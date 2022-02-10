@@ -11,6 +11,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
+#include "perfglue/heap_profiler.h"
 
 #include <sstream>
 
@@ -31,6 +32,7 @@ TEST(bluestore, sizeof) {
   P(bluestore_onode_t);
   P(bluestore_blob_t);
   P(PExtentVector);
+  P(ghobject_t);
   P(bluestore_shared_blob_t);
   P(bluestore_extent_ref_map_t);
   P(bluestore_extent_ref_map_t::record_t);
@@ -42,8 +44,76 @@ TEST(bluestore, sizeof) {
   P(bufferlist);
   P(bufferptr);
   P(range_seg_t);
+  P(sb_info_t);
   cout << "map<uint64_t,uint64_t>\t" << sizeof(map<uint64_t,uint64_t>) << std::endl;
   cout << "map<char,char>\t" << sizeof(map<char,char>) << std::endl;
+}
+
+void dump_mempools()
+{
+  ostringstream ostr;
+  Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+  ostr << "Mempools: ";
+  f->open_object_section("mempools");
+  mempool::dump(f);
+  f->close_section();
+  f->flush(ostr);
+  delete f;
+  cout << ostr.str() << std::endl;
+}
+
+TEST(sb_info_space_efficient_map_t, basic) {
+  sb_info_space_efficient_map_t sb_info;
+  const size_t num_shared = 1000;
+  for (size_t i = 0; i < num_shared; i += 2) {
+    auto& sbi = sb_info.add_maybe_stray(i);
+    sbi.pool_id = i;
+  }
+  ASSERT_TRUE(sb_info.find(0) != sb_info.end());
+  ASSERT_TRUE(sb_info.find(1) == sb_info.end());
+  ASSERT_TRUE(sb_info.find(2) != sb_info.end());
+  ASSERT_TRUE(sb_info.find(4)->pool_id == 4);
+  ASSERT_TRUE(sb_info.find(num_shared) == sb_info.end());
+
+  // ordered insertion
+  sb_info.add_or_adopt(num_shared).pool_id = num_shared;
+  ASSERT_TRUE(sb_info.find(num_shared) != sb_info.end());
+  ASSERT_TRUE(sb_info.find(num_shared)->pool_id == num_shared);
+
+  // out of order insertion
+  sb_info.add_or_adopt(1).pool_id = 1;
+  ASSERT_TRUE(sb_info.find(1) != sb_info.end());
+  ASSERT_TRUE(sb_info.find(1)->pool_id == 1);
+
+  // ordered insertion
+  sb_info.add_maybe_stray(num_shared + 1).pool_id = num_shared + 1;
+  ASSERT_TRUE(sb_info.find(num_shared + 1) != sb_info.end());
+  ASSERT_TRUE(sb_info.find(num_shared + 1)->pool_id == num_shared + 1);
+
+  // out of order insertion
+  sb_info.add_maybe_stray(105).pool_id = 105;
+  ASSERT_TRUE(sb_info.find(105) != sb_info.end());
+  ASSERT_TRUE(sb_info.find(105)->pool_id == 105);
+}
+
+TEST(sb_info_space_efficient_map_t, size) {
+  const size_t num_shared = 10000000;
+  sb_info_space_efficient_map_t sb_info;
+
+  BlueStore store(g_ceph_context, "", 4096);
+  BlueStore::OnodeCacheShard* oc = BlueStore::OnodeCacheShard::create(
+    g_ceph_context, "lru", NULL);
+  BlueStore::BufferCacheShard* bc = BlueStore::BufferCacheShard::create(
+    g_ceph_context, "lru", NULL);
+
+  auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
+
+  for (size_t i = 0; i < num_shared; i++) {
+    auto& sbi = sb_info.add_or_adopt(i);
+    // primarily to silent the 'unused' warning
+    ceph_assert(sbi.pool_id == sb_info_t::INVALID_POOL_ID);
+  }
+  dump_mempools();
 }
 
 TEST(bluestore_extent_ref_map_t, add)
@@ -1739,6 +1809,71 @@ TEST(bluestore_blob_t, wrong_map_bl_in_51682)
   }
 }
 
+TEST(shared_blob_2hash_tracker_t, basic_test)
+{
+  shared_blob_2hash_tracker_t t1(1024 * 1024, 4096);
+
+  ASSERT_TRUE(t1.count_non_zero() == 0);
+
+  t1.inc(0, 0, 1);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(0, 0, -1);
+  ASSERT_TRUE(t1.count_non_zero() == 0);
+
+  t1.inc(3, 0x1000, 2);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(3, 0x1000, -1);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(3, 0x1000, -1);
+  ASSERT_TRUE(t1.count_non_zero() == 0);
+
+  t1.inc(2, 0x2000, 5);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(18, 0x2000, -5);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(18, 0x2000, 1);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(2, 0x2000, -1);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(18, 0x2000, 4);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(2, 0x2000, -4);
+  ASSERT_TRUE(t1.count_non_zero() == 0);
+
+  t1.inc(3, 0x3000, 2);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(4, 0x3000, -1);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(4, 0x3000, -1);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(3, 0x3000, -2);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(4, 0x3000, 1);
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+  t1.inc(4, 0x3000, 1);
+  ASSERT_TRUE(t1.count_non_zero() == 0);
+
+  t1.inc(5, 0x1000, 1);
+  t1.inc(5, 0x2000, 3);
+  t1.inc(5, 0x3000, 2);
+  t1.inc(5, 0x8000, 1);
+
+  ASSERT_TRUE(t1.count_non_zero() != 0);
+
+  ASSERT_TRUE(!t1.test_all_zero(5,0x1000));
+  ASSERT_TRUE(!t1.test_all_zero(5, 0x2000));
+  ASSERT_TRUE(!t1.test_all_zero(5, 0x3000));
+  ASSERT_TRUE(t1.test_all_zero(5, 0x4000));
+  ASSERT_TRUE(!t1.test_all_zero(5, 0x8000));
+
+  ASSERT_TRUE(t1.test_all_zero_range(5, 0, 0x1000));
+  ASSERT_TRUE(t1.test_all_zero_range(5, 0x500, 0x500));
+  ASSERT_TRUE(!t1.test_all_zero_range(5, 0x500, 0x1500));
+  ASSERT_TRUE(!t1.test_all_zero_range(5, 0x1500, 0x3200));
+  ASSERT_TRUE(t1.test_all_zero_range(5, 0x4500, 0x1500));
+  ASSERT_TRUE(t1.test_all_zero_range(5, 0x4500, 0x3b00));
+  ASSERT_TRUE(!t1.test_all_zero_range(5, 0, 0x9000));
+}
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);

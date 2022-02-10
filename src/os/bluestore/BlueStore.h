@@ -2404,8 +2404,7 @@ public:
 
 private:
   int _fsck_check_extents(
-    const coll_t& cid,
-    const ghobject_t& oid,
+    std::string_view ctx_descr,
     const PExtentVector& extents,
     bool compressed,
     mempool_dynamic_bitset &used_blocks,
@@ -2419,6 +2418,10 @@ private:
     int64_t& errors,
     int64_t &warnings,
     BlueStoreRepairer* repairer);
+  void _fsck_repair_shared_blobs(
+    BlueStoreRepairer& repairer,
+    shared_blob_2hash_tracker_t& sb_ref_counts,
+    sb_info_space_efficient_map_t& sb_info);
 
   int _fsck(FSCKDepth depth, bool repair);
   int _fsck_on_open(BlueStore::FSCKDepth depth, bool repair);
@@ -2884,6 +2887,7 @@ public:
   void inject_broken_shared_blob_key(const string& key,
 			 const bufferlist& bl);
   void inject_no_shared_blob_key();
+  void inject_stray_shared_blob_key(uint64_t sbid);
 
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
@@ -3283,21 +3287,10 @@ private:
   inline bool _use_rotational_settings();
 
 public:
-  struct sb_info_t {
-    coll_t cid;
-    int64_t pool_id = INT64_MIN;
-    list<ghobject_t> oids;
-    BlueStore::SharedBlobRef sb;
-    bluestore_extent_ref_map_t ref_map;
-    bool compressed = false;
-    bool passed = false;
-    bool updated = false;
-  };
   typedef btree::btree_set<
     uint64_t, std::less<uint64_t>,
     mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
 
-  typedef mempool::bluestore_fsck::map<uint64_t, sb_info_t> sb_info_map_t;
   struct FSCK_ObjectCtx {
     int64_t& errors;
     int64_t& warnings;
@@ -3311,7 +3304,9 @@ public:
     uint64_t_btree_t* used_omap_head;
 
     ceph::mutex* sb_info_lock;
-    sb_info_map_t& sb_info;
+    sb_info_space_efficient_map_t& sb_info;
+    // approximate amount of references per <shared blob, chunk>
+    shared_blob_2hash_tracker_t& sb_ref_counts;
 
     store_statfs_t& expected_store_statfs;
     per_pool_statfs& expected_pool_statfs;
@@ -3326,8 +3321,10 @@ public:
                    uint64_t& _num_spanning_blobs,
                    mempool_dynamic_bitset* _ub,
                    uint64_t_btree_t* _used_omap_head,
+
                    ceph::mutex* _sb_info_lock,
-                   sb_info_map_t& _sb_info,
+                   sb_info_space_efficient_map_t& _sb_info,
+		   shared_blob_2hash_tracker_t& _sb_ref_counts,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
                    BlueStoreRepairer* _repairer) :
@@ -3342,6 +3339,7 @@ public:
       used_omap_head(_used_omap_head),
       sb_info_lock(_sb_info_lock),
       sb_info(_sb_info),
+      sb_ref_counts(_sb_ref_counts),
       expected_store_statfs(_store_statfs),
       expected_pool_statfs(_pool_statfs),
       repairer(_repairer) {
@@ -3529,9 +3527,13 @@ public:
 public:
   void fix_per_pool_omap(KeyValueDB *db);
   bool remove_key(KeyValueDB *db, const string& prefix, const string& key);
-  bool fix_shared_blob(KeyValueDB *db,
-		         uint64_t sbid,
-		       const bufferlist* bl);
+  //bool fix_shared_blob(KeyValueDB *db,
+  //		       uint64_t sbid,
+  //		       const ceph::buffer::list* bl);
+  bool fix_shared_blob(KeyValueDB::Transaction txn,
+			uint64_t sbid,
+			bluestore_extent_ref_map_t* ref_map,
+			size_t repaired = 1);
   bool fix_statfs(KeyValueDB *db, const string& key,
     const store_statfs_t& new_statfs);
 
@@ -3559,8 +3561,8 @@ public:
   }
   //////////////////////
   //In fact two methods below are the only ones in this class which are thread-safe!!
-  void inc_repaired() {
-    ++to_repair_cnt;
+  void inc_repaired(size_t n = 1) {
+    to_repair_cnt += n;
   }
   void request_compaction() {
     need_compact = true;
