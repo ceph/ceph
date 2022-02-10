@@ -37,7 +37,7 @@ export class ServicesPageHelper extends PageHelper {
     });
   }
 
-  addService(serviceType: string, exist?: boolean, count = '1') {
+  addService(serviceType: string, exist?: boolean, count = '1', snmpVersion?: string) {
     cy.get(`${this.pages.create.id}`).within(() => {
       this.selectServiceType(serviceType);
       switch (serviceType) {
@@ -59,13 +59,33 @@ export class ServicesPageHelper extends PageHelper {
           cy.get('#count').type(count);
           break;
 
+        case 'snmp-gateway':
+          this.selectOption('snmp_version', snmpVersion);
+          cy.get('#snmp_destination').type('192.168.0.1:8443');
+          if (snmpVersion === 'V2c') {
+            cy.get('#snmp_community').type('public');
+          } else {
+            cy.get('#engine_id').type('800C53F00000');
+            this.selectOption('auth_protocol', 'SHA');
+            this.selectOption('privacy_protocol', 'DES');
+
+            // Credentials
+            cy.get('#snmp_v3_auth_username').type('test');
+            cy.get('#snmp_v3_auth_password').type('testpass');
+            cy.get('#snmp_v3_priv_password').type('testencrypt');
+          }
+          break;
+
         default:
           cy.get('#service_id').type('test');
           cy.get('#count').type(count);
           break;
       }
-
-      cy.get('cd-submit-button').click();
+      if (serviceType === 'snmp-gateway') {
+        cy.get('cd-submit-button').dblclick();
+      } else {
+        cy.get('cd-submit-button').click();
+      }
     });
     if (exist) {
       cy.get('#service_id').should('have.class', 'ng-invalid');
