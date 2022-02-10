@@ -11,7 +11,8 @@ tasks:
 - s3tests:
     client.0:
       rgw_server: client.0
-      force-branch: ceph-master
+      force-branch: parquet_s3tests
+      git-remote: https://github.com/galsalomon66/
 overrides:
   ceph:
     fs: xfs
