@@ -3640,6 +3640,7 @@ int main(int argc, const char **argv)
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
   std::optional<std::string> inject_error_at;
+  std::optional<int> inject_error_code;
   std::optional<std::string> inject_abort_at;
 
   rgw::zone_features::set enable_features;
@@ -4122,6 +4123,8 @@ int main(int argc, const char **argv)
       opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
     } else if (ceph_argparse_witharg(args, i, &val, "--inject-error-at", (char*)NULL)) {
       inject_error_at = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject-error-code", (char*)NULL)) {
+      inject_error_code = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--inject-abort-at", (char*)NULL)) {
       inject_abort_at = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
@@ -7757,7 +7760,8 @@ next:
 
     ReshardFaultInjector fault;
     if (inject_error_at) {
-      fault.inject(*inject_error_at, InjectError{-EIO, dpp()});
+      const int code = -inject_error_code.value_or(EIO);
+      fault.inject(*inject_error_at, InjectError{code, dpp()});
     } else if (inject_abort_at) {
       fault.inject(*inject_abort_at, InjectAbort{});
     }
