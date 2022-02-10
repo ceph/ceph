@@ -52,6 +52,17 @@ struct bucket_index_normal_layout {
   BucketHashType hash_type = BucketHashType::Mod;
 };
 
+
+inline bool operator==(const bucket_index_normal_layout& l,
+                       const bucket_index_normal_layout& r) {
+  return l.num_shards == r.num_shards
+      && l.hash_type == r.hash_type;
+}
+inline bool operator!=(const bucket_index_normal_layout& l,
+                       const bucket_index_normal_layout& r) {
+  return !(l == r);
+}
+
 void encode(const bucket_index_normal_layout& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_index_normal_layout& l, bufferlist::const_iterator& bl);
 void encode_json_impl(const char *name, const bucket_index_normal_layout& l, ceph::Formatter *f);
@@ -64,6 +75,15 @@ struct bucket_index_layout {
   bucket_index_normal_layout normal;
 };
 
+inline bool operator==(const bucket_index_layout& l,
+                       const bucket_index_layout& r) {
+  return l.type == r.type && l.normal == r.normal;
+}
+inline bool operator!=(const bucket_index_layout& l,
+                       const bucket_index_layout& r) {
+  return !(l == r);
+}
+
 void encode(const bucket_index_layout& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_index_layout& l, bufferlist::const_iterator& bl);
 void encode_json_impl(const char *name, const bucket_index_layout& l, ceph::Formatter *f);
@@ -73,6 +93,15 @@ struct bucket_index_layout_generation {
   uint64_t gen = 0;
   bucket_index_layout layout;
 };
+
+inline bool operator==(const bucket_index_layout_generation& l,
+                       const bucket_index_layout_generation& r) {
+  return l.gen == r.gen && l.layout == r.layout;
+}
+inline bool operator!=(const bucket_index_layout_generation& l,
+                       const bucket_index_layout_generation& r) {
+  return !(l == r);
+}
 
 void encode(const bucket_index_layout_generation& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_index_layout_generation& l, bufferlist::const_iterator& bl);
