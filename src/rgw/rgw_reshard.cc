@@ -440,7 +440,7 @@ static int init_reshard(rgw::sal::RadosStore* store,
 
   if (ret = fault.check("block_writes");
       ret == 0) { // no fault injected, block writes to the current index shards
-    ret = set_resharding_status(dpp, static_cast<rgw::sal::RadosStore*>(store), bucket_info,
+    ret = set_resharding_status(dpp, store, bucket_info,
                                 cls_rgw_reshard_status::IN_PROGRESS);
   }
 
@@ -462,16 +462,8 @@ static int cancel_reshard(rgw::sal::RadosStore* store,
 {
   static constexpr auto max_retries = 10;
   // unblock writes to the current index shard objects
-  int ret = 0;
-  int tries = 0;
-  do {
-    ret = set_resharding_status(dpp, static_cast<rgw::sal::RadosStore*>(store), bucket_info,
-				cls_rgw_reshard_status::NOT_RESHARDING);
-    ++tries;
-    ldpp_dout(dpp, 1) << "WARNING: " << __func__
-		      << " set_resharding_status got -ECANCELED. Retrying."
-		      << dendl;
-  } while (ret == -ECANCELED && tries < max_retries);
+  int ret = set_resharding_status(dpp, store, bucket_info,
+                                  cls_rgw_reshard_status::NOT_RESHARDING);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to unblock "
         "writes to current index objects: " << cpp_strerror(ret) << dendl;
@@ -479,7 +471,7 @@ static int cancel_reshard(rgw::sal::RadosStore* store,
   }
 
   if (bucket_info.layout.target_index) {
-    tries = 0;
+    auto tries = 0;
     do {
       ret = revert_target_layout(store, bucket_info, bucket_attrs, fault, dpp);
       ++tries;
@@ -549,16 +541,8 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     bucket_info.layout = std::move(prev); // restore in-memory layout
 
     // unblock writes to the current index shard objects
-    int tries = 0;
-    int ret2 = 0;
-    do {
-      ret2 = set_resharding_status(dpp, store, bucket_info,
-				   cls_rgw_reshard_status::NOT_RESHARDING);
-      ++tries;
-      ldpp_dout(dpp, 1) << "WARNING: " << __func__
-			<< " set_resharding_status got -ECANCELED. Retrying."
-			<< dendl;
-    } while (ret2 == -ECANCELED && tries < max_retries);
+    int ret2 = set_resharding_status(dpp, store, bucket_info,
+                                     cls_rgw_reshard_status::NOT_RESHARDING);
     if (ret2 < 0) {
       ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to unblock "
           "writes to current index objects: " << cpp_strerror(ret2) << dendl;
