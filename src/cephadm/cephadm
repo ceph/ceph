@@ -507,7 +507,7 @@ class Monitoring(object):
     def get_version(ctx, container_id, daemon_type):
         # type: (CephadmContext, str, str) -> str
         """
-        :param: daemon_type Either "prometheus", "alertmanager" or "node-exporter"
+        :param: daemon_type Either "prometheus", "alertmanager", "loki", "promtail" or "node-exporter"
         """
         assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter', 'loki', 'promtail')
         cmd = daemon_type.replace('-', '_')
@@ -523,6 +523,14 @@ class Monitoring(object):
                 if code == 0:
                     break
             cmd = 'alertmanager'  # reset cmd for version extraction
+        elif daemon_type == 'loki':
+            _, err, code = call(ctx, [
+                ctx.container_engine.path, 'exec', container_id, cmd, '--version'
+            ], verbosity=CallVerbosity.DEBUG)
+            if code == 0:
+                ver = err.index('version')
+                brnch = err.index('branch')
+                version = (err[ver + 7:brnch - 2])
         else:
             _, err, code = call(ctx, [
                 ctx.container_engine.path, 'exec', container_id, cmd, '--version'
@@ -2359,7 +2367,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
         # set ip and port to bind to for nodeexporter,alertmanager,prometheus
-        if daemon_type != 'grafana' and daemon_type != 'loki' and daemon_type != 'promtail':
+        if daemon_type not in ['grafana', 'loki', 'promtail']:
             ip = ''
             port = Monitoring.port_map[daemon_type][0]
             if 'meta_json' in ctx and ctx.meta_json:
@@ -4749,7 +4757,7 @@ def prepare_ssh(
         cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
-        for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager', 'loki', 'promtail']:
+        for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
             logger.info('Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
 
@@ -6069,10 +6077,6 @@ def command_adopt(ctx):
         command_adopt_ceph(ctx, daemon_type, daemon_id, fsid)
     elif daemon_type == 'prometheus':
         command_adopt_prometheus(ctx, daemon_id, fsid)
-    elif daemon_type == 'loki':
-        command_adopt_loki(ctx, daemon_id, fsid)
-    elif daemon_type == 'promtail':
-        command_adopt_promtail(ctx, daemon_id, fsid)
     elif daemon_type == 'grafana':
         command_adopt_grafana(ctx, daemon_id, fsid)
     elif daemon_type == 'node-exporter':
@@ -6298,64 +6302,6 @@ def command_adopt_prometheus(ctx, daemon_id, fsid):
 
     # data
     data_src = '/var/lib/prometheus/metrics/'
-    data_src = os.path.abspath(ctx.legacy_dir + data_src)
-    data_dst = os.path.join(data_dir_dst, 'data')
-    copy_tree(ctx, [data_src], data_dst, uid=uid, gid=gid)
-
-    make_var_run(ctx, fsid, uid, gid)
-    c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid)
-    update_firewalld(ctx, daemon_type)
-
-
-def command_adopt_loki(ctx, daemon_id, fsid):
-    # type: (CephadmContext, str, str) -> None
-    daemon_type = 'loki'
-    (uid, gid) = extract_uid_gid_monitoring(ctx, daemon_type)
-
-    _stop_and_disable(ctx, 'loki')
-
-    data_dir_dst = make_data_dir(ctx, fsid, daemon_type, daemon_id,
-                                 uid=uid, gid=gid)
-
-    # config
-    config_src = '/etc/loki/loki.yml'
-    config_src = os.path.abspath(ctx.legacy_dir + config_src)
-    config_dst = os.path.join(data_dir_dst, 'etc/loki')
-    makedirs(config_dst, uid, gid, 0o755)
-    copy_files(ctx, [config_src], config_dst, uid=uid, gid=gid)
-
-    # data
-    data_src = '/var/lib/loki'
-    data_src = os.path.abspath(ctx.legacy_dir + data_src)
-    data_dst = os.path.join(data_dir_dst, 'data')
-    copy_tree(ctx, [data_src], data_dst, uid=uid, gid=gid)
-
-    make_var_run(ctx, fsid, uid, gid)
-    c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid)
-    update_firewalld(ctx, daemon_type)
-
-
-def command_adopt_promtail(ctx, daemon_id, fsid):
-    # type: (CephadmContext, str, str) -> None
-    daemon_type = 'promtail'
-    (uid, gid) = extract_uid_gid_monitoring(ctx, daemon_type)
-
-    _stop_and_disable(ctx, 'promtail')
-
-    data_dir_dst = make_data_dir(ctx, fsid, daemon_type, daemon_id,
-                                 uid=uid, gid=gid)
-
-    # config
-    config_src = '/etc/promtail/promtail.yml'
-    config_src = os.path.abspath(ctx.legacy_dir + config_src)
-    config_dst = os.path.join(data_dir_dst, 'etc/promtail')
-    makedirs(config_dst, uid, gid, 0o755)
-    copy_files(ctx, [config_src], config_dst, uid=uid, gid=gid)
-
-    # data
-    data_src = '/var/lib/promtail'
     data_src = os.path.abspath(ctx.legacy_dir + data_src)
     data_dst = os.path.join(data_dir_dst, 'data')
     copy_tree(ctx, [data_src], data_dst, uid=uid, gid=gid)
@@ -8444,7 +8390,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--skip-monitoring-stack',
         action='store_true',
-        help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter, loki, promtail)')
+        help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)')
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')

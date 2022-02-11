@@ -37,12 +37,16 @@ class GrafanaService(CephadmService):
 
             deps.append(dd.name())
 
-        loki_services = []  # type: List[str]
-        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
-            addr = self.mgr.inventory.get_addr(dd.hostname)
-            loki_services.append(build_url(scheme='http', host=addr, port=3100))
+        daemons = self.mgr.cache.get_daemons_by_service('mgr')
+        loki_host = ''
+        assert daemons is not None
+        if daemons != []:
+            assert daemons[0].hostname is not None
+            addr = daemons[0].ip if daemons[0].ip else self._inventory_get_addr(daemons[0].hostname)
+            loki_host = build_url(scheme='http', host=addr, port=3100)
+
         grafana_data_sources = self.mgr.template.render(
-            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services, 'loki_host': loki_services[0]})
+            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services, 'loki_host': loki_host})
 
         cert = self.mgr.get_store('grafana_crt')
         pkey = self.mgr.get_store('grafana_key')
@@ -395,10 +399,6 @@ class LokiService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
-        hostnames: List[str] = []
-        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
-            addr = self.mgr.inventory.get_addr(dd.hostname)
-            hostnames.append(addr)
 
         yml = self.mgr.template.render('services/loki.yml.j2')
         return {
@@ -422,6 +422,7 @@ class PromtailService(CephadmService):
         deps: List[str] = []
         hostnames: List[str] = []
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+            assert dd.hostname is not None
             addr = self.mgr.inventory.get_addr(dd.hostname)
             hostnames.append(addr)
         context = {
