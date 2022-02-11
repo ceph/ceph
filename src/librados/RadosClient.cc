@@ -92,22 +92,22 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
 
 bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
 {
-  bool requires;
-  int r = pool_requires_alignment2(pool_id, &requires);
+  bool required;
+  int r = pool_requires_alignment2(pool_id, &required);
   if (r < 0) {
     // Cast answer to false, this is a little bit problematic
     // since we really don't know the answer yet, say.
     return false;
   }
 
-  return requires;
+  return required;
 }
 
 // a safer version of pool_requires_alignment
 int librados::RadosClient::pool_requires_alignment2(int64_t pool_id,
-						    bool *requires)
+						    bool *req)
 {
-  if (!requires)
+  if (!req)
     return -EINVAL;
 
   int r = wait_for_osdmap();
@@ -115,11 +115,11 @@ int librados::RadosClient::pool_requires_alignment2(int64_t pool_id,
     return r;
   }
 
-  return objecter->with_osdmap([requires, pool_id](const OSDMap& o) {
+  return objecter->with_osdmap([req, pool_id](const OSDMap& o) {
       if (!o.have_pg_pool(pool_id)) {
 	return -ENOENT;
       }
-      *requires = o.get_pg_pool(pool_id)->requires_aligned_append();
+      *req = o.get_pg_pool(pool_id)->requires_aligned_append();
       return 0;
     });
 }

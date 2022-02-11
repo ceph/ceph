@@ -1203,9 +1203,9 @@ bool librados::IoCtx::pool_requires_alignment()
   return io_ctx_impl->client->pool_requires_alignment(get_id());
 }
 
-int librados::IoCtx::pool_requires_alignment2(bool *requires)
+int librados::IoCtx::pool_requires_alignment2(bool *req)
 {
-  return io_ctx_impl->client->pool_requires_alignment2(get_id(), requires);
+  return io_ctx_impl->client->pool_requires_alignment2(get_id(), req);
 }
 
 uint64_t librados::IoCtx::pool_required_alignment()
