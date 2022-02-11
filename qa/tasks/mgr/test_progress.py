@@ -280,6 +280,11 @@ class TestProgress(MgrTestCase):
                 self.mgr_cluster.mon_manager.raw_cluster_cmd(
                     'osd', 'in', str(osd['osd']))
 
+        # Unset allow_pg_recovery_event in case it's set to true
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'set', 'mgr',
+            'mgr/progress/allow_pg_recovery_event', 'false')
+
         super(TestProgress, self).tearDown()
 
     def test_osd_healthy_recovery(self):
@@ -288,6 +293,10 @@ class TestProgress(MgrTestCase):
         placement, and we wait for the PG to get healthy in its new
         locations.
         """
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'set', 'mgr',
+            'mgr/progress/allow_pg_recovery_event', 'true')
+
         ev = self._simulate_failure()
 
         # Wait for progress event to ultimately reach completion
@@ -301,6 +310,10 @@ class TestProgress(MgrTestCase):
         progress event to be correctly marked complete once there
         is no more data to move.
         """
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'set', 'mgr',
+            'mgr/progress/allow_pg_recovery_event', 'true')
+
         ev = self._simulate_failure()
 
         self.mgr_cluster.mon_manager.remove_pool(self.POOL)
@@ -317,6 +330,10 @@ class TestProgress(MgrTestCase):
         It should create another event for when osd is marked in
         and cancel the one that is still ongoing.
         """
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'set', 'mgr',
+            'mgr/progress/allow_pg_recovery_event', 'true')
+
         ev1 = self._simulate_failure()
 
         ev2 = self._simulate_back_in([0], ev1)
@@ -336,6 +353,9 @@ class TestProgress(MgrTestCase):
         coming in from other module, however, once it is turned
         back, on creating an event should be working as it is.
         """
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'set', 'mgr',
+            'mgr/progress/allow_pg_recovery_event', 'true')
 
         pool_size = 3
         self._setup_pool(size=pool_size)
@@ -378,3 +398,26 @@ class TestProgress(MgrTestCase):
                              check_fn=lambda: self._is_inprogress_or_complete(ev1['id']),
                              timeout=self.RECOVERY_PERIOD)
         self.assertTrue(self._is_quiet())
+
+    def test_default_progress_test(self):
+        """
+        progress module disabled the event of pg recovery event
+        by default, we test this to see if this holds true
+        """
+        pool_size = 3
+        self._setup_pool(size=pool_size)
+        self._write_some_data(self.WRITE_PERIOD)        
+
+        with self.recovery_backfill_disabled():
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'osd', 'out', '0')
+
+        time.sleep(self.EVENT_CREATION_PERIOD/2)
+
+        with self.recovery_backfill_disabled():
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'osd', 'in', '0')
+
+        time.sleep(self.EVENT_CREATION_PERIOD/2)
+
+        self.assertEqual(self._osd_in_out_events_count(), 0)
