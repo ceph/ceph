@@ -22,17 +22,6 @@ class PG;
 
 class RepRequest final : public PhasedOperationT<RepRequest> {
 public:
-  class ConnectionPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name =
-	"RepRequest::ConnectionPipeline::await_map";
-    } await_map;
-    struct GetPG : OrderedExclusivePhaseT<GetPG> {
-      static constexpr auto type_name =
-	"RepRequest::ConnectionPipeline::get_pg";
-    } get_pg;
-    friend RepRequest;
-  };
   class PGPipeline {
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "RepRequest::PGPipeline::await_map";

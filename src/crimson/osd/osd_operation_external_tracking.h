@@ -19,9 +19,10 @@ namespace crimson::osd {
 // Just the boilerplate currently. Implementing
 struct LttngBackend
   : ClientRequest::StartEvent::Backend,
-    ClientRequest::ConnectionPipeline::AwaitMap::BlockingEvent::Backend,
+    ConnectionPipeline::AwaitActive::BlockingEvent::Backend,
+    ConnectionPipeline::AwaitMap::BlockingEvent::Backend,
+    ConnectionPipeline::GetPG::BlockingEvent::Backend,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent::Backend,
-    ClientRequest::ConnectionPipeline::GetPG::BlockingEvent::Backend,
     PGMap::PGCreationBlockingEvent::Backend,
     ClientRequest::PGPipeline::AwaitMap::BlockingEvent::Backend,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent::Backend,
@@ -38,9 +39,14 @@ struct LttngBackend
   void handle(ClientRequest::StartEvent&,
               const Operation&) override {}
 
-  void handle(ClientRequest::ConnectionPipeline::AwaitMap::BlockingEvent& ev,
+  void handle(ConnectionPipeline::AwaitActive::BlockingEvent& ev,
               const Operation& op,
-              const ClientRequest::ConnectionPipeline::AwaitMap& blocker) override {
+              const ConnectionPipeline::AwaitActive& blocker) override {
+  }
+
+  void handle(ConnectionPipeline::AwaitMap::BlockingEvent& ev,
+              const Operation& op,
+              const ConnectionPipeline::AwaitMap& blocker) override {
   }
 
   void handle(OSD_OSDMapGate::OSDMapBlocker::BlockingEvent&,
@@ -48,9 +54,9 @@ struct LttngBackend
               const OSD_OSDMapGate::OSDMapBlocker&) override {
   }
 
-  void handle(ClientRequest::ConnectionPipeline::GetPG::BlockingEvent& ev,
+  void handle(ConnectionPipeline::GetPG::BlockingEvent& ev,
               const Operation& op,
-              const ClientRequest::ConnectionPipeline::GetPG& blocker) override {
+              const ConnectionPipeline::GetPG& blocker) override {
   }
 
   void handle(PGMap::PGCreationBlockingEvent&,

@@ -128,7 +128,7 @@ PeeringEvent<T>::complete_rctx(Ref<PG> pg)
     std::move(ctx));
 }
 
-RemotePeeringEvent::ConnectionPipeline &RemotePeeringEvent::cp()
+ConnectionPipeline &RemotePeeringEvent::cp()
 {
   return get_osd_priv(conn.get()).peering_request_conn_pipeline;
 }
