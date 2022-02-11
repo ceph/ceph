@@ -11,3 +11,4 @@ tasks:
     clients:
       all:
         - suites/ffsb.sh
+    timeout: 5h
