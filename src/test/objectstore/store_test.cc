@@ -2929,6 +2929,61 @@ TEST_P(StoreTest, ListEndTest) {
   }
 }
 
+TEST_P(StoreTest, List_0xfffffff_Hash_Test_in_meta) {
+  int r = 0;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    ghobject_t hoid(hobject_t(sobject_t("obj", CEPH_NOSNAP),
+			      "", UINT32_C(0xffffffff), -1, "nspace"));
+    t.touch(cid, hoid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    vector<ghobject_t> objects;
+    r = collection_list(store, ch, ghobject_t(), ghobject_t::get_max(), INT_MAX,
+			&objects, nullptr, true);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(objects.size(), 1);
+  }
+}
+
+TEST_P(StoreTest, List_0xfffffff_Hash_Test_in_PG) {
+  int r = 0;
+  const int64_t poolid = 1;
+  coll_t cid(spg_t(pg_t(0, poolid), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    ghobject_t hoid(hobject_t(sobject_t("obj", CEPH_NOSNAP),
+			      "", UINT32_C(0xffffffff), poolid, "nspace"));
+    t.touch(cid, hoid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    vector<ghobject_t> objects;
+    r = collection_list(store, ch, ghobject_t(), ghobject_t::get_max(), INT_MAX,
+			&objects, nullptr, true);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(objects.size(), 1);
+  }
+}
+
 TEST_P(StoreTest, Sort) {
   {
     hobject_t a(sobject_t("a", CEPH_NOSNAP));
