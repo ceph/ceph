@@ -434,10 +434,9 @@ SegmentedJournal::JournalSegmentManager::roll()
     current_journal_segment->close() :
     Segment::close_ertr::now()
   ).safe_then([this] {
-    return segment_provider.get_segment(
+    auto new_segment_id = segment_provider->get_segment(
         get_device_id(), next_journal_segment_seq);
-  }).safe_then([this](auto segment) {
-    return segment_manager.open(segment);
+    return segment_manager.open(new_segment_id);
   }).safe_then([this](auto sref) {
     current_journal_segment = sref;
     return initialize_segment(*current_journal_segment);

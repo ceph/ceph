@@ -251,11 +251,10 @@ SegmentedAllocator::Writer::roll_segment(bool set_rolling) {
     });
   }
 
-  return segment_provider.get_segment(
-    segment_manager.get_device_id(), OOL_SEG_SEQ
-  ).safe_then([this](auto segment) {
-    return segment_manager.open(segment);
-  }).safe_then([this](auto segref) {
+  auto new_segment_id = segment_provider.get_segment(
+      segment_manager.get_device_id(), OOL_SEG_SEQ);
+  return segment_manager.open(new_segment_id
+  ).safe_then([this](auto segref) {
     LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
     DEBUG("opened new segment: {}", segref->get_segment_id());
     return init_segment(*segref).safe_then([segref=std::move(segref), this] {

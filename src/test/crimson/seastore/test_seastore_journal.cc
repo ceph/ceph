@@ -84,14 +84,12 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   void update_segment_avail_bytes(paddr_t offset) final {}
 
-  get_segment_ret get_segment(device_id_t id, segment_seq_t seq) final {
+  segment_id_t get_segment(device_id_t id, segment_seq_t seq) final {
     auto ret = next;
     next = segment_id_t{
       next.device_id(),
       next.device_segment_id() + 1};
-    return get_segment_ret(
-      get_segment_ertr::ready_future_marker{},
-      ret);
+    return ret;
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
