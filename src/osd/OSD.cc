@@ -2597,6 +2597,7 @@ void OSD::asok_command(
   } else if (prefix == "dump_ops_in_flight" ||
              prefix == "ops" ||
              prefix == "dump_blocked_ops" ||
+             prefix == "dump_blocked_ops_count" ||
              prefix == "dump_historic_ops" ||
              prefix == "dump_historic_ops_by_duration" ||
              prefix == "dump_historic_slow_ops") {
@@ -2622,6 +2623,13 @@ will start to track new ops received afterwards.";
     }
     if (prefix == "dump_blocked_ops") {
       if (!op_tracker.dump_ops_in_flight(f, true, filters)) {
+        ss << error_str;
+	ret = -EINVAL;
+	goto out;
+      }
+    }
+    if (prefix == "dump_blocked_ops_count") {
+      if (!op_tracker.dump_ops_in_flight(f, true, filters, true)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
@@ -3879,6 +3887,11 @@ void OSD::final_init()
 				     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show the blocked ops currently in flight");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("dump_blocked_ops_count " \
+             "name=filterstr,type=CephString,n=N,req=false",
+             asok_hook,
+             "show the count of blocked ops currently in flight");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops " \
                                      "name=filterstr,type=CephString,n=N,req=false",
