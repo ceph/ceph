@@ -155,6 +155,10 @@ protected:
 
   template <class OpT>
   friend class crimson::os::seastore::OperationProxyT;
+
+  // OSD::start_pg_operation needs access to enter_stage, we can make this
+  // more sophisticated later on
+  friend class OSD;
 };
 
 /**
