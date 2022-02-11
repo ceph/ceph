@@ -491,6 +491,15 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
 void Elector::ping_check(int peer)
 {
   dout(20) << __func__ << " to peer " << peer << dendl;
+
+  if (peer >= mon->monmap->ranks.size()) {
+    // Monitor no longer exists in the monmap,
+    // therefore, we shouldn't ping this monitor
+    // since we cannot lookup the address!
+    dout(20) << __func__ << "peer >= ranks_size" << dendl;
+    live_pinging.erase(peer);
+    return;
+  }
   if (!live_pinging.count(peer) &&
       !dead_pinging.count(peer)) {
     dout(20) << __func__ << peer << " is no longer marked for pinging" << dendl;
@@ -518,6 +527,7 @@ void Elector::ping_check(int peer)
 
 void Elector::begin_dead_ping(int peer)
 {
+  dout(20) << __func__ << " to peer " << peer << dendl;  
   if (dead_pinging.count(peer)) {
     return;
   }
