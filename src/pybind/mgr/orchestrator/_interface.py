@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from functools import wraps, reduce
 
 from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
-    Sequence, Dict, cast, Mapping
+    Sequence, Dict, cast, Mapping, Type
 
 try:
     from typing import Protocol  # Protocol was added in Python 3.8
@@ -184,22 +184,25 @@ class OrchResult(Generic[T]):
     def __init__(self, result: Optional[T], exception: Optional[Exception] = None) -> None:
         self.result = result
         self.serialized_exception: Optional[bytes] = None
+        self.exception_type: Optional[Type] = None
         self.exception_str: str = ''
         self.set_exception(exception)
 
-    __slots__ = 'result', 'serialized_exception', 'exception_str'
+    __slots__ = 'result', 'serialized_exception', 'exception_type', 'exception_str'
 
     def set_exception(self, e: Optional[Exception]) -> None:
         if e is None:
             self.serialized_exception = None
+            self.exception_type = None
             self.exception_str = ''
             return
 
+        self.exception_type = type(e)
         self.exception_str = f'{type(e)}: {str(e)}'
         try:
             self.serialized_exception = pickle.dumps(e)
-        except pickle.PicklingError:
-            logger.error(f"failed to pickle {e}")
+        except pickle.PicklingError as pe:
+            logger.error(pe)
             if isinstance(e, Exception):
                 e = Exception(*e.args)
             else:
@@ -224,7 +227,9 @@ def raise_if_exception(c: OrchResult[T]) -> T:
         try:
             e = pickle.loads(c.serialized_exception)
         except (KeyError, AttributeError):
-            raise Exception(c.exception_str)
+            e = Exception(c.exception_str)
+        if c.exception_type and not isinstance(e, c.exception_type):
+            e = c.exception_type(*e.args)
         raise e
     assert c.result is not None, 'OrchResult should either have an exception or a result'
     return c.result
