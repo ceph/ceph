@@ -10,6 +10,7 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
+from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache
 from . import APIDoc, APIRouter, EndpointDoc, RESTController, UIRouter, allow_empty_body
 
@@ -363,6 +364,7 @@ class CephFS(RESTController):
         """
         return cfs.get_directory(os.sep.encode())
 
+    @handle_cephfs_error()
     @RESTController.Resource('GET')
     def ls_dir(self, fs_id, path=None, depth=1):
         """
@@ -517,6 +519,7 @@ class CephFsUi(CephFS):
 
         return data
 
+    @handle_cephfs_error()
     @RESTController.Resource('GET')
     def ls_dir(self, fs_id, path=None, depth=1):
         """
