@@ -177,11 +177,11 @@ public:
       return *this;
     }
     bool end() const { return cur == 0; }
-    bool operator==(const iterator& rhs) const {
-      return cur == rhs.cur;
+    friend bool operator==(const iterator& lhs, const iterator& rhs) {
+      return lhs.cur == rhs.cur;
     }
-    bool operator!=(const iterator& rhs) const {
-      return cur != rhs.cur;
+    friend bool operator!=(const iterator& lhs, const iterator& rhs) {
+      return lhs.cur != rhs.cur;
     }
   };
 
@@ -201,11 +201,13 @@ public:
       return *this;
     }
     bool end() const { return cur == 0; }
-    bool operator==(const_iterator& rhs) const {
-      return cur == rhs.cur;
+    friend bool operator==(const const_iterator& lhs,
+                           const const_iterator& rhs) {
+      return lhs.cur == rhs.cur;
     }
-    bool operator!=(const_iterator& rhs) const {
-      return cur != rhs.cur;
+    friend bool operator!=(const const_iterator& lhs,
+                           const const_iterator& rhs) {
+      return lhs.cur != rhs.cur;
     }
   };
 
