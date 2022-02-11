@@ -357,6 +357,7 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   librbd::MockTestImageCtx* remote_image_ctx;
 
   std::string remote_mirror_uuid = "remote mirror uuid";
+  librbd::mirror::PromotionState remote_promotion_state;
 
   librbd::mirror::snapshot::ImageMeta<librbd::MockTestImageCtx>*
     local_image_meta = nullptr;

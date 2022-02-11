@@ -216,6 +216,7 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   std::string local_image_id;
   std::string remote_mirror_uuid;
   std::string remote_image_id;
+  librbd::mirror::PromotionState remote_promotion_state;
 
   static StateBuilder* create(const std::string&) {
     ceph_assert(s_instance != nullptr);
@@ -748,6 +749,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplayResyncRequested) {
   // prepare local image
   MockPrepareLocalImageRequest mock_prepare_local_image_request;
   MockStateBuilder mock_state_builder;
+  mock_state_builder.remote_promotion_state = librbd::mirror::PROMOTION_STATE_PRIMARY;
   expect_send(mock_prepare_local_image_request, mock_state_builder,
               m_local_image_ctx->id, m_local_image_ctx->name, 0);
 
