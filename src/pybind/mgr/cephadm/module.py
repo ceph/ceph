@@ -423,6 +423,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_alertmanager = ''
             self.container_image_node_exporter = ''
             self.container_image_loki = ''
+            self.container_image_promtail = ''
             self.container_image_haproxy = ''
             self.container_image_keepalived = ''
             self.container_image_snmp_gateway = ''
@@ -2486,7 +2487,7 @@ Then run the following:
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
                 'loki': PlacementSpec(count=1),
-                'promtail': PlacementSpec(host_pattern='*'),
+                'promtail': PlacementSpec(count=1),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
