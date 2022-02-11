@@ -4713,7 +4713,7 @@ int RGWRunBucketSyncCoroutine::operate(const DoutPrefixProvider *dpp)
     yield call(new RGWSyncGetBucketInfoCR(sync_env, sync_pair.dest_bs.bucket, &sync_pipe.dest_bucket_info, 
                                           &sync_pipe.dest_bucket_attrs, tn));
     if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
+      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.dest_bs.bucket}));
       drain_all();
       return set_cr_error(retcode);
     }
