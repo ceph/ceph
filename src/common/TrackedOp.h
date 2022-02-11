@@ -129,7 +129,7 @@ public:
   void set_tracking(bool enable) {
     tracking_enabled = enable;
   }
-  bool dump_ops_in_flight(ceph::Formatter *f, bool print_only_blocked = false, std::set<std::string> filters = {""});
+  bool dump_ops_in_flight(ceph::Formatter *f, bool print_only_blocked = false, std::set<std::string> filters = {""}, bool count_only = false);
   bool dump_historic_ops(ceph::Formatter *f, bool by_duration = false, std::set<std::string> filters = {""});
   bool dump_historic_slow_ops(ceph::Formatter *f, std::set<std::string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
