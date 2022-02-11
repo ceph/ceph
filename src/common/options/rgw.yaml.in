@@ -3261,7 +3261,7 @@ options:
   default: 0x7200000000000001:0x0
   services:
   - rgw
-- name: admin_motr_fid
+- name: motr_admin_fid
   type: str
   level: advanced
   desc: Admin Tool Motr FID for admin-level access.
@@ -3269,7 +3269,7 @@ options:
   default: 0x7200000000000001:0x0
   services:
   - rgw
-- name: admin_motr_endpoint
+- name: motr_admin_endpoint
   type: str
   level: advanced
   desc:  experimental Option to set Admin Motr endpoint address
