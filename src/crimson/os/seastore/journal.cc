@@ -94,7 +94,7 @@ Journal::prep_replay_segments(
   {
     if (seg.first != seg.second.physical_segment_id ||
         seg.first.device_id() != journal_segment_manager.get_device_id() ||
-        seg.second.out_of_line == true) {
+        seg.second.get_type() != segment_type_t::JOURNAL) {
       ERROR("illegal journal segment for replay -- {}", seg.second);
       ceph_abort();
     }
@@ -194,6 +194,7 @@ Journal::replay_segment(
             record_deltas.deltas,
             [locator,
              this,
+             FNAME,
              &handler](delta_info_t& delta)
           {
             /* The journal may validly contain deltas for extents in
@@ -202,18 +203,24 @@ Journal::replay_segment(
              * sequence number > the current journal segment seq. We can
              * safetly skip these deltas because the extent must already
              * have been rewritten.
-             *
-             * Note, this comparison exploits the fact that
-             * SEGMENT_SEQ_NULL is a large number.
              */
-            auto& seg_addr = delta.paddr.as_seg_paddr();
-            if (delta.paddr != P_ADDR_NULL &&
-                (segment_provider->get_seq(seg_addr.get_segment_id()) >
-                 locator.write_result.start_seq.segment_seq)) {
-              return replay_ertr::now();
-            } else {
-              return handler(locator, delta);
+            if (delta.paddr != P_ADDR_NULL) {
+              auto& seg_addr = delta.paddr.as_seg_paddr();
+              auto delta_paddr_segment_seq = segment_provider->get_seq(seg_addr.get_segment_id());
+              auto delta_paddr_segment_type = segment_seq_to_type(delta_paddr_segment_seq);
+              auto locator_segment_seq = locator.write_result.start_seq.segment_seq;
+              if (delta_paddr_segment_type == segment_type_t::NULL_SEG ||
+                  (delta_paddr_segment_type == segment_type_t::JOURNAL &&
+                   delta_paddr_segment_seq > locator_segment_seq)) {
+                SUBDEBUG(seastore_cache,
+                         "delta is obsolete, delta_paddr_segment_seq={}, locator_segment_seq={} -- {}",
+                         segment_seq_printer_t{delta_paddr_segment_seq},
+                         segment_seq_printer_t{locator_segment_seq},
+                         delta);
+                return replay_ertr::now();
+              }
             }
+            return handler(locator, delta);
           });
         });
       });
@@ -384,7 +391,8 @@ Journal::JournalSegmentManager::roll()
     current_journal_segment->close() :
     Segment::close_ertr::now()
   ).safe_then([this] {
-    return segment_provider->get_segment(get_device_id());
+    return segment_provider->get_segment(
+        get_device_id(), next_journal_segment_seq);
   }).safe_then([this](auto segment) {
     return segment_manager.open(segment);
   }).safe_then([this](auto sref) {
@@ -394,9 +402,6 @@ Journal::JournalSegmentManager::roll()
     if (old_segment_id != NULL_SEG_ID) {
       segment_provider->close_segment(old_segment_id);
     }
-    segment_provider->set_journal_segment(
-      current_journal_segment->get_segment_id(),
-      get_segment_seq());
   }).handle_error(
     roll_ertr::pass_further{},
     crimson::ct_error::assert_all{
@@ -460,9 +465,9 @@ Journal::JournalSegmentManager::initialize_segment(Segment& segment)
     seq,
     segment.get_segment_id(),
     new_tail,
-    current_segment_nonce,
-    false};
+    current_segment_nonce};
   INFO("writing {} ...", header);
+  ceph_assert(header.get_type() == segment_type_t::JOURNAL);
   encode(header, bl);
 
   bufferptr bp(

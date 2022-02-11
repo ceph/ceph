@@ -17,14 +17,17 @@ SET_SUBSYS(seastore_cleaner);
 
 namespace crimson::os::seastore {
 
-void segment_info_set_t::segment_info_t::set_open() {
+void segment_info_set_t::segment_info_t::set_open(segment_seq_t seq) {
   assert(state == Segment::segment_state_t::EMPTY);
+  assert(segment_seq_to_type(seq) != segment_type_t::NULL_SEG);
   state = Segment::segment_state_t::OPEN;
+  journal_segment_seq = seq;
 }
 
 void segment_info_set_t::segment_info_t::set_empty() {
   assert(state == Segment::segment_state_t::CLOSED);
   state = Segment::segment_state_t::EMPTY;
+  journal_segment_seq = NULL_SEG_SEQ;
 }
 
 void segment_info_set_t::segment_info_t::set_closed() {
@@ -204,16 +207,19 @@ void SegmentCleaner::register_metrics()
   });
 }
 
-SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(device_id_t id)
+SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(
+    device_id_t id, segment_seq_t seq)
 {
+  assert(segment_seq_to_type(seq) != segment_type_t::NULL_SEG);
   for (auto it = segments.device_begin(id);
        it != segments.device_end(id);
        ++it) {
     auto id = it->first;
     auto& segment_info = it->second;
     if (segment_info.is_empty()) {
-      mark_open(id);
-      logger().debug("{}: returning segment {}", __func__, id);
+      logger().debug("{}: returning segment {} {}",
+                     __func__, id, segment_seq_printer_t{seq});
+      mark_open(id, seq);
       return get_segment_ret(
 	get_segment_ertr::ready_future_marker{},
 	id);
@@ -262,6 +268,8 @@ void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 
 void SegmentCleaner::close_segment(segment_id_t segment)
 {
+  ceph_assert(segment_seq_to_type(segments[segment].journal_segment_seq) !=
+              segment_type_t::NULL_SEG);
   mark_closed(segment);
 }
 
@@ -275,6 +283,7 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
     limit,
     config.journal_rewrite_per_cycle
   ).si_then([=, &t](auto dirty_list) {
+    DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
     return seastar::do_with(
       std::move(dirty_list),
       [FNAME, this, &t](auto &dirty_list) {
@@ -436,24 +445,22 @@ SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
 	return scanner->read_segment_header(
 	  segment_id
 	).safe_then([&segment_set, segment_id, this](auto header) {
-	  if (header.out_of_line) {
-	    logger().debug(
-	      "ExtentReader::init_segments: out-of-line segment {}",
-	      segment_id);
-	    init_mark_segment_closed(
-	      segment_id,
-	      header.journal_segment_seq,
-	      true);
-	  } else {
-	    logger().debug(
-	      "ExtentReader::init_segments: journal segment {}",
-	      segment_id);
-	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
-	    init_mark_segment_closed(
-	      segment_id,
-	      header.journal_segment_seq,
-	      false);
+	  logger().debug(
+	    "ExtentReader::init_segments: segment_id={} -- {}",
+	    segment_id, header);
+	  auto s_type = header.get_type();
+	  if (s_type == segment_type_t::NULL_SEG) {
+	    logger().error(
+	      "ExtentReader::init_segments: got null segment, segment_id={} -- {}",
+	      segment_id, header);
+	    ceph_abort();
 	  }
+	  if (s_type == segment_type_t::JOURNAL) {
+	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
+	  }
+	  init_mark_segment_closed(
+	    segment_id,
+	    header.journal_segment_seq);
 	}).handle_error(
 	  crimson::ct_error::enoent::handle([](auto) {
 	    return init_segments_ertr::now();
