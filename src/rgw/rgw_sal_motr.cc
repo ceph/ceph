@@ -428,7 +428,6 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   }
 
   // Insert the user to user info index.
-      
   muinfo.info = info;
   muinfo.attrs = attrs;
   muinfo.user_version = obj_ver;
@@ -3473,6 +3472,7 @@ void MotrStore::index_name_to_motr_fid(string iname, struct m0_uint128 *id)
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   hash.Update((const unsigned char *)iname.c_str(), iname.length());
   hash.Final(md5);
+
   memcpy(&id->u_hi, md5, 8);
   memcpy(&id->u_lo, md5 + 8, 8);
   ldout(cctx, 20) << "id = 0x" << std::hex << id->u_hi << ":0x" << std::hex << id->u_lo  << dendl;
@@ -3490,12 +3490,14 @@ int MotrStore::do_idx_op_by_name(string idx_name, enum m0_idx_opcode opcode,
   vector<uint8_t> key(key_str.begin(), key_str.end());
   vector<uint8_t> val;
   struct m0_uint128 idx_id;
+
   index_name_to_motr_fid(idx_name, &idx_id);
   int rc = open_motr_idx(&idx_id, &idx);
   if (rc != 0) {
     ldout(cctx, 0) << "ERROR: failed to open index: " << rc << dendl;
     goto out;
   }
+
   if (opcode == M0_IC_PUT)
     val.assign(bl.c_str(), bl.c_str() + bl.length());
 
@@ -3604,8 +3606,8 @@ void *newMotrStore(CephContext *cct)
     const auto& ha_ep    = g_conf().get_val<std::string>("motr_ha_endpoint");
     const auto& proc_fid = g_conf().get_val<std::string>("motr_my_fid");
     const auto& profile  = g_conf().get_val<std::string>("motr_profile_fid");
-    const auto& admin_proc_ep  = g_conf().get_val<std::string>("admin_motr_endpoint");
-    const auto& admin_proc_fid = g_conf().get_val<std::string>("admin_motr_fid");
+    const auto& admin_proc_ep  = g_conf().get_val<std::string>("motr_admin_endpoint");
+    const auto& admin_proc_fid = g_conf().get_val<std::string>("motr_admin_fid");
     const int init_flags = cct->get_init_flags();
     ldout(cct, 0) << "INFO: motr my endpoint: " << proc_ep << dendl;
     ldout(cct, 0) << "INFO: motr ha endpoint: " << ha_ep << dendl;
@@ -3614,9 +3616,9 @@ void *newMotrStore(CephContext *cct)
     store->conf.mc_local_addr  = proc_ep.c_str();
     store->conf.mc_process_fid = proc_fid.c_str();
 
-    ldout(cct, 0) << "INFO: init flags:        " << init_flags << dendl;
-    ldout(cct, 0) << "INFO: admin motr endpoint:  " << admin_proc_ep << dendl;
-    ldout(cct, 0) << "INFO: admin motr  fid:    " << admin_proc_fid << dendl;
+    ldout(cct, 0) << "INFO: init flags:       " << init_flags << dendl;
+    ldout(cct, 0) << "INFO: motr admin endpoint: " << admin_proc_ep << dendl;
+    ldout(cct, 0) << "INFO: motr admin fid:   " << admin_proc_fid << dendl;
 
     // HACK this is so that radosge-admin uses a different client
     if (init_flags == 0) {
