@@ -15,6 +15,24 @@ namespace crimson::os::seastore {
 
 namespace crimson::osd {
 
+/// Ordering stages for a class of operations ordered by PG.
+struct ConnectionPipeline {
+  struct AwaitActive : OrderedExclusivePhaseT<AwaitActive> {
+    static constexpr auto type_name =
+      "ConnectionPipeline::await_active";
+  } await_active;
+
+  struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
+    static constexpr auto type_name =
+      "ConnectionPipeline::await_map";
+  } await_map;
+
+  struct GetPG : OrderedExclusivePhaseT<GetPG> {
+    static constexpr auto type_name =
+      "ConnectionPipeline::get_pg";
+  } get_pg;
+};
+
 enum class OperationTypeCode {
   client_request = 0,
   peering_event,

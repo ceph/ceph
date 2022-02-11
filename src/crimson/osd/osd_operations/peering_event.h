@@ -117,17 +117,6 @@ public:
     } await_active;
     friend class RemotePeeringEvent;
   };
-  class ConnectionPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name =
-	"PeeringRequest::ConnectionPipeline::await_map";
-    } await_map;
-    struct GetPG : OrderedExclusivePhaseT<GetPG> {
-      static constexpr auto type_name =
-	"PeeringRequest::ConnectionPipeline::get_pg";
-    } get_pg;
-    friend class RemotePeeringEvent;
-  };
 
   template <typename... Args>
   RemotePeeringEvent(OSD &osd, crimson::net::ConnectionRef conn, Args&&... args) :
@@ -143,6 +132,7 @@ public:
 
   std::tuple<
     StartEvent,
+    ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
     ConnectionPipeline::GetPG::BlockingEvent,

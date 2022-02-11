@@ -27,21 +27,6 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   OpInfo op_info;
 
 public:
-  class ConnectionPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name =
-        "ClientRequest::ConnectionPipeline::await_map";
-    } await_map;
-
-    struct GetPG : OrderedExclusivePhaseT<GetPG> {
-      static constexpr auto type_name =
-        "ClientRequest::ConnectionPipeline::get_pg";
-    } get_pg;
-
-    friend class ClientRequest;
-    friend class LttngBackend;
-  };
-
   class PGPipeline : public CommonPGPipeline {
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
@@ -109,6 +94,7 @@ private:
 public:
   std::tuple<
     StartEvent,
+    ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
     ConnectionPipeline::GetPG::BlockingEvent,
