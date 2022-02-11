@@ -42,6 +42,43 @@ std::ostream &offset_to_stream(std::ostream &out, const seastore_off_t &t)
     return out << t;
 }
 
+std::ostream& operator<<(std::ostream& out, segment_type_t t)
+{
+  switch(t) {
+  case segment_type_t::JOURNAL:
+    return out << "JOURNAL";
+  case segment_type_t::OOL:
+    return out << "OOL";
+  case segment_type_t::NULL_SEG:
+    return out << "NULL_SEG";
+  default:
+    return out << "INVALID_SEGMENT_TYPE!";
+  }
+}
+
+segment_type_t segment_seq_to_type(segment_seq_t seq)
+{
+  if (seq <= MAX_VALID_SEG_SEQ) {
+    return segment_type_t::JOURNAL;
+  } else if (seq == OOL_SEG_SEQ) {
+    return segment_type_t::OOL;
+  } else {
+    assert(seq == NULL_SEG_SEQ);
+    return segment_type_t::NULL_SEG;
+  }
+}
+
+std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
+{
+  auto type = segment_seq_to_type(seq.seq);
+  switch(type) {
+  case segment_type_t::JOURNAL:
+    return out << seq.seq;
+  default:
+    return out << type;
+  }
+}
+
 std::ostream &operator<<(std::ostream &out, const segment_id_t& segment)
 {
   return out << "[" << (uint64_t)segment.device_id() << ","
@@ -64,7 +101,7 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     out << "BLOCK_REG";
   } else if (rhs.is_record_relative()) {
     out << "RECORD_REG";
-  } else if (rhs.get_device_id() == DEVICE_ID_DELAYED) {
+  } else if (rhs.is_delayed()) {
     out << "DELAYED_TEMP";
   } else if (rhs.get_addr_type() == addr_types_t::SEGMENT) {
     const seg_paddr_t& s = rhs.as_seg_paddr();
@@ -83,7 +120,7 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq)
 {
   return out << "journal_seq_t("
-             << "segment_seq=" << seq.segment_seq
+             << "segment_seq=" << segment_seq_printer_t{seq.segment_seq}
              << ", offset=" << seq.offset
              << ")";
 }
@@ -164,11 +201,10 @@ std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
 std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 {
   return out << "segment_header_t("
-	     << "segment_seq=" << header.journal_segment_seq
+	     << "segment_seq=" << segment_seq_printer_t{header.journal_segment_seq}
 	     << ", segment_id=" << header.physical_segment_id
 	     << ", journal_tail=" << header.journal_tail
 	     << ", segment_nonce=" << header.segment_nonce
-	     << ", out-of-line=" << header.out_of_line
 	     << ")";
 }
 

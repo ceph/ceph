@@ -335,9 +335,6 @@ public:
 
   virtual ~CachedExtent();
 
-  /// type of the backend device that will hold this extent
-  device_type_t backend_type = device_type_t::NONE;
-
   /// hint for allocators
   placement_hint_t hint = placement_hint_t::NUM_HINTS;
 

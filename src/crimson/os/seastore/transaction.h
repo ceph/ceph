@@ -116,15 +116,16 @@ public:
   }
 
   void add_fresh_extent(
-    CachedExtentRef ref,
-    bool delayed = false) {
+    CachedExtentRef ref) {
     ceph_assert(!is_weak());
-    if (delayed) {
+    if (ref->get_paddr().is_delayed()) {
+      assert(ref->get_paddr() == make_delayed_temp_paddr(0));
       assert(ref->is_logical());
-      ref->set_paddr(delayed_temp_paddr(delayed_temp_offset));
+      ref->set_paddr(make_delayed_temp_paddr(delayed_temp_offset));
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
     } else {
+      assert(ref->get_paddr() == make_record_relative_paddr(0));
       ref->set_paddr(make_record_relative_paddr(offset));
       offset += ref->get_length();
       inline_block_list.push_back(ref);
@@ -189,8 +190,18 @@ public:
     return to_release;
   }
 
-  auto& get_delayed_alloc_list() {
-    return delayed_alloc_list;
+  auto get_delayed_alloc_list() {
+    std::list<LogicalCachedExtentRef> ret;
+    for (auto& extent : delayed_alloc_list) {
+      // delayed extents may be invalidated
+      if (extent->is_valid()) {
+        ret.push_back(std::move(extent));
+      } else {
+        ++num_delayed_invalid_extents;
+      }
+    }
+    delayed_alloc_list.clear();
+    return ret;
   }
 
   const auto &get_mutated_block_list() {
@@ -345,10 +356,6 @@ public:
   };
   ool_write_stats_t& get_ool_write_stats() {
     return ool_write_stats;
-  }
-
-  void increment_delayed_invalid_extents() {
-    ++num_delayed_invalid_extents;
   }
 
 private:
