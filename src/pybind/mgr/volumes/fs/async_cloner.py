@@ -200,6 +200,20 @@ def set_quota_on_clone(fs_handle, clone_volumes_pair):
     if attrs["quota"] is not None:
         clone_volumes_pair[0].set_attrs(dst_path, attrs)
 
+    quota_files = None # type: Optional[int]
+    try:
+        quota_files = int(fs_handle.getxattr(src_path, 'ceph.quota.max_files').decode('utf-8'))
+    except cephfs.NoData:
+        pass
+
+    if quota_files is not None:
+        try:
+            fs_handle.setxattr(dst_path, 'ceph.quota.max_files', str(quota_files).encode('utf-8'), 0)
+        except cephfs.InvalidValue:
+            raise VolumeException(-errno.EINVAL, "invalid file count specified: '{0}'".format(quota_files))
+        except cephfs.Error as e:
+             raise VolumeException(-e.args[0], e.args[1])
+
 def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(fs_client, volname) as fs_handle:
         with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
