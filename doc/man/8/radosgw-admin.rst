@@ -973,7 +973,7 @@ Remove a user::
 
 Rename a user::
 
-        $ radosgw-admin user rename --uid=johny --new-uid=joe
+        $ radosgw-admin user rename --uid=johnny --new-uid=joe
         
 Remove a user and all associated buckets with their contents::
 
