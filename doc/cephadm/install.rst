@@ -110,6 +110,15 @@ that case, you can install cephadm directly. For example:
 
      apt install -y cephadm
 
+  In CentOS Stream:
+
+  .. prompt:: bash #
+     :substitutions:
+
+     dnf search release-ceph
+     dnf install --assumeyes centos-release-ceph-|stable-release|
+     dnf install --assumeyes cephadm
+
   In Fedora:
 
   .. prompt:: bash #
