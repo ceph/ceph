@@ -232,6 +232,16 @@ class BaseController:
         return result
 
     @staticmethod
+    def get_client_version():
+        try:
+            client_version = APIVersion.from_mime_type(
+                cherrypy.request.headers['Accept'])
+        except Exception:
+            raise cherrypy.HTTPError(
+                415, "Unable to find version in request header")
+        return client_version
+
+    @staticmethod
     def _request_wrapper(func, method, json_response, xml,  # pylint: disable=unused-argument
                          version: Optional[APIVersion]):
         # pylint: disable=too-many-branches
@@ -247,12 +257,7 @@ class BaseController:
             kwargs.update(params)
 
             if version is not None:
-                try:
-                    client_version = APIVersion.from_mime_type(
-                        cherrypy.request.headers['Accept'])
-                except Exception:
-                    raise cherrypy.HTTPError(
-                        415, "Unable to find version in request header")
+                client_version = BaseController.get_client_version()
 
                 if version.supports(client_version):
                     ret = func(*args, **kwargs)
@@ -265,21 +270,17 @@ class BaseController:
 
             else:
                 ret = func(*args, **kwargs)
+
             if isinstance(ret, bytes):
                 ret = ret.decode('utf-8')
+
             if xml:
-                if version:
-                    cherrypy.response.headers['Content-Type'] = \
-                        'application/vnd.ceph.api.v{}+xml'.format(version)
-                else:
-                    cherrypy.response.headers['Content-Type'] = 'application/xml'
+                cherrypy.response.headers['Content-Type'] = (version.to_mime_type(subtype='xml')
+                                                             if version else 'application/xml')
                 return ret.encode('utf8')
             if json_response:
-                if version:
-                    cherrypy.response.headers['Content-Type'] = \
-                        'application/vnd.ceph.api.v{}+json'.format(version)
-                else:
-                    cherrypy.response.headers['Content-Type'] = 'application/json'
+                cherrypy.response.headers['Content-Type'] = (version.to_mime_type(subtype='json')
+                                                             if version else 'application/json')
                 ret = json.dumps(ret).encode('utf8')
             return ret
         return inner

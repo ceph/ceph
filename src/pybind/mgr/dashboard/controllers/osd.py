@@ -83,16 +83,20 @@ class Osd(RESTController):
             osd_spec = str(osd_id)
             if 'osd' not in osd:
                 continue  # pragma: no cover - simple early continue
-            for stat in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
-                prop = stat.split('.')[1]
-                rates = CephService.get_rates('osd', osd_spec, stat)
-                osd['stats'][prop] = get_most_recent_rate(rates)
-                osd['stats_history'][prop] = rates
-            # Gauge stats
-            for stat in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
-                osd['stats'][stat.split('.')[1]] = mgr.get_latest('osd', osd_spec, stat)
+            self.gauge_stats(osd, osd_spec)
             osd['operational_status'] = self._get_operational_status(osd_id, removing_osd_ids)
         return list(osds.values())
+
+    @staticmethod
+    def gauge_stats(osd, osd_spec):
+        for stat in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
+            prop = stat.split('.')[1]
+            rates = CephService.get_rates('osd', osd_spec, stat)
+            osd['stats'][prop] = get_most_recent_rate(rates)
+            osd['stats_history'][prop] = rates
+            # Gauge stats
+        for stat in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
+            osd['stats'][stat.split('.')[1]] = mgr.get_latest('osd', osd_spec, stat)
 
     @RESTController.Collection('GET', version=APIVersion.EXPERIMENTAL)
     @ReadPermission
