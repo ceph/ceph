@@ -12,6 +12,7 @@ function(build_opentelemetry)
   set(opentelemetry_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                                -DWITH_JAEGER=ON
                                -DBUILD_TESTING=OFF
+                               -DCMAKE_BUILD_TYPE=Release
                                -DWITH_EXAMPLES=OFF)
 
   set(opentelemetry_libs
