@@ -4683,6 +4683,8 @@ int OSDMap::calc_pg_upmaps(
   bool skip_overfull = false;
   auto aggressive =
     cct->_conf.get_val<bool>("osd_calc_pg_upmaps_aggressively");
+  auto fast_aggressive = aggressive &&
+    cct->_conf.get_val<bool>("osd_calc_pg_upmaps_aggressively_fast");
   auto local_fallback_retries =
     cct->_conf.get_val<uint64_t>("osd_calc_pg_upmaps_local_fallback_retries");
     
@@ -4732,7 +4734,7 @@ int OSDMap::calc_pg_upmaps(
       }
       int osd = p->second;
       float deviation = p->first;
-      if (osd_to_skip.count(osd)) {
+      if (fast_aggressive && osd_to_skip.count(osd)) {
 	ldout(cct, 20) << " Skipping osd " << osd 
 	               << " osd_to_skip size = " << osd_to_skip.size() << dendl;
 	continue;
@@ -4835,11 +4837,13 @@ int OSDMap::calc_pg_upmaps(
           goto test_change;
 	}
       }
-      if (prev_n_changes == n_changes) {  // no changes for prev OSD
-	osd_to_skip.insert(osd);
-      }
-      else {
-	prev_n_changes = n_changes;
+      if (fast_aggressive) {
+	if (prev_n_changes == n_changes) {  // no changes for prev OSD
+		osd_to_skip.insert(osd);
+	}
+	else {
+		prev_n_changes = n_changes;
+	}
       }
 
     }
