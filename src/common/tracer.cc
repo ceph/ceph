@@ -33,12 +33,6 @@ void Tracer::init(opentelemetry::nostd::string_view service_name) {
   }
 }
 
-void Tracer::shutdown() {
-  if (tracer) {
-    tracer->CloseWithMicroseconds(1);
-  }
-}
-
 jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   if (is_enabled()) {
     return tracer->StartSpan(trace_name);

@@ -4521,7 +4521,6 @@ int OSD::shutdown()
   utime_t duration = ceph_clock_now() - start_time_func;
   dout(0) <<"Slow Shutdown duration:" << duration << " seconds" << dendl;
 
-  tracing::osd::tracer.shutdown();
 
   return r;
 }

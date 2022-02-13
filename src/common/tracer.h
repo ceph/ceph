@@ -25,7 +25,6 @@ class Tracer {
   Tracer(opentelemetry::nostd::string_view service_name);
 
   void init(opentelemetry::nostd::string_view service_name);
-  void shutdown();
 
   bool is_enabled() const;
   // creates and returns a new span with `trace_name`
@@ -95,7 +94,6 @@ struct Tracer {
   jspan add_span(std::string_view, const jspan&) { return {}; }
   jspan add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
   void init(std::string_view service_name) {}
-  void shutdown() {}
 };
   inline void encode(const jspan_context& span, bufferlist& bl, uint64_t f=0) {}
   inline void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl) {}
