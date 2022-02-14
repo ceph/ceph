@@ -162,7 +162,7 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
 		}
 		auto &next = cursor.pending_record_groups.front();
 		journal_seq_t next_seq = {cursor.seq.segment_seq, next.offset};
-		if (cursor.last_committed == journal_seq_t() ||
+		if (cursor.last_committed == JOURNAL_SEQ_NULL ||
 		    next_seq > cursor.last_committed) {
 		  return scan_valid_records_ertr::make_ready_future<
 		    seastar::stop_iteration>(seastar::stop_iteration::yes);
@@ -239,7 +239,7 @@ ExtentReader::read_validate_record_metadata(
     if (header.mdlength < block_size ||
         header.mdlength % block_size != 0 ||
         header.dlength % block_size != 0 ||
-        (header.committed_to != journal_seq_t() &&
+        (header.committed_to != JOURNAL_SEQ_NULL &&
          header.committed_to.offset.as_seg_paddr().get_segment_off() % block_size != 0) ||
         (seg_addr.get_segment_off() + header.mdlength + header.dlength > segment_size)) {
       ERROR("failed, invalid record group header {}", start);
