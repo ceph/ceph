@@ -37,7 +37,13 @@ export class ServicesPageHelper extends PageHelper {
     });
   }
 
-  addService(serviceType: string, exist?: boolean, count = '1', snmpVersion?: string) {
+  addService(
+    serviceType: string,
+    exist?: boolean,
+    count = '1',
+    snmpVersion?: string,
+    snmpPrivProtocol?: boolean
+  ) {
     cy.get(`${this.pages.create.id}`).within(() => {
       this.selectServiceType(serviceType);
       switch (serviceType) {
@@ -67,12 +73,14 @@ export class ServicesPageHelper extends PageHelper {
           } else {
             cy.get('#engine_id').type('800C53F00000');
             this.selectOption('auth_protocol', 'SHA');
-            this.selectOption('privacy_protocol', 'DES');
+            if (snmpPrivProtocol) {
+              this.selectOption('privacy_protocol', 'DES');
+              cy.get('#snmp_v3_priv_password').type('testencrypt');
+            }
 
             // Credentials
             cy.get('#snmp_v3_auth_username').type('test');
             cy.get('#snmp_v3_auth_password').type('testpass');
-            cy.get('#snmp_v3_priv_password').type('testencrypt');
           }
           break;
 
