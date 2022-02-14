@@ -414,23 +414,28 @@ class Module(MgrModule):
             else:
                 if 'tcmalloc heap stats' in outs:
                     values = [int(i) for i in outs.split() if i.isdigit()]
-                    if len(values) != 12:
-                        self.log.debug('Received unexpected output: | outs: {} ' \
-                                '| values: {} |'.format(outs, values))
-                        return {}
-
-                    categories = ['use_by_application', 'page_heap_freelist',
-                                  'central_cache_freelist', 'transfer_cache_freelist',
-                                  'thread_cache_freelists', 'malloc_metadata',
-                                  'actual_memory_used', 'released_to_os',
-                                  'virtual_address_space_used', 'spans_in_use',
-                                  'thread_heaps_in_use', 'tcmalloc_page_size']
-
+                    # `categories` must be ordered this way for the correct output to be parsed
+                    categories = ['use_by_application',
+                                  'page_heap_freelist',
+                                  'central_cache_freelist',
+                                  'transfer_cache_freelist',
+                                  'thread_cache_freelists',
+                                  'malloc_metadata',
+                                  'actual_memory_used',
+                                  'released_to_os',
+                                  'virtual_address_space_used',
+                                  'spans_in_use',
+                                  'thread_heaps_in_use',
+                                  'tcmalloc_page_size']
+                    if len(values) != len(categories):
+                        self.log.debug('Received unexpected output from osd.{}; number of values should match the number of expected categories:\n' \
+                                'values: len={} {} ~ categories: len={} {} ~ outs: {}'.format(osd_id, len(values), values, len(categories), categories, outs))
+                        continue
                     osd = 'osd.' + str(osd_id)
                     result[osd] = dict(zip(categories, values))
                 else:
-                    self.log.debug('No heap stats available: {}'.format(outs))
-                    return {}
+                    self.log.debug('No heap stats available on osd.{}: {}'.format(osd_id, outs))
+                    continue
 
         return result
 
@@ -465,8 +470,8 @@ class Module(MgrModule):
                     else:
                         self.log.debug("Incorrect mode specified in get_mempool")
                 except (json.decoder.JSONDecodeError, KeyError) as e:
-                    self.log.debug("Error caught: {}".format(e))
-                    return {}
+                    self.log.debug("Error caught on osd.{}: {}".format(osd_id, e))
+                    continue
 
         return result
 
@@ -576,10 +581,10 @@ class Module(MgrModule):
                 # I am also putting in a catch for a KeyError since it could
                 # happen where the code is assuming that a key exists in the
                 # schema when it doesn't. In either case, we'll handle that
-                # by returning an empty dict.
+                # by continuing and collecting what we can from other osds.
                 except (json.decoder.JSONDecodeError, KeyError) as e:
-                    self.log.debug("Error caught: {}".format(e))
-                    return list()
+                    self.log.debug("Error caught on osd.{}: {}".format(osd_id, e))
+                    continue
 
         return list(result.values())
 
