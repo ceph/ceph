@@ -2005,6 +2005,10 @@ int RGWLC::process(LCWorker* worker,
 
 bool RGWLC::expired_session(time_t started)
 {
+  if (! cct->_conf->rgwlc_auto_session_clear) {
+    return false;
+  }
+
   time_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
     ? cct->_conf->rgw_lc_debug_interval
     : 24*60*60;
