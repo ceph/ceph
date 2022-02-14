@@ -315,7 +315,7 @@ void CDir::adjust_num_inodes_with_caps(int d)
 
 CDentry *CDir::lookup(std::string_view name, snapid_t snap)
 { 
-  dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
+  dout(20) << "lookup (" << name << ", '" << snap << "')" << dendl;
   auto iter = items.lower_bound(dentry_key_t(snap, name, inode->hash_dentry_name(name)));
   if (iter == items.end())
     return 0;
@@ -337,6 +337,31 @@ CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
   return p->second;
 }
 
+void CDir::adjust_dentry_lru(CDentry *dn)
+{
+  bool bottom_lru;
+  if (dn->get_linkage()->is_primary()) {
+    bottom_lru = !is_auth() && inode->is_stray();
+  } else if (dn->get_linkage()->is_remote()) {
+    bottom_lru = false;
+  } else {
+    bottom_lru = !is_auth();
+  }
+  if (bottom_lru) {
+    if (!dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+      mdcache->lru.lru_remove(dn);
+      mdcache->bottom_lru.lru_insert_mid(dn);
+      dn->state_set(CDentry::STATE_BOTTOMLRU);
+    }
+  } else {
+    if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+      mdcache->bottom_lru.lru_remove(dn);
+      mdcache->lru.lru_insert_mid(dn);
+      dn->state_clear(CDentry::STATE_BOTTOMLRU);
+    }
+  }
+}
+
 /***
  * linking fun
  */
@@ -349,11 +374,13 @@ CDentry* CDir::add_null_dentry(std::string_view dname,
    
   // create dentry
   CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), "", first, last);
-  if (is_auth()) 
+  if (is_auth()) {
     dn->state_set(CDentry::STATE_AUTH);
-
-  mdcache->bottom_lru.lru_insert_mid(dn);
-  dn->state_set(CDentry::STATE_BOTTOMLRU);
+    mdcache->lru.lru_insert_mid(dn);
+  } else {
+    mdcache->bottom_lru.lru_insert_mid(dn);
+    dn->state_set(CDentry::STATE_BOTTOMLRU);
+  }
 
   dn->dir = this;
   dn->version = get_projected_version();
@@ -623,7 +650,8 @@ void CDir::unlink_inode(CDentry *dn, bool adjust_lru)
 
   unlink_inode_work(dn);
 
-  if (adjust_lru && !dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+  if (adjust_lru && !is_auth() &&
+      !dn->state_test(CDentry::STATE_BOTTOMLRU)) {
     mdcache->lru.lru_remove(dn);
     mdcache->bottom_lru.lru_insert_mid(dn);
     dn->state_set(CDentry::STATE_BOTTOMLRU);
@@ -638,7 +666,6 @@ void CDir::unlink_inode(CDentry *dn, bool adjust_lru)
   }
   ceph_assert(get_num_any() == items.size());
 }
-
 
 void CDir::try_remove_unlinked_dn(CDentry *dn)
 {
@@ -932,10 +959,8 @@ void CDir::prepare_old_fragment(map<string_snap_t, MDSContext::vec >& dentry_wai
 
   if (!waiting_on_dentry.empty()) {
     for (const auto &p : waiting_on_dentry) {
-      auto &e = dentry_waiters[p.first];
-      for (const auto &waiter : p.second) {
-        e.push_back(waiter);
-      }
+      std::copy(p.second.begin(), p.second.end(),
+		std::back_inserter(dentry_waiters[p.first]));
     }
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
@@ -1075,10 +1100,8 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
 
     if (f->waiting_on_dentry.empty())
       f->get(PIN_DNWAITER);
-    auto &e = f->waiting_on_dentry[p.first];
-    for (const auto &waiter : p.second) {
-      e.push_back(waiter);
-    }
+    std::copy(p.second.begin(), p.second.end(),
+	      std::back_inserter(f->waiting_on_dentry[p.first]));
   }
 
   // FIXME: handle dirty old rstat
@@ -1170,10 +1193,8 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
   if (!dentry_waiters.empty()) {
     get(PIN_DNWAITER);
     for (const auto &p : dentry_waiters) {
-      auto &e = waiting_on_dentry[p.first];
-      for (const auto &waiter : p.second) {
-        e.push_back(waiter);
-      }
+      std::copy(p.second.begin(), p.second.end(),
+		std::back_inserter(waiting_on_dentry[p.first]));
     }
   }
 
@@ -1300,31 +1321,13 @@ void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t 
 	     << " [" << first << "," << last << "] found waiter on snap "
 	     << it->first.snapid
 	     << " on " << *this << dendl;
-    for (const auto &waiter : it->second) {
-      ls.push_back(waiter);
-    }
+    std::copy(it->second.begin(), it->second.end(), std::back_inserter(ls));
     waiting_on_dentry.erase(it++);
   }
 
   if (waiting_on_dentry.empty())
     put(PIN_DNWAITER);
 }
-
-void CDir::take_sub_waiting(MDSContext::vec& ls)
-{
-  dout(10) << __func__ << dendl;
-  if (!waiting_on_dentry.empty()) {
-    for (const auto &p : waiting_on_dentry) {
-      for (const auto &waiter : p.second) {
-        ls.push_back(waiter);
-      }
-    }
-    waiting_on_dentry.clear();
-    put(PIN_DNWAITER);
-  }
-}
-
-
 
 void CDir::add_waiter(uint64_t tag, MDSContext *c) 
 {
@@ -1355,9 +1358,7 @@ void CDir::take_waiting(uint64_t mask, MDSContext::vec& ls)
     for (const auto &p : waiting_on_dentry) {
       dout(10) << "take_waiting dentry " << p.first.name
 	       << " snap " << p.first.snapid << " on " << *this << dendl;
-      for (const auto &waiter : p.second) {
-        ls.push_back(waiter);
-      }
+      std::copy(p.second.begin(), p.second.end(), std::back_inserter(ls));
     }
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
@@ -1521,20 +1522,18 @@ void CDir::last_put()
 
 // -----------------------
 // FETCH
-void CDir::fetch(MDSContext *c, bool ignore_authpinnability)
+void CDir::fetch(std::string_view dname, snapid_t last,
+		 MDSContext *c, bool ignore_authpinnability)
 {
-  string want;
-  return fetch(c, want, ignore_authpinnability);
-}
-
-void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnability)
-{
-  dout(10) << "fetch on " << *this << dendl;
+  if (dname.empty())
+    dout(10) << "fetch on " << *this << dendl;
+  else
+    dout(10) << "fetch key(" << dname << ", '" << last << "')" << dendl;
   
   ceph_assert(is_auth());
   ceph_assert(!is_complete());
 
-  if (!can_auth_pin() && !ignore_authpinnability) {
+  if (!ignore_authpinnability && !can_auth_pin()) {
     if (c) {
       dout(7) << "fetch waiting for authpinnable" << dendl;
       add_waiter(WAIT_UNFREEZE, c);
@@ -1544,8 +1543,8 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
   }
 
   // unlinked directory inode shouldn't have any entry
-  if (!inode->is_base() && get_parent_dir()->inode->is_stray() &&
-      !inode->snaprealm) {
+  if (CDir *pdir = get_parent_dir();
+      pdir && pdir->inode->is_stray() && !inode->snaprealm) {
     dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
     if (get_version() == 0) {
       ceph_assert(inode->is_auth());
@@ -1566,8 +1565,16 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
     return;
   }
 
-  if (c) add_waiter(WAIT_COMPLETE, c);
-  if (!want_dn.empty()) wanted_items.insert(mempool::mds_co::string(want_dn));
+  // FIXME: to fetch a snap dentry, we need to get omap key in range
+  //       [(name, last), (name, CEPH_NOSNAP))
+  if (!dname.empty() && last == CEPH_NOSNAP && !g_conf().get_val<bool>("mds_dir_prefetch")) {
+    dentry_key_t key(last, dname, inode->hash_dentry_name(dname));
+    fetch_keys({key}, c);
+    return;
+  }
+
+  if (c)
+    add_waiter(WAIT_COMPLETE, c);
   
   // already fetching?
   if (state_test(CDir::STATE_FETCHING)) {
@@ -1578,38 +1585,76 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
   auth_pin(this);
   state_set(CDir::STATE_FETCHING);
 
-  if (mdcache->mds->logger) mdcache->mds->logger->inc(l_mds_dir_fetch);
+  _omap_fetch(nullptr, nullptr);
 
+  if (mdcache->mds->logger)
+    mdcache->mds->logger->inc(l_mds_dir_fetch_complete);
   mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
-
-  std::set<dentry_key_t> empty;
-  _omap_fetch(NULL, empty);
 }
 
-void CDir::fetch(MDSContext *c, const std::set<dentry_key_t>& keys)
+void CDir::fetch_keys(const std::vector<dentry_key_t>& keys, MDSContext *c)
 {
-  dout(10) << "fetch " << keys.size() << " keys on " << *this << dendl;
-
+  dout(10) << __func__ << " " << keys.size() << " keys on " << *this << dendl;
   ceph_assert(is_auth());
   ceph_assert(!is_complete());
 
-  if (!can_auth_pin()) {
-    dout(7) << "fetch keys waiting for authpinnable" << dendl;
-    add_waiter(WAIT_UNFREEZE, c);
+  if (CDir *pdir = get_parent_dir();
+      pdir && pdir->inode->is_stray() && !inode->snaprealm) {
+    fetch(c, true);
     return;
   }
+
+  MDSContext::vec_alloc<mempool::mds_co::pool_allocator> *fallback_waiting = nullptr;
+  std::set<std::string> str_keys;
+  for (auto& key : keys) {
+    ceph_assert(key.snapid == CEPH_NOSNAP);
+    if (waiting_on_dentry.empty())
+      get(PIN_DNWAITER);
+    auto em = waiting_on_dentry.emplace(std::piecewise_construct,
+					std::forward_as_tuple(key.name, key.snapid),
+					std::forward_as_tuple());
+    if (!em.second) {
+      if (!fallback_waiting)
+	fallback_waiting = &em.first->second;
+      continue;
+    }
+
+    if (c) {
+      em.first->second.push_back(c);
+      c = nullptr;
+    }
+
+    string str;
+    key.encode(str);
+    str_keys.emplace(std::move(str));
+  }
+
+  if (str_keys.empty()) {
+    if (c && fallback_waiting) {
+      fallback_waiting->push_back(c);
+      c = nullptr;
+    }
+
+    if (get_version() > 0) {
+      dout(7) << "fetch keys, all are already being fetched" << dendl;
+      ceph_assert(!c);
+      return;
+    }
+  }
+
   if (state_test(CDir::STATE_FETCHING)) {
-    dout(7) << "fetch keys waiting for full fetch" << dendl;
-    add_waiter(WAIT_COMPLETE, c);
+    dout(7) << "fetch keys, waiting for full fetch" << dendl;
+    if (c)
+      add_waiter(WAIT_COMPLETE, c);
     return;
   }
 
   auth_pin(this);
-  if (mdcache->mds->logger) mdcache->mds->logger->inc(l_mds_dir_fetch);
+  _omap_fetch(&str_keys, c);
 
+  if (mdcache->mds->logger)
+    mdcache->mds->logger->inc(l_mds_dir_fetch_keys);
   mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
-
-  _omap_fetch(c, keys);
 }
 
 class C_IO_Dir_OMAP_FetchedMore : public CDirIOContext {
@@ -1626,7 +1671,7 @@ public:
   void finish(int r) {
     if (omap_version < dir->get_committed_version()) {
       omap.clear();
-      dir->_omap_fetch(fin, {});
+      dir->_omap_fetch(nullptr, fin);
       return;
     }
 
@@ -1639,7 +1684,7 @@ public:
     if (more) {
       dir->_omap_fetch_more(omap_version, hdrbl, omap, fin);
     } else {
-      dir->_omap_fetched(hdrbl, omap, !fin, r);
+      dir->_omap_fetched(hdrbl, omap, true, {}, r);
       if (fin)
 	fin->complete(r);
     }
@@ -1653,6 +1698,8 @@ class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
   MDSContext *fin;
 public:
   const version_t omap_version;
+  bool complete = true;
+  std::set<string> keys;
   bufferlist hdrbl;
   bool more = false;
   map<string, bufferlist> omap;
@@ -1672,44 +1719,37 @@ public:
 
     if (more) {
       if (omap_version < dir->get_committed_version()) {
-        omap.clear();
-        dir->_omap_fetch(fin, {});
+	dir->_omap_fetch(nullptr, fin);
       } else {
-        dir->_omap_fetch_more(omap_version, hdrbl, omap, fin);
+	dir->_omap_fetch_more(omap_version, hdrbl, omap, fin);
       }
       return;
     }
 
-    dir->_omap_fetched(hdrbl, omap, !fin, r);
+    dir->_omap_fetched(hdrbl, omap, complete, keys, r);
     if (fin)
       fin->complete(r);
-
   }
   void print(ostream& out) const override {
     out << "dirfrag_fetch(" << dir->dirfrag() << ")";
   }
 };
 
-void CDir::_omap_fetch(MDSContext *c, const std::set<dentry_key_t>& keys)
+void CDir::_omap_fetch(std::set<string> *keys, MDSContext *c)
 {
   C_IO_Dir_OMAP_Fetched *fin = new C_IO_Dir_OMAP_Fetched(this, c);
   object_t oid = get_ondisk_object();
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
-  if (keys.empty()) {
+  if (keys) {
+    fin->complete = false;
+    fin->keys.swap(*keys);
+    rd.omap_get_vals_by_keys(fin->keys, &fin->omap, &fin->ret2);
+  } else {
     ceph_assert(!c);
     rd.omap_get_vals("", "", g_conf()->mds_dir_keys_per_op,
 		     &fin->omap, &fin->more, &fin->ret2);
-  } else {
-    ceph_assert(c);
-    std::set<std::string> str_keys;
-    for (auto p : keys) {
-      string str;
-      p.encode(str);
-      str_keys.insert(str);
-    }
-    rd.omap_get_vals_by_keys(str_keys, &fin->omap, &fin->ret2);
   }
   // check the correctness of backtrace
   if (g_conf()->mds_verify_backtrace > 0 && frag == frag_t()) {
@@ -1956,7 +1996,7 @@ CDentry *CDir::_load_dentry(
 }
 
 void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
-			 bool complete, int r)
+			 bool complete, const std::set<string>& keys, int r)
 {
   LogChannelRef clog = mdcache->mds->clog;
   dout(10) << "_fetched header " << hdrbl.length() << " bytes "
@@ -2033,22 +2073,83 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     }
   }
 
+
+  MDSContext::vec finished;
+  std::vector<string_snap_t> null_keys;
+
+  auto k_it = keys.rbegin();
+  auto w_it = waiting_on_dentry.rbegin();
+  std::string_view last_name = "";
+
+  auto proc_waiters = [&](const string_snap_t& key) {
+    bool touch = false;
+    if (last_name < key.name) {
+      // string_snap_t and key string are not in the same order
+      w_it = decltype(w_it)(waiting_on_dentry.upper_bound(key));
+    }
+    while (w_it != waiting_on_dentry.rend()) {
+      int cmp = w_it->first.compare(key);
+      if (cmp < 0)
+	break;
+      if (cmp == 0) {
+	touch = true;
+	std::copy(w_it->second.begin(), w_it->second.end(),
+		  std::back_inserter(finished));
+	waiting_on_dentry.erase(std::next(w_it).base());
+	if (waiting_on_dentry.empty())
+	  put(PIN_DNWAITER);
+	break;
+      }
+      ++w_it;
+    }
+    return touch;
+  };
+  auto proc_nulls_and_waiters = [&](const string& str_key, const string_snap_t& key) {
+    bool touch = false;
+    while (k_it != keys.rend()) {
+      int cmp = k_it->compare(str_key);
+      if (cmp < 0)
+	break;
+      if (cmp == 0) {
+	touch = true;
+	proc_waiters(key);
+	++k_it;
+	break;
+      }
+      string_snap_t n_key;
+      dentry_key_t::decode_helper(*k_it, n_key.name, n_key.snapid);
+      ceph_assert(n_key.snapid == CEPH_NOSNAP);
+      proc_waiters(n_key);
+      last_name = std::string_view(k_it->c_str(), n_key.name.length());
+      null_keys.emplace_back(std::move(n_key));
+      ++k_it;
+    }
+    return touch;
+  };
+
   unsigned pos = omap.size() - 1;
   double rand_threshold = get_inode()->get_ephemeral_rand();
-  for (map<string, bufferlist>::reverse_iterator p = omap.rbegin();
-       p != omap.rend();
-       ++p, --pos) {
-    string dname;
-    snapid_t last;
-    dentry_key_t::decode_helper(p->first, dname, last);
+  for (auto p = omap.rbegin(); p != omap.rend(); ++p, --pos) {
+    string_snap_t key;
+    dentry_key_t::decode_helper(p->first, key.name, key.snapid);
+    bool touch = false;
 
-    CDentry *dn = NULL;
+    if (key.snapid == CEPH_NOSNAP) {
+      if (complete) {
+	touch = proc_waiters(key);
+      } else {
+	touch = proc_nulls_and_waiters(p->first, key);
+      }
+      last_name = std::string_view(p->first.c_str(), key.name.length());
+    }
+
+    CDentry *dn = nullptr;
     try {
       dn = _load_dentry(
-            p->first, dname, last, p->second, pos, snaps,
+            p->first, key.name, key.snapid, p->second, pos, snaps,
             rand_threshold, &force_dirty);
     } catch (const buffer::error &err) {
-      mdcache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
+      mdcache->mds->clog->warn() << "Corrupt dentry '" << key.name << "' in "
                                   "dir frag " << dirfrag() << ": "
                                << err.what() << "(" << get_path() << ")";
 
@@ -2056,7 +2157,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       // that try to act directly on it will get their CEPHFS_EIOs, but this
       // dirfrag as a whole will continue to look okay (minus the
       // mysteriously-missing dentry)
-      go_bad_dentry(last, dname);
+      go_bad_dentry(key.snapid, key.name);
 
       // Anyone who was WAIT_DENTRY for this guy will get kicked
       // to RetryRequest, and hit the DamageTable-interrogating path.
@@ -2068,12 +2169,40 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     if (!dn)
       continue;
 
+    if (touch) {
+      dout(10) << " touching wanted dn " << *dn << dendl;
+      mdcache->touch_dentry(dn);
+    }
+
     CDentry::linkage_t *dnl = dn->get_linkage();
     if (dnl->is_primary() && dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF))
       undef_inodes.push_back(dnl->get_inode());
+  }
 
-    if (wanted_items.count(mempool::mds_co::string(dname)) > 0 || !complete) {
-      dout(10) << " touching wanted dn " << *dn << dendl;
+  if (complete) {
+    if (!waiting_on_dentry.empty()) {
+      for (auto &p : waiting_on_dentry) {
+	std::copy(p.second.begin(), p.second.end(), std::back_inserter(finished));
+	if (p.first.snapid == CEPH_NOSNAP)
+	  null_keys.emplace_back(p.first);
+      }
+      waiting_on_dentry.clear();
+      put(PIN_DNWAITER);
+    }
+  } else {
+    proc_nulls_and_waiters("", string_snap_t());
+  }
+
+  if (!null_keys.empty()) {
+    snapid_t first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+    for (auto& key : null_keys) {
+      CDentry* dn = lookup(key.name, key.snapid);
+      if (dn) {
+	dout(12) << "_fetched got null for key " << key << ", have " << *dn << dendl;
+      } else {
+	dn = add_null_dentry(key.name, first, key.snapid);
+	dout(12) << "_fetched got null for key " << key << ", added " << *dn << dendl;
+      }
       mdcache->touch_dentry(dn);
     }
   }
@@ -2082,9 +2211,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   // mark complete, !fetching
   if (complete) {
-    wanted_items.clear();
     mark_complete();
     state_clear(STATE_FETCHING);
+    take_waiting(WAIT_COMPLETE, finished);
   }
 
   // open & force frags
@@ -2101,10 +2230,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   auth_unpin(this);
 
-  if (complete) {
-    // kick waiters
-    finish_waiting(WAIT_COMPLETE, 0);
-  }
+  if (!finished.empty())
+    mdcache->mds->queue_waiters(finished);
 }
 
 void CDir::go_bad_dentry(snapid_t last, std::string_view dname)

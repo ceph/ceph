@@ -4691,8 +4691,11 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     bool dnp = dn->use_projected(client, mdr);
     CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
 
-    if (dnl->is_null())
+    if (dnl->is_null()) {
+      if (dn->get_num_ref() == 0 && !dn->is_projected())
+	dir->remove_dentry(dn);
       continue;
+    }
 
     if (dn->last < snapid || dn->first > snapid) {
       dout(20) << "skipping non-overlapping snap " << *dn << dendl;
