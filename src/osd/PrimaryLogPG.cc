@@ -10457,7 +10457,11 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
   if (pool.info.get_fingerprint_type() == pg_pool_t::TYPE_FINGERPRINT_NONE) {
     dout(0) << " fingerprint algorithm is not set " << dendl;
     return -EINVAL;
-  } 
+  }
+  if (pool.info.get_dedup_tier() <= 0) {
+    dout(10) << " dedup tier is not set " << dendl;
+    return -EINVAL;
+  }
 
   /*
    * The operations to make dedup chunks are tracked by a ManifestOp.
@@ -10593,6 +10597,8 @@ hobject_t PrimaryLogPG::get_fpoid_from_chunk(const hobject_t soid, bufferlist& c
   pg_t raw_pg;
   object_locator_t oloc(soid);
   oloc.pool = pool.info.get_dedup_tier();
+  // check if dedup_tier isn't set
+  ceph_assert(oloc.pool > 0);
   get_osdmap()->object_locator_to_pg(fp_oid, oloc, raw_pg);
   hobject_t target(fp_oid, oloc.key, snapid_t(),
 		    raw_pg.ps(), raw_pg.pool(),
