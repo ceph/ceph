@@ -44,6 +44,8 @@ class Format(enum.Enum):
     json = 'json'
     json_pretty = 'json-pretty'
     yaml = 'yaml'
+    xml_pretty = 'xml-pretty'
+    xml = 'xml'
 
 
 class ServiceType(enum.Enum):
@@ -115,6 +117,8 @@ def to_format(what: Any, format: Format, many: bool, cls: Any) -> Any:
         if many:
             return yaml.dump_all(to_yaml(copy), default_flow_style=False)
         return yaml.dump(to_yaml(copy), default_flow_style=False)
+    elif format == Format.xml or format == Format.xml_pretty:
+        raise OrchestratorError(f"format '{format.name}' is not implemented.")
     else:
         raise OrchestratorError(f'unsupported format type: {format}')
 
