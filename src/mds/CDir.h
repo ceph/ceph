@@ -368,6 +368,7 @@ public:
   CDentry* lookup_exact_snap(std::string_view dname, snapid_t last);
   CDentry* lookup(std::string_view n, snapid_t snap=CEPH_NOSNAP);
 
+  void adjust_dentry_lru(CDentry *dn);
   CDentry* add_null_dentry(std::string_view dname,
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   CDentry* add_primary_dentry(std::string_view dname, CInode *in, mempool::mds_co::string alternate_name,
@@ -471,9 +472,12 @@ public:
   object_t get_ondisk_object() { 
     return file_object_t(ino(), frag);
   }
-  void fetch(MDSContext *c, bool ignore_authpinnability=false);
-  void fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnability=false);
-  void fetch(MDSContext *c, const std::set<dentry_key_t>& keys);
+  void fetch(std::string_view dname, snapid_t last,
+            MDSContext *c, bool ignore_authpinnability=false);
+  void fetch(MDSContext *c, bool ignore_authpinnability=false) {
+    fetch("", CEPH_NOSNAP, c, ignore_authpinnability);
+  }
+  void fetch_keys(const std::vector<dentry_key_t>& keys, MDSContext *c);
 
 #if 0  // unused?
   void wait_for_commit(Context *c, version_t v=0);
@@ -498,7 +502,6 @@ public:
   }
   void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSContext *c);
   void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, MDSContext::vec& ls);
-  void take_sub_waiting(MDSContext::vec& ls);  // dentry or ino
 
   void add_waiter(uint64_t mask, MDSContext *c) override;
   void take_waiting(uint64_t mask, MDSContext::vec& ls) override;  // may include dentry waiters
@@ -644,7 +647,7 @@ protected:
   friend class C_IO_Dir_Committed;
   friend class C_IO_Dir_Commit_Ops;
 
-  void _omap_fetch(MDSContext *fin, const std::set<dentry_key_t>& keys);
+  void _omap_fetch(std::set<std::string> *keys, MDSContext *fin=nullptr);
   void _omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
 			std::map<std::string, bufferlist>& omap, MDSContext *fin);
   CDentry *_load_dentry(
@@ -668,7 +671,7 @@ protected:
   void go_bad(bool complete);
 
   void _omap_fetched(ceph::buffer::list& hdrbl, std::map<std::string, ceph::buffer::list>& omap,
-		     bool complete, int r);
+		     bool complete, const std::set<std::string>& keys, int r);
 
   // -- commit --
   void _commit(version_t want, int op_prio);
@@ -742,11 +745,10 @@ protected:
   /* If you set up the bloom filter, you must keep it accurate!
    * It's deleted when you mark_complete() and is deliberately not serialized.*/
 
-  mempool::mds_co::compact_set<mempool::mds_co::string> wanted_items;
   mempool::mds_co::compact_map<version_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_for_commit;
 
   // -- waiters --
-  mempool::mds_co::compact_map< string_snap_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_on_dentry; // FIXME string_snap_t not in mempool
+  mempool::mds_co::map< string_snap_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_on_dentry; // FIXME string_snap_t not in mempool
 
 private:
   friend std::ostream& operator<<(std::ostream& out, const class CDir& dir);
