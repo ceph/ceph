@@ -701,7 +701,7 @@ public:
   }
 
   void set_journal_head(journal_seq_t head) {
-    assert(journal_head == journal_seq_t() || head >= journal_head);
+    assert(journal_head == JOURNAL_SEQ_NULL || head >= journal_head);
     journal_head = head;
     segments.update_segment_avail_bytes(head.offset);
     gc_process.maybe_wake_on_space_used();
@@ -836,7 +836,7 @@ private:
 	seq);
       return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
     } else {
-      return journal_seq_t();
+      return JOURNAL_SEQ_NULL;
     }
   }
 
@@ -1019,7 +1019,7 @@ private:
 
   /// Return bytes contained in segments in journal
   size_t get_journal_segment_bytes() const {
-    if (journal_head == journal_seq_t()) {
+    if (journal_head == JOURNAL_SEQ_NULL) {
       // this for calculating journal bytes in the journal
       // replay phase in which journal_head is not set
       return segments.get_journal_segments() * segments[journal_device_id]->segment_size;

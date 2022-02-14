@@ -19,6 +19,10 @@
 
 namespace crimson::os::seastore {
 
+/*
+ * Note: NULL value is usually the default and max value.
+ */
+
 using depth_t = uint32_t;
 using depth_le_t = ceph_le32;
 
@@ -59,13 +63,13 @@ using device_segment_id_t = uint32_t;
 constexpr device_id_t DEVICE_ID_MAX = 
   (std::numeric_limits<device_id_t>::max() >>
    (std::numeric_limits<device_id_t>::digits - DEVICE_ID_LEN_BITS + 1));
+constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX;
 constexpr device_id_t DEVICE_ID_RECORD_RELATIVE = DEVICE_ID_MAX - 1;
 constexpr device_id_t DEVICE_ID_BLOCK_RELATIVE = DEVICE_ID_MAX - 2;
 constexpr device_id_t DEVICE_ID_DELAYED = DEVICE_ID_MAX - 3;
-constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX - 4;
-constexpr device_id_t DEVICE_ID_FAKE = DEVICE_ID_MAX - 5;
-constexpr device_id_t DEVICE_ID_ZERO = DEVICE_ID_MAX - 6;
-constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 7;
+constexpr device_id_t DEVICE_ID_FAKE = DEVICE_ID_MAX - 4;
+constexpr device_id_t DEVICE_ID_ZERO = DEVICE_ID_MAX - 5;
+constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 6;
 
 constexpr device_segment_id_t DEVICE_SEGMENT_ID_MAX =
   (1 << SEGMENT_ID_LEN_BITS) - 1;
@@ -166,12 +170,13 @@ struct __attribute((packed)) segment_id_le_t {
   }
 };
 
+constexpr segment_id_t MIN_SEG_ID = segment_id_t(0, 0);
 constexpr segment_id_t MAX_SEG_ID = segment_id_t(
   DEVICE_ID_MAX,
   DEVICE_SEGMENT_ID_MAX
 );
 // for tests which generate fake paddrs
-constexpr segment_id_t NULL_SEG_ID = segment_id_t(DEVICE_ID_NULL, 0);
+constexpr segment_id_t NULL_SEG_ID = MAX_SEG_ID;
 constexpr segment_id_t FAKE_SEG_ID = segment_id_t(DEVICE_ID_FAKE, 0);
 
 std::ostream &operator<<(std::ostream &out, const segment_id_t&);
@@ -182,10 +187,9 @@ std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
 // Offset within a segment on disk, see SegmentManager
 // may be negative for relative offsets
 using seastore_off_t = int32_t;
-constexpr seastore_off_t NULL_SEG_OFF =
-  std::numeric_limits<seastore_off_t>::max();
 constexpr seastore_off_t MAX_SEG_OFF =
   std::numeric_limits<seastore_off_t>::max();
+constexpr seastore_off_t NULL_SEG_OFF = MAX_SEG_OFF;
 
 std::ostream &offset_to_stream(std::ostream &, const seastore_off_t &t);
 
@@ -462,7 +466,8 @@ public:
     seastore_off_t offset) {
     return paddr_t(segment_id_t(device, seg), offset);
   }
-  constexpr paddr_t() : paddr_t(NULL_SEG_ID, 0) {}
+  // P_ADDR_MAX == P_ADDR_NULL == paddr_t{}
+  constexpr paddr_t() : paddr_t(NULL_SEG_ID, NULL_SEG_OFF) {}
   static constexpr paddr_t make_blk_paddr(
     device_id_t device,
     block_off_t offset) {
@@ -667,11 +672,9 @@ private:
   }
 };
 
-constexpr paddr_t P_ADDR_NULL = paddr_t{};
-constexpr paddr_t P_ADDR_MIN = paddr_t::make_seg_paddr(segment_id_t(0, 0), 0);
-constexpr paddr_t P_ADDR_MAX = paddr_t::make_seg_paddr(
-  segment_id_t(DEVICE_ID_MAX, DEVICE_SEGMENT_ID_MAX),
-  std::numeric_limits<seastore_off_t>::max());
+constexpr paddr_t P_ADDR_MIN = paddr_t::make_seg_paddr(MIN_SEG_ID, 0);
+constexpr paddr_t P_ADDR_MAX = paddr_t::make_seg_paddr(MAX_SEG_ID, MAX_SEG_OFF);
+constexpr paddr_t P_ADDR_NULL = paddr_t{}; // P_ADDR_MAX == P_ADDR_NULL == paddr_t{}
 constexpr paddr_t P_ADDR_ZERO = paddr_t::make_seg_paddr(
   DEVICE_ID_ZERO, 0, 0);
 
@@ -710,7 +713,7 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
 
 using objaddr_t = uint32_t;
 constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
-constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX - 1;
+constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX;
 
 enum class placement_hint_t {
   HOT = 0,   // Most of the metadata
@@ -737,9 +740,10 @@ device_type_t string_to_device_type(std::string type);
 /* Monotonically increasing identifier for the location of a
  * journal_record.
  */
+// JOURNAL_SEQ_NULL == JOURNAL_SEQ_MAX == journal_seq_t{}
 struct journal_seq_t {
-  segment_seq_t segment_seq = 0;
-  paddr_t offset;
+  segment_seq_t segment_seq = NULL_SEG_SEQ;
+  paddr_t offset = P_ADDR_NULL;
 
   journal_seq_t add_offset(seastore_off_t o) const {
     return {segment_seq, offset.add_offset(o)};
@@ -760,27 +764,28 @@ WRITE_CMP_OPERATORS_2(journal_seq_t, segment_seq, offset)
 WRITE_EQ_OPERATORS_2(journal_seq_t, segment_seq, offset)
 constexpr journal_seq_t JOURNAL_SEQ_MIN{
   0,
-  paddr_t::make_seg_paddr(NULL_SEG_ID, 0)
+  P_ADDR_MIN
 };
 constexpr journal_seq_t JOURNAL_SEQ_MAX{
   MAX_SEG_SEQ,
   P_ADDR_MAX
 };
+// JOURNAL_SEQ_NULL == JOURNAL_SEQ_MAX == journal_seq_t{}
+constexpr journal_seq_t JOURNAL_SEQ_NULL = JOURNAL_SEQ_MAX;
+constexpr journal_seq_t NO_DELTAS = journal_seq_t{
+  NULL_SEG_SEQ,
+  P_ADDR_ZERO
+};
 
 std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq);
-
-static constexpr journal_seq_t NO_DELTAS = journal_seq_t{
-  NULL_SEG_SEQ,
-  P_ADDR_NULL
-};
 
 // logical addr, see LBAManager, TransactionManager
 using laddr_t = uint64_t;
 constexpr laddr_t L_ADDR_MIN = std::numeric_limits<laddr_t>::min();
 constexpr laddr_t L_ADDR_MAX = std::numeric_limits<laddr_t>::max();
-constexpr laddr_t L_ADDR_NULL = std::numeric_limits<laddr_t>::max();
-constexpr laddr_t L_ADDR_ROOT = std::numeric_limits<laddr_t>::max() - 1;
-constexpr laddr_t L_ADDR_LBAT = std::numeric_limits<laddr_t>::max() - 2;
+constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
+constexpr laddr_t L_ADDR_ROOT = L_ADDR_MAX - 1;
+constexpr laddr_t L_ADDR_LBAT = L_ADDR_MAX - 2;
 
 struct __attribute((packed)) laddr_le_t {
   ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
@@ -877,7 +882,6 @@ struct extent_t {
 };
 
 using extent_version_t = uint32_t;
-constexpr extent_version_t EXTENT_VERSION_NULL = 0;
 
 /* description of a mutation to a physical extent */
 struct delta_info_t {
@@ -1597,7 +1601,7 @@ inline paddr_t paddr_t::operator-(paddr_t rhs) const {
     return seg_addr - rhs;
   }
   ceph_assert(0 == "not supported type");
-  return paddr_t{};
+  return P_ADDR_NULL;
 }
 
 #define PADDR_OPERATION(a_type, base, func)        \
@@ -1609,31 +1613,31 @@ inline paddr_t paddr_t::add_offset(int32_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_offset(o))
   PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_offset(o))
   ceph_assert(0 == "not supported type");
-  return paddr_t{};
+  return P_ADDR_NULL;
 }
 
 inline paddr_t paddr_t::add_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_relative(o))
   ceph_assert(0 == "not supported type");
-  return paddr_t{};
+  return P_ADDR_NULL;
 }
 
 inline paddr_t paddr_t::add_block_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_block_relative(o))
   ceph_assert(0 == "not supported type");
-  return paddr_t{};
+  return P_ADDR_NULL;
 }
 
 inline paddr_t paddr_t::add_record_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_record_relative(o))
   ceph_assert(0 == "not supported type");
-  return paddr_t{};
+  return P_ADDR_NULL;
 }
 
 inline paddr_t paddr_t::maybe_relative_to(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, maybe_relative_to(o))
   ceph_assert(0 == "not supported type");
-  return paddr_t{};
+  return P_ADDR_NULL;
 }
 
 }

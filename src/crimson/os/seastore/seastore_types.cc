@@ -622,7 +622,7 @@ void scan_valid_records_cursor::emplace_record_group(
     const record_group_header_t& header, ceph::bufferlist&& md_bl)
 {
   auto new_committed_to = header.committed_to;
-  ceph_assert(last_committed == journal_seq_t() ||
+  ceph_assert(last_committed == JOURNAL_SEQ_NULL ||
               last_committed <= new_committed_to);
   last_committed = new_committed_to;
   pending_record_groups.emplace_back(
@@ -630,7 +630,7 @@ void scan_valid_records_cursor::emplace_record_group(
     header,
     std::move(md_bl));
   increment_seq(header.dlength + header.mdlength);
-  ceph_assert(new_committed_to == journal_seq_t() ||
+  ceph_assert(new_committed_to == JOURNAL_SEQ_NULL ||
               new_committed_to < seq);
 }
 
