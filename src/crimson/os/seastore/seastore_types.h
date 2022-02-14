@@ -43,9 +43,9 @@ struct seastore_meta_t {
   }
 };
 
-bool is_aligned(uint64_t offset, uint64_t alignment);
-
 std::ostream& operator<<(std::ostream& out, const seastore_meta_t& meta);
+
+bool is_aligned(uint64_t offset, uint64_t alignment);
 
 // identifies a specific physical device within seastore
 using device_id_t = uint8_t;
@@ -70,6 +70,12 @@ constexpr device_id_t DEVICE_ID_DELAYED = DEVICE_ID_MAX - 3;
 constexpr device_id_t DEVICE_ID_FAKE = DEVICE_ID_MAX - 4;
 constexpr device_id_t DEVICE_ID_ZERO = DEVICE_ID_MAX - 5;
 constexpr device_id_t DEVICE_ID_MAX_VALID = DEVICE_ID_MAX - 6;
+
+struct device_id_printer_t {
+  device_id_t id;
+};
+
+std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id);
 
 constexpr device_segment_id_t DEVICE_SEGMENT_ID_MAX =
   (1 << SEGMENT_ID_LEN_BITS) - 1;
@@ -158,6 +164,8 @@ private:
   friend struct paddr_le_t;
 };
 
+std::ostream &operator<<(std::ostream &out, const segment_id_t&);
+
 // ondisk type of segment_id_t
 struct __attribute((packed)) segment_id_le_t {
   ceph_le32 segment = ceph_le32(segment_id_t::DEFAULT_INTERNAL_SEG_ID);
@@ -179,11 +187,6 @@ constexpr segment_id_t MAX_SEG_ID = segment_id_t(
 constexpr segment_id_t NULL_SEG_ID = MAX_SEG_ID;
 constexpr segment_id_t FAKE_SEG_ID = segment_id_t(DEVICE_ID_FAKE, 0);
 
-std::ostream &operator<<(std::ostream &out, const segment_id_t&);
-
-
-std::ostream &segment_to_stream(std::ostream &, const segment_id_t &t);
-
 // Offset within a segment on disk, see SegmentManager
 // may be negative for relative offsets
 using seastore_off_t = int32_t;
@@ -191,7 +194,11 @@ constexpr seastore_off_t MAX_SEG_OFF =
   std::numeric_limits<seastore_off_t>::max();
 constexpr seastore_off_t NULL_SEG_OFF = MAX_SEG_OFF;
 
-std::ostream &offset_to_stream(std::ostream &, const seastore_off_t &t);
+struct seastore_off_printer_t {
+  seastore_off_t off;
+};
+
+std::ostream &operator<<(std::ostream&, const seastore_off_printer_t&);
 
 /* Monotonically increasing segment seq, uniquely identifies
  * the incarnation of a segment */
@@ -555,6 +562,8 @@ public:
 WRITE_EQ_OPERATORS_1(paddr_t, dev_addr);
 WRITE_CMP_OPERATORS_1(paddr_t, dev_addr);
 
+std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
+
 struct seg_paddr_t : public paddr_t {
   static constexpr uint64_t SEG_OFF_MASK = std::numeric_limits<uint32_t>::max();
   // mask for segment manager id
@@ -709,8 +718,6 @@ struct __attribute((packed)) paddr_le_t {
   }
 };
 
-std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
-
 using objaddr_t = uint32_t;
 constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
 constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX;
@@ -762,6 +769,9 @@ struct journal_seq_t {
 };
 WRITE_CMP_OPERATORS_2(journal_seq_t, segment_seq, offset)
 WRITE_EQ_OPERATORS_2(journal_seq_t, segment_seq, offset)
+
+std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq);
+
 constexpr journal_seq_t JOURNAL_SEQ_MIN{
   0,
   P_ADDR_MIN
@@ -776,8 +786,6 @@ constexpr journal_seq_t NO_DELTAS = journal_seq_t{
   NULL_SEG_SEQ,
   P_ADDR_ZERO
 };
-
-std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq);
 
 // logical addr, see LBAManager, TransactionManager
 using laddr_t = uint64_t;
@@ -855,6 +863,8 @@ enum class extent_types_t : uint8_t {
 };
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
 
+std::ostream &operator<<(std::ostream &out, extent_types_t t);
+
 constexpr bool is_logical_type(extent_types_t type) {
   switch (type) {
   case extent_types_t::ROOT:
@@ -871,8 +881,6 @@ constexpr bool is_lba_node(extent_types_t type)
   return type == extent_types_t::LADDR_INTERNAL ||
     type == extent_types_t::LADDR_LEAF;
 }
-
-std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
 /* description of a new physical extent */
 struct extent_t {
@@ -919,11 +927,9 @@ struct delta_info_t {
       bl == rhs.bl
     );
   }
-
-  friend std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 };
 
-std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
+std::ostream &operator<<(std::ostream &out, const delta_info_t &delta);
 
 class object_data_t {
   laddr_t reserved_data_base = L_ADDR_NULL;
