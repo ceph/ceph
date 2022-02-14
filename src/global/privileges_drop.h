@@ -16,5 +16,8 @@
 
 // Drop root privileges if asked via the config mechanism. conf and log
 // subsystens must be already operational.
+#ifdef WITH_SEASTAR
+void maybe_drop_privileges();
+#else
 std::ostringstream maybe_drop_privileges(const int flags);
-
+#endif

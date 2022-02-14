@@ -7,6 +7,8 @@
 #include <grp.h>
 #endif
 
+#include <fmt/format.h>
+
 #include "common/ceph_context.h"
 #include "common/common_init.h"
 #include "common/errno.h"
@@ -14,20 +16,38 @@
 
 using namespace std;
 
-std::ostringstream maybe_drop_privileges(const int flags) {
-  // drop privileges?
-  std::ostringstream priv_ss;
+#ifdef WITH_SEASTAR
+#include "crimson/common/log.h"
+#else
+struct Logger {
+  std::ostringstream ss;
 
+  template <class... Args>
+  static void error(fmt::format_string<Args...> fmt, Args&&... args) {
+    cerr << fmt::format(fmt, std::forward<Args>(args)...) << std::endl;
+  }
+
+  template <class... Args>
+  void debug(fmt::format_string<Args...> fmt, Args&&... args) {
+    ss << fmt::format(fmt, std::forward<Args>(args)...) << std::endl;
+  }
+};
+#endif
+
+
+template <class LoggerT>
+void _maybe_drop_privileges(LoggerT& logger, const int flags) {
+  // drop privileges?
   #ifndef _WIN32
   // consider --setuser root a no-op, even if we're not root
   if (getuid() != 0) {
     if (g_conf()->setuser.length()) {
-      cerr << "ignoring --setuser " << g_conf()->setuser << " since I am not root"
-	   << std::endl;
+      logger.error("ignoring --setuser {} since I am not root",
+		   g_conf()->setuser);
     }
     if (g_conf()->setgroup.length()) {
-      cerr << "ignoring --setgroup " << g_conf()->setgroup
-	   << " since I am not root" << std::endl;
+      logger.debug("ignoring --setgroup {} since I am not root",
+		   g_conf()->setgroup);
     }
   } else if (g_conf()->setgroup.length() ||
              g_conf()->setuser.length()) {
@@ -47,8 +67,7 @@ std::ostringstream maybe_drop_privileges(const int flags) {
       } else {
 	getpwnam_r(g_conf()->setuser.c_str(), &pa, buf, sizeof(buf), &p);
         if (!p) {
-	  cerr << "unable to look up user '" << g_conf()->setuser << "'"
-	       << std::endl;
+	  logger.error("unable to look up user '{}'", g_conf()->setuser);
 	  exit(1);
         }
 
@@ -69,8 +88,8 @@ std::ostringstream maybe_drop_privileges(const int flags) {
 	struct group *g = 0;
 	getgrnam_r(g_conf()->setgroup.c_str(), &gr, buf, sizeof(buf), &g);
 	if (!g) {
-	  cerr << "unable to look up group '" << g_conf()->setgroup << "'"
-	       << ": " << cpp_strerror(errno) << std::endl;
+	  logger.error("unable to look up group '{}': {}",
+		       g_conf()->setgroup, cpp_strerror(errno));
 	  exit(1);
 	}
 	gid = g->gr_gid;
@@ -85,25 +104,22 @@ std::ostringstream maybe_drop_privileges(const int flags) {
       struct stat st;
       int r = ::stat(match_path.c_str(), &st);
       if (r < 0) {
-	cerr << "unable to stat setuser_match_path "
-	     << g_conf()->setuser_match_path
-	     << ": " << cpp_strerror(errno) << std::endl;
+	logger.error("unable to stat setuser_match_path {}: {}",
+		     g_conf()->setuser_match_path, cpp_strerror(errno));
 	exit(1);
       }
       if ((uid && uid != st.st_uid) ||
 	  (gid && gid != st.st_gid)) {
-	cerr << "WARNING: will not setuid/gid: " << match_path
-	     << " owned by " << st.st_uid << ":" << st.st_gid
-	     << " and not requested " << uid << ":" << gid
-	     << std::endl;
+	logger.error("WARNING: will not setuid/gid: {} owned by {}:{}"
+		     " and not requested {}:{}",
+                     match_path, st.st_uid, st.st_gid, uid, gid);
 	uid = 0;
 	gid = 0;
 	uid_string.erase();
 	gid_string.erase();
       } else {
-	priv_ss << "setuser_match_path "
-		<< match_path << " owned by "
-		<< st.st_uid << ":" << st.st_gid << ". ";
+	logger.debug("setuser_match_path {} owned by {}:{}. ",
+                     match_path, st.st_uid, st.st_gid);
       }
     }
 #ifndef WITH_SEASTAR
@@ -112,25 +128,35 @@ std::ostringstream maybe_drop_privileges(const int flags) {
 #endif
     if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) == 0) {
       if (setgid(gid) != 0) {
-	cerr << "unable to setgid " << gid << ": " << cpp_strerror(errno)
-	     << std::endl;
+	logger.error("unable to setgid {}: {}", gid, cpp_strerror(errno));
 	exit(1);
       }
       if (setuid(uid) != 0) {
-	cerr << "unable to setuid " << uid << ": " << cpp_strerror(errno)
-	     << std::endl;
+	logger.error("unable to setuid {}: {}", uid, cpp_strerror(errno));
 	exit(1);
       }
       if (setenv("HOME", home_directory.c_str(), 1) != 0) {
-	cerr << "warning: unable to set HOME to " << home_directory << ": "
-             << cpp_strerror(errno) << std::endl;
+	logger.error("warning: unable to set HOME to {}: {}",
+                     home_directory, cpp_strerror(errno));
       }
-      priv_ss << "set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
+      logger.debug("set uid:gid to {}:{} ({}:{})",
+		   uid, gid, uid_string, gid_string);
     } else {
-      priv_ss << "deferred set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
+      logger.debug("deferred set uid:gid to {}:{} ({}:{})",
+		   uid, gid, uid_string, gid_string);
     }
   }
   #endif /* _WIN32 */
-  return priv_ss;
 }
 
+#ifdef WITH_SEASTAR
+void maybe_drop_privileges() {
+  return _maybe_drop_privileges(crimson::get_logger(ceph_subsys_osd), 0);
+}
+#else
+std::ostringstream maybe_drop_privileges(const int flags) {
+  Logger logger{};
+  _maybe_drop_privileges(logger, flags);
+  return std::move(logger.ss);
+}
+#endif

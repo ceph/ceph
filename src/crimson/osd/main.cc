@@ -254,7 +254,7 @@ int main(int argc, const char* argv[])
           local_conf().parse_config_files(conf_file_list).get();
           local_conf().parse_env().get();
           local_conf().parse_argv(config_proxy_args).get();
-          maybe_drop_privileges(0);
+          maybe_drop_privileges();
           auto log_file_stream = maybe_set_logger();
           auto reset_logger = seastar::defer([] {
             logger().set_ostream(std::cerr);
