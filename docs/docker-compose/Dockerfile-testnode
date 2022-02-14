@@ -6,7 +6,9 @@ RUN apt update && \
         openssh-server \
         hostname \
         curl \
-        python3-pip && \
+        python3-pip \
+        apache2 \
+        nfs-kernel-server && \
     apt clean all
 COPY testnode_start.sh /
 COPY testnode_stop.sh /
