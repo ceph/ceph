@@ -71,7 +71,7 @@ common_args = {
     '--crush-device-class': {
         'dest': 'crush_device_class',
         'help': 'Crush device class to assign this OSD to',
-        'default': None,
+        'default': "",
     },
     '--dmcrypt': {
         'action': 'store_true',
