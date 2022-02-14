@@ -48,7 +48,7 @@ else()
 endif()
 
 include_directories(${CMAKE_INCLUDE_DIR})
-add_library(dbstore ${dbstore_mgr_srcs})
+add_library(dbstore STATIC ${dbstore_mgr_srcs})
 target_link_libraries(dbstore ${CMAKE_LINK_LIBRARIES})
 
 # testing purpose
