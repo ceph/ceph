@@ -65,6 +65,8 @@ class Collection(str, enum.Enum):
     ident_base = 'ident_base'
     perf_perf = 'perf_perf'
     basic_mds_metadata = 'basic_mds_metadata'
+    basic_pool_usage = 'basic_pool_usage'
+    basic_usage_by_class = 'basic_usage_by_class'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -100,6 +102,18 @@ MODULE_COLLECTION : List[Dict] = [
     {
         "name": Collection.basic_mds_metadata,
         "description": "MDS metadata",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_pool_usage,
+        "description": "Default pool application and usage statistics",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_usage_by_class,
+        "description": "Default device class usage statistics",
         "channel": "basic",
         "nag": False
     }
@@ -596,19 +610,15 @@ class Module(MgrModule):
 
         # collect application metadata from osd_map
         osd_map = self.get('osd_map')
-        app_dict = {}
-        for pool in osd_map['pools']:
-            app_dict[pool['pool']] = pool['application_metadata']
+        application_metadata = {pool['pool']: pool['application_metadata'] for pool in osd_map['pools']}
 
         # add application to each pool from pg_dump
         for pool in result:
-            poolid = pool['poolid']
-            # Check that the pool has an application. If it does not,
-            # the application dict will be empty.
-            if app_dict[poolid]:
-                pool['application'] = list(app_dict[poolid].keys())[0]
-            else:
-                pool['application'] = ""
+            pool['application'] = []
+            # Only include default applications
+            for application in application_metadata[pool['poolid']]:
+                if application in ['cephfs', 'mgr', 'rbd', 'rgw']:
+                    pool['application'].append(application)
 
         return result
 
@@ -849,6 +859,7 @@ class Module(MgrModule):
             service_map = self.get('service_map')
             fs_map = self.get('fs_map')
             df = self.get('df')
+            df_pools = {pool['id']: pool for pool in df['pools']}
 
             report['created'] = mon_map['created']
 
@@ -897,8 +908,7 @@ class Module(MgrModule):
                         if k in ['k', 'm', 'plugin', 'technique',
                                  'crush-failure-domain', 'l']
                     }
-                cast(List[Dict[str, Any]], report['pools']).append(
-                    {
+                pool_data = {
                         'pool': pool['pool'],
                         'pg_num': pool['pg_num'],
                         'pgp_num': pool['pg_placement_num'],
@@ -911,7 +921,39 @@ class Module(MgrModule):
                         'erasure_code_profile': ec_profile,
                         'cache_mode': pool['cache_mode'],
                     }
-                )
+
+                # basic_pool_usage collection
+                if self.is_enabled_collection(Collection.basic_pool_usage):
+                    pool_data['application'] = []
+                    for application in pool['application_metadata']:
+                        # Only include default applications
+                        if application in ['cephfs', 'mgr', 'rbd', 'rgw']:
+                            pool_data['application'].append(application)
+                    pool_stats = df_pools[pool['pool']]['stats']
+                    pool_data['stats'] = { # filter out kb_used
+                                            'avail_raw': pool_stats['avail_raw'],
+                                            'bytes_used': pool_stats['bytes_used'],
+                                            'compress_bytes_used': pool_stats['compress_bytes_used'],
+                                            'compress_under_bytes': pool_stats['compress_under_bytes'],
+                                            'data_bytes_used': pool_stats['data_bytes_used'],
+                                            'dirty': pool_stats['dirty'],
+                                            'max_avail': pool_stats['max_avail'],
+                                            'objects': pool_stats['objects'],
+                                            'omap_bytes_used': pool_stats['omap_bytes_used'],
+                                            'percent_used': pool_stats['percent_used'],
+                                            'quota_bytes': pool_stats['quota_bytes'],
+                                            'quota_objects': pool_stats['quota_objects'],
+                                            'rd': pool_stats['rd'],
+                                            'rd_bytes': pool_stats['rd_bytes'],
+                                            'stored': pool_stats['stored'],
+                                            'stored_data': pool_stats['stored_data'],
+                                            'stored_omap': pool_stats['stored_omap'],
+                                            'stored_raw': pool_stats['stored_raw'],
+                                            'wr': pool_stats['wr'],
+                                            'wr_bytes': pool_stats['wr_bytes']
+                        }
+
+                cast(List[Dict[str, Any]], report['pools']).append(pool_data)
                 if 'rbd' in pool['application_metadata']:
                     rbd_num_pools += 1
                     ioctx = self.rados.open_ioctx(pool['pool_name'])
@@ -1032,6 +1074,12 @@ class Module(MgrModule):
                 'total_bytes': df['stats']['total_bytes'],
                 'total_avail_bytes': df['stats']['total_avail_bytes']
             }
+            # basic_usage_by_class collection
+            if self.is_enabled_collection(Collection.basic_usage_by_class):
+                report['usage']['stats_by_class'] = {} # type: ignore
+                for device_class in df['stats_by_class']:
+                    if device_class in ['hdd', 'ssd', 'nvme']:
+                        report['usage']['stats_by_class'][device_class] = df['stats_by_class'][device_class] # type: ignore
 
             services: DefaultDict[str, int] = defaultdict(int)
             for key, value in service_map['services'].items():
