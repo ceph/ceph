@@ -6518,28 +6518,43 @@ def command_rm_cluster(ctx):
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
 
-    # rm cephadm logrotate config if last cluster on host
+    # if last cluster on host remove shared files
     if not os.listdir(ctx.data_dir):
+
+        # rm shared ceph target files
+        call_throws(ctx, ['rm', '-f', ctx.unit_dir + '/multi-user.target.wants/ceph.target'])
+        call_throws(ctx, ['rm', '-f', ctx.unit_dir + '/ceph.target'])
+
+        # rm cephadm logrotate config
         call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/cephadm'])
+
+        if not ctx.keep_logs:
+            # remove all cephadm logs
+            for fname in glob(f'{ctx.log_dir}/cephadm.log*'):
+                os.remove(fname)
 
     # rm sysctl settings
     sysctl_dir = Path(ctx.sysctl_dir)
     for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
         p.unlink()
 
+    # cleanup remaining ceph directories
+    ceph_dirs = [f'/run/ceph/{ctx.fsid}', f'/tmp/var/lib/ceph/{ctx.fsid}', f'/var/run/ceph/{ctx.fsid}']
+    for dd in ceph_dirs:
+        shutil.rmtree(dd, ignore_errors=True)
+
     # clean up config, keyring, and pub key files
     files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
-
     if os.path.exists(files[0]):
         valid_fsid = False
         with open(files[0]) as f:
             if ctx.fsid in f.read():
                 valid_fsid = True
         if valid_fsid:
+            # rm configuration files on /etc/ceph
             for n in range(0, len(files)):
                 if os.path.exists(files[n]):
                     os.remove(files[n])
-
 
 ##################################
 
