@@ -475,14 +475,13 @@ struct GroupSnapshotNamespace {
   }
 
   inline bool operator<(const GroupSnapshotNamespace& gsn) const {
-    if (group_pool < gsn.group_pool) {
-      return true;
-    } else if (group_id < gsn.group_id) {
-      return true;
-    } else {
-      return (group_snapshot_id < gsn.group_snapshot_id);
+    if (group_pool != gsn.group_pool) {
+      return group_pool < gsn.group_pool;
     }
-    return false;
+    if (group_id != gsn.group_id) {
+      return group_id < gsn.group_id;
+    }
+    return group_snapshot_id < gsn.group_snapshot_id;
   }
 };
 
