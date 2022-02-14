@@ -77,7 +77,20 @@ describe('Services page', () => {
 
   it('should create and delete snmp-gateway service with version V3', () => {
     services.navigateTo('create');
-    services.addService('snmp-gateway', false, '1', 'V3');
+    services.addService('snmp-gateway', false, '1', 'V3', true);
+    services.checkExist('snmp-gateway', true);
+
+    services.clickServiceTab('snmp-gateway', 'Details');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus('snmp-gateway');
+    });
+
+    services.deleteService('snmp-gateway');
+  });
+
+  it('should create and delete snmp-gateway service with version V3 and w/o privacy protocol', () => {
+    services.navigateTo('create');
+    services.addService('snmp-gateway', false, '1', 'V3', false);
     services.checkExist('snmp-gateway', true);
 
     services.clickServiceTab('snmp-gateway', 'Details');
