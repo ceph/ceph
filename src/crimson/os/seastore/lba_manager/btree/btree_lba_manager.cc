@@ -672,3 +672,21 @@ BtreeLBAManager::~BtreeLBAManager()
 }
 
 }
+
+namespace crimson::os::seastore {
+
+template class FixedKVBtree<
+  laddr_t,
+  lba_manager::btree::lba_map_val_t,
+  lba_manager::btree::LBAInternalNode,
+  lba_manager::btree::LBALeafNode,
+  lba_manager::btree::LBA_BLOCK_SIZE>::iterator;
+
+template class FixedKVBtree<
+  laddr_t,
+  lba_manager::btree::lba_map_val_t,
+  lba_manager::btree::LBAInternalNode,
+  lba_manager::btree::LBALeafNode,
+  lba_manager::btree::LBA_BLOCK_SIZE>;
+
+};
