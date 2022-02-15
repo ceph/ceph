@@ -201,7 +201,7 @@ private:
     boost::make_optional(false, cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN);
   int m_last_r = 0;
 
-  BootstrapProgressContext m_progress_cxt;
+  BootstrapProgressContext m_progress_ctx;
 
   bool m_finished = false;
   bool m_delete_in_progress = false;
