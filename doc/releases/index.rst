@@ -55,7 +55,10 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
-.. ceph_timeline:: releases.yml pacific octopus nautilus
+.. ceph_timeline:: releases.yml quincy pacific octopus nautilus
+
+.. _Quincy: quincy
+.. _17.1.0: quincy#v17-1-0-pacific
 
 
 .. _Pacific: pacific
