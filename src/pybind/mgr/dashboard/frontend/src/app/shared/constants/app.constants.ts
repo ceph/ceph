@@ -35,7 +35,10 @@ export enum URLVerbs {
 
   /* Prometheus wording */
   RECREATE = 'recreate',
-  EXPIRE = 'expire'
+  EXPIRE = 'expire',
+
+  /* Daemons */
+  RESTART = 'Restart'
 }
 
 export enum ActionLabels {
@@ -68,7 +71,13 @@ export enum ActionLabels {
 
   /* Prometheus wording */
   RECREATE = 'Recreate',
-  EXPIRE = 'Expire'
+  EXPIRE = 'Expire',
+
+  /* Daemons */
+  START = 'Start',
+  STOP = 'Stop',
+  REDEPLOY = 'Redeploy',
+  RESTART = 'Restart'
 }
 
 @Injectable({
@@ -120,6 +129,10 @@ export class ActionLabelsI18n {
   EXIT_MAINTENANCE: string;
   START_DRAIN: string;
   STOP_DRAIN: string;
+  START: string;
+  STOP: string;
+  REDEPLOY: string;
+  RESTART: string;
 
   constructor() {
     /* Create a new item */
@@ -179,6 +192,11 @@ export class ActionLabelsI18n {
     /* Prometheus wording */
     this.RECREATE = $localize`Recreate`;
     this.EXPIRE = $localize`Expire`;
+
+    this.START = $localize`Start`;
+    this.STOP = $localize`Stop`;
+    this.REDEPLOY = $localize`Redeploy`;
+    this.RESTART = $localize`Restart`;
   }
 }
 
@@ -219,6 +237,11 @@ export class SucceededActionLabelsI18n {
   CHANGE: string;
   RECREATED: string;
   EXPIRED: string;
+  MOVE: string;
+  START: string;
+  STOP: string;
+  REDEPLOY: string;
+  RESTART: string;
 
   constructor() {
     /* Create a new item */
@@ -264,5 +287,10 @@ export class SucceededActionLabelsI18n {
     /* Prometheus wording */
     this.RECREATED = $localize`Recreated`;
     this.EXPIRED = $localize`Expired`;
+
+    this.START = $localize`Start`;
+    this.STOP = $localize`Stop`;
+    this.REDEPLOY = $localize`Redeploy`;
+    this.RESTART = $localize`Restart`;
   }
 }

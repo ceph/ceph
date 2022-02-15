@@ -106,7 +106,7 @@ OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode')
 
-RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
+RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
@@ -911,7 +911,7 @@ class Module(MgrModule):
         # export standby mds metadata, default standby fs_id is '-1'
         for standby in fs_map['standbys']:
             id_ = standby['name']
-            host, version = servers.get((id_, 'mds'), ('', ''))
+            host, version, _ = servers.get((id_, 'mds'), ('', '', ''))
             addr, rank = standby['addr'], standby['rank']
             self.metrics['mds_metadata'].set(1, (
                 'mds.{}'.format(id_), '-1',
@@ -933,7 +933,7 @@ class Module(MgrModule):
             self.log.debug('mdsmap: {}'.format(fs['mdsmap']))
             for gid, daemon in fs['mdsmap']['info'].items():
                 id_ = daemon['name']
-                host, version = servers.get((id_, 'mds'), ('', ''))
+                host, version, _ = servers.get((id_, 'mds'), ('', '', ''))
                 self.metrics['mds_metadata'].set(1, (
                     'mds.{}'.format(id_), fs['id'],
                     host, daemon['addr'],
@@ -947,7 +947,7 @@ class Module(MgrModule):
         for mon in mon_status['monmap']['mons']:
             rank = mon['rank']
             id_ = mon['name']
-            host_version = servers.get((id_, 'mon'), ('', ''))
+            host_version = servers.get((id_, 'mon'), ('', '', ''))
             self.metrics['mon_metadata'].set(1, (
                 'mon.{}'.format(id_), host_version[0],
                 mon['public_addr'].rsplit(':', 1)[0], rank,
@@ -973,7 +973,7 @@ class Module(MgrModule):
                        for module in mgr_map['available_modules']}
 
         for mgr in all_mgrs:
-            host, version = servers.get((mgr, 'mgr'), ('', ''))
+            host, version, _ = servers.get((mgr, 'mgr'), ('', '', ''))
             if mgr == active:
                 _state = 1
             else:
@@ -1031,13 +1031,13 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
-    def get_service_list(self) -> Dict[Tuple[str, str], Tuple[str, str]]:
+    def get_service_list(self) -> Dict[Tuple[str, str], Tuple[str, str, str]]:
         ret = {}
         for server in self.list_servers():
             version = cast(str, server.get('ceph_version', ''))
             host = cast(str, server.get('hostname', ''))
             for service in cast(List[ServiceInfoT], server.get('services', [])):
-                ret.update({(service['id'], service['type']): (host, version)})
+                ret.update({(service['id'], service['type']): (host, version, service.get('name', ''))})
         return ret
 
     @profile_method()
@@ -1075,7 +1075,7 @@ class Module(MgrModule):
                               "skipping output".format(id_))
                 continue
 
-            host_version = servers.get((str(id_), 'osd'), ('', ''))
+            host_version = servers.get((str(id_), 'osd'), ('', '', ''))
 
             # collect disk occupation metadata
             osd_metadata = self.get_metadata("osd", str(id_))
@@ -1200,11 +1200,11 @@ class Module(MgrModule):
         for key, value in servers.items():
             service_id, service_type = key
             if service_type == 'rgw':
-                hostname, version = value
+                hostname, version, name = value
                 self.metrics['rgw_metadata'].set(
                     1,
-                    ('{}.{}'.format(service_type, service_id),
-                     hostname, version)
+                    ('{}.{}'.format(service_type, name),
+                     hostname, version, service_id)
                 )
             elif service_type == 'rbd-mirror':
                 mirror_metadata = self.get_metadata('rbd-mirror', service_id)

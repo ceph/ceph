@@ -1336,7 +1336,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def _perfpath_to_path_labels(self, daemon: str,
                                  path: str) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]:
-        label_names = ("ceph_daemon",)  # type: Tuple[str, ...]
+        if daemon.startswith('rgw.'):
+            label_name = 'instance_id'
+            daemon = daemon[len('rgw.'):]
+        else:
+            label_name = 'ceph_daemon'
+
+        label_names = (label_name,)  # type: Tuple[str, ...]
         labels = (daemon,)  # type: Tuple[str, ...]
 
         if daemon.startswith('rbd-mirror.'):

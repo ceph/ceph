@@ -5,12 +5,7 @@ describe('Host Page', () => {
   const hosts = new HostsPageHelper();
   const services = new ServicesPageHelper();
 
-  const hostnames = [
-    'ceph-node-00.cephlab.com',
-    'ceph-node-01.cephlab.com',
-    'ceph-node-02.cephlab.com',
-    'ceph-node-03.cephlab.com'
-  ];
+  const hostnames = ['ceph-node-00', 'ceph-node-01', 'ceph-node-02', 'ceph-node-03'];
 
   beforeEach(() => {
     cy.login();
@@ -19,6 +14,12 @@ describe('Host Page', () => {
   });
 
   // rgw is needed for testing the force maintenance
+  it('should create rgw services', () => {
+    services.navigateTo('create');
+    services.addService('rgw', false, '4');
+    services.checkExist('rgw.foo', true);
+  });
+
   it('should check if rgw daemon is running on all hosts', () => {
     for (const hostname of hostnames) {
       hosts.clickTab('cd-host-details', hostname, 'Daemons');
