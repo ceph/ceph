@@ -276,7 +276,6 @@ class RemoteEvent(Event):
     def failure_message(self):
         return self._failure_message if self._failed else None
 
-
 class PgRecoveryEvent(Event):
     """
     An event whose completion is determined by the recovery of a set of
@@ -525,9 +524,9 @@ class Module(MgrModule):
                 # Has this OSD been assigned a new location?
                 # (it might not be if there is no suitable place to move
                 #  after an OSD is marked in/out)
-                
+
                 is_relocated = old_osds != new_osds
-                
+
                 self.log.debug(
                     "new_up_acting: {0}".format(json.dumps(new_up_acting,
                                                            indent=4,
@@ -559,15 +558,27 @@ class Module(MgrModule):
 
         if len(affected_pgs) > 0:
             r_ev = PgRecoveryEvent(
-                    "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
-                    refs=[("osd", osd_id)],
-                    which_pgs=affected_pgs,
-                    which_osds=[osd_id],
-                    start_epoch=self.get_osdmap().get_epoch(),
-                    add_to_ceph_s=False
-                    )
+                "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
+                refs=[("osd", osd_id)],
+                which_pgs=affected_pgs,
+                which_osds=[osd_id],
+                start_epoch=self.get_osdmap().get_epoch(),
+                add_to_ceph_s=False)
+
             r_ev.pg_update(self.get("pg_progress"), self.log)
             self._events[r_ev.id] = r_ev
+        else:
+            # We created the completed event so that the integration test
+            # can use this information when event is not created due to pgs not being
+            # affected when osd(s) are marked in or out.
+            self._completed_events.append(
+                GhostEvent(str(uuid.uuid4()),
+                           "0 PGs affected by osd.{0} being marked {1}".format(
+                           osd_id, marked),
+                           refs=[("osd", osd_id)],
+                           add_to_ceph_s=False,
+                           started_at=time.time()))
+            self._prune_completed_events()
 
     def _osdmap_changed(self, old_osdmap, new_osdmap):
         # type: (OSDMap, OSDMap) -> None
