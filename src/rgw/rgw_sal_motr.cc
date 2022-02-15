@@ -1273,6 +1273,7 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   source->set_key(ent.key);
   source->set_obj_size(ent.meta.size);
   source->category = ent.meta.category;
+  *params.lastmod = ent.meta.mtime;
 
   // Open the object here.
   if (source->category == RGWObjCategory::MultiMeta) {
