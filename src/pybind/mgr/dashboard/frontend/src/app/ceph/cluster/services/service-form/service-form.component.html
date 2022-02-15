@@ -84,7 +84,8 @@
         </div>
 
         <!-- unmanaged -->
-        <div class="form-group row">
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value !== 'snmp-gateway'">
           <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input class="custom-control-input"
@@ -487,6 +488,9 @@
               <span class="invalid-feedback"
                     *ngIf="serviceForm.showError('engine_id', frm, 'required')"
                     i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('engine_id', frm, 'snmpEngineIdPattern')"
+                    i18n>The value does not match the pattern: <strong>Must be in hexadecimal and length must be multiple of 2 with min value = 10 amd max value = 64.</strong></span>
             </div>
           </div>
           <!-- Auth protocol for snmp V3 -->

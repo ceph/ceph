@@ -29,6 +29,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 export class ServiceFormComponent extends CdForm implements OnInit {
   readonly RGW_SVC_ID_PATTERN = /^([^.]+)(\.([^.]+)\.([^.]+))?$/;
   readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
+  readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
@@ -219,8 +220,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            service_type: 'snmp-gateway',
-            unmanaged: false
+            service_type: 'snmp-gateway'
           })
         ]
       ],
@@ -229,8 +229,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         {
           validators: [
             CdValidators.requiredIf({
-              service_type: 'snmp-gateway',
-              unmanaged: false
+              service_type: 'snmp-gateway'
             }),
             CdValidators.custom('snmpDestinationPattern', (value: string) => {
               if (_.isEmpty(value)) {
@@ -245,8 +244,13 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            snmp_version: 'V3',
-            unmanaged: false
+            service_type: 'snmp-gateway'
+          }),
+          CdValidators.custom('snmpEngineIdPattern', (value: string) => {
+            if (_.isEmpty(value)) {
+              return false;
+            }
+            return !this.SNMP_ENGINE_ID_PATTERN.test(value);
           })
         ]
       ],
@@ -254,8 +258,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         'SHA',
         [
           CdValidators.requiredIf({
-            snmp_version: 'V3',
-            unmanaged: false
+            service_type: 'snmp-gateway'
           })
         ]
       ],
@@ -264,8 +267,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            snmp_version: 'V2c',
-            unmanaged: false
+            snmp_version: 'V2c'
           })
         ]
       ],
@@ -273,8 +275,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            snmp_version: 'V3',
-            unmanaged: false
+            service_type: 'snmp-gateway'
           })
         ]
       ],
@@ -282,8 +283,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            snmp_version: 'V3',
-            unmanaged: false
+            service_type: 'snmp-gateway'
           })
         ]
       ],
@@ -291,8 +291,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [
           CdValidators.requiredIf({
-            privacy_protocol: { op: '!empty' },
-            unmanaged: false
+            privacy_protocol: { op: '!empty' }
           })
         ]
       ]
