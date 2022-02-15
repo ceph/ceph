@@ -469,8 +469,12 @@ struct inode_t {
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
   bool is_truncating() const { return (truncate_pending > 0); }
+  void truncate(uint64_t old_size, uint64_t new_size, const bufferlist &fbl) {
+    truncate(old_size, new_size);
+    fscrypt_last_block = fbl;
+  }
   void truncate(uint64_t old_size, uint64_t new_size) {
-    ceph_assert(new_size < old_size);
+    ceph_assert(new_size <= old_size);
     if (old_size > max_size_ever)
       max_size_ever = old_size;
     truncate_from = old_size;
@@ -624,7 +628,10 @@ struct inode_t {
 
   std::basic_string<char,std::char_traits<char>,Allocator<char>> stray_prior_path; //stores path before unlink
 
-  bool fscrypt = false; // fscrypt enabled ?
+  std::vector<uint8_t> fscrypt_auth;
+  std::vector<uint8_t> fscrypt_file;
+
+  bufferlist fscrypt_last_block;
 
 private:
   bool older_is_consistent(const inode_t &other) const;
@@ -634,7 +641,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(17, 6, bl);
+  ENCODE_START(19, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -689,15 +696,17 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(export_ephemeral_random_pin, bl);
   encode(export_ephemeral_distributed_pin, bl);
 
-  encode(fscrypt, bl);
-
+  encode(!fscrypt_auth.empty(), bl);
+  encode(fscrypt_auth, bl);
+  encode(fscrypt_file, bl);
+  encode(fscrypt_last_block, bl);
   ENCODE_FINISH(bl);
 }
 
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(17, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(19, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -796,11 +805,18 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
   }
 
   if (struct_v >= 17) {
-    decode(fscrypt, p);
-  } else {
-    fscrypt = 0;
+    bool fscrypt_flag;
+    decode(fscrypt_flag, p); // ignored
   }
 
+  if (struct_v >= 18) {
+    decode(fscrypt_auth, p);
+    decode(fscrypt_file, p);
+  }
+
+  if (struct_v >= 19) {
+    decode(fscrypt_last_block, p);
+  }
   DECODE_FINISH(p);
 }
 

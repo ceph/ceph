@@ -470,9 +470,10 @@ private:
       sr->encode(snapbl);
 
     lump.nfull++;
-    lump.add_dfull(dn->get_name(), dn->get_alternate_name(), dn->first, dn->last, dn->get_projected_version(),
-		   pi, in->dirfragtree, in->get_projected_xattrs(), in->symlink,
-		   in->oldest_snap, snapbl, state, in->get_old_inodes());
+    lump.add_dfull(dn->get_name(), dn->get_alternate_name(), dn->first, dn->last,
+                   dn->get_projected_version(), pi, in->dirfragtree,
+                   in->get_projected_xattrs(), in->symlink, in->oldest_snap, snapbl,
+                   state, in->get_old_inodes());
 
     // make note of where this inode was last journaled
     in->last_journaled = event_seq;

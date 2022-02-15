@@ -734,6 +734,8 @@ class MDCache {
   void truncate_inode(CInode *in, LogSegment *ls);
   void _truncate_inode(CInode *in, LogSegment *ls);
   void truncate_inode_finish(CInode *in, LogSegment *ls);
+  void truncate_inode_write_finish(CInode *in, LogSegment *ls,
+                                   uint32_t block_size);
   void truncate_inode_logged(CInode *in, MutationRef& mut);
 
   void add_recovered_truncate(CInode *in, LogSegment *ls);
@@ -1373,6 +1375,26 @@ private:
   MDCache *mdcache;
   MDRequestRef mdr;
   bool drop_locks;
+};
+
+/**
+ * Only for contexts called back from an I/O completion
+ *
+ * Note: duplication of members wrt MDCacheContext, because
+ * it'ls the lesser of two evils compared with introducing
+ * yet another piece of (multiple) inheritance.
+ */
+class MDCacheIOContext : public virtual MDSIOContextBase {
+protected:
+  MDCache *mdcache;
+  MDSRank *get_mds() override
+  {
+    ceph_assert(mdcache != NULL);
+    return mdcache->mds;
+  }
+public:
+  explicit MDCacheIOContext(MDCache *mdc_, bool track=true) :
+    MDSIOContextBase(track), mdcache(mdc_) {}
 };
 
 #endif

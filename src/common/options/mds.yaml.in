@@ -11,6 +11,16 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_fscrypt_last_block_max_size
+  type: size
+  level: advanced
+  desc: maximum size of the last block without the header along with a truncate
+    request when the fscrypt is enabled.
+  default: 4_K
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_valgrind_exit
   type: bool
   level: dev
