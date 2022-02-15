@@ -3296,3 +3296,11 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgwlc_skip_bucket_step
+  type: bool
+  level: advanced
+  desc: Conditionally skip the processing (but not the scheduling) of bucket lifecycle
+  default: false
+  services:
+  - rgw
+  with_legacy: true
