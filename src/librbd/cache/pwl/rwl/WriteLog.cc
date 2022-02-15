@@ -35,14 +35,14 @@ namespace rwl {
 
 const unsigned long int OPS_APPENDED_TOGETHER = MAX_ALLOC_PER_TRANSACTION;
 
-/* Persist runtime metada to pool_root in pmem All values that may be changed
+/* Persist runtime metada to superblock in pmem All values that may be changed
  * will be persisted. Constant value won't be persisted, which has been
  * assigned when initializing the pool. Acquires m_log_append_lock before call.
  */
 template <typename I>
-void WriteLog<I>::persist_pmem_root() {
-  struct WriteLogPoolRoot *pool_root;
-  pool_root = (struct WriteLogPoolRoot *)m_log_pool->get_head_addr();
+void WriteLog<I>::persist_pmem_superblock() {
+  struct WriteLogSuperblock *new_superblock;
+  new_superblock = (struct WriteLogSuperblock *)m_pool_head;
   uint32_t crc = 0;
   uint64_t flushed_sync_gen;
 
@@ -52,23 +52,23 @@ void WriteLog<I>::persist_pmem_root() {
     flushed_sync_gen = this->m_flushed_sync_gen;
   }
   if (m_sequence_num % 2) {
-    pool_root = (struct WriteLogPoolRoot *)((char *)pool_root +
-                SECOND_ROOT_OFFSET);
+    new_superblock = (struct WriteLogSuperblock *)(m_pool_head +
+                     SECOND_SUPERBLOCK_OFFSET);
   }
   /* Don't move the flushed sync gen num backwards. */
-  if (pool_root->flushed_sync_gen < flushed_sync_gen) {
+  if (new_superblock->flushed_sync_gen < flushed_sync_gen) {
     ldout(m_image_ctx.cct, 20) << "flushed_sync_gen in log updated from "
-                               << pool_root->flushed_sync_gen << " to "
+                               << new_superblock->flushed_sync_gen << " to "
                                << flushed_sync_gen << dendl;
-    pool_root->flushed_sync_gen = flushed_sync_gen;
+    new_superblock->flushed_sync_gen = flushed_sync_gen;
   }
-  pool_root->sequence_num = m_sequence_num;
-  pool_root->first_free_entry = this->m_first_free_entry;
-  pool_root->first_valid_entry = this->m_first_valid_entry;
-  crc = ceph_crc32c(crc, (unsigned char*)&pool_root->sequence_num,
-                    m_super_block_crc_len);
-  pool_root->crc = crc;
-  pmem_persist(pool_root, MAX_ROOT_LEN);
+  new_superblock->sequence_num = m_sequence_num;
+  new_superblock->first_free_entry = this->m_first_free_entry;
+  new_superblock->first_valid_entry = this->m_first_valid_entry;
+  crc = ceph_crc32c(crc, (unsigned char*)&new_superblock->sequence_num,
+                    m_superblock_crc_len);
+  new_superblock->crc = crc;
+  pmem_persist(new_superblock, MAX_SUPERBLOCK_LEN);
   ++m_sequence_num;
 }
 
@@ -210,7 +210,7 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
    * allocations for all the data buffers they refer to.
    */
   utime_t tx_start = ceph_clock_now();
-  persist_pmem_root();
+  persist_pmem_superblock();
   utime_t tx_end = ceph_clock_now();
   m_perfcounter->tinc(l_librbd_pwl_append_tx_t, tx_end - tx_start);
   m_perfcounter->hinc(l_librbd_pwl_append_tx_t_hist,
@@ -272,7 +272,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
   CephContext *cct = m_image_ctx.cct;
   uint32_t crc = 0;
   int r = -EINVAL;
-  struct WriteLogPoolRoot *pool_root = nullptr;
+  struct WriteLogSuperblock *superblock;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   if (access(this->m_log_pool_name.c_str(), F_OK) != 0) {
     if (!(m_log_pool = PmemDev::pmem_create_dev(this->m_log_pool_name.c_str(),
@@ -307,30 +307,31 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     m_first_free_entry = 0;
     m_first_valid_entry = 0;
     m_sequence_num = 0;
-    m_pmem_log_entries = (struct WriteLogCacheEntry *)((char *)pool_root +
+    m_pool_head = m_log_pool->get_head_addr();
+    superblock = (struct WriteLogSuperblock *)m_pool_head;
+    m_pmem_log_entries = (struct WriteLogCacheEntry *)(m_pool_head +
                          FIRST_ENTRY_OFFSET);
     {
-      pool_root = (struct WriteLogPoolRoot *)m_log_pool->get_head_addr();
-      pool_root->sequence_num = m_sequence_num;
-      pool_root->header.layout_version = RWL_LAYOUT_VERSION;
-      pool_root->pool_size = this->m_log_pool_size;
-      pool_root->flushed_sync_gen = this->m_flushed_sync_gen;
-      pool_root->block_size = MIN_WRITE_ALLOC_SIZE;
-      pool_root->num_log_entries = num_small_writes;
-      pool_root->first_free_entry = m_first_free_entry;
-      pool_root->first_valid_entry = m_first_valid_entry;
-      m_super_block_crc_len = (char *)&pool_root->first_valid_entry -
-                              (char *)&pool_root->sequence_num +
-                              sizeof(pool_root->first_valid_entry);
-      crc = ceph_crc32c(crc, (unsigned char*)&pool_root->sequence_num,
-                        m_super_block_crc_len);
-      pool_root->crc = crc;
-      pmem_flush(pool_root, MAX_ROOT_LEN);
-      /* copy initialized root1 to root2
+      superblock->sequence_num = m_sequence_num;
+      superblock->header.layout_version = RWL_LAYOUT_VERSION;
+      superblock->pool_size = this->m_log_pool_size;
+      superblock->flushed_sync_gen = this->m_flushed_sync_gen;
+      superblock->block_size = MIN_WRITE_ALLOC_SIZE;
+      superblock->num_log_entries = num_small_writes;
+      superblock->first_free_entry = m_first_free_entry;
+      superblock->first_valid_entry = m_first_valid_entry;
+      m_superblock_crc_len = (char *)&superblock->first_valid_entry -
+                             (char *)&superblock->sequence_num +
+                             sizeof(superblock->first_valid_entry);
+      crc = ceph_crc32c(crc, (unsigned char*)&superblock->sequence_num,
+                        m_superblock_crc_len);
+      superblock->crc = crc;
+      pmem_flush(superblock, MAX_SUPERBLOCK_LEN);
+      /* copy initialized superblock1 to superblock2
        * Next time, just update the values that might be changed */
-      pmem_memcpy_nodrain((char *)pool_root + SECOND_ROOT_OFFSET,
-                          pool_root, MAX_ROOT_LEN);
-      pmem_memset_nodrain(m_log_pool->get_head_addr() + FIRST_ENTRY_OFFSET, 0,
+      pmem_memcpy_nodrain(m_pool_head + SECOND_SUPERBLOCK_OFFSET,
+                          superblock, MAX_SUPERBLOCK_LEN);
+      pmem_memset_nodrain(m_pool_head + FIRST_ENTRY_OFFSET, 0,
           sizeof(struct WriteLogCacheEntry) * num_small_writes);
       m_log_pool->init_data_offset(FIRST_ENTRY_OFFSET +
           sizeof(struct WriteLogCacheEntry) * num_small_writes);
@@ -350,57 +351,58 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       on_finish->complete(-errno);
       return false;
     }
-    uint32_t second_root_crc = 0;
-    struct WriteLogPoolRoot *second_pool_root = nullptr;
-    pool_root = (struct WriteLogPoolRoot *)m_log_pool->get_head_addr();
-    second_pool_root = (struct WriteLogPoolRoot *)(m_log_pool->get_head_addr() +
-                       SECOND_ROOT_OFFSET);
-    m_super_block_crc_len = (char *)&pool_root->first_valid_entry -
-                            (char *)&pool_root->sequence_num +
-                            sizeof(pool_root->first_valid_entry);
-    crc = ceph_crc32c(crc, (unsigned char*)&pool_root->sequence_num,
-                      m_super_block_crc_len);
-    second_root_crc = ceph_crc32c(second_root_crc,
-                      (unsigned char*)&second_pool_root->sequence_num,
-                      m_super_block_crc_len);
-    if (pool_root->crc != crc && second_pool_root->crc == crc) {
-        pool_root = second_pool_root;
-    } else if (pool_root->crc == crc &&
-               second_pool_root->crc == second_root_crc) {
-      if (pool_root->sequence_num < second_pool_root->sequence_num) {
-        pool_root = second_pool_root;
+    uint32_t second_superblock_crc = 0;
+    struct WriteLogSuperblock *second_superblock = nullptr;
+    m_pool_head = m_log_pool->get_head_addr();
+    superblock = (struct WriteLogSuperblock *)m_pool_head;
+    second_superblock = (struct WriteLogSuperblock *)(m_pool_head +
+                        SECOND_SUPERBLOCK_OFFSET);
+    m_superblock_crc_len = (char *)&superblock->first_valid_entry -
+                           (char *)&superblock->sequence_num +
+                           sizeof(superblock->first_valid_entry);
+    crc = ceph_crc32c(crc, (unsigned char*)&superblock->sequence_num,
+                      m_superblock_crc_len);
+    second_superblock_crc = ceph_crc32c(second_superblock_crc,
+                            (unsigned char*)&second_superblock->sequence_num,
+                            m_superblock_crc_len);
+    if (superblock->crc != crc && second_superblock->crc == crc) {
+        superblock = second_superblock;
+    } else if (superblock->crc == crc &&
+               second_superblock->crc == second_superblock_crc) {
+      if (superblock->sequence_num < second_superblock->sequence_num) {
+        superblock = second_superblock;
       } else {
         // do nothing
       }
-    } else if (pool_root->crc != crc &&
-               second_pool_root->crc != second_root_crc) {
+    } else if (superblock->crc != crc &&
+               second_superblock->crc != second_superblock_crc) {
       ldout(cct, 5) << "no valid superblock exist." << dendl;
       goto err_close_pool;
     } else {
       // do nothing
-      // case: pool_root->crc == crc && second_root_crc->crc != crc
+      // case: superblock->crc == crc && second_superblock_crc->crc != crc
     }
 
-    if (pool_root->header.layout_version != RWL_LAYOUT_VERSION) {
+    if (superblock->header.layout_version != RWL_LAYOUT_VERSION) {
       /* Different versions are not compatible */
       lderr(cct) << "pool layout version is "
-                 << pool_root->header.layout_version
+                 << superblock->header.layout_version
                  << " expected " << RWL_LAYOUT_VERSION << dendl;
       goto err_close_pool;
     }
-    if (pool_root->block_size != MIN_WRITE_ALLOC_SIZE) {
-      lderr(cct) << "pool block size is " << pool_root->block_size
+    if (superblock->block_size != MIN_WRITE_ALLOC_SIZE) {
+      lderr(cct) << "pool block size is " << superblock->block_size
                  << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
       goto err_close_pool;
     }
-    this->m_log_pool_size = pool_root->pool_size;
-    this->m_flushed_sync_gen = pool_root->flushed_sync_gen;
-    this->m_total_log_entries = pool_root->num_log_entries;
-    m_first_free_entry = pool_root->first_free_entry;
-    m_first_valid_entry = pool_root->first_valid_entry;
+    this->m_log_pool_size = superblock->pool_size;
+    this->m_flushed_sync_gen = superblock->flushed_sync_gen;
+    this->m_total_log_entries = superblock->num_log_entries;
+    m_first_free_entry = superblock->first_free_entry;
+    m_first_valid_entry = superblock->first_valid_entry;
     /* run time write num is next write operation */
-    m_sequence_num = pool_root->sequence_num + 1;
-    m_pmem_log_entries = (struct WriteLogCacheEntry *)(m_log_pool->get_head_addr() +
+    m_sequence_num = superblock->sequence_num + 1;
+    m_pmem_log_entries = (struct WriteLogCacheEntry *)(m_pool_head +
                          FIRST_ENTRY_OFFSET);
     if (m_first_free_entry < m_first_valid_entry) {
       /* Valid entries wrap around the end of the ring, so first_free is lower
@@ -528,7 +530,7 @@ template <typename I>
 void WriteLog<I>::write_data_to_buffer(
     std::shared_ptr<pwl::WriteLogEntry> ws_entry,
     WriteLogCacheEntry *pmem_entry) {
-  ws_entry->cache_buffer = m_log_pool->get_head_addr() + pmem_entry->write_data;
+  ws_entry->cache_buffer = m_pool_head + pmem_entry->write_data;
 }
 
 /**
@@ -632,7 +634,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     }
     {
       std::lock_guard append_locker(this->m_log_append_lock);
-      persist_pmem_root();
+      persist_pmem_superblock();
     }
   } else {
     ldout(cct, 20) << "Nothing to retire" << dendl;
@@ -950,7 +952,7 @@ template <typename I>
 void WriteLog<I>::persist_last_flushed_sync_gen()
 {
   std::lock_guard append_locker(this->m_log_append_lock);
-  persist_pmem_root();
+  persist_pmem_superblock();
 }
 
 template <typename I>
@@ -959,7 +961,7 @@ void WriteLog<I>::alloc_cache(C_BlockIORequestT *req,
   std::vector<WriteBufferAllocation>& buffers = req->get_resources_buffers();
   for (auto &buffer : buffers) {
     buffer.pmem_offset = m_log_pool->alloc(buffer.allocation_size);
-    buffer.pmem_head_addr = m_log_pool->get_head_addr();
+    buffer.pmem_head_addr = m_pool_head;
     if (!buffer.pmem_offset) {
       ldout(m_image_ctx.cct, 20) << "can't allocate all data buffers: "
                                 << ". " << *req << dendl;

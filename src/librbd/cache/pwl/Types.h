@@ -176,14 +176,14 @@ const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
 const unsigned long int MAX_ALLOC_PER_TRANSACTION = 8;
 const unsigned long int MAX_FREE_PER_TRANSACTION = 1;
 const unsigned int MAX_CONCURRENT_WRITES = (1024 * 1024);
-const unsigned int SECOND_ROOT_OFFSET = 1u << 11;
-const unsigned int MAX_ROOT_LEN = 1u << 11;
+const unsigned int SECOND_SUPERBLOCK_OFFSET = 1u << 11;
+const unsigned int MAX_SUPERBLOCK_LEN = 1u << 11;
 const unsigned int FIRST_ENTRY_OFFSET = 1u << 12;
 
 const uint64_t DEFAULT_POOL_SIZE = 1u << 30;
 const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
 const uint64_t POOL_SIZE_ALIGN = 1 << 20;
-/* The unusable spaces include root and entry.
+/* The unusable spaces include superblock and entries.
  * If modification is necessary, please calculate carefully */
 constexpr double USABLE_SIZE = (7.0 / 10);
 const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
@@ -319,7 +319,7 @@ struct WriteLogCacheEntry {
   static void generate_test_instances(std::list<WriteLogCacheEntry*>& ls);
 };
 
-struct WriteLogPoolRoot {
+struct WriteLogSuperblock {
   #ifdef WITH_RBD_RWL
   uint32_t crc = 0;
   /* To make superblock update atomic. If one of the superblocks fails to
@@ -348,7 +348,7 @@ struct WriteLogPoolRoot {
   uint64_t first_valid_entry;   /* The oldest valid entry to be retired */
 
   #ifdef WITH_RBD_SSD_CACHE
-  DENC(WriteLogPoolRoot, v, p) {
+  DENC(WriteLogSuperblock, v, p) {
     DENC_START(1, 1, p);
     denc(v.layout_version, p);
     denc(v.cur_sync_gen, p);
@@ -363,7 +363,7 @@ struct WriteLogPoolRoot {
   #endif
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<WriteLogPoolRoot*>& ls);
+  static void generate_test_instances(std::list<WriteLogSuperblock*>& ls);
 };
 
 struct WriteBufferAllocation {
@@ -436,7 +436,7 @@ std::string unique_lock_name(const std::string &name, void *address);
 
 #ifdef WITH_RBD_SSD_CACHE
 WRITE_CLASS_DENC(librbd::cache::pwl::WriteLogCacheEntry)
-WRITE_CLASS_DENC(librbd::cache::pwl::WriteLogPoolRoot)
+WRITE_CLASS_DENC(librbd::cache::pwl::WriteLogSuperblock)
 #endif
 
 #endif // CEPH_LIBRBD_CACHE_PWL_TYPES_H
