@@ -151,17 +151,6 @@ public:
 };
 using ExtentAllocatorRef = std::unique_ptr<ExtentAllocator>;
 
-struct open_segment_wrapper_t : public boost::intrusive_ref_counter<
-  open_segment_wrapper_t,
-  boost::thread_unsafe_counter> {
-  SegmentRef segment;
-  std::list<seastar::future<>> inflight_writes;
-  bool outdated = false;
-};
-
-using open_segment_wrapper_ref =
-  boost::intrusive_ptr<open_segment_wrapper_t>;
-
 class SegmentProvider;
 
 /**
@@ -191,11 +180,14 @@ class SegmentedAllocator : public ExtentAllocator {
     write_iertr::future<> write(
       Transaction& t,
       std::list<LogicalCachedExtentRef>& extent) final;
+
     stop_ertr::future<> stop() final {
-      return writer_guard.close().then([this] {
-        return crimson::do_for_each(open_segments, [](auto& seg_wrapper) {
-          return seg_wrapper->segment->close();
-        });
+      return write_guard.close().then([this] {
+        if (current_segment) {
+          return current_segment->close();
+        } else {
+          return Segment::close_ertr::now();
+        }
       });
     }
   private:
@@ -219,11 +211,10 @@ class SegmentedAllocator : public ExtentAllocator {
 
     SegmentProvider& segment_provider;
     SegmentManager& segment_manager;
-    open_segment_wrapper_ref current_segment;
-    std::list<open_segment_wrapper_ref> open_segments;
+    SegmentRef current_segment;
     seastore_off_t allocated_to = 0;
     crimson::condition_variable segment_rotation_guard;
-    seastar::gate writer_guard;
+    seastar::gate write_guard;
     bool rolling_segment = false;
   };
 public:
