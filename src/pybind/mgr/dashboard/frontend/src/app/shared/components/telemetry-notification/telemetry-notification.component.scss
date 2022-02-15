@@ -1,6 +1,6 @@
 @use './src/styles/vendor/variables' as vv;
 
-::ng-deep cd-telemetry-notification .no-margin-bottom {
+.no-margin-bottom {
   margin-bottom: 0;
 }
 
