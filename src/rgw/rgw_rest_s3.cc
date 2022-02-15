@@ -3733,7 +3733,8 @@ void RGWGetBucketEncryption_ObjStore_S3::send_response()
   dump_start(s);
 
   if (!op_ret) {
-    encode_xml("ServerSideEncryptionConfiguration", bucket_encryption_conf, s->formatter);
+    encode_xml("ServerSideEncryptionConfiguration", XMLNS_AWS_S3,
+      bucket_encryption_conf, s->formatter);
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
 }
