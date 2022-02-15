@@ -101,9 +101,9 @@ class TestNFS(MgrTestCase):
         :param expected_status: Status to be verified
         :param fail_msg: Message to be printed if test failed
         '''
-        # Wait for few seconds as ganesha daemon takes few seconds to be deleted/created
+        # Wait for two minutes as ganesha daemon takes some time to be deleted/created
         wait_time = 10
-        while wait_time <= 60:
+        while wait_time <= 120:
             time.sleep(wait_time)
             if expected_status in self._fetch_nfs_daemons_details():
                 return
