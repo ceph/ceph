@@ -141,9 +141,6 @@ public:
 
 int rgw_s3_prepare_encrypt(struct req_state* s,
                            std::map<std::string, ceph::bufferlist>& attrs,
-                           std::map<std::string,
-                                    RGWPostObj_ObjStore::post_form_part,
-                                    const ltstr_nocase>* parts,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
                                     std::string>& crypt_http_responses);
