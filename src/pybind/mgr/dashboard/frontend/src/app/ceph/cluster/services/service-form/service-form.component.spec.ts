@@ -459,6 +459,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           }
         });
       });
+
       it('should test snmp-gateway service with V3', () => {
         formHelper.setValue('snmp_version', 'V3');
         formHelper.setValue('engine_id', '800C53F00000');
@@ -484,11 +485,24 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           }
         });
       });
+
       it('should submit invalid snmp destination', () => {
         formHelper.setValue('snmp_version', 'V2c');
         formHelper.setValue('snmp_destination', '192.168.20.1');
         formHelper.setValue('snmp_community', 'public');
         formHelper.expectError('snmp_destination', 'snmpDestinationPattern');
+      });
+
+      it('should submit invalid snmp engine id', () => {
+        formHelper.setValue('snmp_version', 'V3');
+        formHelper.setValue('snmp_destination', '192.168.20.1');
+        formHelper.setValue('engine_id', 'AABBCCDDE');
+        formHelper.setValue('auth_protocol', 'SHA');
+        formHelper.setValue('privacy_protocol', 'DES');
+        formHelper.setValue('snmp_v3_auth_username', 'testuser');
+        formHelper.setValue('snmp_v3_auth_password', 'testpass');
+
+        formHelper.expectError('engine_id', 'snmpEngineIdPattern');
       });
     });
 
