@@ -1620,6 +1620,7 @@ int BlueFS::device_migrate_to_existing(
     dout(10) << __func__ << " " << ino << " " << file_ref->fnode << dendl;
 
     auto& fnode_extents = file_ref->fnode.extents;
+    vselector->sub_usage(file_ref->vselector_hint, file_ref->fnode);
 
     bool rewrite = std::any_of(
       fnode_extents.begin(),
@@ -1695,6 +1696,7 @@ int BlueFS::device_migrate_to_existing(
 	}
       }
     }
+    vselector->add_usage(file_ref->vselector_hint, file_ref->fnode);
   }
   // new logging device in the current naming scheme
   int new_log_dev_cur = bdev[BDEV_WAL] ?
@@ -2334,6 +2336,7 @@ void BlueFS::_rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
 
   bluefs_fnode_t old_fnode;
   int r;
+  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
   log_file->fnode.swap_extents(old_fnode);
   if (allocate_with_fallback) {
     r = _allocate(log_dev, need, &log_file->fnode);
@@ -2355,13 +2358,11 @@ void BlueFS::_rewrite_log_and_layout_sync_LN_LD(bool allocate_with_fallback,
   // we will write it to super
   log_file->fnode.reset_delta();
   log_file->fnode.size = bl.length();
-  vselector->sub_usage(log_file->vselector_hint, old_fnode);
-  vselector->add_usage(log_file->vselector_hint, log_file->fnode);
 
   log.writer = _create_writer(log_file);
   log.writer->append(bl);
-  uint64_t new_data = _flush_special(log.writer);
-  vselector->add_usage(log_file->vselector_hint, new_data);
+  _flush_special(log.writer);
+  vselector->add_usage(log_file->vselector_hint, log_file->fnode);
 #ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
