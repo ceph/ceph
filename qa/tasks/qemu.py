@@ -14,6 +14,7 @@ from teuthology import contextutil
 from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
+from teuthology.packaging import install_package, remove_package
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +94,25 @@ def create_dirs(ctx, config):
                     'rmdir', '{tdir}/qemu'.format(tdir=testdir), run.Raw('||'), 'true',
                     ]
                 )
+
+@contextlib.contextmanager
+def install_block_rbd_driver(ctx, config):
+    """
+    Make sure qemu rbd block driver (block-rbd.so) is installed
+    """
+    for client, client_config in config.items():
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        if remote.os.package_type == 'rpm':
+            block_rbd_pkg = 'qemu-kvm-block-rbd'
+        else:
+            block_rbd_pkg = 'qemu-block-extra'
+        install_package(block_rbd_pkg, remote)
+    try:
+        yield
+    finally:
+        for client, client_config in config.items():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remove_package(block_rbd_pkg, remote)
 
 @contextlib.contextmanager
 def generate_iso(ctx, config):
@@ -572,6 +592,7 @@ def task(ctx, config):
     create_images(ctx=ctx, config=config, managers=managers)
     managers.extend([
         lambda: create_dirs(ctx=ctx, config=config),
+        lambda: install_block_rbd_driver(ctx=ctx, config=config),
         lambda: generate_iso(ctx=ctx, config=config),
         lambda: download_image(ctx=ctx, config=config),
         ])
