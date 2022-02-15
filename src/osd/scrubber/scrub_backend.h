@@ -53,6 +53,7 @@ struct ScrubMap;
 class PG;
 class PgScrubber;
 class PGBackend;
+class PGPool;
 
 
 using data_omap_digests_t =
@@ -72,11 +73,15 @@ using inconsistent_objs_t = std::vector<wrapped_err_t>;
 
 /// omap-specific stats
 struct omap_stat_t {
- int large_omap_objects{0};
- int64_t omap_bytes{0};
- int64_t omap_keys{0};
+  int large_omap_objects{0};
+  int64_t omap_bytes{0};
+  int64_t omap_keys{0};
 };
 
+struct error_counters_t {
+  int shallow_errors{0};
+  int deep_errors{0};
+};
 
 /*
  * snaps-related aux structures:
@@ -276,6 +281,8 @@ struct scrub_chunk_t {
 
   inconsistent_objs_t m_inconsistent_objs;
 
+  /// shallow/deep error counters
+  error_counters_t m_error_counts;
 
   // these must be reset for each element:
 
@@ -369,7 +376,10 @@ class ScrubBackend {
   bool m_is_replicated{true};
   std::string_view m_mode_desc;
   std::string m_formatted_id;
- /// collecting some scrub-session-wide omap stats
+  const PGPool& m_pool;
+  bool m_incomplete_clones_allowed{false};
+
+  /// collecting some scrub-session-wide omap stats
   omap_stat_t m_omap_stats;
 
   /// Mapping from object with errors to good peers
@@ -399,6 +409,9 @@ class ScrubBackend {
 
   /// a reference to the primary map
   ScrubMap& my_map();
+
+  /// shallow/deep error counters
+  error_counters_t get_error_counts() const { return this_chunk->m_error_counts; }
 
   /**
    *  merge_to_authoritative_set() updates
@@ -480,7 +493,6 @@ class ScrubBackend {
 
   int process_clones_to(const std::optional<hobject_t>& head,
                         const std::optional<SnapSet>& snapset,
-                        bool allow_incomplete_clones,
                         std::optional<snapid_t> target,
                         std::vector<snapid_t>::reverse_iterator* curclone,
                         inconsistent_snapset_wrapper& e);
@@ -501,8 +513,7 @@ class ScrubBackend {
 
   void log_missing(int missing,
                    const std::optional<hobject_t>& head,
-                   const char* logged_func_name,
-                   bool allow_incomplete_clones);
+                   const char* logged_func_name);
 
   /**
    * returns a list of snaps "fix orders"
