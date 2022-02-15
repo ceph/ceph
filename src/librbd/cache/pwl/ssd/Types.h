@@ -14,30 +14,30 @@ namespace cache {
 namespace pwl {
 namespace ssd {
 
-struct SuperBlock{
-  WriteLogPoolRoot root;
+struct SuperBlockWrapper{
+  WriteLogSuperblock superblock;
 
-  DENC(SuperBlock, v, p) {
+  DENC(SuperBlockWrapper, v, p) {
     DENC_START(1, 1, p);
-    denc(v.root, p);
+    denc(v.superblock, p);
     DENC_FINISH(p);
   }
 
   void dump(Formatter *f) const {
-    f->dump_object("super", root);
+    f->dump_object("super", superblock);
   }
 
-  static void generate_test_instances(std::list<SuperBlock*>& ls) {
-    ls.push_back(new SuperBlock());
-    ls.push_back(new SuperBlock);
-    ls.back()->root.layout_version = 3;
-    ls.back()->root.cur_sync_gen = 1;
-    ls.back()->root.pool_size = 10737418240;
-    ls.back()->root.flushed_sync_gen = 1;
-    ls.back()->root.block_size = 4096;
-    ls.back()->root.num_log_entries = 0;
-    ls.back()->root.first_free_entry = 30601;
-    ls.back()->root.first_valid_entry = 2;
+  static void generate_test_instances(std::list<SuperBlockWrapper*>& ls) {
+    ls.push_back(new SuperBlockWrapper());
+    ls.push_back(new SuperBlockWrapper);
+    ls.back()->superblock.layout_version = 3;
+    ls.back()->superblock.cur_sync_gen = 1;
+    ls.back()->superblock.pool_size = 10737418240;
+    ls.back()->superblock.flushed_sync_gen = 1;
+    ls.back()->superblock.block_size = 4096;
+    ls.back()->superblock.num_log_entries = 0;
+    ls.back()->superblock.first_free_entry = 30601;
+    ls.back()->superblock.first_valid_entry = 2;
   }
 };
 
@@ -46,6 +46,6 @@ struct SuperBlock{
 } // namespace cache
 } // namespace librbd
 
-WRITE_CLASS_DENC(librbd::cache::pwl::ssd::SuperBlock)
+WRITE_CLASS_DENC(librbd::cache::pwl::ssd::SuperBlockWrapper)
 
 #endif // CEPH_LIBRBD_CACHE_SSD_TYPES_H

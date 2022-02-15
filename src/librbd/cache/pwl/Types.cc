@@ -88,7 +88,7 @@ void WriteLogCacheEntry::generate_test_instances(std::list<WriteLogCacheEntry*>&
   ls.back()->entry_index = 1;
 }
 
-void WriteLogPoolRoot::dump(Formatter *f) const {
+void WriteLogSuperblock::dump(Formatter *f) const {
   f->dump_unsigned("layout_version", layout_version);
   f->dump_unsigned("cur_sync_gen", cur_sync_gen);
   f->dump_unsigned("pool_size", pool_size);
@@ -99,9 +99,9 @@ void WriteLogPoolRoot::dump(Formatter *f) const {
   f->dump_unsigned("first_valid_entry", first_valid_entry);
 }
 
-void WriteLogPoolRoot::generate_test_instances(std::list<WriteLogPoolRoot*>& ls) {
-  ls.push_back(new WriteLogPoolRoot());
-  ls.push_back(new WriteLogPoolRoot);
+void WriteLogSuperblock::generate_test_instances(std::list<WriteLogSuperblock*>& ls) {
+  ls.push_back(new WriteLogSuperblock());
+  ls.push_back(new WriteLogSuperblock);
   ls.back()->layout_version = 2;
   ls.back()->cur_sync_gen = 1;
   ls.back()->pool_size = 1024;

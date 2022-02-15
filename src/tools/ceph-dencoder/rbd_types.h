@@ -23,8 +23,8 @@ TYPE(rbd::mirror::image_map::PolicyData)
 #include "librbd/cache/pwl/Types.h"
 #include "librbd/cache/pwl/ssd/Types.h"
 TYPE(librbd::cache::pwl::WriteLogCacheEntry)
-TYPE(librbd::cache::pwl::WriteLogPoolRoot)
-TYPE(librbd::cache::pwl::ssd::SuperBlock)
+TYPE(librbd::cache::pwl::WriteLogSuperblock)
+TYPE(librbd::cache::pwl::ssd::SuperBlockWrapper)
 #endif
 
 #ifdef WITH_RBD

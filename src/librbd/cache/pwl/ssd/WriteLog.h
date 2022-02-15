@@ -87,22 +87,22 @@ private:
      }
  }; //class AioTransContext
 
- struct WriteLogPoolRootUpdate {
-    std::shared_ptr<pwl::WriteLogPoolRoot> root;
+ struct WriteLogSuperblockUpdate {
+    std::shared_ptr<pwl::WriteLogSuperblock> superblock;
     Context *ctx;
-    WriteLogPoolRootUpdate(std::shared_ptr<pwl::WriteLogPoolRoot> r,
+    WriteLogSuperblockUpdate(std::shared_ptr<pwl::WriteLogSuperblock> r,
                            Context* c)
-      : root(r), ctx(c) {}
+      : superblock(r), ctx(c) {}
   };
 
-  using WriteLogPoolRootUpdateList = std::list<std::shared_ptr<WriteLogPoolRootUpdate>>;
-  WriteLogPoolRootUpdateList m_poolroot_to_update; /* pool root list to update to SSD */
-  bool m_updating_pool_root = false;
+  using WriteLogSuperblockUpdateList = std::list<std::shared_ptr<WriteLogSuperblockUpdate>>;
+  WriteLogSuperblockUpdateList m_superblock_to_update; /* superblock list to update to SSD */
+  bool m_updating_superblock = false;
 
   std::atomic<int> m_async_update_superblock = {0};
   BlockDevice *bdev = nullptr;
-  pwl::WriteLogPoolRoot pool_root;
-  Builder<This> *m_builderobj;
+  pwl::WriteLogSuperblock m_superblock;
+  Builder<This> *m_builderobj = nullptr;
 
   Builder<This>* create_builder();
   int create_and_open_bdev();
@@ -129,13 +129,13 @@ private:
                   uint64_t* new_first_free_entry);
   void write_log_entries(GenericLogEntriesVector log_entries,
                          AioTransContext *aio, uint64_t *pos);
-  void schedule_update_root(std::shared_ptr<WriteLogPoolRoot> root,
-                            Context *ctx);
-  void enlist_op_update_root();
-  void update_root_scheduled_ops();
-  int update_pool_root_sync(std::shared_ptr<pwl::WriteLogPoolRoot> root);
-  void update_pool_root(std::shared_ptr<WriteLogPoolRoot> root,
-                                          AioTransContext *aio);
+  void schedule_update_superblock(std::shared_ptr<WriteLogSuperblock> superblock,
+                                  Context *ctx);
+  void enlist_op_update_superblock();
+  void update_superblock_scheduled_ops();
+  int update_superblock_sync(std::shared_ptr<pwl::WriteLogSuperblock> superblock);
+  void update_superblock(std::shared_ptr<WriteLogSuperblock> superblock,
+                         AioTransContext *aio);
   void aio_read_data_block(std::shared_ptr<GenericWriteLogEntry> log_entry,
                            bufferlist *bl, Context *ctx);
   void aio_read_data_blocks(std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries,

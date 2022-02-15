@@ -33,14 +33,14 @@ namespace ssd {
 using namespace std;
 using namespace librbd::cache::pwl;
 
-static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
-  return root.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
-         root.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
-         root.first_valid_entry < root.pool_size &&
-         root.first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
-         root.first_free_entry >= DATA_RING_BUFFER_OFFSET &&
-         root.first_free_entry < root.pool_size &&
-         root.first_free_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0;
+static bool is_valid_pool_superblock(const WriteLogSuperblock& superblock) {
+  return superblock.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
+         superblock.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
+         superblock.first_valid_entry < superblock.pool_size &&
+         superblock.first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
+         superblock.first_free_entry >= DATA_RING_BUFFER_OFFSET &&
+         superblock.first_free_entry < superblock.pool_size &&
+         superblock.first_free_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0;
 }
 
 template <typename I>
@@ -177,17 +177,17 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     m_first_free_entry = DATA_RING_BUFFER_OFFSET;
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
 
-    auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
-    new_root->layout_version = SSD_LAYOUT_VERSION;
-    new_root->pool_size = this->m_log_pool_size;
-    new_root->flushed_sync_gen = this->m_flushed_sync_gen;
-    new_root->block_size = MIN_WRITE_ALLOC_SSD_SIZE;
-    new_root->first_free_entry = m_first_free_entry;
-    new_root->first_valid_entry = m_first_valid_entry;
-    new_root->num_log_entries = 0;
-    pool_root = *new_root;
+    auto new_superblock = std::make_shared<WriteLogSuperblock>(m_superblock);
+    new_superblock->layout_version = SSD_LAYOUT_VERSION;
+    new_superblock->pool_size = this->m_log_pool_size;
+    new_superblock->flushed_sync_gen = this->m_flushed_sync_gen;
+    new_superblock->block_size = MIN_WRITE_ALLOC_SSD_SIZE;
+    new_superblock->first_free_entry = m_first_free_entry;
+    new_superblock->first_valid_entry = m_first_valid_entry;
+    new_superblock->num_log_entries = 0;
+    m_superblock = *new_superblock;
 
-    r = update_pool_root_sync(new_root);
+    r = update_superblock_sync(new_superblock);
     if (r != 0) {
       lderr(cct) << "failed to initialize pool ("
                  << this->m_log_pool_name << ")" << dendl;
@@ -205,7 +205,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     }
 
     bufferlist bl;
-    SuperBlock superblock;
+    SuperBlockWrapper superblock_wrapper;
     ::IOContext ioctx(cct, nullptr);
     r = bdev->read(0, MIN_WRITE_ALLOC_SSD_SIZE, &bl, &ioctx, false);
     if (r < 0) {
@@ -213,32 +213,32 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
       goto err_close_bdev;
     }
     auto p = bl.cbegin();
-    decode(superblock, p);
-    pool_root = superblock.root;
-    ldout(cct, 1) << "Decoded root: pool_size=" << pool_root.pool_size
-                  << " first_valid_entry=" << pool_root.first_valid_entry
-                  << " first_free_entry=" << pool_root.first_free_entry
-                  << " flushed_sync_gen=" << pool_root.flushed_sync_gen
+    decode(superblock_wrapper, p);
+    m_superblock = superblock_wrapper.superblock;
+    ldout(cct, 1) << "Decoded superblock: pool_size=" << m_superblock.pool_size
+                  << " first_valid_entry=" << m_superblock.first_valid_entry
+                  << " first_free_entry=" << m_superblock.first_free_entry
+                  << " flushed_sync_gen=" << m_superblock.flushed_sync_gen
                   << dendl;
-    ceph_assert(is_valid_pool_root(pool_root));
-    if (pool_root.layout_version != SSD_LAYOUT_VERSION) {
+    ceph_assert(is_valid_pool_superblock(m_superblock));
+    if (m_superblock.layout_version != SSD_LAYOUT_VERSION) {
       lderr(cct) << "pool layout version is "
-                 << pool_root.layout_version
+                 << m_superblock.layout_version
                  << " expected " << SSD_LAYOUT_VERSION
                  << dendl;
       goto err_close_bdev;
     }
-    if (pool_root.block_size != MIN_WRITE_ALLOC_SSD_SIZE) {
-      lderr(cct) << "pool block size is " << pool_root.block_size
+    if (m_superblock.block_size != MIN_WRITE_ALLOC_SSD_SIZE) {
+      lderr(cct) << "pool block size is " << m_superblock.block_size
                  << " expected " << MIN_WRITE_ALLOC_SSD_SIZE
                  << dendl;
       goto err_close_bdev;
     }
 
-    this->m_log_pool_size = pool_root.pool_size;
-    this->m_flushed_sync_gen = pool_root.flushed_sync_gen;
-    this->m_first_valid_entry = pool_root.first_valid_entry;
-    this->m_first_free_entry = pool_root.first_free_entry;
+    this->m_log_pool_size = m_superblock.pool_size;
+    this->m_flushed_sync_gen = m_superblock.flushed_sync_gen;
+    this->m_first_valid_entry = m_superblock.first_valid_entry;
+    this->m_first_free_entry = m_superblock.first_free_entry;
     this->m_bytes_allocated_cap = this->m_log_pool_size -
                                   DATA_RING_BUFFER_OFFSET -
                                   MIN_WRITE_ALLOC_SSD_SIZE;
@@ -468,7 +468,7 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
   ldout(m_image_ctx.cct, 20) << dendl;
   Context *ctx = new LambdaContext([this, ops](int r) {
     assert(r == 0);
-    ldout(m_image_ctx.cct, 20) << "Finished root update " << dendl;
+    ldout(m_image_ctx.cct, 20) << "Finished superblock update " << dendl;
 
     auto captured_ops = std::move(ops);
     this->complete_op_log_entries(std::move(captured_ops), r);
@@ -494,7 +494,7 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
   uint64_t *new_first_free_entry = new(uint64_t);
   Context *append_ctx = new LambdaContext(
     [this, new_first_free_entry, ops, ctx](int r) {
-      std::shared_ptr<WriteLogPoolRoot> new_root;
+      std::shared_ptr<WriteLogSuperblock> new_superblock;
       {
         ldout(m_image_ctx.cct, 20) << "Finished appending at "
                                    << *new_first_free_entry << dendl;
@@ -507,11 +507,11 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
         std::lock_guard locker1(m_lock);
         assert(this->m_appending);
         this->m_appending = false;
-        new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
-        pool_root.first_free_entry = *new_first_free_entry;
-        new_root->first_free_entry = *new_first_free_entry;
+        new_superblock = std::make_shared<WriteLogSuperblock>(m_superblock);
+        m_superblock.first_free_entry = *new_first_free_entry;
+        new_superblock->first_free_entry = *new_first_free_entry;
         delete new_first_free_entry;
-        schedule_update_root(new_root, ctx);
+        schedule_update_superblock(new_superblock, ctx);
       }
       this->m_async_append_ops--;
       this->m_async_op_tracker.finish_op();
@@ -782,11 +782,11 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     }
 
     ceph_assert(first_valid_entry != initial_first_valid_entry);
-    auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
-    new_root->flushed_sync_gen = flushed_sync_gen;
-    new_root->first_valid_entry = first_valid_entry;
-    pool_root.flushed_sync_gen = flushed_sync_gen;
-    pool_root.first_valid_entry = first_valid_entry;
+    auto new_superblock = std::make_shared<WriteLogSuperblock>(m_superblock);
+    new_superblock->flushed_sync_gen = flushed_sync_gen;
+    new_superblock->first_valid_entry = first_valid_entry;
+    m_superblock.flushed_sync_gen = flushed_sync_gen;
+    m_superblock.first_valid_entry = first_valid_entry;
 
     Context *ctx = new LambdaContext(
       [this, first_valid_entry, initial_first_valid_entry,
@@ -821,7 +821,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           }
 
           ldout(m_image_ctx.cct, 20)
-            << "Finished root update: initial_first_valid_entry="
+            << "Finished superblock update: initial_first_valid_entry="
             << initial_first_valid_entry << ", m_first_valid_entry="
             << m_first_valid_entry << ", release space = "
             << allocated_bytes << ", m_bytes_allocated="
@@ -840,7 +840,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
       });
 
     std::lock_guard locker(m_lock);
-    schedule_update_root(new_root, ctx);
+    schedule_update_superblock(new_superblock, ctx);
   } else {
     ldout(cct, 20) << "Nothing to retire" << dendl;
     return false;
@@ -857,7 +857,7 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
   uint64_t bytes_to_free = 0;
   ldout(cct, 20) << "Appending " << ops.size() << " log entries." << dendl;
 
-  *new_first_free_entry = pool_root.first_free_entry;
+  *new_first_free_entry = m_superblock.first_free_entry;
   AioTransContext* aio = new AioTransContext(cct, ctx);
 
   utime_t now = ceph_clock_now();
@@ -963,67 +963,67 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
 }
 
 template <typename I>
-void WriteLog<I>::schedule_update_root(
-    std::shared_ptr<WriteLogPoolRoot> root, Context *ctx) {
+void WriteLog<I>::schedule_update_superblock(
+    std::shared_ptr<WriteLogSuperblock> superblock, Context *ctx) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 15) << "New root: pool_size=" << root->pool_size
-                 << " first_valid_entry=" << root->first_valid_entry
-                 << " first_free_entry=" << root->first_free_entry
-                 << " flushed_sync_gen=" << root->flushed_sync_gen
+  ldout(cct, 15) << "New superblock: pool_size=" << superblock->pool_size
+                 << " first_valid_entry=" << superblock->first_valid_entry
+                 << " first_free_entry=" << superblock->first_free_entry
+                 << " flushed_sync_gen=" << superblock->flushed_sync_gen
                  << dendl;
-  ceph_assert(is_valid_pool_root(*root));
+  ceph_assert(is_valid_pool_superblock(*superblock));
 
   bool need_finisher;
   {
     ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
-    need_finisher = m_poolroot_to_update.empty() && !m_updating_pool_root;
-    std::shared_ptr<WriteLogPoolRootUpdate> entry =
-      std::make_shared<WriteLogPoolRootUpdate>(root, ctx);
+    need_finisher = m_superblock_to_update.empty() && !m_updating_superblock;
+    std::shared_ptr<WriteLogSuperblockUpdate> entry =
+        std::make_shared<WriteLogSuperblockUpdate>(superblock, ctx);
     this->m_async_update_superblock++;
     this->m_async_op_tracker.start_op();
-    m_poolroot_to_update.emplace_back(entry);
+    m_superblock_to_update.emplace_back(entry);
   }
   if (need_finisher) {
-    enlist_op_update_root();
+    enlist_op_update_superblock();
   }
 }
 
 template <typename I>
-void WriteLog<I>::enlist_op_update_root() {
+void WriteLog<I>::enlist_op_update_superblock() {
   Context *append_ctx = new LambdaContext([this](int r) {
-    update_root_scheduled_ops();
+    update_superblock_scheduled_ops();
   });
   this->m_work_queue.queue(append_ctx);
 }
 
 template <typename I>
-void WriteLog<I>::update_root_scheduled_ops() {
+void WriteLog<I>::update_superblock_scheduled_ops() {
   ldout(m_image_ctx.cct, 20) << dendl;
 
-  std::shared_ptr<WriteLogPoolRoot> root;
-  WriteLogPoolRootUpdateList root_updates;
+  std::shared_ptr<WriteLogSuperblock> superblock;
+  WriteLogSuperblockUpdateList superblock_updates;
   Context *ctx = nullptr;
   {
     std::lock_guard locker(m_lock);
-    if (m_updating_pool_root) {
+    if (m_updating_superblock) {
       /* Another thread is appending */
-      ldout(m_image_ctx.cct, 15) << "Another thread is updating pool root"
+      ldout(m_image_ctx.cct, 15) << "Another thread is updating superblock"
                                  << dendl;
       return;
     }
-    if (m_poolroot_to_update.size()) {
-      m_updating_pool_root = true;
-      root_updates.swap(m_poolroot_to_update);
+    if (m_superblock_to_update.size()) {
+      m_updating_superblock = true;
+      superblock_updates.swap(m_superblock_to_update);
     }
   }
-  ceph_assert(!root_updates.empty());
-  ldout(m_image_ctx.cct, 15) << "Update root number: " << root_updates.size()
-                             << dendl;
+  ceph_assert(!superblock_updates.empty());
+  ldout(m_image_ctx.cct, 15) << "Update superblock number: "
+                             << superblock_updates.size() << dendl;
   // We just update the last one, and call all the completions.
-  auto entry = root_updates.back();
-  root = entry->root;
+  auto entry = superblock_updates.back();
+  superblock = entry->superblock;
 
-  ctx = new LambdaContext([this, updates = std::move(root_updates)](int r) {
+  ctx = new LambdaContext([this, updates = std::move(superblock_updates)](int r) {
     ldout(m_image_ctx.cct, 15) << "Start to callback." << dendl;
     for (auto it = updates.begin(); it != updates.end(); it++) {
       Context *it_ctx = (*it)->ctx;
@@ -1031,30 +1031,30 @@ void WriteLog<I>::update_root_scheduled_ops() {
     }
   });
   Context *append_ctx = new LambdaContext([this, ctx](int r) {
-    ldout(m_image_ctx.cct, 15) << "Finish the update of pool root." << dendl;
+    ldout(m_image_ctx.cct, 15) << "Finish the update of superblock." << dendl;
     bool need_finisher = false;
     assert(r == 0);
     {
       std::lock_guard locker(m_lock);
-      m_updating_pool_root = false;
-      need_finisher = !m_poolroot_to_update.empty();
+      m_updating_superblock = false;
+      need_finisher = !m_superblock_to_update.empty();
     }
     if (need_finisher) {
-      enlist_op_update_root();
+      enlist_op_update_superblock();
     }
     ctx->complete(r);
   });
   AioTransContext* aio = new AioTransContext(m_image_ctx.cct, append_ctx);
-  update_pool_root(root, aio);
+  update_superblock(superblock, aio);
 }
 
 template <typename I>
-void WriteLog<I>::update_pool_root(std::shared_ptr<WriteLogPoolRoot> root,
-                                   AioTransContext *aio) {
+void WriteLog<I>::update_superblock(std::shared_ptr<WriteLogSuperblock> superblock,
+                                    AioTransContext *aio) {
   bufferlist bl;
-  SuperBlock superblock;
-  superblock.root = *root;
-  encode(superblock, bl);
+  SuperBlockWrapper superblock_wrapper;
+  superblock_wrapper.superblock = *superblock;
+  encode(superblock_wrapper, bl);
   bl.append_zero(MIN_WRITE_ALLOC_SSD_SIZE - bl.length());
   ceph_assert(bl.length() % MIN_WRITE_ALLOC_SSD_SIZE == 0);
   bdev->aio_write(0, bl, &aio->ioc, false, WRITE_LIFE_NOT_SET);
@@ -1062,12 +1062,12 @@ void WriteLog<I>::update_pool_root(std::shared_ptr<WriteLogPoolRoot> root,
 }
 
 template <typename I>
-int WriteLog<I>::update_pool_root_sync(
-    std::shared_ptr<WriteLogPoolRoot> root) {
+int WriteLog<I>::update_superblock_sync(
+    std::shared_ptr<WriteLogSuperblock> superblock) {
   bufferlist bl;
-  SuperBlock superblock;
-  superblock.root = *root;
-  encode(superblock, bl);
+  SuperBlockWrapper superblock_wrapper;
+  superblock_wrapper.superblock = *superblock;
+  encode(superblock_wrapper, bl);
   bl.append_zero(MIN_WRITE_ALLOC_SSD_SIZE - bl.length());
   ceph_assert(bl.length() % MIN_WRITE_ALLOC_SSD_SIZE == 0);
   return bdev->write(0, bl, false);
@@ -1117,11 +1117,11 @@ void WriteLog<I>::aio_read_data_blocks(
     ldout(cct, 20) << "entry i=" << i << " " << log_entry->write_data_pos
                    << "~" << len << dendl;
     ceph_assert(log_entry->write_data_pos >= DATA_RING_BUFFER_OFFSET &&
-                log_entry->write_data_pos < pool_root.pool_size);
+                log_entry->write_data_pos < m_superblock.pool_size);
     ceph_assert(align_len);
-    if (log_entry->write_data_pos + align_len > pool_root.pool_size) {
+    if (log_entry->write_data_pos + align_len > m_superblock.pool_size) {
       // spans boundary, need to split
-      uint64_t len1 = pool_root.pool_size - log_entry->write_data_pos;
+      uint64_t len1 = m_superblock.pool_size - log_entry->write_data_pos;
       uint64_t len2 = align_len - len1;
 
       ldout(cct, 20) << "read " << log_entry->write_data_pos << "~"

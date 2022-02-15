@@ -436,8 +436,8 @@ void AbstractWriteLog<I>::update_sync_points(std::map<uint64_t, bool> &missing_s
           sync_point_entry->bytes += gen_write_entry->ram_entry.write_bytes;
           sync_point_entry->writes_completed++;
           m_blocks_to_log_entries.add_log_entry(gen_write_entry);
-          /* This entry is only dirty if its sync gen number is > the flushed
-           * sync gen number from the root object. */
+          /* This entry is only dirty if its sync gen number > the flushed
+           * sync gen number from the superblock. */
           if (gen_write_entry->ram_entry.sync_gen_number > m_flushed_sync_gen) {
             m_dirty_log_entries.push_back(log_entry);
             m_bytes_dirty += gen_write_entry->bytes_dirty();
