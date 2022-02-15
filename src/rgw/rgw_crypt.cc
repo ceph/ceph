@@ -873,13 +873,9 @@ static const crypt_option_names crypt_options[] = {
 
 struct CryptAttributes {
   meta_map_t &x_meta_map;
-  std::map<std::string,
-	RGWPostObj_ObjStore::post_form_part, const ltstr_nocase>* parts;
 
-  CryptAttributes(req_state *s,
-      std::map<std::string,
-	       RGWPostObj_ObjStore::post_form_part,
-	       const ltstr_nocase>* _parts) : x_meta_map(s->info.crypt_attribute_map), parts(_parts) {
+  CryptAttributes(req_state *s)
+    : x_meta_map(s->info.crypt_attribute_map) {
   }
 
   std::string_view get(crypt_option_e option)
@@ -887,21 +883,11 @@ struct CryptAttributes {
     static_assert(
 	X_AMZ_SERVER_SIDE_ENCRYPTION_LAST == sizeof(crypt_options)/sizeof(*crypt_options),
 	"Missing items in crypt_options");
-    if (parts != nullptr) {
-      auto iter
-	= parts->find(crypt_options[option].post_part_name);
-      if (iter == parts->end())
-	return std::string_view();
-      bufferlist& data = iter->second.data;
-      std::string_view str = std::string_view(data.c_str(), data.length());
-      return rgw_trim_whitespace(str);
+    auto hdr { x_meta_map.find(crypt_options[option].post_part_name) };
+    if (hdr != x_meta_map.end()) {
+      return std::string_view(hdr->second);
     } else {
-      auto hdr { x_meta_map.find(crypt_options[option].post_part_name) };
-      if (hdr != x_meta_map.end()) {
-	return std::string_view(hdr->second);
-      } else {
-	return std::string_view();
-      }
+      return std::string_view();
     }
   }
 };
@@ -957,7 +943,7 @@ std::string expand_key_name(struct req_state *s, const std::string_view&t)
 }
 
 static int get_sse_s3_bucket_key(req_state *s,
-			  std::string &key_id)
+                          std::string &key_id)
 {
   int res;
   std::string saved_key;
@@ -987,11 +973,11 @@ static int get_sse_s3_bucket_key(req_state *s,
       attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = key_id_bl;
       res = s->bucket->merge_and_store_attrs(s, attrs, s->yield);
       if (res != -ECANCELED) {
-	break;
+        break;
       }
       res = s->bucket->try_refresh_info(s, nullptr);
       if (res != 0) {
-	break;
+        break;
       }
     }
     if (res != 0) {
@@ -1005,14 +991,11 @@ static int get_sse_s3_bucket_key(req_state *s,
 
 int rgw_s3_prepare_encrypt(struct req_state* s,
                            std::map<std::string, ceph::bufferlist>& attrs,
-                           std::map<std::string,
-                                    RGWPostObj_ObjStore::post_form_part,
-                                    const ltstr_nocase>* parts,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
-  CryptAttributes crypt_attributes { s, parts };
+  CryptAttributes crypt_attributes { s };
   crypt_http_responses.clear();
 
   {
@@ -1135,57 +1118,57 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
 
       if (req_sse == "aws:kms") {
-	std::string_view context =
+        std::string_view context =
           crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT);
         std::string cooked_context;
-	if ((res = make_canonical_context(s, context, cooked_context)))
-	  return res;
-	std::string_view key_id =
+        if ((res = make_canonical_context(s, context, cooked_context)))
+          return res;
+        std::string_view key_id =
           crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
-	if (key_id.empty()) {
-	  ldpp_dout(s, 5) << "ERROR: not provide a valid key id" << dendl;
-	  s->err.message = "Server Side Encryption with KMS managed key requires "
-	    "HTTP header x-amz-server-side-encryption-aws-kms-key-id";
-	  return -EINVAL;
-	}
-	/* try to retrieve actual key */
-	std::string key_selector = create_random_key_selector(s->cct);
-	set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS");
-	set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
-	set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
-	set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
-	std::string actual_key;
-	res = make_actual_key_from_kms(s, s->cct, attrs, actual_key);
-	if (res != 0) {
-	  ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
-	  s->err.message = "Failed to retrieve the actual key, kms-keyid: " + std::string(key_id);
-	  return res;
-	}
-	if (actual_key.size() != AES_256_KEYSIZE) {
-	  ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
+        if (key_id.empty()) {
+          ldpp_dout(s, 5) << "ERROR: not provide a valid key id" << dendl;
+          s->err.message = "Server Side Encryption with KMS managed key requires "
+            "HTTP header x-amz-server-side-encryption-aws-kms-key-id";
+          return -EINVAL;
+        }
+        /* try to retrieve actual key */
+        std::string key_selector = create_random_key_selector(s->cct);
+        set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS");
+        set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
+        set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
+        set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
+        std::string actual_key;
+        res = make_actual_key_from_kms(s, s->cct, attrs, actual_key);
+        if (res != 0) {
+          ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+          s->err.message = "Failed to retrieve the actual key, kms-keyid: " + std::string(key_id);
+          return res;
+        }
+        if (actual_key.size() != AES_256_KEYSIZE) {
+          ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
             key_id << " is not 256 bit size" << dendl;
-	  s->err.message = "KMS provided an invalid key for the given kms-keyid.";
-	  return -EINVAL;
-	}
+          s->err.message = "KMS provided an invalid key for the given kms-keyid.";
+          return -EINVAL;
+        }
 
-	if (block_crypt) {
-	  auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
-	  aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
-	  *block_crypt = std::move(aes);
-	}
+        if (block_crypt) {
+          auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
+          aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
+          *block_crypt = std::move(aes);
+        }
         ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
 
-	crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
-	crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = std::string(key_id);
-	crypt_http_responses["x-amz-server-side-encryption-context"] = std::move(cooked_context);
-	return 0;
+        crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
+        crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = std::string(key_id);
+        crypt_http_responses["x-amz-server-side-encryption-context"] = std::move(cooked_context);
+        return 0;
       } else if (req_sse == "AES256") {
-	/* SSE-S3: fall through to logic to look for vault or test key */
+        /* SSE-S3: fall through to logic to look for vault or test key */
       } else {
         ldpp_dout(s, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
                          << dendl;
         s->err.message = "Server Side Encryption with KMS managed key requires "
-	  "HTTP header x-amz-server-side-encryption : aws:kms or AES256";
+          "HTTP header x-amz-server-side-encryption : aws:kms or AES256";
         return -EINVAL;
       }
     } else {
@@ -1197,16 +1180,16 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 
     if (s->cct->_conf->rgw_crypt_sse_s3_backend == "vault") {
       ldpp_dout(s, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: "
-	      <<  req_sse << dendl;
+              <<  req_sse << dendl;
       std::string_view context = "";
       std::string cooked_context;
       if ((res = make_canonical_context(s, context, cooked_context)))
-	return res;
+        return res;
 
       std::string key_id;
       res = get_sse_s3_bucket_key(s, key_id);
       if (res != 0) {
-	return res;
+        return res;
       }
       std::string key_selector = create_random_key_selector(s->cct);
 
@@ -1217,21 +1200,21 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       std::string actual_key;
       res = make_actual_key_from_sse_s3(s, s->cct, attrs, actual_key);
       if (res != 0) {
-	ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
-	s->err.message = "Failed to retrieve the actual key";
-	return res;
+        ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+        s->err.message = "Failed to retrieve the actual key";
+        return res;
       }
       if (actual_key.size() != AES_256_KEYSIZE) {
-	ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
-		       key_id << " is not 256 bit size" << dendl;
-	s->err.message = "SSE-S3 provided an invalid key for the given keyid.";
-	return -EINVAL;
+        ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
+                       key_id << " is not 256 bit size" << dendl;
+        s->err.message = "SSE-S3 provided an invalid key for the given keyid.";
+        return -EINVAL;
       }
 
       if (block_crypt) {
-	auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
-	aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
-	*block_crypt = std::move(aes);
+        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
+        aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
+        *block_crypt = std::move(aes);
       }
       ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
 
