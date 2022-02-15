@@ -7,11 +7,7 @@
 #include "include/buffer.h"
 
 #ifdef HAVE_JAEGER
-
 #include "opentelemetry/trace/provider.h"
-#include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
-#include "opentelemetry/sdk/trace/simple_processor.h"
-#include "opentelemetry/sdk/trace/tracer_provider.h"
 
 using jspan = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>;
 using jspan_context = opentelemetry::trace::SpanContext;
