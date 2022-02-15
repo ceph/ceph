@@ -4,8 +4,8 @@
 #pragma once
 
 #include "seastar/core/gate.hh"
+#include "seastar/core/shared_future.hh"
 
-#include "crimson/common/condition_variable.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -191,6 +191,10 @@ class SegmentedAllocator : public ExtentAllocator {
       });
     }
   private:
+    write_iertr::future<> do_write(
+      Transaction& t,
+      std::list<LogicalCachedExtentRef>& extent);
+
     bool _needs_roll(seastore_off_t length) const;
 
     write_iertr::future<> _write(
@@ -199,23 +203,18 @@ class SegmentedAllocator : public ExtentAllocator {
 
     using roll_segment_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
-    roll_segment_ertr::future<> roll_segment(bool);
+    roll_segment_ertr::future<> roll_segment();
 
     using init_segment_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
     init_segment_ertr::future<> init_segment(Segment& segment);
 
-    void add_extent_to_write(
-      ool_record_t&,
-      LogicalCachedExtentRef& extent);
-
     SegmentProvider& segment_provider;
     SegmentManager& segment_manager;
     SegmentRef current_segment;
     seastore_off_t allocated_to = 0;
-    crimson::condition_variable segment_rotation_guard;
+    std::optional<seastar::shared_promise<>> roll_promise;
     seastar::gate write_guard;
-    bool rolling_segment = false;
   };
 public:
   SegmentedAllocator(
