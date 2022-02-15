@@ -475,6 +475,7 @@ private:
   double caps_throttle_retry_request_timeout;
 
   size_t alternate_name_max = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
+  size_t fscrypt_last_block_max_size = g_conf().get_val<Option::size_t>("mds_fscrypt_last_block_max_size");
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {

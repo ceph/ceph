@@ -30,6 +30,8 @@ public:
   ceph_mds_request_head head;
   filepath path, path2;
   std::string alternate_name;
+  std::vector<uint8_t>	fscrypt_auth;
+  std::vector<uint8_t>	fscrypt_file;
   bufferlist data;
   int inode_drop = 0;   //the inode caps this operation will drop
   int inode_unless = 0; //unless we have these caps already
