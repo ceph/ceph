@@ -86,9 +86,9 @@ private:
 struct without_gil_t {
   without_gil_t();
   ~without_gil_t();
-private:
   void release_gil();
   void acquire_gil();
+private:
   PyThreadState *save = nullptr;
   friend struct with_gil_t;
 };

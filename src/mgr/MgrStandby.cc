@@ -23,6 +23,7 @@
 
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
+#include "mgr/mgr_perf_counters.h"
 
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
@@ -196,6 +197,8 @@ int MgrStandby::init()
   timer.init();
 
   py_module_registry.init();
+  mgr_perf_start(g_ceph_context);
+
 
   tick();
 
@@ -264,7 +267,7 @@ void MgrStandby::send_beacon()
 
     m->set_services(active_mgr->get_services());
   }
-                                 
+
   monc.send_mon_message(std::move(m));
 }
 
@@ -278,7 +281,7 @@ void MgrStandby::tick()
       new LambdaContext([this](int r){
           tick();
       }
-  )); 
+  ));
 }
 
 void MgrStandby::shutdown()
@@ -313,6 +316,7 @@ void MgrStandby::shutdown()
   // to touch references to the things we're about to tear down
   finisher.wait_for_empty();
   finisher.stop();
+  mgr_perf_stop(g_ceph_context);
 }
 
 void MgrStandby::respawn()
@@ -497,4 +501,3 @@ std::string MgrStandby::state_str()
     return "active (starting)";
   }
 }
-

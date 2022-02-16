@@ -17,6 +17,7 @@ if(WITH_MGR)
     DaemonState.cc
     Gil.cc
     Mgr.cc
+    mgr_perf_counters.cc
     MgrStandby.cc
     MetricCollector.cc
     OSDPerfMetricTypes.cc
