@@ -187,6 +187,19 @@ class TestCluster(object):
         c_foo = c.exclude('foo', lambda role: role.startswith('b'))
         assert c_foo.remotes == {r2: ['bar'], r3: ['foo']}
 
+    def test_filter(self):
+        r1 = Mock(_name='r1')
+        r2 = Mock(_name='r2')
+        def func(r):
+            return r._name == "r1"
+        c = cluster.Cluster(remotes=[
+                (r1, ['foo']),
+                (r2, ['bar']),
+            ])
+        assert c.filter(func).remotes == {
+            r1: ['foo']
+        }
+
 
 class TestWriteFile(object):
     """ Tests for cluster.write_file """
