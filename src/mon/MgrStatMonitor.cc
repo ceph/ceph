@@ -332,10 +332,9 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
 
 void MgrStatMonitor::check_sub(Subscription *sub)
 {
-  const auto epoch = mon.monmap->get_epoch();
   dout(10) << __func__
 	   << " next " << sub->next
-	   << " have " << epoch << dendl;
+	   << " vs service_map.epoch " << service_map.epoch << dendl;
   if (sub->next <= service_map.epoch) {
     auto m = new MServiceMap(service_map);
     sub->session->con->send_message(m);
@@ -344,7 +343,7 @@ void MgrStatMonitor::check_sub(Subscription *sub)
 	  session_map.remove_sub(sub);
 	});
     } else {
-      sub->next = epoch + 1;
+      sub->next = service_map.epoch + 1;
     }
   }
 }
