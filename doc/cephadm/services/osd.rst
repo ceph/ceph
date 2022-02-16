@@ -380,9 +380,7 @@ memory with other services, cephadm can automatically adjust the per-OSD
 memory consumption based on the total amount of RAM and the number of deployed
 OSDs.
 
-This option is enabled globally with::
-
-  ceph config set osd osd_memory_target_autotune true
+.. warning:: Cephadm sets ``osd_memory_target_autotune`` to ``true`` by default which is unsuitable for hyperconverged infrastructures.
 
 Cephadm will start with a fraction
 (``mgr/cephadm/autotune_memory_target_ratio``, which defaults to
