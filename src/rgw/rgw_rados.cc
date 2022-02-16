@@ -6359,11 +6359,12 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
    * for following the specific bucket shard log. Otherwise they end up staying behind, and users
    * have no way to tell that they're all caught up
    */
-  int r = store->svc.datalog_rados->add_entry(dpp, target->bucket_info, bs->shard_id);
-  if (r < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
+  if(ret == 0) {
+      int r = store->svc.datalog_rados->add_entry(dpp, target->bucket_info, bs->shard_id);
+      if (r < 0) {
+          ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
+      }
   }
-
   return ret;
 }
 
