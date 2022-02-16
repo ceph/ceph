@@ -7709,12 +7709,14 @@ int BlueStore::umount()
     dout(20) << __func__ << " closing" << dendl;
   }
 
-  // raise debug level
+  // stop new allocations and raise debug level
   if (unlikely(m_fast_shutdown)) {
-    cct->_conf.set_val("debug_osd", "20");
-    cct->_conf.set_val("debug_bluestore", "20");
-    cct->_conf.set_val("debug_bluefs", "20");
-    cct->_conf.set_val("debug_rocksdb", "20");
+    alloc->prepare_for_fast_shutdown();
+
+    //cct->_conf.set_val("debug_osd", "20");
+    //cct->_conf.set_val("debug_bluestore", "20");
+    //cct->_conf.set_val("debug_bluefs", "20");
+    //cct->_conf.set_val("debug_rocksdb", "20");
   }
 
   _close_db_and_around();

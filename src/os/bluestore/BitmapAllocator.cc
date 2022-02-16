@@ -29,8 +29,8 @@ int64_t BitmapAllocator::allocate(
   ldout(cct, 10) << __func__ << std::hex << " 0x" << want_size
 		 << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		 << std::dec << dendl;
-    
-    
+  ceph_assert(m_fast_shutdown == false);
+
   _allocate_l2(want_size, alloc_unit, max_alloc_size, hint,
     &allocated, extents);
   if (!allocated) {
@@ -51,6 +51,7 @@ int64_t BitmapAllocator::allocate(
 void BitmapAllocator::release(
   const interval_set<uint64_t>& release_set)
 {
+  ceph_assert(m_fast_shutdown == false);
   if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
     for (auto& [offset, len] : release_set) {
       ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << len
@@ -67,7 +68,7 @@ void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 		  << std::dec << dendl;
-
+  ceph_assert(m_fast_shutdown == false);
   auto mas = get_min_alloc_size();
   uint64_t offs = round_up_to(offset, mas);
   uint64_t l = p2align(offset + length - offs, mas);
@@ -80,6 +81,7 @@ void BitmapAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 		 << std::dec << dendl;
+  ceph_assert(m_fast_shutdown == false);
   auto mas = get_min_alloc_size();
   uint64_t offs = round_up_to(offset, mas);
   uint64_t l = p2align(offset + length - offs, mas);

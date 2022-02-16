@@ -40,6 +40,7 @@ void StupidAllocator::_insert_free(uint64_t off, uint64_t len)
   unsigned bin = _choose_bin(len);
   ldout(cct, 30) << __func__ << " 0x" << std::hex << off << "~" << len
 		 << std::dec << " in bin " << bin << dendl;
+  ceph_assert(m_fast_shutdown == false);
   while (true) {
     free[bin].insert(off, len, &off, &len);
     unsigned newbin = _choose_bin(len);
@@ -75,6 +76,7 @@ int64_t StupidAllocator::allocate_int(
 	   	 << " alloc_unit 0x" << alloc_unit
 	   	 << " hint 0x" << hint << std::dec
 	   	 << dendl;
+  ceph_assert(m_fast_shutdown == false);
   uint64_t want = std::max(alloc_unit, want_size);
   int bin = _choose_bin(want);
   int orig_bin = bin;
@@ -194,7 +196,7 @@ int64_t StupidAllocator::allocate(
   uint64_t offset = 0;
   uint32_t length = 0;
   int res = 0;
-
+  ceph_assert(m_fast_shutdown == false);
   if (max_alloc_size == 0) {
     max_alloc_size = want_size;
   }
@@ -239,6 +241,7 @@ int64_t StupidAllocator::allocate(
 void StupidAllocator::release(
   const interval_set<uint64_t>& release_set)
 {
+  ceph_assert(m_fast_shutdown == false);
   std::lock_guard l(lock);
   for (interval_set<uint64_t>::const_iterator p = release_set.begin();
        p != release_set.end();
@@ -313,6 +316,7 @@ void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   if (!length)
     return;
+  ceph_assert(m_fast_shutdown == false);
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 		 << std::dec << dendl;
@@ -324,6 +328,7 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   if (!length)
     return;
+  ceph_assert(m_fast_shutdown == false);
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   	 << std::dec << dendl;

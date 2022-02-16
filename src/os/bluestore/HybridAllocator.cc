@@ -29,7 +29,7 @@ int64_t HybridAllocator::allocate(
                  << std::dec << dendl;
   ceph_assert(isp2(unit));
   ceph_assert(want % unit == 0);
-
+  ceph_assert(m_fast_shutdown == false);
   if (max_alloc_size == 0) {
     max_alloc_size = want;
   }
@@ -106,6 +106,7 @@ int64_t HybridAllocator::allocate(
 }
 
 void HybridAllocator::release(const interval_set<uint64_t>& release_set) {
+  ceph_assert(m_fast_shutdown == false);
   std::lock_guard l(lock);
   // this will attempt to put free ranges into AvlAllocator first and
   // fallback to bitmap one via _try_insert_range call
@@ -157,6 +158,7 @@ void HybridAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   if (!length)
     return;
+  ceph_assert(m_fast_shutdown == false);
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
@@ -213,6 +215,7 @@ void HybridAllocator::_spillover_range(uint64_t start, uint64_t end)
 
 void HybridAllocator::_add_to_tree(uint64_t start, uint64_t size)
 {
+  ceph_assert(m_fast_shutdown == false);
   if (bmap_alloc) {
     uint64_t head = bmap_alloc->claim_free_to_left(start);
     uint64_t tail = bmap_alloc->claim_free_to_right(start + size);

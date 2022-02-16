@@ -91,7 +91,7 @@ uint64_t AvlAllocator::_pick_block_fits(uint64_t size,
 void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
 {
   ceph_assert(size != 0);
-
+  ceph_assert(m_fast_shutdown == false);
   uint64_t end = start + size;
 
   auto rs_after = range_tree.upper_bound(range_t{start, end},
@@ -160,6 +160,7 @@ void AvlAllocator::_process_range_removal(uint64_t start, uint64_t end,
 
 void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
 {
+  ceph_assert(m_fast_shutdown == false);
   uint64_t end = start + size;
 
   ceph_assert(size != 0);
@@ -180,7 +181,7 @@ void AvlAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   uint64_t end = start + size;
 
   ceph_assert(size != 0);
-
+  ceph_assert(m_fast_shutdown == false);
   auto rs = range_tree.find(range_t{ start, end },
     range_tree.key_comp());
 
@@ -217,6 +218,7 @@ int64_t AvlAllocator::_allocate(
   int64_t  hint, // unused, for now!
   PExtentVector* extents)
 {
+  ceph_assert(m_fast_shutdown == false);
   uint64_t allocated = 0;
   while (allocated < want) {
     uint64_t offset, length;
@@ -238,6 +240,7 @@ int AvlAllocator::_allocate(
   uint64_t *offset,
   uint64_t *length)
 {
+  ceph_assert(m_fast_shutdown == false);
   uint64_t max_size = 0;
   if (auto p = range_size_tree.rbegin(); p != range_size_tree.rend()) {
     max_size = p->end - p->start;
@@ -300,6 +303,7 @@ int AvlAllocator::_allocate(
 
 void AvlAllocator::_release(const interval_set<uint64_t>& release_set)
 {
+  ceph_assert(m_fast_shutdown == false);
   for (auto p = release_set.begin(); p != release_set.end(); ++p) {
     const auto offset = p.get_start();
     const auto length = p.get_len();
@@ -313,6 +317,7 @@ void AvlAllocator::_release(const interval_set<uint64_t>& release_set)
 }
 
 void AvlAllocator::_release(const PExtentVector& release_set) {
+  ceph_assert(m_fast_shutdown == false);
   for (auto& e : release_set) {
     ldout(cct, 10) << __func__ << std::hex
       << " offset 0x" << e.offset
@@ -373,7 +378,6 @@ int64_t AvlAllocator::allocate(
                  << std::dec << dendl;
   ceph_assert(isp2(unit));
   ceph_assert(want % unit == 0);
-
   if (max_alloc_size == 0) {
     max_alloc_size = want;
   }
@@ -438,6 +442,7 @@ void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   if (!length)
     return;
+  ceph_assert(m_fast_shutdown == false);
   std::lock_guard l(lock);
   ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
@@ -451,6 +456,7 @@ void AvlAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   if (!length)
     return;
+  ceph_assert(m_fast_shutdown == false);
   std::lock_guard l(lock);
   ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex

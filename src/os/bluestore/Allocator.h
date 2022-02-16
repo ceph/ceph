@@ -65,6 +65,9 @@ public:
   }
   virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
+  void prepare_for_fast_shutdown() {
+    m_fast_shutdown = true;
+  }
 
   static Allocator *create(
     CephContext* cct,
@@ -91,6 +94,7 @@ private:
   class SocketHook;
   SocketHook* asok_hook = nullptr;
 protected:
+  bool    m_fast_shutdown = false;
   const int64_t device_size = 0;
   const int64_t block_size = 0;
 };
