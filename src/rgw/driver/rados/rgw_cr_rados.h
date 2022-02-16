@@ -10,16 +10,17 @@
 #include "rgw_sal_rados.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
-
+#include "cls/lock/cls_lock_client.h"
+#include "sync_fairness.h"
 #include <atomic>
 #include "common/ceph_time.h"
+#include <functional>
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
 
 struct rgw_http_param_pair;
 class RGWRESTConn;
-
 class RGWAsyncRadosRequest : public RefCountedObject {
   RGWCoroutine *caller;
   RGWAioCompletionNotifier *notifier;
@@ -380,9 +381,10 @@ class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
 protected:
   int _send_request(const DoutPrefixProvider *dpp) override;
 public:
-  RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
-                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-		        const std::string& _name, const std::string& _cookie, uint32_t _duration_secs);
+  RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
+			rgw::sal::RadosStore *_store, RGWObjVersionTracker *_objv_tracker,
+			const rgw_raw_obj& _obj, const std::string& _name,
+			const std::string& _cookie, uint32_t _duration_secs);
 };
 
 class RGWAsyncUnlockSystemObj : public RGWAsyncRadosRequest {
@@ -766,22 +768,23 @@ public:
 };
 
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
-  RGWAsyncRadosProcessor *async_rados;
-  rgw::sal::RadosStore* store;
-  std::string lock_name;
-  std::string cookie;
-  uint32_t duration;
+  protected:
+    RGWAsyncRadosProcessor *async_rados;
+    rgw::sal::RadosStore* store;
+    std::string lock_name;
+    std::string cookie;
+    uint32_t duration_secs;
 
-  rgw_raw_obj obj;
+    rgw_raw_obj obj;
 
-  RGWAsyncLockSystemObj *req;
+    RGWAsyncLockSystemObj *req;
 
 public:
   RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
 		      const rgw_raw_obj& _obj,
-                      const std::string& _lock_name,
+          const std::string& _lock_name,
 		      const std::string& _cookie,
-		      uint32_t _duration);
+		      uint32_t _duration_secs);
   ~RGWSimpleRadosLockCR() override {
     request_cleanup();
   }
@@ -797,7 +800,6 @@ public:
     return buf;
   }
 };
-
 class RGWSimpleRadosUnlockCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RadosStore* store;
@@ -1454,8 +1456,8 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   const std::string lock_name;
   const std::string cookie{RGWSimpleRadosLockCR::gen_random_cookie(cct)};
 
-  int interval;
-  bool going_down{false};
+  int lock_duration_secs;
+  bool going_down{ false };
   bool locked{false};
   
   const ceph::timespan interval_tolerance;
@@ -1467,26 +1469,40 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   
   ceph::coarse_mono_time last_renew_try_time;
   ceph::coarse_mono_time current_time;
+  std::atomic<bool> releasing_lock = { false };
 
   LatencyMonitor* latency;
+  uint32_t shard_id;
+  rgw::sync_fairness::BidManager* bid_mgr;
+
+
 
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor* async_rados,
                        rgw::sal::RadosStore* _store,
                        rgw_raw_obj obj, std::string lock_name,
-                       int interval, RGWCoroutine* caller,
+                       int _lock_duration_secs, RGWCoroutine* caller,
 		       LatencyMonitor* const latency)
     : RGWCoroutine(_store->ctx()), async_rados(async_rados), store(_store),
       obj(std::move(obj)), lock_name(std::move(lock_name)),
-      interval(interval), interval_tolerance(ceph::make_timespan(9*interval/10)),
-      ts_interval(ceph::make_timespan(interval)), caller(caller), latency(latency)
+      lock_duration_secs(_lock_duration_secs), interval_tolerance(ceph::make_timespan(9*_lock_duration_secs/10)),
+      ts_interval(ceph::make_timespan(_lock_duration_secs)), caller(caller), latency(latency), shard_id(0), bid_mgr(nullptr)
   {}
-
+  RGWContinuousLeaseCR(RGWAsyncRadosProcessor* async_rados,
+                       rgw::sal::RadosStore* _store,
+                       rgw_raw_obj obj, std::string lock_name,
+                       int _lock_duration_secs, RGWCoroutine* caller,
+		       LatencyMonitor* const latency, uint32_t _shard_id, rgw::sync_fairness::BidManager* _bid_mgr)
+    : RGWCoroutine(_store->ctx()), async_rados(async_rados), store(_store),
+      obj(std::move(obj)), lock_name(std::move(lock_name)),
+      lock_duration_secs(_lock_duration_secs), interval_tolerance(ceph::make_timespan(9*_lock_duration_secs/10)),
+      ts_interval(ceph::make_timespan(_lock_duration_secs)), caller(caller), latency(latency), shard_id(_shard_id), bid_mgr(_bid_mgr)
+  {}
   virtual ~RGWContinuousLeaseCR() override;
 
   int operate(const DoutPrefixProvider *dpp) override;
 
-  bool is_locked() const {
+  virtual bool is_locked() const {
     if (ceph::coarse_mono_clock::now() - last_renew_try_time > ts_interval) {
       return false;
     }
@@ -1497,15 +1513,19 @@ public:
     locked = status;
   }
 
+  void release_lock() {
+    releasing_lock = true;
+    wakeup();
+  }
+
   void go_down() {
     going_down = true;
     wakeup();
   }
-
   void abort() {
     aborted = true;
   }
-};
+};// RGWContinuousLeaseCR
 
 class RGWRadosTimelogAddCR : public RGWSimpleCoroutine {
   const DoutPrefixProvider *dpp;

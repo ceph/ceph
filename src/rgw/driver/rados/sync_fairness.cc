@@ -32,7 +32,7 @@ using bid_value = uint16_t;
 using bid_vector = std::vector<bid_value>; // bid per replication log shard
 
 using notifier_id = uint64_t;
-using bidder_map = boost::container::flat_map<notifier_id, bid_vector>;
+using bidder_map = std::unordered_map<notifier_id, bid_vector>;
 
 struct BidRequest {
   bid_vector bids;
@@ -266,10 +266,12 @@ class RadosBidManager : public BidManager, public Server, public DoutPrefix {
     // fill my_bids with random values
     std::random_device rd;
     std::default_random_engine rng{rd()};
-    std::uniform_int_distribution<bid_value> dist;
 
     my_bids.resize(num_shards);
-    std::generate(my_bids.begin(), my_bids.end(), [&] { return dist(rng); });
+    for(bid_value i = 0; i < num_shards; ++i) {
+      my_bids[i] = i;
+    }
+    std::shuffle(my_bids.begin(), my_bids.end(), rng);
   }
 
   int start() override
