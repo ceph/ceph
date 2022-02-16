@@ -4735,7 +4735,7 @@ int OSDMap::calc_pg_upmaps(
       int osd = p->second;
       float deviation = p->first;
       if (fast_aggressive && osd_to_skip.count(osd)) {
-	ldout(cct, 20) << " Skipping osd " << osd 
+	ldout(cct, 20) << " Fast aggressive mode: skipping osd " << osd 
 	               << " osd_to_skip size = " << osd_to_skip.size() << dendl;
 	continue;
       }
