@@ -3536,6 +3536,7 @@ void BlueStore::Onode::get() {
   }
 }
 void BlueStore::Onode::put() {
+  ++put_nref;
   int n = --nref;
   if (n == 2) {
     OnodeCacheShard* ocs = c->get_onode_cache();
@@ -3555,19 +3556,18 @@ void BlueStore::Onode::put() {
         ocs->_unpin(this);
       } else {
         ocs->_unpin_and_rm(this);
-        // remove will also decrement nref and delete Onode
+        // remove will also decrement nref
         c->onode_map._remove(oid);
       }
     }
     // additional decrement for newly unpinned instance
-    // should be the last action since Onode can be released
-    // at any point after this decrement
     if (need_unpin) {
-      n = --nref;
+      --nref;
     }
     ocs->lock.unlock();
   }
-  if (n == 0) {
+  auto pn = --put_nref;
+  if (nref == 0 && pn == 0) {
     delete this;
   }
 }
