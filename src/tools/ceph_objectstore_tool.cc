@@ -607,7 +607,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 
 typedef map<eversion_t, hobject_t> divergent_priors_t;
 
-int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
+int write_pg(CephContext *cct, ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 	     pg_log_t &log, PastIntervals &past_intervals,
 	     divergent_priors_t &divergent,
 	     pg_missing_t &missing)
@@ -623,13 +623,13 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   if (!divergent.empty()) {
     ceph_assert(missing.get_items().empty());
     PGLog::write_log_and_missing_wo_missing(
-      t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent,
+      cct, t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent,
       require_rollback);
   } else {
     pg_missing_tracker_t tmissing(missing);
     bool rebuilt_missing_set_with_deletes = missing.may_include_deletes;
     PGLog::write_log_and_missing(
-      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing,
+      cct, t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing,
       require_rollback,
       &rebuilt_missing_set_with_deletes);
   }
@@ -1176,6 +1176,7 @@ int expand_log(
     encode(fast, km[string(fastinfo_key)]);
     encode(info, km[string(info_key)]);
     log.write_log_and_missing(
+      cct,
       t,
       &km,
       coll_t(pgid),
@@ -1932,7 +1933,7 @@ int ObjectStoreTool::dump_export(Formatter *formatter,
   return 0;
 }
 
-int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
+int ObjectStoreTool::do_import(CephContext *cct, ObjectStore *store, OSDSuperblock& sb,
 			       bool force, std::string pgidstr)
 {
   bufferlist ebl;
@@ -2219,6 +2220,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
       ms.info.stats.stats_invalid = true;
 
     ret = write_pg(
+      cct,
       t,
       ms.map_epoch,
       ms.info,
@@ -4182,7 +4184,7 @@ int main(int argc, char **argv)
   if (op == "import") {
     ceph_assert(superblock != nullptr);
     try {
-      ret = tool.do_import(fs.get(), *superblock, force, pgidstr);
+      ret = tool.do_import(cct.get(), fs.get(), *superblock, force, pgidstr);
     }
     catch (const buffer::error &e) {
       cerr << "do_import threw exception error " << e.what() << std::endl;

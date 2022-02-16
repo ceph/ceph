@@ -1322,6 +1322,7 @@ public:
   }
 
   void write_log_and_missing(
+    CephContext* cct,
     ObjectStore::Transaction& t,
     std::map<std::string,ceph::buffer::list> *km,
     const coll_t& coll,
@@ -1329,6 +1330,7 @@ public:
     bool require_rollback);
 
   static void write_log_and_missing_wo_missing(
+    CephContext* cct,
     ObjectStore::Transaction& t,
     std::map<std::string,ceph::buffer::list>* km,
     pg_log_t &log,
@@ -1338,6 +1340,7 @@ public:
     const DoutPrefixProvider *dpp = nullptr);
 
   static void write_log_and_missing(
+    CephContext* cct,
     ObjectStore::Transaction& t,
     std::map<std::string,ceph::buffer::list>* km,
     pg_log_t &log,
@@ -1349,6 +1352,7 @@ public:
     const DoutPrefixProvider *dpp = nullptr);
 
   static void _write_log_and_missing_wo_missing(
+    CephContext* cct,
     ObjectStore::Transaction& t,
     std::map<std::string,ceph::buffer::list>* km,
     pg_log_t &log,
@@ -1368,6 +1372,7 @@ public:
     );
 
   static void _write_log_and_missing(
+    CephContext* cct,
     ObjectStore::Transaction& t,
     std::map<std::string,ceph::buffer::list>* km,
     pg_log_t &log,
