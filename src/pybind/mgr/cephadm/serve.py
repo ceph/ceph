@@ -328,6 +328,7 @@ class CephadmServe:
             sd.rank = int(d['rank']) if d.get('rank') is not None else None
             sd.rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
+            sd.extra_container_args = d.get('extra_container_args')
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
@@ -862,6 +863,12 @@ class CephadmServe:
                 self.log.info('Reconfiguring %s (dependencies changed)...' % (
                     dd.name()))
                 action = 'reconfig'
+            elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
+                self.log.debug(
+                    f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
+                self.log.info(f'Redeploying {dd.name()}, (container cli args changed) . . .')
+                dd.extra_container_args = spec.extra_container_args
+                action = 'redeploy'
             elif self.mgr.last_monmap and \
                     self.mgr.last_monmap > last_config and \
                     dd.daemon_type in CEPH_TYPES:
@@ -1077,6 +1084,14 @@ class CephadmServe:
                 if self.mgr.allow_ptrace:
                     daemon_spec.extra_args.append('--allow-ptrace')
 
+                try:
+                    eca = daemon_spec.extra_container_args
+                    if eca:
+                        for a in eca:
+                            daemon_spec.extra_args.append(f'--extra-container-args={a}')
+                except AttributeError:
+                    eca = None
+
                 if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
                     self._registry_login(daemon_spec.host, self.mgr.registry_url,
                                          self.mgr.registry_username, self.mgr.registry_password)
@@ -1096,11 +1111,13 @@ class CephadmServe:
                             'deployed_by': self.mgr.get_active_mgr_digests(),
                             'rank': daemon_spec.rank,
                             'rank_generation': daemon_spec.rank_generation,
+                            'extra_container_args': eca
                         }),
                         '--config-json', '-',
                     ] + daemon_spec.extra_args,
                     stdin=json.dumps(daemon_spec.final_config),
-                    image=image)
+                    image=image,
+                )
 
                 # refresh daemon state?  (ceph daemon reconfig does not need it)
                 if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
