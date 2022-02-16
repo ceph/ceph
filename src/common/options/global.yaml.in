@@ -761,6 +761,11 @@ options:
   desc: Enable Intel QAT acceleration support for compression if available
   default: false
   with_legacy: true
+- name: qat_compressor_session_max_number
+  type: uint
+  level: advanced
+  desc: Set the maximum number of session within Qatzip when using QAT compressor
+  default: 256
 - name: plugin_crypto_accelerator
   type: str
   level: advanced

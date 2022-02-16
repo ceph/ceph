@@ -15,20 +15,23 @@
 #ifndef CEPH_QATACCEL_H
 #define CEPH_QATACCEL_H
 
-#include <memory>
 #include <boost/optional.hpp>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <vector>
+
 #include "include/buffer.h"
 
-extern "C" struct QzSession_S; //struct QzSession_S comes from QAT libraries
+extern "C" struct QzSession_S; // typedef struct QzSession_S QzSession_T;
 
 struct QzSessionDeleter {
   void operator() (struct QzSession_S *session);
 };
 
 class QatAccel {
-  std::unique_ptr<struct QzSession_S, QzSessionDeleter> session;
-
  public:
+  using session_ptr = std::unique_ptr<struct QzSession_S, QzSessionDeleter>;
   QatAccel();
   ~QatAccel();
 
@@ -37,6 +40,15 @@ class QatAccel {
   int compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message);
   int decompress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> compressor_message);
   int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst, boost::optional<int32_t> compressor_message);
+
+ private:
+  // get a session from the pool or create a new one. returns null if session init fails
+  session_ptr get_session();
+
+  friend struct cached_session_t;
+  std::vector<session_ptr> sessions;
+  std::mutex mutex;
+  std::string alg_name;
 };
 
 #endif
