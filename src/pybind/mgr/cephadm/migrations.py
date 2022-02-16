@@ -233,6 +233,12 @@ class Migrations:
             self.mgr.spec_store.rm(f'nfs.ganesha-{service_id}')
             spec.service_id = service_id
             self.mgr.spec_store.save(spec, True)
+
+            # We have to remove the old daemons here as well, otherwise we'll end up with a port conflict.
+            daemons = [d.name()
+                       for d in self.mgr.cache.get_daemons_by_service(f'nfs.ganesha-{service_id}')]
+            self.mgr.log.info(f'Removing old nfs.ganesha-{service_id} daemons {daemons}')
+            self.mgr.remove_daemons(daemons)
         else:
             # redeploy all ganesha daemons to ensures that the daemon
             # cephx are correct AND container configs are set up properly
