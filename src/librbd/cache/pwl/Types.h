@@ -38,7 +38,6 @@ enum {
   l_librbd_pwl_wr_req,             // write requests
   l_librbd_pwl_wr_bytes,           // bytes written
   l_librbd_pwl_wr_req_def,         // write requests deferred for resources
-  l_librbd_pwl_wr_req_def_lanes,   // write requests deferred for lanes
   l_librbd_pwl_wr_req_def_log,     // write requests deferred for log entries
   l_librbd_pwl_wr_req_def_buf,     // write requests deferred for buffer space
   l_librbd_pwl_wr_req_overlap,     // write requests detained for overlap

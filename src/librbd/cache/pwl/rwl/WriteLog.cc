@@ -992,16 +992,15 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   uint64_t bytes_allocated = 0;
   uint64_t bytes_cached = 0;
   uint64_t bytes_dirtied = 0;
-  uint64_t num_lanes = 0;
   uint64_t num_unpublished_reserves = 0;
   uint64_t num_log_entries = 0;
 
   ldout(m_image_ctx.cct, 20) << dendl;
   // Setup buffer, and get all the number of required resources
   req->setup_buffer_resources(&bytes_cached, &bytes_dirtied, &bytes_allocated,
-                              &num_lanes, &num_log_entries, &num_unpublished_reserves);
+                              &num_log_entries, &num_unpublished_reserves);
   alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
-                                          bytes_allocated, num_lanes, num_log_entries,
+                                          bytes_allocated, num_log_entries,
                                           num_unpublished_reserves);
 
   req->set_allocated(alloc_succeeds);
