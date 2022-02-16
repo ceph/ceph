@@ -1145,8 +1145,9 @@ SeaStore::tm_ret SeaStore::_write(
   }
   return seastar::do_with(
     std::move(_bl),
-    [=, &ctx, &onode](auto &bl) {
-      return ObjectDataHandler(max_object_size).write(
+    ObjectDataHandler(max_object_size),
+    [=, &ctx, &onode](auto &bl, auto &objhandler) {
+      return objhandler.write(
         ObjectDataHandler::context_t{
           *transaction_manager,
           *ctx.transaction,
@@ -1278,13 +1279,17 @@ SeaStore::tm_ret SeaStore::_truncate(
   LOG_PREFIX(SeaStore::_truncate);
   DEBUGT("onode={} size={}", *ctx.transaction, *onode, size);
   onode->get_mutable_layout(*ctx.transaction).size = size;
-  return ObjectDataHandler(max_object_size).truncate(
-    ObjectDataHandler::context_t{
-      *transaction_manager,
-      *ctx.transaction,
-      *onode
-    },
-    size);
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [=, &ctx, &onode](auto &objhandler) {
+    return objhandler.truncate(
+      ObjectDataHandler::context_t{
+        *transaction_manager,
+        *ctx.transaction,
+        *onode
+      },
+      size);
+  });
 }
 
 SeaStore::tm_ret SeaStore::_setattrs(
