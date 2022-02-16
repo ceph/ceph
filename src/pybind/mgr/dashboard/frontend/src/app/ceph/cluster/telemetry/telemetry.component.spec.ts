@@ -86,22 +86,28 @@ describe('TelemetryComponent', () => {
         fixture.debugElement.nativeElement.querySelector('input[id=contact]');
       const getDescriptionField = () =>
         fixture.debugElement.nativeElement.querySelector('input[id=description]');
+      const checkVisibility = () => {
+        if (component.showContactInfo) {
+          expect(getContactField()).toBeTruthy();
+          expect(getDescriptionField()).toBeTruthy();
+        } else {
+          expect(getContactField()).toBeFalsy();
+          expect(getDescriptionField()).toBeFalsy();
+        }
+      };
 
-      // Initially hidden.
-      expect(getContactField()).toBeFalsy();
-      expect(getDescriptionField()).toBeFalsy();
+      // Initial check.
+      checkVisibility();
 
-      // Show fields.
+      // toggle fields.
       component.toggleIdent();
       fixture.detectChanges();
-      expect(getContactField()).toBeTruthy();
-      expect(getDescriptionField()).toBeTruthy();
+      checkVisibility();
 
-      // Hide fields.
+      // toggle fields again.
       component.toggleIdent();
       fixture.detectChanges();
-      expect(getContactField()).toBeFalsy();
-      expect(getDescriptionField()).toBeFalsy();
+      checkVisibility();
     });
 
     it('should set module enability to true correctly', () => {
@@ -293,7 +299,7 @@ describe('TelemetryComponent', () => {
       });
     });
 
-    it('should submit ', () => {
+    it('should submit', () => {
       component.onSubmit();
       const req1 = httpTesting.expectOne('api/telemetry');
       expect(req1.request.method).toBe('PUT');
