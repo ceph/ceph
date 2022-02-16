@@ -36,6 +36,7 @@ seastar::future<> TMDriver::write(
           logger().debug("dec_ref complete");
           return tm->alloc_extent<TestBlock>(t, offset, ptr.length());
         }).si_then([this, offset, &t, &ptr](auto ext) {
+          boost::ignore_unused(offset);  // avoid clang warning;
           assert(ext->get_laddr() == (size_t)offset);
           assert(ext->get_bptr().length() == ptr.length());
           ext->get_bptr().swap(ptr);

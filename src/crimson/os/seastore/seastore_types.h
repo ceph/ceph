@@ -8,6 +8,7 @@
 #include <optional>
 #include <iostream>
 #include <vector>
+#include <boost/core/ignore_unused.hpp>
 
 #include "include/byteorder.h"
 #include "include/denc.h"
