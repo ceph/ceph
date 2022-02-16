@@ -593,6 +593,7 @@ LBABtree::find_insertion_ret LBABtree::find_insertion(
     return iter.prev(
       c
     ).si_then([laddr, &iter](auto p) {
+      boost::ignore_unused(laddr); // avoid clang warning;
       assert(p.leaf.node->get_node_meta().begin <= laddr);
       assert(p.get_key() < laddr);
       // Note, this is specifically allowed to violate the iterator

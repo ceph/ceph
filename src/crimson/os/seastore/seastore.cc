@@ -159,7 +159,9 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
       oss << root << "/block." << dtype << "." << std::to_string(id);
       auto sm = std::make_unique<
 	segment_manager::block::BlockSegmentManager>(oss.str());
-      return sm->mount().safe_then([this, sm=std::move(sm), magic]() mutable {
+      return sm->mount().safe_then(
+	[this, sm=std::move(sm), magic]() mutable {
+	boost::ignore_unused(magic);  // avoid clang warning;
 	assert(sm->get_magic() == magic);
 	transaction_manager->add_segment_manager(sm.get());
 	secondaries.emplace_back(std::move(sm));
