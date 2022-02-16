@@ -321,8 +321,6 @@ protected:
 
   PerfCounters *m_perfcounter = nullptr;
 
-  unsigned int m_unpublished_reserves = 0;
-
   ContextWQ m_work_queue;
 
   void wake_up();
@@ -353,8 +351,7 @@ protected:
 
   bool check_allocation(
       C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
-      uint64_t bytes_allocated, uint32_t num_log_entries,
-      uint32_t num_unpublished_reserves);
+      uint64_t bytes_allocated, uint32_t num_log_entries);
   void append_scheduled(
       pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
       bool isRWL=false);

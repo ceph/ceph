@@ -51,7 +51,7 @@ public:
   virtual void appending() = 0;
   virtual void complete(int r) = 0;
   virtual void mark_log_entry_completed() {};
-  virtual bool reserved_allocated() const {
+  virtual bool allocated() const {
     return false;
   }
   virtual bool is_writing_op() const {
@@ -115,7 +115,7 @@ public:
   void mark_log_entry_completed() override{
     sync_point->log_entry->writes_completed++;
   }
-  bool reserved_allocated() const override {
+  bool allocated() const override {
     return true;
   }
   bool is_writing_op() const override {
@@ -209,7 +209,7 @@ public:
   const std::shared_ptr<GenericLogEntry> get_log_entry() override {
     return log_entry;
   }
-  bool reserved_allocated() const override {
+  bool allocated() const override {
     return false;
   }
   std::ostream &format(std::ostream &os) const;

@@ -97,12 +97,8 @@ enum {
   l_librbd_pwl_nowait_req_all_to_dis_t,   // Time spent allocating or waiting to allocate resources
   l_librbd_pwl_nowait_wr_latency,         // average req (persist) completion latency
   l_librbd_pwl_nowait_wr_latency_hist,    // Histogram of write req (persist) completion latency vs. bytes written
-  l_librbd_pwl_nowait_wr_caller_latency,  // average req completion (to caller) latency
 
   /* Log operation times */
-  l_librbd_pwl_log_op_alloc_t,      // elapsed time of pmemobj_reserve()
-  l_librbd_pwl_log_op_alloc_t_hist, // Histogram of elapsed time of pmemobj_reserve()
-
   l_librbd_pwl_log_op_dis_to_buf_t, // dispatch to buffer persist elapsed time
   l_librbd_pwl_log_op_dis_to_app_t, // dispatch to log append elapsed time
   l_librbd_pwl_log_op_dis_to_cmp_t, // dispatch to persist completion elapsed time
