@@ -15,8 +15,8 @@ namespace ssd {
 
 template <typename T>
 void C_WriteRequest<T>::setup_buffer_resources(
-    uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
-    uint64_t *number_log_entries, uint64_t *number_unpublished_reserves) {
+    uint64_t *bytes_cached, uint64_t *bytes_dirtied,
+    uint64_t *bytes_allocated, uint64_t *number_log_entries) {
   *bytes_cached = 0;
   *bytes_allocated = 0;
   *number_log_entries = this->image_extents.size();
@@ -41,8 +41,8 @@ std::ostream &operator<<(std::ostream &os,
 
 template <typename T>
 void C_WriteSameRequest<T>::setup_buffer_resources(
-    uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
-    uint64_t *number_log_entries, uint64_t *number_unpublished_reserves) {
+    uint64_t *bytes_cached, uint64_t *bytes_dirtied,
+    uint64_t *bytes_allocated, uint64_t *number_log_entries) {
   ceph_assert(this->image_extents.size() == 1);
   *number_log_entries = 1;
   *bytes_dirtied = this->image_extents[0].second;

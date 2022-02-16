@@ -127,17 +127,14 @@ void WriteLog<I>::complete_read(
 /*
  * Allocate the (already reserved) write log entries for a set of operations.
  *
- * Locking:
- * Acquires lock
+ * Locking: Acquires lock
  */
 template <typename I>
 void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(this->m_log_append_lock));
 
-  /* Allocate the (already reserved) log entries */
   std::lock_guard locker(m_lock);
-
   for (auto &operation : ops) {
     uint32_t entry_index = this->m_first_free_entry;
     this->m_first_free_entry = (this->m_first_free_entry + 1) % this->m_total_log_entries;
@@ -206,8 +203,7 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
   pmem_drain();
 
   /*
-   * Atomically advance the log head pointer and publish the
-   * allocations for all the data buffers they refer to.
+   * Atomically advance the log head pointer
    */
   utime_t tx_start = ceph_clock_now();
   persist_pmem_superblock();
@@ -916,7 +912,7 @@ void WriteLog<I>::flush_pmem_buffer(V& ops)
 {
   utime_t now = ceph_clock_now();
   for (auto &operation : ops) {
-    if (operation->reserved_allocated()) {
+    if (operation->allocated()) {
       operation->buf_persist_start_time = now;
     } else {
       ldout(m_image_ctx.cct, 20) << "skipping non-write op: "
@@ -936,7 +932,7 @@ void WriteLog<I>::flush_pmem_buffer(V& ops)
 
   now = ceph_clock_now();
   for (auto &operation : ops) {
-    if (operation->reserved_allocated()) {
+    if (operation->allocated()) {
       operation->buf_persist_comp_time = now;
     } else {
       ldout(m_image_ctx.cct, 20) << "skipping non-write op: "
@@ -992,16 +988,14 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
   uint64_t bytes_allocated = 0;
   uint64_t bytes_cached = 0;
   uint64_t bytes_dirtied = 0;
-  uint64_t num_unpublished_reserves = 0;
   uint64_t num_log_entries = 0;
 
   ldout(m_image_ctx.cct, 20) << dendl;
   // Setup buffer, and get all the number of required resources
-  req->setup_buffer_resources(&bytes_cached, &bytes_dirtied, &bytes_allocated,
-                              &num_log_entries, &num_unpublished_reserves);
+  req->setup_buffer_resources(&bytes_cached, &bytes_dirtied,
+                              &bytes_allocated, &num_log_entries);
   alloc_succeeds = this->check_allocation(req, bytes_cached, bytes_dirtied,
-                                          bytes_allocated, num_log_entries,
-                                          num_unpublished_reserves);
+                                          bytes_allocated, num_log_entries);
 
   req->set_allocated(alloc_succeeds);
   return alloc_succeeds;

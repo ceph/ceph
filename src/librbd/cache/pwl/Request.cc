@@ -373,8 +373,8 @@ void C_FlushRequest<T>::dispatch() {
 
 template <typename T>
 void C_FlushRequest<T>::setup_buffer_resources(
-    uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
-    uint64_t *number_log_entries, uint64_t *number_unpublished_reserves) {
+    uint64_t *bytes_cached, uint64_t *bytes_dirtied,
+    uint64_t *bytes_allocated, uint64_t *number_log_entries) {
   *number_log_entries = 1;
 }
 
@@ -456,8 +456,8 @@ void C_DiscardRequest<T>::dispatch() {
 
 template <typename T>
 void C_DiscardRequest<T>::setup_buffer_resources(
-    uint64_t *bytes_cached, uint64_t *bytes_dirtied, uint64_t *bytes_allocated,
-    uint64_t *number_log_entries, uint64_t *number_unpublished_reserves) {
+    uint64_t *bytes_cached, uint64_t *bytes_dirtied,
+    uint64_t *bytes_allocated, uint64_t *number_log_entries) {
   *number_log_entries = 1;
   /* No bytes are allocated for a discard, but we count the discarded bytes
    * as dirty.  This means it's possible to have more bytes dirty than

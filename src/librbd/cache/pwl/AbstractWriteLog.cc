@@ -207,14 +207,6 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
     l_librbd_pwl_nowait_wr_latency_hist, "wr_latency_nw_bytes_histogram",
     op_hist_x_axis_config, op_hist_y_axis_config,
     "Histogram of write request latency (nanoseconds) vs. bytes written for writes not deferred for free space");
-  plb.add_time_avg(
-    l_librbd_pwl_nowait_wr_caller_latency, "caller_wr_latency_nw",
-    "Latency of write completion to callerfor writes not deferred for free space");
-  plb.add_time_avg(l_librbd_pwl_log_op_alloc_t, "op_alloc_t", "Average buffer pmemobj_reserve() time");
-  plb.add_u64_counter_histogram(
-    l_librbd_pwl_log_op_alloc_t_hist, "op_alloc_t_bytes_histogram",
-    op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of buffer pmemobj_reserve() time (nanoseconds) vs. bytes written");
   plb.add_time_avg(l_librbd_pwl_log_op_dis_to_buf_t, "op_dis_to_buf_t", "Average dispatch to buffer persist time");
   plb.add_time_avg(l_librbd_pwl_log_op_dis_to_app_t, "op_dis_to_app_t", "Average dispatch to log append time");
   plb.add_time_avg(l_librbd_pwl_log_op_dis_to_cmp_t, "op_dis_to_cmp_t", "Average dispatch to persist completion time");
@@ -1277,7 +1269,6 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
                                                     const int result)
 {
   GenericLogEntries dirty_entries;
-  int published_reserves = 0;
   ldout(m_image_ctx.cct, 20) << __func__ << ": completing" << dendl;
   for (auto &op : ops) {
     utime_t now = ceph_clock_now();
@@ -1290,12 +1281,8 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
     if (log_entry->is_write_entry()) {
       release_ram(log_entry);
     }
-    if (op->reserved_allocated()) {
-      published_reserves++;
-    }
     {
       std::lock_guard locker(m_lock);
-      m_unpublished_reserves -= published_reserves;
       m_dirty_log_entries.splice(m_dirty_log_entries.end(), dirty_entries);
       if (m_cache_state->clean && !this->m_dirty_log_entries.empty()) {
         m_cache_state->clean = false;
@@ -1461,8 +1448,7 @@ void AbstractWriteLog<I>::alloc_and_dispatch_io_req(C_BlockIORequestT *req)
 template <typename I>
 bool AbstractWriteLog<I>::check_allocation(
     C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
-    uint64_t bytes_allocated, uint32_t num_log_entries,
-    uint32_t num_unpublished_reserves) {
+    uint64_t bytes_allocated, uint32_t num_log_entries) {
   bool alloc_succeeds = true;
   bool no_space = false;
   std::lock_guard locker(m_lock);
@@ -1492,7 +1478,6 @@ bool AbstractWriteLog<I>::check_allocation(
 
   if (alloc_succeeds) {
     m_free_log_entries -= num_log_entries;
-    m_unpublished_reserves += num_unpublished_reserves;
     m_bytes_allocated += bytes_allocated;
     m_bytes_cached += bytes_cached;
     m_bytes_dirty += bytes_dirtied;
