@@ -26,6 +26,13 @@ Transaction::tree_stats_t& get_tree_stats<
   crimson::os::seastore::lba_manager::btree::LBABtree>(Transaction &t) {
   return t.get_lba_tree_stats();
 }
+
+template<>
+phy_tree_root_t& get_phy_tree_root<
+  crimson::os::seastore::lba_manager::btree::LBABtree>(root_t &r) {
+  return r.lba_root;
+}
+
 }
 
 namespace crimson::os::seastore::lba_manager::btree {
@@ -54,7 +61,8 @@ BtreeLBAManager::get_mappings(
   LOG_PREFIX(BtreeLBAManager::get_mappings);
   TRACET("{}~{}", t, offset, length);
   auto c = get_context(t);
-  return with_btree_state<lba_pin_list_t>(
+  return with_btree_state<LBABtree, lba_pin_list_t>(
+    cache,
     c,
     [c, offset, length, FNAME](auto &btree, auto &ret) {
       return LBABtree::iterate_repeat(
@@ -112,7 +120,8 @@ BtreeLBAManager::get_mapping(
   LOG_PREFIX(BtreeLBAManager::get_mapping);
   TRACET("{}", t, offset);
   auto c = get_context(t);
-  return with_btree_ret<LBAPinRef>(
+  return with_btree_ret<LBABtree, LBAPinRef>(
+    cache,
     c,
     [FNAME, c, offset](auto &btree) {
       return btree.lower_bound(
@@ -155,7 +164,8 @@ BtreeLBAManager::alloc_extent(
   auto c = get_context(t);
   ++stats.num_alloc_extents;
   auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
-  return with_btree_state<state_t>(
+  return crimson::os::seastore::with_btree_state<LBABtree, state_t>(
+    cache,
     c,
     hint,
     [this, FNAME, c, hint, len, addr, lookup_attempts, &t](auto &btree, auto &state) {
@@ -333,7 +343,7 @@ BtreeLBAManager::init_cached_extent_ret BtreeLBAManager::init_cached_extent(
   TRACET("{}", t, *e);
   return seastar::do_with(bool(), [this, e, &t](bool &ret) {
     auto c = get_context(t);
-    return with_btree(c, [c, e, &ret](auto &btree)
+    return with_btree<LBABtree>(cache, c, [c, e, &ret](auto &btree)
       -> base_iertr::future<> {
       LOG_PREFIX(BtreeLBAManager::init_cached_extent);
       DEBUGT("extent {}", c.trans, *e);
@@ -352,7 +362,8 @@ BtreeLBAManager::scan_mappings_ret BtreeLBAManager::scan_mappings(
   DEBUGT("begin: {}, end: {}", t, begin, end);
 
   auto c = get_context(t);
-  return with_btree(
+  return with_btree<LBABtree>(
+    cache,
     c,
     [c, f=std::move(f), begin, end](auto &btree) mutable {
       return LBABtree::iterate_repeat(
@@ -383,7 +394,8 @@ BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
   return seastar::do_with(
     std::move(f),
     [this, c](auto &visitor) {
-      return with_btree(
+      return with_btree<LBABtree>(
+	cache,
 	c,
 	[c, &visitor](auto &btree) {
 	  return LBABtree::iterate_repeat(
@@ -419,7 +431,8 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
   if (is_lba_node(*extent)) {
     DEBUGT("rewriting lba extent -- {}", t, *extent);
     auto c = get_context(t);
-    return with_btree(
+    return with_btree<LBABtree>(
+      cache,
       c,
       [c, extent](auto &btree) mutable {
 	return btree.rewrite_extent(c, extent);
@@ -475,7 +488,8 @@ BtreeLBAManager::get_physical_extent_if_live(
          t, type, laddr, addr, len);
   ceph_assert(is_lba_node(type));
   auto c = get_context(t);
-  return with_btree_ret<CachedExtentRef>(
+  return with_btree_ret<LBABtree, CachedExtentRef>(
+    cache,
     c,
     [c, type, addr, laddr, len](auto &btree) {
       if (type == extent_types_t::LADDR_INTERNAL) {
@@ -551,7 +565,8 @@ BtreeLBAManager::_update_mapping_ret BtreeLBAManager::_update_mapping(
   update_func_t &&f)
 {
   auto c = get_context(t);
-  return with_btree_ret<lba_map_val_t>(
+  return with_btree_ret<LBABtree, lba_map_val_t>(
+    cache,
     c,
     [f=std::move(f), c, addr](auto &btree) mutable {
       return btree.lower_bound(

@@ -1676,5 +1676,119 @@ private:
   }
 };
 
+template <typename T>
+struct is_fixed_kv_tree : std::false_type {};
+
+template <
+  typename node_key_t,
+  typename node_val_t,
+  typename internal_node_t,
+  typename leaf_node_t,
+  size_t node_size>
+struct is_fixed_kv_tree<
+  FixedKVBtree<
+    node_key_t,
+    node_val_t,
+    internal_node_t,
+    leaf_node_t,
+    node_size>> : std::true_type {};
+
+template <typename T>
+phy_tree_root_t& get_phy_tree_root(root_t& r);
+
+template <
+  typename tree_type_t,
+  typename node_key_t,
+  typename F,
+  std::enable_if_t<is_fixed_kv_tree<tree_type_t>::value, int> = 0>
+auto with_btree(
+  Cache &cache,
+  op_context_t<node_key_t> c,
+  F &&f) {
+  using base_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using base_iertr = trans_iertr<base_ertr>;
+  return cache.get_root(
+    c.trans
+  ).si_then([c, f=std::forward<F>(f), &cache](RootBlockRef croot) mutable {
+    return seastar::do_with(
+      tree_type_t(get_phy_tree_root<tree_type_t>(croot->get_root())),
+      [c, croot, f=std::move(f), &cache](auto &btree) mutable {
+        return f(
+          btree
+        ).si_then([c, croot, &btree, &cache] {
+          if (btree.is_root_dirty()) {
+            auto mut_croot = cache.duplicate_for_write(
+              c.trans, croot
+            )->template cast<RootBlock>();
+            get_phy_tree_root<tree_type_t>(mut_croot->get_root()) =
+              btree.get_root_undirty();
+          }
+          return base_iertr::now();
+        });
+      });
+  });
+}
+
+template <
+  typename tree_type_t,
+  typename State,
+  typename node_key_t,
+  typename F,
+  std::enable_if_t<is_fixed_kv_tree<tree_type_t>::value, int> = 0>
+auto with_btree_state(
+  Cache &cache,
+  op_context_t<node_key_t> c,
+  State &&init,
+  F &&f) {
+  return seastar::do_with(
+    std::forward<State>(init),
+    [&cache, c, f=std::forward<F>(f)](auto &state) mutable {
+      return with_btree<tree_type_t>(
+        cache,
+        c,
+        [&state, f=std::move(f)](auto &btree) mutable {
+        return f(btree, state);
+      }).si_then([&state] {
+        return seastar::make_ready_future<State>(std::move(state));
+      });
+    });
+}
+
+template <
+  typename tree_type_t,
+  typename State,
+  typename node_key_t,
+  typename F,
+  std::enable_if_t<is_fixed_kv_tree<tree_type_t>::value, int> = 0>
+auto with_btree_state(
+  Cache &cache,
+  op_context_t<node_key_t> c,
+  F &&f) {
+  return crimson::os::seastore::with_btree_state<tree_type_t, State>(
+    cache, c, State{}, std::forward<F>(f));
+}
+
+template <
+  typename tree_type_t,
+  typename Ret,
+  typename node_key_t,
+  typename F>
+auto with_btree_ret(
+  Cache &cache,
+  op_context_t<node_key_t> c,
+  F &&f) {
+  return with_btree_state<tree_type_t, Ret>(
+    cache,
+    c,
+    [f=std::forward<F>(f)](auto &btree, auto &ret) mutable {
+      return f(
+        btree
+      ).si_then([&ret](auto &&_ret) {
+        ret = std::move(_ret);
+      });
+    });
+}
+
 }
 

@@ -26,7 +26,9 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-using LBABtree = FixedKVBtree<laddr_t, lba_map_val_t, LBAInternalNode, LBALeafNode, LBA_BLOCK_SIZE>;
+using LBABtree = FixedKVBtree<
+  laddr_t, lba_map_val_t, LBAInternalNode,
+  LBALeafNode, LBA_BLOCK_SIZE>;
 
 using BtreeLBAPin = BtreeNodePin<laddr_t>;
 
@@ -154,69 +156,6 @@ private:
 
   seastar::metrics::metric_group metrics;
   void register_metrics();
-  template <typename F, typename... Args>
-  auto with_btree(
-    op_context_t<laddr_t> c,
-    F &&f) {
-    return cache.get_root(
-      c.trans
-    ).si_then([this, c, f=std::forward<F>(f)](RootBlockRef croot) mutable {
-      return seastar::do_with(
-	LBABtree(croot->get_root().lba_root),
-	[this, c, croot, f=std::move(f)](auto &btree) mutable {
-	  return f(
-	    btree
-	  ).si_then([this, c, croot, &btree] {
-	    if (btree.is_root_dirty()) {
-	      auto mut_croot = cache.duplicate_for_write(
-		c.trans, croot
-	      )->cast<RootBlock>();
-	      mut_croot->get_root().lba_root = btree.get_root_undirty();
-	    }
-	    return base_iertr::now();
-	  });
-	});
-    });
-  }
-
-  template <typename State, typename F>
-  auto with_btree_state(
-    op_context_t<laddr_t> c,
-    State &&init,
-    F &&f) {
-    return seastar::do_with(
-      std::forward<State>(init),
-      [this, c, f=std::forward<F>(f)](auto &state) mutable {
-	(void)this; // silence incorrect clang warning about capture
-	return with_btree(c, [&state, f=std::move(f)](auto &btree) mutable {
-	  return f(btree, state);
-	}).si_then([&state] {
-	  return seastar::make_ready_future<State>(std::move(state));
-	});
-      });
-  }
-
-  template <typename State, typename F>
-  auto with_btree_state(
-    op_context_t<laddr_t> c,
-    F &&f) {
-    return with_btree_state<State, F>(c, State{}, std::forward<F>(f));
-  }
-
-  template <typename Ret, typename F>
-  auto with_btree_ret(
-    op_context_t<laddr_t> c,
-    F &&f) {
-    return with_btree_state<Ret>(
-      c,
-      [f=std::forward<F>(f)](auto &btree, auto &ret) mutable {
-	return f(
-	  btree
-	).si_then([&ret](auto &&_ret) {
-	  ret = std::move(_ret);
-	});
-      });
-  }
 
   /**
    * update_refcount
