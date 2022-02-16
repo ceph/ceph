@@ -145,7 +145,7 @@ enum {
   WRITE_LOG_CACHE_ENTRY_SYNC_POINT = 1U << 1, /* No data. No write sequence number.
                                                  Marks sync point for this sync gen number */
   WRITE_LOG_CACHE_ENTRY_SEQUENCED = 1U << 2,  /* write sequence number is valid */
-  WRITE_LOG_CACHE_ENTRY_HAS_DATA = 1U << 3,   /* write_data field is valid (else ignore) */
+  WRITE_LOG_CACHE_ENTRY_HAS_DATA = 1U << 3,   /* write_data_pos field is valid (else ignore) */
   WRITE_LOG_CACHE_ENTRY_DISCARD = 1U << 4,    /* has_data will be 0 if this is a discard */
   WRITE_LOG_CACHE_ENTRY_WRITESAME = 1U << 5,  /* ws_datalen indicates length of data at write_bytes */
 };
@@ -210,13 +210,7 @@ struct WriteLogCacheEntry {
   uint64_t write_sequence_number = 0;
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
-  #ifdef WITH_RBD_RWL
-  uint64_t write_data = 0;     /* offset in pmem,
-                                * 1 offset == MIN_WRITE_ALLOC_SIZE Byte */
-  #endif
-  #ifdef WITH_RBD_SSD_CACHE
-  uint64_t write_data_pos = 0; /* SSD data offset */
-  #endif
+  uint64_t write_data_pos = 0;  /* offset in pmem or SSD */
   uint8_t flags = 0;
   uint32_t ws_datalen = 0;  /* Length of data buffer (writesame only) */
   uint32_t entry_index = 0; /* For debug consistency check. Can be removed if

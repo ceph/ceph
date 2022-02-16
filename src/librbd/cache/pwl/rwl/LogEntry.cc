@@ -49,9 +49,9 @@ void WriteLogEntry::init_bl(buffer::ptr &bp, buffer::list &bl) {
 
 void WriteLogEntry::init_cache_buffer(
     std::vector<WriteBufferAllocation>::iterator allocation) {
-  this->ram_entry.write_data = allocation->pmem_offset;
-  ceph_assert(this->ram_entry.write_data);
-  cache_buffer = allocation->pmem_head_addr + this->ram_entry.write_data;
+  this->ram_entry.write_data_pos = allocation->pmem_offset;
+  ceph_assert(this->ram_entry.write_data_pos);
+  cache_buffer = allocation->pmem_head_addr + this->ram_entry.write_data_pos;
 }
 
 buffer::list& WriteLogEntry::get_cache_bl() {
