@@ -55,6 +55,8 @@ WRITE_EQ_OPERATORS_4(
   refcount,
   checksum);
 
+std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
+
 class BtreeLBAPin;
 using BtreeLBAPinRef = std::unique_ptr<BtreeLBAPin>;
 

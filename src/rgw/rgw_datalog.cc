@@ -514,7 +514,7 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
    * it later, so we keep two lists under the map */
-  bc::flat_map<int, std::pair<std::vector<rgw_bucket_shard>,
+  bc::flat_map<int, std::pair<std::vector<BucketGen>,
 			      RGWDataChangesBE::entries>> m;
 
   std::unique_lock l(lock);
@@ -535,7 +535,7 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
     change.gen = gen;
     encode(change, bl);
 
-    m[index].first.push_back(bs);
+    m[index].first.push_back({bs, gen});
     be->prepare(ut, change.key, std::move(bl), m[index].second);
   }
 
@@ -554,22 +554,25 @@ int RGWDataChangesLog::renew_entries(const DoutPrefixProvider *dpp)
 
     auto expiration = now;
     expiration += ceph::make_timespan(cct->_conf->rgw_data_log_window);
-    for (auto& bs : buckets) {
-      update_renewed(bs, expiration);
+    for (auto& [bs, gen] : buckets) {
+      update_renewed(bs, gen, expiration);
     }
   }
 
   return 0;
 }
 
-void RGWDataChangesLog::_get_change(const rgw_bucket_shard& bs,
-				    ChangeStatusPtr& status)
+auto RGWDataChangesLog::_get_change(const rgw_bucket_shard& bs,
+				    uint64_t gen)
+  -> ChangeStatusPtr
 {
   ceph_assert(ceph_mutex_is_locked(lock));
-  if (!changes.find(bs, status)) {
-    status = ChangeStatusPtr(new ChangeStatus);
-    changes.add(bs, status);
+  ChangeStatusPtr status;
+  if (!changes.find({bs, gen}, status)) {
+    status = std::make_shared<ChangeStatus>();
+    changes.add({bs, gen}, status);
   }
+  return status;
 }
 
 void RGWDataChangesLog::register_renew(const rgw_bucket_shard& bs,
@@ -580,11 +583,11 @@ void RGWDataChangesLog::register_renew(const rgw_bucket_shard& bs,
 }
 
 void RGWDataChangesLog::update_renewed(const rgw_bucket_shard& bs,
+				       uint64_t gen,
 				       real_time expiration)
 {
   std::scoped_lock l{lock};
-  ChangeStatusPtr status;
-  _get_change(bs, status);
+  auto status = _get_change(bs, gen);
 
   ldout(cct, 20) << "RGWDataChangesLog::update_renewd() bucket_name="
 		 << bs.bucket.name << " shard_id=" << bs.shard_id
@@ -637,8 +640,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 
   std::unique_lock l(lock);
 
-  ChangeStatusPtr status;
-  _get_change(bs, status);
+  auto status = _get_change(bs, gen.gen);
   l.unlock();
 
   auto now = real_clock::now();
@@ -646,8 +648,8 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
   std::unique_lock sl(status->lock);
 
   ldpp_dout(dpp, 20) << "RGWDataChangesLog::add_entry() bucket.name=" << bucket.name
-		 << " shard_id=" << shard_id << " now=" << now
-		 << " cur_expiration=" << status->cur_expiration << dendl;
+		     << " shard_id=" << shard_id << " now=" << now
+		     << " cur_expiration=" << status->cur_expiration << dendl;
 
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
@@ -789,8 +791,8 @@ int RGWDataChangesLog::list_entries(const DoutPrefixProvider *dpp, int max_entri
     if (ret < 0) {
       return ret;
     }
-    if (truncated) {
-      *ptruncated = true;
+    if (!truncated) {
+      *ptruncated = false;
       return 0;
     }
   }

@@ -572,7 +572,7 @@ int main(int argc, char **argv)
     cout << action << " bluestore.allocmap" << std::endl;
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.read_allocation_from_drive_for_bluestore_tool(true);
+    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -589,7 +589,7 @@ int main(int argc, char **argv)
     cout << action << " bluestore.quick-fsck" << std::endl;
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.read_allocation_from_drive_for_fsck();
+    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);

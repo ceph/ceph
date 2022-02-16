@@ -95,6 +95,8 @@ def run_bucket_reshard_cmd(bucket_name, num_shards, **kwargs):
         cmd += ' --inject-error-at {}'.format(kwargs.pop('error_at'))
     elif 'abort_at' in kwargs:
         cmd += ' --inject-abort-at {}'.format(kwargs.pop('abort_at'))
+    if 'error_code' in kwargs:
+        cmd += ' --inject-error-code {}'.format(kwargs.pop('error_code'))
     return exec_cmd(cmd, **kwargs)
 
 def test_bucket_reshard(conn, name, **fault):
@@ -113,27 +115,31 @@ def test_bucket_reshard(conn, name, **fault):
 
         # try reshard with fault injection
         _, ret = run_bucket_reshard_cmd(name, num_shards_expected, check_retcode=False, **fault)
-        assert(ret != 0 and ret != errno.EBUSY)
 
-        # check shard count
-        cur_shard_count = get_bucket_stats(name).num_shards
-        assert(cur_shard_count == old_shard_count)
+        if fault.get('error_code') == errno.ECANCELED:
+            assert(ret == 0) # expect ECANCELED to retry and succeed
+        else:
+            assert(ret != 0 and ret != errno.EBUSY)
 
-        # verify that the bucket is writeable by deleting an object
-        objs.pop().delete()
+            # check shard count
+            cur_shard_count = get_bucket_stats(name).num_shards
+            assert(cur_shard_count == old_shard_count)
 
-        assert grants == bucket.Acl().grants # recheck grants after cancel
+            # verify that the bucket is writeable by deleting an object
+            objs.pop().delete()
 
-        # retry reshard without fault injection. if radosgw-admin aborted,
-        # we'll have to retry until the reshard lock expires
-        while True:
-            _, ret = run_bucket_reshard_cmd(name, num_shards_expected, check_retcode=False)
-            if ret == errno.EBUSY:
-                log.info('waiting 30 seconds for reshard lock to expire...')
-                time.sleep(30)
-                continue
-            assert(ret == 0)
-            break
+            assert grants == bucket.Acl().grants # recheck grants after cancel
+
+            # retry reshard without fault injection. if radosgw-admin aborted,
+            # we'll have to retry until the reshard lock expires
+            while True:
+                _, ret = run_bucket_reshard_cmd(name, num_shards_expected, check_retcode=False)
+                if ret == errno.EBUSY:
+                    log.info('waiting 30 seconds for reshard lock to expire...')
+                    time.sleep(30)
+                    continue
+                assert(ret == 0)
+                break
 
         # recheck shard count
         final_shard_count = get_bucket_stats(name).num_shards
@@ -198,7 +204,7 @@ def main():
     json_op = json.loads(cmd)
     log.debug('bucket name {}'.format(json_op[0]['bucket_name']))
     assert json_op[0]['bucket_name'] == BUCKET_NAME
-    assert json_op[0]['new_num_shards'] == num_shards_expected
+    assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
 
     # TESTCASE 'reshard-process','reshard','','process bucket resharding','succeeds'
     log.debug('TEST: reshard process\n')
@@ -221,7 +227,7 @@ def main():
     cmd = exec_cmd('radosgw-admin reshard list')
     json_op = json.loads(cmd)
     assert json_op[0]['bucket_name'] == BUCKET_NAME
-    assert json_op[0]['new_num_shards'] == num_shards_expected
+    assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
 
     # TESTCASE 'reshard process ,'reshard','process','reshard non empty bucket','succeeds'
     log.debug('TEST: reshard process non empty bucket\n')
@@ -234,6 +240,8 @@ def main():
     # TESTCASE 'manual bucket resharding','inject error','fail','check bucket accessibility', 'retry reshard'
     log.debug('TEST: reshard bucket with EIO injected at set_target_layout\n')
     test_bucket_reshard(connection, 'error-at-set-target-layout', error_at='set_target_layout')
+    log.debug('TEST: reshard bucket with ECANCELED injected at set_target_layout\n')
+    test_bucket_reshard(connection, 'error-at-set-target-layout', error_at='set_target_layout', error_code=errno.ECANCELED)
     log.debug('TEST: reshard bucket with abort at set_target_layout\n')
     test_bucket_reshard(connection, 'abort-at-set-target-layout', abort_at='set_target_layout')
 
@@ -244,6 +252,8 @@ def main():
 
     log.debug('TEST: reshard bucket with EIO injected at commit_target_layout\n')
     test_bucket_reshard(connection, 'error-at-commit-target-layout', error_at='commit_target_layout')
+    log.debug('TEST: reshard bucket with ECANCELED injected at commit_target_layout\n')
+    test_bucket_reshard(connection, 'error-at-commit-target-layout', error_at='commit_target_layout', error_code=errno.ECANCELED)
     log.debug('TEST: reshard bucket with abort at commit_target_layout\n')
     test_bucket_reshard(connection, 'abort-at-commit-target-layout', abort_at='commit_target_layout')
 

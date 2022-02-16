@@ -146,7 +146,10 @@ int main(int argc, char *argv[])
 	cout << "loglevel set to " << loglevel << "\n";
   }
 
-  dbsm = new DBStoreManager(logfile, loglevel);
+  vector<const char*> args;
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1);
+  dbsm = new DBStoreManager(cct.get(), logfile, loglevel);
   dbs = dbsm->getDB(tenant, true);
 
   cout<<"No. of threads being created = "<<num_thr<<"\n";

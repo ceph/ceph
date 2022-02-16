@@ -356,6 +356,14 @@ def configure(ctx, config):
         if slow_backend:
             s3tests_conf['fixtures']['slow backend'] = slow_backend
 
+        storage_classes = properties.get('storage classes')
+        if storage_classes:
+            s3tests_conf['s3 main']['storage_classes'] = storage_classes
+
+        lc_debug_interval = properties.get('lc_debug_interval')
+        if lc_debug_interval:
+            s3tests_conf['s3 main']['lc_debug_interval'] = lc_debug_interval
+
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[

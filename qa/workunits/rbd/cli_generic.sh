@@ -1129,6 +1129,9 @@ test_trash_purge_schedule() {
     rbd pool init rbd2
     rbd namespace create rbd2/ns1
 
+    test "$(ceph rbd trash purge schedule list)" = "{}"
+    ceph rbd trash purge schedule status | fgrep '"scheduled": []'
+
     expect_fail rbd trash purge schedule ls
     test "$(rbd trash purge schedule ls -R --format json)" = "[]"
 
@@ -1211,7 +1214,16 @@ test_trash_purge_schedule() {
         rbd trash purge schedule rm -p $p 1m
     done
 
+    # Negative tests
+    rbd trash purge schedule add 2m
+    expect_fail rbd trash purge schedule add -p rbd dummy
+    expect_fail rbd trash purge schedule add dummy
+    expect_fail rbd trash purge schedule remove -p rbd dummy
+    expect_fail rbd trash purge schedule remove dummy
+    rbd trash purge schedule ls -p rbd | grep 'every 1d starting at 01:30'
+    rbd trash purge schedule ls | grep 'every 2m'
     rbd trash purge schedule remove -p rbd 1d 01:30
+    rbd trash purge schedule remove 2m
     test "$(rbd trash purge schedule ls -R --format json)" = "[]"
 
     remove_images
@@ -1228,6 +1240,9 @@ test_mirror_snapshot_schedule() {
     rbd mirror pool enable rbd2 image
     rbd mirror pool enable rbd2/ns1 image
     rbd mirror pool peer add rbd2 cluster1
+
+    test "$(ceph rbd mirror snapshot schedule list)" = "{}"
+    ceph rbd mirror snapshot schedule status | fgrep '"scheduled_images": []'
 
     expect_fail rbd mirror snapshot schedule ls
     test "$(rbd mirror snapshot schedule ls -R --format json)" = "[]"
@@ -1263,6 +1278,14 @@ test_mirror_snapshot_schedule() {
 
     rbd mirror snapshot schedule add 1h 00:15
     test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+
+    # Negative tests
+    expect_fail rbd mirror snapshot schedule add dummy
+    expect_fail rbd mirror snapshot schedule add -p rbd2/ns1 --image test1 dummy
+    expect_fail rbd mirror snapshot schedule remove dummy
+    expect_fail rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 dummy
+    test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+    test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
 
     rbd rm rbd2/ns1/test1
 

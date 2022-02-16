@@ -41,7 +41,7 @@ namespace rgw::sal {
     int ret;
 
     buckets.clear();
-    ret = store->getDB()->list_buckets(dpp, info.user_id, marker, end_marker, max,
+    ret = store->getDB()->list_buckets(dpp, "", info.user_id, marker, end_marker, max,
         need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
@@ -924,6 +924,7 @@ namespace rgw::sal {
 			       obj->get_obj());
     DB::Object::Write obj_op(&op_target);
 
+    /* Create meta object */
     obj_op.meta.owner = owner.get_id();
     obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
@@ -1100,17 +1101,9 @@ namespace rgw::sal {
     /* Original head object */
     DB::Object op_target(store->getDB(),
 			     target_obj->get_bucket()->get_info(),
-			     target_obj->get_obj());
+			     target_obj->get_obj(), get_upload_id());
     DB::Object::Write obj_op(&op_target);
-    obj_op.prepare(NULL);
-
-    /* Meta object */
-    std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
-    DB::Object meta_op_target(store->getDB(),
-			     meta_obj->get_bucket()->get_info(),
-			     meta_obj->get_obj());
-    DB::Object::Write mp_op(&meta_op_target);
-    mp_op.update_mp_parts(dpp, target_obj->get_obj().key);
+    ret = obj_op.prepare(dpp);
 
     obj_op.meta.owner = owner.get_id();
     obj_op.meta.flags = PUT_OBJ_CREATE;
@@ -1228,12 +1221,13 @@ namespace rgw::sal {
                 oid(head_obj->get_name() + "." + upload_id +
                     "." + std::to_string(part_num)),
                 meta_obj(((DBMultipartUpload*)upload)->get_meta_obj()),
-                op_target(_store->getDB(), meta_obj->get_bucket()->get_info(), meta_obj->get_obj()),
+                op_target(_store->getDB(), head_obj->get_bucket()->get_info(), head_obj->get_obj(), upload_id),
                 parent_op(&op_target), part_num(_part_num),
-                part_num_str(_part_num_str) { parent_op.prepare(NULL);}
+                part_num_str(_part_num_str) {}
 
   int DBMultipartWriter::prepare(optional_yield y)
   {
+    parent_op.prepare(NULL);
     parent_op.set_mp_part_str(upload_id + "." + std::to_string(part_num));
     // XXX: do we need to handle part_num_str??
     return 0;
@@ -1907,6 +1901,11 @@ namespace rgw::sal {
     if (use_lc_thread) {
       ret = db->createLCTables(dpp);
       lc->start_processor();
+    }
+
+    ret = db->createGC(dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) <<"GC thread creation failed: ret = " << ret << dendl;
     }
 
     return ret;

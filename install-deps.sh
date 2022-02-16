@@ -19,7 +19,7 @@ mkdir -p $DIR
 if test $(id -u) != 0 ; then
     SUDO=sudo
 fi
-export LC_ALL=C # the following is vulnerable to i18n
+export LC_ALL=en_US.UTF-8 # the following is vulnerable to i18n
 
 ARCH=$(uname -m)
 

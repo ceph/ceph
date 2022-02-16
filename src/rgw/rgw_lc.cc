@@ -1468,11 +1468,11 @@ public:
 
     if (ret < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed to transfer object(" << oc.o.key << ") to the cloud endpoint(" << endpoint << ") ret=" << ret << dendl;
-      return ret;
 
       if (!tier_ctx.target_bucket_created) {
         cloud_targets.erase(it.first);
       }
+      return ret;
     }
 
     if (delete_object) {
@@ -1749,9 +1749,14 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return -ENOENT;
   }
 
-  map<string, bufferlist>::iterator aiter = bucket->get_attrs().find(RGW_ATTR_LC);
-  if (aiter == bucket->get_attrs().end())
+  map<string, bufferlist>::iterator aiter
+    = bucket->get_attrs().find(RGW_ATTR_LC);
+  if (aiter == bucket->get_attrs().end()) {
+    ldpp_dout(this, 0) << "WARNING: bucket_attrs.find(RGW_ATTR_LC) failed for "
+		       << bucket_name << " (terminates bucket_lc_process(...))"
+		       << dendl;
     return 0;
+  }
 
   bufferlist::const_iterator iter{&aiter->second};
   try {

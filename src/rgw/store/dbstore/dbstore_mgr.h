@@ -32,11 +32,9 @@ public:
     cct = _cct;
 	default_db = createDB(default_tenant);
   };
-  DBStoreManager(std::string logfile, int loglevel): DBStoreHandles() {
+  DBStoreManager(CephContext *_cct, std::string logfile, int loglevel): DBStoreHandles() {
     /* No ceph context. Create one with log args provided */
-    std::vector<const char*> args;
-    cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-                      CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
+    cct = _cct;
     cct->_log->set_log_file(logfile);
     cct->_log->reopen_log_file();
     cct->_conf->subsys.set_log_level(ceph_subsys_rgw, loglevel);

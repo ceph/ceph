@@ -674,41 +674,14 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
     bucket->get_info().flags |= BUCKET_DATASYNC_DISABLED;
   }
 
+  // when writing this metadata, RGWSI_BucketIndex_RADOS::handle_overwrite()
+  // will write the corresponding datalog and bilog entries
   int r = bucket->put_info(dpp, false, real_time());
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed writing bucket instance info:" + cpp_strerror(-r));
     return r;
   }
-
-  int shards_num = bucket->get_info().layout.current_index.layout.normal.num_shards? bucket->get_info().layout.current_index.layout.normal.num_shards : 1;
-  int shard_id = bucket->get_info().layout.current_index.layout.normal.num_shards? 0 : -1;
-  const auto& log_layout = bucket->get_info().layout.logs.back();
-
-  if (!sync) {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_stop(dpp, bucket->get_info(), log_layout, -1);
-    if (r < 0) {
-      set_err_msg(err_msg, "ERROR: failed writing stop bilog:" + cpp_strerror(-r));
-      return r;
-    }
-  } else {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->bilog_rados->log_start(dpp, bucket->get_info(), log_layout, -1);
-    if (r < 0) {
-      set_err_msg(err_msg, "ERROR: failed writing resync bilog:" + cpp_strerror(-r));
-      return r;
-    }
-  }
-
-  for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = static_cast<rgw::sal::RadosStore*>(store)
-      ->svc()->datalog_rados->add_entry(dpp, bucket->get_info(),
-					bucket->get_info().layout.logs.back(),
-					shard_id);
-    if (r < 0) {
-      set_err_msg(err_msg, "ERROR: failed writing data log:" + cpp_strerror(-r));
-      return r;
-    }
-  }
-
+  
   return 0;
 }
 
@@ -1076,13 +1049,13 @@ static int bucket_stats(rgw::sal::Store* store,
     return ret;
   }
 
-  if (bucket->get_info().is_indexless()) {
+  const auto& index = bucket->get_info().get_current_index();
+  if (is_layout_indexless(index)) {
     cerr << "error, indexless buckets do not maintain stats; bucket=" <<
       bucket->get_name() << std::endl;
     return -EINVAL;
   }
 
-  const auto& index = bucket->get_info().get_current_index();
   std::string bucket_ver, master_ver;
   std::string max_marker;
   ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
@@ -1178,7 +1151,6 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Store* store,
 
       for (const auto& iter : m_buckets) {
 	auto& bucket = iter.second;
-	uint32_t num_shards = 1;
 	uint64_t num_objects = 0;
 
 	marker = bucket->get_name(); /* Casey's location for marker update,
@@ -1189,11 +1161,14 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Store* store,
 	if (ret < 0)
 	  continue;
 
+	const auto& index = bucket->get_info().get_current_index();
+	if (is_layout_indexless(index)) {
+	  continue; // indexless buckets don't have stats
+	}
+
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	const auto& latest_log = bucket->get_info().layout.logs.back();
-	const auto& index = log_to_index_layout(latest_log);
 	ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
 
 	if (ret < 0)
@@ -1203,7 +1178,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Store* store,
 	  num_objects += s.second.num_objects;
 	}
 
-	num_shards = bucket->get_info().layout.current_index.layout.normal.num_shards;
+	const uint32_t num_shards = rgw::num_shards(index.layout.normal);
 	uint64_t objs_per_shard =
 	  (num_shards) ? num_objects/num_shards : num_objects;
 	{
@@ -2916,7 +2891,6 @@ int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
                         const rgw_user& user_id, const std::string& display_name,
                         const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp)
 {
-  RGWObjectCtx obj_ctx(store);
   map<string, bool> common_prefixes;
 
   rgw::sal::Bucket::ListParams params;
@@ -2932,6 +2906,7 @@ int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
   //Loop through objects and update object acls to point to bucket owner
 
   do {
+    RGWObjectCtx obj_ctx(store);
     results.objs.clear();
     int ret = bucket->list(dpp, params, max_entries, results, y);
     if (ret < 0) {

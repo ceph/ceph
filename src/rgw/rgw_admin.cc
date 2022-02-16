@@ -631,6 +631,7 @@ enum class OPT {
   BUCKET_LIMIT_CHECK,
   BUCKET_LINK,
   BUCKET_UNLINK,
+  BUCKET_LAYOUT,
   BUCKET_STATS,
   BUCKET_CHECK,
   BUCKET_SYNC_CHECKPOINT,
@@ -845,6 +846,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket limit check", OPT::BUCKET_LIMIT_CHECK },
   { "bucket link", OPT::BUCKET_LINK },
   { "bucket unlink", OPT::BUCKET_UNLINK },
+  { "bucket layout", OPT::BUCKET_LAYOUT },
   { "bucket stats", OPT::BUCKET_STATS },
   { "bucket check", OPT::BUCKET_CHECK },
   { "bucket sync checkpoint", OPT::BUCKET_SYNC_CHECKPOINT },
@@ -2539,7 +2541,12 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     shard_status.resize(full_status.shards_done_with_gen.size());
   } else if (r == -ENOENT) {
     // no full status, but there may be per-shard status from before upgrade
-    const auto& log = source_bucket->get_info().layout.logs.front();
+    const auto& logs = source_bucket->get_info().layout.logs;
+    if (logs.empty()) {
+      out << indented{width} << "init: bucket sync has not started\n";
+      return 0;
+    }
+    const auto& log = logs.front();
     if (log.gen > 0) {
       // this isn't the backward-compatible case, so we just haven't started yet
       out << indented{width} << "init: bucket sync has not started\n";
@@ -2550,7 +2557,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
       return -EINVAL;
     }
     // use shard count from our log gen=0
-    shard_status.resize(log.layout.in_index.layout.num_shards);
+    shard_status.resize(rgw::num_shards(log.layout.in_index));
   } else {
     lderr(store->ctx()) << "failed to read bucket full sync status: " << cpp_strerror(r) << dendl;
     return r;
@@ -3637,6 +3644,7 @@ int main(int argc, const char **argv)
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
   std::optional<std::string> inject_error_at;
+  std::optional<int> inject_error_code;
   std::optional<std::string> inject_abort_at;
 
   rgw::zone_features::set enable_features;
@@ -4119,6 +4127,8 @@ int main(int argc, const char **argv)
       opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
     } else if (ceph_argparse_witharg(args, i, &val, "--inject-error-at", (char*)NULL)) {
       inject_error_at = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject-error-code", (char*)NULL)) {
+      inject_error_code = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--inject-abort-at", (char*)NULL)) {
       inject_abort_at = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
@@ -4235,6 +4245,7 @@ int main(int argc, const char **argv)
 			 OPT::USER_STATS,
 			 OPT::BUCKETS_LIST,
 			 OPT::BUCKET_LIMIT_CHECK,
+			 OPT::BUCKET_LAYOUT,
 			 OPT::BUCKET_STATS,
 			 OPT::BUCKET_SYNC_CHECKPOINT,
 			 OPT::BUCKET_SYNC_INFO,
@@ -6620,12 +6631,22 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      if (perm_policy_doc.empty()) {
+      if (perm_policy_doc.empty() && infile.empty()) {
         cerr << "permission policy document is empty" << std::endl;
         return -EINVAL;
       }
 
-      bufferlist bl = bufferlist::static_from_string(perm_policy_doc);
+      bufferlist bl;
+      if (!infile.empty()) {
+        int ret = read_input(infile, bl);
+        if (ret < 0) {
+          cerr << "ERROR: failed to read input policy document: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+        perm_policy_doc = bl.to_str();
+      } else {
+        bl = bufferlist::static_from_string(perm_policy_doc);
+      }
       try {
         const rgw::IAM::Policy p(g_ceph_context, tenant, bl);
       } catch (rgw::IAM::PolicyParseException& e) {
@@ -6879,6 +6900,22 @@ int main(int argc, const char **argv)
 	"************************************" << std::endl;
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT::BUCKET_LAYOUT) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    const auto& bucket_info = bucket->get_info();
+    formatter->open_object_section("layout");
+    encode_json("layout", bucket_info.layout, formatter.get());
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::BUCKET_STATS) {
@@ -7675,6 +7712,12 @@ next:
     }
 
     auto zone_svc = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone;
+    if (!zone_svc->can_reshard()) {
+      const auto& zonegroup = zone_svc->get_zonegroup();
+      std::cerr << "The zonegroup '" << zonegroup.get_name() << "' does not "
+          "have the resharding feature enabled." << std::endl;
+      return ENOTSUP;
+    }
     if (!RGWBucketReshard::can_reshard(bucket->get_info(), zone_svc) &&
         !yes_i_really_mean_it) {
       std::cerr << "Bucket '" << bucket->get_name() << "' already has too many "
@@ -7682,7 +7725,7 @@ next:
           "from previous reshards that peer zones haven't finished syncing. "
           "Resharding is not recommended until the old generations sync, but "
           "you can force a reshard with --yes-i-really-mean-it." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store),
@@ -7696,7 +7739,8 @@ next:
 
     ReshardFaultInjector fault;
     if (inject_error_at) {
-      fault.inject(*inject_error_at, InjectError{-EIO, dpp()});
+      const int code = -inject_error_code.value_or(EIO);
+      fault.inject(*inject_error_at, InjectError{code, dpp()});
     } else if (inject_abort_at) {
       fault.inject(*inject_abort_at, InjectAbort{});
     }
@@ -7733,7 +7777,6 @@ next:
   }
 
   if (opt_cmd == OPT::RESHARD_LIST) {
-    list<cls_rgw_reshard_entry> entries;
     int ret;
     int count = 0;
     if (max_entries < 0) {
@@ -7748,19 +7791,20 @@ next:
     formatter->open_array_section("reshard");
     for (int i = 0; i < num_logshards; i++) {
       bool is_truncated = true;
-      string marker;
+      std::string marker;
       do {
-        entries.clear();
+	std::list<cls_rgw_reshard_entry> entries;
         ret = reshard.list(dpp(), i, marker, max_entries - count, entries, &is_truncated);
         if (ret < 0) {
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
           return ret;
         }
-        for (auto iter=entries.begin(); iter != entries.end(); ++iter) {
-          cls_rgw_reshard_entry& entry = *iter;
+        for (const auto& entry : entries) {
           encode_json("entry", entry, formatter.get());
-          entry.get_key(&marker);
         }
+	if (is_truncated) {
+	  entries.crbegin()->get_key(&marker); // last entry's key becomes marker
+	}
         count += entries.size();
         formatter->flush(cout);
       } while (is_truncated && count < max_entries);
@@ -7772,6 +7816,7 @@ next:
 
     formatter->close_section();
     formatter->flush(cout);
+
     return 0;
   }
 
@@ -7830,6 +7875,8 @@ next:
       }
     }
 
+    bool resharding_underway = true;
+
     if (bucket_initable) {
       // we did not encounter an error, so let's work with the bucket
 	RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(store),
@@ -7839,14 +7886,17 @@ next:
       if (ret < 0) {
         if (ret == -EBUSY) {
           cerr << "There is ongoing resharding, please retry after " <<
-            store->ctx()->_conf.get_val<uint64_t>(
-              "rgw_reshard_bucket_lock_duration") <<
-            " seconds " << std::endl;
+            store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_bucket_lock_duration") <<
+            " seconds." << std::endl;
+	  return -ret;
+	} else if (ret == -EINVAL) {
+	  resharding_underway = false;
+	  // we can continue and try to unschedule
         } else {
-          cerr << "Error canceling bucket " << bucket_name <<
-            " resharding: " << cpp_strerror(-ret) << std::endl;
+          cerr << "Error cancelling bucket \"" << bucket_name <<
+            "\" resharding: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
         }
-        return ret;
       }
     }
 
@@ -7855,13 +7905,22 @@ next:
     cls_rgw_reshard_entry entry;
     entry.tenant = tenant;
     entry.bucket_name = bucket_name;
-    //entry.bucket_id = bucket_id;
 
     ret = reshard.remove(dpp(), entry);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "Error in updating reshard log with bucket " <<
-        bucket_name << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
+    if (ret == -ENOENT) {
+      if (!resharding_underway) {
+	cerr << "Error, bucket \"" << bucket_name <<
+	  "\" is neither undergoing resharding nor scheduled to undergo "
+	  "resharding." << std::endl;
+	return EINVAL;
+      } else {
+	// we cancelled underway resharding above, so we're good
+	return 0;
+      }
+    } else if (ret < 0) {
+      cerr << "Error in updating reshard log with bucket \"" <<
+        bucket_name << "\": " << cpp_strerror(-ret) << std::endl;
+      return -ret;
     }
   } // OPT_RESHARD_CANCEL
 
