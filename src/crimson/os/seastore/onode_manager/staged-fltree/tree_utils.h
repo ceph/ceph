@@ -309,6 +309,7 @@ class TreeBuilder {
     return tree->insert(
         t, p_kv->key, {p_kv->value.get_payload_size()}
     ).si_then([&t, this, p_kv](auto ret) {
+      boost::ignore_unused(this);  // avoid clang warning;
       auto success = ret.second;
       auto cursor = std::move(ret.first);
       initialize_cursor_from_item(t, p_kv->key, p_kv->value, cursor, success);
@@ -401,6 +402,9 @@ class TreeBuilder {
                    p_kv->value);
     return tree->erase(t, p_kv->key
     ).si_then([&t, this, p_kv] (auto size) {
+      boost::ignore_unused(t);  // avoid clang warning;
+      boost::ignore_unused(this);
+      boost::ignore_unused(p_kv);
       ceph_assert(size == 1);
 #ifndef NDEBUG
       return tree->contains(t, p_kv->key

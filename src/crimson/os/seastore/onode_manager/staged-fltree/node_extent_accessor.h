@@ -570,6 +570,7 @@ class NodeExtentAccessorT {
         })
       );
     }).si_then([this, c] {
+      boost::ignore_unused(c);  // avoid clang warning;
       assert(!c.t.is_conflicted());
       return *mut;
     });

@@ -226,6 +226,7 @@ OMapInnerNode::list(
 	      start,
 	      config.with_reduced_max(result.size())
 	    ).si_then([&, config](auto &&child_ret) mutable {
+	      boost::ignore_unused(config);   // avoid clang warning;
 	      auto &[child_complete, child_result] = child_ret;
 	      if (result.size() && child_result.size()) {
 		assert(child_result.begin()->first > result.rbegin()->first);
