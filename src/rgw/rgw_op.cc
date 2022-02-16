@@ -4144,6 +4144,8 @@ void RGWPostObj::execute(optional_yield y)
     return;
   }
 
+  s->object->set_bucket(s->bucket.get());
+
   if (s->iam_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
     auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                             boost::none,
