@@ -6586,6 +6586,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     const pg_pool_t *p = osdmap.get_pg_pool(poolid);
     const pool_stat_t* pstat = mon.mgrstatmon()->get_pool_stat(poolid);
+    if (!pstat) {
+      ss << "no stats for pool '" << pool_name << "'";
+      r = -ENOENT;
+      goto reply;
+    }
     const object_stat_sum_t& sum = pstat->stats.sum;
     if (f) {
       f->open_object_section("pool_quotas");
