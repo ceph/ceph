@@ -120,7 +120,7 @@ public:
 
   CephContext * get_context();
   void release_guarded_request(BlockGuardCell *cell);
-  void release_write_lanes(C_BlockIORequestT *req);
+  void attempt_to_dispatch_deferred_writes(void);
   virtual bool alloc_resources(C_BlockIORequestT *req) = 0;
   virtual void setup_schedule_append(
       pwl::GenericLogOperationsVector &ops, bool do_early_flush,
@@ -145,9 +145,6 @@ public:
   }
   uint64_t get_current_sync_gen() {
     return m_current_sync_gen;
-  }
-  unsigned int get_free_lanes() {
-    return m_free_lanes;
   }
   uint32_t get_free_log_entries() {
     return m_free_log_entries;
@@ -209,8 +206,6 @@ private:
 
   /* Writes that have left the block guard, but are waiting for resources */
   C_BlockIORequests m_deferred_ios;
-  /* Throttle writes concurrently allocating & replicating */
-  unsigned int m_free_lanes = pwl::MAX_CONCURRENT_WRITES;
 
   SafeTimer *m_timer = nullptr; /* Used with m_timer_lock */
   mutable ceph::mutex *m_timer_lock = nullptr; /* Used with and by m_timer */
@@ -358,7 +353,7 @@ protected:
 
   bool check_allocation(
       C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
-      uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
+      uint64_t bytes_allocated, uint32_t num_log_entries,
       uint32_t num_unpublished_reserves);
   void append_scheduled(
       pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,

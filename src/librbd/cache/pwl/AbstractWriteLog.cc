@@ -164,7 +164,6 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
   plb.add_u64_counter(l_librbd_pwl_wr_req, "wr", "Writes");
   plb.add_u64_counter(l_librbd_pwl_wr_bytes, "wr_bytes", "Data size in writes");
   plb.add_u64_counter(l_librbd_pwl_wr_req_def, "wr_def", "Writes deferred for resources");
-  plb.add_u64_counter(l_librbd_pwl_wr_req_def_lanes, "wr_def_lanes", "Writes deferred for lanes");
   plb.add_u64_counter(l_librbd_pwl_wr_req_def_log, "wr_def_log", "Writes deferred for log entries");
   plb.add_u64_counter(l_librbd_pwl_wr_req_def_buf, "wr_def_buf", "Writes deferred for buffers");
   plb.add_u64_counter(l_librbd_pwl_wr_req_overlap, "wr_overlap", "Writes overlapping with prior in-progress writes");
@@ -1412,16 +1411,11 @@ void AbstractWriteLog<I>::dispatch_deferred_writes(void)
 }
 
 /**
- * Returns the lanes used by this write, and attempts to dispatch the next
- * deferred write
+ * Attempts to dispatch the next deferred write
  */
 template <typename I>
-void AbstractWriteLog<I>::release_write_lanes(C_BlockIORequestT *req)
+void AbstractWriteLog<I>::attempt_to_dispatch_deferred_writes(void)
 {
-  {
-    std::lock_guard locker(m_lock);
-    m_free_lanes += req->image_extents.size();
-  }
   dispatch_deferred_writes();
 }
 
@@ -1467,20 +1461,12 @@ void AbstractWriteLog<I>::alloc_and_dispatch_io_req(C_BlockIORequestT *req)
 template <typename I>
 bool AbstractWriteLog<I>::check_allocation(
     C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
-    uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
+    uint64_t bytes_allocated, uint32_t num_log_entries,
     uint32_t num_unpublished_reserves) {
   bool alloc_succeeds = true;
   bool no_space = false;
   std::lock_guard locker(m_lock);
   {
-    if (m_free_lanes < num_lanes) {
-      ldout(m_image_ctx.cct, 20) << "not enough free lanes (need "
-                                 <<  num_lanes
-                                 << ", have " << m_free_lanes << ") "
-                                 << *req << dendl;
-      alloc_succeeds = false;
-      /* This isn't considered a "no space" alloc fail. Lanes are a throttling mechanism. */
-    }
     if (m_free_log_entries < num_log_entries) {
       ldout(m_image_ctx.cct, 20) << "not enough free entries (need "
                                  << num_log_entries
@@ -1505,9 +1491,6 @@ bool AbstractWriteLog<I>::check_allocation(
   }
 
   if (alloc_succeeds) {
-    /* We need one free log entry per extent (each is a separate entry), and
-     * one free "lane" for remote replication. */
-    m_free_lanes -= num_lanes;
     m_free_log_entries -= num_log_entries;
     m_unpublished_reserves += num_unpublished_reserves;
     m_bytes_allocated += bytes_allocated;

@@ -40,8 +40,7 @@ public:
 protected:
   void setup_buffer_resources(
       uint64_t *bytes_cached, uint64_t *bytes_dirtied,
-      uint64_t *bytes_allocated, uint64_t *number_lanes,
-      uint64_t *number_log_entries,
+      uint64_t *bytes_allocated, uint64_t *number_log_entries,
       uint64_t *number_unpublished_reserves) override;
 };
 
@@ -79,8 +78,7 @@ public:
 
   void setup_buffer_resources(
       uint64_t *bytes_cached, uint64_t *bytes_dirtied,
-      uint64_t *bytes_allocated, uint64_t *number_lanes,
-      uint64_t *number_log_entries,
+      uint64_t *bytes_allocated, uint64_t *number_log_entries,
       uint64_t *number_unpublished_reserves) override;
 };
 
