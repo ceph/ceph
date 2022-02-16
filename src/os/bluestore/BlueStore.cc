@@ -7582,7 +7582,7 @@ int BlueStore::_mount()
   {
     static bool perform_bluestore_qfsck = true;
     if (perform_bluestore_qfsck && cct->_conf->bluestore_qfsck_on_mount) {
-      perform_bluestore_qfsck = false;
+      //perform_bluestore_qfsck = false;
       dout(0) << __func__ << "::NCB::bluestore_qfsck_on_mount was initiated ... " << dendl;
       int ret = read_allocation_from_drive_for_bluestore_tool();
       ceph_assert(ret == 0);
@@ -18472,7 +18472,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
-  dout(5) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << dendl;
+  dout(5) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << ", serial = " << s_serial << dendl;
   dout(5) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
@@ -18668,7 +18668,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
   utime_t duration = ceph_clock_now() - start_time;
   dout(5) << "READ--extent_count=" << extent_count << ", read_alloc_size=  "
 	    << read_alloc_size << ", file_size=" << file_size << dendl;
-  dout(5) << "READ duration=" << duration << " seconds, s_serial=" << s_serial << dendl;
+  dout(5) << "READ duration=" << duration << " seconds, serial=" << header.serial << dendl;
   *num   = extent_count;
   *bytes = read_alloc_size;
   return 0;
