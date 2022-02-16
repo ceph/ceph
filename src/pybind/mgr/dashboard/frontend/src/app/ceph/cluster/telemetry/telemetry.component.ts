@@ -25,7 +25,8 @@ export class TelemetryComponent extends CdForm implements OnInit {
   licenseAgrmt = false;
   moduleEnabled: boolean;
   options: Object = {};
-  updatedConfig: Object = {};
+  newConfig: Object = {};
+  configResp: object = {};
   previewForm: CdFormGroup;
   requiredFields = [
     'channel_basic',
@@ -35,14 +36,16 @@ export class TelemetryComponent extends CdForm implements OnInit {
     'interval',
     'proxy',
     'contact',
-    'description'
+    'description',
+    'organization'
   ];
+  contactInfofields = ['contact', 'description', 'organization'];
   report: object = undefined;
   reportId: number = undefined;
   sendToUrl = '';
   sendToDeviceUrl = '';
   step = 1;
-  showContactInfo = false;
+  showContactInfo: boolean;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -67,10 +70,11 @@ export class TelemetryComponent extends CdForm implements OnInit {
         this.moduleEnabled = configResp['enabled'];
         this.sendToUrl = configResp['url'];
         this.sendToDeviceUrl = configResp['device_url'];
+        this.showContactInfo = configResp['channel_ident'];
         this.options = _.pick(resp[0], this.requiredFields);
-        const configs = _.pick(configResp, this.requiredFields);
+        this.configResp = _.pick(configResp, this.requiredFields);
         this.createConfigForm();
-        this.configForm.setValue(configs);
+        this.configForm.setValue(this.configResp);
         this.loadingReady();
       },
       (_error) => {
@@ -114,21 +118,21 @@ export class TelemetryComponent extends CdForm implements OnInit {
     return result;
   }
 
-  private updateChannelsInReport(updatedConfig: Object = {}) {
-    const channels: string[] = this.report['report']['channels'];
+  private updateReportFromConfig(updatedConfig: Object = {}) {
+    // update channels
     const availableChannels: string[] = this.report['report']['channels_available'];
     const updatedChannels = [];
     for (const channel of availableChannels) {
       const key = `channel_${channel}`;
-      // channel unchanged or toggled on
-      if (
-        (!updatedConfig.hasOwnProperty(key) && channels.includes(channel)) ||
-        updatedConfig[key]
-      ) {
+      if (updatedConfig[key]) {
         updatedChannels.push(channel);
       }
     }
     this.report['report']['channels'] = updatedChannels;
+    // update contactInfo
+    for (const contactInfofield of this.contactInfofields) {
+      this.report['report'][contactInfofield] = updatedConfig[contactInfofield];
+    }
   }
 
   private getReport() {
@@ -138,7 +142,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
       (resp: object) => {
         this.report = resp;
         this.reportId = resp['report']['report_id'];
-        this.updateChannelsInReport(this.updatedConfig);
+        this.updateReportFromConfig(this.newConfig);
         this.createPreviewForm();
         this.loadingReady();
         this.step++;
@@ -153,17 +157,22 @@ export class TelemetryComponent extends CdForm implements OnInit {
     this.showContactInfo = !this.showContactInfo;
   }
 
-  updateConfig() {
-    this.updatedConfig = {};
+  buildReport() {
+    this.newConfig = {};
     for (const option of Object.values(this.options)) {
       const control = this.configForm.get(option.name);
-      if (!control.valid) {
+      // Append the option only if they are valid
+      if (control.valid) {
+        this.newConfig[option.name] = control.value;
+      } else {
         this.configForm.setErrors({ cdSubmitButton: true });
         return;
       }
-      // Append the option only if the value has been modified.
-      if (control.dirty && control.valid) {
-        this.updatedConfig[option.name] = control.value;
+    }
+    // reset contact info field  if ident channel is off
+    if (!this.newConfig['channel_ident']) {
+      for (const contactInfofield of this.contactInfofields) {
+        this.newConfig[contactInfofield] = '';
       }
     }
     this.getReport();
@@ -184,21 +193,28 @@ export class TelemetryComponent extends CdForm implements OnInit {
   }
 
   next() {
-    if (this.configForm.pristine) {
-      this.getReport();
-    } else {
-      this.updateConfig();
-    }
+    this.buildReport();
   }
 
   back() {
     this.step--;
   }
 
+  getChangedConfig() {
+    const updatedConfig = {};
+    _.forEach(this.requiredFields, (configField) => {
+      if (!_.isEqual(this.configResp[configField], this.newConfig[configField])) {
+        updatedConfig[configField] = this.newConfig[configField];
+      }
+    });
+    return updatedConfig;
+  }
+
   onSubmit() {
+    const updatedConfig = this.getChangedConfig();
     const observables = [
       this.telemetryService.enable(),
-      this.mgrModuleService.updateConfig('telemetry', this.updatedConfig)
+      this.mgrModuleService.updateConfig('telemetry', updatedConfig)
     ];
 
     observableForkJoin(observables).subscribe(
@@ -220,7 +236,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
         this.previewForm.setErrors({ cdSubmitButton: true });
       },
       () => {
-        this.updatedConfig = {};
+        this.newConfig = {};
         this.router.navigate(['']);
       }
     );
