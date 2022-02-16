@@ -101,6 +101,10 @@ def bilog_list(zone, bucket, args = None):
 def bilog_autotrim(zone, args = None):
     zone.cluster.admin(['bilog', 'autotrim'] + (args or []))
 
+def bucket_layout(zone, bucket, args = None):
+    (bl_output,_) = zone.cluster.admin(['bucket', 'layout', '--bucket', bucket] + (args or []))
+    return json.loads(bl_output)
+
 def parse_meta_sync_status(meta_sync_status_json):
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
@@ -1308,6 +1312,93 @@ def test_bucket_index_log_trim():
     # verify cold bucket has empty bilog
     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
     assert(len(cold_bilog) == 0)
+
+def test_bucket_reshard_index_log_trim():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a test bucket, upload some objects, and wait for sync
+    def make_test_bucket():
+        name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, name)
+        bucket = zone.conn.create_bucket(name)
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(zone, name, objname)
+            k.set_contents_from_string('foo')
+        zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_bucket_checkpoint(zonegroup_conns, name)
+        return bucket
+
+    # create a 'test' bucket
+    test_bucket = make_test_bucket()
+
+    # checking bucket layout before resharding
+    json_obj_1 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_1['layout']['logs']) == 1)
+
+    first_gen = json_obj_1['layout']['current_index']['gen']
+
+    before_reshard_bilog = bilog_list(zone.zone, test_bucket.name, ['--gen', str(first_gen)])
+    assert(len(before_reshard_bilog) == 4)
+
+    # Resharding the bucket
+    zone.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', test_bucket.name,
+        '--num-shards', '3',
+        '--yes-i-really-mean-it'])
+
+    # checking bucket layout after 1st resharding
+    json_obj_2 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_2['layout']['logs']) == 2)
+
+    second_gen = json_obj_2['layout']['current_index']['gen']
+
+    after_reshard_bilog = bilog_list(zone.zone, test_bucket.name, ['--gen', str(second_gen)])
+    assert(len(after_reshard_bilog) == 0)
+
+    # upload more objects
+    for objname in ('e', 'f', 'g', 'h'):
+        k = new_key(zone, test_bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
+
+    # Resharding the bucket again
+    zone.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', test_bucket.name,
+        '--num-shards', '3',
+        '--yes-i-really-mean-it'])
+
+    # checking bucket layout after 2nd resharding
+    json_obj_3 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_3['layout']['logs']) == 3)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
+
+    bilog_autotrim(zone.zone)
+
+    # checking bucket layout after 1st bilog autotrim
+    json_obj_4 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_4['layout']['logs']) == 2)
+
+    bilog_autotrim(zone.zone)
+
+    # checking bucket layout after 2nd bilog autotrim
+    json_obj_5 = bucket_layout(zone.zone, test_bucket.name)
+    assert(len(json_obj_5['layout']['logs']) == 1)
+
+    bilog_autotrim(zone.zone)
+
+    # upload more objects
+    for objname in ('i', 'j', 'k', 'l'):
+        k = new_key(zone, test_bucket.name, objname)
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
+
+    # verify the bucket has non-empty bilog
+    test_bilog = bilog_list(zone.zone, test_bucket.name)
+    assert(len(test_bilog) > 0)
 
 @attr('bucket_reshard')
 def test_bucket_reshard_incremental():
