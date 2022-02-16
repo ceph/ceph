@@ -1433,6 +1433,12 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
   boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
 
+  ceph::coarse_mono_clock::duration work_duration;
+  bool work_period_done = false;
+  static constexpr ceph::coarse_mono_clock::time_point work_period_end_unset =
+    ceph::coarse_mono_clock::time_point::min();
+  ceph::coarse_mono_clock::time_point work_period_end = work_period_end_unset;
+  
   bool lost_lock = false;
 
   bool *reset_backoff;
@@ -1448,6 +1454,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   int total_entries = 0;
 
   RGWSyncTraceNodeRef tn;
+
+
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env, const rgw_pool& _pool,
                      const std::string& period, epoch_t realm_epoch,
@@ -1458,8 +1466,12 @@ public:
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), pool(_pool),
       period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
-      period_marker(period_marker),
-      reset_backoff(_reset_backoff), tn(_tn) {
+            period_marker(period_marker),
+      work_duration(std::chrono::seconds(
+		      cct->_conf.get_val<uint64_t>("rgw_sync_work_period"))),
+      reset_backoff(_reset_backoff),
+      tn(_tn)
+  {
     *reset_backoff = false;
   }
 
@@ -1493,11 +1505,12 @@ public:
           return set_cr_error(r);
         }
         return 0;
-      }
-    }
+      } // switch
+    } // while (true)
+
     /* unreachable */
     return 0;
-  }
+  } // RGWMetaSyncShardCR::operate()
 
   void collect_children()
   {
@@ -1559,7 +1572,7 @@ public:
 	rgw::sal::RadosStore* store = sync_env->store;
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                                 rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
-                                                lock_name, lock_duration, this, nullptr));
+                                                lock_name, lock_duration, this, nullptr, shard_id, sync_env->bid_manager));
         lease_stack.reset(spawn(lease_cr.get(), false));
         lost_lock = false;
       }
@@ -1572,7 +1585,9 @@ public:
         set_sleeping(true);
         yield;
       }
+
       tn->log(10, "took lease");
+      //work_period_end = ceph::coarse_mono_clock::now() + work_duration;
 
       /* lock succeeded, a retry now should avoid previous backoff status */
       *reset_backoff = true;
@@ -1587,12 +1602,18 @@ public:
       total_entries = sync_marker.pos;
 
       /* sync! */
+      work_period_end = ceph::coarse_mono_clock::now() + work_duration;
       do {
-        if (!lease_cr->is_locked()) {
-          tn->log(1, "lease is lost, abort");
-          lost_lock = true;
-          break;
+      while (!lease_cr->is_locked()) {
+        if (lease_cr->is_done()) {
+          drain_all();
+          tn->log(5, "failed to take lease");
+          return lease_cr->get_ret_status();
         }
+        set_sleeping(true);
+        yield;
+      }
+
         omapkeys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
                                              marker, max_entries, omapkeys));
@@ -1631,6 +1652,11 @@ public:
           }
         }
         collect_children();
+  if(ceph::coarse_mono_clock::now() >= work_period_end)
+  {
+    ldpp_dout(sync_env->dpp, 20) << "metadata sync work period end releasing lock" << dendl;
+    yield lease_cr->release_lock();
+  }
       } while (omapkeys->more && can_adjust_marker);
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
@@ -1675,7 +1701,6 @@ public:
        * if we reached here, it means that lost_lock is true, otherwise the state
        * change in the previous block will prevent us from reaching here
        */
-
       yield lease_cr->go_down();
 
       lease_cr.reset();
@@ -1708,29 +1733,45 @@ public:
       tn->log(10, "start incremental sync");
       can_adjust_marker = true;
       /* grab lock */
-      if (!lease_cr) { /* could have had  a lease_cr lock from previous state */
+      if (!lease_cr) { /* could have had a lock lease from
+				   * previous state */
         yield {
+          tn->log(20, "creating RGWContinuousLeaseCR");
           uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
           string lock_name = "sync_lock";
 	  rgw::sal::RadosStore* store = sync_env->store;
           lease_cr.reset( new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                                    rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
-                                                   lock_name, lock_duration, this, nullptr));
+                                                   lock_name, lock_duration, this, nullptr, shard_id, sync_env->bid_manager));
           lease_stack.reset(spawn(lease_cr.get(), false));
+
           lost_lock = false;
         }
         while (!lease_cr->is_locked()) {
           if (lease_cr->is_done()) {
             drain_all();
-            tn->log(5, "failed to take lease");
+            tn->log(10, "failed to take lease");
             return lease_cr->get_ret_status();
           }
           set_sleeping(true);
           yield;
         }
       }
-      tn->log(10, "took lease");
-      // if the period has advanced, we can't use the existing marker
+      while (!lease_cr->is_locked()) {
+	if (lease_cr->is_done()) {
+	  drain_all();
+	  tn->log(10, "failed to take lease");
+	  return lease_cr->get_ret_status();
+	}
+	tn->log(20, "do not yet have lock; will try again");
+	set_sleeping(true);
+	yield;
+      }
+/*
+      if (work_period_end_unset == work_period_end) {
+	work_period_end = ceph::coarse_mono_clock::now() + work_duration;
+	tn->log(10, SSTR(*this << "took lease until " << work_period_end));
+      }      // if the period has advanced, we can't use the existing marker
       if (sync_marker.realm_epoch < realm_epoch) {
         ldpp_dout(sync_env->dpp, 4) << "clearing marker=" << sync_marker.marker
             << " from old realm_epoch=" << sync_marker.realm_epoch
@@ -1738,6 +1779,8 @@ public:
         sync_marker.realm_epoch = realm_epoch;
         sync_marker.marker.clear();
       }
+      */
+
       mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
                                                          sync_env->shard_obj_name(shard_id),
@@ -1752,10 +1795,11 @@ public:
        */
       marker = max_marker = sync_marker.marker;
       /* inc sync */
+      work_period_end = ceph::coarse_mono_clock::now() + work_duration;
       do {
         if (!lease_cr->is_locked()) {
           lost_lock = true;
-          tn->log(1, "lease is lost, abort");
+          tn->log(10, "lost lease due to expiration");
           break;
         }
 #define INCREMENTAL_MAX_ENTRIES 100
@@ -1838,6 +1882,11 @@ public:
           tn->log(10, SSTR(*this << ": done with period"));
           break;
         }
+  if(ceph::coarse_mono_clock::now() >= work_period_end)
+  {
+    ldpp_dout(sync_env->dpp, 20) << "metadata sync work period end releasing lock" << dendl;
+    yield lease_cr->release_lock();
+  }
 	if (mdlog_marker == max_marker && can_adjust_marker) {
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 	  yield wait(utime_t(cct->_conf->rgw_meta_sync_poll_interval, 0));
@@ -1852,7 +1901,6 @@ public:
       }
 
       yield lease_cr->go_down();
-
       drain_all();
 
       if (lost_lock) {
@@ -1865,7 +1913,6 @@ public:
 
       return set_cr_done();
     }
-    /* TODO */
     return 0;
   }
 };
@@ -1895,14 +1942,16 @@ public:
     : RGWBackoffControlCR(_sync_env->cct, exit_on_error), sync_env(_sync_env),
       pool(_pool), period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
-      period_marker(std::move(period_marker)) {
+      period_marker(std::move(period_marker))
+     {
     tn = sync_env->sync_tracer->add_node(_tn_parent, "shard",
                                          std::to_string(shard_id));
-  }
+  };
 
   RGWCoroutine *alloc_cr() override {
     return new RGWMetaSyncShardCR(sync_env, pool, period, realm_epoch, mdlog,
-                                  shard_id, sync_marker, period_marker, backoff_ptr(), tn);
+                                  shard_id, sync_marker, period_marker,
+                                  backoff_ptr(), tn);
   }
 
   RGWCoroutine *alloc_finisher_cr() override {
@@ -1934,7 +1983,8 @@ class RGWMetaSyncCR : public RGWCoroutine {
 
 public:
   RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, const RGWPeriodHistory::Cursor &cursor,
-                const rgw_meta_sync_status& _sync_status, RGWSyncTraceNodeRef& _tn)
+                const rgw_meta_sync_status& _sync_status, 
+                RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       pool(sync_env->store->svc()->zone->get_zone_params().log_pool),
       cursor(cursor), sync_status(_sync_status), tn(_tn) {}
@@ -1990,11 +2040,10 @@ public:
                 continue;
               }
             }
-
             using ShardCR = RGWMetaSyncShardControlCR;
             auto cr = new ShardCR(sync_env, pool, period_id, realm_epoch,
                                   mdlog, shard_id, marker,
-                                  std::move(period_marker), tn);
+                                  std::move(period_marker), tn);     
             auto stack = spawn(cr, false);
             shard_crs[shard_id] = RefPair{cr, stack};
           }
@@ -2234,8 +2283,6 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
     ldpp_dout(dpp, -1) << "ERROR: can't sync, mismatch between num shards, master num_shards=" << mdlog_info.num_shards << " local num_shards=" << num_shards << dendl;
     return -EINVAL;
   }
-
-  // construct and start the bid manager for sync fairness
   const auto& control_pool = store->svc()->zone->get_zone_params().control_pool;
   auto control_obj = rgw_raw_obj{control_pool, meta_sync_bids_oid};
 
@@ -2243,9 +2290,16 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
       store, control_obj, num_shards);
   r = bid_manager->start();
   if (r < 0) {
+    tn->log(0, SSTR("ERROR: failed to start bidding manager " << r));
     return r;
   }
   sync_env.bid_manager = bid_manager.get();
+  auto notifyrgws = sync_env.bid_manager->notify_cr();
+  r = run(dpp, notifyrgws);
+  if(r < 0) {
+    tn->log(0, SSTR("ERROR: failed to sync bidding information " << r));
+    return r;
+  } 
 
   RGWPeriodHistory::Cursor cursor;
   do {
@@ -2284,11 +2338,13 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
         if (r < 0) {
           return r;
         }
-        meta_sync_cr = new RGWMetaSyncCR(&sync_env, cursor, sync_status, tn);
-        r = run(dpp, meta_sync_cr);
-        if (r < 0) {
-          tn->log(0, "ERROR: failed to fetch all metadata keys");
-          return r;
+        {
+          meta_sync_cr = new RGWMetaSyncCR(&sync_env, cursor, sync_status, tn);
+          r = run(dpp, meta_sync_cr);
+	        if (r < 0) {
+	          tn->log(0, "ERROR: failed to fetch all metadata keys");
+	          return r;
+	        }
         }
         break;
       default:
@@ -2579,4 +2635,3 @@ void rgw_sync_error_info::dump(Formatter *f) const {
   encode_json("error_code", error_code, f);
   encode_json("message", message, f);
 }
-

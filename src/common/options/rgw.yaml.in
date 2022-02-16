@@ -2429,7 +2429,7 @@ options:
 - name: rgw_sync_lease_period
   type: int
   level: dev
-  default: 2_min
+  default: 10_min
   services:
   - rgw
   with_legacy: true
@@ -2442,6 +2442,20 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_sync_work_period
+  type: uint
+  level: advanced
+  desc: Sync work period length
+  long_desc: Time in seconds a shard sync process will work before giving up lock.
+  default: 180
+  min: 60
+  services:
+  - rgw
+  with_legacy: true
+
+
+
+
 - name: rgw_sync_log_trim_max_buckets
   type: int
   level: advanced
