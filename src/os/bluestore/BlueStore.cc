@@ -18377,6 +18377,13 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   // the easiest way to achieve it is to make sure db is closed
   ceph_assert(db == nullptr);
   utime_t  start_time = ceph_clock_now();
+
+#if 1
+  // remove me - try to prove a point!
+  //cct->_conf->bluefs_compact_log_sync = true;
+  bluefs->compact_log();
+#endif
+
   int ret = 0;
   // we need the label when tracing
   bluestore_bdev_label_t label;
@@ -18407,9 +18414,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
 
 #if 1
-  // remove me - try to prove a point!
-  //cct->_conf->bluefs_compact_log_sync = true;
-  bluefs->compact_log();
+  bluefs->sync_metadata(false);
 #endif
   unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
   if (!allocator) {
