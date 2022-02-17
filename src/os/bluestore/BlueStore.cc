@@ -18401,6 +18401,11 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   uint64_t allocated = p_handle->file->fnode.get_allocated();
   dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
 
+#if 1
+  // remove me - try to prove a point!
+  //cct->_conf->bluefs_compact_log_sync = true;
+  bluefs->compact_log();
+#endif
   unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
   if (!allocator) {
     bluefs->close_writer(p_handle);
