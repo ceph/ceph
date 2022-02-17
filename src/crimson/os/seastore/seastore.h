@@ -22,6 +22,7 @@
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
+#include "crimson/os/seastore/object_data_handler.h"
 
 namespace crimson::os::seastore {
 
@@ -268,6 +269,13 @@ private:
       });
     });
   }
+
+  using _fiemap_ret = ObjectDataHandler::fiemap_ret;
+  _fiemap_ret _fiemap(
+    Transaction &t,
+    Onode &onode,
+    uint64_t off,
+    uint64_t len) const;
 
   using _omap_get_value_iertr = OMapManager::base_iertr::extend<
     crimson::ct_error::enodata
