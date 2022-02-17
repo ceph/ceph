@@ -7685,6 +7685,8 @@ int BlueStore::_mount()
 
 int BlueStore::umount()
 {
+  // move bluefs compaction to synchronous mode
+  cct->_conf->bluefs_compact_log_sync = true;
   ceph_assert(_kv_only || mounted);
   _osr_drain_all();
 
@@ -7702,7 +7704,7 @@ int BlueStore::umount()
 #endif
     dout(20) << __func__ << " stopping kv thread" << dendl;
     _kv_stop();
-    // skip cache cleanup step on fast shutdown 
+    // skip cache cleanup step on fast shutdown
     if (likely(!m_fast_shutdown)) {
       _shutdown_cache();
     }
