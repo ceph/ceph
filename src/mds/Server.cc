@@ -3988,7 +3988,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   // value for them.  (currently this matters for xattrs and inline data)
   mdr->getattr_caps = mask;
 
-  mds->balancer->hit_inode(ref, META_POP_IRD, req->get_source().num());
+  mds->balancer->hit_inode(ref, META_POP_IRD);
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
@@ -4387,8 +4387,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if (cmode & CEPH_FILE_MODE_WR)
     mds->balancer->hit_inode(cur, META_POP_IWR);
   else
-    mds->balancer->hit_inode(cur, META_POP_IRD,
-			     mdr->client_request->get_source().num());
+    mds->balancer->hit_inode(cur, META_POP_IRD);
 
   CDentry *dn = 0;
   if (req->get_dentry_wanted()) {
@@ -4871,7 +4870,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   mdr->reply_extra_bl = dirbl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(dir, META_POP_READDIR, -1, numfiles);
+  mds->balancer->hit_dir(dir, META_POP_READDIR, numfiles);
   
   // reply
   mdr->tracei = diri;
