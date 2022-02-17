@@ -1870,40 +1870,6 @@ inline std::ostream& operator<<(std::ostream& out, const mds_load_t& load)
              << ">";
 }
 
-class load_spread_t {
-public:
-  using time = DecayCounter::time;
-  using clock = DecayCounter::clock;
-  static const int MAX = 4;
-
-  load_spread_t(const DecayRate &rate) : count(rate)
-  {}
-
-  load_spread_t() = delete;
-
-  double hit(int who) {
-    for (int i=0; i<n; i++)
-      if (last[i] == who) 
-	return count.get_last();
-
-    // we're new(ish)
-    last[p++] = who;
-    if (n < MAX) n++;
-    if (n == 1) return 0.0;
-
-    if (p == MAX) p = 0;
-
-    return count.hit();
-  }
-  double get() const {
-    return count.get();
-  }
-
-  std::array<int, MAX> last = {-1, -1, -1, -1};
-  int p = 0, n = 0;
-  DecayCounter count;
-};
-
 // ================================================================
 typedef std::pair<mds_rank_t, mds_rank_t> mds_authority_t;
 
