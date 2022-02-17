@@ -3656,6 +3656,7 @@ public:
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
   int  push_allocation_to_rocksdb();
   int  read_allocation_from_drive_for_bluestore_tool();
+  int  verify_shared_alloc_against_onodes_allocation_info();
 #endif
 private:
 #define MAX_BLOBS_IN_ONODE 128

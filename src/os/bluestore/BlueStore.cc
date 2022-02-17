@@ -7574,21 +7574,6 @@ bool BlueStore::has_null_manager()
 int BlueStore::_mount()
 {
   dout(5) << __func__ << "NCB:: path " << path << dendl;
-
-  // GBH: REMOVE-ME
-  // Verify that allocation-file content matches RocksDB state
-  // Temporary solution to debug the safe-fast-shutdown
-  // cct->_conf->bluestore_qfsck_on_mount should be changed to false on GA
-  {
-    static bool perform_bluestore_qfsck = true;
-    if (perform_bluestore_qfsck && cct->_conf->bluestore_qfsck_on_mount) {
-      //perform_bluestore_qfsck = false;
-      dout(0) << __func__ << "::NCB::bluestore_qfsck_on_mount was initiated ... " << dendl;
-      int ret = read_allocation_from_drive_for_bluestore_tool();
-      ceph_assert(ret == 0);
-    }
-  }
-
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     dout(5) << __func__ << "::NCB::calling fsck()" << dendl;
@@ -18690,6 +18675,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
 }
 
 //-----------------------------------------------------------------------------------
+// we are called from open_db_and_around->init_alloc() when DB is in Read-Only mode
 int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint64_t *bytes)
 {
   utime_t    start = ceph_clock_now();
@@ -18704,6 +18690,26 @@ int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint6
   copy_allocator(temp_allocator.get(), dest_allocator, &num_entries);
   utime_t duration = ceph_clock_now() - start;
   dout(5) << "restored in " << duration << " seconds, num_entries=" << num_entries << dendl;
+
+  // GBH: REMOVE-ME
+  // Verify that allocation-file content matches RocksDB state
+  // Temporary solution to debug the safe-fast-shutdown
+  // cct->_conf->bluestore_qfsck_on_mount should be changed to false on GA
+  {
+    static bool perform_bluestore_qfsck = true;
+    if (perform_bluestore_qfsck && cct->_conf->bluestore_qfsck_on_mount) {
+      perform_bluestore_qfsck = false;
+      dout(0) << __func__ << "::NCB::bluestore_qfsck_on_mount was initiated ... " << dendl;
+      int ret = _open_collections();
+      if (ret < 0) {
+	return ret;
+      }
+
+      ceph_assert(verify_shared_alloc_against_onodes_allocation_info() == 0);
+      _shutdown_cache(); // ????
+    }
+  }
+
   return ret;
 }
 
@@ -19106,11 +19112,58 @@ int BlueStore::add_existing_bluefs_allocation(Allocator* allocator, read_alloc_s
 }
 
 //---------------------------------------------------------
+int BlueStore::verify_shared_alloc_against_onodes_allocation_info()
+{
+  int                ret = 0;
+  utime_t            duration;
+  read_alloc_stats_t stats = {};
+  utime_t            start = ceph_clock_now();
+
+  auto allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
+  //reconstruct allocations into a temp simple-bitmap and copy into allocator
+  {
+    SimpleBitmap sbmap(cct, div_round_up(bdev->get_size(), min_alloc_size));
+    ret = reconstruct_allocations(&sbmap, stats);
+    if (ret != 0) {
+      return ret;
+    }
+    copy_simple_bitmap_to_allocator(&sbmap, allocator.get(), min_alloc_size);
+  }
+
+  // add allocation space used by the bluefs itself
+  ret = add_existing_bluefs_allocation(allocator.get(), stats);
+  if (ret < 0) {
+    return ret;
+  }
+
+  duration = ceph_clock_now() - start;
+  stats.insert_count = 0;
+  auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
+    stats.insert_count++;
+  };
+  allocator->dump(count_entries);
+  uint64_t memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
+  ret = compare_allocators(allocator.get(), alloc, stats.insert_count, memory_target);
+  if (ret == 0) {
+    dout(5) << "Allocator drive - file integrity check OK" << dendl;
+  } else {
+    derr << "FAILURE. Allocator from file and allocator from metadata differ::ret=" << ret << dendl;
+  }
+
+  dout(1) << "Allocation Recovery was completed in " << duration
+	  << " seconds; insert_count=" << stats.insert_count
+	  << "; extent_count=" << stats.extent_count << dendl;
+
+  dout(1) << stats << dendl;
+
+  return ret;
+}
+
+//---------------------------------------------------------
 int BlueStore::read_allocation_from_drive_for_bluestore_tool()
 {
   dout(5) << __func__ << dendl;
   int ret = 0;
-  uint64_t memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
   ret = _open_db_and_around(true, false);
   if (ret < 0) {
     return ret;
@@ -19122,51 +19175,11 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
     return ret;
   }
 
-  utime_t            duration;
-  read_alloc_stats_t stats = {};
-  utime_t            start = ceph_clock_now();
+  ret = verify_shared_alloc_against_onodes_allocation_info();
 
-  auto shutdown_cache = make_scope_guard([&] {
-    dout(1) << "Allocation Recovery was completed in " << duration
-	    << " seconds; insert_count=" << stats.insert_count
-	    << "; extent_count=" << stats.extent_count << dendl;
-    _shutdown_cache();
-    _close_db_and_around();
-  });
+  _shutdown_cache();
+  _close_db_and_around();
 
-  {
-    auto allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
-    //reconstruct allocations into a temp simple-bitmap and copy into allocator
-    {
-      SimpleBitmap sbmap(cct, div_round_up(bdev->get_size(), min_alloc_size));
-      ret = reconstruct_allocations(&sbmap, stats);
-      if (ret != 0) {
-	return ret;
-      }
-      copy_simple_bitmap_to_allocator(&sbmap, allocator.get(), min_alloc_size);
-    }
-
-    // add allocation space used by the bluefs itself
-    ret = add_existing_bluefs_allocation(allocator.get(), stats);
-    if (ret < 0) {
-      return ret;
-    }
-
-    duration = ceph_clock_now() - start;
-    stats.insert_count = 0;
-    auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
-      stats.insert_count++;
-    };
-    allocator->dump(count_entries);
-    ret = compare_allocators(allocator.get(), alloc, stats.insert_count, memory_target);
-    if (ret == 0) {
-      dout(5) << "Allocator drive - file integrity check OK" << dendl;
-    } else {
-      derr << "FAILURE. Allocator from file and allocator from metadata differ::ret=" << ret << dendl;
-    }
-  }
-
-  dout(1) << stats << dendl;
   return ret;
 }
 
