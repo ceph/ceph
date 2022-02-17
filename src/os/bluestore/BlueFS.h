@@ -427,7 +427,7 @@ private:
   int _flush_range_F(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
-  int _flush_special(FileWriter *h);
+  uint64_t _flush_special(FileWriter *h);
   int _fsync(FileWriter *h);
 
 #ifdef HAVE_LIBAIO
