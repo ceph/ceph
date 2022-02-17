@@ -92,9 +92,39 @@ struct seastore_test_t :
         std::move(t)).get0();
     }
 
+    void truncate(
+      CTransaction &t,
+      uint64_t off) {
+      t.truncate(cid, oid, off);
+    }
+
+    void truncate(
+      SeaStore &seastore,
+      uint64_t off) {
+      CTransaction t;
+      truncate(t, off);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
+    std::map<uint64_t, uint64_t> fiemap(
+      SeaStore &seastore,
+      uint64_t off,
+      uint64_t len) {
+      return seastore.fiemap(coll, oid, off, len).get0();
+    }
+
+    bufferlist readv(
+      SeaStore &seastore,
+      interval_set<uint64_t>&m) {
+      return seastore.readv(coll, oid, m).unsafe_get0();
+    }
+
     void remove(
       CTransaction &t) {
       t.remove(cid, oid);
+      t.remove_collection(cid);
     }
 
     void remove(
@@ -516,5 +546,100 @@ TEST_F(seastore_test_t, simple_extent_test)
       1024,
       1024);
     test_obj.check_size(*seastore);
+  });
+}
+
+TEST_F(seastore_test_t, fiemap_empty)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
+    test_obj.truncate(*seastore, 100000);
+
+    std::map<uint64_t, uint64_t> m;
+    m = test_obj.fiemap(*seastore, 0, 100000);
+    EXPECT_TRUE(m.empty());
+
+    test_obj.remove(*seastore);
+  });
+}
+
+TEST_F(seastore_test_t, fiemap_holes)
+{
+  run_async([this] {
+    const uint64_t MAX_EXTENTS = 100;
+
+    // large enough to ensure that seastore will allocate each write seperately
+    const uint64_t SKIP_STEP = 16 << 10;
+    auto &test_obj = get_object(make_oid(0));
+    bufferlist bl;
+    bl.append("foo");
+
+    test_obj.touch(*seastore);
+    for (uint64_t i = 0; i < MAX_EXTENTS; i++) {
+      test_obj.write(*seastore, SKIP_STEP * i, bl);
+    }
+
+    { // fiemap test from 0 to SKIP_STEP * (MAX_EXTENTS - 1) + 3
+      auto m = test_obj.fiemap(
+	*seastore, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3);
+      ASSERT_EQ(m.size(), MAX_EXTENTS);
+      for (uint64_t i = 0; i < MAX_EXTENTS; i++) {
+	ASSERT_TRUE(m.count(SKIP_STEP * i));
+	ASSERT_GE(m[SKIP_STEP * i], bl.length());
+      }
+    }
+
+    { // fiemap test from SKIP_STEP to SKIP_STEP * (MAX_EXTENTS - 2) + 3
+      auto m = test_obj.fiemap(
+	*seastore, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 3) + 3);
+      ASSERT_EQ(m.size(), MAX_EXTENTS - 2);
+      for (uint64_t i = 1; i < MAX_EXTENTS - 1; i++) {
+	ASSERT_TRUE(m.count(SKIP_STEP * i));
+	ASSERT_GE(m[SKIP_STEP * i], bl.length());
+      }
+    }
+
+    { // fiemap test SKIP_STEP + 1 to 2 * SKIP_STEP + 1 (partial overlap)
+      auto m = test_obj.fiemap(
+	*seastore, SKIP_STEP + 1, SKIP_STEP + 1);
+      ASSERT_EQ(m.size(), 2);
+      ASSERT_EQ(m.begin()->first, SKIP_STEP + 1);
+      ASSERT_GE(m.begin()->second, bl.length());
+      ASSERT_LE(m.rbegin()->first, (2 * SKIP_STEP) + 1);
+      ASSERT_EQ(m.rbegin()->first + m.rbegin()->second, 2 * SKIP_STEP + 2);
+    }
+
+    test_obj.remove(*seastore);
+  });
+}
+
+TEST_F(seastore_test_t, sparse_read)
+{
+  run_async([this] {
+    const uint64_t MAX_EXTENTS = 100;
+    const uint64_t SKIP_STEP = 16 << 10;
+    auto &test_obj = get_object(make_oid(0));
+    bufferlist wbl;
+    wbl.append("foo");
+
+    test_obj.touch(*seastore);
+    for (uint64_t i = 0; i < MAX_EXTENTS; i++) {
+      test_obj.write(*seastore, SKIP_STEP * i, wbl);
+    }
+    interval_set<uint64_t> m;
+    m = interval_set<uint64_t>(
+	test_obj.fiemap(*seastore, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3));
+    ASSERT_TRUE(!m.empty());
+    uint64_t off = 0;
+    auto rbl = test_obj.readv(*seastore, m);
+
+    for (auto &&miter : m) {
+      bufferlist subl;
+      subl.substr_of(rbl, off, std::min(miter.second, uint64_t(wbl.length())));
+      ASSERT_TRUE(subl.contents_equal(wbl));
+      off += miter.second;
+    }
+    test_obj.remove(*seastore);
   });
 }
