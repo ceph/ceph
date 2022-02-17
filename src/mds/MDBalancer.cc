@@ -1257,7 +1257,6 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
     double pop_sp = dir->pop_spread.get();
     dir_pop += pop_sp * 10;
 
-    //if (dir->ino() == inodeno_t(0x10000000002))
     if (pop_sp > 0) {
       dout(20) << type << " pop " << dir_pop << " spread " << pop_sp
 	      << " " << dir->pop_spread.last[0]
