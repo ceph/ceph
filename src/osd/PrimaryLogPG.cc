@@ -4692,6 +4692,8 @@ int PrimaryLogPG::trim_object(
 
   PGTransaction *t = ctx->op_t.get();
 
+  int64_t num_objects_before_trim = ctx->delta_stats.num_objects;
+
   if (new_snaps.empty()) {
     // remove clone
     dout(10) << coid << " snaps " << old_snaps << " -> "
@@ -4879,6 +4881,13 @@ int PrimaryLogPG::trim_object(
     t->setattrs(head_oid, attrs);
   }
 
+  // Stats reporting - Set number of objects trimmed
+  if (num_objects_before_trim > ctx->delta_stats.num_objects) {
+    int64_t num_objects_trimmed =
+      num_objects_before_trim - ctx->delta_stats.num_objects;
+    add_objects_trimmed_count(num_objects_trimmed);
+  }
+
   *ctxp = std::move(ctx);
   return 0;
 }
@@ -4894,6 +4903,7 @@ void PrimaryLogPG::kick_snap_trim()
       dout(10) << __func__ << ": nosnaptrim set, not kicking" << dendl;
     } else {
       dout(10) << __func__ << ": clean and snaps to trim, kicking" << dendl;
+      reset_objects_trimmed();
       snap_trimmer_machine.process_event(KickTrim());
     }
   }

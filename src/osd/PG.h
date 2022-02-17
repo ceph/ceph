@@ -553,6 +553,30 @@ public:
   uint64_t get_snap_trimq_size() const override {
     return snap_trimq.size();
   }
+
+  static void add_objects_trimmed_count(
+    int64_t count, pg_stat_t &stats) {
+    stats.objects_trimmed += count;
+  }
+
+  void add_objects_trimmed_count(int64_t count) {
+    recovery_state.update_stats_wo_resched(
+      [=](auto &history, auto &stats) {
+        add_objects_trimmed_count(count, stats);
+      });
+  }
+
+  static void reset_objects_trimmed(pg_stat_t &stats) {
+    stats.objects_trimmed = 0;
+  }
+
+  void reset_objects_trimmed() {
+    recovery_state.update_stats_wo_resched(
+      [=](auto &history, auto &stats) {
+        reset_objects_trimmed(stats);
+      });
+  }
+
   unsigned get_target_pg_log_entries() const override;
 
   void clear_publish_stats() override;
