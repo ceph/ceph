@@ -45,7 +45,7 @@ private:
    *                                   m_first_valid_offset               m_max_offset
    */
 
-  /* offset all align to MIN_WRITE_ALLOC_SIZE */
+  /* offset all align to PMEM_MIN_WRITE_ALLOC_SIZE */
   uint64_t m_max_offset = 0;             /* the max aligned offset */
   uint64_t m_first_data_offset = 0;      /* skip superblock and entry area */
   uint64_t m_first_free_offset = 0;      /* for alloc, data head +1 */

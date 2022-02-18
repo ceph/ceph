@@ -23,7 +23,7 @@ void C_WriteRequest<T>::setup_buffer_resources(
 
   for (auto &extent : this->image_extents) {
     *bytes_cached += extent.second;
-    *bytes_allocated += round_up_to(extent.second, MIN_WRITE_ALLOC_SSD_SIZE);
+    *bytes_allocated += round_up_to(extent.second, SSD_MIN_WRITE_ALLOC_SIZE);
   }
   *bytes_dirtied = *bytes_cached;
 }
@@ -47,7 +47,7 @@ void C_WriteSameRequest<T>::setup_buffer_resources(
   *number_log_entries = 1;
   *bytes_dirtied = this->image_extents[0].second;
   *bytes_cached = this->bl.length();
-  *bytes_allocated = round_up_to(*bytes_cached, MIN_WRITE_ALLOC_SSD_SIZE);
+  *bytes_allocated = round_up_to(*bytes_cached, SSD_MIN_WRITE_ALLOC_SIZE);
 }
 
 } // namespace ssd

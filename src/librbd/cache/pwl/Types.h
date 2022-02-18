@@ -163,8 +163,8 @@ const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
 const uint64_t MAX_WRITES_PER_SYNC_POINT = 256;
 const uint64_t MAX_BYTES_PER_SYNC_POINT = (1024 * 1024 * 8);
 
-const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
-const uint32_t MIN_WRITE_ALLOC_SSD_SIZE = 4096;
+const uint32_t PMEM_MIN_WRITE_ALLOC_SIZE = 4096;
+const uint32_t SSD_MIN_WRITE_ALLOC_SIZE = 4096;
 const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
 
 /**** Write log entries ****/

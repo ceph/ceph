@@ -34,13 +34,13 @@ using namespace std;
 using namespace librbd::cache::pwl;
 
 static bool is_valid_pool_superblock(const WriteLogSuperblock& superblock) {
-  return superblock.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
+  return superblock.pool_size % SSD_MIN_WRITE_ALLOC_SIZE == 0 &&
          superblock.first_valid_entry >= DATA_RING_BUFFER_OFFSET &&
          superblock.first_valid_entry < superblock.pool_size &&
-         superblock.first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
+         superblock.first_valid_entry % SSD_MIN_WRITE_ALLOC_SIZE == 0 &&
          superblock.first_free_entry >= DATA_RING_BUFFER_OFFSET &&
          superblock.first_free_entry < superblock.pool_size &&
-         superblock.first_free_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0;
+         superblock.first_free_entry % SSD_MIN_WRITE_ALLOC_SIZE == 0;
 }
 
 template <typename I>
@@ -116,7 +116,7 @@ int WriteLog<I>::create_and_open_bdev() {
     return r;
   }
 
-  ceph_assert(this->m_log_pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+  ceph_assert(this->m_log_pool_size % SSD_MIN_WRITE_ALLOC_SIZE == 0);
   if (bdev->get_size() != this->m_log_pool_size) {
     lderr(cct) << "size mismatch: bdev size " << bdev->get_size()
                << " (block size " << bdev->get_block_size()
@@ -167,12 +167,12 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     m_cache_state->empty = true;
     /* new pool, calculate and store metadata */
 
-    /* Keep ring buffer at least MIN_WRITE_ALLOC_SSD_SIZE bytes free.
+    /* Keep ring buffer at least SSD_MIN_WRITE_ALLOC_SIZE bytes free.
      * In this way, when all ring buffer spaces are allocated,
      * m_first_free_entry and m_first_valid_entry will not be equal.
      * Equal only means the cache is empty. */
     this->m_bytes_allocated_cap = this->m_log_pool_size -
-        DATA_RING_BUFFER_OFFSET - MIN_WRITE_ALLOC_SSD_SIZE;
+        DATA_RING_BUFFER_OFFSET - SSD_MIN_WRITE_ALLOC_SIZE;
     /* Log ring empty */
     m_first_free_entry = DATA_RING_BUFFER_OFFSET;
     m_first_valid_entry = DATA_RING_BUFFER_OFFSET;
@@ -181,7 +181,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     new_superblock->layout_version = SSD_LAYOUT_VERSION;
     new_superblock->pool_size = this->m_log_pool_size;
     new_superblock->flushed_sync_gen = this->m_flushed_sync_gen;
-    new_superblock->block_size = MIN_WRITE_ALLOC_SSD_SIZE;
+    new_superblock->block_size = SSD_MIN_WRITE_ALLOC_SIZE;
     new_superblock->first_free_entry = m_first_free_entry;
     new_superblock->first_valid_entry = m_first_valid_entry;
     new_superblock->num_log_entries = 0;
@@ -207,7 +207,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     bufferlist bl;
     SuperBlockWrapper superblock_wrapper;
     ::IOContext ioctx(cct, nullptr);
-    r = bdev->read(0, MIN_WRITE_ALLOC_SSD_SIZE, &bl, &ioctx, false);
+    r = bdev->read(0, SSD_MIN_WRITE_ALLOC_SIZE, &bl, &ioctx, false);
     if (r < 0) {
       lderr(cct) << "read ssd cache superblock failed " << dendl;
       goto err_close_bdev;
@@ -228,9 +228,9 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
                  << dendl;
       goto err_close_bdev;
     }
-    if (m_superblock.block_size != MIN_WRITE_ALLOC_SSD_SIZE) {
+    if (m_superblock.block_size != SSD_MIN_WRITE_ALLOC_SIZE) {
       lderr(cct) << "pool block size is " << m_superblock.block_size
-                 << " expected " << MIN_WRITE_ALLOC_SSD_SIZE
+                 << " expected " << SSD_MIN_WRITE_ALLOC_SIZE
                  << dendl;
       goto err_close_bdev;
     }
@@ -241,7 +241,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
     this->m_first_free_entry = m_superblock.first_free_entry;
     this->m_bytes_allocated_cap = this->m_log_pool_size -
                                   DATA_RING_BUFFER_OFFSET -
-                                  MIN_WRITE_ALLOC_SSD_SIZE;
+                                  SSD_MIN_WRITE_ALLOC_SIZE;
 
     load_existing_entries(later);
     m_cache_state->clean = this->m_dirty_log_entries.empty();
@@ -293,7 +293,7 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
     // read the entries from SSD cache and decode
     bufferlist bl_entries;
     ::IOContext ioctx_entry(cct, nullptr);
-    bdev->read(next_log_pos, MIN_WRITE_ALLOC_SSD_SIZE, &bl_entries,
+    bdev->read(next_log_pos, SSD_MIN_WRITE_ALLOC_SIZE, &bl_entries,
                &ioctx_entry, false);
     std::vector<WriteLogCacheEntry> ssd_log_entries;
     auto pl = bl_entries.cbegin();
@@ -309,10 +309,10 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
       log_entry->log_entry_index = curr_log_pos;
       log_entry->completed = true;
       m_log_entries.push_back(log_entry);
-      next_log_pos += round_up_to(it->write_bytes, MIN_WRITE_ALLOC_SSD_SIZE);
+      next_log_pos += round_up_to(it->write_bytes, SSD_MIN_WRITE_ALLOC_SIZE);
     }
     // along with the write_bytes, add control block size too
-    next_log_pos += MIN_WRITE_ALLOC_SSD_SIZE;
+    next_log_pos += SSD_MIN_WRITE_ALLOC_SIZE;
     if (next_log_pos >= this->m_log_pool_size) {
       next_log_pos = next_log_pos % this->m_log_pool_size + DATA_RING_BUFFER_OFFSET;
     }
@@ -348,7 +348,7 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
                               &bytes_allocated, &num_log_entries);
 
   if (num_log_entries) {
-    bytes_allocated += num_log_entries * MIN_WRITE_ALLOC_SSD_SIZE;
+    bytes_allocated += num_log_entries * SSD_MIN_WRITE_ALLOC_SIZE;
     num_log_entries = 0;
   }
 
@@ -711,11 +711,11 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             ldout(cct, 20) << "The log entry is " << *(*it) << dendl;
             if ((*it)->log_entry_index < control_block_pos) {
               ceph_assert((*it)->log_entry_index ==
-                  (control_block_pos + data_length + MIN_WRITE_ALLOC_SSD_SIZE) %
+                  (control_block_pos + data_length + SSD_MIN_WRITE_ALLOC_SIZE) %
                   this->m_log_pool_size + DATA_RING_BUFFER_OFFSET);
             } else {
               ceph_assert((*it)->log_entry_index == control_block_pos +
-                  data_length + MIN_WRITE_ALLOC_SSD_SIZE);
+                  data_length + SSD_MIN_WRITE_ALLOC_SIZE);
             }
             break;
           } else {
@@ -752,7 +752,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
             retiring_subentries.end());
 
         first_valid_entry = control_block_pos + data_length +
-            MIN_WRITE_ALLOC_SSD_SIZE;
+            SSD_MIN_WRITE_ALLOC_SIZE;
         if (first_valid_entry >= this->m_log_pool_size) {
           first_valid_entry = first_valid_entry % this->m_log_pool_size +
               DATA_RING_BUFFER_OFFSET;
@@ -791,7 +791,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           ceph_assert(entry->log_entry_index != 0);
           if (entry->log_entry_index != former_log_pos ) {
             // Space for control blocks
-            allocated_bytes += MIN_WRITE_ALLOC_SSD_SIZE;
+            allocated_bytes += SSD_MIN_WRITE_ALLOC_SIZE;
             former_log_pos = entry->log_entry_index;
           }
           if (entry->is_write_entry()) {
@@ -803,7 +803,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
         {
           std::lock_guard locker(m_lock);
           m_first_valid_entry = first_valid_entry;
-          ceph_assert(m_first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+          ceph_assert(m_first_valid_entry % SSD_MIN_WRITE_ALLOC_SIZE == 0);
           ceph_assert(this->m_bytes_allocated >= allocated_bytes);
           this->m_bytes_allocated -= allocated_bytes;
           ceph_assert(this->m_bytes_cached >= cached_bytes);
@@ -861,7 +861,7 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
     if (log_entries.size() == CONTROL_BLOCK_MAX_LOG_ENTRIES ||
         span_payload_len >= SPAN_MAX_DATA_LEN) {
       if (log_entries.size() > 1) {
-        bytes_to_free += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
+        bytes_to_free += (log_entries.size() - 1) * SSD_MIN_WRITE_ALLOC_SIZE;
       }
       write_log_entries(log_entries, aio, new_first_free_entry);
       log_entries.clear();
@@ -872,7 +872,7 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
   }
   if (!span_payload_len || !log_entries.empty()) {
     if (log_entries.size() > 1) {
-      bytes_to_free += (log_entries.size() - 1) * MIN_WRITE_ALLOC_SSD_SIZE;
+      bytes_to_free += (log_entries.size() - 1) * SSD_MIN_WRITE_ALLOC_SIZE;
     }
     write_log_entries(log_entries, aio, new_first_free_entry);
   }
@@ -893,11 +893,11 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
   ldout(m_image_ctx.cct, 20) << "pos=" << *pos << dendl;
   ceph_assert(*pos >= DATA_RING_BUFFER_OFFSET &&
               *pos < this->m_log_pool_size &&
-              *pos % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+              *pos % SSD_MIN_WRITE_ALLOC_SIZE == 0);
 
   // The first block is for log entries
   uint64_t control_block_pos = *pos;
-  *pos += MIN_WRITE_ALLOC_SSD_SIZE;
+  *pos += SSD_MIN_WRITE_ALLOC_SIZE;
   if (*pos == this->m_log_pool_size) {
     *pos = DATA_RING_BUFFER_OFFSET;
   }
@@ -927,10 +927,10 @@ void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
   //aio write
   bufferlist bl;
   encode(persist_log_entries, bl);
-  ceph_assert(bl.length() <= MIN_WRITE_ALLOC_SSD_SIZE);
-  bl.append_zero(MIN_WRITE_ALLOC_SSD_SIZE - bl.length());
+  ceph_assert(bl.length() <= SSD_MIN_WRITE_ALLOC_SIZE);
+  bl.append_zero(SSD_MIN_WRITE_ALLOC_SIZE - bl.length());
   bl.append(data_bl);
-  ceph_assert(bl.length() % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+  ceph_assert(bl.length() % SSD_MIN_WRITE_ALLOC_SIZE == 0);
   if (control_block_pos + bl.length() > this->m_log_pool_size) {
     //exceeds border, need to split
     uint64_t size = bl.length();
@@ -1048,8 +1048,8 @@ void WriteLog<I>::update_superblock(std::shared_ptr<WriteLogSuperblock> superblo
   SuperBlockWrapper superblock_wrapper;
   superblock_wrapper.superblock = *superblock;
   encode(superblock_wrapper, bl);
-  bl.append_zero(MIN_WRITE_ALLOC_SSD_SIZE - bl.length());
-  ceph_assert(bl.length() % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+  bl.append_zero(SSD_MIN_WRITE_ALLOC_SIZE - bl.length());
+  ceph_assert(bl.length() % SSD_MIN_WRITE_ALLOC_SIZE == 0);
   bdev->aio_write(0, bl, &aio->ioc, false, WRITE_LIFE_NOT_SET);
   bdev->aio_submit(&aio->ioc);
 }
@@ -1061,8 +1061,8 @@ int WriteLog<I>::update_superblock_sync(
   SuperBlockWrapper superblock_wrapper;
   superblock_wrapper.superblock = *superblock;
   encode(superblock_wrapper, bl);
-  bl.append_zero(MIN_WRITE_ALLOC_SSD_SIZE - bl.length());
-  ceph_assert(bl.length() % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+  bl.append_zero(SSD_MIN_WRITE_ALLOC_SIZE - bl.length());
+  ceph_assert(bl.length() % SSD_MIN_WRITE_ALLOC_SIZE == 0);
   return bdev->write(0, bl, false);
 }
 
@@ -1105,7 +1105,7 @@ void WriteLog<I>::aio_read_data_blocks(
     ceph_assert(log_entry->is_write() || log_entry->is_writesame());
     uint64_t len = log_entry->is_write() ? log_entry->write_bytes :
                                            log_entry->ws_datalen;
-    uint64_t align_len = round_up_to(len, MIN_WRITE_ALLOC_SSD_SIZE);
+    uint64_t align_len = round_up_to(len, SSD_MIN_WRITE_ALLOC_SIZE);
 
     ldout(cct, 20) << "entry i=" << i << " " << log_entry->write_data_pos
                    << "~" << len << dendl;
