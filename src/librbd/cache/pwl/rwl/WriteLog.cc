@@ -140,7 +140,6 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
     this->m_first_free_entry = (this->m_first_free_entry + 1) % this->m_total_log_entries;
     auto &log_entry = operation->get_log_entry();
     log_entry->log_entry_index = entry_index;
-    log_entry->ram_entry.entry_index = entry_index;
     log_entry->cache_entry = &m_pmem_log_entries[entry_index];
     log_entry->ram_entry.set_entry_valid(true);
     m_log_entries.push_back(log_entry);
@@ -472,7 +471,6 @@ void WriteLog<I>::load_existing_entries(DeferredContexts &later) {
   while (entry_index != m_first_free_entry) {
     WriteLogCacheEntry *pmem_entry = &m_pmem_log_entries[entry_index];
     std::shared_ptr<GenericLogEntry> log_entry = nullptr;
-    ceph_assert(pmem_entry->entry_index == entry_index);
 
     this->update_entries(&log_entry, pmem_entry, missing_sync_points,
         sync_point_entries, entry_index);

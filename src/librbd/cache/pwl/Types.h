@@ -213,8 +213,6 @@ struct WriteLogCacheEntry {
   uint64_t write_data_pos = 0;  /* offset in pmem or SSD */
   uint8_t flags = 0;
   uint32_t ws_datalen = 0;  /* Length of data buffer (writesame only) */
-  uint32_t entry_index = 0; /* For debug consistency check. Can be removed if
-                             * we need the space */
   WriteLogCacheEntry(uint64_t image_offset_bytes=0, uint64_t write_bytes=0)
       : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes) {}
   BlockExtent block_extent();
@@ -300,7 +298,6 @@ struct WriteLogCacheEntry {
     denc(v.write_data_pos, p);
     denc(v.flags, p);
     denc(v.ws_datalen, p);
-    denc(v.entry_index, p);
     DENC_FINISH(p);
   }
   #endif
