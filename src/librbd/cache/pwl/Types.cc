@@ -67,7 +67,6 @@ void WriteLogCacheEntry::dump(Formatter *f) const {
   f->dump_bool("discard", is_discard());
   f->dump_bool("writesame", is_writesame());
   f->dump_unsigned("ws_datalen", ws_datalen);
-  f->dump_unsigned("entry_index", entry_index);
 }
 
 void WriteLogCacheEntry::generate_test_instances(std::list<WriteLogCacheEntry*>& ls) {
@@ -85,7 +84,6 @@ void WriteLogCacheEntry::generate_test_instances(std::list<WriteLogCacheEntry*>&
   ls.back()->set_discard(true);
   ls.back()->set_writesame(true);
   ls.back()->ws_datalen = 1;
-  ls.back()->entry_index = 1;
 }
 
 void WriteLogSuperblock::dump(Formatter *f) const {
@@ -125,8 +123,7 @@ std::ostream& operator<<(std::ostream& os,
      << ", write_sequence_number=" << entry.write_sequence_number
      << ", image_offset_bytes=" << entry.image_offset_bytes
      << ", write_bytes=" << entry.write_bytes
-     << ", ws_datalen=" << entry.ws_datalen
-     << ", entry_index=" << entry.entry_index;
+     << ", ws_datalen=" << entry.ws_datalen;
   return os;
 }
 
