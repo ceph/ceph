@@ -12,10 +12,25 @@
 
 namespace crimson::os::seastore {
 
+template <typename T>
+struct min_max_t {};
+
+template <>
+struct min_max_t<laddr_t> {
+  static constexpr laddr_t max = L_ADDR_MAX;
+  static constexpr laddr_t min = L_ADDR_MIN;
+};
+
+template <>
+struct min_max_t<paddr_t> {
+  static constexpr paddr_t max = P_ADDR_MAX;
+  static constexpr paddr_t min = P_ADDR_MIN;
+};
+
 template <typename bound_t>
 struct fixed_kv_node_meta_t {
-  bound_t begin = 0;
-  bound_t end = 0;
+  bound_t begin = min_max_t<bound_t>::min;
+  bound_t end = min_max_t<bound_t>::min;
   depth_t depth = 0;
 
   bool is_parent_of(const fixed_kv_node_meta_t &other) const {
@@ -45,7 +60,7 @@ struct fixed_kv_node_meta_t {
   }
 
   bool is_root() const {
-    return begin == 0 && end == L_ADDR_MAX;
+    return begin == min_max_t<bound_t>::min && end == min_max_t<bound_t>::max;
   }
 };
 
