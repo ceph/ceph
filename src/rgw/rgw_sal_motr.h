@@ -662,6 +662,7 @@ class MotrAtomicWriter : public Writer {
   uint64_t olh_epoch;
   const std::string& unique_tag;
   MotrObject obj;
+  MotrObject old_obj;
   uint64_t total_data_size; // for total data being uploaded
   bufferlist acc_data;  // accumulated data
   uint64_t   acc_off; // accumulated data offset
