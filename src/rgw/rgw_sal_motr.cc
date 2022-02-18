@@ -170,7 +170,7 @@ int MotrUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
 
   // Retrieve all `max` number of pairs.
   buckets.clear();
-  string user_info_iname = "motr.rgw.user.info." + info.user_id.id;
+  string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
   keys[0] = marker;
   rc = store->next_query_by_name(user_info_iname, keys, vals);
   if (rc < 0) {
@@ -337,7 +337,7 @@ static int load_user_from_idx(const DoutPrefixProvider *dpp,
   if (store->get_user_cache()->get(dpp, info.user_id.id, bl)) {
     // Cache misses
     int rc = store->do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
-                                      M0_IC_GET, info.user_id.id, bl);
+                                      M0_IC_GET, info.user_id.to_str(), bl);
     ldpp_dout(dpp, 20) << "do_idx_op_by_name() = "  << rc << dendl;
     if (rc < 0)
         return rc;
@@ -367,7 +367,7 @@ int MotrUser::load_user(const DoutPrefixProvider *dpp,
 
 int MotrUser::create_user_info_idx()
 {
-  string user_info_iname = "motr.rgw.user.info." + info.user_id.id;
+  string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
   return store->create_motr_idx_by_name(user_info_iname);
 }
 
@@ -396,11 +396,11 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
     const RGWAccessKey& k = iter->second;
     access_key = k.id;
     secret_key = k.key;
-    MotrAccessKey MGWUserKeys(access_key, secret_key, info.user_id.id);
+    MotrAccessKey MGWUserKeys(access_key, secret_key, info.user_id.to_str());
     store->store_access_key(dpp, y, MGWUserKeys);
   }
 
-  orig_info.user_id.id = info.user_id.id;
+  orig_info.user_id = info.user_id;
   // XXX: we open and close motr idx 2 times in this method:
   // 1) on load_user_from_idx() here and 2) on do_idx_op_by_name(PUT) below.
   // Maybe this can be optimised later somewhow.
@@ -433,7 +433,7 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   muinfo.user_version = obj_ver;
   muinfo.encode(bl);
   rc = store->do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
-                                M0_IC_PUT, info.user_id.id, bl);
+                                M0_IC_PUT, info.user_id.to_str(), bl);
   ldpp_dout(dpp, 10) << "Store user to motr index: rc = " << rc << dendl;
   if (rc == 0) {
     objv_tracker.read_version = obj_ver;
@@ -664,7 +664,7 @@ int MotrBucket::link_user(const DoutPrefixProvider* dpp, User* new_user, optiona
   ldpp_dout(dpp, 20) << "got creation time: << " << std::put_time(std::localtime(&ctime), "%F %T") << dendl;
 
   // Insert the user into the user info index.
-  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.id;
+  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.to_str();
   return store->do_idx_op_by_name(user_info_idx_name,
                                   M0_IC_PUT, info.bucket.name, bl);
 
@@ -674,7 +674,7 @@ int MotrBucket::unlink_user(const DoutPrefixProvider* dpp, User* new_user, optio
 {
   // Remove the user into the user info index.
   bufferlist bl;
-  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.id;
+  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.to_str();
   return store->do_idx_op_by_name(user_info_idx_name,
                                   M0_IC_DEL, info.bucket.name, bl);
 }
@@ -2950,7 +2950,7 @@ int MotrStore::get_user_by_access_key(const DoutPrefixProvider *dpp, const std::
   auto iter = blr.cbegin();
   access_key.decode(iter);
 
-  uinfo.user_id.id = access_key.user_id;
+  uinfo.user_id.from_str(access_key.user_id);
   ldout(cctx, 0) << "Loading user: " << uinfo.user_id.id << dendl;
   rc = load_user_from_idx(dpp, this, uinfo, nullptr, nullptr);
   if (rc < 0){
