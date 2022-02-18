@@ -7879,6 +7879,7 @@ next:
       for (const auto& entry : bucket_lc_map) {
         formatter->open_object_section("bucket_lc_info");
         formatter->dump_string("bucket", entry.bucket);
+	formatter->dump_string("shard", entry.oid);
 	char exp_buf[100];
 	time_t t{time_t(entry.start_time)};
 	if (std::strftime(
