@@ -66,7 +66,8 @@ SegmentedJournal::open_for_write_ret SegmentedJournal::open_for_write()
 SegmentedJournal::close_ertr::future<> SegmentedJournal::close()
 {
   LOG_PREFIX(Journal::close);
-  INFO("closing");
+  INFO("closing, committed_to={}",
+       record_submitter.get_committed_to());
   metrics.clear();
   return journal_segment_manager.close();
 }
@@ -387,12 +388,10 @@ SegmentedJournal::JournalSegmentManager::close()
 {
   LOG_PREFIX(JournalSegmentManager::close);
   if (current_journal_segment) {
-    INFO("segment_id={}, seq={}, "
-         "written_to={}, committed_to={}, nonce={}",
+    INFO("segment_id={}, seq={}, written_to={}, nonce={}",
          current_journal_segment->get_segment_id(),
          get_segment_seq(),
          written_to,
-         committed_to,
          current_segment_nonce);
   } else {
     INFO("no current journal segment");
@@ -420,12 +419,10 @@ SegmentedJournal::JournalSegmentManager::roll()
     current_journal_segment->get_segment_id() :
     NULL_SEG_ID;
   if (current_journal_segment) {
-    INFO("closing segment {}, seq={}, "
-         "written_to={}, committed_to={}, nonce={}",
+    INFO("closing segment {}, seq={}, written_to={}, nonce={}",
          old_segment_id,
          get_segment_seq(),
          written_to,
-         committed_to,
          current_segment_nonce);
   }
 
@@ -479,16 +476,6 @@ SegmentedJournal::JournalSegmentManager::write(ceph::bufferlist to_write)
   ).safe_then([write_result] {
     return write_result;
   });
-}
-
-void SegmentedJournal::JournalSegmentManager::mark_committed(
-  const journal_seq_t& new_committed_to)
-{
-  LOG_PREFIX(JournalSegmentManager::mark_committed);
-  TRACE("{} => {}", committed_to, new_committed_to);
-  assert(committed_to == JOURNAL_SEQ_NULL ||
-         committed_to <= new_committed_to);
-  committed_to = new_committed_to;
 }
 
 SegmentedJournal::JournalSegmentManager::initialize_segment_ertr::future<>
@@ -767,11 +754,10 @@ void SegmentedJournal::RecordSubmitter::flush_current_batch()
 
   increment_io();
   auto num = p_batch->get_num_records();
-  auto committed_to = journal_segment_manager.get_committed_to();
   auto [to_write, sizes] = p_batch->encode_batch(
-    committed_to, journal_segment_manager.get_nonce());
+    journal_committed_to, journal_segment_manager.get_nonce());
   DEBUG("{} records, {}, committed_to={}, outstanding_io={} ...",
-        num, sizes, committed_to, num_outstanding_io);
+        num, sizes, journal_committed_to, num_outstanding_io);
   account_submission(num, sizes);
   std::ignore = journal_segment_manager.write(to_write
   ).safe_then([this, p_batch, FNAME, num, sizes=sizes](auto write_result) {
@@ -803,14 +789,13 @@ SegmentedJournal::RecordSubmitter::submit_pending(
     if (do_flush && p_current_batch->is_empty()) {
       // fast path with direct write
       increment_io();
-      auto committed_to = journal_segment_manager.get_committed_to();
       auto [to_write, sizes] = p_current_batch->submit_pending_fast(
         std::move(record),
         journal_segment_manager.get_block_size(),
-        committed_to,
+        journal_committed_to,
         journal_segment_manager.get_nonce());
       DEBUG("H{} fast submit {}, committed_to={}, outstanding_io={} ...",
-            (void*)&handle, sizes, committed_to, num_outstanding_io);
+            (void*)&handle, sizes, journal_committed_to, num_outstanding_io);
       account_submission(1, sizes);
       return journal_segment_manager.write(to_write
       ).safe_then([mdlength = sizes.get_mdlength()](auto write_result) {
@@ -844,8 +829,10 @@ SegmentedJournal::RecordSubmitter::submit_pending(
     return handle.enter(write_pipeline->finalize
     ).then([this, FNAME, submit_result, &handle] {
       DEBUG("H{} finish with {}", (void*)&handle, submit_result);
-      journal_segment_manager.mark_committed(
-          submit_result.write_result.get_end_seq());
+      auto new_committed_to = submit_result.write_result.get_end_seq();
+      assert(journal_committed_to == JOURNAL_SEQ_NULL ||
+             journal_committed_to <= new_committed_to);
+      journal_committed_to = new_committed_to;
       return submit_result;
     });
   });
