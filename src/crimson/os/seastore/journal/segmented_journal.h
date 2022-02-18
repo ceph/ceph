@@ -86,10 +86,6 @@ private:
       return current_segment_nonce;
     }
 
-    journal_seq_t get_committed_to() const {
-      return committed_to;
-    }
-
     segment_seq_t get_segment_seq() const {
       return next_journal_segment_seq - 1;
     }
@@ -120,9 +116,6 @@ private:
     using write_ertr = base_ertr;
     using write_ret = write_ertr::future<write_result_t>;
     write_ret write(ceph::bufferlist to_write);
-
-    // mark write committed in order
-    void mark_committed(const journal_seq_t& new_committed_to);
     
   private:
     journal_seq_t get_current_write_seq() const {
@@ -139,7 +132,6 @@ private:
       current_segment_nonce = 0;
       current_journal_segment.reset();
       written_to = 0;
-      committed_to = JOURNAL_SEQ_NULL;
     }
 
     // prepare segment for writes, writes out segment header
@@ -154,8 +146,6 @@ private:
 
     SegmentRef current_journal_segment;
     seastore_off_t written_to;
-    // committed_to may be in a previous journal segment
-    journal_seq_t committed_to;
   };
 
   class RecordBatch {
@@ -322,6 +312,10 @@ private:
       return stats.record_group_data_bytes;
     }
 
+    journal_seq_t get_committed_to() const {
+      return journal_committed_to;
+    }
+
     void reset_stats() {
       stats = {};
     }
@@ -378,6 +372,9 @@ private:
 
     WritePipeline* write_pipeline = nullptr;
     JournalSegmentManager& journal_segment_manager;
+    // committed_to may be in a previous journal segment
+    journal_seq_t journal_committed_to = JOURNAL_SEQ_NULL;
+
     std::unique_ptr<RecordBatch[]> batches;
     std::size_t current_batch_index;
     // should not be nullptr after constructed
