@@ -50,9 +50,19 @@ class SegmentAllocator {
     return !!current_segment;
   }
 
+  segment_id_t get_segment_id() const {
+    assert(can_write());
+    return current_segment->get_segment_id();
+  }
+
   segment_nonce_t get_nonce() const {
     assert(can_write());
     return current_segment_nonce;
+  }
+
+  seastore_off_t get_written_to() const {
+    assert(can_write());
+    return written_to;
   }
 
   void set_next_segment_seq(segment_seq_t);
