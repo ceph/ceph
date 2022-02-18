@@ -39,6 +39,7 @@ set(crimson_seastore_srcs
   random_block_manager/nvme_manager.cc
   random_block_manager/nvmedevice.cc
   journal/segmented_journal.cc
+  journal/segment_allocator.cc
   journal.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
