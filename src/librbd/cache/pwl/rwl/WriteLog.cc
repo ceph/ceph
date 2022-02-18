@@ -287,7 +287,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     /* new pool, calculate and store metadata */
     this->m_log_pool_size = m_log_pool->get_mapped_len(); // actual mapped size
     size_t effective_pool_size = (size_t)(this->m_log_pool_size * USABLE_SIZE);
-    size_t small_write_size = MIN_WRITE_ALLOC_SIZE +
+    size_t small_write_size = PMEM_MIN_WRITE_ALLOC_SIZE +
         BLOCK_ALLOC_OVERHEAD_BYTES + sizeof(struct WriteLogCacheEntry);
     uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
     if (num_small_writes > MAX_LOG_ENTRIES) {
@@ -311,7 +311,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
       superblock->header.layout_version = RWL_LAYOUT_VERSION;
       superblock->pool_size = this->m_log_pool_size;
       superblock->flushed_sync_gen = this->m_flushed_sync_gen;
-      superblock->block_size = MIN_WRITE_ALLOC_SIZE;
+      superblock->block_size = PMEM_MIN_WRITE_ALLOC_SIZE;
       superblock->num_log_entries = num_small_writes;
       superblock->first_free_entry = m_first_free_entry;
       superblock->first_valid_entry = m_first_valid_entry;
@@ -385,9 +385,9 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
                  << " expected " << RWL_LAYOUT_VERSION << dendl;
       goto err_close_pool;
     }
-    if (superblock->block_size != MIN_WRITE_ALLOC_SIZE) {
+    if (superblock->block_size != PMEM_MIN_WRITE_ALLOC_SIZE) {
       lderr(cct) << "pool block size is " << superblock->block_size
-                 << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
+                 << " expected " << PMEM_MIN_WRITE_ALLOC_SIZE << dendl;
       goto err_close_pool;
     }
     this->m_log_pool_size = superblock->pool_size;
@@ -515,7 +515,7 @@ template <typename I>
 void WriteLog<I>::inc_allocated_cached_bytes(
     std::shared_ptr<pwl::GenericLogEntry> log_entry) {
   if (log_entry->is_write_entry()) {
-    this->m_bytes_allocated += std::max(log_entry->write_bytes(), MIN_WRITE_ALLOC_SIZE);
+    this->m_bytes_allocated += std::max(log_entry->write_bytes(), PMEM_MIN_WRITE_ALLOC_SIZE);
     this->m_bytes_cached += log_entry->write_bytes();
   }
 }
@@ -616,8 +616,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           ceph_assert(this->m_bytes_cached >= entry->write_bytes());
           this->m_bytes_cached -= entry->write_bytes();
           uint64_t entry_allocation_size = entry->write_bytes();
-          if (entry_allocation_size < MIN_WRITE_ALLOC_SIZE) {
-            entry_allocation_size = MIN_WRITE_ALLOC_SIZE;
+          if (entry_allocation_size < PMEM_MIN_WRITE_ALLOC_SIZE) {
+            entry_allocation_size = PMEM_MIN_WRITE_ALLOC_SIZE;
           }
           ceph_assert(this->m_bytes_allocated >= entry_allocation_size);
           this->m_bytes_allocated -= entry_allocation_size;

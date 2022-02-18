@@ -12,7 +12,7 @@
 namespace librbd::cache::pwl::rwl {
 
 /* p2align and p2roundup require uint64_t, keep the same with offset */
-static const uint64_t min_write_alloc_size = MIN_WRITE_ALLOC_SIZE;
+static const uint64_t min_write_alloc_size = PMEM_MIN_WRITE_ALLOC_SIZE;
 
 PmemDev::PmemDev(const char * path, const uint64_t size, CephContext *cct)
   : m_lock(ceph::make_mutex(pwl::unique_lock_name(

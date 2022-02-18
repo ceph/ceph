@@ -31,7 +31,7 @@ void C_WriteRequest<T>::setup_buffer_resources(
   for (auto &extent : this->image_extents) {
     this->m_resources.buffers.emplace_back();
     struct WriteBufferAllocation &buffer = this->m_resources.buffers.back();
-    buffer.allocation_size = MIN_WRITE_ALLOC_SIZE;
+    buffer.allocation_size = PMEM_MIN_WRITE_ALLOC_SIZE;
     buffer.allocated = false;
     *bytes_cached += extent.second;
     if (extent.second > buffer.allocation_size) {
@@ -63,7 +63,7 @@ void C_WriteSameRequest<T>::setup_buffer_resources(
   auto pattern_length = this->bl.length();
   this->m_resources.buffers.emplace_back();
   struct WriteBufferAllocation &buffer = this->m_resources.buffers.back();
-  buffer.allocation_size = MIN_WRITE_ALLOC_SIZE;
+  buffer.allocation_size = PMEM_MIN_WRITE_ALLOC_SIZE;
   buffer.allocated = false;
   *bytes_cached += pattern_length;
   if (pattern_length > buffer.allocation_size) {

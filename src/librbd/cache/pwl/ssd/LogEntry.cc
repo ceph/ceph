@@ -36,9 +36,9 @@ void WriteLogEntry::remove_cache_bl() {
 
 unsigned int WriteLogEntry::get_aligned_data_size() const {
   if (cache_bl.length()) {
-    return round_up_to(cache_bl.length(), MIN_WRITE_ALLOC_SSD_SIZE);
+    return round_up_to(cache_bl.length(), SSD_MIN_WRITE_ALLOC_SIZE);
   }
-  return round_up_to(write_bytes(), MIN_WRITE_ALLOC_SSD_SIZE);
+  return round_up_to(write_bytes(), SSD_MIN_WRITE_ALLOC_SIZE);
 }
 
 void WriteLogEntry::writeback_bl(
