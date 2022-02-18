@@ -1828,7 +1828,7 @@ inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
      << " FET:" << dl.vec[3]
      << " STR:" << dl.vec[4]
      << " *LOAD:" << dl.meta_load() << "]";
-  return out << css->strv() << std::endl;
+  return out << css->strv();
 }
 
 struct mds_load_t {
