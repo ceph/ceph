@@ -2155,9 +2155,11 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 			   << "entries) returned error ret==" << ret << dendl;
 	goto exit;
       }
-      entry = entries.front();
-      head.marker = entry.bucket;
-      head.start_date = now;
+      if (entries.size() > 0) {
+	entry = entries.front();
+	head.marker = entry.bucket;
+	head.start_date = now;
+      }
     } else {
       ldpp_dout(this, 0) << "RGWLC::process() head.marker !empty() at START for shard=="
 			 << lc_shard << " head last stored at "
