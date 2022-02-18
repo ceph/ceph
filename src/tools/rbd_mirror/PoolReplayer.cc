@@ -262,7 +262,7 @@ bool PoolReplayer<I>::is_leader() const {
 
 template <typename I>
 bool PoolReplayer<I>::is_running() const {
-  return m_pool_replayer_thread.is_started();
+  return m_pool_replayer_thread.is_started() && !m_stopping;
 }
 
 template <typename I>
