@@ -326,10 +326,10 @@ int MotrUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, ui
   return 0;
 }
 
-static int load_user_from_idx(const DoutPrefixProvider *dpp,
+int MotrUser::load_user_from_idx(const DoutPrefixProvider *dpp,
                               MotrStore *store,
                               RGWUserInfo& info, map<string, bufferlist> *attrs,
-                              RGWObjVersionTracker *objv_tracker)
+                              RGWObjVersionTracker *objv_tr)
 {
   struct MotrUserInfo muinfo;
   bufferlist bl;
@@ -352,8 +352,11 @@ static int load_user_from_idx(const DoutPrefixProvider *dpp,
   info = muinfo.info;
   if (attrs)
     *attrs = muinfo.attrs;
-  if (objv_tracker)
-    objv_tracker->read_version = muinfo.user_version;
+  if (objv_tr)
+  {
+    objv_tr->read_version = muinfo.user_version;
+    objv_tracker.read_version = objv_tr->read_version;
+  }
 
   return 0;
 }
@@ -389,16 +392,6 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   obj_version& obj_ver = objv_tr.read_version;
 
   ldpp_dout(dpp, 20) << "Store_user(): User = " << info.user_id.id << dendl;
-  std::string access_key;
-  std::string secret_key;
-  if (!info.access_keys.empty()) {
-    std::map<std::string, RGWAccessKey>::const_iterator iter = info.access_keys.begin();
-    const RGWAccessKey& k = iter->second;
-    access_key = k.id;
-    secret_key = k.key;
-    MotrAccessKey MGWUserKeys(access_key, secret_key, info.user_id.to_str());
-    store->store_access_key(dpp, y, MGWUserKeys);
-  }
 
   orig_info.user_id = info.user_id;
   // XXX: we open and close motr idx 2 times in this method:
@@ -439,6 +432,18 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
     objv_tracker.read_version = obj_ver;
     objv_tracker.write_version = obj_ver;
   }
+  
+  // Store access key in access key index
+  if (!info.access_keys.empty()) {
+    std::string access_key;
+    std::string secret_key;
+    std::map<std::string, RGWAccessKey>::const_iterator iter = info.access_keys.begin();
+    const RGWAccessKey& k = iter->second;
+    access_key = k.id;
+    secret_key = k.key;
+    MotrAccessKey MGWUserKeys(access_key, secret_key, info.user_id.to_str());
+    store->store_access_key(dpp, y, MGWUserKeys);
+  }
 
   // Create user info index to store all buckets that are belong
   // to this bucket.
@@ -449,7 +454,7 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   }
 
   // Put the user info into cache.
-  store->get_user_cache()->put(dpp, info.user_id.id, bl);
+  rc = store->get_user_cache()->put(dpp, info.user_id.id, bl);
 
 out:
   return rc;
@@ -2952,7 +2957,7 @@ int MotrStore::get_user_by_access_key(const DoutPrefixProvider *dpp, const std::
 
   uinfo.user_id.from_str(access_key.user_id);
   ldout(cctx, 0) << "Loading user: " << uinfo.user_id.id << dendl;
-  rc = load_user_from_idx(dpp, this, uinfo, nullptr, nullptr);
+  rc = MotrUser().load_user_from_idx(dpp, this, uinfo, nullptr, nullptr);
   if (rc < 0){
     ldout(cctx, 0) << "Failed to load user: rc = " << rc << dendl;
     return rc;
