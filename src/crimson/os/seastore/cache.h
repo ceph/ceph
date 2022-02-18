@@ -615,6 +615,10 @@ public:
     return backref_remove_set;
   }
 
+  backref_buffer_ref& get_newest_backref_buffer() {
+    return backref_buffer;
+  }
+
   std::list<backref_buffer_ref>& get_backref_bufs_to_flush() {
     return backref_bufs_to_flush;
   }
