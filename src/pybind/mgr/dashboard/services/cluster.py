@@ -12,7 +12,12 @@ class ClusterModel:
 
     status: Status
 
-    def __init__(self, status=Status.INSTALLED.name):
+    def __init__(self, status=Status.POST_INSTALLED.name):
+        """
+        :param status: The status of the cluster. Assume that the cluster
+            is already functional by default.
+        :type status: str
+        """
         self.status = self.Status[status]
 
     def dict(self):
@@ -23,4 +28,8 @@ class ClusterModel:
 
     @classmethod
     def from_db(cls):
-        return cls(status=mgr.get_store('cluster/status', cls.Status.INSTALLED.name))
+        """
+        Get the stored cluster status from the configuration key/value store.
+        If the status is not set, assume it is already fully functional.
+        """
+        return cls(status=mgr.get_store('cluster/status', cls.Status.POST_INSTALLED.name))
