@@ -89,7 +89,8 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
 }
 
 
-DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params)
+DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
+                  const DBOpParams *params)
 {
   if (!Op.compare("InsertUser"))
     return dbops.InsertUser;
@@ -238,7 +239,7 @@ out:
   return ret;
 }
 
-int DB::ProcessOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *params) {
+int DB::ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params) {
   int ret = -1;
   class DBOp *db_op;
 
@@ -251,11 +252,9 @@ int DB::ProcessOp(const DoutPrefixProvider *dpp, string Op, struct DBOpParams *p
   ret = db_op->Execute(dpp, params);
 
   if (ret) {
-    ldpp_dout(dpp, 0)<<"In Process op Execute failed for fop(" \
-      <<Op.c_str()<<") " << dendl;
+    ldpp_dout(dpp, 0)<<"In Process op Execute failed for fop(" << Op << ")" << dendl;
   } else {
-    ldpp_dout(dpp, 20)<<"Successfully processed fop(" \
-      <<Op.c_str()<<") " << dendl;
+    ldpp_dout(dpp, 20)<<"Successfully processed fop(" << Op << ")" << dendl;
   }
 
   return ret;
