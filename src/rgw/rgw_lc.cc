@@ -280,9 +280,9 @@ static inline std::ostream& operator<<(std::ostream &os, rgw::sal::Lifecycle::LC
   os << "; start_time=";
   os << rgw_to_asctime(utime_t(time_t(ent.start_time), 0));
   os << "; status=";
-    os << ent.status;
-    os << ">";
-    return os;
+  os << LC_STATUS[ent.status];
+  os << ">";
+  return os;
 }
 
 static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, ceph::real_time mtime, int days,
