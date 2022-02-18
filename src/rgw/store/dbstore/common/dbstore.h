@@ -1505,7 +1505,7 @@ class DB {
     int Lock(const DoutPrefixProvider *dpp);
     int Unlock(const DoutPrefixProvider *dpp);
 
-    int InitializeParams(const DoutPrefixProvider *dpp, std::string Op, DBOpParams *params);
+    int InitializeParams(const DoutPrefixProvider *dpp, DBOpParams *params);
     int ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params);
     DBOp* getDBOp(const DoutPrefixProvider *dpp, std::string_view Op, const DBOpParams *params);
     int objectmapInsert(const DoutPrefixProvider *dpp, std::string bucket, class ObjectOp* ptr);
