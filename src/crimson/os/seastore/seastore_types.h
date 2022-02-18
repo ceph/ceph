@@ -513,6 +513,9 @@ public:
   const blk_paddr_t& as_blk_paddr() const;
 
   paddr_t operator-(paddr_t rhs) const;
+  paddr_t operator+(int32_t o) const {
+    return add_offset(o);
+  }
 
   bool is_delayed() const {
     return get_device_id() == DEVICE_ID_DELAYED;
