@@ -701,6 +701,11 @@ using lba_pin_list_t = std::list<LBAPinRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
 
+using BackrefPin = PhysicalNodePin<paddr_t, laddr_t>;
+using BackrefPinRef = PhysicalNodePinRef<paddr_t, laddr_t>;
+
+using backref_pin_list_t = std::list<BackrefPinRef>;
+
 /**
  * RetiredExtentPlaceholder
  *

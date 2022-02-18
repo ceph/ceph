@@ -298,6 +298,7 @@ public:
     retired_set.clear();
     onode_tree_stats = {};
     lba_tree_stats = {};
+    backref_tree_stats = {};
     ool_write_stats = {};
     to_release = NULL_SEG_ID;
     conflicted = false;
@@ -326,6 +327,9 @@ public:
   }
   tree_stats_t& get_lba_tree_stats() {
     return lba_tree_stats;
+  }
+  tree_stats_t& get_backref_tree_stats() {
+    return backref_tree_stats;
   }
   void add_rbm_alloc_info_blocks(rbm_alloc_delta_t &d) {
     rbm_alloc_info_blocks.push_back(d);
@@ -417,6 +421,7 @@ private:
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t lba_tree_stats;
+  tree_stats_t backref_tree_stats;
   ool_write_stats_t ool_write_stats;
 
   ///< if != NULL_SEG_ID, release this segment after completion

@@ -7,6 +7,7 @@
 
 namespace crimson::os::seastore::backref {
 
+using backref_node_meta_t = fixed_kv_node_meta_t<paddr_t>;
 using backref_node_meta_le_t = fixed_kv_node_meta_le_t<paddr_t>;
 
 constexpr size_t INTERNAL_NODE_CAPACITY = 254;
@@ -39,7 +40,8 @@ struct backref_map_val_le_t {
   extent_types_le_t type = 0;
 
   backref_map_val_le_t() = default;
-  backref_map_val_le_t(const backref_map_val_le_t &val)
+  backref_map_val_le_t(const backref_map_val_le_t &) = default;
+  explicit backref_map_val_le_t(const backref_map_val_t &val)
     : len(init_extent_len_le(val.len)),
       laddr(val.laddr),
       type(extent_types_le_t(val.type)) {}
