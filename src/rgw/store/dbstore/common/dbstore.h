@@ -377,7 +377,7 @@ class ObjectOp {
 
 class DBOp {
   private:
-    const std::string CreateUserTableQ =
+    static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
        *
        * For now only UserID is made Primary key.
@@ -423,7 +423,7 @@ class DBOp {
       UserVersionTag TEXT,      \
       PRIMARY KEY (UserID) \n);";
 
-    const std::string CreateBucketTableQ =
+    static constexpr std::string_view CreateBucketTableQ =
       /* Corresponds to rgw::sal::Bucket
        *  
        *  For now only BucketName is made Primary key. Since buckets should
@@ -481,7 +481,7 @@ class DBOp {
       FOREIGN KEY (OwnerID) \
       REFERENCES '{}' (UserID) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
-    const std::string CreateObjectTableQ =
+    static constexpr std::string_view CreateObjectTableQ =
       /* Corresponds to rgw::sal::Object
        *
        *  For now only BucketName, ObjName is made Primary key.
@@ -564,7 +564,7 @@ class DBOp {
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
-    const std::string CreateObjectDataTableQ =
+    static constexpr std::string_view CreateObjectDataTableQ =
       /* Extra field 'MultipartPartStr' added which signifies multipart
        * <uploadid + partnum>. For regular object, it is '0.0'
        *
@@ -590,7 +590,7 @@ class DBOp {
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
-    const std::string CreateObjectViewQ =
+    static constexpr std::string_view CreateObjectViewQ =
       /* This query creats temporary view with entries from ObjectData table which have
        * corresponding head object (i.e, with same ObjName, ObjInstance, ObjNS, ObjID)
        * in the Object table.
@@ -606,7 +606,7 @@ class DBOp {
       (ObjName, BucketName, ObjInstance, ObjID);";
 
 
-    const std::string CreateQuotaTableQ =
+    static constexpr std::string_view CreateQuotaTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
       QuotaID INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE , \
       MaxSizeSoftThreshold INTEGER ,	\
@@ -616,7 +616,7 @@ class DBOp {
       Enabled Boolean ,		\
       CheckOnRaw Boolean \n);";
 
-    const std::string CreateLCEntryTableQ =
+    static constexpr std::string_view CreateLCEntryTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
       LCIndex  TEXT NOT NULL , \
       BucketName TEXT NOT NULL , \
@@ -626,63 +626,62 @@ class DBOp {
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
-    const std::string CreateLCHeadTableQ =
+    static constexpr std::string_view CreateLCHeadTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
       LCIndex  TEXT NOT NULL , \
       Marker TEXT , \
       StartDate  INTEGER , \
       PRIMARY KEY (LCIndex) \n);";
 
-    const std::string DropQ = "DROP TABLE IF EXISTS '{}'";
-    const std::string ListAllQ = "SELECT  * from '{}'";
+    static constexpr std::string_view DropQ = "DROP TABLE IF EXISTS '{}'";
+    static constexpr std::string_view ListAllQ = "SELECT  * from '{}'";
 
   public:
     DBOp() {}
     virtual ~DBOp() {}
     std::mutex mtx; // to protect prepared stmt
 
-    std::string CreateTableSchema(std::string type, DBOpParams *params) {
+    std::string CreateTableSchema(std::string_view type,
+                                  const DBOpParams *params) {
       if (!type.compare("User"))
-        return fmt::format(CreateUserTableQ.c_str(),
-            params->user_table.c_str());
+        return fmt::format(CreateUserTableQ,
+            params->user_table);
       if (!type.compare("Bucket"))
-        return fmt::format(CreateBucketTableQ.c_str(),
-            params->bucket_table.c_str(),
-            params->user_table.c_str());
+        return fmt::format(CreateBucketTableQ,
+            params->bucket_table,
+            params->user_table);
       if (!type.compare("Object"))
-        return fmt::format(CreateObjectTableQ.c_str(),
-            params->object_table.c_str(),
-            params->bucket_table.c_str());
+        return fmt::format(CreateObjectTableQ,
+            params->object_table,
+            params->bucket_table);
       if (!type.compare("ObjectData"))
-        return fmt::format(CreateObjectDataTableQ.c_str(),
-            params->objectdata_table.c_str(),
-            params->bucket_table.c_str());
+        return fmt::format(CreateObjectDataTableQ,
+            params->objectdata_table,
+            params->bucket_table);
       if (!type.compare("ObjectView"))
-        return fmt::format(CreateObjectTableQ.c_str(),
-            params->object_view.c_str(),
-            params->objectdata_table.c_str(),
-            params->object_table.c_str());
+        return fmt::format(CreateObjectTableQ,
+            params->object_view,
+            params->objectdata_table,
+            params->object_table);
       if (!type.compare("Quota"))
-        return fmt::format(CreateQuotaTableQ.c_str(),
-            params->quota_table.c_str());
+        return fmt::format(CreateQuotaTableQ,
+            params->quota_table);
       if (!type.compare("LCHead"))
-        return fmt::format(CreateLCHeadTableQ.c_str(),
-            params->lc_head_table.c_str());
+        return fmt::format(CreateLCHeadTableQ,
+            params->lc_head_table);
       if (!type.compare("LCEntry"))
-        return fmt::format(CreateLCEntryTableQ.c_str(),
-            params->lc_entry_table.c_str(),
-            params->bucket_table.c_str());
+        return fmt::format(CreateLCEntryTableQ,
+            params->lc_entry_table,
+            params->bucket_table);
 
-      lsubdout(params->cct, rgw, 0) << "rgw dbstore: Incorrect table type("<<type<<") specified" << dendl;
-
-      return NULL;
+      ceph_abort_msgf("incorrect table type %.*s", type.size(), type.data());
     }
 
-    std::string DeleteTableSchema(std::string table) {
-      return fmt::format(DropQ.c_str(), table.c_str());
+    std::string DeleteTableSchema(std::string_view table) {
+      return fmt::format(DropQ, table);
     }
-    std::string ListTableSchema(std::string table) {
-      return fmt::format(ListAllQ.c_str(), table.c_str());
+    std::string ListTableSchema(std::string_view table) {
+      return fmt::format(ListAllQ, table);
     }
 
     virtual int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
@@ -703,7 +702,7 @@ class InsertUserOp : virtual public DBOp {
      * For now using INSERT or REPLACE. If required of updating existing
      * record, will use another query.
      */
-    const std::string Query = "INSERT OR REPLACE INTO '{}'	\
+    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
                           (UserID, Tenant, NS, DisplayName, UserEmail, \
                            AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -717,8 +716,8 @@ class InsertUserOp : virtual public DBOp {
     virtual ~InsertUserOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.user_table.c_str(),
-          params.op.user.user_id.c_str(), params.op.user.tenant, params.op.user.ns,
+      return fmt::format(Query, params.user_table,
+          params.op.user.user_id, params.op.user.tenant, params.op.user.ns,
           params.op.user.display_name, params.op.user.user_email,
           params.op.user.access_keys_id, params.op.user.access_keys_secret,
           params.op.user.access_keys, params.op.user.swift_keys,
@@ -737,15 +736,15 @@ class InsertUserOp : virtual public DBOp {
 
 class RemoveUserOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "DELETE from '{}' where UserID = {}";
 
   public:
     virtual ~RemoveUserOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.user_table.c_str(),
-          params.op.user.user_id.c_str());
+      return fmt::format(Query, params.user_table,
+          params.op.user.user_id);
     }
 };
 
@@ -753,7 +752,7 @@ class GetUserOp: virtual public DBOp {
   private:
     /* If below query columns are updated, make sure to update the indexes
      * in list_user() cbk in sqliteDB.cc */
-    const std::string Query = "SELECT \
+    static constexpr std::string_view Query = "SELECT \
                           UserID, Tenant, NS, DisplayName, UserEmail, \
                           AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -761,7 +760,7 @@ class GetUserOp: virtual public DBOp {
                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                           UserAttrs, UserVersion, UserVersionTag from '{}' where UserID = {}";
 
-    const std::string QueryByEmail = "SELECT \
+    static constexpr std::string_view QueryByEmail = "SELECT \
                                  UserID, Tenant, NS, DisplayName, UserEmail, \
                                  AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                                  SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -769,7 +768,7 @@ class GetUserOp: virtual public DBOp {
                                  BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                                  UserAttrs, UserVersion, UserVersionTag from '{}' where UserEmail = {}";
 
-    const std::string QueryByAccessKeys = "SELECT \
+    static constexpr std::string_view QueryByAccessKeys = "SELECT \
                                       UserID, Tenant, NS, DisplayName, UserEmail, \
                                       AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                                       SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -777,7 +776,7 @@ class GetUserOp: virtual public DBOp {
                                       BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
                                       UserAttrs, UserVersion, UserVersionTag from '{}' where AccessKeysID = {}";
 
-    const std::string QueryByUserID = "SELECT \
+    static constexpr std::string_view QueryByUserID = "SELECT \
                                   UserID, Tenant, NS, DisplayName, UserEmail, \
                                   AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                                   SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
@@ -791,28 +790,28 @@ class GetUserOp: virtual public DBOp {
 
     std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "email") {
-        return fmt::format(QueryByEmail.c_str(), params.user_table.c_str(),
-            params.op.user.user_email.c_str());
+        return fmt::format(QueryByEmail, params.user_table,
+            params.op.user.user_email);
       } else if (params.op.query_str == "access_key") {
-        return fmt::format(QueryByAccessKeys.c_str(),
-            params.user_table.c_str(),
-            params.op.user.access_keys_id.c_str());
+        return fmt::format(QueryByAccessKeys,
+            params.user_table,
+            params.op.user.access_keys_id);
       } else if (params.op.query_str == "user_id") {
-        return fmt::format(QueryByUserID.c_str(),
-            params.user_table.c_str(),
-            params.op.user.tenant.c_str(),
-            params.op.user.user_id.c_str(),
-            params.op.user.ns.c_str());
+        return fmt::format(QueryByUserID,
+            params.user_table,
+            params.op.user.tenant,
+            params.op.user.user_id,
+            params.op.user.ns);
       } else {
-        return fmt::format(Query.c_str(), params.user_table.c_str(),
-            params.op.user.user_id.c_str());
+        return fmt::format(Query, params.user_table,
+            params.op.user.user_id);
       }
     }
 };
 
 class InsertBucketOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "INSERT OR REPLACE INTO '{}' \
       (BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
        Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
@@ -828,7 +827,7 @@ class InsertBucketOp: virtual public DBOp {
     virtual ~InsertBucketOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.bucket_table.c_str(),
+      return fmt::format(Query, params.bucket_table,
           params.op.bucket.bucket_name, params.op.bucket.tenant,
           params.op.bucket.marker, params.op.bucket.bucket_id,
           params.op.bucket.size, params.op.bucket.size_rounded,
@@ -849,7 +848,7 @@ class InsertBucketOp: virtual public DBOp {
 class UpdateBucketOp: virtual public DBOp {
   private:
     // Updates Info, Mtime, Version
-    const std::string InfoQuery =
+    static constexpr std::string_view InfoQuery =
       "UPDATE '{}' SET Tenant = {}, Marker = {}, BucketID = {}, CreationTime = {}, \
       Count = {}, PlacementName = {}, PlacementStorageClass = {}, OwnerID = {}, Flags = {}, \
       Zonegroup = {}, HasInstanceObj = {}, Quota = {}, RequesterPays = {}, HasWebsite = {}, \
@@ -857,11 +856,11 @@ class UpdateBucketOp: virtual public DBOp {
       NewBucketInstanceID = {}, ObjectLock = {}, SyncPolicyInfoGroups = {}, \
       BucketVersion = {}, Mtime = {} WHERE BucketName = {}";
     // Updates Attrs, OwnerID, Mtime, Version
-    const std::string AttrsQuery =
+    static constexpr std::string_view AttrsQuery =
       "UPDATE '{}' SET OwnerID = {}, BucketAttrs = {}, Mtime = {}, BucketVersion = {} \
       WHERE BucketName = {}";
     // Updates OwnerID, CreationTime, Mtime, Version
-    const std::string OwnerQuery =
+    static constexpr std::string_view OwnerQuery =
       "UPDATE '{}' SET OwnerID = {}, CreationTime = {}, Mtime = {}, BucketVersion = {} WHERE BucketName = {}";
 
   public:
@@ -869,7 +868,7 @@ class UpdateBucketOp: virtual public DBOp {
 
     std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "info") {
-        return fmt::format(InfoQuery.c_str(), params.bucket_table.c_str(),
+        return fmt::format(InfoQuery, params.bucket_table,
             params.op.bucket.tenant, params.op.bucket.marker, params.op.bucket.bucket_id,
             params.op.bucket.creation_time, params.op.bucket.count,
             params.op.bucket.placement_name, params.op.bucket.placement_storage_class,
@@ -884,16 +883,16 @@ class UpdateBucketOp: virtual public DBOp {
             params.op.bucket.bucket_name);
       }
       if (params.op.query_str == "attrs") {
-        return fmt::format(AttrsQuery.c_str(), params.bucket_table.c_str(),
+        return fmt::format(AttrsQuery, params.bucket_table,
             params.op.user.user_id, params.op.bucket.bucket_attrs,
             params.op.bucket.mtime,
-            params.op.bucket.bucket_ver, params.op.bucket.bucket_name.c_str());
+            params.op.bucket.bucket_ver, params.op.bucket.bucket_name);
       }
       if (params.op.query_str == "owner") {
-        return fmt::format(OwnerQuery.c_str(), params.bucket_table.c_str(),
+        return fmt::format(OwnerQuery, params.bucket_table,
             params.op.user.user_id, params.op.bucket.creation_time,
             params.op.bucket.mtime,
-            params.op.bucket.bucket_ver, params.op.bucket.bucket_name.c_str());
+            params.op.bucket.bucket_ver, params.op.bucket.bucket_name);
       }
       return "";
     }
@@ -901,21 +900,21 @@ class UpdateBucketOp: virtual public DBOp {
 
 class RemoveBucketOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "DELETE from '{}' where BucketName = {}";
 
   public:
     virtual ~RemoveBucketOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.bucket_table.c_str(),
-          params.op.bucket.bucket_name.c_str());
+      return fmt::format(Query, params.bucket_table,
+          params.op.bucket.bucket_name);
     }
 };
 
 class GetBucketOp: virtual public DBOp {
   private:
-    const std::string Query = "SELECT  \
+    static constexpr std::string_view Query = "SELECT  \
                           BucketName, BucketTable.Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
                           Count, BucketTable.PlacementName, BucketTable.PlacementStorageClass, OwnerID, Flags, Zonegroup, \
                           HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
@@ -928,11 +927,11 @@ class GetBucketOp: virtual public DBOp {
     virtual ~GetBucketOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      //return fmt::format(Query.c_str(), params.op.bucket.bucket_name.c_str(),
-      //          params.bucket_table.c_str(), params.user_table.c_str());
-      return fmt::format(Query.c_str(),
-          params.bucket_table.c_str(), params.user_table.c_str(),
-          params.op.bucket.bucket_name.c_str());
+      //return fmt::format(Query, params.op.bucket.bucket_name,
+      //          params.bucket_table, params.user_table);
+      return fmt::format(Query,
+          params.bucket_table, params.user_table,
+          params.op.bucket.bucket_name);
     }
 };
 
@@ -940,7 +939,7 @@ class ListUserBucketsOp: virtual public DBOp {
   private:
     // once we have stats also stored, may have to update this query to join
     // these two tables.
-    const std::string Query = "SELECT  \
+    static constexpr std::string_view Query = "SELECT  \
                           BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
                           Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
                           HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
@@ -952,7 +951,7 @@ class ListUserBucketsOp: virtual public DBOp {
     /* BucketNames are unique across users. Hence userid/OwnerID is not used as
      * marker or for ordering here in the below query 
      */
-    const std::string AllQuery = "SELECT  \
+    static constexpr std::string_view AllQuery = "SELECT  \
                           BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
                           Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
                           HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
@@ -966,20 +965,20 @@ class ListUserBucketsOp: virtual public DBOp {
 
     std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "all") {
-        return fmt::format(AllQuery.c_str(), params.bucket_table.c_str(),
-          params.op.bucket.min_marker.c_str(),
-          params.op.list_max_count.c_str());
+        return fmt::format(AllQuery, params.bucket_table,
+          params.op.bucket.min_marker,
+          params.op.list_max_count);
       } else {
-        return fmt::format(Query.c_str(), params.bucket_table.c_str(),
-          params.op.user.user_id.c_str(), params.op.bucket.min_marker.c_str(),
-          params.op.list_max_count.c_str());
+        return fmt::format(Query, params.bucket_table,
+          params.op.user.user_id, params.op.bucket.min_marker,
+          params.op.list_max_count);
       }
     }
 };
 
 class PutObjectOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "INSERT OR REPLACE INTO '{}' \
       (ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
        Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
@@ -998,8 +997,8 @@ class PutObjectOp: virtual public DBOp {
     virtual ~PutObjectOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(),
-          params.object_table.c_str(), params.op.obj.obj_name,
+      return fmt::format(Query,
+          params.object_table, params.op.obj.obj_name,
           params.op.obj.obj_instance, params.op.obj.obj_ns,
           params.op.bucket.bucket_name, params.op.obj.acls, params.op.obj.index_ver,
           params.op.obj.tag, params.op.obj.flags, params.op.obj.versioned_epoch,
@@ -1028,23 +1027,23 @@ class PutObjectOp: virtual public DBOp {
 
 class DeleteObjectOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "DELETE from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {}";
 
   public:
     virtual ~DeleteObjectOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.object_table.c_str(),
-          params.op.bucket.bucket_name.c_str(),
-          params.op.obj.obj_name.c_str(),
-          params.op.obj.obj_instance.c_str());
+      return fmt::format(Query, params.object_table,
+          params.op.bucket.bucket_name,
+          params.op.obj.obj_name,
+          params.op.obj.obj_instance);
     }
 };
 
 class GetObjectOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "SELECT  \
       ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
       Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
@@ -1061,11 +1060,11 @@ class GetObjectOp: virtual public DBOp {
     virtual ~GetObjectOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(),
-          params.object_table.c_str(),
-          params.op.bucket.bucket_name.c_str(),
-          params.op.obj.obj_name.c_str(),
-          params.op.obj.obj_instance.c_str());
+      return fmt::format(Query,
+          params.object_table,
+          params.op.bucket.bucket_name,
+          params.op.obj.obj_name,
+          params.op.obj.obj_instance);
     }
 };
 
@@ -1073,7 +1072,7 @@ class ListBucketObjectsOp: virtual public DBOp {
   private:
     // once we have stats also stored, may have to update this query to join
     // these two tables.
-    const std::string Query =
+    static constexpr std::string_view Query =
       "SELECT  \
       ObjName, ObjInstance, ObjNS, BucketName, ACLs, IndexVer, Tag, \
       Flags, VersionedEpoch, ObjCategory, Etag, Owner, OwnerDisplayName, \
@@ -1090,27 +1089,27 @@ class ListBucketObjectsOp: virtual public DBOp {
 
     std::string Schema(DBOpPrepareParams &params) {
       /* XXX: Include obj_id, delim */
-      return fmt::format(Query.c_str(),
-          params.object_table.c_str(),
-          params.op.bucket.bucket_name.c_str(),
-          params.op.obj.min_marker.c_str(),
-          params.op.list_max_count.c_str());
+      return fmt::format(Query,
+          params.object_table,
+          params.op.bucket.bucket_name,
+          params.op.obj.min_marker,
+          params.op.list_max_count);
     }
 };
 
 class UpdateObjectOp: virtual public DBOp {
   private:
     // Updates Omap
-    const std::string OmapQuery =
+    static constexpr std::string_view OmapQuery =
       "UPDATE '{}' SET Omap = {}, Mtime = {} \
       where BucketName = {} and ObjName = {} and ObjInstance = {}";
-    const std::string AttrsQuery =
+    static constexpr std::string_view AttrsQuery =
       "UPDATE '{}' SET ObjAttrs = {}, Mtime = {}  \
       where BucketName = {} and ObjName = {} and ObjInstance = {}";
-    const std::string MPQuery =
+    static constexpr std::string_view MPQuery =
       "UPDATE '{}' SET MPPartsList = {}, Mtime = {}  \
       where BucketName = {} and ObjName = {} and ObjInstance = {}";
-    const std::string MetaQuery =
+    static constexpr std::string_view MetaQuery =
       "UPDATE '{}' SET \
        ObjNS = {}, ACLs = {}, IndexVer = {}, Tag = {}, Flags = {}, VersionedEpoch = {}, \
        ObjCategory = {}, Etag = {}, Owner = {}, OwnerDisplayName = {}, \
@@ -1131,32 +1130,32 @@ class UpdateObjectOp: virtual public DBOp {
 
     std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "omap") {
-        return fmt::format(OmapQuery.c_str(),
-            params.object_table.c_str(), params.op.obj.omap.c_str(),
-            params.op.obj.mtime.c_str(),
-            params.op.bucket.bucket_name.c_str(),
-            params.op.obj.obj_name.c_str(),
-            params.op.obj.obj_instance.c_str());
+        return fmt::format(OmapQuery,
+            params.object_table, params.op.obj.omap,
+            params.op.obj.mtime,
+            params.op.bucket.bucket_name,
+            params.op.obj.obj_name,
+            params.op.obj.obj_instance);
       }
       if (params.op.query_str == "attrs") {
-        return fmt::format(AttrsQuery.c_str(),
-            params.object_table.c_str(), params.op.obj.obj_attrs.c_str(),
-            params.op.obj.mtime.c_str(),
-            params.op.bucket.bucket_name.c_str(),
-            params.op.obj.obj_name.c_str(),
-            params.op.obj.obj_instance.c_str());
+        return fmt::format(AttrsQuery,
+            params.object_table, params.op.obj.obj_attrs,
+            params.op.obj.mtime,
+            params.op.bucket.bucket_name,
+            params.op.obj.obj_name,
+            params.op.obj.obj_instance);
       }
       if (params.op.query_str == "mp") {
-        return fmt::format(MPQuery.c_str(),
-            params.object_table.c_str(), params.op.obj.mp_parts.c_str(),
-            params.op.obj.mtime.c_str(),
-            params.op.bucket.bucket_name.c_str(),
-            params.op.obj.obj_name.c_str(),
-            params.op.obj.obj_instance.c_str());
+        return fmt::format(MPQuery,
+            params.object_table, params.op.obj.mp_parts,
+            params.op.obj.mtime,
+            params.op.bucket.bucket_name,
+            params.op.obj.obj_name,
+            params.op.obj.obj_instance);
       }
       if (params.op.query_str == "meta") {
-        return fmt::format(MetaQuery.c_str(),
-          params.object_table.c_str(),
+        return fmt::format(MetaQuery,
+          params.object_table,
           params.op.obj.obj_ns, params.op.obj.acls, params.op.obj.index_ver,
           params.op.obj.tag, params.op.obj.flags, params.op.obj.versioned_epoch,
           params.op.obj.obj_category, params.op.obj.etag, params.op.obj.owner,
@@ -1188,7 +1187,7 @@ class UpdateObjectOp: virtual public DBOp {
 
 class PutObjectDataOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "INSERT OR REPLACE INTO '{}' \
       (ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data) \
       VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
@@ -1197,25 +1196,25 @@ class PutObjectDataOp: virtual public DBOp {
     virtual ~PutObjectDataOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(),
-          params.objectdata_table.c_str(),
+      return fmt::format(Query,
+          params.objectdata_table,
           params.op.obj.obj_name, params.op.obj.obj_instance,
           params.op.obj.obj_ns,
-          params.op.bucket.bucket_name.c_str(),
+          params.op.bucket.bucket_name,
           params.op.obj.obj_id,
-          params.op.obj_data.multipart_part_str.c_str(),
+          params.op.obj_data.multipart_part_str,
           params.op.obj_data.part_num,
-          params.op.obj_data.offset.c_str(),
+          params.op.obj_data.offset,
           params.op.obj_data.size,
           params.op.obj.mtime,
-          params.op.obj_data.data.c_str());
+          params.op.obj_data.data);
     }
 };
 
 /* XXX: Recheck if this is really needed */
 class UpdateObjectDataOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "UPDATE '{}' \
       SET Mtime = {} WHERE ObjName = {} and ObjInstance = {} and \
       BucketName = {} and ObjID = {}";
@@ -1224,17 +1223,17 @@ class UpdateObjectDataOp: virtual public DBOp {
     virtual ~UpdateObjectDataOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(),
-          params.objectdata_table.c_str(),
+      return fmt::format(Query,
+          params.objectdata_table,
           params.op.obj.mtime,
           params.op.obj.obj_name, params.op.obj.obj_instance,
-          params.op.bucket.bucket_name.c_str(),
+          params.op.bucket.bucket_name,
           params.op.obj.obj_id);
     }
 };
 class GetObjectDataOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "SELECT  \
       ObjName, ObjInstance, ObjNS, BucketName, ObjID, MultipartPartStr, PartNum, Offset, Size, Mtime, Data \
       from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {} ORDER BY MultipartPartStr, PartNum";
@@ -1243,53 +1242,53 @@ class GetObjectDataOp: virtual public DBOp {
     virtual ~GetObjectDataOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(),
-          params.objectdata_table.c_str(),
-          params.op.bucket.bucket_name.c_str(),
-          params.op.obj.obj_name.c_str(),
-          params.op.obj.obj_instance.c_str(),
-          params.op.obj.obj_id.c_str());
+      return fmt::format(Query,
+          params.objectdata_table,
+          params.op.bucket.bucket_name,
+          params.op.obj.obj_name,
+          params.op.obj.obj_instance,
+          params.op.obj.obj_id);
     }
 };
 
 class DeleteObjectDataOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "DELETE from '{}' where BucketName = {} and ObjName = {} and ObjInstance = {} and ObjID = {}";
 
   public:
     virtual ~DeleteObjectDataOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(),
-          params.objectdata_table.c_str(),
-          params.op.bucket.bucket_name.c_str(),
-          params.op.obj.obj_name.c_str(),
-          params.op.obj.obj_instance.c_str(),
-          params.op.obj.obj_id.c_str());
+      return fmt::format(Query,
+          params.objectdata_table,
+          params.op.bucket.bucket_name,
+          params.op.obj.obj_name,
+          params.op.obj.obj_instance,
+          params.op.obj.obj_id);
     }
 };
 
 class DeleteStaleObjectDataOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "DELETE from '{}' WHERE (ObjName, ObjInstance, ObjID) NOT IN (SELECT s.ObjName, s.ObjInstance, s.ObjID from '{}' as s INNER JOIN '{}' USING (ObjName, BucketName, ObjInstance, ObjID)) and Mtime < {}";
 
   public:
     virtual ~DeleteStaleObjectDataOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(),
-          params.objectdata_table.c_str(),
-          params.objectdata_table.c_str(),
-          params.object_table.c_str(),
+      return fmt::format(Query,
+          params.objectdata_table,
+          params.objectdata_table,
+          params.object_table,
           params.op.obj.mtime);
     }
 };
 
 class InsertLCEntryOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "INSERT OR REPLACE INTO '{}' \
       (LCIndex, BucketName, StartTime, Status) \
       VALUES ({}, {}, {}, {})";
@@ -1298,7 +1297,7 @@ class InsertLCEntryOp: virtual public DBOp {
     virtual ~InsertLCEntryOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
+      return fmt::format(Query, params.lc_entry_table,
           params.op.lc_entry.index, params.op.lc_entry.bucket_name,
           params.op.lc_entry.start_time, params.op.lc_entry.status);
     }
@@ -1306,24 +1305,24 @@ class InsertLCEntryOp: virtual public DBOp {
 
 class RemoveLCEntryOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "DELETE from '{}' where LCIndex = {} and BucketName = {}";
 
   public:
     virtual ~RemoveLCEntryOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
+      return fmt::format(Query, params.lc_entry_table,
           params.op.lc_entry.index, params.op.lc_entry.bucket_name);
     }
 };
 
 class GetLCEntryOp: virtual public DBOp {
   private:
-    const std::string Query = "SELECT  \
+    static constexpr std::string_view Query = "SELECT  \
                           LCIndex, BucketName, StartTime, Status \
                           from '{}' where LCIndex = {} and BucketName = {}";
-    const std::string NextQuery = "SELECT  \
+    static constexpr std::string_view NextQuery = "SELECT  \
                           LCIndex, BucketName, StartTime, Status \
                           from '{}' where LCIndex = {} and BucketName > {} ORDER BY BucketName ASC";
 
@@ -1332,18 +1331,18 @@ class GetLCEntryOp: virtual public DBOp {
 
     std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "get_next_entry") {
-        return fmt::format(NextQuery.c_str(), params.lc_entry_table.c_str(),
+        return fmt::format(NextQuery, params.lc_entry_table,
             params.op.lc_entry.index, params.op.lc_entry.bucket_name);
       }
       // default 
-      return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
+      return fmt::format(Query, params.lc_entry_table,
           params.op.lc_entry.index, params.op.lc_entry.bucket_name);
     }
 };
 
 class ListLCEntriesOp: virtual public DBOp {
   private:
-    const std::string Query = "SELECT  \
+    static constexpr std::string_view Query = "SELECT  \
                           LCIndex, BucketName, StartTime, Status \
                           FROM '{}' WHERE LCIndex = {} AND BucketName > {} ORDER BY BucketName ASC LIMIT {}";
 
@@ -1351,15 +1350,15 @@ class ListLCEntriesOp: virtual public DBOp {
     virtual ~ListLCEntriesOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.lc_entry_table.c_str(),
-          params.op.lc_entry.index.c_str(), params.op.lc_entry.min_marker.c_str(),
-          params.op.list_max_count.c_str());
+      return fmt::format(Query, params.lc_entry_table,
+          params.op.lc_entry.index, params.op.lc_entry.min_marker,
+          params.op.list_max_count);
     }
 };
 
 class InsertLCHeadOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "INSERT OR REPLACE INTO '{}' \
       (LCIndex, Marker, StartDate) \
       VALUES ({}, {}, {})";
@@ -1368,7 +1367,7 @@ class InsertLCHeadOp: virtual public DBOp {
     virtual ~InsertLCHeadOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
+      return fmt::format(Query, params.lc_head_table,
           params.op.lc_head.index, params.op.lc_head.marker,
           params.op.lc_head.start_date);
     }
@@ -1376,21 +1375,21 @@ class InsertLCHeadOp: virtual public DBOp {
 
 class RemoveLCHeadOp: virtual public DBOp {
   private:
-    const std::string Query =
+    static constexpr std::string_view Query =
       "DELETE from '{}' where LCIndex = {}";
 
   public:
     virtual ~RemoveLCHeadOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
+      return fmt::format(Query, params.lc_head_table,
           params.op.lc_head.index);
     }
 };
 
 class GetLCHeadOp: virtual public DBOp {
   private:
-    const std::string Query = "SELECT  \
+    static constexpr std::string_view Query = "SELECT  \
                           LCIndex, Marker, StartDate \
                           from '{}' where LCIndex = {}";
 
@@ -1398,7 +1397,7 @@ class GetLCHeadOp: virtual public DBOp {
     virtual ~GetLCHeadOp() {}
 
     std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query.c_str(), params.lc_head_table.c_str(),
+      return fmt::format(Query, params.lc_head_table,
           params.op.lc_head.index);
     }
 };
@@ -1507,8 +1506,8 @@ class DB {
     int Unlock(const DoutPrefixProvider *dpp);
 
     int InitializeParams(const DoutPrefixProvider *dpp, std::string Op, DBOpParams *params);
-    int ProcessOp(const DoutPrefixProvider *dpp, std::string Op, DBOpParams *params);
-    DBOp* getDBOp(const DoutPrefixProvider *dpp, std::string Op, struct DBOpParams *params);
+    int ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params);
+    DBOp* getDBOp(const DoutPrefixProvider *dpp, std::string_view Op, const DBOpParams *params);
     int objectmapInsert(const DoutPrefixProvider *dpp, std::string bucket, class ObjectOp* ptr);
     int objectmapDelete(const DoutPrefixProvider *dpp, std::string bucket);
 
@@ -1578,16 +1577,18 @@ class DB {
 
     // db raw obj string is of format -
     // "<bucketname>_<objname>_<objinstance>_<multipart-part-str>_<partnum>"
-    const std::string raw_obj_oid = "{0}_{1}_{2}_{3}_{4}";
+    static constexpr std::string_view raw_obj_oid = "{0}_{1}_{2}_{3}_{4}";
 
-    inline std::string to_oid(const std::string& bucket, const std::string& obj_name, const std::string& obj_instance, const std::string& obj_id,
-        std::string mp_str, uint64_t partnum) {
-      std::string s = fmt::format(raw_obj_oid.c_str(), bucket, obj_name, obj_instance, obj_id, mp_str, partnum);
-      return s;
+    std::string to_oid(std::string_view bucket, std::string_view obj_name,
+                       std::string_view obj_instance, std::string_view obj_id,
+                       std::string_view mp_str, uint64_t partnum) {
+      return fmt::format(raw_obj_oid, bucket, obj_name, obj_instance, obj_id, mp_str, partnum);
     }
-    inline int from_oid(const std::string& oid, std::string& bucket, std::string& obj_name, std::string& obj_id, 
+    int from_oid(const std::string& oid, std::string& bucket, std::string& obj_name, std::string& obj_id,
         std::string& obj_instance,
         std::string& mp_str, uint64_t& partnum) {
+      // TODO: use ceph::split() from common/split.h
+      // XXX: doesn't this break if obj_name has underscores in it?
       std::vector<std::string> result;
       boost::split(result, oid, boost::is_any_of("_"));
       bucket = result[0];
