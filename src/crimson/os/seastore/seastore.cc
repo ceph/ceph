@@ -35,6 +35,46 @@
 using std::string;
 using crimson::common::local_conf;
 
+template <> struct fmt::formatter<crimson::os::seastore::SeaStore::op_type_t>
+  : fmt::formatter<std::string_view> {
+  using op_type_t =  crimson::os::seastore::SeaStore::op_type_t;
+  // parse is inherited from formatter<string_view>.
+  template <typename FormatContext>
+  auto format(op_type_t op, FormatContext& ctx) {
+    std::string_view name = "unknown";
+    switch (op) {
+      case op_type_t::TRANSACTION:
+      name = "transaction";
+      break;
+    case op_type_t::READ:
+      name = "read";
+      break;
+    case op_type_t::WRITE:
+      name = "write";
+      break;
+    case op_type_t::GET_ATTR:
+      name = "get_attr";
+      break;
+    case op_type_t::GET_ATTRS:
+      name = "get_attrs";
+      break;
+    case op_type_t::STAT:
+      name = "stat";
+      break;
+    case op_type_t::OMAP_GET_VALUES:
+      name = "omap_get_values";
+      break;
+    case op_type_t::OMAP_LIST:
+      name = "omap_list";
+      break;
+    case op_type_t::MAX:
+      name = "unknown";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
+
 SET_SUBSYS(seastore);
 
 namespace crimson::os::seastore {
