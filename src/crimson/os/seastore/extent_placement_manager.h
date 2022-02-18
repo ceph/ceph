@@ -7,8 +7,8 @@
 #include "seastar/core/shared_future.hh"
 
 #include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
@@ -169,12 +169,9 @@ class SegmentProvider;
 class SegmentedAllocator : public ExtentAllocator {
   class Writer : public ExtentOolWriter {
   public:
-    Writer(
-      SegmentProvider& sp,
-      SegmentManager& sm)
-      : segment_provider(sp),
-        segment_manager(sm)
-    {}
+    Writer(SegmentProvider& sp, SegmentManager& sm)
+      : segment_allocator(segment_type_t::OOL, sp, sm) {}
+
     Writer(Writer &&) = default;
 
     write_iertr::future<> write(
@@ -183,36 +180,20 @@ class SegmentedAllocator : public ExtentAllocator {
 
     stop_ertr::future<> stop() final {
       return write_guard.close().then([this] {
-        if (current_segment) {
-          return current_segment->close();
-        } else {
-          return Segment::close_ertr::now();
-        }
+        return segment_allocator.close();
       });
     }
+
   private:
     write_iertr::future<> do_write(
       Transaction& t,
       std::list<LogicalCachedExtentRef>& extent);
 
-    bool _needs_roll(seastore_off_t length) const;
-
     write_iertr::future<> _write(
       Transaction& t,
       ool_record_t& record);
 
-    using roll_segment_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    roll_segment_ertr::future<> roll_segment();
-
-    using init_segment_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    init_segment_ertr::future<> init_segment(Segment& segment);
-
-    SegmentProvider& segment_provider;
-    SegmentManager& segment_manager;
-    SegmentRef current_segment;
-    seastore_off_t allocated_to = 0;
+    journal::SegmentAllocator segment_allocator;
     std::optional<seastar::shared_promise<>> roll_promise;
     seastar::gate write_guard;
   };
@@ -251,8 +232,6 @@ public:
     });
   }
 private:
-  SegmentProvider& segment_provider;
-  SegmentManager& segment_manager;
   std::vector<Writer> writers;
 };
 
