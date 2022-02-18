@@ -7,7 +7,7 @@
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore);
+    return crimson::get_logger(ceph_subsys_seastore_tm);
   }
 }
 
@@ -42,6 +42,8 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
     return out << "INITIAL_WRITE_PENDING";
   case CachedExtent::extent_state_t::MUTATION_PENDING:
     return out << "MUTATION_PENDING";
+  case CachedExtent::extent_state_t::CLEAN_PENDING:
+    return out << "CLEAN_PENDING";
   case CachedExtent::extent_state_t::CLEAN:
     return out << "CLEAN";
   case CachedExtent::extent_state_t::DIRTY:
@@ -61,6 +63,7 @@ std::ostream &operator<<(std::ostream &out, const CachedExtent &ext)
 CachedExtent::~CachedExtent()
 {
   if (parent_index) {
+    assert(is_linked());
     parent_index->erase(*this);
   }
 }

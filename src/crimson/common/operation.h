@@ -314,6 +314,12 @@ std::ostream &operator<<(std::ostream &, const Operation &op);
  * Maintains a set of lists of all active ops.
  */
 class OperationRegistryI {
+  using op_list_member_option = boost::intrusive::member_hook<
+    Operation,
+    registry_hook_t,
+    &Operation::registry_hook
+    >;
+
   friend class Operation;
   seastar::timer<seastar::lowres_clock> shutdown_timer;
   seastar::promise<> shutdown;
@@ -323,6 +329,11 @@ protected:
   virtual bool registries_empty() const = 0;
 
 public:
+  using op_list = boost::intrusive::list<
+    Operation,
+    op_list_member_option,
+    boost::intrusive::constant_time_size<false>>;
+
   template <typename T, typename... Args>
   typename T::IRef create_operation(Args&&... args) {
     typename T::IRef op = new T(std::forward<Args>(args)...);
@@ -346,16 +357,6 @@ public:
 
 template <size_t NUM_REGISTRIES>
 class OperationRegistryT : public OperationRegistryI {
-  using op_list_member_option = boost::intrusive::member_hook<
-    Operation,
-    registry_hook_t,
-    &Operation::registry_hook
-    >;
-  using op_list = boost::intrusive::list<
-    Operation,
-    op_list_member_option,
-    boost::intrusive::constant_time_size<false>>;
-
   std::array<
     op_list,
     NUM_REGISTRIES
@@ -378,6 +379,13 @@ protected:
 		       [](auto& opl) {
 			 return opl.empty();
 		       });
+  }
+public:
+  template <size_t REGISTRY_INDEX>
+  const op_list& get_registry() const {
+    static_assert(
+      REGISTRY_INDEX < std::tuple_size<decltype(registries)>::value);
+    return registries[REGISTRY_INDEX];
   }
 };
 
@@ -579,5 +587,44 @@ private:
   const char * name;
   seastar::shared_mutex mutex;
 };
+
+/**
+ * Imposes no ordering or exclusivity at all.  Ops enter without constraint and
+ * may exit in any order.  Useful mainly for informational purposes between
+ * stages with constraints.
+ */
+class UnorderedStage : public PipelineStageI {
+  void dump_detail(ceph::Formatter *f) const final {}
+  const char *get_type_name() const final {
+    return name;
+  }
+
+  class ExitBarrier final : public PipelineExitBarrierI {
+  public:
+    ExitBarrier() = default;
+
+    seastar::future<> wait() final {
+      return seastar::now();
+    }
+
+    void exit() final {}
+
+    void cancel() final {}
+
+    ~ExitBarrier() final {}
+  };
+
+public:
+  seastar::future<PipelineExitBarrierI::Ref> enter() final {
+    return seastar::make_ready_future<PipelineExitBarrierI::Ref>(
+      new ExitBarrier);
+  }
+
+  UnorderedStage(const char *name) : name(name) {}
+
+private:
+  const char * name;
+};
+
 
 }

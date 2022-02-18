@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/config_proxy.h"
 #include "common/event_socket.h"
@@ -34,8 +35,6 @@
 
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
-
-class SafeTimer;
 
 namespace neorados {
 class IOContext;
@@ -83,7 +82,7 @@ namespace librbd {
       }
     };
 
-    static const string METADATA_CONF_PREFIX;
+    static const std::string METADATA_CONF_PREFIX;
 
     CephContext *cct;
     ConfigProxy config;
@@ -281,7 +280,7 @@ namespace librbd {
 
     uint64_t get_current_size() const;
     uint64_t get_object_size() const;
-    string get_object_name(uint64_t num) const;
+    std::string get_object_name(uint64_t num) const;
     uint64_t get_stripe_unit() const;
     uint64_t get_stripe_count() const;
     uint64_t get_stripe_period() const;
@@ -324,7 +323,7 @@ namespace librbd {
     int get_parent_overlap(librados::snap_t in_snap_id,
 			   uint64_t *overlap) const;
     void register_watch(Context *on_finish);
-    uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
+    uint64_t prune_parent_extents(std::vector<std::pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
     void cancel_async_requests();

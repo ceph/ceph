@@ -64,7 +64,7 @@ To add a specific version of a package to the allowlist:
   # radosgw-admin script-package add --package='{package name} {package version}' [--allow-compilation]
 
 
-* When adding a diffrent version of a package which already exists in the list, the newly
+* When adding a different version of a package which already exists in the list, the newly
   added version will override the existing one.
 
 * When adding a package without a version specified, the latest version of the package
@@ -262,6 +262,8 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.HTTP.Metadata``                          | table    | string to string metadata map                                | yes      | yes       | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.HTTP.StorageClass``                      | string   | storage class                                                | no       | yes       | yes      |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.HTTP.Host``                              | string   | host name                                                    | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.HTTP.Method``                            | string   | HTTP method                                                  | no       | no        | no       |
@@ -322,9 +324,9 @@ Lua Code Samples
 
   function print_owner(owner)
     RGWDebugLog("Owner:")
-    RGWDebugLog("  Dispaly Name: " .. owner.DisplayName)
+    RGWDebugLog("  Display Name: " .. owner.DisplayName)
     RGWDebugLog("  Id: " .. owner.User.Id)
-    RGWDebugLog("  Tenanet: " .. owner.User.Tenant)
+    RGWDebugLog("  Tenant: " .. owner.User.Tenant)
   end
 
   function print_acl(acl_type)

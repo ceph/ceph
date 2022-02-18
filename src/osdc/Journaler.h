@@ -135,7 +135,7 @@ public:
     uint64_t expire_pos;
     uint64_t unused_field;
     uint64_t write_pos;
-    string magic;
+    std::string magic;
     file_layout_t layout; //< The mapping from byte stream offsets
 			     //  to RADOS objects
     stream_format_t stream_format; //< The encoding of LogEvents
@@ -186,7 +186,7 @@ public:
       f->close_section(); // journal_header
     }
 
-    static void generate_test_instances(list<Header*> &ls)
+    static void generate_test_instances(std::list<Header*> &ls)
     {
       ls.push_back(new Header());
 
@@ -269,7 +269,7 @@ private:
 
   void _reread_head(Context *onfinish);
   void _set_layout(file_layout_t const *l);
-  list<Context*> waitfor_recover;
+  std::list<Context*> waitfor_recover;
   void _read_head(Context *on_finish, bufferlist *bl);
   void _finish_read_head(int r, bufferlist& bl);
   void _finish_reread_head(int r, bufferlist& bl, Context *finish);
@@ -311,7 +311,7 @@ private:
 
   uint64_t waiting_for_zero_pos;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
-  list<Context*> waitfor_prezero;
+  std::list<Context*> waitfor_prezero;
 
   std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
@@ -330,7 +330,7 @@ private:
   // read buffer.  unused_field + read_buf.length() == prefetch_pos.
   bufferlist read_buf;
 
-  map<uint64_t,bufferlist> prefetch_buf;
+  std::map<uint64_t,bufferlist> prefetch_buf;
 
   uint64_t fetch_len;     // how much to read at a time
   uint64_t temp_fetch_len;

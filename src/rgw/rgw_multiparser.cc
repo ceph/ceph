@@ -12,7 +12,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-                                  
+using namespace std;
+
 int main(int argc, char **argv) {
   RGWMultiXMLParser parser;
 

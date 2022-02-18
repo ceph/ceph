@@ -9,6 +9,7 @@ from jinja2 import Template
 from pcpp.preprocessor import Preprocessor
 from sphinx.util import logging
 from sphinx.util.console import bold
+from importlib import reload
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +311,7 @@ class CephMgrCommands(Directive):
         with self.mocked_modules():
             logger.info(bold(f"loading mgr module '{name}'..."))
             mgr_mod = __import__(name, globals(), locals(), [], 0)
+            reload(mgr_mod)
             from tests import M
 
             def subclass(x):
@@ -355,6 +357,10 @@ class CephMgrCommands(Directive):
         cmds = [cmd for cmd in cmds if 'hidden' not in cmd.flags]
         cmds = sorted(cmds, key=lambda cmd: cmd.prefix)
         self._render_cmds(cmds)
+
+        orig_rgw_mod = sys.modules['pybind_rgw_mod']
+        sys.modules['rgw'] = orig_rgw_mod
+
         return []
 
 

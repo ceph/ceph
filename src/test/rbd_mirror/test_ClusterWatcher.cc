@@ -166,8 +166,8 @@ public:
 
   RadosRef m_cluster;
   ceph::mutex m_lock = ceph::make_mutex("TestClusterWatcherLock");
-  unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
-  unique_ptr<ClusterWatcher> m_cluster_watcher;
+  std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
+  std::unique_ptr<ClusterWatcher> m_cluster_watcher;
 
   set<string> m_pools;
   ClusterWatcher::PoolPeers m_pool_peers;

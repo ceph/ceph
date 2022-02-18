@@ -22,13 +22,6 @@ Crimson is not enabled by default. To enable it::
 Please note, `ASan`_ is enabled by default if crimson is built from a source
 cloned using git.
 
-Also, Seastar uses its own lockless allocator which does not play well with
-the alien threads. So, to use alienstore / bluestore backend, you might want to
-pass ``-DSeastar_CXX_FLAGS=-DSEASTAR_DEFAULT_ALLOCATOR`` to ``cmake`` when
-configuring this project to use the libc allocator, like::
-
-  $ cmake -DWITH_SEASTAR=ON -DSeastar_CXX_FLAGS=-DSEASTAR_DEFAULT_ALLOCATOR ..
-
 .. _ASan: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
 Running Crimson
@@ -39,12 +32,30 @@ As you might expect, crimson is not featurewise on par with its predecessor yet.
 object store backend
 --------------------
 
-At the moment ``crimson-osd`` offers two object store backends:
+At the moment, ``crimson-osd`` offers both native and alienized object store
+backends. The native object store backends perform IO using seastar reactor.
+They are:
 
-- CyanStore: CyanStore is modeled after memstore in classic OSD.
-- AlienStore: AlienStore is short for Alienized BlueStore.
+.. describe:: cyanstore
 
-Seastore is still under active development.
+   CyanStore is modeled after memstore in classic OSD.
+
+.. describe:: seastore
+
+   Seastore is still under active development.
+
+While the alienized object store backends are backed by a thread pool, which
+is a proxy of the alien store adaptor running in SeaStar. The proxy issues
+requests to object stores running in alien threads, i.e., worker threads not
+managed by the Seastar framework. They are:
+
+.. describe:: memstore
+
+   The memory backed object store
+
+.. describe:: bluestore
+
+   The object store used by classic OSD by default.
 
 daemonize
 ---------
@@ -121,18 +132,21 @@ using ``vstart.sh``,
 
     for more Seastar specific command line options.
 
-``--memstore``
+``--cyanstore``
     use the CyanStore as the object store backend.
 
 ``--bluestore``
-    use the AlienStore as the object store backend. This is the default setting,
-    if not specified otherwise.
+    use the alienized BlueStore as the object store backend. This is the default
+    setting, if not specified otherwise.
+
+``--memstore``
+    use the alienized MemStore as the object store backend.
 
 So, a typical command to start a single-crimson-node cluster is::
 
   $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
-    --without-dashboard --memstore \
-    --crimson --nodaemon --redirect-output \
+    --without-dashboard --cyanstore \
+    --crimson --redirect-output \
     --osd-args "--memory 4G"
 
 Where we assign 4 GiB memory, a single thread running on core-0 to crimson-osd.
@@ -150,7 +164,7 @@ pg stats reported to mgr
 ------------------------
 
 Crimson collects the per-pg, per-pool, and per-osd stats in a `MPGStats`
-messsage, and send it over to mgr, so that the mgr modules can query
+message, and send it over to mgr, so that the mgr modules can query
 them using the `MgrModule.get()` method.
 
 asock command

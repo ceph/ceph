@@ -27,6 +27,10 @@ class DirectoryState:
             f' purging={self.purging}]'
 
 class Policy:
+    # number of seconds after which a directory can be reshuffled
+    # to other mirror daemon instances.
+    DIR_SHUFFLE_THROTTLE_INTERVAL = 300
+
     def __init__(self):
         self.dir_states = {}
         self.instance_to_dir_map = {}
@@ -54,7 +58,8 @@ class Policy:
         """
         log.debug(f'can_shuffle_dir: {dir_path}')
         dir_state = self.dir_states[dir_path]
-        return StateTransition.is_idle(dir_state.state)
+        return StateTransition.is_idle(dir_state.state) and \
+            (time.time() - dir_state['mapped_time']) > Policy.DIR_SHUFFLE_THROTTLE_INTERVAL
 
     def set_state(self, dir_state, state, ignore_current_state=False):
         if not ignore_current_state and dir_state.state == state:

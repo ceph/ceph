@@ -30,6 +30,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
+using namespace std;
 
 ostream& CDentry::print_db_line_prefix(ostream& out)
 {
@@ -224,6 +225,22 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
+void CDentry::mark_auth()
+{
+  if (!is_auth()) {
+    state_set(STATE_AUTH);
+    dir->adjust_dentry_lru(this);
+  }
+}
+
+void CDentry::clear_auth()
+{
+  if (is_auth()) {
+    state_clear(STATE_AUTH);
+    dir->adjust_dentry_lru(this);
+  }
+}
+
 void CDentry::make_path_string(string& s, bool projected) const
 {
   if (dir) {
@@ -255,6 +272,9 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 
   if (dnl == &linkage)
     in->add_remote_parent(this);
+
+  // check for reintegration
+  dir->mdcache->eval_remote(this);
 }
 
 void CDentry::unlink_remote(CDentry::linkage_t *dnl)

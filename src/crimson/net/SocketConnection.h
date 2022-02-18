@@ -75,7 +75,7 @@ class SocketConnection : public Connection {
 
   void mark_down() override;
 
-  void print(ostream& out) const override;
+  void print(std::ostream& out) const override;
 
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
@@ -95,6 +95,8 @@ class SocketConnection : public Connection {
   bool is_lossy() const {
     return policy.lossy;
   }
+
+  seastar::socket_address get_local_address() const;
 
   friend class Protocol;
   friend class ProtocolV1;

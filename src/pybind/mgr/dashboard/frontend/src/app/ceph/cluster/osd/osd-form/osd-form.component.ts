@@ -1,5 +1,5 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
+import { FormControl } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -15,6 +15,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
+import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
@@ -39,6 +40,14 @@ export class OsdFormComponent extends CdForm implements OnInit {
 
   @ViewChild('previewButtonPanel')
   previewButtonPanel: FormButtonPanelComponent;
+
+  @Input()
+  hideTitle = false;
+
+  @Input()
+  hideSubmitBtn = false;
+
+  @Output() emitDriveGroup: EventEmitter<DriveGroup> = new EventEmitter();
 
   icons = Icons;
 
@@ -68,7 +77,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
     private orchService: OrchestratorService,
     private hostService: HostService,
     private router: Router,
-    private modalService: ModalService
+    private modalService: ModalService,
+    public wizardStepService: WizardStepsService
   ) {
     super();
     this.resource = $localize`OSDs`;
@@ -105,12 +115,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
 
   createForm() {
     this.form = new CdFormGroup({
-      walSlots: new FormControl(0, {
-        validators: [Validators.min(0)]
-      }),
-      dbSlots: new FormControl(0, {
-        validators: [Validators.min(0)]
-      }),
+      walSlots: new FormControl(0),
+      dbSlots: new FormControl(0),
       features: new CdFormGroup(
         this.featureList.reduce((acc: object, e) => {
           // disable initially because no data devices are selected
@@ -182,6 +188,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
       this.enableFeatures();
     }
     this.driveGroup.setDeviceSelection(event.type, event.filters);
+
+    this.emitDriveGroup.emit(this.driveGroup);
   }
 
   onDevicesCleared(event: DevicesSelectionClearEvent) {

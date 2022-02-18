@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/iterator/counting_iterator.hpp>
+#include <fmt/format.h>
 
 #include "os/Transaction.h"
 #include "fs_driver.h"
@@ -13,16 +14,94 @@ coll_t get_coll(unsigned num) {
   return coll_t(spg_t(pg_t(0, num)));
 }
 
+ghobject_t get_log_object(unsigned coll)
+{
+  return ghobject_t(
+    shard_id_t::NO_SHARD,
+    0,
+    (coll << 16),
+    "",
+    "",
+    0,
+    ghobject_t::NO_GEN);
+}
+
+std::string make_log_key(
+  unsigned i)
+{
+  return fmt::format("log_entry_{}", i);
+}
+
+void add_log_entry(
+  unsigned i,
+  unsigned entry_size,
+  std::map<std::string, ceph::buffer::list> *omap)
+{
+  assert(omap);
+  bufferlist bl;
+  bl.append(ceph::buffer::create('0', entry_size));
+
+  omap->emplace(std::make_pair(make_log_key(i), bl));
+}
+
+void populate_log(
+  ceph::os::Transaction &t,
+  FSDriver::pg_analogue_t &pg,
+  unsigned entry_size,
+  unsigned entries)
+{
+  t.touch(pg.collection->get_cid(), pg.log_object);
+  // omap_clear not yet implemented, TODO
+  // t.omap_clear(pg.collection->get_cid(), pg.log_object);
+
+  std::map<std::string, ceph::buffer::list> omap;
+  for (unsigned i = 0; i < entries; ++i) {
+    add_log_entry(i, entry_size, &omap);
+  }
+
+  t.omap_setkeys(
+    pg.collection->get_cid(),
+    pg.log_object,
+    omap);
+
+  pg.log_head = entries;
+}
+
+void update_log(
+  ceph::os::Transaction &t,
+  FSDriver::pg_analogue_t &pg,
+  unsigned entry_size,
+  unsigned entries)
+{
+  ++pg.log_head;
+  std::map<std::string, ceph::buffer::list> key;
+  add_log_entry(pg.log_head, entry_size, &key);
+
+  t.omap_setkeys(
+    pg.collection->get_cid(),
+    pg.log_object,
+    key);
+
+
+  while ((pg.log_head - pg.log_tail) > entries) {
+    t.omap_rmkey(
+      pg.collection->get_cid(),
+      pg.log_object,
+      make_log_key(pg.log_tail));
+    ++pg.log_tail;
+  }
+}
+
 FSDriver::offset_mapping_t FSDriver::map_offset(off_t offset)
 {
   uint32_t objid = offset / config.object_size;
-  uint32_t collid = objid % config.num_collections;
+  uint32_t collid = objid % config.num_pgs;
   return offset_mapping_t{
     collections[collid],
     ghobject_t(
       shard_id_t::NO_SHARD,
       0,
-      (objid << 16) | collid,
+      (collid << 16) | (objid + 1),
       "",
       "",
       0,
@@ -41,14 +120,33 @@ seastar::future<> FSDriver::write(
   bufferlist bl;
   bl.append(ptr);
   t.write(
-    mapping.chandle->get_cid(), 
+    mapping.pg.collection->get_cid(),
     mapping.object,
     mapping.offset,
     ptr.length(),
     bl,
     0);
+
+  if (config.oi_enabled() ) {
+    bufferlist attr;
+    attr.append(ceph::buffer::create(config.oi_size, '0'));
+    t.setattr(
+      mapping.pg.collection->get_cid(),
+      mapping.object,
+      "_",
+      attr);
+  }
+
+  if (config.log_enabled()) {
+    update_log(
+      t,
+      mapping.pg,
+      config.log_entry_size,
+      config.log_size);
+  }
+
   return fs->do_transaction(
-    mapping.chandle,
+    mapping.pg.collection,
     std::move(t));
 }
 
@@ -59,7 +157,7 @@ seastar::future<bufferlist> FSDriver::read(
   auto mapping = map_offset(offset);
   ceph_assert((mapping.offset + size) <= config.object_size);
   return fs->read(
-    mapping.chandle,
+    mapping.pg.collection,
     mapping.object,
     mapping.offset,
     size,
@@ -71,7 +169,7 @@ seastar::future<bufferlist> FSDriver::read(
       return seastar::make_ready_future<bufferlist>(std::move(bl));
     }),
     crimson::ct_error::assert_all{"Unrecoverable error in FSDriver::read"}
-  ).then([this, size](auto &&bl) {
+  ).then([size](auto &&bl) {
     if (bl.length() < size) {
       bl.append_zero(size - bl.length());
     }
@@ -81,24 +179,44 @@ seastar::future<bufferlist> FSDriver::read(
 
 seastar::future<> FSDriver::mkfs()
 {
-  init();
-  assert(fs);
-  return fs->start(
+  return init(    
   ).then([this] {
+    assert(fs);
+    return fs->start();
+  }).then([this] {
     uuid_d uuid;
     uuid.generate_random();
-    return fs->mkfs(uuid);
+    return fs->mkfs(uuid).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        crimson::get_logger(ceph_subsys_test)
+          .error("error creating empty object store in {}: ({}) {}",
+          crimson::common::local_conf().get_val<std::string>("osd_data"),
+          ec.value(), ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return fs->stop();
   }).then([this] {
-    init();
-    return fs->start();
+    return init().then([this] {
+      return fs->start();
+    });
   }).then([this] {
-    return fs->mount();
+    return fs->mount(
+    ).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        crimson::get_logger(
+	  ceph_subsys_test
+	).error(
+	  "error mounting object store in {}: ({}) {}",
+	  crimson::common::local_conf().get_val<std::string>("osd_data"),
+	  ec.value(),
+	  ec.message());
+	std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return seastar::do_for_each(
       boost::counting_iterator<unsigned>(0),
-      boost::counting_iterator<unsigned>(config.num_collections),
+      boost::counting_iterator<unsigned>(config.num_pgs),
       [this](auto i) {
 	return fs->create_new_collection(get_coll(i)
 	).then([this, i](auto coll) {
@@ -123,19 +241,46 @@ seastar::future<> FSDriver::mount()
   return (
     config.mkfs ? mkfs() : seastar::now()
   ).then([this] {
-    init();
-    return fs->start();
+    return init().then([this] {
+      return fs->start();
+    });
   }).then([this] {
-    return fs->mount();
+    return fs->mount(
+    ).handle_error(
+      crimson::stateful_ec::handle([] (const auto& ec) {
+        crimson::get_logger(
+	  ceph_subsys_test
+	).error(
+	  "error mounting object store in {}: ({}) {}",
+	  crimson::common::local_conf().get_val<std::string>("osd_data"),
+	  ec.value(),
+	  ec.message());
+        std::exit(EXIT_FAILURE);
+      }));
   }).then([this] {
     return seastar::do_for_each(
       boost::counting_iterator<unsigned>(0),
-      boost::counting_iterator<unsigned>(config.num_collections),
+      boost::counting_iterator<unsigned>(config.num_pgs),
       [this](auto i) {
 	return fs->open_collection(get_coll(i)
 	).then([this, i](auto ref) {
-	  collections[i] = ref;
-	  return seastar::now();
+	  collections[i].collection = ref;
+	  collections[i].log_object = get_log_object(i);
+	  if (config.log_enabled()) {
+	    ceph::os::Transaction t;
+	    if (config.prepopulate_log_enabled()) {
+	      populate_log(
+		t,
+		collections[i],
+		config.log_entry_size,
+		config.log_size);
+	    }
+	    return fs->do_transaction(
+	      collections[i].collection,
+	      std::move(t));
+	  } else {
+	    return seastar::now();
+	  }
 	});
       });
   }).then([this] {
@@ -157,12 +302,15 @@ seastar::future<> FSDriver::close()
   });
 }
 
-void FSDriver::init()
+seastar::future<> FSDriver::init()
 {
   fs.reset();
-  fs = FuturizedStore::create(
+  return FuturizedStore::create(
     config.get_fs_type(),
     *config.path,
-    crimson::common::local_conf().get_config_values(),
-    alien);
+    crimson::common::local_conf().get_config_values()
+  ).then([this] (auto store_ptr) {
+      fs = std::move(store_ptr);
+      return seastar::now();
+  });
 }

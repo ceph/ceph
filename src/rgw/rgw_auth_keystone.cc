@@ -25,6 +25,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 namespace rgw {
 namespace auth {
@@ -63,7 +64,7 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
   }
 
   std::string admin_token;
-  if (rgw::keystone::Service::get_admin_token(cct, token_cache, config,
+  if (rgw::keystone::Service::get_admin_token(dpp, cct, token_cache, config,
                                               admin_token) < 0) {
     throw -EINVAL;
   }
@@ -100,7 +101,7 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
                  << ", body=" << token_body_bl.c_str() << dendl;
 
   TokenEngine::token_envelope_t token_body;
-  ret = token_body.parse(cct, token, token_body_bl, config.get_api_version());
+  ret = token_body.parse(dpp, cct, token, token_body_bl, config.get_api_version());
   if (ret < 0) {
     throw ret;
   }
@@ -285,7 +286,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   /* get authentication token for Keystone. */
   std::string admin_token;
-  int ret = rgw::keystone::Service::get_admin_token(cct, token_cache, config,
+  int ret = rgw::keystone::Service::get_admin_token(dpp, cct, token_cache, config,
                                                     admin_token);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
@@ -342,7 +343,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   /* now parse response */
   rgw::keystone::TokenEnvelope token_envelope;
-  ret = token_envelope.parse(cct, std::string(), token_body_bl, api_version);
+  ret = token_envelope.parse(dpp, cct, std::string(), token_body_bl, api_version);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: token parsing failed, ret=0" << ret
                   << dendl;
@@ -378,7 +379,7 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
 
   /* get authentication token for Keystone. */
   std::string admin_token;
-  int ret = rgw::keystone::Service::get_admin_token(cct, token_cache, config,
+  int ret = rgw::keystone::Service::get_admin_token(dpp, cct, token_cache, config,
                                                     admin_token);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"

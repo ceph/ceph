@@ -19,6 +19,8 @@
 #include <net/if.h>
 #endif
 
+using namespace std;
+
 static void ipv4(struct sockaddr_in *addr, const char *s) {
   int err;
 

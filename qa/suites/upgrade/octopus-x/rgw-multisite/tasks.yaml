@@ -1,5 +1,7 @@
 tasks:
 - install:
+    exclude_packages:
+      - ceph-volume
 - ceph: {cluster: c1}
 - ceph: {cluster: c2}
 - parallel:

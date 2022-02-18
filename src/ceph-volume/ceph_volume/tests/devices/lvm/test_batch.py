@@ -15,6 +15,10 @@ class TestBatch(object):
         b = batch.Batch([])
         b.main()
 
+    def test_invalid_osd_ids_passed(self):
+        with pytest.raises(SystemExit):
+            batch.Batch(argv=['--osd-ids', '1', 'foo']).main()
+
     def test_disjoint_device_lists(self, factory):
         device1 = factory(used_by_ceph=False, available=True, abspath="/dev/sda")
         device2 = factory(used_by_ceph=False, available=True, abspath="/dev/sdb")
@@ -217,6 +221,15 @@ class TestBatch(object):
         fast = batch.get_physical_fast_allocs(mock_devices_available,
                                               'block_db', 2, 2, args)
         assert len(fast) == 2
+
+    def test_batch_fast_allocations_one_block_db_length(self, factory, conf_ceph_stub,
+                                                  mock_lv_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+
+        b = batch.Batch([])
+        db_lv_devices = [mock_lv_device_generator()]
+        fast = b.fast_allocations(db_lv_devices, 1, 0, 'block_db')
+        assert len(fast) == 1
 
     @pytest.mark.parametrize('occupied_prior', range(7))
     @pytest.mark.parametrize('slots,num_devs',

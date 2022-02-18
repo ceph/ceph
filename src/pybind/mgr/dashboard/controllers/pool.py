@@ -11,8 +11,8 @@ from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
 from ..services.rbd import RbdConfiguration
 from ..tools import TaskManager, str_to_bool
-from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, Task, UiApiController
+from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, \
+    RESTController, Task, UIRouter
 
 POOL_SCHEMA = ([{
     "pool": (int, "pool id"),
@@ -73,7 +73,8 @@ POOL_SCHEMA = ([{
     "expected_num_objects": (int, ""),
     "fast_read": (bool, ""),
     "options": ({
-        "pg_num_min": (int, "")
+        "pg_num_min": (int, ""),
+        "pg_num_max": (int, "")
     }, ""),
     "application_metadata": ([str], ""),
     "create_time": (str, ""),
@@ -89,8 +90,8 @@ def pool_task(name, metadata, wait_for=2.0):
     return Task("pool/{}".format(name), metadata, wait_for)
 
 
-@ApiController('/pool', Scope.POOL)
-@ControllerDoc("Get pool details by pool name", "Pool")
+@APIRouter('/pool', Scope.POOL)
+@APIDoc("Get pool details by pool name", "Pool")
 class Pool(RESTController):
 
     @staticmethod
@@ -283,8 +284,8 @@ class Pool(RESTController):
         return RbdConfiguration(pool_name).list()
 
 
-@UiApiController('/pool', Scope.POOL)
-@ControllerDoc("Dashboard UI helper function; not part of the public API", "PoolUi")
+@UIRouter('/pool', Scope.POOL)
+@APIDoc("Dashboard UI helper function; not part of the public API", "PoolUi")
 class PoolUi(Pool):
     @Endpoint()
     @ReadPermission

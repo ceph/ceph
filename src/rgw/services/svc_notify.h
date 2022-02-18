@@ -37,15 +37,15 @@ private:
   int num_watchers{0};
   RGWWatcher **watchers{nullptr};
   std::set<int> watchers_set;
-  vector<RGWSI_RADOS::Obj> notify_objs;
+  std::vector<RGWSI_RADOS::Obj> notify_objs;
 
   bool enabled{false};
 
   double inject_notify_timeout_probability{0};
   static constexpr unsigned max_notify_retries = 10;
 
-  string get_control_oid(int i);
-  RGWSI_RADOS::Obj pick_control_obj(const string& key);
+  std::string get_control_oid(int i);
+  RGWSI_RADOS::Obj pick_control_obj(const std::string& key);
 
   CB *cb{nullptr};
 
@@ -85,7 +85,8 @@ private:
   void schedule_context(Context *c);
 public:
   RGWSI_Notify(CephContext *cct): RGWServiceInstance(cct) {}
-  ~RGWSI_Notify();
+
+  virtual ~RGWSI_Notify() override;
 
   class CB {
     public:
@@ -98,7 +99,7 @@ public:
       virtual void set_enabled(bool status) = 0;
   };
 
-  int distribute(const DoutPrefixProvider *dpp, const string& key, const RGWCacheNotifyInfo& bl,
+  int distribute(const DoutPrefixProvider *dpp, const std::string& key, const RGWCacheNotifyInfo& bl,
 		 optional_yield y);
 
   void register_watch_cb(CB *cb);

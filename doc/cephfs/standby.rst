@@ -4,7 +4,7 @@ Terminology
 -----------
 
 A Ceph cluster may have zero or more CephFS *file systems*.  Each CephFS has
-a human readable name (set at creatiopn time with ``fs new``) and an integer
+a human readable name (set at creation time with ``fs new``) and an integer
 ID.  The ID is called the file system cluster ID, or *FSCID*.
 
 Each CephFS file system has a number of *ranks*, numbered beginning with zero.

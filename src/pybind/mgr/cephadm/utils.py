@@ -24,8 +24,11 @@ class CephadmNoImage(Enum):
 CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror', 'cephfs-mirror']
 GATEWAY_TYPES = ['iscsi', 'nfs']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus', 'alertmanager', 'grafana']
+
 CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES
 
+# these daemon types use the ceph container image
+CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs']
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token

@@ -9,7 +9,7 @@ from tasks.ceph_test_case import CephTestCase
 
 from teuthology import contextutil
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +66,6 @@ class CephFSTestCase(CephTestCase):
     # their special needs.  If not met, tests will be skipped.
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
-    REQUIRE_KCLIENT_REMOTE = False
     REQUIRE_ONE_CLIENT_REMOTE = False
 
     # Whether to create the default filesystem during setUp

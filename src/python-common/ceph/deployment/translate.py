@@ -36,7 +36,16 @@ class to_ceph_volume(object):
             return None
 
         cmd = ""
-        if self.spec.objectstore == 'filestore':
+        if self.spec.method == 'raw':
+            assert self.spec.objectstore == 'bluestore'
+            cmd = "raw prepare --bluestore"
+            cmd += " --data {}".format(" ".join(data_devices))
+            if db_devices:
+                cmd += " --block.db {}".format(" ".join(db_devices))
+            if wal_devices:
+                cmd += " --block.wal {}".format(" ".join(wal_devices))
+
+        elif self.spec.objectstore == 'filestore':
             cmd = "lvm batch --no-auto"
 
             cmd += " {}".format(" ".join(data_devices))
@@ -50,7 +59,7 @@ class to_ceph_volume(object):
 
             cmd += " --filestore"
 
-        if self.spec.objectstore == 'bluestore':
+        elif self.spec.objectstore == 'bluestore':
 
             cmd = "lvm batch --no-auto {}".format(" ".join(data_devices))
 
@@ -78,8 +87,9 @@ class to_ceph_volume(object):
         if self.osd_id_claims:
             cmd += " --osd-ids {}".format(" ".join(self.osd_id_claims))
 
-        cmd += " --yes"
-        cmd += " --no-systemd"
+        if self.spec.method != 'raw':
+            cmd += " --yes"
+            cmd += " --no-systemd"
 
         if self.preview:
             cmd += " --report"

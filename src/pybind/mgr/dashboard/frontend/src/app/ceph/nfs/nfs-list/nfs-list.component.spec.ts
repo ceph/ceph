@@ -58,7 +58,6 @@ describe('NfsListComponent', () => {
     beforeEach(() => {
       fixture.detectChanges();
       spyOn(nfsService, 'list').and.callThrough();
-      httpTesting.expectOne('api/nfs-ganesha/daemon').flush([]);
     });
 
     afterEach(() => {
@@ -126,9 +125,6 @@ describe('NfsListComponent', () => {
       refresh(new Summary());
       spyOn(nfsService, 'list').and.callFake(() => of(exports));
       fixture.detectChanges();
-
-      const req = httpTesting.expectOne('api/nfs-ganesha/daemon');
-      req.flush([]);
     });
 
     it('should gets all exports without tasks', () => {

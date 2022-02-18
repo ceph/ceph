@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG
 #define CEPH_LIBRBD_CACHE_PARENT_WRITE_LOG
 
+#include "common/Timer.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncOpTracker.h"
@@ -20,7 +21,6 @@
 #include <list>
 
 class Context;
-class SafeTimer;
 
 namespace librbd {
 
@@ -178,6 +178,9 @@ private:
 
   bool m_persist_on_write_until_flush = true;
 
+  pwl::WriteLogGuard m_flush_guard;
+  mutable ceph::mutex m_flush_guard_lock;
+
  /* Debug counters for the places m_async_op_tracker is used */
   std::atomic<int> m_async_complete_ops = {0};
   std::atomic<int> m_async_null_flush_finish = {0};
@@ -225,7 +228,6 @@ private:
   void detain_guarded_request(C_BlockIORequestT *request,
                               pwl::GuardedRequestFunctionContext *guarded_ctx,
                               bool is_barrier);
-
   void perf_start(const std::string name);
   void perf_stop();
   void log_perf();
@@ -234,6 +236,7 @@ private:
 
   void pwl_init(Context *on_finish, pwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
+  void check_image_cache_state_clean();
 
   void flush_dirty_entries(Context *on_finish);
   bool can_flush_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
@@ -336,14 +339,18 @@ protected:
       std::map<uint64_t, bool> &missing_sync_points,
       std::map<uint64_t,
       std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
-      int entry_index);
+      uint64_t entry_index);
   void update_sync_points(
       std::map<uint64_t, bool> &missing_sync_points,
       std::map<uint64_t,
       std::shared_ptr<pwl::SyncPointLogEntry>> &sync_point_entries,
-      pwl::DeferredContexts &later, uint32_t alloc_size);
+      pwl::DeferredContexts &later);
+  virtual void inc_allocated_cached_bytes(
+      std::shared_ptr<pwl::GenericLogEntry> log_entry) = 0;
   Context *construct_flush_entry(
       const std::shared_ptr<pwl::GenericLogEntry> log_entry, bool invalidating);
+  void detain_flush_guard_request(std::shared_ptr<GenericLogEntry> log_entry,
+                                  GuardedRequestFunctionContext *guarded_ctx);
   void process_writeback_dirty_entries();
   bool can_retire_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
 
@@ -366,11 +373,11 @@ protected:
                                pwl::DeferredContexts &later) = 0;
   virtual void collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
-      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
       std::vector<bufferlist*> &bls_to_read, uint64_t entry_hit_length,
       Extent hit_extent, pwl::C_ReadRequest *read_ctx) = 0;
   virtual void complete_read(
-      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<std::shared_ptr<GenericWriteLogEntry>> &log_entries_to_read,
       std::vector<bufferlist*> &bls_to_read, Context *ctx) = 0;
   virtual void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry,
@@ -386,10 +393,9 @@ protected:
   virtual void persist_last_flushed_sync_gen() {}
   virtual void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
                              bool &no_space) {}
-  virtual Context *construct_flush_entry_ctx(
-      const std::shared_ptr<pwl::GenericLogEntry> log_entry) {
-    return nullptr;
-  }
+  virtual void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
+					DeferredContexts &post_unlock,
+					bool has_write_entry) = 0;
   virtual uint64_t get_max_extent() {
     return 0;
   }

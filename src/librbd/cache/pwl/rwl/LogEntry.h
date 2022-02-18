@@ -39,6 +39,7 @@ public:
       std::vector<WriteBufferAllocation>::iterator allocation) override;
   buffer::list &get_cache_bl() override;
   void copy_cache_bl(bufferlist *out_bl) override;
+  unsigned int reader_count() const override;
 };
 
 class WriteSameLogEntry : public WriteLogEntry {

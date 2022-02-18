@@ -212,7 +212,8 @@ int KqueueDriver::resize_events(int newsize)
   return 0;
 }
 
-int KqueueDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tvp)
+int KqueueDriver::event_wait(std::vector<FiredFileEvent> &fired_events,
+			     struct timeval *tvp)
 {
   int retval, numevents = 0;
   struct timespec timeout;

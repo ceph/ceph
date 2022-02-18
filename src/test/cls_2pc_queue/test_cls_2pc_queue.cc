@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
@@ -18,6 +18,8 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+
+using namespace std;
 
 class TestCls2PCQueue : public ::testing::Test {
 protected:

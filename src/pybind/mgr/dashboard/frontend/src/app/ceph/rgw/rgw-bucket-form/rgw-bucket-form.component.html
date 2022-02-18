@@ -5,7 +5,7 @@
         [formGroup]="bucketForm"
         novalidate>
     <div class="card">
-      <div i18n="form title|Example: Create Pool@@formTitle"
+      <div i18n="form title"
            class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
 
       <div class="card-body">
@@ -46,9 +46,9 @@
                   i18n>This field is required.</span>
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'bucketNameInvalid')"
-                  i18n>The value is not valid.</span>
+                  i18n>Bucket names can only contain lowercase letters, numbers, periods and hyphens.</span>
             <span class="invalid-feedback"
-                  *ngIf="bucketForm.showError('bid', frm, 'bucketNameExists')"
+                  *ngIf="bucketForm.showError('bid', frm, 'bucketNameNotAllowed')"
                   i18n>The chosen name is already in use.</span>
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'containsUpperCase')"
@@ -61,7 +61,7 @@
                   i18n>Bucket names cannot be formatted as IP address.</span>
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'onlyLowerCaseAndNumbers')"
-                  i18n>Bucket names can only contain lowercase letters, numbers, and hyphens.</span>
+                  i18n>Bucket labels cannot be empty and can only contain lowercase letters, numbers and hyphens.</span>
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'shouldBeInRange')"
                   i18n>Bucket names must be 3 to 63 characters long.</span>

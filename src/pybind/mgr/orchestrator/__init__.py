@@ -12,7 +12,7 @@ from ._interface import \
     DaemonDescription, DaemonDescriptionStatus, \
     OrchestratorEvent, set_exception_subject, \
     InventoryHost, DeviceLightLoc, \
-    UpgradeStatusSpec, daemon_type_to_service, service_to_daemon_types
+    UpgradeStatusSpec, daemon_type_to_service, service_to_daemon_types, KNOWN_DAEMON_TYPES
 
 
 import os

@@ -17,6 +17,8 @@
 #include "CInode.h"
 #include "CDir.h"
 
+using namespace std;
+
 // MutationImpl
 
 void MutationImpl::pin(MDSCacheObject *o)

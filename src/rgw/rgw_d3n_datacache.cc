@@ -20,7 +20,7 @@ namespace efs = std::experimental::filesystem;
 
 #define dout_subsys ceph_subsys_rgw
 
-
+using namespace std;
 
 int D3nCacheAioWriteRequest::d3n_prepare_libaio_write_op(bufferlist& bl, unsigned int len, string oid, string cache_location)
 {
@@ -97,12 +97,14 @@ void D3nDataCache::init(CephContext *_cct) {
   if (conf_eviction_policy == "random")
     eviction_policy = _eviction_policy::RANDOM;
 
+#if defined(HAVE_LIBAIO)
   // libaio setup
   struct aioinit ainit{0};
-  ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_threads");;
+  ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_threads");
   ainit.aio_num = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_num");
   ainit.aio_idle_time = 120;
   aio_init(&ainit);
+#endif
 }
 
 int D3nDataCache::d3n_io_write(bufferlist& bl, unsigned int len, std::string oid)
@@ -160,10 +162,7 @@ void D3nDataCache::d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c)
 
   { // update cache_map entries for new chunk in cache
     const std::lock_guard l(d3n_cache_lock);
-    auto it = d3n_outstanding_write_list.find(c->oid);
-    if (it != d3n_outstanding_write_list.end()) {
-      d3n_outstanding_write_list.erase(it);
-    }
+    d3n_outstanding_write_list.erase(c->oid);
     chunk_info = new D3nChunkDataInfo;
     chunk_info->oid = c->oid;
     chunk_info->set_ctx(cct);
@@ -211,10 +210,10 @@ done:
 
 void D3nDataCache::put(bufferlist& bl, unsigned int len, std::string& oid)
 {
-  int r = 0;
+  size_t sr = 0;
   uint64_t freed_size = 0, _free_data_cache_size = 0, _outstanding_write_size = 0;
 
-  ldout(cct, 10) << "D3nDataCache::" << __func__ << "(): oid=" << oid << dendl;
+  ldout(cct, 10) << "D3nDataCache::" << __func__ << "(): oid=" << oid << ", len=" << len << dendl;
   {
     const std::lock_guard l(d3n_cache_lock);
     std::unordered_map<string, D3nChunkDataInfo*>::iterator iter = d3n_cache_map.find(oid);
@@ -235,27 +234,29 @@ void D3nDataCache::put(bufferlist& bl, unsigned int len, std::string& oid)
     _outstanding_write_size = outstanding_write_size;
   }
   ldout(cct, 20) << "D3nDataCache: Before eviction _free_data_cache_size:" << _free_data_cache_size << ", _outstanding_write_size:" << _outstanding_write_size << ", freed_size:" << freed_size << dendl;
-  while (len >= (_free_data_cache_size - _outstanding_write_size + freed_size)) {
-    ldout(cct, 20) << "D3nDataCache: enter eviction, r=" << r << dendl;
+  while (len > (_free_data_cache_size - _outstanding_write_size + freed_size)) {
+    ldout(cct, 20) << "D3nDataCache: enter eviction" << dendl;
     if (eviction_policy == _eviction_policy::LRU) {
-      r = lru_eviction();
+      sr = lru_eviction();
     } else if (eviction_policy == _eviction_policy::RANDOM) {
-      r = random_eviction();
+      sr = random_eviction();
     } else {
       ldout(cct, 0) << "D3nDataCache: Warning: unknown cache eviction policy, defaulting to lru eviction" << dendl;
-      r = lru_eviction();
+      sr = lru_eviction();
     }
-    if (r < 0)
+    if (sr == 0) {
+      ldout(cct, 2) << "D3nDataCache: Warning: eviction was not able to free disk space, not writing to cache" << dendl;
+      d3n_outstanding_write_list.erase(oid);
       return;
-    freed_size += r;
+    }
+    ldout(cct, 20) << "D3nDataCache: completed eviction of " << sr << " bytes" << dendl;
+    freed_size += sr;
   }
+  int r = 0;
   r = d3n_libaio_create_write_request(bl, len, oid);
   if (r < 0) {
     const std::lock_guard l(d3n_cache_lock);
-    auto it = d3n_outstanding_write_list.find(oid);
-    if (it != d3n_outstanding_write_list.end()) {
-      d3n_outstanding_write_list.erase(it);
-    }
+    d3n_outstanding_write_list.erase(oid);
     ldout(cct, 1) << "D3nDataCache: create_aio_write_request fail, r=" << r << dendl;
     return;
   }
@@ -324,7 +325,7 @@ size_t D3nDataCache::random_eviction()
   }
 
   location = cache_location + del_oid;
-  remove(location.c_str());
+  ::remove(location.c_str());
   return freed_size;
 }
 
@@ -355,14 +356,11 @@ size_t D3nDataCache::lru_eviction()
     }
     del_oid = del_entry->oid;
     ldout(cct, 20) << "D3nDataCache: lru_eviction: oid to remove: " << del_oid << dendl;
-    std::unordered_map<string, D3nChunkDataInfo*>::iterator iter = d3n_cache_map.find(del_oid);
-    if (iter != d3n_cache_map.end()) {
-      d3n_cache_map.erase(iter); // oid
-    }
+    d3n_cache_map.erase(del_oid); // oid
   }
   freed_size = del_entry->size;
   delete del_entry;
   location = cache_location + del_oid;
-  remove(location.c_str());
+  ::remove(location.c_str());
   return freed_size;
 }

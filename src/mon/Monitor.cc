@@ -421,6 +421,11 @@ int Monitor::do_admin_command(
     cmd_getval(cmdmap, "devid", want_devid);
 
     string devname = store->get_devname();
+    if (devname.empty()) {
+      err << "could not determine device name for " << store->get_path();
+      r = -ENOENT;
+      goto abort;
+    }
     set<string> devnames;
     get_raw_devices(devname, &devnames);
     json_spirit::mObject json_map;
@@ -674,31 +679,8 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
 
 void Monitor::update_log_clients()
 {
-  map<string,string> log_to_monitors;
-  map<string,string> log_to_syslog;
-  map<string,string> log_channel;
-  map<string,string> log_prio;
-  map<string,string> log_to_graylog;
-  map<string,string> log_to_graylog_host;
-  map<string,string> log_to_graylog_port;
-  uuid_d fsid;
-  string host;
-
-  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
-			       log_channel, log_prio, log_to_graylog,
-			       log_to_graylog_host, log_to_graylog_port,
-			       fsid, host))
-    return;
-
-  clog->update_config(log_to_monitors, log_to_syslog,
-		      log_channel, log_prio, log_to_graylog,
-		      log_to_graylog_host, log_to_graylog_port,
-		      fsid, host);
-
-  audit_clog->update_config(log_to_monitors, log_to_syslog,
-			    log_channel, log_prio, log_to_graylog,
-			    log_to_graylog_host, log_to_graylog_port,
-			    fsid, host);
+  clog->parse_client_options(g_ceph_context);
+  audit_clog->parse_client_options(g_ceph_context);
 }
 
 int Monitor::sanitize_options()
@@ -953,6 +935,9 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
   mgrmon()->prime_mgr_client();
+
+  // generate list of filestore OSDs
+  osdmon()->get_filestore_osd_list();
 
   state = STATE_PROBING;
   bootstrap();
@@ -2614,8 +2599,7 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
   if (!quorum.empty()) {
     f->dump_int(
       "quorum_age",
-      std::chrono::duration_cast<std::chrono::seconds>(
-	mono_clock::now() - quorum_since).count());
+      quorum_age());
   }
 
   f->open_object_section("features");
@@ -2650,8 +2634,7 @@ void Monitor::get_mon_status(Formatter *f)
   if (!quorum.empty()) {
     f->dump_int(
       "quorum_age",
-      std::chrono::duration_cast<std::chrono::seconds>(
-	mono_clock::now() - quorum_since).count());
+      quorum_age());
   }
 
   f->open_object_section("features");
@@ -2990,7 +2973,6 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
 
   const auto&& fs_names = session->get_allowed_fs_names();
 
-  mono_clock::time_point now = mono_clock::now();
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
     healthmon()->get_health_status(false, f, nullptr);
@@ -3006,8 +2988,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       f->close_section();
       f->dump_int(
 	"quorum_age",
-	std::chrono::duration_cast<std::chrono::seconds>(
-	  mono_clock::now() - quorum_since).count());
+        quorum_age());
     }
     f->open_object_section("monmap");
     monmap->dump_summary(f);
@@ -3060,8 +3041,9 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       string spacing(maxlen - 3, ' ');
       const auto quorum_names = get_quorum_names();
       const auto mon_count = monmap->mon_info.size();
+      auto mnow = ceph::mono_clock::now();
       ss << "    mon: " << spacing << mon_count << " daemons, quorum "
-	 << quorum_names << " (age " << timespan_str(now - quorum_since) << ")";
+	 << quorum_names << " (age " << timespan_str(mnow - quorum_since) << ")";
       if (quorum_names.size() != mon_count) {
 	std::list<std::string> out_of_q;
 	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
@@ -6030,8 +6012,6 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
     r = ceph_resolve_file_search(g_conf()->keyring, keyring_filename);
     if (r) {
-      derr << "unable to find a keyring file on " << g_conf()->keyring
-	   << ": " << cpp_strerror(r) << dendl;
       if (g_conf()->key != "") {
 	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf()->key +
 	  "\n\tcaps mon = \"allow *\"\n";
@@ -6047,7 +6027,9 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 	  return -EINVAL;
 	}
       } else {
-	return -ENOENT;
+	derr << "unable to find a keyring on " << g_conf()->keyring
+	     << ": " << cpp_strerror(r) << dendl;
+	return r;
       }
     } else {
       r = keyring.load(g_ceph_context, keyring_filename);
@@ -6469,12 +6451,17 @@ void Monitor::ms_handle_accept(Connection *con)
     dout(10) << __func__ << " con " << con << " session " << s
 	     << " already on list" << dendl;
   } else {
+    std::lock_guard l(session_map_lock);
+    if (state == STATE_SHUTDOWN) {
+      dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
+      con->mark_down();
+      return;
+    }
     dout(10) << __func__ << " con " << con << " session " << s
 	     << " registering session for "
 	     << con->get_peer_addrs() << dendl;
     s->_ident(entity_name_t(con->get_peer_type(), con->get_peer_id()),
 	      con->get_peer_addrs());
-    std::lock_guard l(session_map_lock);
     session_map.add_session(s);
   }
 }
@@ -6647,7 +6634,7 @@ void Monitor::do_stretch_mode_election_work()
   dout(20) << "prior dead_mon_buckets: " << old_dead_buckets
 	   << "; down_mon_buckets: " << down_mon_buckets
 	   << "; up_mon_buckets: " << up_mon_buckets << dendl;
-  for (auto di : down_mon_buckets) {
+  for (const auto& di : down_mon_buckets) {
     if (!up_mon_buckets.count(di.first)) {
       dead_mon_buckets[di.first] = di.second;
     }
@@ -6809,10 +6796,12 @@ bool Monitor::session_stretch_allowed(MonSession *s, MonOpRequestRef& op)
   if (s->con->peer_is_osd()) {
     dout(20) << __func__ << "checking OSD session" << s << dendl;
     // okay, check the crush location
-    int barrier_id;
-    int retval = osdmon()->osdmap.crush->get_validated_type_id(stretch_bucket_divider,
-							       &barrier_id);
-    ceph_assert(retval >= 0);
+    int barrier_id = [&] {
+      auto type_id = osdmon()->osdmap.crush->get_validated_type_id(
+	stretch_bucket_divider);
+      ceph_assert(type_id.has_value());
+      return *type_id;
+    }();
     int osd_bucket_id = osdmon()->osdmap.crush->get_parent_of_type(s->con->peer_id,
 								   barrier_id);
     const auto &mi = monmap->mon_info.find(name);

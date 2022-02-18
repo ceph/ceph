@@ -38,6 +38,8 @@
 
 namespace po = boost::program_options;
 
+using namespace std;
+
 class TraceIter {
   int fd;
   unsigned idx;
@@ -488,6 +490,20 @@ static int update_auth(MonitorDBStore& st, const string& keyring_path)
 	 << " with caps(" << caps << ")" << std::endl;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
 
+    AuthMonitor::Incremental inc;
+    inc.inc_type = AuthMonitor::AUTH_DATA;
+    encode(auth_inc, inc.auth_data);
+    inc.auth_type = CEPH_AUTH_CEPHX;
+    inc.encode(bl, CEPH_FEATURES_ALL);
+  }
+
+  // prime rotating secrets
+  {
+    KeyServer ks(g_ceph_context, nullptr);
+    KeyServerData::Incremental auth_inc;
+    auth_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
+    bool r = ks.prepare_rotating_update(auth_inc.rotating_bl);
+    ceph_assert(r);
     AuthMonitor::Incremental inc;
     inc.inc_type = AuthMonitor::AUTH_DATA;
     encode(auth_inc, inc.auth_data);

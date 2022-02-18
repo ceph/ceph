@@ -112,6 +112,7 @@ class HealthTest(DashboardTestCase):
                     JObj({
                         'in': int,
                         'up': int,
+                        'state': JList(str)
                     })),
             }),
             'pg_info': self.__pg_info_schema,

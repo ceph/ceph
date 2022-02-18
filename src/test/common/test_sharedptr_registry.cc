@@ -26,6 +26,8 @@
 #include "common/sharedptr_registry.hpp"
 #include "common/ceph_argparse.h"
 
+using namespace std;
+
 class SharedPtrRegistryTest : public SharedPtrRegistry<unsigned int, int> {
 public:
   ceph::mutex &get_lock() { return lock; }

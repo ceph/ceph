@@ -57,36 +57,36 @@ public:
 
 public:
   seastar::future<> start();
-  uint64_t get_prev_id() const {
-    assert(prev_op_id.has_value());
-    return *prev_op_id;
-  }
+  bool same_session_and_pg(const ClientRequest& other_op) const;
 
 private:
   template <typename FuncT>
-  interruptible_future<> with_sequencer(FuncT&& func) {
-    may_set_prev_op();
-    return sequencer.start_op(*this, handle, std::forward<FuncT>(func))
-    .then_interruptible([this] {
-      sequencer.finish_op(*this);
-    });
-  }
-  interruptible_future<> do_process(
+  interruptible_future<> with_sequencer(FuncT&& func);
+
+  enum class seq_mode_t {
+    IN_ORDER,
+    OUT_OF_ORDER
+  };
+
+  interruptible_future<seq_mode_t> do_process(
     Ref<PG>& pg,
     crimson::osd::ObjectContextRef obc);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_pg_op(
     Ref<PG> &pg);
   ::crimson::interruptible::interruptible_future<
-    ::crimson::osd::IOInterruptCondition> process_op(
+    ::crimson::osd::IOInterruptCondition, seq_mode_t> process_op(
     Ref<PG> &pg);
   bool is_pg_op() const;
 
   ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
 
-  OpSequencer& sequencer;
-  std::optional<uint64_t> prev_op_id;
+  class OpSequencer& sequencer;
+  // a tombstone used currently by OpSequencer. In the future it's supposed
+  // to be replaced with a reusage of OpTracking facilities.
+  bool finished = false;
+  friend class OpSequencer;
 
   template <typename Errorator>
   using interruptible_errorator =
@@ -95,7 +95,6 @@ private:
       Errorator>;
 private:
   bool is_misdirected(const PG& pg) const;
-  void may_set_prev_op();
 };
 
 }

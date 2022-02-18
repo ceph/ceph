@@ -9,6 +9,8 @@
 
 #define dout_subsys ceph_subsys_
 
+using namespace std;
+
 MemoryModel::MemoryModel(CephContext *cct_)
   : cct(cct_)
 {

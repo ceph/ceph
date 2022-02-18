@@ -8,7 +8,6 @@ from mgr_module import CommandResult
 from mgr_util import get_most_recent_rate, get_time_series_rates
 
 from .. import mgr
-from ..exceptions import DashboardException
 
 try:
     from typing import Any, Dict, Optional, Union
@@ -25,6 +24,7 @@ class SendCommandError(rados.Error):
         super(SendCommandError, self).__init__(err, errno)
 
 
+# pylint: disable=too-many-public-methods
 class CephService(object):
 
     OSD_FLAG_NO_SCRUB = 'noscrub'
@@ -89,6 +89,32 @@ class CephService(object):
         if svc_data:
             svc_data['status'] = mgr.get_daemon_status(svc_data['type'], svc_data['service_map_id'])
         return svc_data
+
+    @classmethod
+    def get_service_perf_counters(cls, service_type: str, service_id: str) -> Dict[str, Any]:
+        schema_dict = mgr.get_perf_schema(service_type, service_id)
+        schema = schema_dict["{}.{}".format(service_type, service_id)]
+        counters = []
+        for key, value in sorted(schema.items()):
+            counter = {'name': str(key), 'description': value['description']}
+            # pylint: disable=W0212
+            if mgr._stattype_to_str(value['type']) == 'counter':
+                counter['value'] = cls.get_rate(
+                    service_type, service_id, key)
+                counter['unit'] = mgr._unit_to_str(value['units'])
+            else:
+                counter['value'] = mgr.get_latest(
+                    service_type, service_id, key)
+                counter['unit'] = ''
+            counters.append(counter)
+
+        return {
+            'service': {
+                'type': service_type,
+                'id': str(service_id)
+            },
+            'counters': counters
+        }
 
     @classmethod
     def get_pool_list(cls, application=None):
@@ -208,11 +234,7 @@ class CephService(object):
         # type: (dict) -> Dict[str, dict]
         # Check whether the device is associated with daemons.
         if 'daemons' in device and device['daemons']:
-            dev_smart_data = None
-
-            # The daemons associated with the device. Note, the list may
-            # contain daemons that are 'down' or 'destroyed'.
-            daemons = device.get('daemons')
+            dev_smart_data: Dict[str, Any] = {}
 
             # Get a list of all OSD daemons on all hosts that are 'up'
             # because SMART data can not be retrieved from daemons that
@@ -223,38 +245,38 @@ class CephService(object):
                 if node.get('status') == 'up'
             ]
 
-            # Finally get the daemons on the host of the given device
-            # that are 'up'. All daemons on the same host can deliver
-            # SMART data, thus it is not relevant for us which daemon
-            # we are using.
-            daemons = list(set(daemons) & set(osd_daemons_up))  # type: ignore
-
-            for daemon in daemons:
+            # All daemons on the same host can deliver SMART data,
+            # thus it is not relevant for us which daemon we are using.
+            # NOTE: the list may contain daemons that are 'down' or 'destroyed'.
+            for daemon in device['daemons']:
                 svc_type, svc_id = daemon.split('.')
                 if 'osd' in svc_type:
+                    if daemon not in osd_daemons_up:
+                        continue
                     try:
                         dev_smart_data = CephService.send_command(
                             svc_type, 'smart', svc_id, devid=device['devid'])
-                    except SendCommandError:
+                    except SendCommandError as error:
+                        logger.warning(str(error))
+                        # Try to retrieve SMART data from another daemon.
+                        continue
+                elif 'mon' in svc_type:
+                    try:
+                        dev_smart_data = CephService.send_command(
+                            svc_type, 'device query-daemon-health-metrics', who=daemon)
+                    except SendCommandError as error:
+                        logger.warning(str(error))
                         # Try to retrieve SMART data from another daemon.
                         continue
                 else:
-                    try:
-                        dev_smart_data = CephService.send_command(
-                            svc_type, 'device get-health-metrics', svc_id, devid=device['devid'])
-                    except SendCommandError:
-                        # Try to retrieve SMART data from another daemon.
-                        continue
+                    dev_smart_data = {}
                 for dev_id, dev_data in dev_smart_data.items():
                     if 'error' in dev_data:
                         logger.warning(
                             '[SMART] Error retrieving smartctl data for device ID "%s": %s',
                             dev_id, dev_data)
                 break
-            if dev_smart_data is None:
-                raise DashboardException(
-                    'Failed to retrieve SMART data for device ID "{}"'.format(
-                        device['devid']))
+
             return dev_smart_data
         logger.warning('[SMART] No daemons associated with device ID "%s"',
                        device['devid'])

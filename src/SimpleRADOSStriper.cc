@@ -618,7 +618,7 @@ int SimpleRADOSStriper::recover_lock()
     entity_addrvec_t addrv;
     addrv.parse(addrs.c_str());
     auto R = librados::Rados(ioctx);
-    auto b = "blocklist"sv;
+    std::string_view b = "blocklist";
 retry:
     for (auto& a : addrv.v) {
       CachedStackStringStream css;
@@ -630,8 +630,8 @@ retry:
       d(5) << "sending blocklist command: " << cmd << dendl;
       std::string out;
       if (int rc = R.mon_command(css->str(), bufferlist(), nullptr, &out); rc < 0) {
-        if (rc == -EINVAL && b == "blocklist"sv) {
-          b = "blacklist"sv;
+        if (rc == -EINVAL && b == "blocklist") {
+          b = "blacklist";
           goto retry;
         }
         d(-1) << "Cannot proceed with recovery because I have failed to blocklist the old client: " << cpp_strerror(rc) << ", out = " << out << dendl;

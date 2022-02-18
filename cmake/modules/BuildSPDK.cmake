@@ -14,10 +14,16 @@ macro(build_spdk)
 
   set(spdk_CFLAGS "-fPIC")
   include(CheckCCompilerFlag)
-  check_c_compiler_flag("-Wno-address-of-packed-member" HAS_WARNING_ADDRESS_OF_PACKED_MEMBER)
-  if(HAS_WARNING_ADDRESS_OF_PACKED_MEMBER)
-    set(spdk_CFLAGS "${spdk_CFLAGS} -Wno-address-of-packed-member")
+  check_c_compiler_flag("-Wno-address-of-packed-member" HAVE_WARNING_ADDRESS_OF_PACKED_MEMBER)
+  if(HAVE_WARNING_ADDRESS_OF_PACKED_MEMBER)
+    string(APPEND spdk_CFLAGS " -Wno-address-of-packed-member")
   endif()
+  check_c_compiler_flag("-Wno-unused-but-set-variable"
+    HAVE_UNUSED_BUT_SET_VARIABLE)
+  if(HAVE_UNUSED_BUT_SET_VARIABLE)
+    string(APPEND spdk_CFLAGS " -Wno-unused-but-set-variable")
+  endif()
+
   include(ExternalProject)
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64|AMD64")
     # a safer option than relying on the build host's arch
@@ -49,21 +55,27 @@ macro(build_spdk)
     # unset $CFLAGS, otherwise it will interfere with how SPDK sets
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
-    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${make_cmd} EXTRA_CFLAGS="${spdk_CFLAGS}"
+    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${make_cmd} EXTRA_CFLAGS=${spdk_CFLAGS}
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${spdk_libs}
-    INSTALL_COMMAND "")
+    INSTALL_COMMAND ""
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_MERGED_STDOUTERR ON
+    LOG_OUTPUT_ON_FAILURE ON)
   unset(make_cmd)
   foreach(spdk_lib ${SPDK_LIBRARIES})
     add_dependencies(${spdk_lib} spdk-ext)
   endforeach()
 
-  set_target_properties(spdk::env_dpdk PROPERTIES
-    INTERFACE_LINK_LIBRARIES "dpdk::dpdk;rt")
-  set_target_properties(spdk::lvol PROPERTIES
-    INTERFACE_LINK_LIBRARIES spdk::util)
-  set_target_properties(spdk::util PROPERTIES
-    INTERFACE_LINK_LIBRARIES ${UUID_LIBRARIES})
   set(SPDK_INCLUDE_DIR "${source_dir}/include")
+  add_library(spdk::spdk INTERFACE IMPORTED)
+  add_dependencies(spdk::spdk
+    ${SPDK_LIBRARIES})
+  # workaround for https://review.spdk.io/gerrit/c/spdk/spdk/+/6798
+  set_target_properties(spdk::spdk PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES ${SPDK_INCLUDE_DIR}
+    INTERFACE_LINK_LIBRARIES
+    "-Wl,--whole-archive $<JOIN:${spdk_libs}, > -Wl,--no-whole-archive;dpdk::dpdk;rt;${UUID_LIBRARIES}")
   unset(source_dir)
 endmacro()

@@ -37,6 +37,8 @@
 
 #define DEFAULT_UMASK 002
 
+using namespace std;
+
 static mode_t umask_cb(void *);
 namespace {
 // Set things up this way so we don't start up threads until mount and
@@ -273,10 +275,8 @@ public:
 
   int conf_parse_argv(int argc, const char **argv)
   {
-    int ret;
-    vector<const char*> args;
-    argv_to_vec(argc, argv, args);
-    ret = cct->_conf.parse_argv(args);
+    auto args = argv_to_vec(argc, argv);
+    int ret = cct->_conf.parse_argv(args);
     if (ret)
 	return ret;
     cct->_conf.apply_changes(nullptr);

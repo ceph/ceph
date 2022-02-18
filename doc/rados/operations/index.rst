@@ -1,3 +1,5 @@
+.. _rados-operations:
+
 ====================
  Cluster Operations
 ====================

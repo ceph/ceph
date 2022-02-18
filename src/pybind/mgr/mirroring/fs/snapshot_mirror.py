@@ -15,6 +15,7 @@ import rados
 
 from mgr_util import RTimer, CephfsClient, open_filesystem,\
     CephfsConnectionException
+from mgr_module import NotifyType
 from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
@@ -288,9 +289,9 @@ class FSSnapshotMirror:
         self.refresh_pool_policy()
         self.local_fs = CephfsClient(mgr)
 
-    def notify(self, notify_type):
+    def notify(self, notify_type: NotifyType):
         log.debug(f'got notify type {notify_type}')
-        if notify_type == 'fs_map':
+        if notify_type == NotifyType.fs_map:
             with self.lock:
                 self.fs_map = self.mgr.get('fs_map')
                 self.refresh_pool_policy_locked()
@@ -749,14 +750,9 @@ class FSSnapshotMirror:
         except MirrorException as me:
             return me.args[0], '', me.args[1]
 
-    def daemon_status(self, filesystem):
+    def daemon_status(self):
         try:
             with self.lock:
-                if not self.filesystem_exist(filesystem):
-                    raise MirrorException(-errno.ENOENT, f'filesystem {filesystem} does not exist')
-                fspolicy = self.pool_policy.get(filesystem, None)
-                if not fspolicy:
-                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
                 daemons = []
                 sm = self.mgr.get('service_map')
                 daemon_entry = sm['services'].get('cephfs-mirror', None)

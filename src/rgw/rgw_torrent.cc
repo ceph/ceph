@@ -16,7 +16,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using ceph::crypto::MD5;
+using namespace std;
 using namespace librados;
 using namespace boost;
 using ceph::crypto::SHA1;

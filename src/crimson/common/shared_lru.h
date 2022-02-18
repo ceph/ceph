@@ -42,8 +42,10 @@ public:
   {}
   ~SharedLRU() {
     cache.clear();
-    // use plain assert() in utiliy classes to avoid dependencies on logging
-    assert(weak_refs.empty());
+    // initially, we were assuming that no pointer obtained from SharedLRU
+    // can outlive the lru itself. However, since going with the interruption
+    // concept for handling shutdowns, this is no longer valid.
+    weak_refs.clear();
   }
   /**
    * Returns a reference to the given key, and perform an insertion if such

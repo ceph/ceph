@@ -17,10 +17,10 @@
 
 namespace crimson::os::seastore::onode {
 
-using eagain_ertr = crimson::errorator<
-  crimson::ct_error::eagain>;
+using eagain_iertr = trans_iertr<
+  crimson::errorator<crimson::ct_error::input_output_error> >;
 template <class ValueT=void>
-using eagain_future = eagain_ertr::future<ValueT>;
+using eagain_ifuture = eagain_iertr::future<ValueT>;
 
 using crimson::os::seastore::Transaction;
 using crimson::os::seastore::TransactionRef;

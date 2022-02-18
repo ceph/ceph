@@ -25,6 +25,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <new>
+#include <utility>
 
 /// \addtogroup memory-module
 /// @{

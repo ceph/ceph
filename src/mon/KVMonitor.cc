@@ -10,6 +10,12 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
 
+using std::ostream;
+using std::ostringstream;
+using std::set;
+using std::string;
+using std::stringstream;
+
 static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
                         const KVMonitor *hmon) {
   return *_dout << "mon." << mon.name << "@" << mon.rank
@@ -47,9 +53,6 @@ void KVMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   pending.clear();
-  bufferlist bl;
-  bl.append("scale-down");
-  pending["config/mgr/mgr/pg_autoscaler/autoscale_profile"] = bl;
 }
 
 void KVMonitor::update_from_paxos(bool *need_bootstrap)

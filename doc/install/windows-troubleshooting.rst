@@ -43,7 +43,7 @@ Windows Event Log, having Event ID 1000. The entry will also include the process
 the faulting module name and path as well as the exception code.
 
 Please note that in order to analyze crash dumps, the debug symbols are required.
-We're currently buidling Ceph using ``MinGW``, so by default ``DWARF`` symbols will
+We're currently building Ceph using ``MinGW``, so by default ``DWARF`` symbols will
 be embedded in the binaries. ``windbg`` does not support such symbols but ``gdb``
 can be used.
 

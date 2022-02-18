@@ -42,7 +42,7 @@ public:
     ceph_assert(image_ctx.exclusive_lock == nullptr ||
                 image_ctx.exclusive_lock->is_lock_owner());
 
-    string oid = image_ctx.get_object_name(m_object_no);
+    std::string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
     auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
@@ -80,7 +80,7 @@ public:
       }
     }
 
-    string oid = image_ctx.get_object_name(m_object_no);
+    std::string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing " << oid << dendl;
 
     librados::AioCompletion *rados_completion =
@@ -343,19 +343,18 @@ void TrimRequest<I>::send_clean_boundary() {
 
   ContextCompletion *completion =
     new ContextCompletion(this->create_async_callback_context(), true);
-  for (vector<ObjectExtent>::iterator p = extents.begin();
-       p != extents.end(); ++p) {
-    ldout(cct, 20) << " ex " << *p << dendl;
+  for (auto& extent : extents) {
+    ldout(cct, 20) << " ex " << extent << dendl;
     Context *req_comp = new C_ContextCompletion(*completion);
 
-    if (p->offset == 0) {
+    if (extent.offset == 0) {
       // treat as a full object delete on the boundary
-      p->length = image_ctx.layout.object_size;
+      extent.length = image_ctx.layout.object_size;
     }
 
     auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
-      &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, p->objectno, p->offset,
-      p->length, io_context, 0, 0, {}, req_comp);
+      &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, extent.objectno, extent.offset,
+      extent.length, io_context, 0, 0, {}, req_comp);
     object_dispatch_spec->send();
   }
   completion->finish_adding_requests();

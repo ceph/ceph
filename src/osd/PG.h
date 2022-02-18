@@ -54,20 +54,22 @@
 
 class OSD;
 class OSDService;
-class OSDShard;
-class OSDShardPGSlot;
+struct OSDShard;
+struct OSDShardPGSlot;
 
 class PG;
 struct OpRequest;
 typedef OpRequest::Ref OpRequestRef;
 class DynamicPerfStats;
 class PgScrubber;
+class ScrubBackend;
 
 namespace Scrub {
   class Store;
   class ReplicaReservations;
   class LocalReservation;
   class ReservedByRemotePrimary;
+  enum class schedule_result_t;
 }
 
 #ifdef PG_DEBUG_REFS
@@ -161,25 +163,44 @@ class PGRecoveryStats {
  *
  */
 
+/// Facilitating scrub-realated object access to private PG data
+class ScrubberPasskey {
+private:
+  friend class Scrub::ReplicaReservations;
+  friend class PrimaryLogScrub;
+  friend class PgScrubber;
+  ScrubberPasskey() {}
+  ScrubberPasskey(const ScrubberPasskey&) = default;
+  ScrubberPasskey& operator=(const ScrubberPasskey&) = delete;
+};
+
 class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend struct NamedState;
   friend class PeeringState;
   friend class PgScrubber;
-  friend class PrimaryLogScrub;
-  friend class Scrub::ReplicaReservations;
-  friend class Scrub::LocalReservation;  // dout()-only friendship
-  friend class Scrub::ReservedByRemotePrimary;  //  dout()-only friendship
+  friend class ScrubBackend;
 
 public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
 
+  /// the 'scrubber'. Will be allocated in the derivative (PrimaryLogPG) ctor,
+  /// and be removed only in the PrimaryLogPG destructor.
   std::unique_ptr<ScrubPgIF> m_scrubber;
 
   /// flags detailing scheduling/operation characteristics of the next scrub 
   requested_scrub_t m_planned_scrub;
+
+  const requested_scrub_t& get_planned_scrub() const {
+    return m_planned_scrub;
+  }
+
   /// scrubbing state for both Primary & replicas
   bool is_scrub_active() const { return m_scrubber->is_scrub_active(); }
+
+  /// set when the scrub request is queued, and reset after scrubbing fully
+  /// cleaned up.
+  bool is_scrub_queued_or_active() const { return m_scrubber->is_queued_or_active(); }
 
 public:
   // -- members --
@@ -265,6 +286,31 @@ public:
       [=](auto &history, auto &stats) {
 	set_last_deep_scrub_stamp(t, history, stats);
 	return true;
+      });
+  }
+
+  static void add_objects_scrubbed_count(
+    int64_t count, pg_stat_t &stats) {
+    stats.objects_scrubbed += count;
+  }
+
+  void add_objects_scrubbed_count(int64_t count) {
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+	add_objects_scrubbed_count(count, stats);
+	return true;
+      });
+  }
+
+  static void reset_objects_scrubbed(pg_stat_t &stats) {
+    stats.objects_scrubbed = 0;
+  }
+
+  void reset_objects_scrubbed() {
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+  reset_objects_scrubbed(stats);
+  return true;
       });
   }
 
@@ -377,112 +423,112 @@ public:
   void scrub(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     // a new scrub
-    scrub_queued = false;
-    forward_scrub_event(&ScrubPgIF::initiate_regular_scrub, queued, "StartScrub"sv);
+    forward_scrub_event(&ScrubPgIF::initiate_regular_scrub, queued, "StartScrub");
   }
 
   /**
    *  a special version of PG::scrub(), which:
    *  - is initiated after repair, and
+   * (not true anymore:)
    *  - is not required to allocate local/remote OSD scrub resources
    */
   void recovery_scrub(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     // a new scrub
-    scrub_queued = false;
     forward_scrub_event(&ScrubPgIF::initiate_scrub_after_repair, queued,
-			"AfterRepairScrub"sv);
+			"AfterRepairScrub");
   }
 
-  void replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  void replica_scrub(epoch_t queued,
+		     Scrub::act_token_t act_token,
+		     ThreadPool::TPHandle& handle);
 
-  void replica_scrub_resched(epoch_t queued, ThreadPool::TPHandle& handle)
+  void replica_scrub_resched(epoch_t queued,
+			     Scrub::act_token_t act_token,
+			     ThreadPool::TPHandle& handle)
   {
-    scrub_queued = false;
-    forward_scrub_event(&ScrubPgIF::send_sched_replica, queued, "SchedReplica"sv);
+    forward_scrub_event(&ScrubPgIF::send_sched_replica, queued, act_token,
+			"SchedReplica");
   }
 
   void scrub_send_resources_granted(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_remotes_reserved, queued, "RemotesReserved"sv);
+    forward_scrub_event(&ScrubPgIF::send_remotes_reserved, queued, "RemotesReserved");
   }
 
   void scrub_send_resources_denied(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::send_reservation_failure, queued,
-			"ReservationFailure"sv);
+			"ReservationFailure");
   }
 
   void scrub_send_scrub_resched(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    scrub_queued = false;
-    forward_scrub_event(&ScrubPgIF::send_scrub_resched, queued, "InternalSchedScrub"sv);
+    forward_scrub_event(&ScrubPgIF::send_scrub_resched, queued, "InternalSchedScrub");
   }
 
   void scrub_send_pushes_update(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::active_pushes_notification, queued,
-			"ActivePushesUpd"sv);
+			"ActivePushesUpd");
   }
 
   void scrub_send_applied_update(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::update_applied_notification, queued,
-			"UpdatesApplied"sv);
+			"UpdatesApplied");
   }
 
   void scrub_send_unblocking(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_scrub_unblock, queued, "Unblocked"sv);
+    forward_scrub_event(&ScrubPgIF::send_scrub_unblock, queued, "Unblocked");
   }
 
   void scrub_send_digest_update(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::digest_update_notification, queued, "DigestUpdate"sv);
+    forward_scrub_event(&ScrubPgIF::digest_update_notification, queued, "DigestUpdate");
   }
 
   void scrub_send_local_map_ready(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_local_map_done, queued, "IntLocalMapDone"sv);
+    forward_scrub_event(&ScrubPgIF::send_local_map_done, queued, "IntLocalMapDone");
   }
 
   void scrub_send_replmaps_ready(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_replica_maps_ready, queued, "GotReplicas"sv);
+    forward_scrub_event(&ScrubPgIF::send_replica_maps_ready, queued, "GotReplicas");
   }
 
   void scrub_send_replica_pushes(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::send_replica_pushes_upd, queued,
-			"ReplicaPushesUpd"sv);
+			"ReplicaPushesUpd");
   }
 
   void scrub_send_maps_compared(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_maps_compared, queued, "MapsCompared"sv);
+    forward_scrub_event(&ScrubPgIF::send_maps_compared, queued, "MapsCompared");
   }
 
   void scrub_send_get_next_chunk(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_get_next_chunk, queued, "NextChunk"sv);
+    forward_scrub_event(&ScrubPgIF::send_get_next_chunk, queued, "NextChunk");
   }
 
   void scrub_send_scrub_is_finished(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_scrub_is_finished, queued, "ScrubFinished"sv);
+    forward_scrub_event(&ScrubPgIF::send_scrub_is_finished, queued, "ScrubFinished");
   }
 
   void scrub_send_chunk_free(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_chunk_free, queued, "SelectedChunkFree"sv);
+    forward_scrub_event(&ScrubPgIF::send_chunk_free, queued, "SelectedChunkFree");
   }
 
   void scrub_send_chunk_busy(epoch_t queued, ThreadPool::TPHandle& handle)
   {
-    forward_scrub_event(&ScrubPgIF::send_chunk_busy, queued, "ChunkIsBusy"sv);
+    forward_scrub_event(&ScrubPgIF::send_chunk_busy, queued, "ChunkIsBusy");
   }
-
-  void reg_next_scrub();
 
   void queue_want_pg_temp(const std::vector<int> &wanted) override;
   void clear_want_pg_temp() override;
@@ -497,6 +543,10 @@ public:
   virtual void plpg_on_pool_change() = 0;
 
   void on_info_history_change() override;
+
+  void on_primary_status_change(bool was_primary, bool now_primary) override;
+
+  void reschedule_scrub() override;
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -621,7 +671,7 @@ public:
   virtual void on_shutdown() = 0;
 
   bool get_must_scrub() const;
-  bool sched_scrub();
+  Scrub::schedule_result_t sched_scrub();
 
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsigned int suggested_priority) const;
   /// the version that refers to flags_.priority
@@ -651,8 +701,14 @@ private:
 				  requested_scrub_t& planned) const;
 
   using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
-
   void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc);
+  // and for events that carry a meaningful 'activation token'
+  using ScrubSafeAPI = void (ScrubPgIF::*)(epoch_t epoch_queued,
+					   Scrub::act_token_t act_token);
+  void forward_scrub_event(ScrubSafeAPI fn,
+			   epoch_t epoch_queued,
+			   Scrub::act_token_t act_token,
+			   std::string_view desc);
 
 public:
   virtual void do_request(
@@ -787,7 +843,6 @@ protected:
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
   xlist<PG*>::item stat_queue_item;
-  bool scrub_queued;
   bool recovery_queued;
 
   int recovery_ops_active;
@@ -1138,15 +1193,9 @@ protected:
 
   int active_pushes;
 
-  void repair_object(
-    const hobject_t &soid,
-    const std::list<std::pair<ScrubMap::object, pg_shard_t> > &ok_peers,
-    const std::set<pg_shard_t> &bad_peers);
-
   [[nodiscard]] bool ops_blocked_by_scrub() const;
   [[nodiscard]] Scrub::scrub_prio_t is_scrub_blocking_ops() const;
 
-  void _repair_oinfo_oid(ScrubMap &map);
   void _scan_rollback_obs(const std::vector<ghobject_t> &rollback_obs);
   /**
    * returns true if [begin, end) is good to scrub at this time
@@ -1318,6 +1367,22 @@ protected:
 
   // ref to recovery_state.info
   const pg_info_t &info;
+
+
+// ScrubberPasskey getters:
+public:
+  const pg_info_t& get_pg_info(ScrubberPasskey) const {
+    return info;
+  }
+
+  OSDService* get_pg_osd(ScrubberPasskey) const {
+    return osd;
+  }
+
+  requested_scrub_t& get_planned_scrub(ScrubberPasskey) {
+    return m_planned_scrub;
+  }
+
 };
 
 #endif

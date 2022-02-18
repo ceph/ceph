@@ -1,12 +1,12 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
-import { of as observableOf, throwError } from 'rxjs';
+import { of as observableOf } from 'rxjs';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
@@ -54,92 +54,12 @@ describe('RgwBucketFormComponent', () => {
   });
 
   describe('bucketNameValidator', () => {
-    const testValidator = (name: string, valid: boolean, expectedError?: string) => {
-      rgwBucketServiceGetSpy.and.returnValue(throwError('foo'));
-      formHelper.setValue('bid', name, true);
-      tick();
-      if (valid) {
-        formHelper.expectValid('bid');
-      } else {
-        formHelper.expectError('bid', expectedError);
-      }
-    };
-
     it('should validate empty name', fakeAsync(() => {
       formHelper.expectErrorChange('bid', '', 'required', true);
     }));
+  });
 
-    it('bucket names cannot be formatted as IP address', fakeAsync(() => {
-      const testIPs = ['1.1.1.01', '001.1.1.01', '127.0.0.1'];
-      for (const ip of testIPs) {
-        testValidator(ip, false, 'ipAddress');
-      }
-    }));
-
-    it('bucket name must be >= 3 characters long (1/2)', fakeAsync(() => {
-      testValidator('ab', false, 'shouldBeInRange');
-    }));
-
-    it('bucket name must be >= 3 characters long (2/2)', fakeAsync(() => {
-      testValidator('abc', true);
-    }));
-
-    it('bucket name must be <= than 63 characters long (1/2)', fakeAsync(() => {
-      testValidator(_.repeat('a', 64), false, 'shouldBeInRange');
-    }));
-
-    it('bucket name must be <= than 63 characters long (2/2)', fakeAsync(() => {
-      testValidator(_.repeat('a', 63), true);
-    }));
-
-    it('bucket names must not contain uppercase characters or underscores (1/2)', fakeAsync(() => {
-      testValidator('iAmInvalid', false, 'containsUpperCase');
-    }));
-
-    it('bucket names can only contain lowercase letters, numbers, and hyphens', fakeAsync(() => {
-      testValidator('$$$', false, 'onlyLowerCaseAndNumbers');
-    }));
-
-    it('bucket names must not contain uppercase characters or underscores (2/2)', fakeAsync(() => {
-      testValidator('i_am_invalid', false, 'containsUpperCase');
-    }));
-
-    it('bucket names must start and end with letters or numbers', fakeAsync(() => {
-      testValidator('abcd-', false, 'lowerCaseOrNumber');
-    }));
-
-    it('bucket names with invalid labels (1/3)', fakeAsync(() => {
-      testValidator('abc.1def.Ghi2', false, 'containsUpperCase');
-    }));
-
-    it('bucket names with invalid labels (2/3)', fakeAsync(() => {
-      testValidator('abc.1_xy', false, 'containsUpperCase');
-    }));
-
-    it('bucket names with invalid labels (3/3)', fakeAsync(() => {
-      testValidator('abc.*def', false, 'lowerCaseOrNumber');
-    }));
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (1/3)', fakeAsync(() => {
-      testValidator('xyz.abc', true);
-    }));
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (2/3)', fakeAsync(() => {
-      testValidator('abc.1-def', true);
-    }));
-
-    it('bucket names must be a series of one or more labels and can contain lowercase letters, numbers, and hyphens (3/3)', fakeAsync(() => {
-      testValidator('abc.ghi2', true);
-    }));
-
-    it('bucket names must be unique', fakeAsync(() => {
-      testValidator('bucket-name-is-unique', true);
-    }));
-
-    it('bucket names must not contain spaces', fakeAsync(() => {
-      testValidator('bucket name  with   spaces', false, 'onlyLowerCaseAndNumbers');
-    }));
-
+  describe('zonegroup and placement targets', () => {
     it('should get zonegroup and placement targets', () => {
       const payload: Record<string, any> = {
         zonegroup: 'default',

@@ -16,12 +16,13 @@ namespace crimson::os::seastore::onode {
 
 using shard_t = int8_t;
 using pool_t = int64_t;
+// Note: this is the reversed version of the object hash
 using crush_hash_t = uint32_t;
 using snap_t = uint64_t;
 using gen_t = uint64_t;
 static_assert(sizeof(shard_t) == sizeof(ghobject_t().shard_id.id));
 static_assert(sizeof(pool_t) == sizeof(ghobject_t().hobj.pool));
-static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_hash()));
+static_assert(sizeof(crush_hash_t) == sizeof(ghobject_t().hobj.get_bitwise_key_u32()));
 static_assert(sizeof(snap_t) == sizeof(ghobject_t().hobj.snap.val));
 static_assert(sizeof(gen_t) == sizeof(ghobject_t().generation));
 
@@ -40,6 +41,15 @@ template<> struct _full_key_type<KeyT::VIEW> { using type = key_view_t; };
 template<> struct _full_key_type<KeyT::HOBJ> { using type = key_hobj_t; };
 template <KeyT type>
 using full_key_t = typename _full_key_type<type>::type;
+
+static laddr_t get_lba_hint(shard_t shard, pool_t pool, crush_hash_t crush) {
+  // FIXME: It is possible that PGs from different pools share the same prefix
+  // if the mask 0xFF is not long enough, result in unexpected transaction
+  // conflicts.
+  return ((uint64_t)(shard & 0XFF)<<56 |
+          (uint64_t)(pool  & 0xFF)<<48 |
+          (uint64_t)(crush       )<<16);
+}
 
 struct node_offset_packed_t {
   node_offset_t value;
@@ -68,6 +78,7 @@ inline MatchKindCMP compare_to(const shard_pool_t& l, const shard_pool_t& r) {
   return toMatchKindCMP(l.pool, r.pool);
 }
 
+// Note: this is the reversed version of the object hash
 struct crush_t {
   bool operator==(const crush_t& x) const { return crush == x.crush; }
   bool operator!=(const crush_t& x) const { return !(*this == x); }
@@ -78,7 +89,7 @@ struct crush_t {
   crush_hash_t crush;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const crush_t& c) {
-  return os << c.crush;
+  return os << "0x" << std::hex << c.crush << std::dec;
 }
 inline MatchKindCMP compare_to(const crush_t& l, const crush_t& r) {
   return toMatchKindCMP(l.crush, r.crush);
@@ -97,7 +108,7 @@ struct shard_pool_crush_t {
   crush_t crush;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const shard_pool_crush_t& spc) {
-  return os << spc.shard_pool << "," << spc.crush;
+  return os << spc.shard_pool << ",0x" << std::hex << spc.crush << std::dec;
 }
 inline MatchKindCMP compare_to(
     const shard_pool_crush_t& l, const shard_pool_crush_t& r) {
@@ -476,8 +487,10 @@ inline const ghobject_t _MIN_OID() {
  * ghobject_t::get_max() if necessary.
  */
 inline const ghobject_t _MAX_OID() {
-  return ghobject_t(shard_id_t(MAX_SHARD), MAX_POOL, MAX_CRUSH,
-                    "MAX", "MAX", MAX_SNAP, MAX_GEN);
+  auto ret = ghobject_t(shard_id_t(MAX_SHARD), MAX_POOL, MAX_CRUSH,
+                        "MAX", "MAX", MAX_SNAP, MAX_GEN);
+  assert(ret.hobj.get_hash() == ret.hobj.get_bitwise_key_u32());
+  return ret;
 }
 
 // the valid key stored in tree should be in the range of (_MIN_OID, _MAX_OID)
@@ -513,7 +526,11 @@ class key_hobj_t {
     return ghobj.hobj.pool;
   }
   crush_hash_t crush() const {
-    return ghobj.hobj.get_hash();
+    // Note: this is the reversed version of the object hash
+    return ghobj.hobj.get_bitwise_key_u32();
+  }
+  laddr_t get_hint() const {
+    return get_lba_hint(shard(), pool(), crush());
   }
   std::string_view nspace() const {
     // TODO(cross-node string dedup)
@@ -546,7 +563,7 @@ class key_hobj_t {
 
   std::ostream& dump(std::ostream& os) const {
     os << "key_hobj(" << (int)shard() << ","
-       << pool() << "," << crush() << "; "
+       << pool() << ",0x" << std::hex << crush() << std::dec << "; "
        << string_view_masked_t{nspace()} << ","
        << string_view_masked_t{oid()} << "; "
        << snap() << "," << gen() << ")";
@@ -562,6 +579,7 @@ class key_hobj_t {
     ceph::decode(shard, delta);
     pool_t pool;
     ceph::decode(pool, delta);
+    // Note: this is the reversed version of the object hash
     crush_hash_t crush;
     ceph::decode(crush, delta);
     std::string nspace;
@@ -607,6 +625,9 @@ class key_view_t {
   }
   crush_hash_t crush() const {
     return crush_packed().crush;
+  }
+  laddr_t get_hint() const {
+    return get_lba_hint(shard(), pool(), crush());
   }
   std::string_view nspace() const {
     // TODO(cross-node string dedup)
@@ -729,7 +750,7 @@ class key_view_t {
       os << "X,X,";
     }
     if (has_crush()) {
-      os << crush() << "; ";
+      os << "0x" << std::hex << crush() << std::dec << "; ";
     } else {
       os << "X; ";
     }

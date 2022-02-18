@@ -109,7 +109,7 @@ export class UsersPageHelper extends PageHelper {
     // creating this user to edit for the test
     this.navigateTo('create');
     this.create(tenant, uname, 'xxx', 'xxx@xxx', '50');
-
+    const name = tenant + '$' + uname;
     this.navigateEdit(name);
 
     // put invalid email to make field invalid

@@ -18,11 +18,15 @@
 #include "rgw_common.h"
 #include "rgw_compression_types.h"
 #include "rgw_sal.h"
+#include "rgw_zone.h"
 
 class RGWSI_Zone;
 struct RGWZoneGroup;
 struct RGWZoneParams;
 class RGWRados;
+namespace rgw { namespace sal {
+  class RadosStore;
+} };
 
 class rgw_obj_select {
   rgw_placement_rule placement_rule;
@@ -45,7 +49,7 @@ public:
   }
 
   rgw_raw_obj get_raw_obj(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params) const;
-  rgw_raw_obj get_raw_obj(rgw::sal::Store* store) const;
+  rgw_raw_obj get_raw_obj(rgw::sal::RadosStore* store) const;
 
   rgw_obj_select& operator=(const rgw_obj& rhs) {
     obj = rhs;
@@ -114,7 +118,7 @@ struct RGWObjManifestRule {
   uint64_t start_ofs;
   uint64_t part_size; /* each part size, 0 if there's no part size, meaning it's unlimited */
   uint64_t stripe_max_size; /* underlying obj max size */
-  string override_prefix;
+  std::string override_prefix;
 
   RGWObjManifestRule() : start_part_num(0), start_ofs(0), part_size(0), stripe_max_size(0) {}
   RGWObjManifestRule(uint32_t _start_part_num, uint64_t _start_ofs, uint64_t _part_size, uint64_t _stripe_max_size) :
@@ -144,10 +148,36 @@ struct RGWObjManifestRule {
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
+struct RGWObjTier {
+    std::string name;
+    RGWZoneGroupPlacementTier tier_placement;
+    bool is_multipart_upload{false};
+
+    RGWObjTier(): name("none") {}
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(2, 2, bl);
+      encode(name, bl);
+      encode(tier_placement, bl);
+      encode(is_multipart_upload, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+      decode(name, bl);
+      decode(tier_placement, bl);
+      decode(is_multipart_upload, bl);
+      DECODE_FINISH(bl);
+    }
+    void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(RGWObjTier)
+
 class RGWObjManifest {
 protected:
   bool explicit_objs{false}; /* really old manifest? */
-  map<uint64_t, RGWObjManifestPart> objs;
+  std::map<uint64_t, RGWObjManifestPart> objs;
 
   uint64_t obj_size{0};
 
@@ -156,16 +186,19 @@ protected:
   rgw_placement_rule head_placement_rule;
 
   uint64_t max_head_size{0};
-  string prefix;
+  std::string prefix;
   rgw_bucket_placement tail_placement; /* might be different than the original bucket,
                                        as object might have been copied across pools */
-  map<uint64_t, RGWObjManifestRule> rules;
+  std::map<uint64_t, RGWObjManifestRule> rules;
 
-  string tail_instance; /* tail object's instance */
+  std::string tail_instance; /* tail object's instance */
+
+  std::string tier_type;
+  RGWObjTier tier_config;
 
   void convert_to_explicit(const DoutPrefixProvider *dpp, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
   int append_explicit(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params);
-  void append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& iter, string *override_prefix);
+  void append_rules(RGWObjManifest& m, std::map<uint64_t, RGWObjManifestRule>::iterator& iter, std::string *override_prefix);
 
 public:
 
@@ -184,22 +217,24 @@ public:
     tail_placement = rhs.tail_placement;
     rules = rhs.rules;
     tail_instance = rhs.tail_instance;
+    tier_type = rhs.tier_type;
+    tier_config = rhs.tier_config;
     return *this;
   }
 
-  map<uint64_t, RGWObjManifestPart>& get_explicit_objs() {
+  std::map<uint64_t, RGWObjManifestPart>& get_explicit_objs() {
     return objs;
   }
 
 
-  void set_explicit(uint64_t _size, map<uint64_t, RGWObjManifestPart>& _objs) {
+  void set_explicit(uint64_t _size, std::map<uint64_t, RGWObjManifestPart>& _objs) {
     explicit_objs = true;
     objs.swap(_objs);
     set_obj_size(_size);
   }
 
   void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs,
-                             string *override_prefix, rgw_obj_select *location) const;
+                             std::string *override_prefix, rgw_obj_select *location) const;
 
   void set_trivial_rule(uint64_t tail_ofs, uint64_t stripe_max_size) {
     RGWObjManifestRule rule(0, tail_ofs, 0, stripe_max_size);
@@ -215,7 +250,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 6, bl);
+    ENCODE_START(8, 6, bl);
     encode(obj_size, bl);
     encode(objs, bl);
     encode(explicit_objs, bl);
@@ -236,6 +271,8 @@ public:
     }
     encode(head_placement_rule, bl);
     encode(tail_placement.placement_rule, bl);
+    encode(tier_type, bl);
+    encode(tier_config, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -253,7 +290,7 @@ public:
     } else {
       explicit_objs = true;
       if (!objs.empty()) {
-        map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
+        std::map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
         obj = iter->second.loc;
         head_size = iter->second.size;
         max_head_size = head_size;
@@ -308,11 +345,16 @@ public:
       decode(tail_placement.placement_rule, bl);
     }
 
+    if (struct_v >= 8) {
+      decode(tier_type, bl);
+      decode(tier_config, bl);
+    }
+
     DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWObjManifest*>& o);
+  static void generate_test_instances(std::list<RGWObjManifest*>& o);
 
   int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);
@@ -370,19 +412,19 @@ public:
     return head_placement_rule;
   }
 
-  void set_prefix(const string& _p) {
+  void set_prefix(const std::string& _p) {
     prefix = _p;
   }
 
-  const string& get_prefix() const {
+  const std::string& get_prefix() const {
     return prefix;
   }
 
-  void set_tail_instance(const string& _ti) {
+  void set_tail_instance(const std::string& _ti) {
     tail_instance = _ti;
   }
 
-  const string& get_tail_instance() const {
+  const std::string& get_tail_instance() const {
     return tail_instance;
   }
 
@@ -406,6 +448,36 @@ public:
     return max_head_size;
   }
 
+  const std::string& get_tier_type() {
+      return tier_type;
+  }
+
+  inline void set_tier_type(std::string value) {
+      /* Only "cloud-s3" tier-type is supported for now */
+      if (value == "cloud-s3") {
+        tier_type = value;
+      }
+  }
+
+  inline void set_tier_config(RGWObjTier t) {
+      /* Set only if tier_type set to "cloud-s3" */
+      if (tier_type != "cloud-s3")
+        return;
+
+      tier_config.name = t.name;
+      tier_config.tier_placement = t.tier_placement;
+      tier_config.is_multipart_upload = t.is_multipart_upload;
+  }
+
+  inline const void get_tier_config(RGWObjTier* t) {
+      if (tier_type != "cloud-s3")
+        return;
+
+      t->name = tier_config.name;
+      t->tier_placement = tier_config.tier_placement;
+      t->is_multipart_upload = tier_config.is_multipart_upload;
+  }
+
   class obj_iterator {
     const DoutPrefixProvider *dpp;
     const RGWObjManifest *manifest = nullptr;
@@ -416,13 +488,13 @@ public:
 
     int cur_part_id = 0;
     int cur_stripe = 0;
-    string cur_override_prefix;
+    std::string cur_override_prefix;
 
     rgw_obj_select location;
 
-    map<uint64_t, RGWObjManifestRule>::const_iterator rule_iter;
-    map<uint64_t, RGWObjManifestRule>::const_iterator next_rule_iter;
-    map<uint64_t, RGWObjManifestPart>::const_iterator explicit_iter;
+    std::map<uint64_t, RGWObjManifestRule>::const_iterator rule_iter;
+    std::map<uint64_t, RGWObjManifestRule>::const_iterator next_rule_iter;
+    std::map<uint64_t, RGWObjManifestPart>::const_iterator explicit_iter;
 
     void update_explicit_pos();
 
@@ -507,9 +579,9 @@ public:
     int cur_part_id;
     int cur_stripe;
     uint64_t cur_stripe_size;
-    string cur_oid;
+    std::string cur_oid;
     
-    string oid_prefix;
+    std::string oid_prefix;
 
     rgw_obj_select cur_obj;
 
@@ -527,7 +599,7 @@ public:
     int create_next(uint64_t ofs);
 
     rgw_raw_obj get_cur_obj(RGWZoneGroup& zonegroup, RGWZoneParams& zone_params) { return cur_obj.get_raw_obj(zonegroup, zone_params); }
-    rgw_raw_obj get_cur_obj(rgw::sal::Store* store) const { return cur_obj.get_raw_obj(store); }
+    rgw_raw_obj get_cur_obj(rgw::sal::RadosStore* store) const { return cur_obj.get_raw_obj(store); }
 
     /* total max size of current stripe (including head obj) */
     uint64_t cur_stripe_max_size() const {
@@ -536,3 +608,48 @@ public:
   };
 };
 WRITE_CLASS_ENCODER(RGWObjManifest)
+
+struct RGWObjState {
+  rgw_obj obj;
+  bool is_atomic{false};
+  bool has_attrs{false};
+  bool exists{false};
+  uint64_t size{0}; //< size of raw object
+  uint64_t accounted_size{0}; //< size before compression, encryption
+  ceph::real_time mtime;
+  uint64_t epoch{0};
+  bufferlist obj_tag;
+  bufferlist tail_tag;
+  std::string write_tag;
+  bool fake_tag{false};
+  std::optional<RGWObjManifest> manifest;
+  std::string shadow_obj;
+  bool has_data{false};
+  bufferlist data;
+  bool prefetch_data{false};
+  bool keep_tail{false};
+  bool is_olh{false};
+  bufferlist olh_tag;
+  uint64_t pg_ver{false};
+  uint32_t zone_short_id{0};
+  bool compressed{false};
+
+  /* important! don't forget to update copy constructor */
+
+  RGWObjVersionTracker objv_tracker;
+
+  std::map<std::string, bufferlist> attrset;
+
+  RGWObjState();
+  RGWObjState(const RGWObjState& rhs);
+  ~RGWObjState();
+
+  bool get_attr(std::string name, bufferlist& dest) {
+    std::map<std::string, bufferlist>::iterator iter = attrset.find(name);
+    if (iter != attrset.end()) {
+      dest = iter->second;
+      return true;
+    }
+    return false;
+  }
+};

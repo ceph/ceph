@@ -28,12 +28,18 @@
 
 #include "osd.h"
 
+using namespace std::literals;
 namespace bpo = boost::program_options;
 using config_t = crimson::common::ConfigProxy;
+using std::string;
+
+seastar::logger& logger() {
+  return crimson::get_logger(ceph_subsys_osd);
+}
 
 void usage(const char* prog) {
-  std::cout << "usage: " << prog << " -i <ID>\n"
-            << "  --help-seastar    show Seastar help messages\n";
+  std::cout << "usage: " << prog << "\n"
+            << "  -i <ID>\n";
   generic_server_usage();
 }
 
@@ -54,6 +60,7 @@ auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_e
   // options. and ceph wins
   auto consume_conf_arg = [&](char** argv) {
     if (std::strcmp(*argv, "-c") == 0) {
+      std::cout << "warn: apply '-c FILE' as ceph option" << std::endl;
       ceph_args.push_back(*argv++);
       if (argv != argv_end) {
         ceph_args.push_back(*argv++);
@@ -66,11 +73,7 @@ auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_e
     for (; unknown != unknown_args.end() &&
            argv != argv_end &&
            *unknown == *argv; ++argv, ++unknown) {
-      if (std::strcmp(*argv, "--help-seastar") == 0) {
-        app_args.push_back("--help");
-      } else {
-        ceph_args.push_back(*argv);
-      }
+      ceph_args.push_back(*argv);
     }
     return argv;
   };
@@ -98,10 +101,11 @@ seastar::future<> make_keyring()
     if (exists &&
         keyring.load(nullptr, path) == 0 &&
         keyring.get_auth(name, auth)) {
-      seastar::fprint(std::cerr, "already have key in keyring: %s\n", path);
+      fmt::print(std::cerr, "already have key in keyring: {}\n", path);
       return seastar::now();
     } else {
-      auth.key.create(std::make_unique<CephContext>().get(), CEPH_CRYPTO_AES);
+      CephContext temp_cct{};
+      auth.key.create(&temp_cct, CEPH_CRYPTO_AES);
       keyring.add(name, auth);
       bufferlist bl;
       keyring.encode_plaintext(bl);
@@ -110,20 +114,20 @@ seastar::future<> make_keyring()
       return crimson::write_file(std::move(bl), path, permissions);
     }
   }).handle_exception_type([path](const std::filesystem::filesystem_error& e) {
-    seastar::fprint(std::cerr, "FATAL: writing new keyring to %s: %s\n", path, e.what());
+    fmt::print(std::cerr, "FATAL: writing new keyring to {}: {}\n", path, e.what());
     throw e;
   });
 }
 
-uint64_t get_nonce()
+static uint64_t get_nonce()
 {
-  if (auto pid = getpid(); pid != 1) {
-    return pid;
-  } else {
+  if (auto pid = getpid(); pid == 1 || std::getenv("CEPH_USE_RANDOM_NONCE")) {
     // we're running in a container; use a random number instead!
     std::random_device rd;
     std::default_random_engine rng{rd()};
     return std::uniform_int_distribution<uint64_t>{}(rng);
+  } else {
+    return pid;
   }
 }
 
@@ -162,7 +166,7 @@ seastar::future<> fetch_config()
       msgr->shutdown().get();
     });
     monc.start().handle_exception([] (auto ep) {
-      seastar::fprint(std::cerr, "FATAL: unable to connect to cluster: {}\n", ep);
+      fmt::print(std::cerr, "FATAL: unable to connect to cluster: {}\n", ep);
       return seastar::make_exception_future<>(ep);
     }).get();
     auto stop_monc = seastar::defer([&] {
@@ -178,6 +182,21 @@ seastar::future<> fetch_config()
   });
 }
 
+static void override_seastar_opts(std::vector<const char*>& args)
+{
+  if (auto found = std::find_if(std::begin(args), std::end(args),
+                                [] (auto* arg) { return "--smp"sv == arg; });
+      found == std::end(args)) {
+    // TODO: we don't have a way to communicate the resource requirements
+    // with the deployment tools, like cephadm and rook, which don't set, for
+    // instance, aio-max-nr for us. but we should fix this, once crimson is able
+    // to run on a multi-core system, i.e., once m-to-n problem is resolved.
+    std::cout << "warn: added seastar option --smp 1" << std::endl;
+    args.emplace_back("--smp");
+    args.emplace_back("1");
+  }
+}
+
 int main(int argc, char* argv[])
 {
   seastar::app_template::config app_cfg;
@@ -189,8 +208,9 @@ int main(int argc, char* argv[])
               "This is normally used in combination with --mkfs")
     ("mkfs", "create a [new] data directory")
     ("debug", "enable debug output on all loggers")
+    ("trace", "enable trace output on all loggers")
     ("no-mon-config", "do not retrieve configuration from monitors on boot")
-    ("prometheus_port", bpo::value<uint16_t>()->default_value(9180),
+    ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
      "Prometheus port. Set to zero to disable")
     ("prometheus_address", bpo::value<string>()->default_value("0.0.0.0"),
      "Prometheus listening address")
@@ -198,11 +218,11 @@ int main(int argc, char* argv[])
      "Prometheus metrics prefix");
 
   auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
-  if (ceph_argparse_need_usage(ceph_args) &&
-      std::find(app_args.begin(), app_args.end(), "--help") == app_args.end()) {
+  if (ceph_argparse_need_usage(ceph_args) ||
+      ceph_argparse_need_usage(app_args)) {
     usage(argv[0]);
-    return EXIT_SUCCESS;
   }
+  override_seastar_opts(app_args);
   std::string cluster_name{"ceph"};
   std::string conf_file_list;
   // ceph_argparse_early_args() could _exit(), while local_conf() won't ready
@@ -227,6 +247,11 @@ int main(int argc, char* argv[])
               seastar::log_level::debug
             );
           }
+	  if (config.count("trace")) {
+	    seastar::global_logger_registry().set_all_loggers_level(
+              seastar::log_level::trace
+            );
+	  }
           sharded_conf().start(init_params.name, cluster_name).get();
           auto stop_conf = seastar::defer([] {
             sharded_conf().stop().get();
@@ -236,6 +261,7 @@ int main(int argc, char* argv[])
             sharded_perf_coll().stop().get();
           });
           local_conf().parse_config_files(conf_file_list).get();
+          local_conf().parse_env().get();
           local_conf().parse_argv(ceph_args).get();
           if (const auto ret = pidfile_write(local_conf()->pid_file);
               ret == -EACCES || ret == -EAGAIN) {
@@ -287,8 +313,7 @@ int main(int argc, char* argv[])
           auto store = crimson::os::FuturizedStore::create(
             local_conf().get_val<std::string>("osd_objectstore"),
             local_conf().get_val<std::string>("osd_data"),
-            local_conf().get_config_values(),
-            app.alien());
+            local_conf().get_config_values()).get();
 
           osd.start_single(whoami, nonce,
                            std::ref(*store),
@@ -304,10 +329,15 @@ int main(int argc, char* argv[])
             fetch_config().get();
           }
           if (config.count("mkfs")) {
+            auto osd_uuid = local_conf().get_val<uuid_d>("osd_uuid");
+            if (osd_uuid.is_zero()) {
+              // use a random osd uuid if not specified
+              osd_uuid.generate_random();
+            }
             osd.invoke_on(
               0,
               &crimson::osd::OSD::mkfs,
-              local_conf().get_val<uuid_d>("osd_uuid"),
+              osd_uuid,
               local_conf().get_val<uuid_d>("fsid")).get();
           }
           if (config.count("mkkey") || config.count("mkfs")) {
@@ -315,20 +345,20 @@ int main(int argc, char* argv[])
           } else {
             osd.invoke_on(0, &crimson::osd::OSD::start).get();
           }
-          seastar::fprint(std::cout, "crimson startup completed.");
+          logger().info("crimson startup completed");
           should_stop.wait().get();
-          seastar::fprint(std::cout, "crimson shutting down.");
+          logger().info("crimson shutting down");
           // stop()s registered using defer() are called here
         } catch (...) {
-          seastar::fprint(std::cerr, "FATAL: startup failed: %s\n", std::current_exception());
+          logger().error("startup failed: {}", std::current_exception());
           return EXIT_FAILURE;
         }
-        seastar::fprint(std::cout, "crimson shutdown complete");
+        logger().info("crimson shutdown complete");
         return EXIT_SUCCESS;
       });
     });
   } catch (...) {
-    seastar::fprint(std::cerr, "FATAL: Exception during startup, aborting: %s\n", std::current_exception());
+    fmt::print(std::cerr, "FATAL: Exception during startup, aborting: {}\n", std::current_exception());
     return EXIT_FAILURE;
   }
 }

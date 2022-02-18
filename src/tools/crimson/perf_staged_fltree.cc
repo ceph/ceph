@@ -35,12 +35,16 @@ class PerfTree : public TMTestState {
                       : NodeExtentManager::create_seastore(*tm)));
         {
           auto t = create_mutate_transaction();
-          tree->bootstrap(*t).unsafe_get();
+          with_trans_intr(*t, [&](auto &tr){
+            return tree->bootstrap(tr);
+          }).unsafe_get();
           submit_transaction(std::move(t));
         }
         {
           auto t = create_mutate_transaction();
-          tree->insert(*t).unsafe_get();
+          with_trans_intr(*t, [&](auto &tr){
+            return tree->insert(tr);
+          }).unsafe_get();
           auto start_time = mono_clock::now();
           submit_transaction(std::move(t));
           std::chrono::duration<double> duration = mono_clock::now() - start_time;
@@ -49,18 +53,30 @@ class PerfTree : public TMTestState {
         {
           // Note: create_weak_transaction() can also work, but too slow.
           auto t = create_read_transaction();
-          tree->get_stats(*t).unsafe_get();
-          tree->validate(*t).unsafe_get();
+          with_trans_intr(*t, [&](auto &tr){
+            return tree->get_stats(tr);
+          }).unsafe_get();
+
+          with_trans_intr(*t, [&](auto &tr){
+            return tree->validate(tr);
+          }).unsafe_get();
         }
         {
           auto t = create_mutate_transaction();
-          tree->erase(*t, kvs.size() * erase_ratio).unsafe_get();
+          with_trans_intr(*t, [&](auto &tr){
+            return tree->erase(tr, kvs.size() * erase_ratio);
+          }).unsafe_get();
           submit_transaction(std::move(t));
         }
         {
           auto t = create_read_transaction();
-          tree->get_stats(*t).unsafe_get();
-          tree->validate(*t).unsafe_get();
+          with_trans_intr(*t, [&](auto &tr){
+            return tree->get_stats(tr);
+          }).unsafe_get();
+
+          with_trans_intr(*t, [&](auto &tr){
+            return tree->validate(tr);
+          }).unsafe_get();
         }
         tree.reset();
       });
@@ -99,7 +115,7 @@ seastar::future<> run(const bpo::variables_map& config) {
     ceph_assert(erase_ratio <= 1);
 
     using crimson::common::sharded_conf;
-    sharded_conf().start(EntityName{}, string_view{"ceph"}).get();
+    sharded_conf().start(EntityName{}, std::string_view{"ceph"}).get();
     seastar::engine().at_exit([] {
       return sharded_conf().stop();
     });

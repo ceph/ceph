@@ -25,7 +25,6 @@ CAP_RECALL_MIN = 100
 
 
 class TestClientLimits(CephFSTestCase):
-    REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
     def _test_client_pin(self, use_subdir, open_files):

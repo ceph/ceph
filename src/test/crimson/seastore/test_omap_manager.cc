@@ -219,7 +219,7 @@ struct omap_manager_test_t :
     omap_root_t omap_root = with_trans_intr(
       *t,
       [this](auto &t) {
-	return omap_manager->initialize_omap(t);
+	return omap_manager->initialize_omap(t, L_ADDR_MIN);
       }).unsafe_get0();
     submit_transaction(std::move(t));
     return omap_root;
@@ -507,7 +507,6 @@ TEST_F(omap_manager_test_t, replay)
         check_mappings(omap_root, *t);
         check_mappings(omap_root);
       }
-      i++;
     }
     logger().debug("finally submitting transaction ");
     submit_transaction(std::move(t));

@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
@@ -7,6 +8,7 @@ import { ChartsModule } from 'ng2-charts';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
+import { FeedbackComponent } from '../shared/feedback/feedback.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
@@ -25,7 +27,9 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     SharedModule,
     ChartsModule,
     RouterModule,
-    NgbPopoverModule
+    NgbPopoverModule,
+    FormsModule,
+    ReactiveFormsModule
   ],
 
   declarations: [
@@ -37,7 +41,8 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     MdsSummaryPipe,
     HealthPieComponent,
     InfoCardComponent,
-    InfoGroupComponent
+    InfoGroupComponent,
+    FeedbackComponent
   ]
 })
 export class DashboardModule {}

@@ -9,7 +9,7 @@
 #
 a2batic Kanika Murarka <kmurarka@redhat.com>
 aaSharma14 Aashish Sharma <aasharma@redhat.com>
-aclamk Adam Kupczyk <akucpzyk@redhat.com>
+aclamk Adam Kupczyk <akupczyk@redhat.com>
 adamemerson Adam C. Emerson <aemerson@redhat.com>
 adk3798 Adam King <adking@redhat.com>
 ajarr Ramana Raja <rraja@redhat.com>
@@ -34,6 +34,7 @@ capri1989 Kai Wagner <kwagner@suse.com>
 cbodley Casey Bodley <cbodley@redhat.com>
 chardan Jesse Williamson <jwilliamson@suse.de>
 chhabaramesh Ramesh Chander <Ramesh.Chander@sandisk.com>
+chrisphoffman Christopher Hoffman <choffman@redhat.com>
 CourtneyCCaldwell Courtney Caldwell <ccaldwel@redhat.com>
 Daniel-Pivonka Daniel Pivonka <dpivonka@redhat.com>
 ddiss David Disseldorp <ddiss@suse.de>
@@ -65,6 +66,7 @@ jdurgin Josh Durgin <jdurgin@redhat.com>
 jecluis João Eduardo Luís <joao@suse.de>
 jmolmo Juan Miguel Olmo <jolmomar@redhat.com>
 joscollin Jos Collin <jcollin@redhat.com>
+josephsawaya Joseph Sawaya <jsawaya@redhat.com>
 jschmid1 Joshua Schmid <jschmid@suse.de>
 jtlayton Jeff Layton <jlayton@redhat.com>
 kotreshhr Kotresh Hiremath Ravishankar <khiremat@redhat.com>
@@ -74,9 +76,11 @@ LenzGr Lenz Grimmer <lgrimmer@suse.com>
 leseb Sébastien Han <seb@redhat.com>
 liewegas Sage Weil <sage@redhat.com>
 liupan1111 Pan Liu <liupan1111@gmail.com>
+ljflores Laura Flores <lflores@redhat.com>
 lxbsz Xiubo Li <xiubli@redhat.com>
 majianpeng Jianpeng Ma <jianpeng.ma@intel.com>
 markhpc Mark Nelson <mnelson@redhat.com>
+Matan-B Matan Breizman <mbreizma@redhat.com>
 mattbenjamin Matt Benjamin <mbenjami@redhat.com>
 mchangir Milind Changire <mchangir@redhat.com>
 mgfritch Michael Fritch <mfritch@suse.com>
@@ -84,6 +88,7 @@ mikechristie Mike Christie <mchristi@redhat.com>
 mogeb Mohamad Gebai <mgebai@suse.com>
 myoungwon Myoungwon Oh <myoungwon.oh@samsung.com>
 neha-ojha Neha Ojha <nojha@redhat.com>
+NitzanMordhai Nitzan Mordechai <nmordech@redhat.com>
 nizamial09 Nizamudeen A <nia@redhat.com>
 noahdesu Noah Watkins <nwatkins@redhat.com>
 oritwas Orit Wasserman <owasserm@redhat.com>
@@ -101,7 +106,7 @@ runsisi luo runbing <luo.runbing@zte.com.cn>
 rzarzynski Radoslaw Zarzynski <rzarzyns@redhat.com>
 s0nea Tatjana Dehler <tdehler@suse.com>
 saschagrunert Sascha Grunert <sgrunert@suse.com>
-sebastian-philipp Sebastian Wagner <swagner@suse.com>
+sebastian-philipp Sebastian Wagner <sewagner@redhat.com>
 ShyamsundarR Shyamsundar R <srangana@redhat.com>
 sidharthanup Sidharth Anupkrishnan <sanupkri@redhat.com>
 smithfarm Nathan Cutler <ncutler@suse.com>
@@ -116,7 +121,7 @@ tserong Tim Serong <tserong@suse.com>
 tspmelo Tiago Melo <tmelo@suse.com>
 ukernel Zheng Yan <zyan@redhat.com>
 varadakari Varada Kari <varadaraja.kari@flipkart.com>
-varshar16 Varsha Rao <varao@redhat.com>
+varshar16 Varsha Rao <rvarsha016@gmail.com>
 vasukulkarni Vasu Kulkarni <vasu@redhat.com>
 vkmc Victoria Martinez de la Cruz <vkmc@redhat.com>
 votdev Volker Theile <vtheile@suse.com>
@@ -139,3 +144,6 @@ yuvalif Yuval Lifshitz <ylifshit@redhat.com>
 yuyuyu101 Haomai Wang <haomai@xsky.com>
 zdover23 Zac Dover <zac.dover@gmail.com>
 Thingee Mike Perez <miperez@redhat.com>
+cfsnyder Cory Snyder <csnyder@iland.com>
+benhanokh Gabriel Benhanokh <gbenhano@redhat.com>
+kamoltat Kamoltat Sirivadhna <ksirivad@redhat.com>

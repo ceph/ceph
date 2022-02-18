@@ -61,7 +61,6 @@ set(common_srcs
   code_environment.cc
   common_init.cc
   compat.cc
-  condition_variable_debug.cc
   config.cc
   config_values.cc
   dout.cc
@@ -112,6 +111,7 @@ if(WITH_CEPH_DEBUG_MUTEX)
   list(APPEND common_srcs
     lockdep.cc
     mutex_debug.cc
+    condition_variable_debug.cc
     shared_mutex_debug.cc)
 endif()
 
@@ -188,7 +188,8 @@ target_include_directories(common-common-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_compile_definitions(common-common-objs PRIVATE
   "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
-  "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
+  "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\""
+  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
 add_dependencies(common-common-objs legacy-option-headers)
 
 set(common_mountcephfs_srcs

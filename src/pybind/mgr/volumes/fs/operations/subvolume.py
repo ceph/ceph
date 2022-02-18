@@ -1,8 +1,5 @@
-import os
-import errno
 from contextlib import contextmanager
 
-from ..exception import VolumeException
 from .template import SubvolumeOpType
 
 from .versions import loaded_subvolumes
@@ -25,6 +22,7 @@ def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, po
     subvolume = loaded_subvolumes.get_subvolume_object_max(mgr, fs, vol_spec, group, subvolname)
     subvolume.create(size, isolate_nspace, pool, mode, uid, gid)
 
+
 def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, source_subvolume, snapname):
     """
     create a cloned subvolume.
@@ -42,6 +40,7 @@ def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, sour
     subvolume = loaded_subvolumes.get_subvolume_object_max(mgr, fs, vol_spec, group, subvolname)
     subvolume.create_clone(pool, source_volume, source_subvolume, snapname)
 
+
 def remove_subvol(mgr, fs, vol_spec, group, subvolname, force=False, retainsnaps=False):
     """
     remove a subvolume.
@@ -56,6 +55,7 @@ def remove_subvol(mgr, fs, vol_spec, group, subvolname, force=False, retainsnaps
     op_type = SubvolumeOpType.REMOVE if not force else SubvolumeOpType.REMOVE_FORCE
     with open_subvol(mgr, fs, vol_spec, group, subvolname, op_type) as subvolume:
         subvolume.remove(retainsnaps)
+
 
 @contextmanager
 def open_subvol(mgr, fs, vol_spec, group, subvolname, op_type):

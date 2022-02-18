@@ -49,8 +49,8 @@ public:
     ack_waiters[tid].push_back(c);
   }
 
-  set<version_t> get_journaled_tids() const {
-    set<version_t> tids;
+  std::set<version_t> get_journaled_tids() const {
+    std::set<version_t> tids;
     for (auto p : pending_commit)
       tids.insert(p.first);
     return tids;
@@ -88,12 +88,12 @@ protected:
 
   bool server_ready = false;
 
-  map<uint64_t, _pending_prepare> pending_prepare;
-  map<version_t, uint64_t> prepared_update;
-  list<_pending_prepare> waiting_for_reqid;
+  std::map<uint64_t, _pending_prepare> pending_prepare;
+  std::map<version_t, uint64_t> prepared_update;
+  std::list<_pending_prepare> waiting_for_reqid;
 
   // pending commits
-  map<version_t, LogSegment*> pending_commit;
-  map<version_t, MDSContext::vec > ack_waiters;
+  std::map<version_t, LogSegment*> pending_commit;
+  std::map<version_t, MDSContext::vec > ack_waiters;
 };
 #endif

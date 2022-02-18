@@ -15,5 +15,4 @@ tasks:
       - \(OSD_
       - \(OBJECT_
       - overall HEALTH
-- rgw: [client.0]
 - ssh_keys:

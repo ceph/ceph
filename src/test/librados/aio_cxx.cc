@@ -13,12 +13,12 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "include/scope_guard.h"
+#include "common/ceph_mutex.h"
 
 #include "test_cxx.h"
 
+using namespace std;
 using namespace librados;
-using std::pair;
-using std::ostringstream;
 
 class AioTestDataPP
 {
@@ -2230,4 +2230,91 @@ TEST(LibRadosAio, RoundTripCmpExtPP2)
 
   ioctx.remove("test_obj");
   destroy_one_pool_pp(pool_name, cluster);
+}
+
+ceph::mutex my_lock = ceph::make_mutex("my_lock");
+set<unsigned> inflight;
+unsigned max_success = 0;
+unsigned min_failed = 0;
+
+struct io_info {
+  unsigned i;
+  AioCompletion *c;
+};
+
+void pool_io_callback(completion_t cb, void *arg)
+{
+  AioCompletion *c = (AioCompletion*)cb;
+  io_info *info = (io_info *)arg;
+  unsigned long i = info->i;
+  int r = info->c->get_return_value();
+  //cout << "finish " << i << " r = " << r << std::endl;
+
+  std::scoped_lock l(my_lock);
+  inflight.erase(i);
+  if (r == 0) {
+    if (i > max_success) {
+      max_success = i;
+    }
+  } else {
+    if (!min_failed || i < min_failed) {
+      min_failed = i;
+    }
+  }
+}
+
+TEST(LibRadosAio, PoolEIOFlag) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+
+  bufferlist bl;
+  bl.append("some data");
+  std::thread *t = nullptr;
+  
+  unsigned max = 100;
+  unsigned long i = 1;
+  my_lock.lock();
+  for (; min_failed == 0; ++i) {
+    io_info *info = new io_info;
+    info->i = i;
+    info->c = Rados::aio_create_completion();
+    info->c->set_complete_callback((void*)info, pool_io_callback);
+    inflight.insert(i);
+    my_lock.unlock();
+    int r = test_data.m_ioctx.aio_write("foo", info->c, bl, bl.length(), 0);
+    //cout << "start " << i << " r = " << r << std::endl;
+
+    if (i == max / 2) {
+      cout << "setting pool EIO" << std::endl;
+      t = new std::thread(
+	[&] {
+	  bufferlist empty;
+	  int r = test_data.m_cluster.mon_command(
+	    "{\"prefix\": \"osd pool set\", \"pool\": \"" + test_data.m_pool_name +
+	    "\", \"var\": \"eio\", \"val\": \"true\"}", empty, nullptr, nullptr);
+	  ceph_assert(r == 0);
+	});
+    }
+
+    sleep(.01);
+    my_lock.lock();
+    if (r < 0) {
+      inflight.erase(i);
+      break;
+    }
+  }
+  t->join();
+  delete t;
+
+  // wait for ios to finish
+  for (; !inflight.empty(); ++i) {
+    cout << "waiting for " << inflight << std::endl;
+    my_lock.unlock();
+    sleep(1);
+    my_lock.lock();
+  }
+
+  cout << "max_success " << max_success << ", min_failed " << min_failed << std::endl;
+  ASSERT_TRUE(max_success + 1 == min_failed);
+  my_lock.unlock();
 }

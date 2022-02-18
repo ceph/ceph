@@ -25,6 +25,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+using std::string;
+using namespace std::literals;
+
 int ActivePyModule::load(ActivePyModules *py_modules)
 {
   ceph_assert(py_modules);

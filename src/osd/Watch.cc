@@ -23,6 +23,7 @@ using std::make_pair;
 using std::pair;
 using std::ostream;
 using std::set;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::decode;

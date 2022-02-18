@@ -29,6 +29,7 @@
 
 namespace fs = std::filesystem;
 
+using namespace std;
 using ceph::bufferlist;
 using std::cerr;
 using std::ostringstream;

@@ -14,6 +14,12 @@ ObjectContextRegistry::ObjectContextRegistry(crimson::common::ConfigProxy &conf)
   conf.add_observer(this);
 }
 
+ObjectContextRegistry::~ObjectContextRegistry()
+{
+  // purge the cache to avoid leaks and complains from LSan
+  obc_lru.set_target_size(0UL);
+}
+
 const char** ObjectContextRegistry::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {

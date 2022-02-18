@@ -26,7 +26,8 @@ static constexpr uint32_t max_keys = 1000;
 /// process each of the omap value comparisons according to the same rules as
 /// cmpxattr(), and return -ECANCELED if a comparison is unsuccessful. for
 /// comparisons with Mode::U64, failure to decode an input value is reported
-/// as -EINVAL, while failure to decode a stored value is reported as -EIO
+/// as -EINVAL, an empty stored value is compared as 0, and failure to decode
+/// a stored value is reported as -EIO
 [[nodiscard]] int cmp_vals(librados::ObjectReadOperation& op,
                            Mode mode, Op comparison, ComparisonMap values,
                            std::optional<ceph::bufferlist> default_value);
@@ -34,9 +35,9 @@ static constexpr uint32_t max_keys = 1000;
 /// process each of the omap value comparisons according to the same rules as
 /// cmpxattr(). any key/value pairs that compare successfully are overwritten
 /// with the corresponding input value. for comparisons with Mode::U64, failure
-/// to decode an input value is reported as -EINVAL. decode failure of a stored
-/// value is treated as an unsuccessful comparison and is not reported as an
-/// error
+/// to decode an input value is reported as -EINVAL. an empty stored value is
+/// compared as 0, while decode failure of a stored value is treated as an
+/// unsuccessful comparison and is not reported as an error
 [[nodiscard]] int cmp_set_vals(librados::ObjectWriteOperation& writeop,
                                Mode mode, Op comparison, ComparisonMap values,
                                std::optional<ceph::bufferlist> default_value);
@@ -44,8 +45,9 @@ static constexpr uint32_t max_keys = 1000;
 /// process each of the omap value comparisons according to the same rules as
 /// cmpxattr(). any key/value pairs that compare successfully are removed. for
 /// comparisons with Mode::U64, failure to decode an input value is reported as
-/// -EINVAL. decode failure of a stored value is treated as an unsuccessful
-/// comparison and is not reported as an error
+/// -EINVAL. an empty stored value is compared as 0, while decode failure of a
+/// stored value is treated as an unsuccessful comparison and is not reported
+/// as an error
 [[nodiscard]] int cmp_rm_keys(librados::ObjectWriteOperation& writeop,
                               Mode mode, Op comparison, ComparisonMap values);
 

@@ -107,7 +107,9 @@ static constexpr std::uint64_t s3DeletePublicAccessBlock = 64;
 static constexpr std::uint64_t s3GetBucketPublicAccessBlock = 65;
 static constexpr std::uint64_t s3PutBucketPublicAccessBlock = 66;
 static constexpr std::uint64_t s3DeleteBucketPublicAccessBlock = 67;
-static constexpr std::uint64_t s3All = 68;
+static constexpr std::uint64_t s3GetBucketEncryption = 68;
+static constexpr std::uint64_t s3PutBucketEncryption = 69;
+static constexpr std::uint64_t s3All = 70;
 
 static constexpr std::uint64_t iamPutUserPolicy = s3All + 1;
 static constexpr std::uint64_t iamGetUserPolicy = s3All + 2;
@@ -126,12 +128,16 @@ static constexpr std::uint64_t iamCreateOIDCProvider = s3All + 14;
 static constexpr std::uint64_t iamDeleteOIDCProvider = s3All + 15;
 static constexpr std::uint64_t iamGetOIDCProvider = s3All + 16;
 static constexpr std::uint64_t iamListOIDCProviders = s3All + 17;
-static constexpr std::uint64_t iamAll = s3All + 18;
+static constexpr std::uint64_t iamTagRole = s3All + 18;
+static constexpr std::uint64_t iamListRoleTags = s3All + 19;
+static constexpr std::uint64_t iamUntagRole = s3All + 20;
+static constexpr std::uint64_t iamAll = s3All + 21;
 
 static constexpr std::uint64_t stsAssumeRole = iamAll + 1;
 static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = iamAll + 2;
 static constexpr std::uint64_t stsGetSessionToken = iamAll + 3;
-static constexpr std::uint64_t stsAll = iamAll + 4;
+static constexpr std::uint64_t stsTagSession = iamAll + 4;
+static constexpr std::uint64_t stsAll = iamAll + 5;
 
 static constexpr std::uint64_t s3Count = s3All;
 static constexpr std::uint64_t allCount = stsAll + 1;
@@ -197,6 +203,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetAccelerateConfiguration:
   case s3GetBucketAcl:
   case s3GetBucketCORS:
+  case s3GetBucketEncryption:
   case s3GetBucketLocation:
   case s3GetBucketLogging:
   case s3GetBucketNotification:
@@ -220,6 +227,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutAccelerateConfiguration:
   case s3PutBucketAcl:
   case s3PutBucketCORS:
+  case s3PutBucketEncryption:
   case s3PutBucketLogging:
   case s3PutBucketNotification:
   case s3PutBucketPolicy:
@@ -248,7 +256,7 @@ enum class PolicyPrincipal {
   Other
 };
 
-using Environment = boost::container::flat_map<std::string, std::string>;
+using Environment = std::unordered_multimap<std::string, std::string>;
 
 using Address = std::bitset<128>;
 struct MaskedIP {
@@ -278,6 +286,7 @@ struct Condition {
   // In future development, use symbol internment.
   std::string key;
   bool ifexists = false;
+  bool isruntime = false; //Is evaluated during run-time
   // Much to my annoyance there is no actual way to do this in a
   // typed way that is compatible with AWS. I know this because I've
   // seen examples where the same value is used as a string in one
@@ -385,13 +394,33 @@ struct Condition {
     }
   };
 
+  using unordered_multimap_it_pair = std::pair <std::unordered_multimap<std::string,std::string>::const_iterator, std::unordered_multimap<std::string,std::string>::const_iterator>;
+
   template<typename F>
-  static bool orrible(F&& f, const std::string& c,
+  static bool andible(F&& f, const unordered_multimap_it_pair& it,
 		      const std::vector<std::string>& v) {
-    for (const auto& d : v) {
-      if (std::forward<F>(f)(c, d)) {
-	return true;
+    for (auto itr = it.first; itr != it.second; itr++) {
+      bool matched = false;
+      for (const auto& d : v) {
+        if (std::forward<F>(f)(itr->second, d)) {
+	        matched = true;
       }
+     }
+     if (!matched)
+      return false;
+    }
+    return true;
+  }
+
+  template<typename F>
+  static bool orrible(F&& f, const unordered_multimap_it_pair& it,
+		      const std::vector<std::string>& v) {
+    for (auto itr = it.first; itr != it.second; itr++) {
+      for (const auto& d : v) {
+        if (std::forward<F>(f)(itr->second, d)) {
+	        return true;
+      }
+     }
     }
     return false;
   }
@@ -421,6 +450,15 @@ struct Condition {
   bool has_key_p(const std::string& _key, F p) const {
     return p(key, _key);
   }
+
+  template <typename F>
+  bool has_val_p(const std::string& _val, F p) const {
+    for (auto val : vals) {
+      if (p(val, _val))
+        return true;
+    }
+    return false;
+  }
 };
 
 std::ostream& operator <<(std::ostream& m, const Condition& c);
@@ -445,7 +483,7 @@ struct Statement {
 
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, const ARN& resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
 
   Effect eval_principal(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
@@ -453,7 +491,7 @@ struct Statement {
   Effect eval_conditions(const Environment& e) const;
 };
 
-std::ostream& operator <<(ostream& m, const Statement& s);
+std::ostream& operator <<(std::ostream& m, const Statement& s);
 
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
@@ -477,7 +515,7 @@ struct Policy {
 
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, const ARN& resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
 
   Effect eval_principal(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
@@ -485,7 +523,7 @@ struct Policy {
   Effect eval_conditions(const Environment& e) const;
 
   template <typename F>
-  bool has_conditional(const string& conditional, F p) const {
+  bool has_conditional(const std::string& conditional, F p) const {
     for (const auto&s: statements){
       if (std::any_of(s.conditions.begin(), s.conditions.end(),
 		      [&](const Condition& c) { return c.has_key_p(conditional, p);}))
@@ -494,16 +532,31 @@ struct Policy {
     return false;
   }
 
-  bool has_conditional(const string& c) const {
+  template <typename F>
+  bool has_conditional_value(const std::string& conditional, F p) const {
+    for (const auto&s: statements){
+      if (std::any_of(s.conditions.begin(), s.conditions.end(),
+		      [&](const Condition& c) { return c.has_val_p(conditional, p);}))
+	    return true;
+    }
+    return false;
+  }
+
+  bool has_conditional(const std::string& c) const {
     return has_conditional(c, Condition::ci_equal_to());
   }
 
-  bool has_partial_conditional(const string& c) const {
+  bool has_partial_conditional(const std::string& c) const {
     return has_conditional(c, Condition::ci_starts_with());
+  }
+
+  // Example: ${s3:ResourceTag}
+  bool has_partial_conditional_value(const std::string& c) const {
+    return has_conditional_value(c, Condition::ci_starts_with());
   }
 };
 
-std::ostream& operator <<(ostream& m, const Policy& p);
+std::ostream& operator <<(std::ostream& m, const Policy& p);
 bool is_public(const Policy& p);
 
 }

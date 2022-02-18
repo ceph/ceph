@@ -6,6 +6,8 @@
 #include "json_spirit/json_spirit.h"
 #include "test_common.h"
 
+using namespace std;
+
 namespace {
 
 using namespace ceph;

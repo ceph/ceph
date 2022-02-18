@@ -4,7 +4,7 @@ import re
 import threading
 
 from mgr_module import CLICommand, CLIReadCommand, HandleCommandResult
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, CommandResult, NotifyType
 from . import health as health_util
 
 # hours of crash history to report
@@ -20,6 +20,9 @@ ON_DISK_VERSION = 1
 
 
 class Module(MgrModule):
+
+    NOTIFY_TYPES = [NotifyType.health]
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
@@ -29,10 +32,30 @@ class Module(MgrModule):
         # health history tracking
         self._pending_health = []
         self._health_slot = None
+        self._store = {}
 
-    def notify(self, ttype, ident):
+    # The following three functions, get_store, set_store, and get_store_prefix
+    # mask the functions defined in the parent to avoid storing large keys
+    # persistently to disk as that was proving problematic. Long term we may
+    # implement a different mechanism to make these persistent. When that day
+    # comes it should just be a matter of deleting these three functions.
+    def get_store(self, key):
+        return self._store.get(key)
+
+    def set_store(self, key, value):
+        if value is None:
+            if key in self._store:
+                del self._store[key]
+        else:
+            self._store[key] = value
+
+    def get_store_prefix(self, prefix):
+        return { k: v for k, v in self._store.items() if k.startswith(prefix) }
+
+
+    def notify(self, ttype: NotifyType, ident):
         """Queue updates for processing"""
-        if ttype == "health":
+        if ttype == NotifyType.health:
             self.log.info("Received health check update {} pending".format(
                 len(self._pending_health)))
             health = json.loads(self.get("health")["json"])

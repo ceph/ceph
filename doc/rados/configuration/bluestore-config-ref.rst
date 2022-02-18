@@ -64,7 +64,7 @@ the deployment strategy:
 **block (data) only**
 ^^^^^^^^^^^^^^^^^^^^^
 If all devices are the same type, for example all rotational drives, and
-there are no fast devices to use for metadata, it makes sense to specifiy the
+there are no fast devices to use for metadata, it makes sense to specify the
 block device only and to not separate ``block.db`` or ``block.wal``. The
 :ref:`ceph-volume-lvm` command for a single ``/dev/sda`` device looks like::
 
@@ -139,7 +139,7 @@ In older releases, internal level sizes mean that the DB can fully utilize only
 specific partition / LV sizes that correspond to sums of L0, L0+L1, L1+L2,
 etc. sizes, which with default settings means roughly 3 GB, 30 GB, 300 GB, and
 so forth.  Most deployments will not substantially benefit from sizing to
-accomodate L3 and higher, though DB compaction can be facilitated by doubling
+accommodate L3 and higher, though DB compaction can be facilitated by doubling
 these figures to 6GB, 60GB, and 600GB.
 
 Improvements in releases beginning with Nautilus 14.2.12 and Octopus 15.2.6

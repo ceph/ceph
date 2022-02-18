@@ -24,6 +24,8 @@
 #include "common/config_proxy.h"
 #include "gtest/gtest.h"
 
+using namespace std;
+
 TEST(ErasureCodeClay, sanity_check_k)
 {
   ErasureCodeClay clay(g_conf().get_val<std::string>("erasure_code_dir"));

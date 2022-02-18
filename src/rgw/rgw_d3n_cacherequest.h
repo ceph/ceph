@@ -26,7 +26,7 @@ struct D3nGetObjData {
 
 struct D3nL1CacheRequest {
   ~D3nL1CacheRequest() {
-    lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): Read From Cache, comlete" << dendl;
+    lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): Read From Cache, complete" << dendl;
   }
 
   // unique_ptr with custom deleter for struct aiocb
@@ -131,11 +131,11 @@ struct D3nL1CacheRequest {
     }
   };
 
-  void file_aio_read_abstract(const DoutPrefixProvider *dpp, boost::asio::io_context& context, spawn::yield_context yield,
+  void file_aio_read_abstract(const DoutPrefixProvider *dpp, boost::asio::io_context& context, yield_context yield,
                               std::string& file_path, off_t read_ofs, off_t read_len,
                               rgw::Aio* aio, rgw::AioResult& r) {
     using namespace boost::asio;
-    async_completion<spawn::yield_context, void()> init(yield);
+    async_completion<yield_context, void()> init(yield);
     auto ex = get_associated_executor(init.completion_handler);
 
     auto& ref = r.obj.get_ref();

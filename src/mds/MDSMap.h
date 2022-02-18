@@ -37,16 +37,16 @@
 #include "mds/mdstypes.h"
 #include "mds/cephfs_features.h"
 
-#define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")
-#define MDS_FEATURE_INCOMPAT_CLIENTRANGES CompatSet::Feature(2, "client writeable ranges")
-#define MDS_FEATURE_INCOMPAT_FILELAYOUT CompatSet::Feature(3, "default file layouts on dirs")
-#define MDS_FEATURE_INCOMPAT_DIRINODE CompatSet::Feature(4, "dir inode in separate object")
-#define MDS_FEATURE_INCOMPAT_ENCODING CompatSet::Feature(5, "mds uses versioned encoding")
-#define MDS_FEATURE_INCOMPAT_OMAPDIRFRAG CompatSet::Feature(6, "dirfrag is stored in omap")
-#define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
-#define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
-#define MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 CompatSet::Feature(9, "file layout v2")
-#define MDS_FEATURE_INCOMPAT_SNAPREALM_V2 CompatSet::Feature(10, "snaprealm v2")
+static inline const auto MDS_FEATURE_INCOMPAT_BASE = CompatSet::Feature(1, "base v0.20");
+static inline const auto MDS_FEATURE_INCOMPAT_CLIENTRANGES = CompatSet::Feature(2, "client writeable ranges");
+static inline const auto MDS_FEATURE_INCOMPAT_FILELAYOUT = CompatSet::Feature(3, "default file layouts on dirs");
+static inline const auto MDS_FEATURE_INCOMPAT_DIRINODE = CompatSet::Feature(4, "dir inode in separate object");
+static inline const auto MDS_FEATURE_INCOMPAT_ENCODING = CompatSet::Feature(5, "mds uses versioned encoding");
+static inline const auto MDS_FEATURE_INCOMPAT_OMAPDIRFRAG = CompatSet::Feature(6, "dirfrag is stored in omap");
+static inline const auto MDS_FEATURE_INCOMPAT_INLINE = CompatSet::Feature(7, "mds uses inline data");
+static inline const auto MDS_FEATURE_INCOMPAT_NOANCHOR = CompatSet::Feature(8, "no anchor table");
+static inline const auto MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 = CompatSet::Feature(9, "file layout v2");
+static inline const auto MDS_FEATURE_INCOMPAT_SNAPREALM_V2 = CompatSet::Feature(10, "snaprealm v2");
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
@@ -109,6 +109,10 @@ public:
   } availability_t;
 
   struct mds_info_t {
+    enum mds_flags : uint64_t {
+      FROZEN = 1 << 0,
+    };
+
     mds_info_t() = default;
 
     bool laggy() const { return !(laggy_since == utime_t()); }
@@ -151,9 +155,7 @@ public:
     fs_cluster_id_t join_fscid = FS_CLUSTER_ID_NONE;
     uint64_t mds_features = 0;
     uint64_t flags = 0;
-    enum mds_flags : uint64_t {
-      FROZEN = 1 << 0,
-    };
+    CompatSet compat;
   private:
     void encode_versioned(ceph::buffer::list& bl, uint64_t features) const;
     void encode_unversioned(ceph::buffer::list& bl) const;
@@ -166,6 +168,14 @@ public:
   static CompatSet get_compat_set_all();
   static CompatSet get_compat_set_default();
   static CompatSet get_compat_set_base(); // pre v0.20
+  static CompatSet get_compat_set_v16_2_4(); // pre-v16.2.5 CompatSet in MDS beacon
+
+  static MDSMap create_null_mdsmap() {
+    MDSMap null_map;
+    /* Use the largest epoch so it's always bigger than whatever the MDS has. */
+    null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
+    return null_map;
+  }
 
   bool get_inline_data_enabled() const { return inline_data_enabled; }
   void set_inline_data_enabled(bool enabled) { inline_data_enabled = enabled; }
@@ -437,6 +447,9 @@ public:
     return get_state_gid(it->second);
   }
 
+  auto get_gid(mds_rank_t r) const {
+    return up.at(r);
+  }
   const auto& get_info(mds_rank_t m) const {
     return mds_info.at(up.at(m));
   }
@@ -445,6 +458,9 @@ public:
   }
 
   bool is_boot(mds_rank_t m) const { return get_state(m) == STATE_BOOT; }
+  bool is_bootstrapping(mds_rank_t m) const {
+    return is_creating(m) || is_starting(m) || is_replay(m);
+  }
   bool is_creating(mds_rank_t m) const { return get_state(m) == STATE_CREATING; }
   bool is_starting(mds_rank_t m) const { return get_state(m) == STATE_STARTING; }
   bool is_replay(mds_rank_t m) const   { return get_state(m) == STATE_REPLAY; }
@@ -540,10 +556,10 @@ public:
    * Get MDS rank incarnation if the rank is up, else -1
    */
   mds_gid_t get_incarnation(mds_rank_t m) const {
-    std::map<mds_rank_t, mds_gid_t>::const_iterator u = up.find(m);
-    if (u == up.end())
+    auto it = up.find(m);
+    if (it == up.end())
       return MDS_GID_NONE;
-    return (mds_gid_t)get_inc_gid(u->second);
+    return (mds_gid_t)get_inc_gid(it->second);
   }
 
   int get_inc_gid(mds_gid_t gid) const {

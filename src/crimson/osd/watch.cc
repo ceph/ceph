@@ -81,9 +81,9 @@ seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
 {
   if (this->conn == conn) {
     logger().debug("conn={} already connected", conn);
-    timeout_timer.cancel();
+    return seastar::now();
   }
-
+  timeout_timer.cancel();
   timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
   this->conn = std::move(conn);
   return seastar::now();

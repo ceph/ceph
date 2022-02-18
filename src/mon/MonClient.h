@@ -698,20 +698,20 @@ public:
     }
   };
 
-  void start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
-			 bufferlist *outbl, string *outs,
+  void start_mon_command(const std::vector<std::string>& cmd, const bufferlist& inbl,
+			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(cmd, inbl, ContextVerter(outs, outbl, onfinish));
   }
   void start_mon_command(int mon_rank,
-			 const vector<string>& cmd, const bufferlist& inbl,
-			 bufferlist *outbl, string *outs,
+			 const std::vector<std::string>& cmd, const bufferlist& inbl,
+			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(mon_rank, cmd, inbl, ContextVerter(outs, outbl, onfinish));
   }
-  void start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
-			 const vector<string>& cmd, const bufferlist& inbl,
-			 bufferlist *outbl, string *outs,
+  void start_mon_command(const std::string &mon_name,  ///< mon name, with mon. prefix
+			 const std::vector<std::string>& cmd, const bufferlist& inbl,
+			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(mon_name, cmd, inbl, ContextVerter(outs, outbl, onfinish));
   }

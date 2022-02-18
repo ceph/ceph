@@ -38,8 +38,14 @@ public:
                  Context *ctx, ceph::bufferlist &&bl) override;
   void init_cache_bl(bufferlist &src_bl, uint64_t off, uint64_t len) override;
   buffer::list &get_cache_bl() override;
+  void copy_cache_bl(bufferlist *out) override;
   void remove_cache_bl() override;
   unsigned int get_aligned_data_size() const override;
+  void inc_bl_refs() { bl_refs++; };
+  void dec_bl_refs() { bl_refs--; };
+  unsigned int reader_count() const override {
+    return bl_refs;
+  }
 };
 
 class WriteSameLogEntry : public WriteLogEntry {

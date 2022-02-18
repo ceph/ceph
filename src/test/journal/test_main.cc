@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "gtest/gtest.h"
@@ -13,10 +13,9 @@ int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
 
-  std::vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_OSD,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_MON_CONFIG);
   g_conf().set_val("lockdep", "true");

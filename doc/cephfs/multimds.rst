@@ -100,6 +100,8 @@ When a daemon finishes stopping, it will respawn itself and go back to being a
 standby.
 
 
+.. _cephfs-pinning:
+
 Manually pinning directory trees to a particular rank
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

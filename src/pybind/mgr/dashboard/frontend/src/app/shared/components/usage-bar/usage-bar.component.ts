@@ -1,5 +1,7 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
+import _ from 'lodash';
+
 @Component({
   selector: 'cd-usage-bar',
   templateUrl: './usage-bar.component.html',
@@ -10,6 +12,10 @@ export class UsageBarComponent implements OnChanges {
   total: number;
   @Input()
   used: number;
+  @Input()
+  warningThreshold: number;
+  @Input()
+  errorThreshold: number;
   @Input()
   isBinary = true;
   @Input()

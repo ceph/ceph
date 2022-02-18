@@ -59,7 +59,7 @@ struct TestDeepCopy : public TestFixture {
   }
 
   void compare() {
-    vector<librbd::snap_info_t> src_snaps, dst_snaps;
+    std::vector<librbd::snap_info_t> src_snaps, dst_snaps;
 
     EXPECT_EQ(m_src_ictx->size, m_dst_ictx->size);
     EXPECT_EQ(0, librbd::api::Snapshot<>::list(m_src_ictx, src_snaps));

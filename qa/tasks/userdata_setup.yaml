@@ -17,6 +17,15 @@
   sed -i 's/archive.ubuntu.com/old-releases.ubuntu.com/' /etc/apt/sources.list
   sed -i 's/security.ubuntu.com/old-releases.ubuntu.com/' /etc/apt/sources.list
   apt-get update
+
+  # DST Root CA X3 certificate expired on Sep 30, 2021.  It was used by
+  # Let's Encrypt, which is what git.ceph.com relies on for HTTPS.  Get the
+  # new Let's Encrypt root certificate in place and deactivate the old one
+  # (lines that begin with "!" are deselected).
+  apt-get install --only-upgrade ca-certificates libssl1.0.0
+  sed -i 's/mozilla\/DST_Root_CA_X3\.crt/!mozilla\/DST_Root_CA_X3\.crt/' /etc/ca-certificates.conf
+  update-ca-certificates
+
   apt-get -y install nfs-common
   mkdir /mnt/log
   # 10.0.2.2 is the host

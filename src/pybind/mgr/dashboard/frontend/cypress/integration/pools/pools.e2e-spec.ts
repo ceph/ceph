@@ -30,19 +30,19 @@ describe('Pools page', () => {
 
   describe('Create, update and destroy', () => {
     it('should create a pool', () => {
-      pools.exist(poolName, false);
+      pools.existTableCell(poolName, false);
       pools.navigateTo('create');
       pools.create(poolName, 8, 'rbd');
-      pools.exist(poolName, true);
+      pools.existTableCell(poolName);
     });
 
     it('should edit a pools placement group', () => {
-      pools.exist(poolName, true);
+      pools.existTableCell(poolName);
       pools.edit_pool_pg(poolName, 32);
     });
 
     it('should show updated configuration field values', () => {
-      pools.exist(poolName, true);
+      pools.existTableCell(poolName);
       const bpsLimit = '4 B/s';
       pools.edit_pool_configuration(poolName, bpsLimit);
     });

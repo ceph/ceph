@@ -11,7 +11,7 @@ from .list import direct_report
 
 logger = logging.getLogger(__name__)
 
-def activate_bluestore(meta, tmpfs, systemd, block_wal=None, block_db=None):
+def activate_bluestore(meta, tmpfs, systemd):
     # find the osd
     osd_id = meta['osd_id']
     osd_uuid = meta['osd_uuid']
@@ -35,21 +35,23 @@ def activate_bluestore(meta, tmpfs, systemd, block_wal=None, block_db=None):
     system.chown(osd_path)
     prime_command = [
         'ceph-bluestore-tool',
-        'prime-osd-dir', '--dev', meta['device'],
+        'prime-osd-dir',
         '--path', osd_path,
-        '--no-mon-config']
+        '--no-mon-config',
+        '--dev', meta['device'],
+    ]
     process.run(prime_command)
 
     # always re-do the symlink regardless if it exists, so that the block,
     # block.wal, and block.db devices that may have changed can be mapped
     # correctly every time
-    prepare_utils.link_block( meta['device'], osd_id)
+    prepare_utils.link_block(meta['device'], osd_id)
 
-    if block_wal:
-        prepare_utils.link_wal(block_wal, osd_id, osd_uuid)
+    if 'device_db' in meta:
+        prepare_utils.link_db(meta['device_db'], osd_id, osd_uuid)
 
-    if block_db:
-        prepare_utils.link_db(block_db, osd_id, osd_uuid)
+    if 'device_wal' in meta:
+        prepare_utils.link_wal(meta['device_wal'], osd_id, osd_uuid)
 
     system.chown(osd_path)
     terminal.success("ceph-volume raw activate successful for osd ID: %s" % osd_id)
@@ -64,30 +66,43 @@ class Activate(object):
         self.args = None
 
     @decorators.needs_root
-    def activate(self, devices, tmpfs, systemd, block_wal, block_db):
+    def activate(self, devs, start_osd_id, start_osd_uuid,
+                 tmpfs, systemd):
         """
         :param args: The parsed arguments coming from the CLI
         """
-        assert devices
-        found = direct_report(devices)
+        assert devs or start_osd_id or start_osd_uuid
+        found = direct_report(devs)
 
-        for osd_id, meta in found.items():
+        activated_any = False
+        for osd_uuid, meta in found.items():
+            osd_id = meta['osd_id']
+            if start_osd_id is not None and str(osd_id) != str(start_osd_id):
+                continue
+            if start_osd_uuid is not None and osd_uuid != start_osd_uuid:
+                continue
             logger.info('Activating osd.%s uuid %s cluster %s' % (
-                        osd_id, meta['osd_uuid'], meta['ceph_fsid']))
+                        osd_id, osd_uuid, meta['ceph_fsid']))
             activate_bluestore(meta,
                                tmpfs=tmpfs,
-                               systemd=systemd,
-                               block_wal=block_wal,
-                               block_db=block_db)
+                               systemd=systemd)
+            activated_any = True
+
+        if not activated_any:
+            raise RuntimeError('did not find any matching OSD to activate')
 
     def main(self):
         sub_command_help = dedent("""
-        Activate (BlueStore) OSD on a raw block device based on the
+        Activate (BlueStore) OSD on a raw block device(s) based on the
         device label (normally the first block of the device).
 
-            ceph-volume raw activate --device /dev/sdb
+            ceph-volume raw activate [/dev/sdb2 ...]
 
-        The device(s) associated with the OSD needs to have been prepared
+        or
+
+            ceph-volume raw activate --osd-id NUM --osd-uuid UUID
+
+        The device(s) associated with the OSD need to have been prepared
         previously, so that all needed tags and metadata exist.
         """)
         parser = argparse.ArgumentParser(
@@ -97,9 +112,16 @@ class Activate(object):
         )
         parser.add_argument(
             '--device',
-            nargs='+',
             help='The device for the OSD to start'
-            )
+        )
+        parser.add_argument(
+            '--osd-id',
+            help='OSD ID to activate'
+        )
+        parser.add_argument(
+            '--osd-uuid',
+            help='OSD UUID to active'
+        )
         parser.add_argument(
             '--no-systemd',
             dest='no_systemd',
@@ -130,8 +152,15 @@ class Activate(object):
         if not args.no_systemd:
             terminal.error('systemd support not yet implemented')
             raise SystemExit(1)
-        self.activate(args.device,
+
+        devs = [args.device]
+        if args.block_wal:
+            devs.append(args.block_wal)
+        if args.block_db:
+            devs.append(args.block_db)
+
+        self.activate(devs=devs,
+                      start_osd_id=args.osd_id,
+                      start_osd_uuid=args.osd_uuid,
                       tmpfs=not args.no_tmpfs,
-                      systemd=not self.args.no_systemd,
-                      block_wal=self.args.block_wal,
-                      block_db=self.args.block_db)
+                      systemd=not self.args.no_systemd)

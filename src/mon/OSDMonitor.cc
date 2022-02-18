@@ -214,6 +214,16 @@ struct OSDMemCache : public PriorityCache::PriCache {
   virtual void set_cache_ratio(double ratio) {
     cache_ratio = ratio;
   }
+  virtual void shift_bins() {
+  }
+  virtual void import_bins(const std::vector<uint64_t> &bins) {
+  }
+  virtual void set_bins(PriorityCache::Priority pri, uint64_t end_bin) {
+  }
+  virtual uint64_t get_bins(PriorityCache::Priority pri) const {
+    return 0;
+  }
+
   virtual string get_cache_name() const = 0;
 };
 
@@ -893,10 +903,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       if (state & CEPH_OSD_UP) {
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd);
-      }
-      if (state & CEPH_OSD_OUT) {
-        // could be marked in *or* out, but we can safely drop it
-        osd_epochs.erase(osd);
       }
     }
     for (const auto [osd, weight] : inc.new_weight) {
@@ -2024,12 +2030,26 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // metadata, too!
   for (map<int,bufferlist>::iterator p = pending_metadata.begin();
        p != pending_metadata.end();
-       ++p)
+       ++p) {
+    Metadata m;
+    auto mp = p->second.cbegin();
+    decode(m, mp);
+    auto it = m.find("osd_objectstore");
+    if (it != m.end()) {
+      if (it->second == "filestore") {
+        filestore_osds.insert(p->first);
+      } else {
+        filestore_osds.erase(p->first);
+      }
+    }
     t->put(OSD_METADATA_PREFIX, stringify(p->first), p->second);
+  }
   for (set<int>::iterator p = pending_metadata_rm.begin();
        p != pending_metadata_rm.end();
-       ++p)
+       ++p) {
+    filestore_osds.erase(*p);
     t->erase(OSD_METADATA_PREFIX, stringify(*p));
+  }
   pending_metadata.clear();
   pending_metadata_rm.clear();
 
@@ -2062,6 +2082,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   health_check_map_t next;
   tmp.check_health(cct, &next);
+  // OSD_FILESTORE
+  check_for_filestore_osds(&next);
   encode_health(next, t);
 }
 
@@ -2135,6 +2157,39 @@ int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
     return -ENOENT;
   *type = it->second;
   return 0;
+}
+
+void OSDMonitor::get_filestore_osd_list()
+{
+  for (unsigned osd = 0; osd < osdmap.get_num_osds(); ++osd) {
+    string objectstore_type;
+    int r = get_osd_objectstore_type(osd, &objectstore_type);
+    if (r == 0 && objectstore_type == "filestore") {
+      filestore_osds.insert(osd);
+    }
+  }
+}
+
+void OSDMonitor::check_for_filestore_osds(health_check_map_t *checks)
+{
+  if (g_conf()->mon_warn_on_filestore_osds &&
+      filestore_osds.size() > 0) {
+    ostringstream ss, deprecated_tip;
+    list<string> detail;
+    ss << filestore_osds.size()
+       << " osd(s) "
+       << (filestore_osds.size() == 1 ? "is" : "are")
+       << " running Filestore";
+    deprecated_tip << ss.str();
+    ss << " [Deprecated]";
+    auto& d = checks->add("OSD_FILESTORE", HEALTH_WARN, ss.str(),
+                          filestore_osds.size());
+    deprecated_tip << ", which has been deprecated and"
+                   << " not been optimized for QoS"
+                   << " (Filestore OSDs will use 'osd_op_queue = wpq' strictly)";
+    detail.push_back(deprecated_tip.str());
+    d.detail.swap(detail);
+  }
 }
 
 bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
@@ -5357,7 +5412,7 @@ namespace {
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
-    DEDUP_CDC_CHUNK_SIZE };
+    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6046,7 +6101,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"size", SIZE},
       {"min_size", MIN_SIZE},
       {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM},
-      {"crush_rule", CRUSH_RULE}, {"hashpspool", HASHPSPOOL},
+      {"crush_rule", CRUSH_RULE},
+      {"hashpspool", HASHPSPOOL},
+      {"eio", POOL_EIO},
       {"allow_ec_overwrites", EC_OVERWRITES}, {"nodelete", NODELETE},
       {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
       {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
@@ -6084,12 +6141,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"fingerprint_algorithm", FINGERPRINT_ALGORITHM},
       {"pg_autoscale_mode", PG_AUTOSCALE_MODE},
       {"pg_num_min", PG_NUM_MIN},
+      {"pg_num_max", PG_NUM_MAX},
       {"target_size_bytes", TARGET_SIZE_BYTES},
       {"target_size_ratio", TARGET_SIZE_RATIO},
       {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
       {"dedup_tier", DEDUP_TIER},
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
+      {"bulk", BULK}
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6205,7 +6264,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 			     p->pg_autoscale_mode));
 	    break;
 	  case HASHPSPOOL:
+	  case POOL_EIO:
 	  case NODELETE:
+	  case BULK:
 	  case NOPGCHANGE:
 	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
@@ -6310,6 +6371,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
 	  case PG_NUM_MIN:
+	  case PG_NUM_MAX:
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
@@ -6432,7 +6494,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      "\n";
 	    break;
 	  case HASHPSPOOL:
+	  case POOL_EIO:
 	  case NODELETE:
+	  case BULK:
 	  case NOPGCHANGE:
 	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
@@ -6470,6 +6534,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MIN_BLOCK:
 	  case FINGERPRINT_ALGORITHM:
 	  case PG_NUM_MIN:
+	  case PG_NUM_MAX:
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
 	  case PG_AUTOSCALE_BIAS:
@@ -6513,6 +6578,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     const pg_pool_t *p = osdmap.get_pg_pool(poolid);
     const pool_stat_t* pstat = mon.mgrstatmon()->get_pool_stat(poolid);
+    if (!pstat) {
+      ss << "no stats for pool '" << pool_name << "'";
+      r = -ENOENT;
+      goto reply;
+    }
     const object_stat_sum_t& sum = pstat->stats.sum;
     if (f) {
       f->open_object_section("pool_quotas");
@@ -7255,11 +7325,12 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   string erasure_code_profile;
   stringstream ss;
   string rule_name;
+  bool bulk = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0, 0, 0, 0.0,
+			 0, 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
-			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {},
+			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 &ss);
 
   if (ret < 0) {
@@ -7346,7 +7417,7 @@ int OSDMonitor::normalize_profile(const string& profilename,
   auto it = profile.find("stripe_unit");
   if (it != profile.end()) {
     string err_str;
-    uint32_t stripe_unit = strict_iecstrtoll(it->second.c_str(), &err_str);
+    uint32_t stripe_unit = strict_iecstrtoll(it->second, &err_str);
     if (!err_str.empty()) {
       *ss << "could not parse stripe_unit '" << it->second
 	  << "': " << err_str << std::endl;
@@ -7644,7 +7715,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       auto it = profile.find("stripe_unit");
       if (it != profile.end()) {
 	string err_str;
-	stripe_unit = strict_iecstrtoll(it->second.c_str(), &err_str);
+	stripe_unit = strict_iecstrtoll(it->second, &err_str);
 	ceph_assert(err_str.empty());
       }
       *stripe_width = data_chunks *
@@ -7789,22 +7860,55 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
   return 0;
 }
 
-int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
+int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, ostream *ss)
 {
   auto max_pgs_per_osd = g_conf().get_val<uint64_t>("mon_max_pg_per_osd");
-  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);   // assume min cluster size 3
-  auto max_pgs = max_pgs_per_osd * num_osds;
   uint64_t projected = 0;
+  unsigned osd_num = 0;
+  // assume min cluster size 3
+  auto num_osds = std::max(osdmap.get_num_in_osds(), 3u);
   if (pool < 0) {
+    // a new pool
     projected += pg_num * size;
   }
-  for (const auto& i : osdmap.get_pools()) {
-    if (i.first == pool) {
+  if (mapping.get_epoch() >= osdmap.get_epoch()) {
+    set<int> roots;
+    CrushWrapper newcrush = _get_pending_crush();
+    newcrush.find_takes_by_rule(crush_rule, &roots);
+    int max_osd = osdmap.get_max_osd();
+    for (auto root : roots) {
+      const char *rootname = newcrush.get_item_name(root);
+      set<int> osd_ids;
+      newcrush.get_leaves(rootname, &osd_ids);
+      unsigned out_osd = 0;
+      for (auto id : osd_ids) {
+	if (id > max_osd) { 
+	  out_osd++;
+	  continue;
+	}
+	projected += mapping.get_osd_acting_pgs(id).size();
+      }
+      osd_num += osd_ids.size() - out_osd;
+    }
+    if (pool >= 0) {
+      // update an existing pool's pg num.
+      // already counted the pgs of this `pool` by iterating crush map, so
+      // remove them using adding the specified pg num
       projected += pg_num * size;
-    } else {
-      projected += i.second.get_pg_num_target() * i.second.get_size();
+      projected -= mapping.get_num_acting_pgs(pool);
+    }
+    num_osds = std::max(osd_num, 3u);  // assume min cluster size 3
+  } else {
+    // use pg_num target for evaluating the projected pg num
+    for (const auto& [pool_id, pool_info] : osdmap.get_pools()) {
+      if (pool_id == pool) {
+	projected += pg_num * size;
+      } else {
+	projected += pool_info.get_pg_num_target() * pool_info.get_size();
+      }
     }
   }
+  auto max_pgs = max_pgs_per_osd * num_osds;
   if (projected > max_pgs) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
@@ -7825,6 +7929,8 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
  * @param crush_rule_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
+ * @param pg_num_min min pg_num
+ * @param pg_num_max max pg_num
  * @param repl_size Replication factor, or 0 for default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, or TYPE_REP
@@ -7839,6 +7945,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
 				 unsigned pg_num_min,
+				 unsigned pg_num_max,
                                  const uint64_t repl_size,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
@@ -7847,6 +7954,7 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  const uint64_t expected_num_objects,
                                  FastReadType fast_read,
 				 const string& pg_autoscale_mode,
+				 bool bulk,
 				 ostream *ss)
 {
   if (name.length() == 0)
@@ -7915,7 +8023,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << __func__ << " crush smoke test duration: "
              << duration << dendl;
   }
-  r = check_pg_num(-1, pg_num, size, ss);
+  r = check_pg_num(-1, pg_num, size, crush_rule, ss);
   if (r) {
     dout(10) << "check_pg_num returns " << r << dendl;
     return r;
@@ -7967,6 +8075,11 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->type = pool_type;
   pi->fast_read = fread; 
   pi->flags = g_conf()->osd_pool_default_flags;
+  if (bulk) {
+    pi->set_flag(pg_pool_t::FLAG_BULK);
+  } else if (g_conf()->osd_pool_default_flag_bulk) {
+      pi->set_flag(pg_pool_t::FLAG_BULK);
+  }
   if (g_conf()->osd_pool_default_flag_hashpspool)
     pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
   if (g_conf()->osd_pool_default_flag_nodelete)
@@ -8020,6 +8133,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (osdmap.require_osd_release >= ceph_release_t::nautilus &&
       pg_num_min) {
     pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int64_t>(pg_num_min));
+  }
+  if (osdmap.require_osd_release >= ceph_release_t::quincy &&
+      pg_num_max) {
+    pi->opts.set(pool_opts_t::PG_NUM_MAX, static_cast<int64_t>(pg_num_max));
   }
   if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
 	pg_autoscale_mode); m != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
@@ -8128,9 +8245,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     "csum_min_block",
   };
   if (count(begin(si_options), end(si_options), var)) {
-    n = strict_si_cast<int64_t>(val.c_str(), &interr);
+    n = strict_si_cast<int64_t>(val, &interr);
   } else if (count(begin(iec_options), end(iec_options), var)) {
-    n = strict_iec_cast<int64_t>(val.c_str(), &interr);
+    n = strict_iec_cast<int64_t>(val, &interr);
   } else {
     // parse string as both int and float; different fields use different types.
     n = strict_strtoll(val.c_str(), 10, &interr);
@@ -8184,7 +8301,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "crush rule " << p.get_crush_rule() << " type does not match pool";
       return -EINVAL;
     }
-    int r = check_pg_num(pool, p.get_pg_num(), n, &ss);
+    int r = check_pg_num(pool, p.get_pg_num(), n, p.get_crush_rule(), &ss);
     if (r < 0) {
       return r;
     }
@@ -8290,7 +8407,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -ERANGE;
     }
     if (n > (int)p.get_pg_num_target()) {
-      int r = check_pg_num(pool, n, p.get_size(), &ss);
+      int r = check_pg_num(pool, n, p.get_size(), p.get_crush_rule(), &ss);
       if (r) {
 	return r;
       }
@@ -8305,6 +8422,19 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	ss << "nautilus OSDs are required to decrease pg_num";
 	return -EPERM;
       }
+    }
+    int64_t pg_min = 0, pg_max = 0;
+    p.opts.get(pool_opts_t::PG_NUM_MIN, &pg_min);
+    p.opts.get(pool_opts_t::PG_NUM_MAX, &pg_max);
+    if (pg_min && n < pg_min) {
+      ss << "specified pg_num " << n
+	 << " < pg_num_min " << pg_min;
+      return -EINVAL;
+    }
+    if (pg_max && n > pg_max) {
+      ss << "specified pg_num " << n
+	 << " < pg_num_max " << pg_max;
+      return -EINVAL;
     }
     if (osdmap.require_osd_release < ceph_release_t::nautilus) {
       // pre-nautilus osdmap format; increase pg_num directly
@@ -8400,8 +8530,20 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
-	     var == "noscrub" || var == "nodeep-scrub") {
+	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
+    // make sure we only compare against 'n' if we didn't receive a string
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.set_flag(flag);
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.unset_flag(flag);
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
+    }
+  } else if (var == "eio") {
+    uint64_t flag = pg_pool_t::get_flag_by_name(var);
+
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
@@ -8679,6 +8821,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (n > (int)p.get_pg_num_target()) {
 	ss << "specified pg_num_min " << n
 	   << " > pg_num " << p.get_pg_num_target();
+	return -EINVAL;
+      }
+    } else if (var == "pg_num_max") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n && n < (int)p.get_pg_num_target()) {
+	ss << "specified pg_num_max " << n
+	   << " < pg_num " << p.get_pg_num_target();
 	return -EINVAL;
       }
     } else if (var == "recovery_priority") {
@@ -10236,6 +10388,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto update;
   } else if (prefix == "osd crush weight-set create" ||
 	     prefix == "osd crush weight-set create-compat") {
+    if (_have_pending_crush()) {
+      dout(10) << " first waiting for pending crush changes to commit" << dendl;
+      goto wait;
+    }
     CrushWrapper newcrush = _get_pending_crush();
     int64_t pool;
     int positions;
@@ -12664,6 +12820,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool create") {
     int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
     int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
+    int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
     int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
     string pool_type_str;
     cmd_getval(cmdmap, "pool_type", pool_type_str);
@@ -12826,15 +12983,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pg_autoscale_mode;
     cmd_getval(cmdmap, "autoscale_mode", pg_autoscale_mode);
 
+    bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", 0);
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
-			   pg_num, pgp_num, pg_num_min,
+			   pg_num, pgp_num, pg_num_min, pg_num_max,
                            repl_size, target_size_bytes, target_size_ratio,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
 			   pg_autoscale_mode,
+			   bulk,
 			   &ss);
     if (err < 0) {
       switch(err) {
@@ -13433,9 +13592,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string tss;
     int64_t value;
     if (field == "max_objects") {
-      value = strict_sistrtoll(val.c_str(), &tss);
+      value = strict_si_cast<uint64_t>(val, &tss);
     } else if (field == "max_bytes") {
-      value = strict_iecstrtoll(val.c_str(), &tss);
+      value = strict_iecstrtoll(val, &tss);
     } else {
       ceph_abort_msg("unrecognized option");
     }
@@ -14325,13 +14484,15 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   dout(20) << __func__ << dendl;
   *okay = false;
   CrushWrapper crush = _get_pending_crush();
-  int dividing_id;
-  int retval = crush.get_validated_type_id(dividing_bucket, &dividing_id);
-  if (retval == -1) {
+  int dividing_id = -1;
+  if (auto type_id = crush.get_validated_type_id(dividing_bucket);
+      !type_id.has_value()) {
     ss << dividing_bucket << " is not a valid crush bucket type";
     *errcode = -ENOENT;
-    ceph_assert(!commit || retval != -1);
+    ceph_assert(!commit);
     return;
+  } else {
+    dividing_id = *type_id;
   }
   vector<int> subtrees;
   crush.get_subtree_of_type(dividing_id, &subtrees);

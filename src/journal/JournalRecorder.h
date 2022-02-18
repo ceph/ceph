@@ -9,14 +9,13 @@
 #include "include/rados/librados.hpp"
 #include "common/ceph_mutex.h"
 #include "common/containers.h"
+#include "common/Timer.h"
 #include "journal/Future.h"
 #include "journal/FutureImpl.h"
 #include "journal/JournalMetadata.h"
 #include "journal/ObjectRecorder.h"
 #include <map>
 #include <string>
-
-class SafeTimer;
 
 namespace journal {
 

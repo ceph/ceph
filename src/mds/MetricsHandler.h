@@ -98,6 +98,8 @@ private:
   void handle_payload(Session *session, const OpenedFilesPayload &payload);
   void handle_payload(Session *session, const PinnedIcapsPayload &payload);
   void handle_payload(Session *session, const OpenedInodesPayload &payload);
+  void handle_payload(Session *session, const ReadIoSizesPayload &payload);
+  void handle_payload(Session *session, const WriteIoSizesPayload &payload);
   void handle_payload(Session *session, const UnknownPayload &payload);
 
   void set_next_seq(version_t seq);

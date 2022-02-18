@@ -23,6 +23,7 @@
 #include "common/admin_socket.h"
 #include "kv/RocksDBStore.h"
 
+using namespace std;
 namespace fs = std::filesystem;
 namespace po = boost::program_options;
 
@@ -239,8 +240,14 @@ static void bluefs_import(
     cerr << "open " << input_file.c_str() << " failed: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
   }
-
-  std::unique_ptr<BlueFS> bs{open_bluefs_readonly(cct, path, devs)};
+  BlueStore bluestore(cct, path);
+  KeyValueDB *db_ptr;
+  r = bluestore.open_db_environment(&db_ptr, false);
+  if (r < 0) {
+    cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  BlueFS* bs = bluestore.get_bluefs();
 
   BlueFS::FileWriter *h;
   fs::path file_path(dest_file);
@@ -260,13 +267,14 @@ static void bluefs_import(
   f.close();
   bs->fsync(h);
   bs->close_writer(h);
-  bs->umount();
+  bluestore.close_db_environment();
   return;
 }
 
 int main(int argc, char **argv)
 {
   string out_dir;
+  string osd_instance;
   vector<string> devs;
   vector<string> devs_source;
   string dev_target;
@@ -285,6 +293,7 @@ int main(int argc, char **argv)
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
+    (",i", po::value<string>(&osd_instance), "OSD instance. Requires access to monitor/ceph.conf")
     ("path", po::value<string>(&path), "bluestore path")
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("input-file", po::value<string>(&input_file), "import file")
@@ -305,6 +314,9 @@ int main(int argc, char **argv)
   po_positional.add_options()
     ("command", po::value<string>(&action),
         "fsck, "
+        "qfsck, "
+        "allocmap, "
+        "restore_cfb, "
         "repair, "
         "quick-fix, "
         "bluefs-export, "
@@ -328,14 +340,12 @@ int main(int argc, char **argv)
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
-  po::positional_options_description pd;
-  pd.add("command", 1);
 
   vector<string> ceph_option_strings;
   po::variables_map vm;
   try {
     po::parsed_options parsed =
-      po::command_line_parser(argc, argv).options(po_all).allow_unregistered().positional(pd).run();
+      po::command_line_parser(argc, argv).options(po_all).allow_unregistered().run();
     po::store( parsed, vm);
     po::notify(vm);
     ceph_option_strings = po::collect_unrecognized(parsed.options,
@@ -352,12 +362,72 @@ int main(int argc, char **argv)
     usage(po_all);
     exit(EXIT_SUCCESS);
   }
+
+  vector<const char*> args;
+  if (log_file.size()) {
+    args.push_back("--log-file");
+    args.push_back(log_file.c_str());
+    static char ll[10];
+    snprintf(ll, sizeof(ll), "%d", log_level);
+    args.push_back("--debug-bluestore");
+    args.push_back(ll);
+    args.push_back("--debug-bluefs");
+    args.push_back(ll);
+    args.push_back("--debug-rocksdb");
+    args.push_back(ll);
+  } else {
+    // do not write to default-named log "osd.x.log" if --log-file is not provided
+    if (!osd_instance.empty()) {
+      args.push_back("--no-log-to-file");
+    }
+  }
+
+  if (!osd_instance.empty()) {
+    args.push_back("-i");
+    args.push_back(osd_instance.c_str());
+  }
+  args.push_back("--no-log-to-stderr");
+  args.push_back("--err-to-stderr");
+
+  for (auto& i : ceph_option_strings) {
+    args.push_back(i.c_str());
+  }
+  auto cct = global_init(NULL, args, osd_instance.empty() ? CEPH_ENTITY_TYPE_CLIENT : CEPH_ENTITY_TYPE_OSD,
+			 CODE_ENVIRONMENT_UTILITY,
+			 osd_instance.empty() ? CINIT_FLAG_NO_DEFAULT_CONFIG_FILE : 0);
+
+  common_init_finish(cct.get());
+  if (action.empty()) {
+    // if action ("command") is not yet defined try to use first param as action
+    if (args.size() > 0) {
+      if (args.size() == 1) {
+	// treat first unparsed value as action
+	action = args[0];
+      } else {
+	std::cerr << "Unknown options: " << args << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    }
+  } else {
+    if (args.size() != 0) {
+      std::cerr << "Unknown options: " << args << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+
   if (action.empty()) {
     cerr << "must specify an action; --help for help" << std::endl;
     exit(EXIT_FAILURE);
   }
 
-  if (action == "fsck" || action == "repair" || action == "quick-fix") {
+  if (!osd_instance.empty()) {
+    // when "-i" is provided "osd data" can be used as path
+    if (path.size() == 0) {
+      path = cct->_conf.get_val<std::string>("osd_data");
+    }
+  }
+
+  if (action == "fsck" || action == "repair" || action == "quick-fix" || action == "allocmap" || action == "qfsck" || action == "restore_cfb") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -476,32 +546,59 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
-  vector<const char*> args;
-  if (log_file.size()) {
-    args.push_back("--log-file");
-    args.push_back(log_file.c_str());
-    static char ll[10];
-    snprintf(ll, sizeof(ll), "%d", log_level);
-    args.push_back("--debug-bluestore");
-    args.push_back(ll);
-    args.push_back("--debug-bluefs");
-    args.push_back(ll);
-    args.push_back("--debug-rocksdb");
-    args.push_back(ll);
+
+  if (action == "restore_cfb") {
+#ifndef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
+    cerr << action << " bluestore.restore_cfb is not supported!!! " << std::endl;
+    exit(EXIT_FAILURE);
+#else
+    cout << action << " bluestore.restore_cfb" << std::endl;
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.push_allocation_to_rocksdb();
+    if (r < 0) {
+      cerr << action << " failed: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
+    }
+#endif
   }
-  args.push_back("--no-log-to-stderr");
-  args.push_back("--err-to-stderr");
-
-  for (auto& i : ceph_option_strings) {
-    args.push_back(i.c_str());
+  else if (action == "allocmap") {
+#ifdef CEPH_BLUESTORE_TOOL_DISABLE_ALLOCMAP
+    cerr << action << " bluestore.allocmap is not supported!!! " << std::endl;
+    exit(EXIT_FAILURE);
+#else
+    cout << action << " bluestore.allocmap" << std::endl;
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
+    if (r < 0) {
+      cerr << action << " failed: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
+    }
+#endif
   }
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-
-  common_init_finish(cct.get());
-
-  if (action == "fsck" ||
+  else if( action == "qfsck" ) {
+#ifndef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
+    cerr << action << " bluestore.qfsck is not supported!!! " << std::endl;
+    exit(EXIT_FAILURE);
+#else
+    cout << action << " bluestore.quick-fsck" << std::endl;
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
+    if (r < 0) {
+      cerr << action << " failed: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
+    }
+#endif
+  }
+  else if (action == "fsck" ||
       action == "repair" ||
       action == "quick-fix") {
     validate_path(cct.get(), path, false);

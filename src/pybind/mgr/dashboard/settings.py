@@ -63,14 +63,13 @@ class Options(object):
     AUDIT_API_LOG_PAYLOAD = Setting(True, [bool])
 
     # RGW settings
-    RGW_API_HOST = Setting('', [dict, str])
-    RGW_API_PORT = Setting(80, [dict, int])
     RGW_API_ACCESS_KEY = Setting('', [dict, str])
     RGW_API_SECRET_KEY = Setting('', [dict, str])
     RGW_API_ADMIN_RESOURCE = Setting('admin', [str])
-    RGW_API_SCHEME = Setting('http', [str])
-    RGW_API_USER_ID = Setting('', [dict, str])
     RGW_API_SSL_VERIFY = Setting(True, [bool])
+
+    # Ceph Issue Tracker API Access Key
+    ISSUE_TRACKER_API_KEY = Setting('', [str])
 
     # Grafana settings
     GRAFANA_API_URL = Setting('', [str])

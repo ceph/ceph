@@ -62,39 +62,37 @@ class NodeExtent : public LogicalCachedExtent {
 
 using crimson::os::seastore::TransactionManager;
 class NodeExtentManager {
-  using base_ertr = eagain_ertr::extend<
-    crimson::ct_error::input_output_error>;
-
+  using base_iertr = TransactionManager::base_iertr;
  public:
   virtual ~NodeExtentManager() = default;
 
   virtual bool is_read_isolated() const = 0;
 
-  using read_ertr = base_ertr::extend<
+  using read_iertr = base_iertr::extend<
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
     crimson::ct_error::erange>;
-  virtual read_ertr::future<NodeExtentRef> read_extent(
+  virtual read_iertr::future<NodeExtentRef> read_extent(
       Transaction&, laddr_t) = 0;
 
-  using alloc_ertr = base_ertr;
-  virtual alloc_ertr::future<NodeExtentRef> alloc_extent(
-      Transaction&, extent_len_t) = 0;
+  using alloc_iertr = base_iertr;
+  virtual alloc_iertr::future<NodeExtentRef> alloc_extent(
+      Transaction&, laddr_t hint, extent_len_t) = 0;
 
-  using retire_ertr = base_ertr::extend<
+  using retire_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  virtual retire_ertr::future<> retire_extent(
+  virtual retire_iertr::future<> retire_extent(
       Transaction&, NodeExtentRef) = 0;
 
-  using getsuper_ertr = base_ertr;
-  virtual getsuper_ertr::future<Super::URef> get_super(
+  using getsuper_iertr = base_iertr;
+  virtual getsuper_iertr::future<Super::URef> get_super(
       Transaction&, RootNodeTracker&) = 0;
 
   virtual std::ostream& print(std::ostream& os) const = 0;
 
   static NodeExtentManagerURef create_dummy(bool is_sync);
   static NodeExtentManagerURef create_seastore(
-      InterruptedTransactionManager tm, laddr_t min_laddr = L_ADDR_MIN, double p_eagain = 0.0);
+      TransactionManager &tm, laddr_t min_laddr = L_ADDR_MIN, double p_eagain = 0.0);
 };
 inline std::ostream& operator<<(std::ostream& os, const NodeExtentManager& nm) {
   return nm.print(os);

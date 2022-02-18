@@ -10,7 +10,7 @@ storage administrators among others can use the common CLI provided by the
 ceph-mgr volumes module to manage the CephFS exports.
 
 The ceph-mgr volumes module implements the following file system export
-abstactions:
+abstractions:
 
 * FS volumes, an abstraction for CephFS file systems
 
@@ -78,6 +78,24 @@ remove MDSes using the enabled ceph-mgr orchestrator module.
 List volumes using::
 
     $ ceph fs volume ls
+
+Rename a volume using::
+
+    $ ceph fs volume rename <vol_name> <new_vol_name> [--yes-i-really-mean-it]
+
+Renaming a volume can be an expensive operation. It does the following:
+
+- renames the orchestrator managed MDS service to match the <new_vol_name>.
+  This involves launching a MDS service with <new_vol_name> and bringing down
+  the MDS service with <vol_name>.
+- renames the file system matching <vol_name> to <new_vol_name>
+- changes the application tags on the data and metadata pools of the file system
+  to <new_vol_name>
+- renames the  metadata and data pools of the file system.
+
+The CephX IDs authorized to <vol_name> need to be reauthorized to <new_vol_name>. Any
+on-going operations of the clients using these IDs may be disrupted. Mirroring is
+expected to be disabled on the volume.
 
 FS Subvolume groups
 -------------------
@@ -359,13 +377,13 @@ To delete a partial clone use::
   $ ceph fs subvolume rm <vol_name> <clone_name> [--group_name <group_name>] --force
 
 .. note:: Cloning only synchronizes directories, regular files and symbolic links. Also, inode timestamps (access and
-          modification times) are synchronized upto seconds granularity.
+          modification times) are synchronized up to seconds granularity.
 
 An `in-progress` or a `pending` clone operation can be canceled. To cancel a clone operation use the `clone cancel` command::
 
   $ ceph fs clone cancel <vol_name> <clone_name> [--group_name <group_name>]
 
-On successful cancelation, the cloned subvolume is moved to `canceled` state::
+On successful cancellation, the cloned subvolume is moved to `canceled` state::
 
   $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
   $ ceph fs clone cancel cephfs clone1
@@ -382,6 +400,40 @@ On successful cancelation, the cloned subvolume is moved to `canceled` state::
   }
 
 .. note:: The canceled cloned can be deleted by using --force option in `fs subvolume rm` command.
+
+
+.. _subvol-pinning:
+
+Pinning Subvolumes and Subvolume Groups
+---------------------------------------
+
+
+Subvolumes and subvolume groups can be automatically pinned to ranks according
+to policies. This can help distribute load across MDS ranks in predictable and
+stable ways.  Review :ref:`cephfs-pinning` and :ref:`cephfs-ephemeral-pinning`
+for details on how pinning works.
+
+Pinning is configured by::
+
+  $ ceph fs subvolumegroup pin <vol_name> <group_name> <pin_type> <pin_setting>
+
+or for subvolumes::
+
+  $ ceph fs subvolume pin <vol_name> <group_name> <pin_type> <pin_setting>
+
+Typically you will want to set subvolume group pins. The ``pin_type`` may be
+one of ``export``, ``distributed``, or ``random``. The ``pin_setting``
+corresponds to the extended attributed "value" as in the pinning documentation
+referenced above.
+
+So, for example, setting a distributed pinning strategy on a subvolume group::
+
+  $ ceph fs subvolumegroup pin cephfilesystem-a csi distributed 1
+
+Will enable distributed subtree partitioning policy for the "csi" subvolume
+group.  This will cause every subvolume within the group to be automatically
+pinned to one of the available ranks on the file system.
+
 
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi

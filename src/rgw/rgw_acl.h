@@ -67,7 +67,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<ACLPermission*>& o);
+  static void generate_test_instances(std::list<ACLPermission*>& o);
 
   friend bool operator==(const ACLPermission& lhs, const ACLPermission& rhs);
   friend bool operator!=(const ACLPermission& lhs, const ACLPermission& rhs);
@@ -96,7 +96,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<ACLGranteeType*>& o);
+  static void generate_test_instances(std::list<ACLGranteeType*>& o);
 
   friend bool operator==(const ACLGranteeType& lhs, const ACLGranteeType& rhs);
   friend bool operator!=(const ACLGranteeType& lhs, const ACLGranteeType& rhs);
@@ -116,12 +116,12 @@ class ACLGrant
 protected:
   ACLGranteeType type;
   rgw_user id;
-  string email;
+  std::string email;
   mutable rgw_user email_id;
   ACLPermission permission;
-  string name;
+  std::string name;
   ACLGroupTypeEnum group;
-  string url_spec;
+  std::string url_spec;
 
 public:
   ACLGrant() : group(ACL_GROUP_NONE) {}
@@ -161,15 +161,15 @@ public:
   ACLPermission& get_permission() { return permission; }
   const ACLPermission& get_permission() const { return permission; }
   ACLGroupTypeEnum get_group() const { return group; }
-  const string& get_referer() const { return url_spec; }
+  const std::string& get_referer() const { return url_spec; }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 3, bl);
     encode(type, bl);
-    string s;
+    std::string s;
     id.to_str(s);
     encode(s, bl);
-    string uri;
+    std::string uri;
     encode(uri, bl);
     encode(email, bl);
     encode(permission, bl);
@@ -182,10 +182,10 @@ public:
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     decode(type, bl);
-    string s;
+    std::string s;
     decode(s, bl);
     id.from_str(s);
-    string uri;
+    std::string uri;
     decode(uri, bl);
     decode(email, bl);
     decode(permission, bl);
@@ -205,11 +205,11 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<ACLGrant*>& o);
+  static void generate_test_instances(std::list<ACLGrant*>& o);
 
-  ACLGroupTypeEnum uri_to_group(string& uri);
+  ACLGroupTypeEnum uri_to_group(std::string& uri);
 
-  void set_canon(const rgw_user& _id, const string& _name, const uint32_t perm) {
+  void set_canon(const rgw_user& _id, const std::string& _name, const uint32_t perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;
@@ -318,9 +318,9 @@ protected:
   CephContext *cct;
   /* FIXME: in the feature we should consider switching to uint32_t also
    * in data structures. */
-  map<string, int> acl_user_map;
-  map<uint32_t, int> acl_group_map;
-  list<ACLReferer> referer_list;
+  std::map<std::string, int> acl_user_map;
+  std::map<uint32_t, int> acl_group_map;
+  std::list<ACLReferer> referer_list;
   ACLGrantMap grant_map;
   void _add_grant(ACLGrant *grant);
 public:
@@ -371,7 +371,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWAccessControlList*>& o);
+  static void generate_test_instances(std::list<RGWAccessControlList*>& o);
 
   void add_grant(ACLGrant *grant);
   void remove_canon_user_grant(rgw_user& user_id);
@@ -379,7 +379,7 @@ public:
   ACLGrantMap& get_grant_map() { return grant_map; }
   const ACLGrantMap& get_grant_map() const { return grant_map; }
 
-  void create_default(const rgw_user& id, string name) {
+  void create_default(const rgw_user& id, std::string name) {
     acl_user_map.clear();
     acl_group_map.clear();
     referer_list.clear();
@@ -398,7 +398,7 @@ class ACLOwner
 {
 protected:
   rgw_user id;
-  string display_name;
+  std::string display_name;
 public:
   ACLOwner() {}
   ACLOwner(const rgw_user& _id) : id(_id) {}
@@ -406,7 +406,7 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);
-    string s;
+    std::string s;
     id.to_str(s);
     encode(s, bl);
     encode(display_name, bl);
@@ -414,7 +414,7 @@ public:
   }
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
-    string s;
+    std::string s;
     decode(s, bl);
     id.from_str(s);
     decode(display_name, bl);
@@ -422,14 +422,14 @@ public:
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<ACLOwner*>& o);
+  static void generate_test_instances(std::list<ACLOwner*>& o);
   void set_id(const rgw_user& _id) { id = _id; }
-  void set_name(const string& name) { display_name = name; }
+  void set_name(const std::string& name) { display_name = name; }
 
   rgw_user& get_id() { return id; }
   const rgw_user& get_id() const { return id; }
-  string& get_display_name() { return display_name; }
-  const string& get_display_name() const { return display_name; }
+  std::string& get_display_name() { return display_name; }
+  const std::string& get_display_name() const { return display_name; }
   friend bool operator==(const ACLOwner& lhs, const ACLOwner& rhs);
   friend bool operator!=(const ACLOwner& lhs, const ACLOwner& rhs);
 };
@@ -477,7 +477,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<RGWAccessControlPolicy*>& o);
+  static void generate_test_instances(std::list<RGWAccessControlPolicy*>& o);
   void decode_owner(bufferlist::const_iterator& bl) { // sometimes we only need that, should be faster
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(owner, bl);
@@ -489,7 +489,7 @@ public:
     return owner;
   }
 
-  void create_default(const rgw_user& id, string& name) {
+  void create_default(const rgw_user& id, std::string& name) {
     acl.create_default(id, name);
     owner.set_id(id);
     owner.set_name(name);
@@ -501,7 +501,7 @@ public:
     return acl;
   }
 
-  virtual bool compare_group_name(string& id, ACLGroupTypeEnum group) { return false; }
+  virtual bool compare_group_name(std::string& id, ACLGroupTypeEnum group) { return false; }
   bool is_public(const DoutPrefixProvider *dpp) const;
 
   friend bool operator==(const RGWAccessControlPolicy& lhs, const RGWAccessControlPolicy& rhs);

@@ -12,6 +12,12 @@
 
 #include "mds/flock.h"
 
+using std::dec;
+using std::list;
+using std::oct;
+using std::ostream;
+using std::string;
+
 Inode::~Inode()
 {
   delay_cap_item.remove_myself();
@@ -470,7 +476,6 @@ void Inode::dump(Formatter *f) const
   f->open_array_section("caps");
   for (const auto &pair : caps) {
     f->open_object_section("cap");
-    f->dump_int("mds", pair.first);
     if (&pair.second == auth_cap)
       f->dump_int("auth", 1);
     pair.second.dump(f);
@@ -772,12 +777,27 @@ void Inode::unset_deleg(Fh *fh)
 */
 void Inode::mark_caps_dirty(int caps)
 {
+  /*
+   * If auth_cap is nullptr means the reonnecting is not finished or
+   * already rejected.
+   */
+  if (!auth_cap) {
+    ceph_assert(!dirty_caps);
+
+    lsubdout(client->cct, client, 1) << __func__ << " " << *this << " dirty caps '" << ccap_string(caps)
+	     << "', but no auth cap." << dendl;
+    return;
+  }
+
   lsubdout(client->cct, client, 10) << __func__ << " " << *this << " " << ccap_string(dirty_caps) << " -> "
            << ccap_string(dirty_caps | caps) << dendl;
+
   if (caps && !caps_dirty())
     iget();
+
   dirty_caps |= caps;
-  client->get_dirty_list().push_back(&dirty_cap_item);
+  auth_cap->session->get_dirty_list().push_back(&dirty_cap_item);
+  client->cap_delay_requeue(this);
 }
 
 /**

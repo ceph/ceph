@@ -65,7 +65,7 @@ public:
 };
 
 class RGWListBucket_ObjStore_SWIFT : public RGWListBucket_ObjStore {
-  string path;
+  std::string path;
 public:
   RGWListBucket_ObjStore_SWIFT() {
     default_max = 10000;
@@ -78,7 +78,7 @@ public:
 };
 
 class RGWStatAccount_ObjStore_SWIFT : public RGWStatAccount_ObjStore {
-  map<string, bufferlist> attrs;
+  std::map<std::string, bufferlist> attrs;
 public:
   RGWStatAccount_ObjStore_SWIFT() {
   }
@@ -116,7 +116,7 @@ public:
 };
 
 class RGWPutObj_ObjStore_SWIFT : public RGWPutObj_ObjStore {
-  string lo_etag;
+  std::string lo_etag;
 public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}
@@ -235,10 +235,10 @@ protected:
   struct info
   {
     bool is_admin_info;
-    function<void (Formatter&, const ConfigProxy&, rgw::sal::Store*)> list_data;
+    std::function<void (Formatter&, const ConfigProxy&, rgw::sal::Store*)> list_data;
   };
 
-  static const vector<pair<string, struct info>> swift_info;
+  static const std::vector<std::pair<std::string, struct info>> swift_info;
 public:
   RGWInfo_ObjStore_SWIFT() {}
   ~RGWInfo_ObjStore_SWIFT() override {}
@@ -393,7 +393,7 @@ public:
   }
   ~RGWHandler_REST_SWIFT() override = default;
 
-  int validate_bucket_name(const string& bucket);
+  int validate_bucket_name(const std::string& bucket);
 
   int init(rgw::sal::Store* store, struct req_state *s, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;

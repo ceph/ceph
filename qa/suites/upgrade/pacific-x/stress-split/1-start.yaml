@@ -1,6 +1,8 @@
 tasks:
 - install:
     branch: pacific
+    exclude_packages:
+      - ceph-volume
 
 - cephadm:
     image: docker.io/ceph/daemon-base:latest-pacific
@@ -11,9 +13,6 @@ tasks:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
-    # deploy additional mons the "old" (pacific) way
-    add_mons_via_daemon_add: true
-    avoid_pacific_features: true
 
 - cephadm.shell:
     mon.a:
@@ -53,6 +52,7 @@ first-half-sequence:
     env: [sha1]
     mon.a:
       - ceph config set mgr mgr/cephadm/daemon_cache_timeout 60
+      - ceph config set global log_to_journald false --force
 
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
       - ceph orch ps

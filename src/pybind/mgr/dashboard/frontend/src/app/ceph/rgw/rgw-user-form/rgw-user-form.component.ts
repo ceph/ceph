@@ -107,11 +107,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       max_buckets_mode: [1],
       max_buckets: [
         1000,
-        [
-          CdValidators.requiredIf({ max_buckets_mode: '1' }),
-          CdValidators.number(false),
-          Validators.min(1)
-        ]
+        [CdValidators.requiredIf({ max_buckets_mode: '1' }), CdValidators.number(false)]
       ],
       suspended: [false],
       // S3 key
@@ -137,7 +133,6 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       user_quota_max_objects: [
         null,
         [
-          Validators.min(0),
           CdValidators.requiredIf({
             user_quota_enabled: true,
             user_quota_max_objects_unlimited: false
@@ -163,7 +158,6 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       bucket_quota_max_objects: [
         null,
         [
-          Validators.min(0),
           CdValidators.requiredIf({
             bucket_quota_enabled: true,
             bucket_quota_max_objects_unlimited: false

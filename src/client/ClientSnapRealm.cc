@@ -4,6 +4,9 @@
 #include "ClientSnapRealm.h"
 #include "common/Formatter.h"
 
+using std::set;
+using std::vector;
+
 void SnapRealm::build_snap_context()
 {
   set<snapid_t> snaps;

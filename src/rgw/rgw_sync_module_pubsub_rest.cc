@@ -19,6 +19,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 // command: PUT /topics/<topic-name>[&push-endpoint=<endpoint>[&<arg1>=<value1>]]
 class RGWPSCreateTopic_ObjStore : public RGWPSCreateTopicOp {
 public:
@@ -136,7 +138,7 @@ protected:
     if (s->init_state.url_bucket.empty()) {
       return nullptr;
     }
-    if (s->object->empty()) {
+    if (s->object == nullptr || s->object->empty()) {
       return new RGWPSListTopics_ObjStore();
     }
     return new RGWPSGetTopic_ObjStore();
@@ -357,7 +359,8 @@ private:
     std::string events_str = s->info.args.get("events", &exists);
     if (!exists) {
       // if no events are provided, we notify on all of them
-      events_str = "OBJECT_CREATE,OBJECT_DELETE,DELETE_MARKER_CREATE";
+      events_str =
+	"OBJECT_CREATE,OBJECT_DELETE,DELETE_MARKER_CREATE,OBJECT_EXPIRATION";
     }
     rgw::notify::from_string_list(events_str, events);
     if (std::find(events.begin(), events.end(), rgw::notify::UnknownEvent) != events.end()) {

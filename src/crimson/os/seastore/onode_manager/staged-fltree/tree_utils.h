@@ -196,13 +196,14 @@ class KVPool {
 
   static KVPool create_range(
       const std::pair<index_t, index_t>& range_i,
-      const std::vector<size_t>& value_sizes) {
+      const std::vector<size_t>& value_sizes,
+      const uint64_t block_size) {
     kv_vector_t kvs;
     std::random_device rd;
     for (index_t i = range_i.first; i < range_i.second; ++i) {
       auto value_size = value_sizes[rd() % value_sizes.size()];
       kvs.emplace_back(
-          kv_t{make_oid(i), ValueItem::create(value_size, i)}
+          kv_t{make_oid(i), ValueItem::create(value_size, i, block_size)}
       );
     }
     return KVPool(std::move(kvs));
@@ -276,7 +277,7 @@ class TreeBuilder {
     tree.emplace(std::move(nm));
   }
 
-  eagain_future<> bootstrap(Transaction& t) {
+  eagain_ifuture<> bootstrap(Transaction& t) {
     std::ostringstream oss;
 #ifndef NDEBUG
     oss << "debug=on, ";
@@ -298,7 +299,7 @@ class TreeBuilder {
     return tree->mkfs(t);
   }
 
-  eagain_future<BtreeCursor> insert_one(
+  eagain_ifuture<BtreeCursor> insert_one(
       Transaction& t, const iterator_t& iter_rd) {
     auto p_kv = *iter_rd;
     logger().debug("[{}] insert {} -> {}",
@@ -307,14 +308,15 @@ class TreeBuilder {
                    p_kv->value);
     return tree->insert(
         t, p_kv->key, {p_kv->value.get_payload_size()}
-    ).safe_then([&t, this, p_kv](auto ret) {
+    ).si_then([&t, this, p_kv](auto ret) {
+      boost::ignore_unused(this);  // avoid clang warning;
       auto success = ret.second;
       auto cursor = std::move(ret.first);
       initialize_cursor_from_item(t, p_kv->key, p_kv->value, cursor, success);
 #ifndef NDEBUG
       validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
       return tree->find(t, p_kv->key
-      ).safe_then([this, cursor, p_kv](auto cursor_) mutable {
+      ).si_then([cursor, p_kv](auto cursor_) mutable {
         assert(!cursor_.is_end());
         ceph_assert(cursor_.get_ghobj() == p_kv->key);
         ceph_assert(cursor_.value() == cursor.value());
@@ -322,9 +324,9 @@ class TreeBuilder {
         return cursor;
       });
 #else
-      return eagain_ertr::make_ready_future<BtreeCursor>(cursor);
+      return eagain_iertr::make_ready_future<BtreeCursor>(cursor);
 #endif
-    }).handle_error(
+    }).handle_error_interruptible(
       [] (const crimson::ct_error::value_too_large& e) {
         ceph_abort("impossible path");
       },
@@ -332,15 +334,15 @@ class TreeBuilder {
     );
   }
 
-  eagain_future<> insert(Transaction& t) {
+  eagain_ifuture<> insert(Transaction& t) {
     auto ref_kv_iter = seastar::make_lw_shared<iterator_t>();
     *ref_kv_iter = kvs.random_begin();
     auto cursors = seastar::make_lw_shared<std::vector<BtreeCursor>>();
     logger().warn("start inserting {} kvs ...", kvs.size());
     auto start_time = mono_clock::now();
-    return crimson::repeat([&t, this, cursors, ref_kv_iter,
+    return trans_intr::repeat([&t, this, cursors, ref_kv_iter,
                             start_time]()
-      -> eagain_future<seastar::stop_iteration> {
+      -> eagain_ifuture<seastar::stop_iteration> {
       if (*ref_kv_iter == kvs.random_end()) {
         std::chrono::duration<double> duration = mono_clock::now() - start_time;
         logger().warn("Insert done! {}s", duration.count());
@@ -348,7 +350,7 @@ class TreeBuilder {
           seastar::stop_iteration::yes);
       } else {
         return insert_one(t, *ref_kv_iter
-        ).safe_then([cursors, ref_kv_iter] (auto cursor) {
+        ).si_then([cursors, ref_kv_iter] (auto cursor) {
           if constexpr (TRACK) {
             cursors->emplace_back(cursor);
           }
@@ -356,16 +358,16 @@ class TreeBuilder {
           return seastar::stop_iteration::no;
         });
       }
-    }).safe_then([&t, this, cursors, ref_kv_iter] {
+    }).si_then([&t, this, cursors, ref_kv_iter] {
       if (!cursors->empty()) {
         logger().info("Verifing tracked cursors ...");
         *ref_kv_iter = kvs.random_begin();
         return seastar::do_with(
             cursors->begin(),
             [&t, this, cursors, ref_kv_iter] (auto& c_iter) {
-          return crimson::repeat(
+          return trans_intr::repeat(
             [&t, this, &c_iter, cursors, ref_kv_iter] ()
-            -> eagain_future<seastar::stop_iteration> {
+            -> eagain_ifuture<seastar::stop_iteration> {
             if (*ref_kv_iter == kvs.random_end()) {
               logger().info("Verify done!");
               return seastar::make_ready_future<seastar::stop_iteration>(
@@ -374,7 +376,7 @@ class TreeBuilder {
             assert(c_iter != cursors->end());
             auto p_kv = **ref_kv_iter;
             // validate values in tree keep intact
-            return tree->find(t, p_kv->key).safe_then([this, &c_iter, ref_kv_iter](auto cursor) {
+            return tree->find(t, p_kv->key).si_then([&c_iter, ref_kv_iter](auto cursor) {
               auto p_kv = **ref_kv_iter;
               validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
               // validate values in cursors keep intact
@@ -386,12 +388,12 @@ class TreeBuilder {
           });
         });
       } else {
-        return eagain_ertr::now();
+        return eagain_iertr::now();
       }
     });
   }
 
-  eagain_future<> erase_one(
+  eagain_ifuture<> erase_one(
       Transaction& t, const iterator_t& iter_rd) {
     auto p_kv = *iter_rd;
     logger().debug("[{}] erase {} -> {}",
@@ -399,33 +401,38 @@ class TreeBuilder {
                    key_hobj_t{p_kv->key},
                    p_kv->value);
     return tree->erase(t, p_kv->key
-    ).safe_then([&t, this, p_kv] (auto size) {
+    ).si_then([&t, this, p_kv] (auto size) {
+      boost::ignore_unused(t);  // avoid clang warning;
+      boost::ignore_unused(this);
+      boost::ignore_unused(p_kv);
       ceph_assert(size == 1);
 #ifndef NDEBUG
       return tree->contains(t, p_kv->key
-      ).safe_then([] (bool ret) {
+      ).si_then([] (bool ret) {
         ceph_assert(ret == false);
       });
 #else
-      return eagain_ertr::now();
+      return eagain_iertr::now();
 #endif
     });
   }
 
-  eagain_future<> erase(Transaction& t, std::size_t erase_size) {
+  eagain_ifuture<> erase(Transaction& t, std::size_t erase_size) {
     assert(erase_size <= kvs.size());
     kvs.shuffle();
     auto erase_end = kvs.random_begin() + erase_size;
     auto ref_kv_iter = seastar::make_lw_shared<iterator_t>();
     auto cursors = seastar::make_lw_shared<std::map<ghobject_t, BtreeCursor>>();
-    return seastar::now().then([&t, this, cursors, ref_kv_iter] {
+    return eagain_iertr::now().si_then([&t, this, cursors, ref_kv_iter] {
+      (void)this; // silence clang warning for !TRACK
+      (void)t; // silence clang warning for !TRACK
       if constexpr (TRACK) {
         logger().info("Tracking cursors before erase ...");
         *ref_kv_iter = kvs.begin();
         auto start_time = mono_clock::now();
-        return crimson::repeat(
+        return trans_intr::repeat(
           [&t, this, cursors, ref_kv_iter, start_time] ()
-          -> eagain_future<seastar::stop_iteration> {
+          -> eagain_ifuture<seastar::stop_iteration> {
           if (*ref_kv_iter == kvs.end()) {
             std::chrono::duration<double> duration = mono_clock::now() - start_time;
             logger().info("Track done! {}s", duration.count());
@@ -433,7 +440,7 @@ class TreeBuilder {
               seastar::stop_iteration::yes);
           }
           auto p_kv = **ref_kv_iter;
-          return tree->find(t, p_kv->key).safe_then([this, cursors, ref_kv_iter](auto cursor) {
+          return tree->find(t, p_kv->key).si_then([cursors, ref_kv_iter](auto cursor) {
             auto p_kv = **ref_kv_iter;
             validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
             cursors->emplace(p_kv->key, cursor);
@@ -442,16 +449,16 @@ class TreeBuilder {
           });
         });
       } else {
-        return eagain_ertr::now();
+        return eagain_iertr::now();
       }
-    }).safe_then([&t, this, ref_kv_iter, erase_end] {
+    }).si_then([&t, this, ref_kv_iter, erase_end] {
       *ref_kv_iter = kvs.random_begin();
       logger().warn("start erasing {}/{} kvs ...",
                     erase_end - kvs.random_begin(), kvs.size());
       auto start_time = mono_clock::now();
-      return crimson::repeat([&t, this, ref_kv_iter,
+      return trans_intr::repeat([&t, this, ref_kv_iter,
                               start_time, erase_end] ()
-        -> eagain_future<seastar::stop_iteration> {
+        -> eagain_ifuture<seastar::stop_iteration> {
         if (*ref_kv_iter == erase_end) {
           std::chrono::duration<double> duration = mono_clock::now() - start_time;
           logger().warn("Erase done! {}s", duration.count());
@@ -459,13 +466,13 @@ class TreeBuilder {
             seastar::stop_iteration::yes);
         } else {
           return erase_one(t, *ref_kv_iter
-          ).safe_then([ref_kv_iter] {
+          ).si_then([ref_kv_iter] {
             ++(*ref_kv_iter);
             return seastar::stop_iteration::no;
           });
         }
       });
-    }).safe_then([this, cursors, ref_kv_iter, erase_end] {
+    }).si_then([this, cursors, ref_kv_iter, erase_end] {
       if constexpr (TRACK) {
         logger().info("Verifing tracked cursors ...");
         *ref_kv_iter = kvs.random_begin();
@@ -492,14 +499,14 @@ class TreeBuilder {
     });
   }
 
-  eagain_future<> get_stats(Transaction& t) {
+  eagain_ifuture<> get_stats(Transaction& t) {
     return tree->get_stats_slow(t
-    ).safe_then([this](auto stats) {
+    ).si_then([](auto stats) {
       logger().warn("{}", stats);
     });
   }
 
-  eagain_future<std::size_t> height(Transaction& t) {
+  eagain_ifuture<std::size_t> height(Transaction& t) {
     return tree->height(t);
   }
 
@@ -507,16 +514,16 @@ class TreeBuilder {
     tree.emplace(std::move(nm));
   }
 
-  eagain_future<> validate_one(
+  eagain_ifuture<> validate_one(
       Transaction& t, const iterator_t& iter_seq) {
     assert(iter_seq != kvs.end());
     auto next_iter = iter_seq + 1;
     auto p_kv = *iter_seq;
     return tree->find(t, p_kv->key
-    ).safe_then([p_kv, &t] (auto cursor) {
+    ).si_then([p_kv, &t] (auto cursor) {
       validate_cursor_from_item(p_kv->key, p_kv->value, cursor);
       return cursor.get_next(t);
-    }).safe_then([next_iter, this] (auto cursor) {
+    }).si_then([next_iter, this] (auto cursor) {
       if (next_iter == kvs.end()) {
         ceph_assert(cursor.is_end());
       } else {
@@ -526,15 +533,23 @@ class TreeBuilder {
     });
   }
 
-  eagain_future<> validate(Transaction& t) {
-    return seastar::async([this, &t] {
-      logger().info("Verifing inserted ...");
-      auto iter = kvs.begin();
-      while (iter != kvs.end()) {
-        validate_one(t, iter).unsafe_get0();
-        ++iter;
-      }
-      logger().info("Verify done!");
+  eagain_ifuture<> validate(Transaction& t) {
+    logger().info("Verifing inserted ...");
+    return seastar::do_with(
+      kvs.begin(),
+      [this, &t] (auto &iter) {
+      return trans_intr::repeat(
+        [this, &t, &iter]() ->eagain_iertr::future<seastar::stop_iteration> {
+        if (iter == kvs.end()) {
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        }
+        return validate_one(t, iter).si_then([&iter] {
+          ++iter;
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::no);
+        });
+      });
     });
   }
 

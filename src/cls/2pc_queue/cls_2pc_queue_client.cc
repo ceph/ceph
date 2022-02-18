@@ -32,7 +32,7 @@ int cls_2pc_queue_get_capacity_result(const bufferlist& bl, uint64_t& size) {
 }
 
 #ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_2pc_queue_get_capacity(IoCtx& io_ctx, const string& queue_name, uint64_t& size) {
+int cls_2pc_queue_get_capacity(IoCtx& io_ctx, const std::string& queue_name, uint64_t& size) {
   bufferlist in, out;
   const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_GET_CAPACITY, in, out);
   if (r < 0 ) {
@@ -64,7 +64,7 @@ int cls_2pc_queue_reserve_result(const bufferlist& bl, cls_2pc_reservation::id_t
   return 0;
 }
 
-int cls_2pc_queue_reserve(IoCtx& io_ctx, const string& queue_name, 
+int cls_2pc_queue_reserve(IoCtx& io_ctx, const std::string& queue_name,
         uint64_t res_size, uint32_t entries, cls_2pc_reservation::id_t& res_id) {
   bufferlist in, out;
   cls_2pc_queue_reserve_op reserve_op;
@@ -131,9 +131,11 @@ int cls_2pc_queue_list_entries_result(const bufferlist& bl, std::vector<cls_queu
 }
 
 #ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_2pc_queue_list_entries(IoCtx& io_ctx, const string& queue_name, const string& marker, uint32_t max,
-                            std::vector<cls_queue_entry>& entries,
-                            bool *truncated, std::string& next_marker) {
+int cls_2pc_queue_list_entries(IoCtx& io_ctx,
+                               const std::string& queue_name,
+                               const std::string& marker, uint32_t max,
+                               std::vector<cls_queue_entry>& entries,
+                               bool *truncated, std::string& next_marker) {
   bufferlist in, out;
   cls_queue_list_op op;
   op.start_marker = marker;

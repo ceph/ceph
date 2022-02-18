@@ -35,8 +35,8 @@ def disconnect(ctx, config):
     (ip1, _) = get_ip_and_ports(ctx, config[0])
     (ip2, _) = get_ip_and_ports(ctx, config[1])
 
-    (host1,) = ctx.cluster.only(config[0]).remotes.iterkeys()
-    (host2,) = ctx.cluster.only(config[1]).remotes.iterkeys()
+    (host1,) = ctx.cluster.only(config[0]).remotes.keys()
+    (host2,) = ctx.cluster.only(config[1]).remotes.keys()
     assert host1 is not None
     assert host2 is not None
 
@@ -58,8 +58,8 @@ def reconnect(ctx, config):
     (ip1, _) = get_ip_and_ports(ctx, config[0])
     (ip2, _) = get_ip_and_ports(ctx, config[1])
 
-    (host1,) = ctx.cluster.only(config[0]).remotes.iterkeys()
-    (host2,) = ctx.cluster.only(config[1]).remotes.iterkeys()
+    (host1,) = ctx.cluster.only(config[0]).remotes.keys()
+    (host2,) = ctx.cluster.only(config[1]).remotes.keys()
     assert host1 is not None
     assert host2 is not None
 

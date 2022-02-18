@@ -340,8 +340,9 @@ describe('HealthComponent', () => {
       expect(component['calcPercentage'](undefined, 1)).toEqual(0);
       expect(component['calcPercentage'](null, 1)).toEqual(0);
       expect(component['calcPercentage'](0, 1)).toEqual(0);
-      expect(component['calcPercentage'](2.346, 10)).toEqual(23);
-      expect(component['calcPercentage'](2.35, 10)).toEqual(24);
+      expect(component['calcPercentage'](1, 100000)).toEqual(0.01);
+      expect(component['calcPercentage'](2.346, 10)).toEqual(23.46);
+      expect(component['calcPercentage'](2.56, 10)).toEqual(25.6);
     });
   });
 });

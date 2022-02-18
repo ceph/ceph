@@ -10,14 +10,11 @@
 
 #include <seastar/core/future.hh>
 
+#include "os/Transaction.h"
 #include "crimson/osd/exceptions.h"
 #include "include/buffer_fwd.h"
 #include "include/uuid.h"
 #include "osd/osd_types.h"
-
-namespace seastar::alien {
-class instance;
-}
 
 namespace ceph::os {
 class Transaction;
@@ -55,10 +52,9 @@ public:
   };
   using OmapIteratorRef = boost::intrusive_ptr<OmapIterator>;
 
-  static std::unique_ptr<FuturizedStore> create(const std::string& type,
+  static seastar::future<std::unique_ptr<FuturizedStore>> create(const std::string& type,
                                                 const std::string& data,
-                                                const ConfigValues& values,
-                                                seastar::alien::instance& alien);
+                                                const ConfigValues& values);
   FuturizedStore() = default;
   virtual ~FuturizedStore() = default;
 
@@ -70,10 +66,13 @@ public:
     return seastar::now();
   }
   virtual seastar::future<> stop() = 0;
-  virtual seastar::future<> mount() = 0;
+
+  using mount_ertr = crimson::errorator<crimson::stateful_ec>;
+  virtual mount_ertr::future<> mount() = 0;
   virtual seastar::future<> umount() = 0;
 
-  virtual seastar::future<> mkfs(uuid_d new_osd_fsid) = 0;
+  using mkfs_ertr = crimson::errorator<crimson::stateful_ec>;
+  virtual mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) = 0;
   virtual seastar::future<store_statfs_t> stat() const = 0;
 
   using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
@@ -136,6 +135,18 @@ public:
 
   virtual seastar::future<> do_transaction(CollectionRef ch,
 					   ceph::os::Transaction&& txn) = 0;
+  /**
+   * flush
+   *
+   * Flushes outstanding transactions on ch, returned future resolves
+   * after any previously submitted transactions on ch have committed.
+   *
+   * @param ch [in] collection on which to flush
+   */
+  virtual seastar::future<> flush(CollectionRef ch) {
+    return do_transaction(ch, ceph::os::Transaction{});
+  }
+
   // error injection
   virtual seastar::future<> inject_data_error(const ghobject_t& o) {
     return seastar::now();

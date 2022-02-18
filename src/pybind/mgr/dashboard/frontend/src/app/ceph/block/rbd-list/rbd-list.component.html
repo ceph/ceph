@@ -29,6 +29,26 @@
        [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
 </ng-template>
 
+<ng-template #provisionedNotAvailableTooltipTpl
+             let-row="row">
+  <span *ngIf="row.disk_usage === null && !row.features_name.includes('fast-diff'); else provisioned"
+        [ngbTooltip]="usageNotAvailableTooltipTpl"
+        placement="top"
+        i18n>N/A</span>
+  <ng-template #provisioned
+               i18n>{{row.disk_usage | dimlessBinary}}</ng-template>
+</ng-template>
+
+<ng-template #totalProvisionedNotAvailableTooltipTpl
+             let-row="row">
+  <span *ngIf="row.total_disk_usage === null && !row.features_name.includes('fast-diff'); else totalProvisioned"
+        [ngbTooltip]="usageNotAvailableTooltipTpl"
+        placement="top"
+        i18n>N/A</span>
+  <ng-template #totalProvisioned
+               i18n>{{row.total_disk_usage | dimlessBinary}}</ng-template>
+</ng-template>
+
 <ng-template #parentTpl
              let-value="value">
   <span *ngIf="value">{{ value.pool_name }}<span

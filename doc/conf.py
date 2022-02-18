@@ -13,6 +13,9 @@ top_level = \
         os.path.dirname(
             os.path.abspath(__file__)))
 
+pybind_rgw_mod = __import__('rgw', globals(), locals(), [], 0)
+sys.modules['pybind_rgw_mod'] = pybind_rgw_mod
+
 
 def parse_ceph_release():
     with open(os.path.join(top_level, 'src/ceph_release')) as f:
@@ -51,7 +54,7 @@ html_theme_options = {
     'display_version': False,
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,
-    'vcs_pageview_mode': '',
+    'vcs_pageview_mode': 'edit',
     'style_nav_header_background': '#eee',
     # Toc options
     'collapse_navigation': True,
@@ -121,11 +124,15 @@ extensions = [
     'ceph_commands',
     'ceph_releases',
     'ceph_confval',
-    'sphinxcontrib.openapi'
+    'sphinxcontrib.openapi',
+    'sphinxcontrib.seqdiag',
     ]
 
 ditaa = shutil.which("ditaa")
 if ditaa is not None:
+    # in case we don't have binfmt_misc enabled or jar is not registered
+    ditaa_args = ['-jar', ditaa]
+    ditaa = 'java'
     extensions += ['sphinxcontrib.ditaa']
 else:
     extensions += ['plantweb.directive']
@@ -226,6 +233,10 @@ for c in pybinds:
 # openapi
 openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30')
 openapi_logger.setLevel(logging.WARNING)
+
+# seqdiag
+seqdiag_antialias = True
+seqdiag_html_image_format = 'SVG'
 
 # ceph_confval
 ceph_confval_imports = glob.glob(os.path.join(top_level,

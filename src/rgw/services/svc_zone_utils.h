@@ -16,7 +16,7 @@ class RGWSI_ZoneUtils : public RGWServiceInstance
   RGWSI_RADOS *rados_svc{nullptr};
   RGWSI_Zone *zone_svc{nullptr};
 
-  string trans_id_suffix;
+  std::string trans_id_suffix;
 
   void init(RGWSI_RADOS *_rados_svc,
             RGWSI_Zone *_zone_svc) {
@@ -31,8 +31,8 @@ class RGWSI_ZoneUtils : public RGWServiceInstance
 public:
   RGWSI_ZoneUtils(CephContext *cct): RGWServiceInstance(cct) {}
 
-  string gen_host_id();
-  string unique_id(uint64_t unique_num);
+  std::string gen_host_id();
+  std::string unique_id(uint64_t unique_num);
 
-  string unique_trans_id(const uint64_t unique_num);
+  std::string unique_trans_id(const uint64_t unique_num);
 };

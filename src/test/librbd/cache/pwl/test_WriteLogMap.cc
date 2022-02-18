@@ -13,6 +13,8 @@ namespace librbd {
 namespace cache {
 namespace pwl {
 
+using namespace std;
+
 struct TestLogEntry {
   uint64_t image_offset_bytes;
   uint64_t write_bytes;

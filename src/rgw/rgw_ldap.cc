@@ -14,6 +14,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 std::string parse_rgw_ldap_bindpw(CephContext* ctx)
 {
   string ldap_bindpw;

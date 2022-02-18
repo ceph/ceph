@@ -58,7 +58,7 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
   // with a bogus, possibly way into the future, validity
   ttl = service_id == CEPH_ENTITY_TYPE_AUTH ?
       cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
-  ttl = min(ttl, static_cast<double>(
+  ttl = std::min(ttl, static_cast<double>(
 		     secrets.secrets.rbegin()->second.expiration - now));
 
   ldout(cct, 30) << __func__ << " service "
@@ -72,8 +72,11 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 				uint64_t secret_id, CryptoKey& secret) const
 {
   auto iter = rotating_secrets.find(service_id);
-  if (iter == rotating_secrets.end())
+  if (iter == rotating_secrets.end()) {
+    ldout(cct, 10) << __func__ << " no rotating_secrets for service " << service_id
+		   << " " << ceph_entity_type_name(service_id) << dendl;
     return false;
+  }
 
   const RotatingSecrets& secrets = iter->second;
   auto riter = secrets.secrets.find(secret_id);
@@ -146,31 +149,13 @@ int KeyServer::start_server()
 {
   std::scoped_lock l{lock};
 
-  _check_rotating_secrets();
   _dump_rotating_secrets();
   return 0;
 }
 
-bool KeyServer::_check_rotating_secrets()
+void KeyServer::dump()
 {
-  ldout(cct, 10) << "_check_rotating_secrets" << dendl;
-
-  int added = 0;
-  added += _rotate_secret(CEPH_ENTITY_TYPE_AUTH);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_MON);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_OSD);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_MDS);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_MGR);
-
-  if (added) {
-    ldout(cct, 10) << __func__ << " added " << added << dendl;
-    data.rotating_ver++;
-    //data.next_rotating_time = ceph_clock_now(cct);
-    //data.next_rotating_time += std::min(cct->_conf->auth_mon_ticket_ttl, cct->_conf->auth_service_ticket_ttl);
-    _dump_rotating_secrets();
-    return true;
-  }
-  return false;
+  _dump_rotating_secrets();
 }
 
 void KeyServer::_dump_rotating_secrets()
@@ -189,9 +174,9 @@ void KeyServer::_dump_rotating_secrets()
   }
 }
 
-int KeyServer::_rotate_secret(uint32_t service_id)
+int KeyServer::_rotate_secret(uint32_t service_id, KeyServerData &pending_data)
 {
-  RotatingSecrets& r = data.rotating_secrets[service_id];
+  RotatingSecrets& r = pending_data.rotating_secrets[service_id];
   int added = 0;
   utime_t now = ceph_clock_now();
   double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
@@ -356,19 +341,30 @@ void KeyServer::encode_plaintext(bufferlist &bl)
   bl.append(os.str());
 }
 
-bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver)
+bool KeyServer::prepare_rotating_update(bufferlist& rotating_bl)
 {
   std::scoped_lock l{lock};
+  ldout(cct, 20) << __func__ << " before: data.rotating_ver=" << data.rotating_ver
+		 << dendl;
 
-  _check_rotating_secrets(); 
+  KeyServerData pending_data(nullptr);
+  pending_data.rotating_ver = data.rotating_ver + 1;
+  pending_data.rotating_secrets = data.rotating_secrets;
 
-  if (data.rotating_ver <= rotating_ver)
+  int added = 0;
+  added += _rotate_secret(CEPH_ENTITY_TYPE_AUTH, pending_data);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MON, pending_data);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_OSD, pending_data);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MDS, pending_data);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MGR, pending_data);
+  if (!added) {
     return false;
- 
-  data.encode_rotating(rotating_bl);
+  }
 
-  rotating_ver = data.rotating_ver;
-
+  ldout(cct, 20) << __func__ << " after: pending_data.rotating_ver="
+		 << pending_data.rotating_ver
+		 << dendl;
+  pending_data.encode_rotating(rotating_bl);
   return true;
 }
 

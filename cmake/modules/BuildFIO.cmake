@@ -13,15 +13,20 @@ function(build_fio)
   file(MAKE_DIRECTORY ${source_dir})
   ExternalProject_Add(fio_ext
     UPDATE_COMMAND "" # this disables rebuild on each run
-    GIT_REPOSITORY "https://github.com/axboe/fio.git"
+    GIT_REPOSITORY "https://github.com/ceph/fio.git"
     GIT_CONFIG advice.detachedHead=false
     GIT_SHALLOW 1
-    GIT_TAG "fio-3.15"
+    GIT_TAG "fio-3.27-cxx"
     SOURCE_DIR ${source_dir}
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
     BUILD_COMMAND ${make_cmd} fio EXTFLAGS=-Wno-format-truncation ${FIO_EXTLIBS}
-    INSTALL_COMMAND cp <BINARY_DIR>/fio ${CMAKE_BINARY_DIR}/bin)
+    INSTALL_COMMAND cp <BINARY_DIR>/fio ${CMAKE_BINARY_DIR}/bin
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_INSTALL ON
+    LOG_MERGED_STDOUTERR ON
+    LOG_OUTPUT_ON_FAILURE ON)
 
   add_library(fio INTERFACE IMPORTED)
   add_dependencies(fio fio_ext)

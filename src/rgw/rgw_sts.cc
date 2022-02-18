@@ -30,6 +30,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 namespace STS {
 
 void Credentials::dump(Formatter *f) const
@@ -40,12 +42,14 @@ void Credentials::dump(Formatter *f) const
   encode_json("SessionToken", sessionToken , f);
 }
 
-int Credentials::generateCredentials(CephContext* cct,
+int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
+                          CephContext* cct,
                           const uint64_t& duration,
-                          const boost::optional<string>& policy,
-                          const boost::optional<string>& roleId,
-                          const boost::optional<string>& role_session,
-                          const boost::optional<std::vector<string>> token_claims,
+                          const boost::optional<std::string>& policy,
+                          const boost::optional<std::string>& roleId,
+                          const boost::optional<std::string>& role_session,
+                          const boost::optional<std::vector<std::string>>& token_claims,
+                          const boost::optional<std::vector<std::pair<std::string,std::string>>>& session_princ_tags,
                           boost::optional<rgw_user> user,
                           rgw::auth::Identity* identity)
 {
@@ -68,20 +72,20 @@ int Credentials::generateCredentials(CephContext* cct,
   //Session Token - Encrypt using AES
   auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {
-    ldout(cct, 0) << "ERROR: No AES cryto handler found !" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: No AES cryto handler found !" << dendl;
     return -EINVAL;
   }
   string secret_s = cct->_conf->rgw_sts_key;
   buffer::ptr secret(secret_s.c_str(), secret_s.length());
   int ret = 0;
   if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldout(cct, 0) << "ERROR: Invalid rgw sts key, please ensure its length is 16" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key, please ensure its length is 16" << dendl;
     return ret;
   }
   string error;
-  auto* keyhandler = cryptohandler->get_key_handler(secret, error);
+  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
   if (! keyhandler) {
-    ldout(cct, 0) << "ERROR: No Key handler found !" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: No Key handler found !" << dendl;
     return -EINVAL;
   }
   error.clear();
@@ -129,11 +133,14 @@ int Credentials::generateCredentials(CephContext* cct,
     token.role_session = role_session.get();
   }
 
+  if (session_princ_tags) {
+    token.principal_tags = std::move(*session_princ_tags);
+  }
   buffer::list input, enc_output;
   encode(token, input);
 
   if (ret = keyhandler->encrypt(input, enc_output, &error); ret < 0) {
-    ldout(cct, 0) << "ERROR: Encrypting session token returned an error !" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Encrypting session token returned an error !" << dendl;
     return ret;
   }
 
@@ -188,40 +195,40 @@ AssumeRoleRequestBase::AssumeRoleRequestBase( CephContext* cct,
   }
 }
 
-int AssumeRoleRequestBase::validate_input() const
+int AssumeRoleRequestBase::validate_input(const DoutPrefixProvider *dpp) const
 {
   if (!err_msg.empty()) {
-    ldout(cct, 0) << "ERROR: error message is empty !" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: error message is empty !" << dendl;
     return -EINVAL;
   }
 
   if (duration < MIN_DURATION_IN_SECS ||
           duration > MAX_DURATION_IN_SECS) {
-    ldout(cct, 0) << "ERROR: Incorrect value of duration: " << duration << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Incorrect value of duration: " << duration << dendl;
     return -EINVAL;
   }
 
   if (! iamPolicy.empty() &&
           (iamPolicy.size() < MIN_POLICY_SIZE || iamPolicy.size() > MAX_POLICY_SIZE)) {
-    ldout(cct, 0) << "ERROR: Incorrect size of iamPolicy: " << iamPolicy.size() << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Incorrect size of iamPolicy: " << iamPolicy.size() << dendl;
     return -ERR_PACKED_POLICY_TOO_LARGE;
   }
 
   if (! roleArn.empty() &&
           (roleArn.size() < MIN_ROLE_ARN_SIZE || roleArn.size() > MAX_ROLE_ARN_SIZE)) {
-    ldout(cct, 0) << "ERROR: Incorrect size of roleArn: " << roleArn.size() << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Incorrect size of roleArn: " << roleArn.size() << dendl;
     return -EINVAL;
   }
 
   if (! roleSessionName.empty()) {
     if (roleSessionName.size() < MIN_ROLE_SESSION_SIZE || roleSessionName.size() > MAX_ROLE_SESSION_SIZE) {
-      ldout(cct, 0) << "ERROR: Either role session name is empty or role session size is incorrect: " << roleSessionName.size() << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Either role session name is empty or role session size is incorrect: " << roleSessionName.size() << dendl;
       return -EINVAL;
     }
 
     std::regex regex_roleSession("[A-Za-z0-9_=,.@-]+");
     if (! std::regex_match(roleSessionName, regex_roleSession)) {
-      ldout(cct, 0) << "ERROR: Role session name is incorrect: " << roleSessionName << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Role session name is incorrect: " << roleSessionName << dendl;
       return -EINVAL;
     }
   }
@@ -229,51 +236,51 @@ int AssumeRoleRequestBase::validate_input() const
   return 0;
 }
 
-int AssumeRoleWithWebIdentityRequest::validate_input() const
+int AssumeRoleWithWebIdentityRequest::validate_input(const DoutPrefixProvider *dpp) const
 {
   if (! providerId.empty()) {
     if (providerId.length() < MIN_PROVIDER_ID_LEN ||
           providerId.length() > MAX_PROVIDER_ID_LEN) {
-      ldout(cct, 0) << "ERROR: Either provider id is empty or provider id length is incorrect: " << providerId.length() << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Either provider id is empty or provider id length is incorrect: " << providerId.length() << dendl;
       return -EINVAL;
     }
   }
-  return AssumeRoleRequestBase::validate_input();
+  return AssumeRoleRequestBase::validate_input(dpp);
 }
 
-int AssumeRoleRequest::validate_input() const
+int AssumeRoleRequest::validate_input(const DoutPrefixProvider *dpp) const
 {
   if (! externalId.empty()) {
     if (externalId.length() < MIN_EXTERNAL_ID_LEN ||
           externalId.length() > MAX_EXTERNAL_ID_LEN) {
-      ldout(cct, 0) << "ERROR: Either external id is empty or external id length is incorrect: " << externalId.length() << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Either external id is empty or external id length is incorrect: " << externalId.length() << dendl;
       return -EINVAL;
     }
 
     std::regex regex_externalId("[A-Za-z0-9_=,.@:/-]+");
     if (! std::regex_match(externalId, regex_externalId)) {
-      ldout(cct, 0) << "ERROR: Invalid external Id: " << externalId << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: Invalid external Id: " << externalId << dendl;
       return -EINVAL;
     }
   }
   if (! serialNumber.empty()){
     if (serialNumber.size() < MIN_SERIAL_NUMBER_SIZE || serialNumber.size() > MAX_SERIAL_NUMBER_SIZE) {
-      ldout(cct, 0) << "Either serial number is empty or serial number length is incorrect: " << serialNumber.size() << dendl;
+      ldpp_dout(dpp, 0) << "Either serial number is empty or serial number length is incorrect: " << serialNumber.size() << dendl;
       return -EINVAL;
     }
 
     std::regex regex_serialNumber("[A-Za-z0-9_=/:,.@-]+");
     if (! std::regex_match(serialNumber, regex_serialNumber)) {
-      ldout(cct, 0) << "Incorrect serial number: " << serialNumber << dendl;
+      ldpp_dout(dpp, 0) << "Incorrect serial number: " << serialNumber << dendl;
       return -EINVAL;
     }
   }
   if (! tokenCode.empty() && tokenCode.size() == TOKEN_CODE_SIZE) {
-    ldout(cct, 0) << "Either token code is empty or token code size is invalid: " << tokenCode.size() << dendl;
+    ldpp_dout(dpp, 0) << "Either token code is empty or token code size is invalid: " << tokenCode.size() << dendl;
     return -EINVAL;
   }
 
-  return AssumeRoleRequestBase::validate_input();
+  return AssumeRoleRequestBase::validate_input(dpp);
 }
 
 std::tuple<int, rgw::sal::RGWRole*> STSService::getRoleInfo(const DoutPrefixProvider *dpp,
@@ -329,7 +336,7 @@ int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yi
   return ret;
 }
 
-AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRoleWithWebIdentityRequest& req)
+AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(const DoutPrefixProvider *dpp, AssumeRoleWithWebIdentityRequest& req)
 {
   AssumeRoleWithWebIdentityResponse response;
   response.assumeRoleResp.packedPolicySize = 0;
@@ -348,7 +355,7 @@ AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRo
   //Get the role info which is being assumed
   boost::optional<rgw::ARN> r_arn = rgw::ARN::parse(req.getRoleARN());
   if (r_arn == boost::none) {
-    ldout(cct, 0) << "Error in parsing role arn: " << req.getRoleARN() << dendl;
+    ldpp_dout(dpp, 0) << "Error in parsing role arn: " << req.getRoleARN() << dendl;
     response.assumeRoleResp.retCode = -EINVAL;
     return response;
   }
@@ -358,7 +365,7 @@ AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRo
   req.setMaxDuration(roleMaxSessionDuration);
 
   //Validate input
-  response.assumeRoleResp.retCode = req.validate_input();
+  response.assumeRoleResp.retCode = req.validate_input(dpp);
   if (response.assumeRoleResp.retCode < 0) {
     return response;
   }
@@ -379,10 +386,11 @@ AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRo
 
   //Generate Credentials
   //Role and Policy provide the authorization info, user id and applier info are not needed
-  response.assumeRoleResp.retCode = response.assumeRoleResp.creds.generateCredentials(cct, req.getDuration(),
+  response.assumeRoleResp.retCode = response.assumeRoleResp.creds.generateCredentials(dpp, cct, req.getDuration(),
                                                                                       req.getPolicy(), roleId,
                                                                                       req.getRoleSessionName(),
                                                                                       token_claims,
+                                                                                      req.getPrincipalTags(),
                                                                                       user_id, nullptr);
   if (response.assumeRoleResp.retCode < 0) {
     return response;
@@ -412,7 +420,7 @@ AssumeRoleResponse STSService::assumeRole(const DoutPrefixProvider *dpp,
   req.setMaxDuration(roleMaxSessionDuration);
 
   //Validate input
-  response.retCode = req.validate_input();
+  response.retCode = req.validate_input(dpp);
   if (response.retCode < 0) {
     return response;
   }
@@ -429,9 +437,10 @@ AssumeRoleResponse STSService::assumeRole(const DoutPrefixProvider *dpp,
 
   //Generate Credentials
   //Role and Policy provide the authorization info, user id and applier info are not needed
-  response.retCode = response.creds.generateCredentials(cct, req.getDuration(),
+  response.retCode = response.creds.generateCredentials(dpp, cct, req.getDuration(),
                                               req.getPolicy(), roleId,
                                               req.getRoleSessionName(),
+                                              boost::none,
                                               boost::none,
                                               user_id, nullptr);
   if (response.retCode < 0) {
@@ -460,14 +469,15 @@ GetSessionTokenRequest::GetSessionTokenRequest(const string& duration, const str
   this->tokenCode = tokenCode;
 }
 
-GetSessionTokenResponse STSService::getSessionToken(GetSessionTokenRequest& req)
+GetSessionTokenResponse STSService::getSessionToken(const DoutPrefixProvider *dpp, GetSessionTokenRequest& req)
 {
   int ret;
   Credentials cred;
 
   //Generate Credentials
-  if (ret = cred.generateCredentials(cct,
+  if (ret = cred.generateCredentials(dpp, cct,
                                       req.getDuration(),
+                                      boost::none,
                                       boost::none,
                                       boost::none,
                                       boost::none,

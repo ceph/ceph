@@ -21,6 +21,11 @@ def remove_pool(mgr, pool_name):
                'yes_i_really_really_mean_it': True}
     return mgr.mon_command(command)
 
+def rename_pool(mgr, pool_name, new_pool_name):
+    command = {'prefix': 'osd pool rename', 'srcpool': pool_name,
+               'destpool': new_pool_name}
+    return mgr.mon_command(command)
+
 def create_filesystem(mgr, fs_name, metadata_pool, data_pool):
     command = {'prefix': 'fs new', 'fs_name': fs_name, 'metadata': metadata_pool,
                'data': data_pool}
@@ -33,6 +38,11 @@ def remove_filesystem(mgr, fs_name):
         return r, outb, outs
 
     command = {'prefix': 'fs rm', 'fs_name': fs_name, 'yes_i_really_mean_it': True}
+    return mgr.mon_command(command)
+
+def rename_filesystem(mgr, fs_name, new_fs_name):
+    command = {'prefix': 'fs rename', 'fs_name': fs_name, 'new_fs_name': new_fs_name,
+               'yes_i_really_mean_it': True}
     return mgr.mon_command(command)
 
 def create_mds(mgr, fs_name, placement):
@@ -161,3 +171,15 @@ def get_ancestor_xattr(fs, path, attr):
             raise VolumeException(-e.args[0], e.args[1])
         else:
             return get_ancestor_xattr(fs, os.path.split(path)[0], attr)
+
+def create_base_dir(fs, path, mode):
+    """
+    Create volspec base/group directory if it doesn't exist
+    """
+    try:
+        fs.stat(path)
+    except cephfs.Error as e:
+        if e.args[0] == errno.ENOENT:
+            fs.mkdirs(path, mode)
+        else:
+            raise VolumeException(-e.args[0], e.args[1])

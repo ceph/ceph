@@ -35,6 +35,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 struct RGWQuotaCacheStats {
   RGWStorageStats stats;
@@ -272,11 +273,11 @@ int BucketAsyncRefreshHandler::init_fetch()
 
   ldpp_dout(&dp, 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
-  r = rbucket->get_bucket_stats_async(&dp, RGW_NO_SHARD, this);
+  r = rbucket->read_stats_async(&dp, RGW_NO_SHARD, this);
   if (r < 0) {
     ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
-    /* get_bucket_stats_async() dropped our reference already */
+    /* read_stats_async() dropped our reference already */
     return r;
   }
 
@@ -344,7 +345,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  r = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, bucket_stats);
+  r = bucket->read_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, bucket_stats);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not get bucket stats for bucket="
                            << _b.name << dendl;
@@ -1002,3 +1003,29 @@ void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
     quota.enabled = true;
   }
 }
+
+void RGWQuotaInfo::dump(Formatter *f) const
+{
+  f->dump_bool("enabled", enabled);
+  f->dump_bool("check_on_raw", check_on_raw);
+
+  f->dump_int("max_size", max_size);
+  f->dump_int("max_size_kb", rgw_rounded_kb(max_size));
+  f->dump_int("max_objects", max_objects);
+}
+
+void RGWQuotaInfo::decode_json(JSONObj *obj)
+{
+  if (false == JSONDecoder::decode_json("max_size", max_size, obj)) {
+    /* We're parsing an older version of the struct. */
+    int64_t max_size_kb = 0;
+
+    JSONDecoder::decode_json("max_size_kb", max_size_kb, obj);
+    max_size = max_size_kb * 1024;
+  }
+  JSONDecoder::decode_json("max_objects", max_objects, obj);
+
+  JSONDecoder::decode_json("check_on_raw", check_on_raw, obj);
+  JSONDecoder::decode_json("enabled", enabled, obj);
+}
+

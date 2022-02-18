@@ -2,17 +2,37 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore);
+    return crimson::get_logger(ceph_subsys_seastore_cleaner);
   }
 }
 
+SET_SUBSYS(seastore_cleaner);
+
 namespace crimson::os::seastore {
+
+void segment_info_set_t::segment_info_t::set_open(segment_seq_t seq) {
+  assert(state == Segment::segment_state_t::EMPTY);
+  assert(segment_seq_to_type(seq) != segment_type_t::NULL_SEG);
+  state = Segment::segment_state_t::OPEN;
+  journal_segment_seq = seq;
+}
+
+void segment_info_set_t::segment_info_t::set_empty() {
+  assert(state == Segment::segment_state_t::CLOSED);
+  state = Segment::segment_state_t::EMPTY;
+  journal_segment_seq = NULL_SEG_SEQ;
+}
+
+void segment_info_set_t::segment_info_t::set_closed() {
+  state = Segment::segment_state_t::CLOSED;
+}
 
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 {
@@ -25,23 +45,24 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
   }
 
   bool all_match = true;
-  for (segment_id_t i = 0; i < live_bytes_by_segment.size(); ++i) {
-    if (other.live_bytes_by_segment[i] != live_bytes_by_segment[i]) {
+  for (auto i = live_bytes_by_segment.begin(), j = other.live_bytes_by_segment.begin();
+       i != live_bytes_by_segment.end(); ++i, ++j) {
+    if (i->second != j->second) {
       all_match = false;
       logger().debug(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
-	i,
-	live_bytes_by_segment[i],
-	other.live_bytes_by_segment[i]);
+	i->first,
+	i->second,
+	j->second);
     }
   }
   return all_match;
 }
 
 int64_t SpaceTrackerDetailed::SegmentMap::allocate(
-  segment_id_t segment,
-  segment_off_t offset,
+  device_segment_id_t segment,
+  seastore_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
 {
@@ -72,8 +93,8 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
 }
 
 int64_t SpaceTrackerDetailed::SegmentMap::release(
-  segment_id_t segment,
-  segment_off_t offset,
+  device_segment_id_t segment,
+  seastore_off_t offset,
   extent_len_t len,
   const extent_len_t block_size)
 {
@@ -114,15 +135,16 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
   }
 
   bool all_match = true;
-  for (segment_id_t i = 0; i < segment_usage.size(); ++i) {
-    if (other.segment_usage[i].get_usage() != segment_usage[i].get_usage()) {
+  for (auto i = segment_usage.begin(), j = other.segment_usage.begin();
+       i != segment_usage.end(); ++i, ++j) {
+    if (i->second.get_usage() != j->second.get_usage()) {
       all_match = false;
       logger().error(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
-	i,
-	segment_usage[i].get_usage(),
-	other.segment_usage[i].get_usage());
+	i->first,
+	i->second.get_usage(),
+	j->second.get_usage());
     }
   }
   return all_match;
@@ -140,12 +162,17 @@ void SpaceTrackerDetailed::SegmentMap::dump_usage(extent_len_t block_size) const
 void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
 {
   logger().debug("SpaceTrackerDetailed::dump_usage {}", id);
-  segment_usage[id].dump_usage(block_size);
+  segment_usage[id].dump_usage(
+    block_size_by_segment_manager[id.device_id()]);
 }
 
-SegmentCleaner::SegmentCleaner(config_t config, bool detailed)
+SegmentCleaner::SegmentCleaner(
+  config_t config,
+  ExtentReaderRef&& scr,
+  bool detailed)
   : detailed(detailed),
     config(config),
+    scanner(std::move(scr)),
     gc_process(*this)
 {
   register_metrics();
@@ -157,32 +184,60 @@ void SegmentCleaner::register_metrics()
   metrics.add_group("segment_cleaner", {
     sm::make_counter("segments_released", stats.segments_released,
 		     sm::description("total number of extents released by SegmentCleaner")),
+    sm::make_counter("accumulated_blocked_ios", stats.accumulated_blocked_ios,
+		     sm::description("accumulated total number of ios that were blocked by gc")),
+    sm::make_derive("empty_segments", stats.empty_segments,
+		    sm::description("current empty segments")),
+    sm::make_derive("ios_blocking", stats.ios_blocking,
+		    sm::description("IOs that are blocking on space usage")),
+    sm::make_derive("used_bytes", stats.used_bytes,
+		    sm::description("the size of the space occupied by live extents")),
+    sm::make_derive("projected_used_bytes", stats.projected_used_bytes,
+		    sm::description("the size of the space going to be occupied by new extents")),
+    sm::make_derive("avail_bytes",
+		    [this] {
+		      return segments.get_available_bytes();
+		    },
+		    sm::description("the size of the space not occupied")),
+    sm::make_derive("opened_segments",
+		    [this] {
+		      return segments.get_opened_segments();
+		    },
+		    sm::description("the number of segments whose state is open"))
   });
 }
 
-SegmentCleaner::get_segment_ret SegmentCleaner::get_segment()
+SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(
+    device_id_t id, segment_seq_t seq)
 {
-  for (size_t i = 0; i < segments.size(); ++i) {
-    if (segments[i].is_empty()) {
-      mark_open(i);
-      logger().debug("{}: returning segment {}", __func__, i);
+  assert(segment_seq_to_type(seq) != segment_type_t::NULL_SEG);
+  for (auto it = segments.device_begin(id);
+       it != segments.device_end(id);
+       ++it) {
+    auto id = it->first;
+    auto& segment_info = it->second;
+    if (segment_info.is_empty()) {
+      logger().debug("{}: returning segment {} {}",
+                     __func__, id, segment_seq_printer_t{seq});
+      mark_open(id, seq);
       return get_segment_ret(
 	get_segment_ertr::ready_future_marker{},
-	i);
+	id);
     }
   }
   assert(0 == "out of space handling todo");
   return get_segment_ret(
     get_segment_ertr::ready_future_marker{},
-    0);
+    NULL_SEG_ID);
 }
 
 void SegmentCleaner::update_journal_tail_target(journal_seq_t target)
 {
   logger().debug(
-    "{}: {}",
+    "{}: {}, current tail target {}",
     __func__,
-    target);
+    target,
+    journal_tail_target);
   assert(journal_tail_target == journal_seq_t() || target >= journal_tail_target);
   if (journal_tail_target == journal_seq_t() || target > journal_tail_target) {
     journal_tail_target = target;
@@ -213,6 +268,8 @@ void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 
 void SegmentCleaner::close_segment(segment_id_t segment)
 {
+  ceph_assert(segment_seq_to_type(segments[segment].journal_segment_seq) !=
+              segment_type_t::NULL_SEG);
   mark_closed(segment);
 }
 
@@ -220,20 +277,20 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
   Transaction &t,
   journal_seq_t limit)
 {
-  return trans_intr::make_interruptible(
-    ecb->get_next_dirty_extents(
-      limit,
-      config.journal_rewrite_per_cycle)
-  ).then_interruptible([=, &t](auto dirty_list) {
+  LOG_PREFIX(SegmentCleaner::rewrite_dirty);
+  return ecb->get_next_dirty_extents(
+    t,
+    limit,
+    config.journal_rewrite_per_cycle
+  ).si_then([=, &t](auto dirty_list) {
+    DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
     return seastar::do_with(
       std::move(dirty_list),
-      [this, &t](auto &dirty_list) {
+      [FNAME, this, &t](auto &dirty_list) {
 	return trans_intr::do_for_each(
 	  dirty_list,
-	  [this, &t](auto &e) {
-	    logger().debug(
-	      "SegmentCleaner::rewrite_dirty cleaning {}",
-	      *e);
+	  [FNAME, this, &t](auto &e) {
+	    DEBUGT("cleaning {}", t, *e);
 	    return ecb->rewrite_extent(t, e);
 	  });
       });
@@ -281,103 +338,144 @@ SegmentCleaner::gc_cycle_ret SegmentCleaner::do_gc_cycle()
 
 SegmentCleaner::gc_trim_journal_ret SegmentCleaner::gc_trim_journal()
 {
-  return repeat_eagain(
-    [this] {
-      return seastar::do_with(
-	ecb->create_transaction(Transaction::src_t::CLEANER),
-	[this](auto &tref) {
-	  return with_trans_intr(*tref, [this](auto &t) {
-	    return rewrite_dirty(t, get_dirty_tail()
-	    ).si_then([this, &t] {
-	      return ecb->submit_transaction_direct(
-		t);
-	    });
-	  });
-	});
+  return repeat_eagain([this] {
+    return ecb->with_transaction_intr(
+      Transaction::src_t::CLEANER_TRIM,
+      "trim_journal",
+      [this](auto& t)
+    {
+      return rewrite_dirty(t, get_dirty_tail()
+      ).si_then([this, &t] {
+        return ecb->submit_transaction_direct(t);
+      });
     });
+  });
 }
 
 SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 {
   if (!scan_cursor) {
-    paddr_t next = P_ADDR_NULL;
-    next.segment = get_next_gc_target();
-    if (next == P_ADDR_NULL) {
+    journal_seq_t next = get_next_gc_target();
+    if (next == journal_seq_t()) {
       logger().debug(
 	"SegmentCleaner::do_gc: no segments to gc");
       return seastar::now();
     }
-    next.offset = 0;
     scan_cursor =
-      std::make_unique<ExtentCallbackInterface::scan_extents_cursor>(
+      std::make_unique<ExtentReader::scan_extents_cursor>(
 	next);
     logger().debug(
       "SegmentCleaner::do_gc: starting gc on segment {}",
-      scan_cursor->get_offset().segment);
+      scan_cursor->seq);
   } else {
     ceph_assert(!scan_cursor->is_complete());
   }
 
-  return ecb->scan_extents(
+  return scanner->scan_extents(
     *scan_cursor,
     config.reclaim_bytes_stride
   ).safe_then([this](auto &&_extents) {
     return seastar::do_with(
-      std::move(_extents),
-      [this](auto &extents) {
-	return repeat_eagain([this, &extents]() mutable {
-	  logger().debug(
-	    "SegmentCleaner::gc_reclaim_space: processing {} extents",
-	    extents.size());
-	  return seastar::do_with(
-	    ecb->create_transaction(Transaction::src_t::CLEANER),
-	    [this, &extents](auto &tref) mutable {
-	      return with_trans_intr(*tref, [this, &extents](auto &t) {
-		return trans_intr::do_for_each(
-		  extents,
-		  [this, &t](auto &extent) {
-		    auto &[addr, info] = extent;
-		    logger().debug(
-		      "SegmentCleaner::gc_reclaim_space: checking extent {}",
-		      info);
-		    return ecb->get_extent_if_live(
-		      t,
-		      info.type,
-		      addr,
-		      info.addr,
-		      info.len
-		    ).si_then([addr=addr, &t, this](CachedExtentRef ext) {
-		      if (!ext) {
-			logger().debug(
-			  "SegmentCleaner::gc_reclaim_space: addr {} dead, skipping",
-			  addr);
-			return ExtentCallbackInterface::rewrite_extent_iertr::now();
-		      } else {
-			logger().debug(
-			  "SegmentCleaner::gc_reclaim_space: addr {} alive, gc'ing {}",
-			  addr,
-			  *ext);
-			return ecb->rewrite_extent(
-			  t,
-			  ext);
-		      }
-		    });
-		  }
-		).si_then([this, &t] {
-		  if (scan_cursor->is_complete()) {
-		    t.mark_segment_to_release(scan_cursor->get_offset().segment);
-		  }
-		  return ecb->submit_transaction_direct(t);
-		});
-	      });
-	    });
-	});
+        std::move(_extents),
+        [this](auto &extents) {
+      return repeat_eagain([this, &extents]() mutable {
+        logger().debug(
+          "SegmentCleaner::gc_reclaim_space: processing {} extents",
+          extents.size());
+        return ecb->with_transaction_intr(
+          Transaction::src_t::CLEANER_RECLAIM,
+          "reclaim_space",
+          [this, &extents](auto& t)
+        {
+          return trans_intr::do_for_each(
+              extents,
+              [this, &t](auto &extent) {
+            auto &[addr, info] = extent;
+            logger().debug(
+              "SegmentCleaner::gc_reclaim_space: checking extent {}",
+              info);
+            return ecb->get_extent_if_live(
+              t,
+              info.type,
+              addr,
+              info.addr,
+              info.len
+            ).si_then([addr=addr, &t, this](CachedExtentRef ext) {
+              if (!ext) {
+                logger().debug(
+                  "SegmentCleaner::gc_reclaim_space: addr {} dead, skipping",
+                  addr);
+                return ExtentCallbackInterface::rewrite_extent_iertr::now();
+              } else {
+                logger().debug(
+                  "SegmentCleaner::gc_reclaim_space: addr {} alive, gc'ing {}",
+                  addr,
+                  *ext);
+                return ecb->rewrite_extent(
+                  t,
+                  ext);
+              }
+            });
+          }).si_then([this, &t] {
+            if (scan_cursor->is_complete()) {
+              t.mark_segment_to_release(scan_cursor->get_segment_id());
+            }
+            return ecb->submit_transaction_direct(t);
+          });
+        });
       });
+    });
   }).safe_then([this] {
     if (scan_cursor->is_complete()) {
       scan_cursor.reset();
     }
   });
+}
+
+SegmentCleaner::init_segments_ret SegmentCleaner::init_segments() {
+  logger().debug("SegmentCleaner::init_segments: {} segments", segments.size());
+  return seastar::do_with(
+    std::vector<std::pair<segment_id_t, segment_header_t>>(),
+    [this](auto& segment_set) {
+    return crimson::do_for_each(
+      segments.begin(),
+      segments.end(),
+      [this, &segment_set](auto& it) {
+	auto segment_id = it.first;
+	return scanner->read_segment_header(
+	  segment_id
+	).safe_then([&segment_set, segment_id, this](auto header) {
+	  logger().debug(
+	    "ExtentReader::init_segments: segment_id={} -- {}",
+	    segment_id, header);
+	  auto s_type = header.get_type();
+	  if (s_type == segment_type_t::NULL_SEG) {
+	    logger().error(
+	      "ExtentReader::init_segments: got null segment, segment_id={} -- {}",
+	      segment_id, header);
+	    ceph_abort();
+	  }
+	  if (s_type == segment_type_t::JOURNAL) {
+	    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
+	  }
+	  init_mark_segment_closed(
+	    segment_id,
+	    header.journal_segment_seq);
+	}).handle_error(
+	  crimson::ct_error::enoent::handle([](auto) {
+	    return init_segments_ertr::now();
+	  }),
+	  crimson::ct_error::enodata::handle([](auto) {
+	    return init_segments_ertr::now();
+	  }),
+	  crimson::ct_error::input_output_error::pass_further{}
+	);
+      }).safe_then([&segment_set] {
+	return seastar::make_ready_future<
+	  std::vector<std::pair<segment_id_t, segment_header_t>>>(
+	    std::move(segment_set));
+      });
+    });
 }
 
 }

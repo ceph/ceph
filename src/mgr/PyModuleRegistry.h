@@ -191,6 +191,11 @@ public:
     }
   }
 
+  bool should_notify(const std::string& name,
+		     const std::string& notify_type) {
+    return modules.at(name)->should_notify(notify_type);
+  }
+
   std::map<std::string, std::string> get_services() const
   {
     ceph_assert(active_modules);

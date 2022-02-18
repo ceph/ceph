@@ -15,6 +15,8 @@
 
 #include <vector>
 
+using namespace std;
+
 void usage() {
   std::cout << "usage: cephfs-mirror [options...]" << std::endl;
   std::cout << "options:\n";
@@ -34,8 +36,7 @@ static void handle_signal(int signum) {
 }
 
 int main(int argc, const char **argv) {
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     ::exit(1);
@@ -81,8 +82,7 @@ int main(int argc, const char **argv) {
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
-  std::vector<const char*> cmd_args;
-  argv_to_vec(argc, argv, cmd_args);
+  auto cmd_args = argv_to_vec(argc, argv);
 
   Messenger *msgr = Messenger::create_client_messenger(g_ceph_context, "client");
   msgr->set_default_policy(Messenger::Policy::lossy_client(0));

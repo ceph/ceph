@@ -22,7 +22,10 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mdcache->mds)
-static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
+
+using namespace std;
+
+static std::ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".scrubstack ";
 }
 
@@ -315,7 +318,7 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
       dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
     } else if (dir->get_version() == 0) {
       dout(20) << __func__ << " barebones " << *dir  << dendl;
-      dir->fetch(gather.new_sub());
+      dir->fetch_keys({}, gather.new_sub());
     } else {
       _enqueue(dir, header, true);
       queued.insert_raw(dir->get_frag());

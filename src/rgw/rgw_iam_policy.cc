@@ -22,7 +22,9 @@ constexpr int dout_subsys = ceph_subsys_rgw;
 }
 
 using std::bitset;
+using std::dec;
 using std::find;
+using std::hex;
 using std::int64_t;
 using std::move;
 using std::pair;
@@ -79,6 +81,7 @@ static const actpair actpairs[] =
  { "s3:GetAccelerateConfiguration", s3GetAccelerateConfiguration },
  { "s3:GetBucketAcl", s3GetBucketAcl },
  { "s3:GetBucketCORS", s3GetBucketCORS },
+ { "s3:GetBucketEncryption", s3GetBucketEncryption },
  { "s3:GetBucketLocation", s3GetBucketLocation },
  { "s3:GetBucketLogging", s3GetBucketLogging },
  { "s3:GetBucketNotification", s3GetBucketNotification },
@@ -111,6 +114,7 @@ static const actpair actpairs[] =
  { "s3:PutAccelerateConfiguration", s3PutAccelerateConfiguration },
  { "s3:PutBucketAcl", s3PutBucketAcl },
  { "s3:PutBucketCORS", s3PutBucketCORS },
+ { "s3:PutBucketEncryption", s3PutBucketEncryption },
  { "s3:PutBucketLogging", s3PutBucketLogging },
  { "s3:PutBucketNotification", s3PutBucketNotification },
  { "s3:PutBucketPolicy", s3PutBucketPolicy },
@@ -149,9 +153,13 @@ static const actpair actpairs[] =
  { "iam:DeleteOIDCProvider", iamDeleteOIDCProvider},
  { "iam:GetOIDCProvider", iamGetOIDCProvider},
  { "iam:ListOIDCProviders", iamListOIDCProviders},
+ { "iam:TagRole", iamTagRole},
+ { "iam:ListRoleTags", iamListRoleTags},
+ { "iam:UntagRole", iamUntagRole},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
+ { "sts:TagSession", stsTagSession},
 };
 
 struct PolicyParser;
@@ -554,12 +562,24 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 	a->account = pp->tenant;
       (w->id == TokenID::Resource ? t->resource : t->notresource)
 	.emplace(std::move(*a));
-    }
-    else
+    } else {
       ldout(cct, 0) << "Supplied resource is discarded: " << string(s, l)
 		    << dendl;
+      return false;
+    }
   } else if (w->kind == TokenKind::cond_key) {
     auto& t = pp->policy.statements.back();
+    if (l > 0 && *s == '$') {
+      if (l >= 2 && *(s+1) == '{') {
+        if (l > 0 && *(s+l-1) == '}') {
+          t.conditions.back().isruntime = true;
+        } else {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
     t.conditions.back().vals.emplace_back(s, l);
 
     // Principals
@@ -671,36 +691,67 @@ ostream& operator <<(ostream& m, const MaskedIP& ip) {
 }
 
 bool Condition::eval(const Environment& env) const {
+  std::vector<std::string> runtime_vals;
   auto i = env.find(key);
   if (op == TokenID::Null) {
     return i == env.end() ? true : false;
   }
 
   if (i == env.end()) {
-    return ifexists;
+    if (op == TokenID::ForAllValuesStringEquals ||
+        op == TokenID::ForAllValuesStringEqualsIgnoreCase ||
+        op == TokenID::ForAllValuesStringLike) {
+      return true;
+    } else {
+      return ifexists;
+    }
+  }
+
+  if (isruntime) {
+    string k = vals.back();
+    k.erase(0,2); //erase $, {
+    k.erase(k.length() - 1, 1); //erase }
+    const auto& it = env.equal_range(k);
+    for (auto itr = it.first; itr != it.second; itr++) {
+      runtime_vals.emplace_back(itr->second);
+    }
   }
   const auto& s = i->second;
 
+  const auto& itr = env.equal_range(key);
+
   switch (op) {
     // String!
+  case TokenID::ForAnyValueStringEquals:
   case TokenID::StringEquals:
-    return orrible(std::equal_to<std::string>(), s, vals);
+    return orrible(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotEquals:
     return orrible(std::not_fn(std::equal_to<std::string>()),
-		   s, vals);
+		   itr, isruntime? runtime_vals : vals);
 
+  case TokenID::ForAnyValueStringEqualsIgnoreCase:
   case TokenID::StringEqualsIgnoreCase:
-    return orrible(ci_equal_to(), s, vals);
+    return orrible(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return orrible(std::not_fn(ci_equal_to()), s, vals);
+    return orrible(std::not_fn(ci_equal_to()), itr, isruntime? runtime_vals : vals);
 
+  case TokenID::ForAnyValueStringLike:
   case TokenID::StringLike:
-    return orrible(string_like(), s, vals);
+    return orrible(string_like(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotLike:
-    return orrible(std::not_fn(string_like()), s, vals);
+    return orrible(std::not_fn(string_like()), itr, isruntime? runtime_vals : vals);
+
+  case TokenID::ForAllValuesStringEquals:
+    return andible(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
+
+  case TokenID::ForAllValuesStringLike:
+    return andible(string_like(), itr, isruntime? runtime_vals : vals);
+
+  case TokenID::ForAllValuesStringEqualsIgnoreCase:
+    return andible(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
     // Numeric
   case TokenID::NumericEquals:
@@ -976,23 +1027,29 @@ ostream& operator <<(ostream& m, const Condition& c) {
 
 Effect Statement::eval(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida,
-		       uint64_t act, const ARN& res, boost::optional<PolicyPrincipal&> princ_type) const {
+		       uint64_t act, boost::optional<const ARN&> res, boost::optional<PolicyPrincipal&> princ_type) const {
 
   if (eval_principal(e, ida, princ_type) == Effect::Deny) {
     return Effect::Pass;
   }
 
-  if (!resource.empty()) {
+  if (res && resource.empty() && notresource.empty()) {
+    return Effect::Pass;
+  }
+  if (!res && (!resource.empty() || !notresource.empty())) {
+    return Effect::Pass;
+  }
+  if (!resource.empty() && res) {
     if (!std::any_of(resource.begin(), resource.end(),
           [&res](const ARN& pattern) {
-            return pattern.match(res);
+            return pattern.match(*res);
           })) {
       return Effect::Pass;
     }
-  } else if (!notresource.empty()) {
+  } else if (!notresource.empty() && res) {
     if (std::any_of(notresource.begin(), notresource.end(),
           [&res](const ARN& pattern) {
-            return pattern.match(res);
+            return pattern.match(*res);
           })) {
       return Effect::Pass;
     }
@@ -1135,6 +1192,12 @@ const char* action_bit_string(uint64_t action) {
 
   case s3PutBucketCORS:
     return "s3:PutBucketCORS";
+
+  case s3GetBucketEncryption:
+    return "s3:GetBucketEncryption";
+
+  case s3PutBucketEncryption:
+    return "s3:PutBucketEncryption";
 
   case s3GetBucketVersioning:
     return "s3:GetBucketVersioning";
@@ -1292,6 +1355,15 @@ const char* action_bit_string(uint64_t action) {
   case iamListOIDCProviders:
     return "iam:ListOIDCProviders";
 
+  case iamTagRole:
+    return "iam:TagRole";
+
+  case iamListRoleTags:
+    return "iam:ListRoleTags";
+
+  case iamUntagRole:
+    return "iam:UntagRole";
+
   case stsAssumeRole:
     return "sts:AssumeRole";
 
@@ -1300,6 +1372,9 @@ const char* action_bit_string(uint64_t action) {
 
   case stsGetSessionToken:
     return "sts:GetSessionToken";
+
+  case stsTagSession:
+    return "sts:TagSession";
   }
   return "s3Invalid";
 }
@@ -1412,7 +1487,7 @@ Policy::Policy(CephContext* cct, const string& tenant,
 
 Effect Policy::eval(const Environment& e,
 		    boost::optional<const rgw::auth::Identity&> ida,
-		    std::uint64_t action, const ARN& resource,
+		    std::uint64_t action, boost::optional<const ARN&> resource,
         boost::optional<PolicyPrincipal&> princ_type) const {
   auto allowed = false;
   for (auto& s : statements) {

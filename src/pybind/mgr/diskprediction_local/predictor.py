@@ -15,11 +15,12 @@ It will return a string to indicate disk failure status: "Good", "Warning",
 
 An example code is as follows:
 
->>> model = disk_failure_predictor.RHDiskFailurePredictor()
->>> status = model.initialize("./models")
->>> if status:
->>>     model.predict(disk_days)
-'Bad'
+>>> model = RHDiskFailurePredictor()
+>>> model.initialize(get_diskfailurepredictor_path() + "/models/redhat")
+>>> vendor = list(RHDiskFailurePredictor.MANUFACTURER_MODELNAME_PREFIXES.keys())[0]
+>>> disk_days = [{'vendor': vendor}]
+>>> model.predict(disk_days)
+'Unknown'
 """
 import os
 import json
@@ -170,12 +171,12 @@ class RHDiskFailurePredictor(Predictor):
         dataset_size = disk_days_attrs.shape[0] - roll_window_size + 1
         gen = (disk_days_attrs[i: i + roll_window_size, ...].mean(axis=0)
                for i in range(dataset_size))
-        means = np.vstack(gen)
+        means = np.vstack(gen)  # type: ignore
 
         # rolling stds generator
         gen = (disk_days_attrs[i: i + roll_window_size, ...].std(axis=0, ddof=1)
                for i in range(dataset_size))
-        stds = np.vstack(gen)
+        stds = np.vstack(gen)  # type: ignore
 
         # coefficient of variation
         cvs = stds / means

@@ -67,10 +67,11 @@ daemon or process startup will proceed.
 Bootstrap options
 -----------------
 
-Because some configuration options affect the process's ability to
-contact the monitors, authenticate, and retrieve the cluster-stored
-configuration, they may need to be stored locally on the node and set
-in a local configuration file.  These options include:
+Some configuration options affect the process's ability to contact the
+monitors, to authenticate, and to retrieve the cluster-stored configuration.
+For this reason, these options might need to be stored locally on the node, and
+set by means of a local configuration file. These options include the
+following:
 
 .. confval:: mon_host
 .. confval:: mon_host_override
@@ -84,20 +85,19 @@ in a local configuration file.  These options include:
   the monitor.  Note that in most cases the default keyring location
   is in the data directory specified above.
 
-In the vast majority of cases the default values of these are
-appropriate, with the exception of the :confval:`mon_host` option that
-identifies the addresses of the cluster's monitors.  When DNS is used
-to identify monitors a local ceph configuration file can be avoided
-entirely.
+In most cases, the default values of these options are suitable. There is one
+exception to this: the :confval:`mon_host` option that identifies the addresses
+of the cluster's monitors.  When DNS is used to identify monitors, a local Ceph
+configuration file can be avoided entirely.
 
 Skipping monitor config
 -----------------------
 
-Any process may be passed the option ``--no-mon-config`` to skip the
-step that retrieves configuration from the cluster monitors.  This is
-useful in cases where configuration is managed entirely via
-configuration files or where the monitor cluster is currently down but
-some maintenance activity needs to be done.
+Pass the option ``--no-mon-config`` to any process to skip the step that
+retrieves configuration information from the cluster monitors. This is useful
+in cases where configuration is managed entirely via configuration files, or
+when the monitor cluster is down and some maintenance activity needs to be
+done.
 
 
 .. _ceph-conf-file:

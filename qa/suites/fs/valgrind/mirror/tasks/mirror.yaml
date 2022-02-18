@@ -7,4 +7,4 @@ overrides:
 tasks:
   - cephfs_test_runner:
       modules:
-        - tasks.cephfs.test_mirroring
+        - tasks.cephfs.test_mirroring.TestMirroring

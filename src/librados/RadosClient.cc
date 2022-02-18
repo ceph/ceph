@@ -50,6 +50,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librados: "
 
+using std::ostringstream;
+using std::string;
+using std::map;
+using std::vector;
+
 namespace bc = boost::container;
 namespace bs = boost::system;
 namespace ca = ceph::async;

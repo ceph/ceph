@@ -37,8 +37,8 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 install(FILES
-  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_argparse.py
-  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_daemon.py
+  ceph_argparse.py
+  ceph_daemon.py
   DESTINATION ${PYTHON3_INSTDIR})
 
 if(WITH_MGR)

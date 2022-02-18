@@ -23,9 +23,8 @@ from ..services.iscsi_config import IscsiGatewayDoesNotExist
 from ..services.rbd import format_bitmask
 from ..services.tcmu_service import TcmuService
 from ..tools import TaskManager, str_to_bool
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, Task, UiApiController, \
-    UpdatePermission
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UIRouter, UpdatePermission
 
 ISCSI_SCHEMA = {
     'user': (str, 'username'),
@@ -35,7 +34,7 @@ ISCSI_SCHEMA = {
 }
 
 
-@UiApiController('/iscsi', Scope.ISCSI)
+@UIRouter('/iscsi', Scope.ISCSI)
 class IscsiUi(BaseController):
 
     REQUIRED_CEPH_ISCSI_CONFIG_MIN_VERSION = 10
@@ -199,8 +198,8 @@ class IscsiUi(BaseController):
         return result_gateways
 
 
-@ApiController('/iscsi', Scope.ISCSI)
-@ControllerDoc("Iscsi Management API", "Iscsi")
+@APIRouter('/iscsi', Scope.ISCSI)
+@APIDoc("Iscsi Management API", "Iscsi")
 class Iscsi(BaseController):
     @Endpoint('GET', 'discoveryauth')
     @ReadPermission
@@ -256,8 +255,8 @@ def iscsi_target_task(name, metadata, wait_for=2.0):
     return Task("iscsi/target/{}".format(name), metadata, wait_for)
 
 
-@ApiController('/iscsi/target', Scope.ISCSI)
-@ControllerDoc("Get Iscsi Target Details", "IscsiTarget")
+@APIRouter('/iscsi/target', Scope.ISCSI)
+@APIDoc("Get Iscsi Target Details", "IscsiTarget")
 class IscsiTarget(RESTController):
 
     def list(self):

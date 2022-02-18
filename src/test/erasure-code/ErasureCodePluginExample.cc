@@ -21,6 +21,8 @@
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeExample.h"
 
+using namespace std;
+
 class ErasureCodePluginExample : public ErasureCodePlugin {
 public:
   int factory(const std::string &directory,

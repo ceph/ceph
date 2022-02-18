@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from . import CLICommandTestMixin, ControllerTestCase  # pylint: disable=no-name-in-module
+from ..tests import CLICommandTestMixin, ControllerTestCase
 
 
 class TestPluginDebug(ControllerTestCase, CLICommandTestMixin):

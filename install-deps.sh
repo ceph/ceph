@@ -19,7 +19,7 @@ mkdir -p $DIR
 if test $(id -u) != 0 ; then
     SUDO=sudo
 fi
-export LC_ALL=C # the following is vulnerable to i18n
+export LC_ALL=en_US.UTF-8 # the following is vulnerable to i18n
 
 ARCH=$(uname -m)
 
@@ -29,6 +29,8 @@ function munge_ceph_spec_in {
     local with_zbd=$1
     shift
     local for_make_check=$1
+    shift
+    local with_jaeger=$1
     shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
@@ -259,7 +261,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/libtool \
         devel/google-perftools \
         lang/cython \
-        devel/py-virtualenv \
         databases/leveldb \
         net/openldap24-client \
         archivers/snappy \
@@ -305,6 +306,8 @@ else
     [ $WITH_JAEGER ] && with_jaeger=true || with_jaeger=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
+    [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
+    motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
@@ -351,21 +354,45 @@ else
 	if $with_seastar; then
 	    build_profiles+=",pkg.ceph.crimson"
 	fi
+	if $with_jaeger; then
+	    build_profiles+=",pkg.ceph.jaeger"
+	fi
+
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
 	      --build-profiles "${build_profiles#,}" \
 	      --install --remove \
 	      --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
+
+        # for rgw motr backend build checks
+        if ! dpkg -l cortx-motr-dev &> /dev/null &&
+            { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
+            deb_arch=$(dpkg --print-architecture)
+            motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
+            motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
+            $SUDO curl -sL -o/var/cache/apt/archives/$motr_pkg $motr_pkgs_url/$motr_pkg
+            $SUDO curl -sL -o/var/cache/apt/archives/$motr_dev_pkg $motr_pkgs_url/$motr_dev_pkg
+            # For some reason libfabric pkg is not available in arm64 version
+            # of Ubuntu 20.04 (Focal Fossa), so we borrow it from more recent
+            # versions for now.
+            if [[ "$deb_arch" == 'arm64' ]]; then
+                lf_pkg='libfabric1_1.11.0-2_arm64.deb'
+                $SUDO curl -sL -o/var/cache/apt/archives/$lf_pkg http://ports.ubuntu.com/pool/universe/libf/libfabric/$lf_pkg
+                $SUDO apt-get install -y /var/cache/apt/archives/$lf_pkg
+            fi
+            $SUDO apt-get install -y /var/cache/apt/archives/{$motr_pkg,$motr_dev_pkg}
+            $SUDO apt-get install -y libisal-dev
+        fi
         ;;
-    centos|fedora|rhel|ol|virtuozzo)
+    rocky|centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
                 ;;
-            centos|rhel|ol|virtuozzo)
+            rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO dnf install -y dnf-utils
                 rpm --quiet --query epel-release || \
@@ -385,19 +412,27 @@ else
                 fi
                 ;;
         esac
-        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $with_jaeger $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -qi "error:" && exit 1
+        # for rgw motr backend build checks
+        if ! rpm --quiet -q cortx-motr-devel &&
+              { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
+            $SUDO dnf install -y \
+                  "$motr_pkgs_url/isa-l-2.30.0-1.el7.${ARCH}.rpm" \
+                  "$motr_pkgs_url/cortx-motr-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm" \
+                  "$motr_pkgs_url/cortx-motr-devel-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm"
+        fi
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
-        munge_ceph_spec_in $with_seastar false $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar false $for_make_check $with_jaeger $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)
@@ -415,9 +450,12 @@ function populate_wheelhouse() {
     # of pip matters when it comes to using wheel packages
     PIP_OPTS="--timeout 300 --exists-action i"
     pip $PIP_OPTS $install \
-      'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
+      'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
     if test $# != 0 ; then
-        pip $PIP_OPTS $install $@ || return 1
+        # '--use-feature=fast-deps --use-deprecated=legacy-resolver' added per
+        # https://github.com/pypa/pip/issues/9818 These should be able to be
+        # removed at some point in the future.
+        pip --use-feature=fast-deps --use-deprecated=legacy-resolver $PIP_OPTS $install $@ || return 1
     fi
 }
 
@@ -426,7 +464,7 @@ function activate_virtualenv() {
     local env_dir=$top_srcdir/install-deps-python3
 
     if ! test -d $env_dir ; then
-        virtualenv --python=python3 ${env_dir}
+        python3 -m venv ${env_dir}
         . $env_dir/bin/activate
         if ! populate_wheelhouse install ; then
             rm -rf $env_dir

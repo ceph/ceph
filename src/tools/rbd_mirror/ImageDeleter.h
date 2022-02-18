@@ -18,6 +18,7 @@
 #include "include/utime.h"
 #include "common/AsyncOpTracker.h"
 #include "common/ceph_mutex.h"
+#include "common/Timer.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 #include <atomic>
@@ -29,7 +30,6 @@
 
 class AdminSocketHook;
 class Context;
-class SafeTimer;
 namespace librbd {
 struct ImageCtx;
 namespace asio { struct ContextWQ; }

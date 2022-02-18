@@ -59,7 +59,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t size = strict_iecstrtoll(s.c_str(), &parse_error);
+  uint64_t size = strict_iecstrtoll(s, &parse_error);
   if (!parse_error.empty()) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -188,7 +188,7 @@ void rbd_bencher_completion(void *vc, void *pc)
     std::cout << "write error: " << cpp_strerror(ret) << std::endl;
     exit(ret < 0 ? -ret : ret);
   } else if (b->io_type == IO_TYPE_READ && (unsigned int)ret != b->io_size) {
-    cout << "read error: " << cpp_strerror(ret) << std::endl;
+    std::cout << "read error: " << cpp_strerror(ret) << std::endl;
     exit(ret < 0 ? -ret : ret);
   }
   b->lock.lock();
@@ -239,7 +239,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
        << " type " << (io_type == IO_TYPE_READ ? "read" :
                        io_type == IO_TYPE_WRITE ? "write" : "readwrite")
        << (io_type == IO_TYPE_RW ? " read:write=" +
-           to_string(read_proportion) + ":" + to_string(100 - read_proportion) : "")
+           std::to_string(read_proportion) + ":" +
+	   std::to_string(100 - read_proportion) : "")
        << " io_size " << io_size
        << " io_threads " << io_threads
        << " bytes " << io_bytes
@@ -263,10 +264,10 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   srand(time(NULL) % (unsigned long) -1);
 
   coarse_mono_time start = coarse_mono_clock::now();
-  chrono::duration<double> last = chrono::duration<double>::zero();
-  unsigned ios = 0;
+  std::chrono::duration<double> last = std::chrono::duration<double>::zero();
+  uint64_t ios = 0;
 
-  vector<uint64_t> thread_offset;
+  std::vector<uint64_t> thread_offset;
   uint64_t i;
   uint64_t seq_chunk_length = (size / io_size / io_threads) * io_size;;
 
@@ -374,8 +375,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     }
 
     coarse_mono_time now = coarse_mono_clock::now();
-    chrono::duration<double> elapsed = now - start;
-    if (last == chrono::duration<double>::zero()) {
+    std::chrono::duration<double> elapsed = now - start;
+    if (last == std::chrono::duration<double>::zero()) {
       last = elapsed;
     } else if ((int)elapsed.count() != (int)last.count()) {
       time_acc((elapsed - last).count());
@@ -388,7 +389,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       std::cout.width(5);
       std::cout << (int)elapsed.count();
       std::cout.width(10);
-      std::cout << (int)(ios - io_threads);
+      std::cout << ios - io_threads;
       std::cout.width(10);
       std::cout << boost::accumulators::rolling_sum(ios_acc) / time_sum;
       std::cout.width(10);
@@ -408,7 +409,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   }
 
   coarse_mono_time now = coarse_mono_clock::now();
-  chrono::duration<double> elapsed = now - start;
+  std::chrono::duration<double> elapsed = now - start;
 
   std::cout << "elapsed: " << (int)elapsed.count() << "   "
             << "ops: " << ios << "   "
@@ -437,7 +438,7 @@ void add_bench_common_options(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 
   options->add_options()
-    ("io-size", po::value<Size>(), "IO size (in B/K/M/G/T) [default: 4K]")
+    ("io-size", po::value<Size>(), "IO size (in B/K/M/G) (< 4G) [default: 4K]")
     ("io-threads", po::value<uint32_t>(), "ios in flight [default: 16]")
     ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T) [default: 1G]")
     ("io-pattern", po::value<IOPattern>(), "IO pattern (rand, seq, or full-seq) [default: seq]")

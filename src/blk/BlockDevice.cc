@@ -118,8 +118,11 @@ BlockDevice::detect_device_type(const std::string& path)
     return block_device_t::hm_smr;
   }
 #endif
-
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   return block_device_t::aio;
+#else
+  return block_device_t::unknown;
+#endif
 }
 
 BlockDevice::block_device_t

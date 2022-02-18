@@ -90,11 +90,11 @@ public:
     return get_decoratee().get_identity_type();
   }
 
-  string get_acct_name() const override {
+  std::string get_acct_name() const override {
     return get_decoratee().get_acct_name();
   }
 
-  string get_subuser() const override {
+  std::string get_subuser() const override {
     return get_decoratee().get_subuser();
   }
 
@@ -107,7 +107,7 @@ public:
     get_decoratee().to_str(out);
   }
 
-  string get_role_tenant() const override {     /* in/out */
+  std::string get_role_tenant() const override {     /* in/out */
     return get_decoratee().get_role_tenant();
   }
 

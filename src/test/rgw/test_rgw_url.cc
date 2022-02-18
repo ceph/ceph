@@ -19,6 +19,18 @@ TEST(TestURL, SimpleAuthority)
     EXPECT_STREQ(host.c_str(), "example.com"); 
 }
 
+TEST(TestURL, SimpleAuthority_1)
+{
+    std::string host;
+    std::string user;
+    std::string password;
+    const std::string url = "http://example.com/";
+    ASSERT_TRUE(parse_url_authority(url, host, user, password));
+    ASSERT_TRUE(user.empty());
+    ASSERT_TRUE(password.empty());
+    EXPECT_STREQ(host.c_str(), "example.com");
+}
+
 TEST(TestURL, IPAuthority)
 {
     std::string host;

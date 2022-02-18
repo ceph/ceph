@@ -5,6 +5,7 @@ import os
 from textwrap import dedent
 from ceph_volume.util import system, disk, merge_dict
 from ceph_volume.util.device import Device
+from ceph_volume.util.arg_validators import valid_osd_id
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
 from ceph_volume.systemd import systemctl
@@ -275,7 +276,7 @@ class Migrate(object):
     # (in the order of precedence, stop on the first match)
     # if source list has DB volume - target device replaces it.
     # if source list has WAL volume - target device replace it.
-    # if source list has slow volume only - operation isn’t permitted,
+    # if source list has slow volume only - operation isn't permitted,
     #  requires explicit allocation via new-db/new-wal command.detects which
     def get_target_type_by_source(self, devices):
         ret = None
@@ -400,7 +401,7 @@ class Migrate(object):
 
     @decorators.needs_root
     def migrate_osd(self):
-        if self.args.osd_id:
+        if self.args.osd_id and not self.args.no_systemd:
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
                 mlogger.error('OSD is running, stop it with: '
@@ -413,7 +414,7 @@ class Migrate(object):
         target_lv = api.get_lv_by_fullname(self.args.target)
         if not target_lv:
             mlogger.error(
-                'Target path "{}" is not a Logical Volume'.formaat(
+                'Target path "{}" is not a Logical Volume'.format(
                     self.args.target))
             raise SystemExit(
                 'Unable to migrate to : {}'.format(self.args.target))
@@ -436,7 +437,47 @@ class Migrate(object):
                 devices,
                 target_lv)
 
-    def parse_argv(self):
+    def make_parser(self, prog, sub_command_help):
+        parser = argparse.ArgumentParser(
+            prog=prog,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=sub_command_help,
+        )
+
+        parser.add_argument(
+            '--osd-id',
+            required=True,
+            help='Specify an OSD ID to detect associated devices for zapping',
+            type=valid_osd_id
+        )
+
+        parser.add_argument(
+            '--osd-fsid',
+            required=True,
+            help='Specify an OSD FSID to detect associated devices for zapping',
+        )
+        parser.add_argument(
+            '--target',
+            required=True,
+            help='Specify target Logical Volume (LV) to migrate data to',
+        )
+        parser.add_argument(
+            '--from',
+            nargs='*',
+            dest='from_',
+            required=True,
+            choices=['data', 'db', 'wal'],
+            help='Copy BlueFS data from DB device',
+        )
+        parser.add_argument(
+            '--no-systemd',
+            dest='no_systemd',
+            action='store_true',
+            help='Skip checking OSD systemd unit',
+        )
+        return parser
+
+    def main(self):
         sub_command_help = dedent("""
         Moves BlueFS data from source volume(s) to the target one, source
         volumes (except the main (i.e. data or block) one) are removed on
@@ -479,44 +520,15 @@ class Migrate(object):
             ceph-volume lvm migrate --osd-id 1 --osd-fsid <uuid> --from db wal --target vgname/data
 
         """)
-        parser = argparse.ArgumentParser(
-            prog='ceph-volume lvm migrate',
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            description=sub_command_help,
-        )
 
-        parser.add_argument(
-            '--osd-id',
-            required=True,
-            help='Specify an OSD ID to detect associated devices for zapping',
-        )
-
-        parser.add_argument(
-            '--osd-fsid',
-            required=True,
-            help='Specify an OSD FSID to detect associated devices for zapping',
-        )
-        parser.add_argument(
-            '--target',
-            required=True,
-            help='Specify target Logical Volume (LV) to migrate data to',
-        )
-        parser.add_argument(
-            '--from',
-            nargs='*',
-            dest='from_',
-            required=True,
-            choices=['data', 'db', 'wal'],
-            help='Copy BlueFS data from DB device',
-        )
+        parser = self.make_parser('ceph-volume lvm migrate', sub_command_help)
 
         if len(self.argv) == 0:
             print(sub_command_help)
             return
+
         self.args = parser.parse_args(self.argv)
 
-    def main(self):
-        self.parse_argv()
         self.migrate_osd()
 
 class NewVolume(object):
@@ -535,6 +547,7 @@ class NewVolume(object):
             '--osd-id',
             required=True,
             help='Specify an OSD ID to attach new volume to',
+            type=valid_osd_id,
         )
 
         parser.add_argument(
@@ -546,6 +559,12 @@ class NewVolume(object):
             '--target',
             required=True,
             help='Specify target Logical Volume (LV) to attach',
+        )
+        parser.add_argument(
+            '--no-systemd',
+            dest='no_systemd',
+            action='store_true',
+            help='Skip checking OSD systemd unit',
         )
         return parser
 
@@ -587,7 +606,7 @@ class NewVolume(object):
 
     @decorators.needs_root
     def new_volume(self):
-        if self.args.osd_id:
+        if self.args.osd_id and not self.args.no_systemd:
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
                 mlogger.error('OSD ID is running, stop it with:'

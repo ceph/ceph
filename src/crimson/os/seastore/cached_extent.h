@@ -17,9 +17,13 @@
 
 namespace crimson::os::seastore {
 
+class ool_record_t;
 class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
+class SegmentedAllocator;
+class TransactionManager;
+class ExtentPlacementManager;
 
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
@@ -79,6 +83,7 @@ class CachedExtent : public boost::intrusive_ref_counter<
   enum class extent_state_t : uint8_t {
     INITIAL_WRITE_PENDING, // In Transaction::write_set and fresh_block_list
     MUTATION_PENDING,      // In Transaction::write_set and mutated_block_list
+    CLEAN_PENDING,         // CLEAN, but not yet read out
     CLEAN,                 // In Cache::extent_index, Transaction::read_set
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
@@ -166,10 +171,14 @@ public:
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
 	<< ", paddr=" << get_paddr()
+	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count();
-    print_detail(out);
+    if (state != extent_state_t::INVALID &&
+        state != extent_state_t::CLEAN_PENDING) {
+      print_detail(out);
+    }
     return out << ")";
   }
 
@@ -248,7 +257,8 @@ public:
   bool is_clean() const {
     ceph_assert(is_valid());
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
-      state == extent_state_t::CLEAN;
+           state == extent_state_t::CLEAN ||
+           state == extent_state_t::CLEAN_PENDING;
   }
 
   /// Returns true if extent is dirty (has deltas on disk)
@@ -265,6 +275,11 @@ public:
   /// Returns true if extent or prior_instance has been invalidated
   bool has_been_invalidated() const {
     return !is_valid() || (prior_instance && !prior_instance->is_valid());
+  }
+
+  /// Returns true if extent is a plcaeholder
+  bool is_placeholder() const {
+    return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
   }
 
   /// Return journal location of oldest relevant delta, only valid while DIRTY
@@ -320,6 +335,12 @@ public:
 
   virtual ~CachedExtent();
 
+  /// hint for allocators
+  placement_hint_t hint = placement_hint_t::NUM_HINTS;
+
+  bool is_inline() const {
+    return poffset.is_relative();
+  }
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -341,6 +362,10 @@ private:
   friend class ExtentIndex;
   friend class Transaction;
 
+  bool is_linked() {
+    return extent_index_hook.is_linked();
+  }
+
   /// hook for intrusive ref list (mainly dirty or lru list)
   boost::intrusive::list_member_hook<> primary_ref_list_hook;
   using primary_ref_list_member_options = boost::intrusive::member_hook<
@@ -350,7 +375,6 @@ private:
   using list = boost::intrusive::list<
     CachedExtent,
     primary_ref_list_member_options>;
-  friend class retired_extent_gate_t;
 
   /**
    * dirty_from_or_retired_at
@@ -457,6 +481,10 @@ protected:
     }
   }
 
+  friend class crimson::os::seastore::ool_record_t;
+  friend class crimson::os::seastore::SegmentedAllocator;
+  friend class crimson::os::seastore::TransactionManager;
+  friend class crimson::os::seastore::ExtentPlacementManager;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
@@ -515,7 +543,7 @@ class ExtentIndex {
   friend class Cache;
   CachedExtent::index extent_index;
 public:
-  auto get_overlap(paddr_t addr, segment_off_t len) {
+  auto get_overlap(paddr_t addr, seastore_off_t len) {
     auto bottom = extent_index.upper_bound(addr, paddr_cmp());
     if (bottom != extent_index.begin())
       --bottom;
@@ -531,12 +559,18 @@ public:
   }
 
   void clear() {
-    extent_index.clear();
+    struct cached_extent_disposer {
+      void operator() (CachedExtent* extent) {
+	extent->parent_index = nullptr;
+      }
+    };
+    extent_index.clear_and_dispose(cached_extent_disposer());
     bytes = 0;
   }
 
   void insert(CachedExtent &extent) {
     // sanity check
+    ceph_assert(!extent.parent_index);
     auto [a, b] = get_overlap(
       extent.get_paddr(),
       extent.get_length());
@@ -551,12 +585,13 @@ public:
 
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
-    auto erased = extent_index.erase(extent);
+    assert(extent.is_linked());
+    [[maybe_unused]] auto erased = extent_index.erase(
+      extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
 
-    if (erased) {
-      bytes -= extent.get_length();
-    }
+    assert(erased);
+    bytes -= extent.get_length();
   }
 
   void replace(CachedExtent &to, CachedExtent &from) {
@@ -619,89 +654,6 @@ std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
 using lba_pin_list_t = std::list<LBAPinRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
-
-/**
- * retired_extent_gate_t
- *
- * We need to keep each retired extent in memory until all transactions
- * that could still reference it has completed.  live_tokens tracks the
- * set of tokens (which will be embedded in Transaction's) still live
- * in order of the commit after which it was created.  retired_extents
- * lists retired extents ordered by the commit at which they were
- * retired.
- */
-class retired_extent_gate_t {
-public:
-  class token_t {
-    friend class retired_extent_gate_t;
-    retired_extent_gate_t *parent = nullptr;
-    journal_seq_t created_after;
-
-    boost::intrusive::list_member_hook<> list_hook;
-    using list_hook_options = boost::intrusive::member_hook<
-      token_t,
-      boost::intrusive::list_member_hook<>,
-      &token_t::list_hook>;
-    using registry =  boost::intrusive::list<
-      token_t,
-      list_hook_options>;
-  public:
-    token_t(journal_seq_t created_after) : created_after(created_after) {}
-
-    void drop_self();
-    void add_self();
-
-    void reset(journal_seq_t _created_after) {
-      drop_self();
-      created_after = _created_after;
-      add_self();
-    }
-
-    ~token_t() {
-      if (parent) {
-	drop_self();
-	parent = nullptr;
-      }
-    }
-  };
-
-  void prune() {
-    journal_seq_t prune_to = live_tokens.empty() ?
-      JOURNAL_SEQ_MAX : live_tokens.front().created_after;
-    while (!retired_extents.empty() &&
-	   prune_to > retired_extents.front().get_retired_at()) {
-      auto ext = &retired_extents.front();
-      retired_extents.pop_front();
-      intrusive_ptr_release(ext);
-    }
-  }
-
-  void add_token(token_t &t) {
-    t.parent = this;
-    t.add_self();
-  }
-
-  void add_extent(CachedExtent &extent) {
-    intrusive_ptr_add_ref(&extent);
-    retired_extents.push_back(extent);
-  }
-
-private:
-  token_t::registry live_tokens;
-  CachedExtent::list retired_extents;
-};
-
-inline void retired_extent_gate_t::token_t::add_self() {
-  assert(parent);
-  parent->live_tokens.push_back(*this);
-}
-
-inline void retired_extent_gate_t::token_t::drop_self() {
-  assert(parent);
-  parent->live_tokens.erase(
-    parent->live_tokens.s_iterator_to(*this));
-  parent->prune();
-}
 
 /**
  * RetiredExtentPlaceholder

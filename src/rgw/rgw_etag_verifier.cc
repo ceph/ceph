@@ -2,13 +2,14 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_etag_verifier.h"
+#include "rgw_obj_manifest.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::putobj {
 
 int create_etag_verifier(const DoutPrefixProvider *dpp, 
-                         CephContext* cct, DataProcessor* filter,
+                         CephContext* cct, rgw::sal::DataProcessor* filter,
                          const bufferlist& manifest_bl,
                          const std::optional<RGWCompressionInfo>& compression,
                          etag_verifier_ptr& verifier)

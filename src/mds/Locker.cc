@@ -35,6 +35,9 @@
 #undef dout_prefix
 #define dout_context g_ceph_context
 #define dout_prefix _prefix(_dout, mds)
+
+using namespace std;
+
 static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".locker ";
 }
@@ -1321,7 +1324,7 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
     if (in->try_drop_loner()) {
       need_issue = true;
       if (in->get_wanted_loner() >= 0) {
-	dout(10) << "eval end set loner to client." << in->get_loner() << dendl;
+	dout(10) << "eval end set loner to client." << in->get_wanted_loner() << dendl;
 	bool ok = in->try_set_loner();
 	ceph_assert(ok);
 	mask = -1;
@@ -3714,6 +3717,8 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();
     }
+    if (m->fscrypt_file.size())
+      pi->fscrypt_file = m->fscrypt_file;
   }
   // auth
   if (dirty & CEPH_CAP_AUTH_EXCL) {
@@ -3741,6 +3746,8 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->btime = m->get_btime();
     }
+    if (m->fscrypt_auth.size())
+      pi->fscrypt_auth = m->fscrypt_auth;
   }
 }
 

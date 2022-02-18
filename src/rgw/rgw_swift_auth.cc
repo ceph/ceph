@@ -27,6 +27,7 @@
 
 #define DEFAULT_SWIFT_PREFIX "/swift"
 
+using namespace std;
 using namespace ceph::crypto;
 
 
@@ -460,7 +461,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
                                            extract_swift_subuser(swift_user),
-                                           boost::none);
+                                           std::nullopt);
   return result_t::grant(std::move(apl));
 }
 
@@ -614,7 +615,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
                                            extract_swift_subuser(swift_user),
-                                           boost::none);
+                                           std::nullopt);
   return result_t::grant(std::move(apl));
 }
 

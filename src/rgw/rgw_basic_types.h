@@ -82,15 +82,15 @@ struct rgw_user {
     size_t pos = str.find('$');
     if (pos != std::string::npos) {
       tenant = str.substr(0, pos);
-      string_view sv = str;
-      string_view ns_id = sv.substr(pos + 1);
+      std::string_view sv = str;
+      std::string_view ns_id = sv.substr(pos + 1);
       size_t ns_pos = ns_id.find('$');
       if (ns_pos != std::string::npos) {
-        ns = string(ns_id.substr(0, ns_pos));
-        id = string(ns_id.substr(ns_pos + 1));
+        ns = std::string(ns_id.substr(0, ns_pos));
+        id = std::string(ns_id.substr(ns_pos + 1));
       } else {
         ns.clear();
-        id = string(ns_id);
+        id = std::string(ns_id);
       }
     } else {
       tenant.clear();
@@ -510,9 +510,22 @@ inline std::ostream& operator<<(std::ostream& os, const rgw_zone_id& zid) {
   return os;
 }
 
-void encode_json_impl(const char *name, const rgw_zone_id& zid, ceph::Formatter *f);
-void decode_json_obj(rgw_zone_id& zid, JSONObj *obj);
+struct obj_version;
+struct rgw_placement_rule;
+struct RGWAccessKey;
+class RGWUserCaps;
 
+extern void encode_json(const char *name, const obj_version& v, Formatter *f);
+extern void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
+extern void encode_json(const char *name, const rgw_pool& pool, Formatter *f);
+extern void encode_json(const char *name, const rgw_placement_rule& r, Formatter *f);
+extern void encode_json_impl(const char *name, const rgw_zone_id& zid, ceph::Formatter *f);
+extern void encode_json_plain(const char *name, const RGWAccessKey& val, Formatter *f);
+
+extern void decode_json_obj(obj_version& v, JSONObj *obj);
+extern void decode_json_obj(rgw_zone_id& zid, JSONObj *obj);
+extern void decode_json_obj(rgw_pool& pool, JSONObj *obj);
+extern void decode_json_obj(rgw_placement_rule& v, JSONObj *obj);
 
 // Represents an identity. This is more wide-ranging than a
 // 'User'. Its purposes is to be matched against by an
@@ -599,11 +612,11 @@ public:
     return idp_url;
   }
 
-  const string& get_role_session() const {
+  const std::string& get_role_session() const {
     return u.id;
   }
 
-  const string& get_role() const {
+  const std::string& get_role() const {
     return u.id;
   }
 

@@ -30,6 +30,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
+using namespace std;
+
 namespace {
 class SessionMapIOContext : public MDSIOContextBase
 {

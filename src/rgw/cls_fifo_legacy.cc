@@ -35,7 +35,6 @@
 #include "cls_fifo_legacy.h"
 
 namespace rgw::cls::fifo {
-static constexpr auto dout_subsys = ceph_subsys_objclass;
 namespace cb = ceph::buffer;
 namespace fifo = rados::cls::fifo;
 
@@ -404,7 +403,7 @@ std::optional<marker> FIFO::to_marker(std::string_view s)
   }
 
   auto pos = s.find(':');
-  if (pos == string::npos) {
+  if (pos == s.npos) {
     return std::nullopt;
   }
 
@@ -432,22 +431,23 @@ std::string FIFO::generate_tag() const
 }
 
 
-int FIFO::apply_update(fifo::info* info,
+int FIFO::apply_update(const DoutPrefixProvider *dpp,
+                       fifo::info* info,
 		       const fifo::objv& objv,
 		       const fifo::update& update,
 		       std::uint64_t tid)
 {
-  ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " entering: tid=" << tid << dendl;
   std::unique_lock l(m);
   if (objv != info->version) {
-    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " version mismatch, canceling: tid=" << tid << dendl;
     return -ECANCELED;
   }
   auto err = info->apply_update(update);
   if (err) {
-    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " error applying update: " << *err << " tid=" << tid << dendl;
     return -ECANCELED;
   }
@@ -470,7 +470,7 @@ int FIFO::_update_meta(const DoutPrefixProvider *dpp, const fifo::update& update
   if (r >= 0 || r == -ECANCELED) {
     canceled = (r == -ECANCELED);
     if (!canceled) {
-      r = apply_update(&info, version, update, tid);
+      r = apply_update(dpp, &info, version, update, tid);
       if (r < 0) canceled = true;
     }
     if (canceled) {
@@ -507,7 +507,7 @@ struct Updater : public Completion<Updater> {
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			 << " entering: tid=" << tid << dendl;
     if (reread)
-      handle_reread(std::move(p), r);
+      handle_reread(dpp, std::move(p), r);
     else
       handle_update(dpp, std::move(p), r);
   }
@@ -524,7 +524,7 @@ struct Updater : public Completion<Updater> {
     }
     bool canceled = (r == -ECANCELED);
     if (!canceled) {
-      int r = fifo->apply_update(&fifo->info, version, update, tid);
+      int r = fifo->apply_update(dpp, &fifo->info, version, update, tid);
       if (r < 0) {
 	ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			     << " update failed, marking canceled: r=" << r
@@ -544,8 +544,8 @@ struct Updater : public Completion<Updater> {
     complete(std::move(p), 0);
   }
 
-  void handle_reread(Ptr&& p, int r) {
-    ldout(fifo->cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+  void handle_reread(const DoutPrefixProvider *dpp, Ptr&& p, int r) {
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			 << " handling async read_meta: tid="
 			 << tid << dendl;
     if (r < 0 && pcanceled) {
@@ -554,11 +554,11 @@ struct Updater : public Completion<Updater> {
       *pcanceled = true;
     }
     if (r < 0) {
-      lderr(fifo->cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		       << " failed dispatching read_meta: r=" << r << " tid="
 		       << tid << dendl;
     } else {
-      ldout(fifo->cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+      ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			   << " completing: tid=" << tid << dendl;
     }
     complete(std::move(p), r);
@@ -1137,12 +1137,12 @@ int FIFO::trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t of
   return 0;
 }
 
-void FIFO::trim_part(int64_t part_num, uint64_t ofs,
+void FIFO::trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t ofs,
 		     std::optional<std::string_view> tag,
 		     bool exclusive, std::uint64_t tid,
 		     lr::AioCompletion* c)
 {
-  ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " entering: tid=" << tid << dendl;
   lr::ObjectWriteOperation op;
   std::unique_lock l(m);
@@ -1222,7 +1222,7 @@ int FIFO::read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_y
   std::uint32_t _phs;
   std::uint32_t _peo;
 
-  auto r = get_meta(dpp, ioctx, oid, nullopt, &_info, &_phs, &_peo, tid, y);
+  auto r = get_meta(dpp, ioctx, oid, std::nullopt, &_info, &_phs, &_peo, tid, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " get_meta failed: r=" << r << " tid=" << tid << dendl;
@@ -1431,13 +1431,13 @@ struct Pusher : public Completion<Pusher> {
   std::uint64_t tid;
   bool new_heading = false;
 
-  void prep_then_push(Ptr&& p, const unsigned successes) {
+  void prep_then_push(const DoutPrefixProvider *dpp, Ptr&& p, const unsigned successes) {
     std::unique_lock l(f->m);
     auto max_part_size = f->info.params.max_part_size;
     auto part_entry_overhead = f->part_entry_overhead;
     l.unlock();
 
-    ldout(f->cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		      << " preparing push: remaining=" << remaining.size()
 		      << " batch=" << batch.size() << " i=" << i
 		      << " tid=" << tid << dendl;
@@ -1470,7 +1470,7 @@ struct Pusher : public Completion<Pusher> {
       batch.push_back(std::move(remaining.front()));
       remaining.pop_front();
     }
-    ldout(f->cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		      << " prepared push: remaining=" << remaining.size()
 		      << " batch=" << batch.size() << " i=" << i
 		      << " batch_len=" << batch_len
@@ -1503,7 +1503,7 @@ struct Pusher : public Completion<Pusher> {
 	return;
       }
       i = 0; // We've made forward progress, so reset the race counter!
-      prep_then_push(std::move(p), r);
+      prep_then_push(dpp, std::move(p), r);
     } else {
       if (r < 0) {
 	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -1513,14 +1513,14 @@ struct Pusher : public Completion<Pusher> {
 	return;
       }
       new_heading = false;
-      handle_new_head(std::move(p), r);
+      handle_new_head(dpp, std::move(p), r);
     }
   }
 
-  void handle_new_head(Ptr&& p, int r) {
+  void handle_new_head(const DoutPrefixProvider *dpp, Ptr&& p, int r) {
     if (r == -ECANCELED) {
       if (p->i == MAX_RACE_RETRIES) {
-	lderr(f->cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		      << " canceled too many times, giving up: tid=" << tid << dendl;
 	complete(std::move(p), -ECANCELED);
 	return;
@@ -1532,7 +1532,7 @@ struct Pusher : public Completion<Pusher> {
     }
 
     if (p->batch.empty()) {
-      prep_then_push(std::move(p), 0);
+      prep_then_push(dpp, std::move(p), 0);
       return;
     } else {
       push(std::move(p));
@@ -1580,7 +1580,7 @@ void FIFO::push(const DoutPrefixProvider *dpp, const std::vector<cb::list>& data
 		   << " need new head tid=" << tid << dendl;
     p->new_head(dpp, std::move(p));
   } else {
-    p->prep_then_push(std::move(p), 0);
+    p->prep_then_push(dpp, std::move(p), 0);
   }
 }
 
@@ -1839,12 +1839,12 @@ struct Trimmer : public Completion<Trimmer> {
       if (pn < part_num) {
 	ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		       << " pn=" << pn << " tid=" << tid << dendl;
-	fifo->trim_part(pn++, max_part_size, std::nullopt,
+	fifo->trim_part(dpp, pn++, max_part_size, std::nullopt,
 			false, tid, call(std::move(p)));
       } else {
 	update = true;
 	canceled = tail_part_num < part_num;
-	fifo->trim_part(part_num, ofs, std::nullopt, exclusive, tid,
+	fifo->trim_part(dpp, part_num, ofs, std::nullopt, exclusive, tid,
 			call(std::move(p)));
       }
       return;
@@ -1872,7 +1872,7 @@ struct Trimmer : public Completion<Trimmer> {
 	std::unique_lock l(fifo->m);
 	const auto max_part_size = fifo->info.params.max_part_size;
 	l.unlock();
-	fifo->trim_part(pn++, max_part_size, std::nullopt,
+	fifo->trim_part(dpp, pn++, max_part_size, std::nullopt,
 			false, tid, call(std::move(p)));
 	return;
       }
@@ -1882,7 +1882,7 @@ struct Trimmer : public Completion<Trimmer> {
       l.unlock();
       update = true;
       canceled = tail_part_num < part_num;
-      fifo->trim_part(part_num, ofs, std::nullopt, exclusive, tid,
+      fifo->trim_part(dpp, part_num, ofs, std::nullopt, exclusive, tid,
 		      call(std::move(p)));
       return;
     }
@@ -1944,7 +1944,7 @@ void FIFO::trim(const DoutPrefixProvider *dpp, std::string_view markstr, bool ex
   } else {
     trimmer->update = true;
   }
-  trim_part(pn, ofs, std::nullopt, exclusive,
+  trim_part(dpp, pn, ofs, std::nullopt, exclusive,
 	    tid, Trimmer::call(std::move(trimmer)));
 }
 
@@ -2066,9 +2066,9 @@ private:
     pp_callback,
   } state;
 
-  void create_part(Ptr&& p, int64_t part_num,
+  void create_part(const DoutPrefixProvider *dpp, Ptr&& p, int64_t part_num,
 		   std::string_view tag) {
-    ldout(fifo->cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			 << " entering: tid=" << tid << dendl;
     state = entry_callback;
     lr::ObjectWriteOperation op;
@@ -2083,9 +2083,9 @@ private:
     return;
   }
 
-  void remove_part(Ptr&& p, int64_t part_num,
+  void remove_part(const DoutPrefixProvider *dpp, Ptr&& p, int64_t part_num,
 		   std::string_view tag) {
-    ldout(fifo->cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			 << " entering: tid=" << tid << dendl;
     state = entry_callback;
     lr::ObjectWriteOperation op;
@@ -2272,7 +2272,7 @@ public:
       const auto entry = iter->second;
       switch (entry.op) {
       case fifo::journal_entry::Op::create:
-	create_part(std::move(p), entry.part_num, entry.part_tag);
+	create_part(dpp, std::move(p), entry.part_num, entry.part_tag);
 	return;
       case fifo::journal_entry::Op::set_head:
 	if (entry.part_num > new_head) {
@@ -2282,10 +2282,10 @@ public:
 	++iter;
 	continue;
       case fifo::journal_entry::Op::remove:
-	remove_part(std::move(p), entry.part_num, entry.part_tag);
+	remove_part(dpp, std::move(p), entry.part_num, entry.part_tag);
 	return;
       default:
-	lderr(fifo->cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			 << " unknown journaled op: entry=" << entry << " tid="
 			 << tid << dendl;
 	complete(std::move(p), -EIO);

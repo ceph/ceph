@@ -6,10 +6,21 @@ DASHBOARD_FRONTEND_DIR=${SCRIPT_DIR}/../../../src/pybind/mgr/dashboard/frontend
 [ -z "$SUDO" ] && SUDO=sudo
 
 install_common () {
+    NODEJS_VERSION="16"
     if grep -q  debian /etc/*-release; then
         $SUDO apt-get update
-        $SUDO apt-get install -y jq npm
+        # https://github.com/nodesource/distributions#manual-installation
+        $SUDO apt-get install curl gpg
+        KEYRING=/usr/share/keyrings/nodesource.gpg
+        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | gpg --dearmor | $SUDO tee "$KEYRING" >/dev/null
+        DISTRO="$(source /etc/lsb-release; echo $DISTRIB_CODENAME)"
+        VERSION="node_$NODEJS_VERSION.x"
+        echo "deb [signed-by=$KEYRING] https://deb.nodesource.com/$VERSION $DISTRO main" | $SUDO tee /etc/apt/sources.list.d/nodesource.list
+        echo "deb-src [signed-by=$KEYRING] https://deb.nodesource.com/$VERSION $DISTRO main" | $SUDO tee -a /etc/apt/sources.list.d/nodesource.list
+        $SUDO apt-get update
+        $SUDO apt-get install nodejs
     elif grep -q rhel /etc/*-release; then
+        $SUDO yum module -y enable nodejs:$NODEJS_VERSION
         $SUDO yum install -y jq npm
     else
         echo "Unsupported distribution."
@@ -87,24 +98,10 @@ find cypress # List all specs
 
 cypress_run "orchestrator/01-hosts.e2e-spec.ts"
 
-ceph orch apply rgw foo --placement=3
-sleep 15
-ceph orch device ls --refresh
-ceph orch ps --refresh
-sleep 10  # the previous call is asynchronous
-ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
-ceph orch ps --format=json | tee cypress/fixtures/orchestrator/services.json
-
-cypress_run "orchestrator/01-hosts-force-maintenance.e2e-spec.ts"
-
 # Hosts are removed and added in the previous step. Do a refresh again.
-ceph orch rm rgw.foo
 ceph orch device ls --refresh
-ceph orch ps --refresh
 sleep 10
 ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
-ceph orch ps --format=json | tee cypress/fixtures/orchestrator/services.json
 
-cypress_run "orchestrator/02-hosts-inventory.e2e-spec.ts"
 cypress_run "orchestrator/03-inventory.e2e-spec.ts"
 cypress_run "orchestrator/04-osds.e2e-spec.ts" 300000

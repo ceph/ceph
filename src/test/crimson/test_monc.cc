@@ -22,9 +22,11 @@ DummyAuthHandler dummy_handler;
 
 }
 
+using namespace std::literals;
+
 static seastar::future<> test_monc()
 {
-  return crimson::common::sharded_conf().start(EntityName{}, string_view{"ceph"}).then([] {
+  return crimson::common::sharded_conf().start(EntityName{}, "ceph"sv).then([] {
     std::vector<const char*> args;
     std::string cluster;
     std::string conf_file_list;

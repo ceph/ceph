@@ -57,7 +57,7 @@ options:
   - runtime
   validator: |
     [](std::string *value, std::string *error_message) {
-      stringstream ss;
+      std::stringstream ss;
       uint64_t features = librbd::rbd_features_from_string(*value, &ss);
       // Leave this in integer form to avoid breaking Cinder.  Someday
       // we would like to present this in string form instead...
@@ -206,6 +206,8 @@ options:
   default: false
   services:
   - rbd
+  see_also:
+  - rbd_read_from_replica_policy
 - name: rbd_localize_snap_reads
   type: bool
   level: advanced
@@ -213,6 +215,8 @@ options:
   default: false
   services:
   - rbd
+  see_also:
+  - rbd_read_from_replica_policy
 - name: rbd_balance_parent_reads
   type: bool
   level: advanced
@@ -220,6 +224,8 @@ options:
   default: false
   services:
   - rbd
+  see_also:
+  - rbd_read_from_replica_policy
 - name: rbd_localize_parent_reads
   type: bool
   level: advanced
@@ -227,6 +233,8 @@ options:
   default: false
   services:
   - rbd
+  see_also:
+  - rbd_read_from_replica_policy
 - name: rbd_sparse_read_threshold_bytes
   type: size
   level: advanced
@@ -310,7 +318,7 @@ options:
   max: 32_M
   validator: |
     [](std::string *value, std::string *error_message) {
-      uint64_t f = strict_si_cast<uint64_t>(value->c_str(), error_message);
+      uint64_t f = strict_si_cast<uint64_t>(*value, error_message);
       if (!error_message->empty()) {
         return -EINVAL;
       } else if (!isp2(f)) {
@@ -355,9 +363,11 @@ options:
     for read operations. If set to ``balance``, read operations will
     be sent to a randomly selected OSD within the replica set. If set
     to ``localize``, read operations will be sent to the closest OSD
-    as determined by the CRUSH map. Note: this feature requires the
-    cluster to be configured with a minimum compatible OSD release of
-    Octopus.
+    as determined by the CRUSH map. Unlike ``rbd_balance_snap_reads``
+    and ``rbd_localize_snap_reads`` or ``rbd_balance_parent_reads`` and
+    ``rbd_localize_parent_reads``, it affects all read operations, not
+    just snap or parent. Note: this feature requires the cluster to
+    be configured with a minimum compatible OSD release of Octopus.
   default: default
   services:
   - rbd
@@ -471,6 +481,9 @@ options:
   type: uint
   level: advanced
   desc: default order (data block object size) for new images
+  long_desc: This configures the default object size for new images. The value is used as a
+    power of two, meaning ``default_object_size = 2 ^ rbd_default_order``. Configure a value
+    between 12 and 25 (inclusive), translating to 4KiB lower and 32MiB upper limit.
   default: 22
   services:
   - rbd
@@ -729,6 +742,10 @@ options:
   type: uint
   level: advanced
   desc: minimum schedule tick (in milliseconds) for QoS
+  long_desc: This determines the minimum time (in milliseconds) at which I/Os
+    can become unblocked if the limit of a throttle is hit. In terms of the
+    token bucket algorithm, this is the minimum interval at which tokens are
+    added to the bucket.
   default: 50
   services:
   - rbd
@@ -748,7 +765,7 @@ options:
   - runtime
   validator: |
     [](std::string *value, std::string *error_message) {
-        ostringstream ss;
+        std::ostringstream ss;
         uint64_t exclude_ops = librbd::io::rbd_io_operations_from_string(*value, &ss);
         // Leave this in integer form to avoid breaking Cinder.  Someday
         // we would like to present this in string form instead...

@@ -6,6 +6,7 @@
 #include "rgw/rgw_sal_rados.h"
 #include "rgw/rgw_lua_request.h"
 
+using namespace std;
 using namespace rgw;
 using boost::container::flat_set;
 using rgw::auth::Identity;
@@ -75,8 +76,8 @@ public:
     return 0;
   }
 
-  virtual sal::Bucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time) override {
-    return nullptr;
+  virtual int create_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, const std::string& zonegroup_id, rgw_placement_rule& placement_rule, std::string& swift_ver_location, const RGWQuotaInfo* pquota_info, const RGWAccessControlPolicy& policy, sal::Attrs& attrs, RGWBucketInfo& info, obj_version& ep_objv, bool exclusive, bool obj_lock_enabled, bool* existed, req_info& req_info, std::unique_ptr<sal::Bucket>* bucket, optional_yield y) override {
+    return 0;
   }
 
   virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y) override {
@@ -114,7 +115,9 @@ public:
   virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override {
     return 0;
   }
-
+  virtual int merge_and_store_attrs(const DoutPrefixProvider *dpp, rgw::sal::Attrs& attrs, optional_yield y) override {
+    return 0;
+  }
   virtual ~TestUser() = default;
 };
 
@@ -374,10 +377,9 @@ TEST(TestRGWLua, Environment)
   )";
 
   DEFINE_REQ_STATE;
-  s.env[""] = "world";
-  s.env[""] = "bar";
-  s.env["goodbye"] = "cruel world";
-  s.env["ka"] = "boom";
+  s.env.emplace("", "bar");
+  s.env.emplace("goodbye", "cruel world");
+  s.env.emplace("ka", "boom");
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
   ASSERT_EQ(rc, 0);

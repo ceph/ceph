@@ -54,7 +54,7 @@ public:
   int get_log_status(const DoutPrefixProvider *dpp,
                      const RGWBucketInfo& bucket_info,
                      int shard_id,
-                     map<int, string> *markers,
+                     std::map<int, std::string> *markers,
                      optional_yield y);
 };
 

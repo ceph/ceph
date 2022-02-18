@@ -28,6 +28,8 @@
     } \
   } while(0)
 
+using namespace std;
+
 TEST(Readahead, random_access) {
   Readahead r;
   r.set_trigger_requests(2);

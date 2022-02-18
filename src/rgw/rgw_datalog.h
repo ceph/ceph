@@ -113,7 +113,7 @@ struct RGWDataChangesLogInfo {
 
 struct RGWDataChangesLogMarker {
   int shard = 0;
-  std::optional<std::string> marker;
+  std::string marker;
 
   RGWDataChangesLogMarker() = default;
 };
@@ -148,7 +148,7 @@ public:
   }
   int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 	   std::vector<rgw_data_change_log_entry>& entries,
-	   std::optional<std::string_view> marker,
+	   std::string_view marker,
 	   std::string* out_marker, bool* truncated);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker);
   void trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
@@ -175,10 +175,10 @@ class RGWDataChangesLog {
   const int num_shards;
   std::string get_prefix() {
     auto prefix = cct->_conf->rgw_data_log_obj_prefix;
-    return prefix.empty() ? prefix : "data_log"s;
+    return prefix.empty() ? prefix : "data_log";
   }
   std::string metadata_log_oid() {
-    return get_prefix() + "generations_metadata"s;
+    return get_prefix() + "generations_metadata";
   }
   std::string prefix;
 
@@ -232,7 +232,7 @@ public:
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
-		   std::optional<std::string_view> marker,
+		   std::string_view marker,
 		   std::string* out_marker, bool* truncated);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,

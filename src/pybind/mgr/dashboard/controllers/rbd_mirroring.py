@@ -15,9 +15,8 @@ from ..services.ceph_service import CephService
 from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
 from ..services.rbd import rbd_call
 from ..tools import ViewCache
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
-    allow_empty_body
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    ReadPermission, RESTController, Task, UpdatePermission, allow_empty_body
 
 logger = logging.getLogger('controllers.rbd_mirror')
 
@@ -367,8 +366,8 @@ RBDM_SUMMARY_SCHEMA = {
 }
 
 
-@ApiController('/block/mirroring', Scope.RBD_MIRRORING)
-@ControllerDoc("RBD Mirroring Management API", "RbdMirroring")
+@APIRouter('/block/mirroring', Scope.RBD_MIRRORING)
+@APIDoc("RBD Mirroring Management API", "RbdMirroring")
 class RbdMirroring(BaseController):
 
     @Endpoint(method='GET', path='site_name')
@@ -390,8 +389,8 @@ class RbdMirroring(BaseController):
         return {'site_name': rbd.RBD().mirror_site_name_get(mgr.rados)}
 
 
-@ApiController('/block/mirroring/summary', Scope.RBD_MIRRORING)
-@ControllerDoc("RBD Mirroring Summary Management API", "RbdMirroringSummary")
+@APIRouter('/block/mirroring/summary', Scope.RBD_MIRRORING)
+@APIDoc("RBD Mirroring Summary Management API", "RbdMirroringSummary")
 class RbdMirroringSummary(BaseController):
 
     @Endpoint()
@@ -408,8 +407,8 @@ class RbdMirroringSummary(BaseController):
                 'content_data': content_data}
 
 
-@ApiController('/block/mirroring/pool', Scope.RBD_MIRRORING)
-@ControllerDoc("RBD Mirroring Pool Mode Management API", "RbdMirroringPoolMode")
+@APIRouter('/block/mirroring/pool', Scope.RBD_MIRRORING)
+@APIDoc("RBD Mirroring Pool Mode Management API", "RbdMirroringPoolMode")
 class RbdMirroringPoolMode(RESTController):
 
     RESOURCE_ID = "pool_name"
@@ -450,9 +449,8 @@ class RbdMirroringPoolMode(RESTController):
         return rbd_call(pool_name, None, _edit, mirror_mode)
 
 
-@ApiController('/block/mirroring/pool/{pool_name}/bootstrap',
-               Scope.RBD_MIRRORING)
-@ControllerDoc("RBD Mirroring Pool Bootstrap Management API", "RbdMirroringPoolBootstrap")
+@APIRouter('/block/mirroring/pool/{pool_name}/bootstrap', Scope.RBD_MIRRORING)
+@APIDoc("RBD Mirroring Pool Bootstrap Management API", "RbdMirroringPoolBootstrap")
 class RbdMirroringPoolBootstrap(BaseController):
 
     @Endpoint(method='POST', path='token')
@@ -484,8 +482,8 @@ class RbdMirroringPoolBootstrap(BaseController):
         return {}
 
 
-@ApiController('/block/mirroring/pool/{pool_name}/peer', Scope.RBD_MIRRORING)
-@ControllerDoc("RBD Mirroring Pool Peer Management API", "RbdMirroringPoolPeer")
+@APIRouter('/block/mirroring/pool/{pool_name}/peer', Scope.RBD_MIRRORING)
+@APIDoc("RBD Mirroring Pool Peer Management API", "RbdMirroringPoolPeer")
 class RbdMirroringPoolPeer(RESTController):
 
     RESOURCE_ID = "peer_uuid"

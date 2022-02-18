@@ -36,7 +36,10 @@ enum {
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
-static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
+
+using namespace std;
+
+static std::ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".openfiles ";
 }
 
@@ -1126,6 +1129,8 @@ void OpenFileTable::_prefetch_inodes()
       destroyed_inos_set.insert(it.second.begin(), it.second.end());
   }
 
+  mdcache->open_ino_batch_start();
+
   for (auto& [ino, anchor] : loaded_anchor_map) {
     if (destroyed_inos_set.count(ino))
 	continue;
@@ -1164,6 +1169,8 @@ void OpenFileTable::_prefetch_inodes()
     if (!(num_opening_inodes % 1000))
       mds->heartbeat_reset();
   }
+
+  mdcache->open_ino_batch_submit();
 
   _open_ino_finish(inodeno_t(0), 0);
 }

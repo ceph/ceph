@@ -2,9 +2,10 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, List, Tuple
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any
 
 import orchestrator
+from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, MONITORING_STACK_TYPES
@@ -16,18 +17,34 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# from ceph_fs.h
+CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
+
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
-    # normal case:
-    #   ceph/ceph -> docker.io/ceph/ceph
-    # edge cases that shouldn't ever come up:
-    #   ubuntu -> docker.io/ubuntu    (ubuntu alias for library/ubuntu)
-    # no change:
-    #   quay.ceph.io/ceph/ceph -> ceph
-    #   docker.io/ubuntu -> no change
-    bits = digest.split('/')
-    if '.' not in bits[0] or len(bits) < 3:
-        digest = 'docker.io/' + digest
+    """
+    Normal case:
+    >>> normalize_image_digest('ceph/ceph', 'docker.io')
+    'docker.io/ceph/ceph'
+
+    No change:
+    >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'docker.io')
+    'quay.ceph.io/ceph/ceph'
+
+    >>> normalize_image_digest('docker.io/ubuntu', 'docker.io')
+    'docker.io/ubuntu'
+
+    >>> normalize_image_digest('localhost/ceph', 'docker.io')
+    'localhost/ceph'
+    """
+    known_shortnames = [
+        'ceph/ceph',
+        'ceph/daemon',
+        'ceph/daemon-base',
+    ]
+    for image in known_shortnames:
+        if digest.startswith(image):
+            return f'{default_registry}/{digest}'
     return digest
 
 
@@ -41,6 +58,7 @@ class UpgradeState:
                  error: Optional[str] = None,
                  paused: Optional[bool] = None,
                  fs_original_max_mds: Optional[Dict[str, int]] = None,
+                 fs_original_allow_standby_replay: Optional[Dict[str, bool]] = None
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
@@ -50,6 +68,8 @@ class UpgradeState:
         self.error: Optional[str] = error
         self.paused: bool = paused or False
         self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
+        self.fs_original_allow_standby_replay: Optional[Dict[str,
+                                                             bool]] = fs_original_allow_standby_replay
 
     def to_json(self) -> dict:
         return {
@@ -59,6 +79,7 @@ class UpgradeState:
             'target_digests': self.target_digests,
             'target_version': self.target_version,
             'fs_original_max_mds': self.fs_original_max_mds,
+            'fs_original_allow_standby_replay': self.fs_original_allow_standby_replay,
             'error': self.error,
             'paused': self.paused,
         }
@@ -138,7 +159,7 @@ class CephadmUpgrade:
         completed_types = list(set([completion[0] for completion in completed_daemons if all(
             c[1] for c in completed_daemons if c[0] == completion[0])]))
 
-        return '%s/%s ceph daemons upgraded' % (done, len(daemons)), completed_types
+        return '%s/%s daemons upgraded' % (done, len(daemons)), completed_types
 
     def _check_target_version(self, version: str) -> Optional[str]:
         try:
@@ -175,6 +196,37 @@ class CephadmUpgrade:
             return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
         return None
+
+    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict:
+        if not image:
+            image = self.mgr.container_image_base
+        reg_name, bare_image = image.split('/', 1)
+        reg = Registry(reg_name)
+        versions = []
+        r: Dict[Any, Any] = {
+            "image": image,
+            "registry": reg_name,
+            "bare_image": bare_image,
+        }
+        ls = reg.get_tags(bare_image)
+        if not tags:
+            for t in ls:
+                if t[0] != 'v':
+                    continue
+                v = t[1:].split('.')
+                if len(v) != 3:
+                    continue
+                if '-' in v[2]:
+                    continue
+                versions.append('.'.join(v))
+            r["versions"] = sorted(
+                versions,
+                key=lambda k: list(map(int, k.split('.'))),
+                reverse=True
+            )
+        else:
+            r["tags"] = sorted(ls)
+        return r
 
     def upgrade_start(self, image: str, version: str) -> str:
         if self.mgr.mode != 'root':
@@ -356,42 +408,43 @@ class CephadmUpgrade:
         target_major: str,
         need_upgrade: List[DaemonDescription]
     ) -> bool:
-        # are any daemons running a different major version?
-        scale_down = False
-        for name, info in self.mgr.get("mds_metadata").items():
-            version = info.get("ceph_version_short")
-            major_version = None
-            if version:
-                major_version = version.split('.')[0]
-            if not major_version:
-                self.mgr.log.info('Upgrade: mds.%s version is not known, will retry' % name)
-                time.sleep(5)
-                return False
-            if int(major_version) < int(target_major):
-                scale_down = True
-
-        if not scale_down:
-            self.mgr.log.debug('Upgrade: All MDS daemons run same major version')
-            return True
-
         # scale down all filesystems to 1 MDS
         assert self.upgrade_state
         if not self.upgrade_state.fs_original_max_mds:
             self.upgrade_state.fs_original_max_mds = {}
+        if not self.upgrade_state.fs_original_allow_standby_replay:
+            self.upgrade_state.fs_original_allow_standby_replay = {}
         fsmap = self.mgr.get("fs_map")
         continue_upgrade = True
-        for i in fsmap.get('filesystems', []):
-            fs = i["mdsmap"]
-            fs_id = i["id"]
-            fs_name = fs["fs_name"]
+        for fs in fsmap.get('filesystems', []):
+            fscid = fs["id"]
+            mdsmap = fs["mdsmap"]
+            fs_name = mdsmap["fs_name"]
+
+            # disable allow_standby_replay?
+            if mdsmap['flags'] & CEPH_MDSMAP_ALLOW_STANDBY_REPLAY:
+                self.mgr.log.info('Upgrade: Disabling standby-replay for filesystem %s' % (
+                    fs_name
+                ))
+                if fscid not in self.upgrade_state.fs_original_allow_standby_replay:
+                    self.upgrade_state.fs_original_allow_standby_replay[fscid] = True
+                    self._save_upgrade_state()
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'fs set',
+                    'fs_name': fs_name,
+                    'var': 'allow_standby_replay',
+                    'val': '0',
+                })
+                continue_upgrade = False
+                continue
 
             # scale down this filesystem?
-            if fs["max_mds"] > 1:
+            if mdsmap["max_mds"] > 1:
                 self.mgr.log.info('Upgrade: Scaling down filesystem %s' % (
                     fs_name
                 ))
-                if fs_id not in self.upgrade_state.fs_original_max_mds:
-                    self.upgrade_state.fs_original_max_mds[fs_id] = fs['max_mds']
+                if fscid not in self.upgrade_state.fs_original_max_mds:
+                    self.upgrade_state.fs_original_max_mds[fscid] = mdsmap['max_mds']
                     self._save_upgrade_state()
                 ret, out, err = self.mgr.check_mon_command({
                     'prefix': 'fs set',
@@ -402,21 +455,33 @@ class CephadmUpgrade:
                 continue_upgrade = False
                 continue
 
-            if len(fs['info']) > 1:
-                self.mgr.log.info('Upgrade: Waiting for fs %s to scale down to 1 MDS' % (fs_name))
+            if not (mdsmap['in'] == [0] and len(mdsmap['up']) <= 1):
+                self.mgr.log.info(
+                    'Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (fs_name))
                 time.sleep(10)
                 continue_upgrade = False
                 continue
 
-            lone_mds = list(fs['info'].values())[0]
-            if lone_mds['state'] != 'up:active':
-                self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
-                    lone_mds['name'],
-                    lone_mds['state'],
-                ))
-                time.sleep(10)
-                continue_upgrade = False
-                continue
+            if len(mdsmap['up']) == 0:
+                self.mgr.log.warning(
+                    "Upgrade: No mds is up; continuing upgrade procedure to poke things in the right direction")
+                # This can happen because the current version MDS have
+                # incompatible compatsets; the mons will not do any promotions.
+                # We must upgrade to continue.
+            elif len(mdsmap['up']) > 0:
+                mdss = list(mdsmap['info'].values())
+                assert len(mdss) == 1
+                lone_mds = mdss[0]
+                if lone_mds['state'] != 'up:active':
+                    self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
+                        lone_mds['name'],
+                        lone_mds['state'],
+                    ))
+                    time.sleep(10)
+                    continue_upgrade = False
+                    continue
+            else:
+                assert False
 
         return continue_upgrade
 
@@ -438,9 +503,9 @@ class CephadmUpgrade:
 
         # find fs this mds daemon belongs to
         fsmap = self.mgr.get("fs_map")
-        for i in fsmap.get('filesystems', []):
-            fs = i["mdsmap"]
-            fs_name = fs["fs_name"]
+        for fs in fsmap.get('filesystems', []):
+            mdsmap = fs["mdsmap"]
+            fs_name = mdsmap["fs_name"]
 
             assert mds_daemon.daemon_id
             if fs_name != mds_daemon.service_name().split('.', 1)[1]:
@@ -452,7 +517,7 @@ class CephadmUpgrade:
                 [daemon for daemon in self.mgr.cache.get_daemons_by_service(mds_daemon.service_name())])
 
             # standby mds daemons for this fs?
-            if fs["max_mds"] < mds_count:
+            if mdsmap["max_mds"] < mds_count:
                 return True
             return False
 
@@ -473,10 +538,10 @@ class CephadmUpgrade:
         if not target_id or not target_version or not target_digests:
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
-            self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
+            self.upgrade_info_str: str = 'Doing first pull of %s image' % (target_image)
             try:
-                target_id, target_version, target_digests = CephadmServe(self.mgr)._get_container_image_info(
-                    target_image)
+                target_id, target_version, target_digests = self.mgr.wait_async(CephadmServe(self.mgr)._get_container_image_info(
+                    target_image))
             except OrchestratorError as e:
                 self._fail_upgrade('UPGRADE_FAILED_PULL', {
                     'severity': 'warning',
@@ -528,6 +593,18 @@ class CephadmUpgrade:
 
         image_settings = self.get_distinct_container_image_settings()
 
+        # Older monitors (pre-v16.2.5) asserted that FSMap::compat ==
+        # MDSMap::compat for all fs. This is no longer the case beginning in
+        # v16.2.5. We must disable the sanity checks during upgrade.
+        # N.B.: we don't bother confirming the operator has not already
+        # disabled this or saving the config value.
+        self.mgr.check_mon_command({
+            'prefix': 'config set',
+            'name': 'mon_mds_skip_sanity',
+            'value': '1',
+            'who': 'mon',
+        })
+
         daemons = [d for d in self.mgr.cache.get_daemons() if d.daemon_type in CEPH_UPGRADE_ORDER]
         done = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
@@ -541,6 +618,9 @@ class CephadmUpgrade:
                     continue
                 assert d.daemon_type is not None
                 assert d.daemon_id is not None
+                assert d.hostname is not None
+                if self.mgr.use_agent and not self.mgr.cache.host_metadata_up_to_date(d.hostname):
+                    continue
                 correct_digest = False
                 if (any(d in target_digests for d in (d.container_image_digests or []))
                         or d.daemon_type in MONITORING_STACK_TYPES):
@@ -622,7 +702,7 @@ class CephadmUpgrade:
                 to_upgrade.append(d_entry)
 
                 # if we don't have a list of others to consider, stop now
-                if not known_ok_to_stop:
+                if d.daemon_type in ['osd', 'mds', 'mon'] and not known_ok_to_stop:
                     break
 
             num = 1
@@ -635,17 +715,17 @@ class CephadmUpgrade:
                 self._update_upgrade_progress(done / len(daemons))
 
                 # make sure host has latest container image
-                out, errs, code = CephadmServe(self.mgr)._run_cephadm(
+                out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                     d.hostname, '', 'inspect-image', [],
-                    image=target_image, no_fsid=True, error_ok=True)
+                    image=target_image, no_fsid=True, error_ok=True))
                 if code or not any(d in target_digests for d in json.loads(''.join(out)).get('repo_digests', [])):
                     logger.info('Upgrade: Pulling %s on %s' % (target_image,
                                                                d.hostname))
                     self.upgrade_info_str = 'Pulling %s image on host %s' % (
                         target_image, d.hostname)
-                    out, errs, code = CephadmServe(self.mgr)._run_cephadm(
+                    out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
                         d.hostname, '', 'pull', [],
-                        image=target_image, no_fsid=True, error_ok=True)
+                        image=target_image, no_fsid=True, error_ok=True))
                     if code:
                         self._fail_upgrade('UPGRADE_FAILED_PULL', {
                             'severity': 'warning',
@@ -682,6 +762,7 @@ class CephadmUpgrade:
                         'redeploy',
                         image=target_image if not d_entry[1] else None
                     )
+                    self.mgr.cache.metadata_up_to_date[d.hostname] = False
                 except Exception as e:
                     self._fail_upgrade('UPGRADE_REDEPLOY_DAEMON', {
                         'severity': 'warning',
@@ -755,8 +836,6 @@ class CephadmUpgrade:
                         'who': section,
                     })
 
-            logger.debug('Upgrade: All %s daemons are up to date.' % daemon_type)
-
             # complete osd upgrade?
             if daemon_type == 'osd':
                 osdmap = self.mgr.get("osd_map")
@@ -771,24 +850,50 @@ class CephadmUpgrade:
                     })
 
             # complete mds upgrade?
-            if daemon_type == 'mds' and self.upgrade_state.fs_original_max_mds:
-                for i in self.mgr.get("fs_map")['filesystems']:
-                    fs_id = i["id"]
-                    fs_name = i['mdsmap']['fs_name']
-                    new_max = self.upgrade_state.fs_original_max_mds.get(fs_id)
-                    if new_max:
-                        self.mgr.log.info('Upgrade: Scaling up filesystem %s max_mds to %d' % (
-                            fs_name, new_max
-                        ))
-                        ret, _, err = self.mgr.check_mon_command({
-                            'prefix': 'fs set',
-                            'fs_name': fs_name,
-                            'var': 'max_mds',
-                            'val': str(new_max),
-                        })
+            if daemon_type == 'mds':
+                if self.upgrade_state.fs_original_max_mds:
+                    for fs in self.mgr.get("fs_map")['filesystems']:
+                        fscid = fs["id"]
+                        fs_name = fs['mdsmap']['fs_name']
+                        new_max = self.upgrade_state.fs_original_max_mds.get(fscid, 1)
+                        if new_max > 1:
+                            self.mgr.log.info('Upgrade: Scaling up filesystem %s max_mds to %d' % (
+                                fs_name, new_max
+                            ))
+                            ret, _, err = self.mgr.check_mon_command({
+                                'prefix': 'fs set',
+                                'fs_name': fs_name,
+                                'var': 'max_mds',
+                                'val': str(new_max),
+                            })
 
-                self.upgrade_state.fs_original_max_mds = {}
-                self._save_upgrade_state()
+                    self.upgrade_state.fs_original_max_mds = {}
+                    self._save_upgrade_state()
+                if self.upgrade_state.fs_original_allow_standby_replay:
+                    for fs in self.mgr.get("fs_map")['filesystems']:
+                        fscid = fs["id"]
+                        fs_name = fs['mdsmap']['fs_name']
+                        asr = self.upgrade_state.fs_original_allow_standby_replay.get(fscid, False)
+                        if asr:
+                            self.mgr.log.info('Upgrade: Enabling allow_standby_replay on filesystem %s' % (
+                                fs_name
+                            ))
+                            ret, _, err = self.mgr.check_mon_command({
+                                'prefix': 'fs set',
+                                'fs_name': fs_name,
+                                'var': 'allow_standby_replay',
+                                'val': '1'
+                            })
+
+                    self.upgrade_state.fs_original_allow_standby_replay = {}
+                    self._save_upgrade_state()
+
+            # Make sure all metadata is up to date before saying we are done upgrading this daemon type
+            if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
+                self.mgr.agent_helpers._request_ack_all_not_up_to_date()
+                return
+
+            logger.debug('Upgrade: All %s daemons are up to date.' % daemon_type)
 
         # clean up
         logger.info('Upgrade: Finalizing container_image settings')
@@ -800,6 +905,12 @@ class CephadmUpgrade:
                 'name': 'container_image',
                 'who': name_to_config_section(daemon_type),
             })
+
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'name': 'mon_mds_skip_sanity',
+            'who': 'mon',
+        })
 
         logger.info('Upgrade: Complete!')
         if self.upgrade_state.progress_id:

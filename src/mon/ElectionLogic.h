@@ -17,6 +17,7 @@
 #define CEPH_ELECTIONLOGIC_H
 
 #include <map>
+#include <set>
 #include "include/types.h"
 #include "ConnectionTracker.h"
 
@@ -95,7 +96,7 @@ public:
    * Like paxos_size(), This set can change between elections, but not
    * during them.
    */
-  virtual const set<int>& get_disallowed_leaders() const = 0;
+  virtual const std::set<int>& get_disallowed_leaders() const = 0;
   /**
    * Tell the ElectionOwner we have started a new election.
    *

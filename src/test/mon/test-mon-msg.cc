@@ -48,6 +48,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "test-mon-msg "
 
+using namespace std;
+
 class MonClientHelper : public Dispatcher
 {
 protected:
@@ -323,8 +325,7 @@ TEST_F(MonMsgTest, MMonJoin)
 
 int main(int argc, char *argv[])
 {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(nullptr, args,
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,

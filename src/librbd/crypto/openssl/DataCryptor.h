@@ -35,6 +35,7 @@ public:
 private:
     CephContext* m_cct;
     unsigned char* m_key = nullptr;
+    uint16_t m_key_size = 0;
     const EVP_CIPHER* m_cipher;
     uint32_t m_iv_size;
 

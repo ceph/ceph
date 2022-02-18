@@ -64,7 +64,7 @@ performance issues::
   MDS_SLOW_REQUEST 1 MDSs report slow requests
      mds.fs-01(mds.0): 5 slow requests are blocked > 30 secs
 
-Where, for intance, ``MDS_SLOW_REQUEST`` is the unique code representing the
+Where, for instance, ``MDS_SLOW_REQUEST`` is the unique code representing the
 condition where requests are taking long time to complete. And the following
 description shows its severity and the MDS daemons which are serving these
 slow requests.
@@ -72,7 +72,8 @@ slow requests.
 This page lists the health checks raised by MDS daemons. For the checks from
 other daemons, please see :ref:`health-checks`.
 
-* ``MDS_TRIM``
+``MDS_TRIM``
+------------
 
   Message
     "Behind on trimming..."
@@ -85,7 +86,9 @@ other daemons, please see :ref:`health-checks`.
     too slowly, or a software bug is preventing trimming, then this health
     message may appear.  The threshold for this message to appear is controlled by
     the config option ``mds_log_warn_factor``, the default is 2.0.
-* ``MDS_HEALTH_CLIENT_LATE_RELEASE``, ``MDS_HEALTH_CLIENT_LATE_RELEASE_MANY``
+
+``MDS_HEALTH_CLIENT_LATE_RELEASE``, ``MDS_HEALTH_CLIENT_LATE_RELEASE_MANY``
+---------------------------------------------------------------------------
 
   Message
     "Client *name* failing to respond to capability release"
@@ -96,7 +99,9 @@ other daemons, please see :ref:`health-checks`.
     is unresponsive or buggy, it might fail to do so promptly or fail to do
     so at all.  This message appears if a client has taken longer than
     ``session_timeout`` (default 60s) to comply.
-* ``MDS_CLIENT_RECALL``, ``MDS_HEALTH_CLIENT_RECALL_MANY``
+
+``MDS_CLIENT_RECALL``, ``MDS_HEALTH_CLIENT_RECALL_MANY``
+--------------------------------------------------------
 
   Message
     "Client *name* failing to respond to cache pressure"
@@ -111,7 +116,9 @@ other daemons, please see :ref:`health-checks`.
     ``mds_recall_warning_threshold`` capabilities (decaying with a half-life of
     ``mds_recall_max_decay_rate``) within the last
     ``mds_recall_warning_decay_rate`` second.
-* ``MDS_CLIENT_OLDEST_TID``, ``MDS_CLIENT_OLDEST_TID_MANY``
+
+``MDS_CLIENT_OLDEST_TID``, ``MDS_CLIENT_OLDEST_TID_MANY``
+---------------------------------------------------------
 
   Message
     "Client *name* failing to advance its oldest client/flush tid"
@@ -124,7 +131,9 @@ other daemons, please see :ref:`health-checks`.
     appears if a client appears to have more than ``max_completed_requests``
     (default 100000) requests that are complete on the MDS side but haven't
     yet been accounted for in the client's *oldest tid* value.
-* ``MDS_DAMAGE``
+
+``MDS_DAMAGE``
+--------------
 
   Message
     "Metadata damage detected"
@@ -135,7 +144,9 @@ other daemons, please see :ref:`health-checks`.
     client accesses to the damaged subtree will return IO errors.  Use
     the ``damage ls`` admin socket command to get more detail on the damage.
     This message appears as soon as any damage is encountered.
-* ``MDS_HEALTH_READ_ONLY``
+
+``MDS_HEALTH_READ_ONLY``
+------------------------
 
   Message
     "MDS in read-only mode"
@@ -145,7 +156,9 @@ other daemons, please see :ref:`health-checks`.
     MDS will go into readonly mode if it encounters a write error while
     writing to the metadata pool, or if forced to by an administrator using
     the *force_readonly* admin socket command.
-* ``MDS_SLOW_REQUEST``
+
+``MDS_SLOW_REQUEST``
+--------------------
 
   Message
     "*N* slow requests are blocked"
@@ -157,7 +170,9 @@ other daemons, please see :ref:`health-checks`.
     Use the ``ops`` admin socket command to list outstanding metadata operations.
     This message appears if any client requests have taken longer than
     ``mds_op_complaint_time`` (default 30s).
-* ``MDS_CACHE_OVERSIZED``
+
+``MDS_CACHE_OVERSIZED``
+-----------------------
 
   Message
     "Too many inodes in cache"
@@ -166,5 +181,60 @@ other daemons, please see :ref:`health-checks`.
     limit set by the administrator.  If the MDS cache becomes too large, the daemon
     may exhaust available memory and crash.  By default, this message appears if
     the actual cache size (in memory) is at least 50% greater than
-    ``mds_cache_memory_limit`` (default 1GB). Modify ``mds_health_cache_threshold``
+    ``mds_cache_memory_limit`` (default 4GB). Modify ``mds_health_cache_threshold``
     to set the warning ratio.
+
+``FS_WITH_FAILED_MDS``
+----------------------
+
+  Message
+    "Some MDS ranks do not have standby replacements"
+
+  Description
+    Normally, a failed MDS rank will be replaced by a standby MDS. This situation
+    is transient and is not considered critical. However, if there are no standby
+    MDSs available to replace an active MDS rank, this health warning is generated.
+
+``MDS_INSUFFICIENT_STANDBY``
+----------------------------
+
+  Message
+    "Insufficient number of available standby(-replay) MDS daemons than configured"
+
+  Description
+    The minimum number of standby(-replay) MDS daemons can be configured by setting
+    ``standby_count_wanted`` configuration variable. This health warning is generated
+    when the configured value mismatches the number of standby(-replay) MDS daemons
+    available.
+
+``FS_DEGRADED``
+----------------------------
+
+  Message
+    "Some MDS ranks have been marked failed or damaged"
+
+  Description
+    When one or more MDS rank ends up in failed or damaged state due to
+    an unrecoverable error. The file system may be partially or fully
+    unavailable when one (or more) ranks are offline.
+
+``MDS_UP_LESS_THAN_MAX``
+----------------------------
+
+  Message
+    "Number of active ranks are less than configured number of maximum MDSs"
+
+  Description
+    The maximum number of MDS ranks can be configured by setting ``max_mds``
+    configuration variable. This health warning is generated when the number
+    of MDS ranks falls below this configured value.
+
+``MDS_ALL_DOWN``
+----------------------------
+
+  Message
+    "None of the MDS ranks are available (file system offline)"
+
+  Description
+    All MDS ranks are unavailable resulting in the file system to be completely
+    offline.

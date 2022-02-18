@@ -53,6 +53,8 @@
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
 
+using namespace std;
+
 static const ceph::unordered_map<int,int> cephfs_errno_to_system_errno = {
   {CEPHFS_EBLOCKLISTED,    ESHUTDOWN},
   {CEPHFS_EPERM,           EPERM},

@@ -218,6 +218,8 @@ class CephArgtype(object):
         orig_type = get_origin(tp)
         type_args = get_args(tp)
         if orig_type in (abc.Sequence, Sequence, List, list):
+            if v is None:
+                return None
             return [CephArgtype.cast_to(type_args[0], e) for e in v]
         elif orig_type is Tuple:
             return tuple(CephArgtype.cast_to(type_args[0], e) for e in v)
@@ -1159,8 +1161,12 @@ def validate(args: List[str],
 
             # no arg, but not required?  Continue consuming mysig
             # in case there are later required args
-            if myarg in (None, []) and not desc.req:
-                break
+            if myarg in (None, []):
+                if not desc.req:
+                    break
+                # did we already get this argument (as a named arg, earlier?)
+                if desc.name in d:
+                    break
 
             # A keyword argument?
             if myarg:

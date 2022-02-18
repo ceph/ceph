@@ -272,7 +272,7 @@ public:
     return "image" + stringify(++_image_number);
   }
 
-  std::string get_image_id(librados::IoCtx &ioctx, const string &image_name)
+  std::string get_image_id(librados::IoCtx &ioctx, const std::string &image_name)
   {
     std::string obj = librbd::util::id_obj_name(image_name);
     std::string id;
@@ -664,7 +664,7 @@ TYPED_TEST(TestImageReplayer, BootstrapMirrorDisabling)
   this->create_replayer();
   C_SaferCond cond;
   this->m_replayer->start(&cond);
-  ASSERT_EQ(-EREMOTEIO, cond.wait());
+  ASSERT_EQ(-ENOENT, cond.wait());
   ASSERT_TRUE(this->m_replayer->is_stopped());
 }
 

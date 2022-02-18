@@ -68,10 +68,10 @@ public:
   seastar::future<> stop() final {
     return seastar::now();
   }
-  seastar::future<> mount() final;
+  mount_ertr::future<> mount() final;
   seastar::future<> umount() final;
 
-  seastar::future<> mkfs(uuid_d new_osd_fsid) final;
+  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   seastar::future<store_statfs_t> stat() const final;
   seastar::future<struct stat> stat(
     CollectionRef c,
@@ -172,9 +172,10 @@ private:
     const std::string &last);
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
-                std::map<std::string,bufferlist>& aset);
+                std::map<std::string,bufferlist>&& aset);
   int _rm_attr(const coll_t& cid, const ghobject_t& oid,
-	       string_view name);
+               std::string_view name);
+  int _rm_attrs(const coll_t& cid, const ghobject_t& oid);
   int _create_collection(const coll_t& cid, int bits);
   boost::intrusive_ptr<Collection> _get_collection(const coll_t& cid);
 };

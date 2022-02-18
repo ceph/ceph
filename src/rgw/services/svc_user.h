@@ -30,11 +30,11 @@ public:
   RGWSI_User(CephContext *cct);
   virtual ~RGWSI_User();
 
-  static string get_meta_key(const rgw_user& user) {
+  static std::string get_meta_key(const rgw_user& user) {
     return user.to_str();
   }
 
-  static rgw_user user_from_meta_key(const string& key) {
+  static rgw_user user_from_meta_key(const std::string& key) {
     return rgw_user(key);
   }
 
@@ -48,7 +48,7 @@ public:
                              RGWObjVersionTracker * const objv_tracker,
                              real_time * const pmtime,
                              rgw_cache_entry_info * const cache_info,
-                             map<string, bufferlist> * const pattrs,
+                             std::map<std::string, bufferlist> * const pattrs,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) = 0;
 
@@ -58,7 +58,7 @@ public:
                               RGWObjVersionTracker *objv_tracker,
                               const real_time& mtime,
                               bool exclusive,
-                              map<string, bufferlist> *attrs,
+                              std::map<std::string, bufferlist> *attrs,
                               optional_yield y,
                               const DoutPrefixProvider *dpp) = 0;
 
@@ -69,13 +69,13 @@ public:
                                const DoutPrefixProvider *dpp) = 0;
 
   virtual int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
-                             const string& email, RGWUserInfo *info,
+                             const std::string& email, RGWUserInfo *info,
                              RGWObjVersionTracker *objv_tracker,
                              real_time *pmtime,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) = 0;
   virtual int get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
-                             const string& swift_name,
+                             const std::string& swift_name,
                              RGWUserInfo *info,        /* out */
                              RGWObjVersionTracker * const objv_tracker,
                              real_time * const pmtime,
@@ -102,8 +102,8 @@ public:
   virtual int list_buckets(const DoutPrefixProvider *dpp, 
                            RGWSI_MetaBackend::Context *ctx,
                            const rgw_user& user,
-                           const string& marker,
-                           const string& end_marker,
+                           const std::string& marker,
+                           const std::string& end_marker,
                            uint64_t max,
                            RGWUserBuckets *buckets,
                            bool *is_truncated,

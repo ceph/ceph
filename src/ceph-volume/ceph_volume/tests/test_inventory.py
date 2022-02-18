@@ -196,7 +196,7 @@ def lsm_info(monkeypatch):
         return query_map.get(func, 'Unknown')
 
     # mocked states and settings taken from the libstoragemgmt code base
-    # c_binding/include/libstoragemgmt/libstoragemgmt_types.h at 
+    # c_binding/include/libstoragemgmt/libstoragemgmt_types.h at
     # https://github.com/libstorage/libstoragemgmt/
     mock_health_map = {
             -1: "Unknown",
@@ -222,7 +222,7 @@ def lsm_info(monkeypatch):
         LED_STATUS_UNKNOWN = 1
         LED_STATUS_IDENT_ON = 2
         LED_STATUS_IDENT_OFF = 4
-        LED_STATUS_IDENT_UNKNOWN = 8 
+        LED_STATUS_IDENT_UNKNOWN = 8
         LED_STATUS_FAULT_ON = 16
         LED_STATUS_FAULT_OFF = 32
         LED_STATUS_FAULT_UNKNOWN = 64
@@ -249,6 +249,6 @@ class TestLSM(object):
     def test_lsmdisk_led_fault_support(self, lsm_info):
         assert lsm_info.led_fault_support == 'Supported'
     def test_lsmdisk_led_fault(self, lsm_info):
-        assert lsm_info.led_fault_state == 'Off'    
+        assert lsm_info.led_fault_state == 'Off'
     def test_lsmdisk_report(self, lsm_info):
         assert isinstance(lsm_info.json_report(), dict)

@@ -7,6 +7,7 @@ class lua_State;
 class rgw_user;
 namespace rgw::sal {
   class Store;
+  class RadosStore;
 }
 
 namespace rgw::lua {
@@ -40,17 +41,17 @@ int delete_script(const DoutPrefixProvider *dpp, rgw::sal::Store* store, const s
 using packages_t = std::set<std::string>;
 
 // add a lua package to the allowlist
-int add_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name, bool allow_compilation);
+int add_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, const std::string& package_name, bool allow_compilation);
 
 // remove a lua package from the allowlist
-int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name);
+int remove_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, const std::string& package_name);
 
 // list lua packages in the allowlist
-int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& packages);
+int list_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, packages_t& packages);
 
 // install all packages from the allowlist
 // return the list of packages that failed to install and the output of the install command
-int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& failed_packages, std::string& output);
+int install_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, packages_t& failed_packages, std::string& output);
 #endif
 }
 

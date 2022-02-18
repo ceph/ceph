@@ -19,7 +19,7 @@ std::ostream& operator<<(std::ostream& lhs,
 std::ostream& operator<<(std::ostream& lhs,
                          const RemotePoolMeta& rhs) {
   return lhs << "mirror_uuid=" << rhs.mirror_uuid << ", "
-                "mirror_pool_uuid=" << rhs.mirror_peer_uuid;
+                "mirror_peer_uuid=" << rhs.mirror_peer_uuid;
 }
 
 std::ostream& operator<<(std::ostream& lhs, const PeerSpec &peer) {

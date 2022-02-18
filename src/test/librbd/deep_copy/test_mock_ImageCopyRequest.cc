@@ -116,6 +116,8 @@ DiffRequest<MockTestImageCtx>* DiffRequest<MockTestImageCtx>::s_instance = nullp
 #include "librbd/deep_copy/ImageCopyRequest.cc"
 template class librbd::deep_copy::ImageCopyRequest<librbd::MockTestImageCtx>;
 
+using namespace std::chrono_literals;
+
 namespace librbd {
 namespace deep_copy {
 

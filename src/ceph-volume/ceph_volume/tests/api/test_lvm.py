@@ -195,8 +195,8 @@ class TestCreateLV(object):
     def test_uses_size(self, m_get_single_lv, m_call, m_run, monkeypatch):
         m_get_single_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, size=419430400, tags={'ceph.type': 'data'})
-        expected = ['lvcreate', '--yes', '-l', '100', '-n', 'foo-0', 'foo_group']
-        m_run.assert_called_with(expected)
+        expected = (['lvcreate', '--yes', '-l', '100', '-n', 'foo-0', 'foo_group'])
+        m_run.assert_called_with(expected, run_on_host=True)
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
@@ -211,7 +211,7 @@ class TestCreateLV(object):
         # 423624704 should be just under 1% off of the available size 419430400
         api.create_lv('foo', 0, vg=foo_group, size=4232052736, tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', '1000', '-n', 'foo-0', 'foo_group']
-        m_run.assert_called_with(expected)
+        m_run.assert_called_with(expected, run_on_host=True)
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
@@ -228,7 +228,7 @@ class TestCreateLV(object):
         m_get_single_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, extents='50', tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', '50', '-n', 'foo-0', 'foo_group']
-        m_run.assert_called_with(expected)
+        m_run.assert_called_with(expected, run_on_host=True)
 
     @pytest.mark.parametrize("test_input,expected",
                              [(2, 50),
@@ -240,7 +240,7 @@ class TestCreateLV(object):
         m_get_single_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, slots=test_input, tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', str(expected), '-n', 'foo-0', 'foo_group']
-        m_run.assert_called_with(expected)
+        m_run.assert_called_with(expected, run_on_host=True)
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
@@ -249,7 +249,7 @@ class TestCreateLV(object):
         m_get_single_lv.return_value = self.foo_volume
         api.create_lv('foo', 0, vg=self.foo_group, tags={'ceph.type': 'data'})
         expected = ['lvcreate', '--yes', '-l', '100%FREE', '-n', 'foo-0', 'foo_group']
-        m_run.assert_called_with(expected)
+        m_run.assert_called_with(expected, run_on_host=True)
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')

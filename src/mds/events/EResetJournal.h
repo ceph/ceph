@@ -28,7 +28,7 @@ class EResetJournal : public LogEvent {
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
   static void generate_test_instances(std::list<EResetJournal*>& ls);
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "EResetJournal";
   }
 

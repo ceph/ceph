@@ -62,6 +62,7 @@ def exec(ctx, config):
                     'sudo',
                     'TESTDIR={tdir}'.format(tdir=testdir),
                     'bash',
+                    '-ex',
                     '-c',
                     subst_vip(ctx, c)],
                 )

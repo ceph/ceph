@@ -1,6 +1,8 @@
 tasks:
 - install:
     branch: octopus
+    exclude_packages:
+      - ceph-volume
 - print: "**** done install task..."
 - print: "**** done start installing octopus cephadm ..."
 - cephadm:

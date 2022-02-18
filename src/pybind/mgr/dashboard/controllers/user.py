@@ -12,8 +12,8 @@ from ..exceptions import DashboardException, PasswordPolicyException, \
 from ..security import Scope
 from ..services.access_control import SYSTEM_ROLES, PasswordPolicy
 from ..services.auth import JwtManager
-from . import ApiController, BaseController, ControllerDoc, Endpoint, \
-    EndpointDoc, RESTController, allow_empty_body, validate_ceph_type
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
+    RESTController, allow_empty_body, validate_ceph_type
 
 USER_SCHEMA = ([{
     "username": (str, 'Username of the user'),
@@ -46,8 +46,8 @@ def validate_password_policy(password, username=None, old_password=None):
                                  component='user')
 
 
-@ApiController('/user', Scope.USER)
-@ControllerDoc("Display User Details", "User")
+@APIRouter('/user', Scope.USER)
+@APIDoc("Display User Details", "User")
 class User(RESTController):
 
     @staticmethod
@@ -157,8 +157,8 @@ class User(RESTController):
         return User._user_to_dict(user)
 
 
-@ApiController('/user')
-@ControllerDoc("Get User Password Policy Details", "UserPasswordPolicy")
+@APIRouter('/user')
+@APIDoc("Get User Password Policy Details", "UserPasswordPolicy")
 class UserPasswordPolicy(RESTController):
 
     @Endpoint('POST')
@@ -190,8 +190,8 @@ class UserPasswordPolicy(RESTController):
         return result
 
 
-@ApiController('/user/{username}')
-@ControllerDoc("Change User Password", "UserChangePassword")
+@APIRouter('/user/{username}')
+@APIDoc("Change User Password", "UserChangePassword")
 class UserChangePassword(BaseController):
 
     @Endpoint('POST')

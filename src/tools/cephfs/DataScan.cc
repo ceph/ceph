@@ -35,6 +35,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "datascan." << __func__ << ": "
 
+using namespace std;
+
 void DataScan::usage()
 {
   std::cout << "Usage: \n"
@@ -679,8 +681,9 @@ int DataScan::scan_inodes()
     AccumulateResult accum_res;
     inode_backtrace_t backtrace;
     file_layout_t loaded_layout = file_layout_t::get_default();
+    std::string symlink;
     r = ClsCephFSClient::fetch_inode_accumulate_result(
-        data_io, oid, &backtrace, &loaded_layout, &accum_res);
+        data_io, oid, &backtrace, &loaded_layout, &symlink, &accum_res);
 
     if (r == -EINVAL) {
       dout(4) << "Accumulated metadata missing from '"
@@ -826,7 +829,7 @@ int DataScan::scan_inodes()
     }
 
     InodeStore dentry;
-    build_file_dentry(obj_name_ino, file_size, file_mtime, guessed_layout, &dentry);
+    build_file_dentry(obj_name_ino, file_size, file_mtime, guessed_layout, &dentry, symlink);
 
     // Inject inode to the metadata pool
     if (have_backtrace) {
@@ -2154,12 +2157,19 @@ int LocalFileDriver::check_roots(bool *result)
 
 void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const file_layout_t &layout, InodeStore *out)
+    const file_layout_t &layout, InodeStore *out, std::string symlink)
 {
   ceph_assert(out != NULL);
 
   auto inode = out->get_inode();
-  inode->mode = 0500 | S_IFREG;
+  if(!symlink.empty()) {
+    inode->mode = 0777 | S_IFLNK;
+    out->symlink = symlink;
+  }
+  else {
+    inode->mode = 0500 | S_IFREG;
+  }
+
   inode->size = file_size;
   inode->max_size_ever = file_size;
   inode->mtime.tv.tv_sec = file_mtime;

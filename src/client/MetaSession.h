@@ -46,9 +46,11 @@ struct MetaSession {
   int mds_state = MDSMap::STATE_NULL;
   bool readonly = false;
 
-  list<Context*> waiting_for_open;
+  std::list<Context*> waiting_for_open;
 
   xlist<Cap*> caps;
+  // dirty_list keeps all the dirty inodes before flushing in current session.
+  xlist<Inode*> dirty_list;
   xlist<Inode*> flushing_caps;
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
@@ -60,6 +62,8 @@ struct MetaSession {
     : mds_num(mds_num), con(con), addrs(addrs) {
   }
 
+  xlist<Inode*> &get_dirty_list() { return dirty_list; }
+
   const char *get_state_name() const;
 
   void dump(Formatter *f, bool cap_dump=false) const;
@@ -68,4 +72,5 @@ struct MetaSession {
       ceph_seq_t mseq, epoch_t osd_barrier);
 };
 
+using MetaSessionRef = std::shared_ptr<MetaSession>;
 #endif

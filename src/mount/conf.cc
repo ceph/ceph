@@ -17,6 +17,7 @@
 
 #include "mount.ceph.h"
 
+using namespace std;
 
 extern "C" void mount_ceph_get_config_info(const char *config_file,
 					   const char *name,
@@ -44,6 +45,9 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
 
   conf.parse_env(cct->get_module_type()); // environment variables override
   conf.apply_changes(nullptr);
+
+  auto fsid = conf.get_val<uuid_d>("fsid");
+  fsid.print(cci->cci_fsid);
 
   ceph::async::io_context_pool ioc(1);
   MonClient monc = MonClient(cct.get(), ioc);

@@ -32,20 +32,45 @@ void FatalSignal::install_oneshot_signals_handler()
   (install_oneshot_signal_handler<SigNums>() , ...);
 }
 
+static void reraise_fatal(const int signum)
+{
+  // use default handler to dump core
+  ::signal(signum, SIG_DFL);
+
+  // normally, we won't get here. if we do, something is very weird.
+  if (::raise(signum)) {
+    std::cerr << "reraise_fatal: failed to re-raise signal " << signum
+              << std::endl;
+  } else {
+    std::cerr << "reraise_fatal: default handler for signal " << signum
+              << " didn't terminate the process?" << std::endl;
+  }
+  std::cerr << std::flush;
+  ::_exit(1);
+}
+
+[[gnu::noinline]] void FatalSignal::signal_entry(
+  const int signum,
+  siginfo_t* const info,
+  void*)
+{
+  if (static std::atomic_bool handled{false}; handled.exchange(true)) {
+    return;
+  }
+  assert(info);
+  FatalSignal::signaled(signum, *info);
+  reraise_fatal(signum);
+}
+
 template <int SigNum>
 void FatalSignal::install_oneshot_signal_handler()
 {
   struct sigaction sa;
-  sa.sa_sigaction = [](int sig, siginfo_t *info, void *p) {
-    if (static std::atomic_bool handled{false}; handled.exchange(true)) {
-      return;
-    }
-    assert(info);
-    FatalSignal::signaled(sig, *info);
-    ::signal(sig, SIG_DFL);
-  };
-  sigfillset(&sa.sa_mask);
-  sa.sa_flags = SA_SIGINFO | SA_RESTART;
+  // it's a bad idea to use a lambda here. On GCC there are `operator()`
+  // and `_FUN()`. Controlling their inlineability is hard (impossible?).
+  sa.sa_sigaction = signal_entry;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_SIGINFO | SA_RESTART | SA_NODEFER;
   if constexpr (SigNum == SIGSEGV) {
     sa.sa_flags |= SA_ONSTACK;
   }
@@ -54,13 +79,20 @@ void FatalSignal::install_oneshot_signal_handler()
 }
 
 
-static void print_backtrace(std::string_view cause) {
+[[gnu::noinline]] static void print_backtrace(std::string_view cause) {
   std::cerr << cause;
   if (seastar::engine_is_ready()) {
     std::cerr << " on shard " << seastar::this_shard_id();
   }
+  // nobody wants to see things like `FatalSignal::signaled()` or
+  // `print_backtrace()` in our backtraces. `+ 1` is for the extra
+  // frame created by kernel (signal trampoline, it will take care
+  // about e.g. sigreturn(2) calling; see the man page).
+  constexpr std::size_t FRAMES_TO_SKIP = 3 + 1;
   std::cerr << ".\nBacktrace:\n";
-  std::cerr << boost::stacktrace::stacktrace();
+  std::cerr << boost::stacktrace::stacktrace(
+    FRAMES_TO_SKIP,
+    static_cast<std::size_t>(-1)/* max depth same as the default one */);
   std::cerr << std::flush;
   // TODO: dump crash related meta data to $crash_dir
   //       see handle_fatal_signal()
@@ -121,7 +153,8 @@ static void print_proc_maps()
   }
 }
 
-void FatalSignal::signaled(const int signum, const siginfo_t& siginfo)
+[[gnu::noinline]] void FatalSignal::signaled(const int signum,
+                                             const siginfo_t& siginfo)
 {
   switch (signum) {
   case SIGSEGV:

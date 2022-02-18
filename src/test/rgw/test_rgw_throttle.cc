@@ -172,7 +172,7 @@ TEST_F(Aio_Throttle, YieldCostOverWindow)
 
   boost::asio::io_context context;
   spawn::spawn(context,
-    [&] (spawn::yield_context yield) {
+    [&] (yield_context yield) {
       YieldingAioThrottle throttle(4, context, yield);
       scoped_completion op;
       auto c = throttle.get(obj, wait_on(op), 8, 0);
@@ -194,7 +194,7 @@ TEST_F(Aio_Throttle, YieldingThrottleOverMax)
 
   boost::asio::io_context context;
   spawn::spawn(context,
-    [&] (spawn::yield_context yield) {
+    [&] (yield_context yield) {
       YieldingAioThrottle throttle(window, context, yield);
       for (uint64_t i = 0; i < total; i++) {
         using namespace std::chrono_literals;

@@ -32,7 +32,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-
+using namespace std;
 
 extern void op_type_to_str(uint32_t mask, char *buf, int len);
 
@@ -68,7 +68,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* stor
 
       auto& bucket = i->second;
 
-      ret = bucket->get_bucket_info(dpp, y);
+      ret = bucket->load_bucket(dpp, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;
@@ -97,7 +97,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Store* stor
 int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
 				   rgw::sal::Store* store,
 				   rgw::sal::User* user,
-				   map<string, cls_user_bucket_entry>& buckets_usage_map,
+				   map<string, bucket_meta_entry>& buckets_usage_map,
 				   optional_yield y)
 {
   CephContext *cct = store->ctx();
@@ -118,19 +118,34 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
       marker = i.first;
 
       auto& bucket_ent = i.second;
-      ret = bucket_ent->read_bucket_stats(dpp, y);
+      ret = bucket_ent->load_bucket(dpp, y, true /* load user stats */);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;
       }
-      cls_user_bucket_entry entry;
-      bucket_ent->convert(&entry);
+      bucket_meta_entry entry;
+      entry.size = bucket_ent->get_size();
+      entry.size_rounded = bucket_ent->get_size_rounded();
+      entry.creation_time = bucket_ent->get_creation_time();
+      entry.count = bucket_ent->get_count();
       buckets_usage_map.emplace(bucket_ent->get_name(), entry);
     }
     done = (buckets.count() < max_entries);
   } while (!done);
 
   return 0;
+}
+
+static string key_type_to_str(int key_type) {
+  switch (key_type) {
+    case KEY_TYPE_SWIFT:
+      return "swift";
+      break;
+
+    default:
+      return "s3";
+      break;
+  }
 }
 
 static bool char_is_unreserved_url(char c)
@@ -147,64 +162,6 @@ static bool char_is_unreserved_url(char c)
   default:
     return false;
   }
-}
-
-struct rgw_flags_desc {
-  uint32_t mask;
-  const char *str;
-};
-
-static struct rgw_flags_desc rgw_perms[] = {
- { RGW_PERM_FULL_CONTROL, "full-control" },
- { RGW_PERM_READ | RGW_PERM_WRITE, "read-write" },
- { RGW_PERM_READ, "read" },
- { RGW_PERM_WRITE, "write" },
- { RGW_PERM_READ_ACP, "read-acp" },
- { RGW_PERM_WRITE_ACP, "write-acp" },
- { 0, NULL }
-};
-
-void rgw_perm_to_str(uint32_t mask, char *buf, int len)
-{
-  const char *sep = "";
-  int pos = 0;
-  if (!mask) {
-    snprintf(buf, len, "<none>");
-    return;
-  }
-  while (mask) {
-    uint32_t orig_mask = mask;
-    for (int i = 0; rgw_perms[i].mask; i++) {
-      struct rgw_flags_desc *desc = &rgw_perms[i];
-      if ((mask & desc->mask) == desc->mask) {
-        pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
-        if (pos == len)
-          return;
-        sep = ", ";
-        mask &= ~desc->mask;
-        if (!mask)
-          return;
-      }
-    }
-    if (mask == orig_mask) // no change
-      break;
-  }
-}
-
-uint32_t rgw_str_to_perm(const char *str)
-{
-  if (strcasecmp(str, "") == 0)
-    return RGW_PERM_NONE;
-  else if (strcasecmp(str, "read") == 0)
-    return RGW_PERM_READ;
-  else if (strcasecmp(str, "write") == 0)
-    return RGW_PERM_WRITE;
-  else if (strcasecmp(str, "readwrite") == 0)
-    return RGW_PERM_READ | RGW_PERM_WRITE;
-  else if (strcasecmp(str, "full") == 0)
-    return RGW_PERM_FULL_CONTROL;
-
-  return RGW_PERM_INVALID;
 }
 
 int rgw_validate_tenant_name(const string& t)
@@ -413,7 +370,7 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
   const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     keys_allowed = false;
-    return -EACCES;
+    return -EINVAL;
   }
 
   swift_keys = op_state.get_swift_keys();
@@ -636,8 +593,9 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 
   // don't check for secret key because we may be doing a removal
 
-  check_existing_key(op_state);
-
+  if (check_existing_key(op_state)) {
+    op_state.set_access_key_exist();
+  }
   return 0;
 }
 
@@ -909,7 +867,8 @@ int RGWAccessKeyPool::execute_remove(const DoutPrefixProvider *dpp,
   map<std::string, RGWAccessKey> *keys_map;
 
   if (!op_state.has_existing_key()) {
-    set_err_msg(err_msg, "unable to find access key");
+    set_err_msg(err_msg, "unable to find access key,  with key type: " +
+                             key_type_to_str(key_type));
     return -ERR_INVALID_ACCESS_KEY;
   }
 
@@ -1178,6 +1137,11 @@ int RGWSubUserPool::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_s
   if (ret < 0) {
     set_err_msg(err_msg, "unable to parse request, " + subprocess_msg);
     return ret;
+  }
+
+  if (op_state.get_access_key_exist()) {
+    set_err_msg(err_msg, "cannot create existing key");
+    return -ERR_KEY_EXIST;
   }
 
   if (key_type == KEY_TYPE_S3 && op_state.get_access_key().empty()) {
@@ -1727,7 +1691,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       auto& bucket = it->second;
       marker = it->first;
 
-      ret = bucket->get_bucket_info(dpp, y);
+      ret = bucket->load_bucket(dpp, y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket->get_name());
         return ret;
@@ -1930,9 +1894,8 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       return -EEXIST; // change to code that maps to 409: conflict
     }
 
-    std::string prefix, delimiter;
     for (auto it = m.begin(); it != m.end(); ++it) {
-      ret = it->second->remove_bucket(dpp, true, prefix, delimiter, false, nullptr, y);
+      ret = it->second->remove_bucket(dpp, true, false, nullptr, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
@@ -2973,5 +2936,10 @@ int RGWUserCtl::read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& 
 
 RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc) {
   return new RGWUserMetadataHandler(user_svc);
+}
+
+void rgw_user::dump(Formatter *f) const
+{
+  ::encode_json("user", *this, f);
 }
 

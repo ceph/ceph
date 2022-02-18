@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -17,6 +17,8 @@
 #include "gtest/gtest.h"
 #include "common/ceph_context.h"
 #include "include/util.h"
+
+using namespace std;
 
 namespace fs = std::filesystem;
 

@@ -11,6 +11,8 @@
 #define dout_prefix *_dout << "librbd::cache::pwl::Request: " << this << " " \
                            <<  __func__ << ": "
 
+using namespace std;
+
 namespace librbd {
 namespace cache {
 namespace pwl {
@@ -33,16 +35,13 @@ C_BlockIORequest<T>::~C_BlockIORequest() {
 template <typename T>
 std::ostream &operator<<(std::ostream &os,
                          const C_BlockIORequest<T> &req) {
-   os << "image_extents=[" << req.image_extents << "], "
-      << "image_extents_summary=[" << req.image_extents_summary << "], "
-      << "bl=" << req.bl << ", "
-      << "user_req=" << req.user_req << ", "
-      << "m_user_req_completed=" << req.m_user_req_completed << ", "
-      << "m_deferred=" << req.m_deferred << ", "
-      << "detained=" << req.detained << ", "
-      << "waited_lanes=" << req.waited_lanes << ", "
-      << "waited_entries=" << req.waited_entries << ", "
-      << "waited_buffers=" << req.waited_buffers << "";
+   os << "image_extents=" << req.image_extents
+      << ", image_extents_summary=[" << req.image_extents_summary
+      << "], bl=" << req.bl
+      << ", user_req=" << req.user_req
+      << ", m_user_req_completed=" << req.m_user_req_completed
+      << ", m_deferred=" << req.m_deferred
+      << ", detained=" << req.detained;
    return os;
 }
 
@@ -139,7 +138,7 @@ std::ostream &operator<<(std::ostream &os,
   os << (C_BlockIORequest<T>&)req
      << " m_resources.allocated=" << req.m_resources.allocated;
   if (req.op_set) {
-     os << "op_set=" << *req.op_set;
+     os << " op_set=[" << *req.op_set << "]";
   }
   return os;
 }
@@ -209,7 +208,8 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
                                         current_sync_point,
                                         pwl.get_persist_on_flush(),
                                         pwl.get_context(), this);
-    ldout(pwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get() << dendl;
+    ldout(pwl.get_context(), 20) << "write_req=[" << *this
+                                 << "], op_set=" << op_set.get() << dendl;
     ceph_assert(m_resources.allocated);
     /* op_set->operations initialized differently for plain write or write same */
     auto allocation = m_resources.buffers.begin();
@@ -220,8 +220,9 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
       this->op_set->operations.emplace_back(operation);
 
       /* A WS is also a write */
-      ldout(pwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get()
-                                   << " operation=" << operation << dendl;
+      ldout(pwl.get_context(), 20) << "write_req=[" << *this
+                                   << "], op_set=" << op_set.get()
+                                   << ", operation=" << operation << dendl;
       log_entries.emplace_back(operation->log_entry);
       if (!op_set->persist_on_flush) {
         pwl.inc_last_op_sequence_num();
@@ -350,16 +351,16 @@ void C_FlushRequest<T>::finish_req(int r) {
 
 template <typename T>
 bool C_FlushRequest<T>::alloc_resources() {
-  ldout(pwl.get_context(), 20) << "req type=" << get_name() << " "
-                               << "req=[" << *this << "]" << dendl;
+  ldout(pwl.get_context(), 20) << "req type=" << get_name()
+                               << " req=[" << *this << "]" << dendl;
   return pwl.alloc_resources(this);
 }
 
 template <typename T>
 void C_FlushRequest<T>::dispatch() {
   utime_t now = ceph_clock_now();
-  ldout(pwl.get_context(), 20) << "req type=" << get_name() << " "
-                               << "req=[" << *this << "]" << dendl;
+  ldout(pwl.get_context(), 20) << "req type=" << get_name()
+                               << " req=[" << *this << "]" << dendl;
   ceph_assert(this->m_resources.allocated);
   this->m_dispatched_time = now;
 
@@ -407,8 +408,8 @@ C_DiscardRequest<T>::~C_DiscardRequest() {
 
 template <typename T>
 bool C_DiscardRequest<T>::alloc_resources() {
-  ldout(pwl.get_context(), 20) << "req type=" << get_name() << " "
-                               << "req=[" << *this << "]" << dendl;
+  ldout(pwl.get_context(), 20) << "req type=" << get_name()
+                               << " req=[" << *this << "]" << dendl;
   return pwl.alloc_resources(this);
 }
 
@@ -448,8 +449,8 @@ void C_DiscardRequest<T>::setup_log_operations() {
 template <typename T>
 void C_DiscardRequest<T>::dispatch() {
   utime_t now = ceph_clock_now();
-  ldout(pwl.get_context(), 20) << "req type=" << get_name() << " "
-                               << "req=[" << *this << "]" << dendl;
+  ldout(pwl.get_context(), 20) << "req type=" << get_name()
+                               << " req=[" << *this << "]" << dendl;
   ceph_assert(this->m_resources.allocated);
   this->m_dispatched_time = now;
   setup_log_operations();

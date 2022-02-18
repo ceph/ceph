@@ -65,6 +65,7 @@ BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
 }
 
 int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
+				  uint64_t zone_size, uint64_t first_sequential_zone,
 				  KeyValueDB::Transaction txn)
 {
   bytes_per_block = granularity;
@@ -260,7 +261,7 @@ int BitmapFreelistManager::_read_cfg(
     string val;
     int r = cfg_reader(keys[i], &val);
     if (r == 0) {
-      *(vals[i]) = strict_iecstrtoll(val.c_str(), &err);
+      *(vals[i]) = strict_iecstrtoll(val, &err);
       if (!err.empty()) {
         derr << __func__ << " Failed to parse - "
           << keys[i] << ":" << val
@@ -486,7 +487,9 @@ void BitmapFreelistManager::allocate(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  _xor(offset, length, txn);
+  if (!is_null_manager()) {
+    _xor(offset, length, txn);
+  }
 }
 
 void BitmapFreelistManager::release(
@@ -495,7 +498,9 @@ void BitmapFreelistManager::release(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  _xor(offset, length, txn);
+  if (!is_null_manager()) {
+    _xor(offset, length, txn);
+  }
 }
 
 void BitmapFreelistManager::_xor(

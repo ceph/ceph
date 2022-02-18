@@ -28,9 +28,12 @@
 #include "rgw_resolve.h"
 #include "rgw_sal_rados.h"
 
+#include "rgw_ratelimit.h"
 #include <numeric>
 
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 struct rgw_http_status_code {
   int code;
@@ -477,15 +480,15 @@ void dump_epoch_header(struct req_state *s, const char *name, real_time t)
   return dump_header(s, name, std::string_view(buf, len));
 }
 
-void dump_time(struct req_state *s, const char *name, real_time *t)
+void dump_time(struct req_state *s, const char *name, real_time t)
 {
   char buf[TIME_BUF_SIZE];
-  rgw_to_iso8601(*t, buf, sizeof(buf));
+  rgw_to_iso8601(t, buf, sizeof(buf));
 
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(struct req_state *s, const rgw_user& id, string& name,
+void dump_owner(struct req_state *s, const rgw_user& id, const string& name,
 		const char *section)
 {
   if (!section)
@@ -757,6 +760,16 @@ int dump_body(struct req_state* const s,
               const char* const buf,
               const size_t len)
 {
+  bool healthchk = false;
+  // we dont want to limit health checks
+  if(s->op_type == RGW_OP_GET_HEALTH_CHECK)
+    healthchk = true;
+  if(len > 0 && !healthchk) {
+    const char *method = s->info.method;
+    s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
+    if(!rgw::sal::Bucket::empty(s->bucket.get()))
+      s->ratelimit_data->decrease_bytes(method, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
+  }
   try {
     return RESTFUL_IO(s)->send_body(buf, len);
   } catch (rgw::io::Exception& e) {
@@ -778,11 +791,24 @@ int recv_body(struct req_state* const s,
               char* const buf,
               const size_t max)
 {
+  int len;
   try {
-    return RESTFUL_IO(s)->recv_body(buf, max);
+    len = RESTFUL_IO(s)->recv_body(buf, max);
   } catch (rgw::io::Exception& e) {
     return -e.code().value();
   }
+  bool healthchk = false;
+  // we dont want to limit health checks
+  if(s->op_type ==  RGW_OP_GET_HEALTH_CHECK)
+    healthchk = true;
+  if(len > 0 && !healthchk) {
+    const char *method = s->info.method;
+    s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
+    if(!rgw::sal::Bucket::empty(s->bucket.get()))
+      s->ratelimit_data->decrease_bytes(method, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
+  }
+  return len;
+
 }
 
 int RGWGetObj_ObjStore::get_params(optional_yield y)
@@ -1472,7 +1498,7 @@ static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const ui
   int total = need_to_read;
   bufferlist bl;
 
-  int read_len = 0, len = 0;
+  int read_len = 0;
   do {
     bufferptr bp(need_to_read + 1);
     read_len = recv_body(s, bp.c_str(), need_to_read);
@@ -1483,7 +1509,6 @@ static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const ui
     bp.c_str()[read_len] = '\0';
     bp.set_length(read_len);
     bl.append(bp);
-    len += read_len;
 
     if (read_len == need_to_read) {
       if (need_to_read < MAX_READ_CHUNK)
@@ -1612,8 +1637,14 @@ int RGWListBucketMultiparts_ObjStore::get_params(optional_yield y)
 
   string key_marker = s->info.args.get("key-marker");
   string upload_id_marker = s->info.args.get("upload-id-marker");
-  if (!key_marker.empty())
-    marker.init(key_marker, upload_id_marker);
+  if (!key_marker.empty()) {
+    std::unique_ptr<rgw::sal::MultipartUpload> upload;
+    upload = s->bucket->get_multipart_upload(key_marker,
+					 upload_id_marker);
+    marker_meta = upload->get_meta();
+    marker_key = upload->get_key();
+    marker_upload_id = upload->get_upload_id();
+  }
 
   return 0;
 }

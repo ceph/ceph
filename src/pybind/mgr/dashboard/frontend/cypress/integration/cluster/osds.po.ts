@@ -13,8 +13,7 @@ export class OSDsPageHelper extends PageHelper {
     status: 5
   };
 
-  @PageHelper.restrictTo(pages.create.url)
-  create(deviceType: 'hdd' | 'ssd') {
+  create(deviceType: 'hdd' | 'ssd', hostname?: string, expandCluster = false) {
     // Click Primary devices Add button
     cy.get('cd-osd-devices-selection-groups[name="Primary"]').as('primaryGroups');
     cy.get('@primaryGroups').find('button').click();
@@ -23,20 +22,29 @@ export class OSDsPageHelper extends PageHelper {
     cy.get('cd-osd-devices-selection-modal').within(() => {
       cy.get('.modal-footer .tc_submitButton').as('addButton').should('be.disabled');
       this.filterTable('Type', deviceType);
+      if (hostname) {
+        this.filterTable('Hostname', hostname);
+      }
+
+      if (expandCluster) {
+        this.getTableCount('total').should('be.gte', 1);
+      }
       cy.get('@addButton').click();
     });
 
-    cy.get('@primaryGroups').within(() => {
-      this.getTableCount('total').as('newOSDCount');
-    });
+    if (!expandCluster) {
+      cy.get('@primaryGroups').within(() => {
+        this.getTableCount('total').as('newOSDCount');
+      });
 
-    cy.get(`${pages.create.id} .card-footer .tc_submitButton`).click();
-    cy.get(`cd-osd-creation-preview-modal .modal-footer .tc_submitButton`).click();
+      cy.get(`${pages.create.id} .card-footer .tc_submitButton`).click();
+      cy.get(`cd-osd-creation-preview-modal .modal-footer .tc_submitButton`).click();
+    }
   }
 
   @PageHelper.restrictTo(pages.index.url)
   checkStatus(id: number, status: string[]) {
-    this.seachTable(`id:${id}`);
+    this.searchTable(`id:${id}`);
     this.expectTableCount('found', 1);
     cy.get(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`).should(($ele) => {
       const allStatus = $ele.toArray().map((v) => v.innerText);
@@ -48,7 +56,7 @@ export class OSDsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   ensureNoOsd(id: number) {
-    this.seachTable(`id:${id}`);
+    this.searchTable(`id:${id}`);
     this.expectTableCount('found', 0);
     this.clearTableSearchInput();
   }

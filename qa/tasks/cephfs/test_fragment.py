@@ -214,11 +214,14 @@ class TestFragmentation(CephFSTestCase):
 
         self.fs.mds_asok(['flush', 'journal'])
 
+        def _check_pq_finished():
+            num_strays = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['num_strays']
+            pq_ops = self.fs.mds_asok(['perf', 'dump', 'purge_queue'])['purge_queue']['pq_executing']
+            return num_strays == 0 and pq_ops == 0
+
         # Wait for all strays to purge
-        self.wait_until_equal(
-            lambda: self.fs.mds_asok(['perf', 'dump', 'mds_cache']
-                                     )['mds_cache']['num_strays'],
-            0,
+        self.wait_until_true(
+            lambda: _check_pq_finished(),
             timeout=1200
         )
         # Check that the metadata pool objects for all the myriad

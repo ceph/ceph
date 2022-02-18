@@ -163,6 +163,14 @@ TEST_F(LibRadosIo, AppendRoundTrip) {
   ASSERT_EQ(0, memcmp(buf3 + sizeof(buf), buf2, sizeof(buf2)));
 }
 
+TEST_F(LibRadosIo, ZeroLenZero) {
+  rados_write_op_t op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_zero(op, 0, 0);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "foo", NULL, 0));
+  rados_release_write_op(op);
+}
+
 TEST_F(LibRadosIo, TruncTest) {
   char buf[128];
   char buf2[sizeof(buf)];

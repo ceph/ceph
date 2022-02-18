@@ -48,40 +48,50 @@ using ObjectDataBlockRef = TCachedExtentRef<ObjectDataBlock>;
 
 class ObjectDataHandler {
 public:
-  using base_ertr = with_trans_ertr<TransactionManager::base_iertr>;
+  using base_iertr = TransactionManager::base_iertr;
+
+  ObjectDataHandler(uint32_t mos) : max_object_size(mos) {}
 
   struct context_t {
-    InterruptedTransactionManager tm;
+    TransactionManager &tm;
     Transaction &t;
     Onode &onode;
   };
 
   /// Writes bl to [offset, offset + bl.length())
-  using write_ertr = base_ertr;
-  using write_ret = write_ertr::future<>;
+  using write_iertr = base_iertr;
+  using write_ret = write_iertr::future<>;
   write_ret write(
     context_t ctx,
     objaddr_t offset,
     const bufferlist &bl);
 
   /// Reads data in [offset, offset + len)
-  using read_ertr = base_ertr;
-  using read_ret = read_ertr::future<bufferlist>;
+  using read_iertr = base_iertr;
+  using read_ret = read_iertr::future<bufferlist>;
   read_ret read(
     context_t ctx,
     objaddr_t offset,
     extent_len_t len);
 
+  /// sparse read data, get range interval in [offset, offset + len)
+  using fiemap_iertr = base_iertr;
+  using fiemap_ret = fiemap_iertr::future<std::map<uint64_t, uint64_t>>;
+  fiemap_ret fiemap(
+    context_t ctx,
+    objaddr_t offset,
+    extent_len_t len);
+
   /// Clears data past offset
-  using truncate_ertr = base_ertr;
-  using truncate_ret = truncate_ertr::future<>;
+  using truncate_iertr = base_iertr;
+  using truncate_ret = truncate_iertr::future<>;
   truncate_ret truncate(
     context_t ctx,
     objaddr_t offset);
 
   /// Clears data and reservation
-  using clear_ertr = base_ertr;
-  using clear_ret = clear_ertr::future<>;
+  using clear_iertr = base_iertr;
+  using clear_ret = clear_iertr::future<>;
   clear_ret clear(context_t ctx);
 
 private:
@@ -104,6 +114,16 @@ private:
     context_t ctx,
     object_data_t &object_data,
     extent_len_t size);
+private:
+  /**
+   * max_object_size
+   *
+   * For now, we allocate a fixed region of laddr space of size max_object_size
+   * for any object.  In the future, once we have the ability to remap logical
+   * mappings (necessary for clone), we'll add the ability to grow and shrink
+   * these regions and remove this assumption.
+   */
+  const uint32_t max_object_size = 0;
 };
 
 }

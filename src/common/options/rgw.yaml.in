@@ -62,9 +62,11 @@ options:
   desc: Set RGW max chunk size
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
     accessing data objects. RGW read and write operations will never request more than
-    this amount in a single request. This also defines the RGW object head size, as
+    this amount in a single request. This also defines the RGW head object size, as
     head operations need to be atomic, and anything larger than this would require
-    more than a single operation.
+    more than a single operation. When RGW objects are written to the default
+    storage class, up to this amount of payload data will be stored alongside
+    metadata in the head object.
   default: 4_M
   services:
   - rgw
@@ -406,6 +408,12 @@ options:
 - name: rgw_lc_debug_interval
   type: int
   level: dev
+  desc: The number of seconds that simulate one "day" in order to debug RGW LifeCycle.
+    Do *not* modify for a production cluster.
+  long_desc: For debugging RGW LifeCycle, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change LifeCycle behavior.
+    For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
+    then this would be set to 600, the number of seconds in 10 minutes.
   default: -1
   services:
   - rgw
@@ -1149,15 +1157,6 @@ options:
   - rgw
   min: 0.01
   max: 100000
-- name: rgw_rados_pool_pg_num_min
-  type: uint
-  level: advanced
-  desc: pg_num_min value for RGW metadata (omap-heavy) pools
-  default: 8
-  services:
-  - rgw
-  min: 1
-  max: 1_K
 - name: rgw_rados_pool_recovery_priority
   type: uint
   level: advanced
@@ -1180,6 +1179,16 @@ options:
   - rgw_zonegroup
   - rgw_realm
   with_legacy: true
+- name: rgw_zone_id
+  type: str
+  level: advanced
+  desc: Zone ID
+  services:
+  - rgw
+  see_also:
+  - rgw_zone
+  - rgw_zonegroup
+  - rgw_realm
 - name: rgw_zone_root_pool
   type: str
   level: advanced
@@ -1248,6 +1257,16 @@ options:
   - rgw_zone
   - rgw_realm
   with_legacy: true
+- name: rgw_zonegroup_id
+  type: str
+  level: advanced
+  desc: Zonegroup ID
+  services:
+  - rgw
+  see_also:
+  - rgw_zone
+  - rgw_zonegroup
+  - rgw_realm
 - name: rgw_zonegroup_root_pool
   type: str
   level: advanced
@@ -1278,6 +1297,11 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_realm_id
+  type: str
+  level: advanced
+  services:
+  - rgw
 - name: rgw_realm_root_pool
   type: str
   level: advanced
@@ -1405,6 +1429,7 @@ options:
   - rgw_log_object_name
   - rgw_ops_log_rados
   - rgw_ops_log_socket_path
+  - rgw_ops_log_file_path
   with_legacy: true
 # enable logging bandwidth usage
 - name: rgw_enable_usage_log
@@ -1444,6 +1469,18 @@ options:
   see_also:
   - rgw_enable_ops_log
   - rgw_ops_log_data_backlog
+  with_legacy: true
+# path to file where ops log can go
+- name: rgw_ops_log_file_path
+  type: str
+  level: advanced
+  desc: File-system path for ops log.
+  long_desc: Path to file that RGW will log ops logs to.
+  fmt_desc: The file-system path for writing operations logs.
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_ops_log
   with_legacy: true
 # max data backlog for ops log
 - name: rgw_ops_log_data_backlog
@@ -2086,7 +2123,7 @@ options:
   type: size
   level: advanced
   desc: Minimum S3 multipart-upload part size
-  long_desc: When doing a multipart upload, each part (other than the last part) should
+  long_desc: When doing a multipart upload, each part (other than the last part) must
     be at least this size.
   default: 5_M
   services:
@@ -2755,9 +2792,13 @@ options:
   type: int
   level: advanced
   desc: data changes notification interval to followers
+  long_desc: In multisite, radosgw will occasionally broadcast new entries in its
+    data changes log to peer zones, so they can prioritize sync of some
+    of the most recent changes. Can be disabled with 0.
   default: 200
   services:
   - rgw
+  with_legacy: true
 - name: rgw_torrent_origin
   type: str
   level: advanced
@@ -2776,7 +2817,7 @@ options:
   type: bool
   level: basic
   desc: Enable dynamic resharding
-  long_desc: If true, RGW will dynamicall increase the number of shards in buckets
+  long_desc: If true, RGW will dynamically increase the number of shards in buckets
     that have a high number of objects per shard.
   default: true
   services:
@@ -3134,7 +3175,7 @@ options:
   type: size
   level: advanced
   desc: datacache maximum size on disk in bytes
-  default: 1048576
+  default: 1_G
   services:
   - rgw
   with_legacy: true
@@ -3187,6 +3228,57 @@ options:
   see_also:
   - rgw_thread_pool_size
   with_legacy: true
+- name: rgw_backend_store
+  type: str
+  level: advanced
+  desc: experimental Option to set backend store type
+  long_desc: defaults to rados. Other valid values are dbstore and motr (both experimental).
+  default: rados
+  services:
+  - rgw
+  enum_values:
+  - rados
+  - dbstore
+  - motr
+- name: motr_profile_fid
+  type: str
+  level: advanced
+  desc: experimental Option to set Motr profile fid
+  long_desc: example value 0x7000000000000001:0x4f
+  default: 0x7000000000000001:0x0
+  services:
+  - rgw
+- name: motr_my_fid
+  type: str
+  level: advanced
+  desc: experimental Option to set my Motr fid
+  long_desc: example value 0x7200000000000001:0x29
+  default: 0x7200000000000001:0x0
+  services:
+  - rgw
+- name: motr_my_endpoint
+  type: str
+  level: advanced
+  desc: experimental Option to set my Motr endpoint address
+  long_desc: example value 192.168.180.182@tcp:12345:4:1
+  default: 192.168.180.182@tcp:12345:4:1
+  services:
+  - rgw
+- name: motr_ha_endpoint
+  type: str
+  level: advanced
+  desc: experimental Option to set Motr HA agent endpoint address
+  long_desc: example value 192.168.180.182@tcp:12345:1:1
+  default: 192.168.180.182@tcp:12345:1:1
+  services:
+  - rgw
+- name: motr_tracing_enabled
+  type: bool
+  level: advanced
+  desc: Set to true when Motr client debugging is needed
+  default: false
+  services:
+  - rgw
 - name: rgw_luarocks_location
   type: str
   level: advanced

@@ -2089,6 +2089,123 @@ TEST_F(TestLibRBD, TestCreateLsRenameSnapPP)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, ConcurrentCreatesUnvalidatedPool)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, create_pool(true).c_str(),
+                                  &ioctx));
+
+  std::vector<std::string> names;
+  for (int i = 0; i < 4; i++) {
+    names.push_back(get_temp_image_name());
+  }
+  uint64_t size = 2 << 20;
+
+  std::vector<std::thread> threads;
+  for (const auto& name : names) {
+    threads.emplace_back([ioctx, &name, size]() {
+      int order = 0;
+      ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  for (const auto& name : names) {
+    ASSERT_EQ(0, rbd_remove(ioctx, name.c_str()));
+  }
+  rados_ioctx_destroy(ioctx);
+}
+
+static void remove_full_try(rados_ioctx_t ioctx, const std::string& image_name,
+                            const std::string& data_pool_name)
+{
+  int order = 0;
+  uint64_t quota = 10 << 20;
+  uint64_t size = 5 * quota;
+  ASSERT_EQ(0, create_image(ioctx, image_name.c_str(), size, &order));
+
+  std::string cmdstr = "{\"prefix\": \"osd pool set-quota\", \"pool\": \"" +
+      data_pool_name + "\", \"field\": \"max_bytes\", \"val\": \"" +
+      std::to_string(quota) + "\"}";
+  char *cmd[1];
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(rados_ioctx_get_cluster(ioctx),
+                                 (const char **)cmd, 1, "", 0, nullptr, 0,
+                                 nullptr, 0));
+
+  rados_set_pool_full_try(ioctx);
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, image_name.c_str(), &image, nullptr));
+
+  uint64_t off;
+  size_t len = 1 << 20;
+  ssize_t ret;
+  for (off = 0; off < size; off += len) {
+    ret = rbd_write_zeroes(image, off, len,
+                           RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
+                           LIBRADOS_OP_FLAG_FADVISE_FUA);
+    if (ret < 0) {
+      break;
+    }
+    ASSERT_EQ(ret, len);
+    sleep(1);
+  }
+  ASSERT_TRUE(off >= quota && off < size);
+  ASSERT_EQ(ret, -EDQUOT);
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  // make sure we have latest map that marked the pool full
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(rados_ioctx_get_cluster(ioctx)));
+  ASSERT_EQ(0, rbd_remove(ioctx, image_name.c_str()));
+}
+
+TEST_F(TestLibRBD, RemoveFullTry)
+{
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  rados_ioctx_t ioctx;
+  auto pool_name = create_pool(true);
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, pool_name.c_str(), &ioctx));
+  // cancel out rbd_default_data_pool -- we need an image without
+  // a separate data pool
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_default_data_pool",
+                                     pool_name.c_str()));
+
+  int order = 0;
+  auto image_name = get_temp_image_name();
+  // FIXME: this is a workaround for rbd_trash object being created
+  // on the first remove -- pre-create it to avoid bumping into quota
+  ASSERT_EQ(0, create_image(ioctx, image_name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd_remove(ioctx, image_name.c_str()));
+  remove_full_try(ioctx, image_name, pool_name);
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, RemoveFullTryDataPool)
+{
+  REQUIRE_FORMAT_V2();
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  rados_ioctx_t ioctx;
+  auto pool_name = create_pool(true);
+  auto data_pool_name = create_pool(true);
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, pool_name.c_str(), &ioctx));
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_default_data_pool",
+                                     data_pool_name.c_str()));
+
+  auto image_name = get_temp_image_name();
+  remove_full_try(ioctx, image_name, data_pool_name);
+
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, TestIO)
 {
   rados_ioctx_t ioctx;
@@ -4401,6 +4518,73 @@ TYPED_TEST(DiffIterateTest, DiffIterateRegression6926)
   ASSERT_EQ(static_cast<size_t>(0), extents.size());
 }
 
+TYPED_TEST(DiffIterateTest, DiffIterateParent)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ssize_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    uint64_t features;
+    ASSERT_EQ(0, image.features(&features));
+    uint64_t object_size = 0;
+    if (this->whole_object) {
+      object_size = 1 << order;
+    }
+
+    ceph::bufferlist bl;
+    bl.append(std::string(size, '1'));
+    ASSERT_EQ(size, image.write(0, size, bl));
+    ASSERT_EQ(0, image.snap_create("snap"));
+    ASSERT_EQ(0, image.snap_protect("snap"));
+
+    std::string clone_name = this->get_temp_image_name();
+    ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "snap", ioctx,
+                           clone_name.c_str(), features, &order));
+    librbd::Image clone;
+    ASSERT_EQ(0, rbd.open(ioctx, clone, clone_name.c_str(), NULL));
+
+    std::vector<diff_extent> extents;
+    ASSERT_EQ(0, clone.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                     vector_iterate_cb, &extents));
+    ASSERT_EQ(5u, extents.size());
+    ASSERT_EQ(diff_extent(0, 4194304, true, object_size), extents[0]);
+    ASSERT_EQ(diff_extent(4194304, 4194304, true, object_size), extents[1]);
+    ASSERT_EQ(diff_extent(8388608, 4194304, true, object_size), extents[2]);
+    ASSERT_EQ(diff_extent(12582912, 4194304, true, object_size), extents[3]);
+    ASSERT_EQ(diff_extent(16777216, 4194304, true, object_size), extents[4]);
+    extents.clear();
+
+    ASSERT_EQ(0, clone.resize(size / 2));
+    ASSERT_EQ(0, clone.resize(size));
+    ASSERT_EQ(1, clone.write(size - 1, 1, bl));
+
+    ASSERT_EQ(0, clone.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                     vector_iterate_cb, &extents));
+    ASSERT_EQ(4u, extents.size());
+    ASSERT_EQ(diff_extent(0, 4194304, true, object_size), extents[0]);
+    ASSERT_EQ(diff_extent(4194304, 4194304, true, object_size), extents[1]);
+    ASSERT_EQ(diff_extent(8388608, 2097152, true, object_size), extents[2]);
+    // hole (parent overlap = 10M) followed by copyup'ed object
+    ASSERT_EQ(diff_extent(16777216, 4194304, true, object_size), extents[3]);
+
+    ASSERT_PASSED(this->validate_object_map, image);
+    ASSERT_PASSED(this->validate_object_map, clone);
+  }
+
+  ioctx.close();
+}
+
 TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
@@ -4419,6 +4603,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
 
   bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
+  uint64_t features;
+  ASSERT_EQ(0, image.features(&features));
   uint64_t object_size = 0;
   if (this->whole_object) {
     object_size = 1 << order;
@@ -4435,7 +4621,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
 
   std::string clone_name = this->get_temp_image_name();
   ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "one", ioctx, clone_name.c_str(),
-                         RBD_FEATURE_LAYERING, &order));
+                         features, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, clone_name.c_str(), NULL));
 
   interval_set<uint64_t> exists;
@@ -4502,6 +4688,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
 
   bool skip_discard = this->is_skip_partial_discard_enabled(image);
 
+  uint64_t features;
+  ASSERT_EQ(0, image.features(&features));
   uint64_t object_size = 0;
   if (this->whole_object) {
     object_size = 1 << order;
@@ -4520,7 +4708,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
 
   std::string clone_name = this->get_temp_image_name();
   ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "two", ioctx,
-                         clone_name.c_str(), RBD_FEATURE_LAYERING, &order));
+                         clone_name.c_str(), features, &order));
   ASSERT_EQ(0, rbd.open(ioctx, image, clone_name.c_str(), NULL));
 
   interval_set<uint64_t> two;
@@ -4531,6 +4719,72 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
   ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
                                    iterate_cb, (void *)&diff));
   ASSERT_TRUE(two.subset_of(diff));
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateUnalignedSmall)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = this->get_temp_image_name();
+    ssize_t size = 10 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(size, '1'));
+    ASSERT_EQ(size, image.write(0, size, bl));
+
+    std::vector<diff_extent> extents;
+    ASSERT_EQ(0, image.diff_iterate2(NULL, 5000005, 1234, true,
+                                     this->whole_object, vector_iterate_cb,
+                                     &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(5000005, 1234, true, 0), extents[0]);
+
+    ASSERT_PASSED(this->validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateUnaligned)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ssize_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(size, '1'));
+    ASSERT_EQ(size, image.write(0, size, bl));
+
+    std::vector<diff_extent> extents;
+    ASSERT_EQ(0, image.diff_iterate2(NULL, 8376263, 4260970, true,
+                                     this->whole_object, vector_iterate_cb,
+                                     &extents));
+    ASSERT_EQ(3u, extents.size());
+    ASSERT_EQ(diff_extent(8376263, 12345, true, 0), extents[0]);
+    ASSERT_EQ(diff_extent(8388608, 4194304, true, 0), extents[1]);
+    ASSERT_EQ(diff_extent(12582912, 54321, true, 0), extents[2]);
+
+    ASSERT_PASSED(this->validate_object_map, image);
+  }
+
+  ioctx.close();
 }
 
 TEST_F(TestLibRBD, ZeroLengthWrite)
@@ -5197,6 +5451,43 @@ TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, UpdateFeaturesViaLockOwner) {
+
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  librbd::RBD rbd;
+  int order = 0;
+  //creates full with rbd default features
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  bool lock_owner;
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.update_features(RBD_FEATURE_OBJECT_MAP, false));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.update_features(RBD_FEATURE_OBJECT_MAP, true));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
 }
 
 TEST_F(TestLibRBD, EnableJournalingViaLockOwner)

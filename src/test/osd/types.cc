@@ -25,6 +25,8 @@
 #include "osd/ReplicatedBackend.h"
 #include <sstream>
 
+using namespace std;
+
 TEST(hobject, prefixes0)
 {
   uint32_t mask = 0xE947FA20;

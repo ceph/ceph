@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from ..services.sso import load_sso_db
-from . import CLICommandTestMixin, CmdException  # pylint: disable=no-name-in-module
+from ..tests import CLICommandTestMixin, CmdException
 
 
 class AccessControlTest(unittest.TestCase, CLICommandTestMixin):

@@ -15,7 +15,15 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string notify_oid_prefix = "notify";
+
+RGWSI_Notify::~RGWSI_Notify()
+{
+  shutdown();
+}
+
 
 class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   CephContext *cct;
@@ -294,11 +302,6 @@ void RGWSI_Notify::shutdown()
   delete shutdown_cb;
 
   finalized = true;
-}
-
-RGWSI_Notify::~RGWSI_Notify()
-{
-  shutdown();
 }
 
 int RGWSI_Notify::unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle)

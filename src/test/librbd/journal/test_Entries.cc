@@ -89,6 +89,7 @@ public:
   }
 
   bool wait_for_entries_available(librbd::ImageCtx *ictx) {
+    using namespace std::chrono_literals;
     std::unique_lock locker{m_replay_handler.lock};
     while (!m_replay_handler.entries_available) {
       if (m_replay_handler.cond.wait_for(locker, 10s) == std::cv_status::timeout) {

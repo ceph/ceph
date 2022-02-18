@@ -25,8 +25,9 @@ class GenericLogEntry {
 public:
   WriteLogCacheEntry ram_entry;
   WriteLogCacheEntry *cache_entry = nullptr;
-  uint32_t log_entry_index = 0;
+  uint64_t log_entry_index = 0;
   bool completed = false;
+  BlockGuardCell* m_cell = nullptr;
   GenericLogEntry(uint64_t image_offset_bytes = 0, uint64_t write_bytes = 0)
     : ram_entry(image_offset_bytes, write_bytes) {
   };
@@ -217,9 +218,8 @@ public:
   virtual buffer::list &get_cache_bl() = 0;
 
   BlockExtent block_extent();
-  unsigned int reader_count() const;
+  virtual unsigned int reader_count() const = 0;
   /* Constructs a new bl containing copies of cache_bp */
-  void copy_cache_bl(bufferlist *out_bl) override {};
   bool can_retire() const override {
     return (this->completed && this->get_flushed() && (0 == reader_count()));
   }

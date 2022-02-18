@@ -1,4 +1,19 @@
 roles:
-- [mon.a, osd.0, osd.1, osd.2, a_gateway.0]
-- [mon.b, osd.3, osd.4, osd.5, b_client.0]
-- [mon.c, mgr.x, osd.6, osd.7, c_gateway.1]
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - client.0
+  - ceph.iscsi.iscsi.a
+- - mon.b
+  - osd.2
+  - osd.3
+  - osd.4
+  - client.1
+- - mon.c
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.2
+  - ceph.iscsi.iscsi.b

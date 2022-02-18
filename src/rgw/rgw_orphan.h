@@ -19,7 +19,7 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
-#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -40,11 +40,11 @@ enum RGWOrphanSearchStageId {
 struct RGWOrphanSearchStage {
   RGWOrphanSearchStageId stage;
   int shard;
-  string marker;
+  std::string marker;
 
   RGWOrphanSearchStage() : stage(ORPHAN_SEARCH_STAGE_UNKNOWN), shard(0) {}
   explicit RGWOrphanSearchStage(RGWOrphanSearchStageId _stage) : stage(_stage), shard(0) {}
-  RGWOrphanSearchStage(RGWOrphanSearchStageId _stage, int _shard, const string& _marker) : stage(_stage), shard(_shard), marker(_marker) {}
+  RGWOrphanSearchStage(RGWOrphanSearchStageId _stage, int _shard, const std::string& _marker) : stage(_stage), shard(_shard), marker(_marker) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -69,7 +69,7 @@ struct RGWOrphanSearchStage {
 WRITE_CLASS_ENCODER(RGWOrphanSearchStage)
   
 struct RGWOrphanSearchInfo {
-  string job_name;
+  std::string job_name;
   rgw_pool pool;
   uint16_t num_shards;
   utime_t start_time;
@@ -86,7 +86,7 @@ struct RGWOrphanSearchInfo {
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(job_name, bl);
-    string s;
+    std::string s;
     decode(s, bl);
     pool.from_str(s);
     decode(num_shards, bl);
@@ -123,42 +123,42 @@ struct RGWOrphanSearchState {
 WRITE_CLASS_ENCODER(RGWOrphanSearchState)
 
 class RGWOrphanStore {
-  rgw::sal::Store* store;
+  rgw::sal::RadosStore* store;
   librados::IoCtx ioctx;
 
-  string oid;
+  std::string oid;
 
 public:
-  explicit RGWOrphanStore(rgw::sal::Store* _store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
+  explicit RGWOrphanStore(rgw::sal::RadosStore* _store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 
   int init(const DoutPrefixProvider *dpp);
 
-  int read_job(const string& job_name, RGWOrphanSearchState& state);
-  int write_job(const string& job_name, const RGWOrphanSearchState& state);
-  int remove_job(const string& job_name);
-  int list_jobs(map<string,RGWOrphanSearchState> &job_list);
+  int read_job(const std::string& job_name, RGWOrphanSearchState& state);
+  int write_job(const std::string& job_name, const RGWOrphanSearchState& state);
+  int remove_job(const std::string& job_name);
+  int list_jobs(std::map<std::string,RGWOrphanSearchState> &job_list);
 
 
-  int store_entries(const DoutPrefixProvider *dpp, const string& oid, const map<string, bufferlist>& entries);
-  int read_entries(const string& oid, const string& marker, map<string, bufferlist> *entries, bool *truncated);
+  int store_entries(const DoutPrefixProvider *dpp, const std::string& oid, const std::map<std::string, bufferlist>& entries);
+  int read_entries(const std::string& oid, const std::string& marker, std::map<std::string, bufferlist> *entries, bool *truncated);
 };
 
 
 class RGWOrphanSearch {
-  rgw::sal::Store* store;
+  rgw::sal::RadosStore* store;
 
   RGWOrphanStore orphan_store;
 
   RGWOrphanSearchInfo search_info;
   RGWOrphanSearchStage search_stage;
 
-  map<int, string> all_objs_index;
-  map<int, string> buckets_instance_index;
-  map<int, string> linked_objs_index;
+  std::map<int, std::string> all_objs_index;
+  std::map<int, std::string> buckets_instance_index;
+  std::map<int, std::string> linked_objs_index;
 
-  string index_objs_prefix;
+  std::string index_objs_prefix;
 
   uint16_t max_concurrent_ios;
   uint64_t stale_secs;
@@ -167,24 +167,24 @@ class RGWOrphanSearch {
   bool detailed_mode;
 
   struct log_iter_info {
-    string oid;
-    list<string>::iterator cur;
-    list<string>::iterator end;
+    std::string oid;
+    std::list<std::string>::iterator cur;
+    std::list<std::string>::iterator end;
   };
 
-  int log_oids(const DoutPrefixProvider *dpp, map<int, string>& log_shards, map<int, list<string> >& oids);
+  int log_oids(const DoutPrefixProvider *dpp, std::map<int, std::string>& log_shards, std::map<int, std::list<std::string> >& oids);
 
 #define RGW_ORPHANSEARCH_HASH_PRIME 7877
-  int orphan_shard(const string& str) {
+  int orphan_shard(const std::string& str) {
     return ceph_str_hash_linux(str.c_str(), str.size()) % RGW_ORPHANSEARCH_HASH_PRIME % search_info.num_shards;
   }
 
-  int handle_stat_result(const DoutPrefixProvider *dpp, map<int, list<string> >& oids, rgw::sal::Object::StatOp::Result& result);
-  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, map<int, list<string> >& oids, std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops);
+  int handle_stat_result(const DoutPrefixProvider *dpp, std::map<int, std::list<std::string> >& oids, RGWRados::Object::Stat::Result& result);
+  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, std::map<int, std::list<std::string> >& oids, std::deque<RGWRados::Object::Stat>& ops);
 
-  int remove_index(map<int, string>& index);
+  int remove_index(std::map<int, std::string>& index);
 public:
-  RGWOrphanSearch(rgw::sal::Store* _store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
+  RGWOrphanSearch(rgw::sal::RadosStore* _store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
 
   int save_state() {
     RGWOrphanSearchState state;
@@ -193,13 +193,13 @@ public:
     return orphan_store.write_job(search_info.job_name, state);
   }
 
-  int init(const DoutPrefixProvider *dpp, const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode=false);
+  int init(const DoutPrefixProvider *dpp, const std::string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode=false);
 
-  int create(const string& job_name, int num_shards);
+  int create(const std::string& job_name, int num_shards);
 
   int build_all_oids_index(const DoutPrefixProvider *dpp);
   int build_buckets_instance_index(const DoutPrefixProvider *dpp);
-  int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const string& bucket_instance_id, map<int, list<string> >& oids);
+  int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const std::string& bucket_instance_id, std::map<int, std::list<std::string> >& oids);
   int build_linked_oids_index(const DoutPrefixProvider *dpp);
   int compare_oid_indexes(const DoutPrefixProvider *dpp);
 
@@ -250,7 +250,7 @@ class RGWRadosList {
     p.first->second.filter_keys.insert(obj_key);
   }
 
-  rgw::sal::Store* store;
+  rgw::sal::RadosStore* store;
 
   uint16_t max_concurrent_ios;
   uint64_t stale_secs;
@@ -260,17 +260,17 @@ class RGWRadosList {
   std::string field_separator;
 
   int handle_stat_result(const DoutPrefixProvider *dpp,
-                         rgw::sal::Object::StatOp::Result& result,
+			 RGWRados::Object::Stat::Result& result,
 			 std::string& bucket_name,
 			 rgw_obj_key& obj_key,
-			 std::set<string>& obj_oids);
+			 std::set<std::string>& obj_oids);
   int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, 
                              RGWObjectCtx& obj_ctx,
-			     std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops);
+			     std::deque<RGWRados::Object::Stat>& ops);
 
 public:
 
-  RGWRadosList(rgw::sal::Store* _store,
+  RGWRadosList(rgw::sal::RadosStore* _store,
 	       int _max_ios,
 	       uint64_t _stale_secs,
 	       const std::string& _tenant_name) :

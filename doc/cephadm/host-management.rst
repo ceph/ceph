@@ -8,7 +8,13 @@ To list hosts associated with the cluster:
 
 .. prompt:: bash #
 
-    ceph orch host ls [--format yaml]
+    ceph orch host ls [--format yaml] [--host-pattern <name>] [--label <label>] [--host-status <status>]
+
+where the optional arguments "host-pattern", "label" and "host-status" are used for filtering.
+"host-pattern" is a regex that will match against hostnames and will only return matching hosts
+"label" will only return hosts with the given label
+"host-status" will only return hosts with the given status (currently "offline" or "maintenance")
+Any combination of these filtering flags is valid. You may filter against name, label and/or status simultaneously
 
 .. _cephadm-adding-hosts:    
     
@@ -82,7 +88,7 @@ All osds on the host will be scheduled to be removed. You can check osd removal 
 
 see :ref:`cephadm-osd-removal` for more details about osd removal
 
-You can check if there are no deamons left on the host with the following:
+You can check if there are no daemons left on the host with the following:
 
 .. prompt:: bash #
 
@@ -93,6 +99,18 @@ Once all daemons are removed you can remove the host with the following:
 .. prompt:: bash #
 
   ceph orch host rm <host>
+
+Offline host removal
+--------------------
+
+If a host is offline and can not be recovered it can still be removed from the cluster with the following:
+
+.. prompt:: bash #
+
+  ceph orch host rm <host> --offline --force
+
+This can potentially cause data loss as osds will be forcefully purged from the cluster by calling ``osd purge-actual`` for each osd.
+Service specs that still contain this host should be manually updated.
 
 .. _orchestrator-host-labels:
 
@@ -151,19 +169,20 @@ Maintenance Mode
 Place a host in and out of maintenance mode (stops all Ceph daemons on host)::
 
     ceph orch host maintenance enter <hostname> [--force]
-    ceph orch host maintenace exit <hostname>
+    ceph orch host maintenance exit <hostname>
 
 Where the force flag when entering maintenance allows the user to bypass warnings (but not alerts)
 
 See also :ref:`cephadm-fqdn`
 
-Host Specification
-==================
+Creating many hosts at once
+===========================
 
 Many hosts can be added at once using
-``ceph orch apply -i`` by submitting a multi-document YAML file::
+``ceph orch apply -i`` by submitting a multi-document YAML file:
 
-    ---
+.. code-block:: yaml
+
     service_type: host
     hostname: node-00
     addr: 192.168.0.10
@@ -184,6 +203,28 @@ Many hosts can be added at once using
 This can be combined with service specifications (below) to create a cluster spec
 file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec``
 also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
+
+Setting the initial CRUSH location of host
+==========================================
+
+Hosts can contain a ``location`` identifier which will instruct cephadm to 
+create a new CRUSH host located in the specified hierarchy.
+
+.. code-block:: yaml
+
+    service_type: host
+    hostname: node-00
+    addr: 192.168.0.10
+    location:
+      rack: rack1
+
+.. note:: 
+
+  The ``location`` attribute will be only affect the initial CRUSH location. Subsequent
+  changes of the ``location`` property will be ignored. Also, removing a host will no remove
+  any CRUSH buckets.
+
+See also :ref:`crush_map_default_types`.
 
 SSH Configuration
 =================
@@ -220,6 +261,8 @@ You can make use of an existing key by directly importing it with::
 You will then need to restart the mgr daemon to reload the configuration with::
 
   ceph mgr fail
+
+.. _cephadm-ssh-user:
 
 Configuring a different SSH user
 ----------------------------------

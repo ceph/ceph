@@ -45,7 +45,16 @@
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
+
 using namespace TOPNSPC::common;
+
+using std::list;
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+using std::vector;
+using std::unique_ptr;
+
 namespace {
   template <typename Map>
   bool map_compare(Map const &lhs, Map const &rhs) {
@@ -669,9 +678,11 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
   }
 
   // if there are any schema updates, notify the python modules
+  /* no users currently
   if (!m->declare_types.empty() || !m->undeclare_types.empty()) {
     py_modules.notify_all("perf_schema_update", ceph::to_string(key));
   }
+  */
 
   if (m->get_connection()->peer_is_osd()) {
     osd_perf_metric_collector.process_reports(m->osd_perf_metric_reports);
@@ -1064,7 +1075,7 @@ bool DaemonServer::_handle_command(
 
     auto dump_cmd = [&cmdnum, &f, m](const MonCommand &mc){
       ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      secname << "cmd" << std::setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(&f, m->get_connection()->get_features(),
                            secname.str(), mc.cmdstring, mc.helpstring,
                            mc.module, mc.req_perms, 0);
@@ -2757,15 +2768,24 @@ void DaemonServer::adjust_pgs()
 	    } else {
 	      active = false;
 	    }
+	    unsigned pg_gap = p.get_pg_num() - p.get_pgp_num();
+	    unsigned max_jump = cct->_conf->mgr_max_pg_num_change;
 	    if (!active) {
 	      dout(10) << "pool " << i.first
 		       << " pg_num_target " << p.get_pg_num_target()
 		       << " pg_num " << p.get_pg_num()
 		       << " - not all pgs active"
 		       << dendl;
+	    } else if (pg_gap >= max_jump) {
+	      dout(10) << "pool " << i.first
+		       << " pg_num " << p.get_pg_num()
+		       << " - pgp_num " << p.get_pgp_num()
+		       << " gap > max_pg_num_change " << max_jump
+		       << " - must scale pgp_num first"
+		       << dendl;
 	    } else {
 	      unsigned add = std::min(
-		left,
+		std::min(left, max_jump - pg_gap),
 		p.get_pg_num_target() - p.get_pg_num());
 	      unsigned target = p.get_pg_num() + add;
 	      left -= add;

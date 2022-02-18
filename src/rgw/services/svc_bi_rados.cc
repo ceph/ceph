@@ -13,6 +13,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string dir_oid_prefix = ".dir.";
 
 RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_BucketIndex(cct)
@@ -379,6 +381,10 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
   if (r < 0) {
     return r;
   }
+
+  result->count = 0; 
+  result->size = 0; 
+  result->size_rounded = 0; 
 
   auto hiter = headers.begin();
   for (; hiter != headers.end(); ++hiter) {

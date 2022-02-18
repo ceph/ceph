@@ -44,7 +44,7 @@ class Inventory(object):
 
         self.args = parser.parse_args(self.argv)
         if self.args.path:
-            self.format_report(Disks(self.args.path)) 
+            self.format_report(Disks(self.args.path))
         else:
-            self.format_report(Disks()) 
+            self.format_report(Disks())
 

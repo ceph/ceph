@@ -18,7 +18,7 @@ class FileStoreTracker {
   uint64_t restart_seq;
 
   struct OutTransaction {
-    list<pair<pair<coll_t, string>, uint64_t> > *in_flight;
+    std::list<std::pair<std::pair<coll_t, std::string>, uint64_t> > *in_flight;
     ObjectStore::Transaction *t;
   };
 public:
@@ -33,75 +33,77 @@ public:
 			      OutTransaction *out) = 0;
       virtual ~Op() {};
     };
-    list<Op*> ops;
+    std::list<Op*> ops;
     class Write : public Op {
     public:
       coll_t coll;
-      string oid;
+      std::string oid;
       Write(const coll_t &coll,
-	    const string &oid)
+	    const std::string &oid)
 	: coll(coll), oid(oid) {}
       void operator()(FileStoreTracker *harness,
 		      OutTransaction *out) override {
-	harness->write(make_pair(coll, oid), out);
+	harness->write(std::make_pair(coll, oid), out);
       }
     };
     class CloneRange : public Op {
     public:
       coll_t coll;
-      string from;
-      string to;
+      std::string from;
+      std::string to;
       CloneRange(const coll_t &coll,
-		 const string &from,
-		 const string &to)
+		 const std::string &from,
+		 const std::string &to)
 	: coll(coll), from(from), to(to) {}
       void operator()(FileStoreTracker *harness,
 		      OutTransaction *out) override {
-	harness->clone_range(make_pair(coll, from), make_pair(coll, to),
+	harness->clone_range(std::make_pair(coll, from),
+			     std::make_pair(coll, to),
 			     out);
       }
     };
     class Clone : public Op {
     public:
       coll_t coll;
-      string from;
-      string to;
+      std::string from;
+      std::string to;
       Clone(const coll_t &coll,
-		 const string &from,
-		 const string &to)
+		 const std::string &from,
+		 const std::string &to)
 	: coll(coll), from(from), to(to) {}
       void operator()(FileStoreTracker *harness,
 		      OutTransaction *out) override {
-	harness->clone(make_pair(coll, from), make_pair(coll, to),
-			     out);
+	harness->clone(std::make_pair(coll, from),
+		       std::make_pair(coll, to),
+		       out);
       }
     };
     class Remove: public Op {
     public:
       coll_t coll;
-      string obj;
+      std::string obj;
       Remove(const coll_t &coll,
-	     const string &obj)
+	     const std::string &obj)
 	: coll(coll), obj(obj) {}
       void operator()(FileStoreTracker *harness,
 		      OutTransaction *out) override {
-	harness->remove(make_pair(coll, obj),
+	harness->remove(std::make_pair(coll, obj),
 			out);
       }
     };
   public:
-    void write(const coll_t &coll, const string &oid) {
+    void write(const coll_t &coll, const std::string &oid) {
       ops.push_back(new Write(coll, oid));
     }
-    void clone_range(const coll_t &coll, const string &from,
-		     const string &to) {
+    void clone_range(const coll_t &coll, const std::string &from,
+		     const std::string &to) {
       ops.push_back(new CloneRange(coll, from, to));
     }
-    void clone(const coll_t &coll, const string &from,
-	       const string &to) {
+    void clone(const coll_t &coll, const std::string &from,
+	       const std::string &to) {
       ops.push_back(new Clone(coll, from, to));
     }
-    void remove(const coll_t &coll, const string &oid) {
+    void remove(const coll_t &coll, const std::string &oid) {
       ops.push_back(new Remove(coll, oid));
     }
     friend class FileStoreTracker;
@@ -110,26 +112,26 @@ public:
   int init();
   void submit_transaction(Transaction &t);
   void verify(const coll_t &coll,
-	      const string &from,
+	      const std::string &from,
 	      bool on_start = false);
 
 private:
-  ObjectContents get_current_content(const pair<coll_t, string> &obj);
-  pair<uint64_t, uint64_t> get_valid_reads(const pair<coll_t, string> &obj);
-  ObjectContents get_content(const pair<coll_t, string> &obj, uint64_t version);
+  ObjectContents get_current_content(const std::pair<coll_t, std::string> &obj);
+  std::pair<uint64_t, uint64_t> get_valid_reads(const std::pair<coll_t, std::string> &obj);
+  ObjectContents get_content(const std::pair<coll_t, std::string> &obj, uint64_t version);
 
-  void committed(const pair<coll_t, string> &obj, uint64_t seq);
-  void applied(const pair<coll_t, string> &obj, uint64_t seq);
-  uint64_t set_content(const pair<coll_t, string> &obj, ObjectContents &content);
+  void committed(const std::pair<coll_t, std::string> &obj, uint64_t seq);
+  void applied(const std::pair<coll_t, std::string> &obj, uint64_t seq);
+  uint64_t set_content(const std::pair<coll_t, std::string> &obj, ObjectContents &content);
 
   // ObjectContents Operations
-  void write(const pair<coll_t, string> &obj, OutTransaction *out);
-  void remove(const pair<coll_t, string> &obj, OutTransaction *out);
-  void clone_range(const pair<coll_t, string> &from,
-		   const pair<coll_t, string> &to,
+  void write(const std::pair<coll_t, std::string> &obj, OutTransaction *out);
+  void remove(const std::pair<coll_t, std::string> &obj, OutTransaction *out);
+  void clone_range(const std::pair<coll_t, std::string> &from,
+		   const std::pair<coll_t, std::string> &to,
 		   OutTransaction *out);
-  void clone(const pair<coll_t, string> &from,
-	     const pair<coll_t, string> &to,
+  void clone(const std::pair<coll_t, std::string> &from,
+	     const std::pair<coll_t, std::string> &to,
 	     OutTransaction *out);
   friend class OnApplied;
   friend class OnCommitted;

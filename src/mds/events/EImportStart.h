@@ -27,7 +27,7 @@ class MDSRank;
 class EImportStart : public LogEvent {
 protected:
   dirfrag_t base;
-  vector<dirfrag_t> bounds;
+  std::vector<dirfrag_t> bounds;
   mds_rank_t from;
 
 public:
@@ -35,13 +35,13 @@ public:
   bufferlist client_map;  // encoded map<__u32,entity_inst_t>
   version_t cmapv{0};
 
-  EImportStart(MDLog *log, dirfrag_t di, const vector<dirfrag_t>& b, mds_rank_t f) :
+  EImportStart(MDLog *log, dirfrag_t di, const std::vector<dirfrag_t>& b, mds_rank_t f) :
     LogEvent(EVENT_IMPORTSTART),
     base(di), bounds(b), from(f) { }
   EImportStart() :
     LogEvent(EVENT_IMPORTSTART), from(MDS_RANK_NONE) { }
   
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "EImportStart " << base << " from mds." << from << " " << metablob;
   }
 

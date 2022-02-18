@@ -2,6 +2,29 @@
 Upgrading Ceph
 ==============
 
+.. DANGER:: DATE: 01 NOV 2021. 
+
+   DO NOT UPGRADE TO CEPH PACIFIC FROM AN OLDER VERSION.  
+
+   A recently-discovered bug (https://tracker.ceph.com/issues/53062) can cause
+   data corruption. This bug occurs during OMAP format conversion for
+   clusters that are updated to Pacific. New clusters are not affected by this
+   bug.
+
+   The trigger for this bug is BlueStore's repair/quick-fix functionality. This
+   bug can be triggered in two known ways: 
+
+    (1) manually via the ceph-bluestore-tool, or 
+    (2) automatically, by OSD if ``bluestore_fsck_quick_fix_on_mount`` is set 
+        to true.
+
+   The fix for this bug is expected to be available in Ceph v16.2.7.
+
+   DO NOT set ``bluestore_quick_fix_on_mount`` to true. If it is currently
+   set to true in your configuration, immediately set it to false.
+
+   DO NOT run ``ceph-bluestore-tool``'s repair/quick-fix commands.
+
 Cephadm can safely upgrade Ceph from one bugfix release to the next.  For
 example, you can upgrade from v15.2.0 (the first Octopus release) to the next
 point release, v15.2.1.
@@ -12,8 +35,14 @@ The automated upgrade process follows Ceph best practices.  For example:
 * Each daemon is restarted only after Ceph indicates that the cluster
   will remain available.
 
-Keep in mind that the Ceph cluster health status is likely to switch to
-``HEALTH_WARNING`` during the upgrade.
+.. note::
+
+   The Ceph cluster health status is likely to switch to
+   ``HEALTH_WARNING`` during the upgrade.
+
+.. note:: 
+
+   In case a host of the cluster is offline, the upgrade is paused.
 
 
 Starting the upgrade
@@ -31,11 +60,19 @@ To upgrade (or downgrade) to a specific release, run the following command:
 
   ceph orch upgrade start --ceph-version <version>
 
-For example, to upgrade to v15.2.1, run the following command:
+For example, to upgrade to v16.2.6, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch upgrade start --ceph-version 15.2.1
+  ceph orch upgrade start --ceph-version 16.2.6
+
+.. note::
+
+    From version v16.2.6 the Docker Hub registry is no longer used, so if you use Docker you have to point it to the image in the quay.io registry:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image quay.io/ceph/ceph:v16.2.6
 
 
 Monitoring the upgrade

@@ -26,6 +26,7 @@
    man/8/cephfs-top
    man/8/cephfs-mirror
    man/8/cephfs-shell
+   man/8/crushdiff
    man/8/crushtool
    man/8/librados-config
    man/8/monmaptool

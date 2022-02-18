@@ -11,6 +11,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void RGWLoadGenRequestEnv::set_date(utime_t& tm)
 {
   date_str = rgw_to_asctime(tm);

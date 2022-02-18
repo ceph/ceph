@@ -1,4 +1,7 @@
-from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6
+import pytest
+
+from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6, valid_addr
+from typing import NamedTuple
 
 
 def test_is_ipv6():
@@ -35,3 +38,38 @@ def test_wrap_ipv6():
         ('', ''), ('fd00::1::1', 'fd00::1::1')]
     for address, expected in tests:
         wrap_test(address, expected)
+
+
+class Address(NamedTuple):
+    addr: str
+    status: bool
+    description: str
+
+
+@pytest.mark.parametrize('addr_object', [
+    Address('www.ibm.com', True, 'Name'),
+    Address('www.google.com:162', True, 'Name:Port'),
+    Address('my.big.domain.name.for.big.people', False, 'DNS lookup failed'),
+    Address('192.168.122.1', True, 'IPv4'),
+    Address('[192.168.122.1]', False, 'IPv4 address wrapped in brackets is invalid'),
+    Address('10.40003.200', False, 'Invalid partial IPv4 address'),
+    Address('10.7.5', False, 'Invalid partial IPv4 address'),
+    Address('10.7', False, 'Invalid partial IPv4 address'),
+    Address('192.168.122.5:7090', True, 'IPv4:Port'),
+    Address('fe80::7561:c8fb:d3d7:1fa4', True, 'IPv6'),
+    Address('[fe80::7561:c8fb:d3d7:1fa4]:9464', True, 'IPv6:Port'),
+    Address('[fe80::7561:c8fb:d3d7:1fa4]', True, 'IPv6'),
+    Address('[fe80::7561:c8fb:d3d7:1fa4', False,
+            'Address has incorrect/incomplete use of enclosing brackets'),
+    Address('fe80::7561:c8fb:d3d7:1fa4]', False,
+            'Address has incorrect/incomplete use of enclosing brackets'),
+    Address('fred.knockinson.org', False, 'DNS lookup failed'),
+    Address('tumbleweed.pickles.gov.au', False, 'DNS lookup failed'),
+    Address('192.168.122.5:00PS', False, 'Port must be numeric'),
+    Address('[fe80::7561:c8fb:d3d7:1fa4]:DOH', False, 'Port must be numeric')
+])
+def test_valid_addr(addr_object: Address):
+
+    valid, description = valid_addr(addr_object.addr)
+    assert valid == addr_object.status
+    assert description == addr_object.description

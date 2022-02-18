@@ -156,6 +156,18 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
         c->second = metrics.opened_inodes_metric.total_inodes;
       }
       break;
+    case MDSPerformanceCounterType::READ_IO_SIZES_METRIC:
+      if (metrics.read_io_sizes_metric.updated) {
+        c->first = metrics.read_io_sizes_metric.total_ops;
+        c->second = metrics.read_io_sizes_metric.total_size;
+      }
+      break;
+    case MDSPerformanceCounterType::WRITE_IO_SIZES_METRIC:
+      if (metrics.write_io_sizes_metric.updated) {
+        c->first = metrics.write_io_sizes_metric.total_ops;
+        c->second = metrics.write_io_sizes_metric.total_size;
+      }
+      break;
     default:
       ceph_abort_msg("unknown counter type");
     }

@@ -62,7 +62,7 @@ public:
       return r;
     }
 
-    string group_header_oid = util::group_header_name(snap_namespace.group_id);
+    std::string group_header_oid = util::group_header_name(snap_namespace.group_id);
     r = cls_client::group_snap_get_by_id(&group_ioctx,
 					 group_header_oid,
 					 snap_namespace.group_snapshot_id,
@@ -277,7 +277,7 @@ int Snapshot<I>::get_id(I *ictx, const std::string& snap_name, uint64_t *snap_id
   }
 
 template <typename I>
-int Snapshot<I>::list(I *ictx, vector<snap_info_t>& snaps) {
+int Snapshot<I>::list(I *ictx, std::vector<snap_info_t>& snaps) {
   ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
 
   int r = ictx->state->refresh_if_required();

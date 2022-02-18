@@ -26,7 +26,7 @@ public:
   explicit ECommitted(metareqid_t r) :
     LogEvent(EVENT_COMMITTED), reqid(r) { }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "ECommitted " << reqid;
   }
 

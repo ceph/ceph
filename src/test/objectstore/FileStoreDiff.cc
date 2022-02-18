@@ -25,6 +25,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore_diff "
 
+using namespace std;
+
 FileStoreDiff::FileStoreDiff(FileStore *a, FileStore *b)
     : a_store(a), b_store(b)
 {

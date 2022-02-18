@@ -299,6 +299,12 @@ class NetworkStack {
   std::function<void ()> add_thread(Worker* w);
 
   virtual Worker* create_worker(CephContext *c, unsigned i) = 0;
+  virtual void rename_thread(unsigned id) {
+    static constexpr int TASK_COMM_LEN = 16;
+    char tp_name[TASK_COMM_LEN];
+    sprintf(tp_name, "msgr-worker-%u", id);
+    ceph_pthread_setname(pthread_self(), tp_name);
+  }
 
  protected:
   CephContext *cct;

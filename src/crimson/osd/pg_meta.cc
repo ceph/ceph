@@ -8,6 +8,8 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
+using std::string;
+using std::string_view;
 // prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
 // easily skip them
 using crimson::os::FuturizedStore;

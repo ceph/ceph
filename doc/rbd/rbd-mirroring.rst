@@ -79,9 +79,10 @@ Enable Mirroring
 ----------------
 
 To enable mirroring on a pool with ``rbd``, issue the ``mirror pool enable``
-subcommand with the pool name, and the mirroring mode::
+subcommand with the pool name, the mirroring mode, and an optional friendly
+site name to describe the local cluster::
 
-        rbd mirror pool enable {pool-name} {mode}
+        rbd mirror pool enable [--site-name {local-site-name}] {pool-name} {mode}
 
 The mirroring mode can either be ``image`` or ``pool``:
 
@@ -92,8 +93,15 @@ The mirroring mode can either be ``image`` or ``pool``:
 
 For example::
 
-        $ rbd --cluster site-a mirror pool enable image-pool image
-        $ rbd --cluster site-b mirror pool enable image-pool image
+        $ rbd --cluster site-a mirror pool enable --site-name site-a image-pool image
+        $ rbd --cluster site-b mirror pool enable --site-name site-b image-pool image
+
+The site name can also be specified when creating or importing a new
+`bootstrap token`_.
+
+The site name can be changed later using the same ``mirror pool enable``
+subcommand but note that the local site name and the corresponding site name
+used by the remote cluster generally must match.
 
 Disable Mirroring
 -----------------
@@ -161,7 +169,7 @@ perform mirroring. A new local Ceph user should be created for the remote
 daemon to use. To `create a Ceph user`_, with ``ceph`` specify the
 ``auth get-or-create`` command, user name, monitor caps, and OSD caps::
 
-        ceph auth get-or-create client.rbd-mirror-peer mon 'profile rbd' osd 'profile rbd'
+        $ ceph auth get-or-create client.rbd-mirror-peer mon 'profile rbd-mirror-peer' osd 'profile rbd'
 
 The resulting keyring should be copied to the other cluster's ``rbd-mirror``
 daemon hosts if not using the Ceph monitor ``config-key`` store described below.
@@ -302,7 +310,7 @@ For example::
    section of the local or centralized configuration.  Note that these
    settings may allow ``rbd-mirror`` to present a substantial write workload
    to the destination cluster:  monitor cluster performance closely during
-   migrations and test carefuly before running multiple migrations in parallel.
+   migrations and test carefully before running multiple migrations in parallel.
 
 Create Image Mirror-Snapshots
 -----------------------------
@@ -523,6 +531,7 @@ The ``rbd-mirror`` can also be run in foreground by ``rbd-mirror`` command::
 .. _rbd: ../../man/8/rbd
 .. _ceph-conf: ../../rados/configuration/ceph-conf/#running-multiple-clusters
 .. _explicitly enabled: #enable-image-mirroring
+.. _bootstrap token: #bootstrap-peers
 .. _force resync command: #force-image-resync
 .. _demote the image: #image-promotion-and-demotion
 .. _create a Ceph user: ../../rados/operations/user-management#add-a-user

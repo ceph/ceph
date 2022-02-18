@@ -99,6 +99,11 @@
 	mon_warn_on_insecure_global_id_reclaim = false
 	mon_warn_on_insecure_global_id_reclaim_allowed = false
 
+	# 1m isn't quite enough
+	mon_down_mkfs_grace = 2m
+
+	mon_warn_on_filestore_osds = false
+
 [client]
 	rgw cache enabled = true
 	rgw enable ops log = true

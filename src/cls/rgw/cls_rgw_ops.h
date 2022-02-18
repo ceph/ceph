@@ -427,6 +427,12 @@ struct rgw_cls_list_ret {
   rgw_bucket_dir dir;
   bool is_truncated;
 
+  // if is_truncated is true, starting marker for next iteration; this
+  // is necessary as it's possible after maximum number of tries we
+  // still might have zero entries to return, in which case we have to
+  // at least move the ball foward
+  cls_rgw_obj_key marker;
+
   // cls_filtered is not transmitted; it is assumed true for versions
   // on/after 3 and false for prior versions; this allows the rgw
   // layer to know when an older osd (cls) does not do the filtering
@@ -438,16 +444,20 @@ struct rgw_cls_list_ret {
   {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     encode(dir, bl);
     encode(is_truncated, bl);
+    encode(marker, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(dir, bl);
     decode(is_truncated, bl);
     cls_filtered = struct_v >= 3;
+    if (struct_v >= 4) {
+      decode(marker, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -676,7 +686,7 @@ WRITE_CLASS_ENCODER(rgw_cls_bi_put_op)
 
 struct rgw_cls_bi_list_op {
   uint32_t max;
-  std::string name;
+  std::string name_filter; // limit resultto one object and its instances
   std::string marker;
 
   rgw_cls_bi_list_op() : max(0) {}
@@ -684,7 +694,7 @@ struct rgw_cls_bi_list_op {
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(max, bl);
-    encode(name, bl);
+    encode(name_filter, bl);
     encode(marker, bl);
     ENCODE_FINISH(bl);
   }
@@ -692,7 +702,7 @@ struct rgw_cls_bi_list_op {
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(max, bl);
-    decode(name, bl);
+    decode(name_filter, bl);
     decode(marker, bl);
     DECODE_FINISH(bl);
   }
@@ -1082,17 +1092,34 @@ struct cls_rgw_lc_get_entry_ret {
     : entry(std::move(_entry)) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(entry, bl);
+    DECODE_START(2, bl);
+    if (struct_v < 2) {
+      /* there was an unmarked change in the encoding during v1, so
+       * if the sender version is v1, try decoding both ways (sorry) */
+      ceph::buffer::list::const_iterator save_bl = bl;
+      try {
+	decode(entry, bl);
+      } catch (ceph::buffer::error& e) {
+	std::pair<std::string, int> oe;
+	bl = save_bl;
+	decode(oe, bl);
+	entry.bucket = oe.first;
+	entry.start_time = 0;
+	entry.status = oe.second;
+      }
+    } else {
+      decode(entry, bl);
+    }
     DECODE_FINISH(bl);
   }
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_rgw_lc_get_entry_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_entry_ret)
 
@@ -1211,7 +1238,7 @@ struct cls_rgw_lc_list_entries_op {
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_op)
 
 struct cls_rgw_lc_list_entries_ret {
-  vector<cls_rgw_lc_entry> entries;
+  std::vector<cls_rgw_lc_entry> entries;
   bool is_truncated{false};
   uint8_t compat_v;
 
@@ -1221,7 +1248,7 @@ cls_rgw_lc_list_entries_ret(uint8_t compat_v = 3)
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(compat_v, 1, bl);
     if (compat_v <= 2) {
-      map<string, int> oes;
+      std::map<std::string, int> oes;
       std::for_each(entries.begin(), entries.end(),
                    [&oes](const cls_rgw_lc_entry& elt)
                      {oes.insert({elt.bucket, elt.status});});
@@ -1237,10 +1264,10 @@ cls_rgw_lc_list_entries_ret(uint8_t compat_v = 3)
     DECODE_START(3, bl);
     compat_v = struct_v;
     if (struct_v <= 2) {
-      map<string, int> oes;
+      std::map<std::string, int> oes;
       decode(oes, bl);
       std::for_each(oes.begin(), oes.end(),
-		    [this](const std::pair<string, int>& oe)
+		    [this](const std::pair<std::string, int>& oe)
 		      {entries.push_back({oe.first, 0 /* start */,
 					  uint32_t(oe.second)});});
     } else {

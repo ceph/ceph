@@ -1157,6 +1157,9 @@ function test_mon_mon()
 {
   # print help message
   ceph --help mon
+  # -h works even when some arguments are passed
+  ceph osd dump -h | grep 'osd dump'
+  ceph osd dump 123 -h | grep 'osd dump'
   # no mon add/remove
   ceph mon dump
   ceph mon getmap -o $TEMP_DIR/monmap.$$
@@ -2214,7 +2217,7 @@ function test_mon_osd_pool_set()
   ceph osd pool get pool_erasure erasure_code_profile
   ceph osd pool rm pool_erasure pool_erasure --yes-i-really-really-mean-it
 
-  for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
+  for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub bulk; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
       ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: false"
       ceph osd pool set $TEST_POOL_GETSET $flag true

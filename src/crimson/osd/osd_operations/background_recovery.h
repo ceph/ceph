@@ -23,7 +23,7 @@ public:
     Ref<PG> pg,
     ShardServices &ss,
     epoch_t epoch_started,
-    crimson::osd::scheduler::scheduler_class_t scheduler_class);
+    crimson::osd::scheduler::scheduler_class_t scheduler_class, float delay = 0);
 
   virtual void print(std::ostream &) const;
   seastar::future<> start();
@@ -31,6 +31,7 @@ public:
 protected:
   Ref<PG> pg;
   const epoch_t epoch_started;
+  float delay = 0;
 
 private:
   virtual void dump_detail(Formatter *f) const;
@@ -77,7 +78,8 @@ public:
   PglogBasedRecovery(
     Ref<PG> pg,
     ShardServices &ss,
-    epoch_t epoch_started);
+    epoch_t epoch_started,
+    float delay = 0);
 
 private:
   interruptible_future<bool> do_recovery() override;

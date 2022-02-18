@@ -2,9 +2,11 @@
 
 #include "rgw_common.h"
 #include "rgw_sync_policy.h"
+#include "rgw_bucket.h"
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 string rgw_sync_bucket_entity::bucket_key() const
 {
@@ -500,3 +502,282 @@ void rgw_sync_policy_info::get_potential_related_buckets(const rgw_bucket& bucke
     group.get_potential_related_buckets(bucket, sources, dests);
   }
 }
+
+void rgw_sync_directional_rule::dump(Formatter *f) const
+{
+  encode_json("source_zone", source_zone, f);
+  encode_json("dest_zone", dest_zone, f);
+}
+
+void rgw_sync_directional_rule::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("source_zone", source_zone, obj);
+  JSONDecoder::decode_json("dest_zone", dest_zone, obj);
+}
+
+void rgw_sync_symmetric_group::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("zones", zones, f);
+}
+
+void rgw_sync_symmetric_group::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("zones", zones, obj);
+}
+
+void rgw_sync_bucket_entity::dump(Formatter *f) const
+{
+  encode_json("zone", zone, f);
+  encode_json("bucket", bucket_key(), f);
+}
+
+void rgw_sync_bucket_entity::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("zone", zone, obj);
+  string s;
+  if (JSONDecoder::decode_json("bucket", s, obj)) {
+    rgw_bucket b;
+    int ret = rgw_bucket_parse_bucket_key(nullptr, s, &b, nullptr);
+    if (ret >= 0) {
+      bucket = b;
+    } else {
+      bucket.reset();
+    }
+  }
+}
+
+void rgw_sync_pipe_filter_tag::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+  encode_json("value", value, f);
+}
+
+void rgw_sync_pipe_filter_tag::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("value", value, obj);
+}
+
+void rgw_sync_pipe_filter::dump(Formatter *f) const
+{
+  encode_json("prefix", prefix, f);
+  encode_json("tags", tags, f);
+}
+
+void rgw_sync_pipe_filter::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("prefix", prefix, obj);
+  JSONDecoder::decode_json("tags", tags, obj);
+}
+
+void rgw_sync_pipe_acl_translation::dump(Formatter *f) const
+{
+  encode_json("owner", owner, f);
+}
+
+void rgw_sync_pipe_acl_translation::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("owner", owner, obj);
+}
+
+void rgw_sync_pipe_source_params::dump(Formatter *f) const
+{
+  encode_json("filter", filter, f);
+}
+
+void rgw_sync_pipe_source_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("filter", filter, obj);
+}
+
+void rgw_sync_pipe_dest_params::dump(Formatter *f) const
+{
+  encode_json("acl_translation", acl_translation, f);
+  encode_json("storage_class", storage_class, f);
+}
+
+void rgw_sync_pipe_dest_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("acl_translation", acl_translation, obj);
+  JSONDecoder::decode_json("storage_class", storage_class, obj);
+}
+
+void rgw_sync_pipe_params::dump(Formatter *f) const
+{
+  encode_json("source", source, f);
+  encode_json("dest", dest, f);
+  encode_json("priority", priority, f);
+  string s;
+  switch (mode) {
+    case MODE_SYSTEM:
+      s = "system";
+      break;
+    default:
+      s = "user";
+  }
+  encode_json("mode", s, f);
+  encode_json("user", user, f);
+}
+
+void rgw_sync_pipe_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
+  JSONDecoder::decode_json("priority", priority, obj);
+  string s;
+  JSONDecoder::decode_json("mode", s, obj);
+  if (s == "system") {
+    mode = MODE_SYSTEM;
+  } else {
+    mode = MODE_USER;
+  }
+  JSONDecoder::decode_json("user", user, obj);
+}
+
+void rgw_sync_bucket_entities::dump(Formatter *f) const
+{
+  encode_json("bucket", rgw_sync_bucket_entities::bucket_key(bucket), f);
+  if (zones) {
+    encode_json("zones", zones, f);
+  } else if (all_zones) {
+    set<string> z = { "*" };
+    encode_json("zones", z, f);
+  }
+}
+
+void rgw_sync_bucket_entities::decode_json(JSONObj *obj)
+{
+  string s;
+  JSONDecoder::decode_json("bucket", s, obj);
+  if (s == "*") {
+    bucket.reset();
+  } else {
+    rgw_bucket b;
+    int ret = rgw_bucket_parse_bucket_key(nullptr, s, &b, nullptr);
+    if (ret < 0) {
+      bucket.reset();
+    } else {
+      if (b.tenant == "*") {
+        b.tenant.clear();
+      }
+      if (b.name == "*") {
+        b.name.clear();
+      }
+      if (b.bucket_id == "*") {
+        b.bucket_id.clear();
+      }
+      bucket = b;
+    }
+  }
+  JSONDecoder::decode_json("zones", zones, obj);
+  if (zones && zones->size() == 1) {
+    auto iter = zones->begin();
+    if (*iter == "*") {
+      zones.reset();
+      all_zones = true;
+    }
+  }
+}
+
+void rgw_sync_bucket_pipe::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("source", source, f);
+  encode_json("dest", dest, f);
+  encode_json("params", params, f);
+}
+
+void rgw_sync_bucket_pipe::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
+  JSONDecoder::decode_json("params", params, obj);
+}
+
+void rgw_sync_bucket_pipes::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("source", source, f);
+  encode_json("dest", dest, f);
+  encode_json("params", params, f);
+}
+
+void rgw_sync_bucket_pipes::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
+  JSONDecoder::decode_json("params", params, obj);
+}
+
+void rgw_sync_data_flow_group::dump(Formatter *f) const
+{
+  if (!symmetrical.empty()) {
+    encode_json("symmetrical", symmetrical, f);
+  }
+
+  if (!directional.empty()) {
+    encode_json("directional", directional, f);
+  }
+}
+
+void rgw_sync_data_flow_group::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("symmetrical", symmetrical, obj);
+  JSONDecoder::decode_json("directional", directional, obj);
+}
+
+void rgw_sync_policy_group::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("data_flow", data_flow, f);
+  encode_json("pipes", pipes, f);
+  string s;
+  switch (status) {
+    case  rgw_sync_policy_group::Status::FORBIDDEN:
+      s = "forbidden";
+      break;
+    case  rgw_sync_policy_group::Status::ALLOWED:
+      s = "allowed";
+      break;
+    case  rgw_sync_policy_group::Status::ENABLED:
+      s = "enabled";
+      break;
+    default:
+      s = "unknown";
+  }
+  encode_json("status", s, f);
+}
+
+void rgw_sync_policy_group::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("data_flow", data_flow, obj);
+  JSONDecoder::decode_json("pipes", pipes, obj);
+  string s;
+  JSONDecoder::decode_json("status", s, obj);
+  set_status(s);
+}
+
+void rgw_sync_policy_info::dump(Formatter *f) const
+{
+  Formatter::ArraySection section(*f, "groups");
+  for (auto& group : groups ) {
+    encode_json("group", group.second, f);
+  }
+}
+
+void rgw_sync_policy_info::decode_json(JSONObj *obj)
+{
+  vector<rgw_sync_policy_group> groups_vec;
+
+  JSONDecoder::decode_json("groups", groups_vec, obj);
+
+  for (auto& group : groups_vec) {
+    groups.emplace(std::make_pair(group.id, std::move(group)));
+  }
+}
+

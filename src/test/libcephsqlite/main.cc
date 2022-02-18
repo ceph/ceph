@@ -1093,8 +1093,7 @@ out:
 
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   std::string conf_file_list;
   std::string cluster;

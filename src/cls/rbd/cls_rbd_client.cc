@@ -2310,6 +2310,20 @@ int mirror_image_status_get_summary_finish(
   return 0;
 }
 
+int mirror_image_status_remove(librados::IoCtx *ioctx,
+                               const std::string &global_image_id) {
+  librados::ObjectWriteOperation op;
+  mirror_image_status_remove(&op, global_image_id);
+  return ioctx->operate(RBD_MIRRORING, &op);
+}
+
+void mirror_image_status_remove(librados::ObjectWriteOperation *op,
+                                const std::string &global_image_id) {
+  bufferlist bl;
+  encode(global_image_id, bl);
+  op->exec("rbd", "mirror_image_status_remove", bl);
+}
+
 int mirror_image_status_remove_down(librados::IoCtx *ioctx) {
   librados::ObjectWriteOperation op;
   mirror_image_status_remove_down(&op);

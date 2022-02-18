@@ -989,8 +989,7 @@ int do_map() {
 boost::intrusive_ptr<CephContext> do_global_init(
   int argc, const char **argv, Command cmd)
 {
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   code_environment_t code_env;
   int flags;
@@ -1032,8 +1031,7 @@ int main(int argc, const char** argv)
   g_cfg = new Config;
 
   Command cmd = Command::None;
-  std::vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   std::ostringstream err_msg;
   int r = parse_args(args, &err_msg, &cmd, g_cfg);
   if (r) {

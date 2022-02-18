@@ -19,6 +19,8 @@
 
 #include "gtest/gtest.h"
 
+using namespace std;
+
 const char *parse_good[] = {
 
   // MonCapMatch

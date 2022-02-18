@@ -11,6 +11,7 @@ tasks:
       - ceph-mgr-rook
       - ceph-mgr-cephadm
       - cephadm
+      - ceph-volume
     extra_packages: ['librados2']
 - print: "**** done installing octopus"
 - ceph:

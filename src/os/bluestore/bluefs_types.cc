@@ -147,6 +147,31 @@ mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   return p;
 }
 
+bluefs_fnode_delta_t* bluefs_fnode_t::make_delta(bluefs_fnode_delta_t* delta) {
+  ceph_assert(delta);
+  delta->ino = ino;
+  delta->size = size;
+  delta->mtime = mtime;
+  delta->offset = allocated_commited;
+  delta->extents.clear();
+  if (allocated_commited < allocated) {
+    uint64_t x_off = 0;
+    auto p = seek(allocated_commited, &x_off);
+    ceph_assert(p != extents.end());
+    if (x_off > 0) {
+      ceph_assert(x_off < p->length);
+      delta->extents.emplace_back(p->bdev, p->offset + x_off, p->length - x_off);
+      ++p;
+    }
+    while (p != extents.end()) {
+      delta->extents.push_back(*p);
+      ++p;
+    }
+    reset_delta();
+  }
+  return delta;
+}
+
 void bluefs_fnode_t::dump(Formatter *f) const
 {
   f->dump_unsigned("ino", ino);
@@ -175,10 +200,22 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " allocated " << std::hex << file.allocated << std::dec
+	     << " alloc_commit " << std::hex << file.allocated_commited << std::dec
 	     << " extents " << file.extents
 	     << ")";
 }
 
+// bluefs_fnode_delta_t
+
+std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
+{
+  return out << "delta(ino " << delta.ino
+	     << " size 0x" << std::hex << delta.size << std::dec
+	     << " mtime " << delta.mtime
+	     << " offset " << std::hex << delta.offset << std::dec
+	     << " extents " << delta.extents
+	     << ")";
+}
 
 // bluefs_transaction_t
 

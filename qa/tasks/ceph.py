@@ -46,8 +46,8 @@ def generate_caps(type_):
     """
     defaults = dict(
         osd=dict(
-            mon='allow *',
-            mgr='allow *',
+            mon='allow profile osd',
+            mgr='allow profile osd',
             osd='allow *',
         ),
         mgr=dict(
@@ -377,6 +377,20 @@ def crush_setup(ctx, config):
 
 
 @contextlib.contextmanager
+def setup_manager(ctx, config):
+    first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
+    if not hasattr(ctx, 'managers'):
+        ctx.managers = {}
+    ctx.managers[config['cluster']] = CephManager(
+        mon,
+        ctx=ctx,
+        logger=log.getChild('ceph_manager.' + config['cluster']),
+        cluster=config['cluster'],
+    )
+    yield
+
+@contextlib.contextmanager
 def create_rbd_pool(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
@@ -415,7 +429,6 @@ def cephfs_setup(ctx, config):
         log.info('Setting up CephFS filesystem(s)...')
         cephfs_config = config.get('cephfs', {})
         fs_configs =  cephfs_config.pop('fs', [{'name': 'cephfs'}])
-        set_allow_multifs = len(fs_configs) > 1
 
         # wait for standbys to become available (slow due to valgrind, perhaps)
         mdsc = MDSCluster(ctx)
@@ -432,9 +445,6 @@ def cephfs_setup(ctx, config):
             temp = deepcopy(cephfs_config)
             teuthology.deep_merge(temp, fs_config)
             fs = Filesystem(ctx, fs_config=temp, name=name, create=True)
-            if set_allow_multifs:
-                fs.set_allow_multifs()
-                set_allow_multifs = False
             fss.append(fs)
 
         yield
@@ -1870,6 +1880,7 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
         lambda: crush_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+        lambda: setup_manager(ctx=ctx, config=config),
         lambda: create_rbd_pool(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         lambda: cephfs_setup(ctx=ctx, config=config),
@@ -1877,17 +1888,6 @@ def task(ctx, config):
     ]
 
     with contextutil.nested(*subtasks):
-        first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
-        (mon,) = ctx.cluster.only(first_mon).remotes.keys()
-        if not hasattr(ctx, 'managers'):
-            ctx.managers = {}
-        ctx.managers[config['cluster']] = CephManager(
-            mon,
-            ctx=ctx,
-            logger=log.getChild('ceph_manager.' + config['cluster']),
-            cluster=config['cluster'],
-        )
-
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))

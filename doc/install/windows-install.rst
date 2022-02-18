@@ -5,7 +5,7 @@ Installing Ceph on Windows
 ==========================
 
 The Ceph client tools and libraries can be natively used on Windows. This avoids
-the need of having additional layers such as iSCSI gateways or SMB shares,
+the need for additional layers such as iSCSI gateways or SMB shares,
 drastically improving the performance.
 
 Prerequisites

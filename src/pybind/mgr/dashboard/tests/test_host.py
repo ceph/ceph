@@ -1,38 +1,13 @@
-import contextlib
 import unittest
-from typing import List, Optional
 from unittest import mock
 
-from orchestrator import HostSpec, InventoryHost
+from orchestrator import HostSpec
 
 from .. import mgr
+from ..controllers._version import APIVersion
 from ..controllers.host import Host, HostUi, get_device_osd_map, get_hosts, get_inventories
+from ..tests import ControllerTestCase, patch_orch
 from ..tools import NotificationQueue, TaskManager
-from . import ControllerTestCase  # pylint: disable=no-name-in-module
-
-
-@contextlib.contextmanager
-def patch_orch(available: bool, hosts: Optional[List[HostSpec]] = None,
-               inventory: Optional[List[dict]] = None):
-    with mock.patch('dashboard.controllers.orchestrator.OrchClient.instance') as instance:
-        fake_client = mock.Mock()
-        fake_client.available.return_value = available
-        fake_client.get_missing_features.return_value = []
-
-        if hosts is not None:
-            fake_client.hosts.list.return_value = hosts
-
-        if inventory is not None:
-            def _list_inventory(hosts=None, refresh=False):  # pylint: disable=unused-argument
-                inv_hosts = []
-                for inv_host in inventory:
-                    if hosts is None or inv_host['name'] in hosts:
-                        inv_hosts.append(InventoryHost.from_json(inv_host))
-                return inv_hosts
-            fake_client.inventory.list.side_effect = _list_inventory
-
-        instance.return_value = fake_client
-        yield fake_client
 
 
 class HostControllerTest(ControllerTestCase):
@@ -42,8 +17,6 @@ class HostControllerTest(ControllerTestCase):
     def setup_server(cls):
         NotificationQueue.start_queue()
         TaskManager.init()
-        # pylint: disable=protected-access
-        Host._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Host])
 
     @classmethod
@@ -51,7 +24,7 @@ class HostControllerTest(ControllerTestCase):
         NotificationQueue.stop()
 
     @mock.patch('dashboard.controllers.host.get_hosts')
-    def test_host_list(self, mock_get_hosts):
+    def test_host_list_with_sources(self, mock_get_hosts):
         hosts = [{
             'hostname': 'host-0',
             'sources': {
@@ -72,32 +45,115 @@ class HostControllerTest(ControllerTestCase):
             }
         }]
 
-        def _get_hosts(from_ceph=True, from_orchestrator=True):
-            _hosts = []
-            if from_ceph:
-                _hosts.append(hosts[0])
-            if from_orchestrator:
-                _hosts.append(hosts[1])
-                _hosts.append(hosts[2])
-            return _hosts
+        def _get_hosts(sources=None):
+            if sources == 'ceph':
+                return hosts[0]
+            if sources == 'orchestrator':
+                return hosts[1:]
+            if sources == 'ceph, orchestrator':
+                return hosts[2]
+            return hosts
 
         mock_get_hosts.side_effect = _get_hosts
 
-        self._get(self.URL_HOST)
+        self._get(self.URL_HOST, version=APIVersion(1, 1))
         self.assertStatus(200)
         self.assertJsonBody(hosts)
 
-        self._get('{}?sources=ceph'.format(self.URL_HOST))
+        self._get('{}?sources=ceph'.format(self.URL_HOST), version=APIVersion(1, 1))
         self.assertStatus(200)
-        self.assertJsonBody([hosts[0]])
+        self.assertJsonBody(hosts[0])
 
-        self._get('{}?sources=orchestrator'.format(self.URL_HOST))
+        self._get('{}?sources=orchestrator'.format(self.URL_HOST), version=APIVersion(1, 1))
         self.assertStatus(200)
         self.assertJsonBody(hosts[1:])
 
-        self._get('{}?sources=ceph,orchestrator'.format(self.URL_HOST))
+        self._get('{}?sources=ceph,orchestrator'.format(self.URL_HOST), version=APIVersion(1, 1))
         self.assertStatus(200)
         self.assertJsonBody(hosts)
+
+    @mock.patch('dashboard.controllers.host.get_hosts')
+    def test_host_list_with_facts(self, mock_get_hosts):
+        hosts_without_facts = [{
+            'hostname': 'host-0',
+            'sources': {
+                'ceph': True,
+                'orchestrator': False
+            }
+        }, {
+            'hostname': 'host-1',
+            'sources': {
+                'ceph': False,
+                'orchestrator': True
+            }
+        }]
+
+        hosts_facts = [{
+            'hostname': 'host-0',
+            'cpu_count': 1,
+            'memory_total_kb': 1024
+        }, {
+            'hostname': 'host-1',
+            'cpu_count': 2,
+            'memory_total_kb': 1024
+        }]
+
+        hosts_with_facts = [{
+            'hostname': 'host-0',
+            'sources': {
+                'ceph': True,
+                'orchestrator': False
+            },
+            'cpu_count': 1,
+            'memory_total_kb': 1024
+        }, {
+            'hostname': 'host-1',
+            'sources': {
+                'ceph': False,
+                'orchestrator': True
+            },
+            'cpu_count': 2,
+            'memory_total_kb': 1024
+        }]
+        # test with orchestrator available
+        with patch_orch(True, hosts=hosts_without_facts) as fake_client:
+            mock_get_hosts.return_value = hosts_without_facts
+            fake_client.hosts.get_facts.return_value = hosts_facts
+            # test with ?facts=true
+            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self.assertStatus(200)
+            self.assertHeader('Content-Type',
+                              'application/vnd.ceph.api.v1.1+json')
+            self.assertJsonBody(hosts_with_facts)
+
+            # test with ?facts=false
+            self._get('{}?facts=false'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self.assertStatus(200)
+            self.assertHeader('Content-Type',
+                              'application/vnd.ceph.api.v1.1+json')
+            self.assertJsonBody(hosts_without_facts)
+
+        # test with orchestrator available but orch backend!=cephadm
+        with patch_orch(True, missing_features=['get_facts']) as fake_client:
+            mock_get_hosts.return_value = hosts_without_facts
+            # test with ?facts=true
+            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self.assertStatus(400)
+
+        # test with no orchestrator available
+        with patch_orch(False):
+            mock_get_hosts.return_value = hosts_without_facts
+
+            # test with ?facts=true
+            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self.assertStatus(400)
+
+            # test with ?facts=false
+            self._get('{}?facts=false'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self.assertStatus(200)
+            self.assertHeader('Content-Type',
+                              'application/vnd.ceph.api.v1.1+json')
+            self.assertJsonBody(hosts_without_facts)
 
     def test_get_1(self):
         mgr.list_servers.return_value = []
@@ -135,7 +191,7 @@ class HostControllerTest(ControllerTestCase):
                 'labels': 'mon',
                 'status': 'maintenance'
             }
-            self._post(self.URL_HOST, payload, version='0.1')
+            self._post(self.URL_HOST, payload, version=APIVersion(0, 1))
             self.assertStatus(201)
             mock_add_host.assert_called()
 
@@ -149,7 +205,7 @@ class HostControllerTest(ControllerTestCase):
             fake_client.hosts.add_label = mock.Mock()
 
             payload = {'update_labels': True, 'labels': ['bbb', 'ccc']}
-            self._put('{}/node0'.format(self.URL_HOST), payload, version='0.1')
+            self._put('{}/node0'.format(self.URL_HOST), payload, version=APIVersion(0, 1))
             self.assertStatus(200)
             self.assertHeader('Content-Type',
                               'application/vnd.ceph.api.v0.1+json')
@@ -157,8 +213,9 @@ class HostControllerTest(ControllerTestCase):
             fake_client.hosts.add_label.assert_called_once_with('node0', 'ccc')
 
             # return 400 if type other than List[str]
-            self._put('{}/node0'.format(self.URL_HOST), {'update_labels': True,
-                                                         'labels': 'ddd'}, version='0.1')
+            self._put('{}/node0'.format(self.URL_HOST),
+                      {'update_labels': True, 'labels': 'ddd'},
+                      version=APIVersion(0, 1))
             self.assertStatus(400)
 
     def test_host_maintenance(self):
@@ -169,25 +226,29 @@ class HostControllerTest(ControllerTestCase):
         ]
         with patch_orch(True, hosts=orch_hosts):
             # enter maintenance mode
-            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True}, version='0.1')
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True},
+                      version=APIVersion(0, 1))
             self.assertStatus(200)
             self.assertHeader('Content-Type',
                               'application/vnd.ceph.api.v0.1+json')
 
             # force enter maintenance mode
             self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True, 'force': True},
-                      version='0.1')
+                      version=APIVersion(0, 1))
             self.assertStatus(200)
 
             # exit maintenance mode
-            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True}, version='0.1')
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True},
+                      version=APIVersion(0, 1))
             self.assertStatus(200)
-            self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True}, version='0.1')
+            self._put('{}/node1'.format(self.URL_HOST), {'maintenance': True},
+                      version=APIVersion(0, 1))
             self.assertStatus(200)
 
         # maintenance without orchestrator service
         with patch_orch(False):
-            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True}, version='0.1')
+            self._put('{}/node0'.format(self.URL_HOST), {'maintenance': True},
+                      version=APIVersion(0, 1))
             self.assertStatus(503)
 
     @mock.patch('dashboard.controllers.host.time')
@@ -244,14 +305,30 @@ class HostControllerTest(ControllerTestCase):
             self._get(inventory_url)
             self.assertStatus(503)
 
+    def test_host_drain(self):
+        mgr.list_servers.return_value = []
+        orch_hosts = [
+            HostSpec('node0')
+        ]
+        with patch_orch(True, hosts=orch_hosts):
+            self._put('{}/node0'.format(self.URL_HOST), {'drain': True},
+                      version=APIVersion(0, 1))
+            self.assertStatus(200)
+            self.assertHeader('Content-Type',
+                              'application/vnd.ceph.api.v0.1+json')
+
+        # maintenance without orchestrator service
+        with patch_orch(False):
+            self._put('{}/node0'.format(self.URL_HOST), {'drain': True},
+                      version=APIVersion(0, 1))
+            self.assertStatus(503)
+
 
 class HostUiControllerTest(ControllerTestCase):
     URL_HOST = '/ui-api/host'
 
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-        HostUi._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([HostUi])
 
     def test_labels(self):

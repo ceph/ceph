@@ -390,8 +390,15 @@ daemonperf {type.id | path} list|ls [stat-pats] [priority]
 def do_extended_help(parser, args, target, partial) -> int:
     def help_for_sigs(sigs, partial=None):
         try:
-            sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
-                             partial=partial))
+            while True:
+                out = format_help(parse_json_funcsigs(sigs, 'cli'),
+                                  partial=partial)
+                if not out and partial:
+                    # shorten partial until we get at least one matching command prefix
+                    partial = ' '.join(partial.split()[:-1])
+                    continue
+                sys.stdout.write(out)
+                break
         except BrokenPipeError:
             pass
 

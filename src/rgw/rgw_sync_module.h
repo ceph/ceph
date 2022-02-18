@@ -23,17 +23,17 @@ public:
 
   virtual void init(RGWDataSyncCtx *sync_env, uint64_t instance_id) {}
 
-  virtual RGWCoroutine *init_sync(RGWDataSyncCtx *sc) {
+  virtual RGWCoroutine *init_sync(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc) {
     return nullptr;
   }
 
-  virtual RGWCoroutine *start_sync(RGWDataSyncCtx *sc) {
+  virtual RGWCoroutine *start_sync(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc) {
     return nullptr;
   }
-  virtual RGWCoroutine *sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) = 0;
-  virtual RGWCoroutine *remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& bucket_info, rgw_obj_key& key, real_time& mtime,
+  virtual RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) = 0;
+  virtual RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& bucket_info, rgw_obj_key& key, real_time& mtime,
                                       bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
-  virtual RGWCoroutine *create_delete_marker(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& bucket_info, rgw_obj_key& key, real_time& mtime,
+  virtual RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& bucket_info, rgw_obj_key& key, real_time& mtime,
                                              rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
 };
 
@@ -76,7 +76,7 @@ public:
     return false;
   }
   virtual bool supports_data_export() = 0;
-  virtual int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
+  virtual int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
 };
 
 typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
@@ -85,19 +85,19 @@ typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
 class RGWSyncModulesManager {
   ceph::mutex lock = ceph::make_mutex("RGWSyncModulesManager");
 
-  map<string, RGWSyncModuleRef> modules;
+  std::map<std::string, RGWSyncModuleRef> modules;
 public:
   RGWSyncModulesManager() = default;
 
-  void register_module(const string& name, RGWSyncModuleRef& module, bool is_default = false) {
+  void register_module(const std::string& name, RGWSyncModuleRef& module, bool is_default = false) {
     std::lock_guard l{lock};
     modules[name] = module;
     if (is_default) {
-      modules[string()] = module;
+      modules[std::string()] = module;
     }
   }
 
-  bool get_module(const string& name, RGWSyncModuleRef *module) {
+  bool get_module(const std::string& name, RGWSyncModuleRef *module) {
     std::lock_guard l{lock};
     auto iter = modules.find(name);
     if (iter == modules.end()) {
@@ -110,7 +110,7 @@ public:
   }
 
 
-  bool supports_data_export(const string& name) {
+  bool supports_data_export(const std::string& name) {
     RGWSyncModuleRef module;
     if (!get_module(name, &module)) {
       return false;
@@ -119,17 +119,17 @@ public:
     return module->supports_data_export();
   }
 
-  int create_instance(CephContext *cct, const string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const std::string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
     RGWSyncModuleRef module;
     if (!get_module(name, &module)) {
       return -ENOENT;
     }
 
-    return module.get()->create_instance(cct, config, instance);
+    return module.get()->create_instance(dpp, cct, config, instance);
   }
 
-  vector<string> get_registered_module_names() const {
-    vector<string> names;
+  std::vector<std::string> get_registered_module_names() const {
+    std::vector<std::string> names;
     for (auto& i: modules) {
       if (!i.first.empty()) {
         names.push_back(i.first);
@@ -149,9 +149,9 @@ protected:
 
   ceph::real_time mtime;
   uint64_t size = 0;
-  string etag;
-  map<string, bufferlist> attrs;
-  map<string, string> headers;
+  std::string etag;
+  std::map<std::string, bufferlist> attrs;
+  std::map<std::string, std::string> headers;
 public:
   RGWStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
                        rgw_bucket& _src_bucket, rgw_obj_key& _key);
@@ -159,9 +159,9 @@ public:
 
   void set_result(ceph::real_time& _mtime,
                   uint64_t _size,
-                  const string& _etag,
-                  map<string, bufferlist>&& _attrs,
-                  map<string, string>&& _headers) {
+                  const std::string& _etag,
+                  std::map<std::string, bufferlist>&& _attrs,
+                  std::map<std::string, std::string>&& _headers) {
     mtime = _mtime;
     size = _size;
     etag = _etag;
@@ -173,9 +173,9 @@ public:
 class RGWCallStatRemoteObjCR : public RGWCoroutine {
   ceph::real_time mtime;
   uint64_t size{0};
-  string etag;
-  map<string, bufferlist> attrs;
-  map<string, string> headers;
+  std::string etag;
+  std::map<std::string, bufferlist> attrs;
+  std::map<std::string, std::string> headers;
 
 protected:
   RGWDataSyncCtx *sc;

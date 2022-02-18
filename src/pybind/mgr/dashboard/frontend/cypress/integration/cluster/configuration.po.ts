@@ -23,7 +23,7 @@ export class ConfigurationPageHelper extends PageHelper {
     cy.get('[data-cy=submitBtn]').click();
 
     // Enter config setting name into filter box
-    this.seachTable(name);
+    this.searchTable(name);
 
     // Expand row
     this.getExpandCollapseElement(name).click();
@@ -60,7 +60,7 @@ export class ConfigurationPageHelper extends PageHelper {
     cy.get('[data-cy=submitBtn]').click();
 
     // Enter config setting name into filter box
-    this.seachTable(name);
+    this.searchTable(name);
 
     // Checks for visibility of config in table
     this.getExpandCollapseElement(name).should('be.visible').click();

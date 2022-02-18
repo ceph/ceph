@@ -157,11 +157,19 @@ This is an overview of the current implementation status of the orchestrators.
  apply nfs                           ✔      ✔
  apply osd                           ✔      ✔
  apply rbd-mirror                    ✔      ✔
- apply rgw                           ✔      ✔
+ apply cephfs-mirror                 ⚪      ✔
+ apply grafana                       ⚪      ✔
+ apply prometheus                    ❌      ✔
+ apply alertmanager                  ❌      ✔
+ apply node-exporter                 ❌      ✔
+ apply rgw                           ✔       ✔
  apply container                     ⚪      ✔
+ apply snmp-gateway                  ❌      ✔
  host add                            ⚪      ✔
  host ls                             ✔      ✔
  host rm                             ⚪      ✔
+ host maintenance enter              ❌      ✔
+ host maintenance exit               ❌      ✔
  daemon status                       ⚪      ✔
  daemon {stop,start,...}             ⚪      ✔
  device {ident,fault}-(on,off}       ⚪      ✔
@@ -171,7 +179,10 @@ This is an overview of the current implementation status of the orchestrators.
  nfs add                             ⚪      ✔
  rbd-mirror add                      ⚪      ✔
  rgw add                             ⚪     ✔
+ ls                                  ✔      ✔
  ps                                  ✔      ✔
+ status                              ✔      ✔
+ upgrade                             ❌      ✔
 =================================== ====== =========
 
 where

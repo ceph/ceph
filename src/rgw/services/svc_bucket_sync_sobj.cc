@@ -9,6 +9,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string bucket_sync_sources_oid_prefix = "bucket.sync-source-hints";
 static string bucket_sync_targets_oid_prefix = "bucket.sync-target-hints";
 

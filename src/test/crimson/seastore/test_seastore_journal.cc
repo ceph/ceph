@@ -6,6 +6,7 @@
 #include <random>
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 
@@ -32,7 +33,9 @@ struct record_validator_t {
       auto test = manager.read(
 	record_final_offset.add_relative(addr),
 	block.bl.length()).unsafe_get0();
-      addr.offset += block.bl.length();
+      addr.as_seg_paddr().set_segment_off(
+	addr.as_seg_paddr().get_segment_off()
+	+ block.bl.length());
       bufferlist bl;
       bl.push_back(test);
       ASSERT_EQ(
@@ -62,7 +65,7 @@ struct record_validator_t {
   }
 };
 
-struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
+struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   WritePipeline pipeline;
   std::unique_ptr<Journal> journal;
@@ -71,28 +74,39 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
 
   std::default_random_engine generator;
 
-  const segment_off_t block_size;
+  seastore_off_t block_size;
 
-  journal_test_t()
-    : segment_manager(segment_manager::create_test_ephemeral()),
-      block_size(segment_manager->get_block_size())
-  {
-  }
+  ExtentReaderRef scanner;
 
-  segment_id_t next = 0;
-  get_segment_ret get_segment() final {
+  segment_id_t next;
+
+  journal_test_t() = default;
+
+  void update_segment_avail_bytes(paddr_t offset) final {}
+
+  get_segment_ret get_segment(device_id_t id, segment_seq_t seq) final {
+    auto ret = next;
+    next = segment_id_t{
+      next.device_id(),
+      next.device_segment_id() + 1};
     return get_segment_ret(
       get_segment_ertr::ready_future_marker{},
-      next++);
+      ret);
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
   void update_journal_tail_committed(journal_seq_t paddr) final {}
 
   seastar::future<> set_up_fut() final {
-    journal.reset(new Journal(*segment_manager));
+    segment_manager = segment_manager::create_test_ephemeral();
+    block_size = segment_manager->get_block_size();
+    scanner.reset(new ExtentReader());
+    next = segment_id_t(segment_manager->get_device_id(), 0);
+    journal.reset(new Journal(*segment_manager, *scanner));
+
     journal->set_segment_provider(this);
     journal->set_write_pipeline(&pipeline);
+    scanner->add_segment_manager(segment_manager.get());
     return segment_manager->init(
     ).safe_then([this] {
       return journal->open_for_write();
@@ -103,16 +117,65 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
       }));
   }
 
+  seastar::future<> tear_down_fut() final {
+    return journal->close(
+    ).safe_then([this] {
+      segment_manager.reset();
+      scanner.reset();
+      journal.reset();
+    }).handle_error(
+      crimson::ct_error::all_same_way([](auto e) {
+        ASSERT_FALSE("Unable to close");
+      })
+    );
+  }
+
   template <typename T>
   auto replay(T &&f) {
     return journal->close(
     ).safe_then([this, f=std::move(f)]() mutable {
-      journal.reset(new Journal(*segment_manager));
+      journal.reset(new Journal(*segment_manager, *scanner));
       journal->set_segment_provider(this);
       journal->set_write_pipeline(&pipeline);
-      return journal->replay(std::forward<T>(std::move(f)));
-    }).safe_then([this] {
-      return journal->open_for_write();
+      return seastar::do_with(
+	std::vector<std::pair<segment_id_t, segment_header_t>>(),
+	[this](auto& segments) {
+	return crimson::do_for_each(
+	  boost::make_counting_iterator(device_segment_id_t{0}),
+	  boost::make_counting_iterator(device_segment_id_t{
+	    segment_manager->get_num_segments()}),
+	  [this, &segments](auto segment_id) {
+	  return scanner->read_segment_header(segment_id_t{0, segment_id})
+	  .safe_then([&segments, segment_id](auto header) {
+	    if (header.get_type() == segment_type_t::JOURNAL) {
+	      segments.emplace_back(
+		std::make_pair(
+		  segment_id_t{0, segment_id},
+		  std::move(header)
+		));
+	    }
+	    return seastar::now();
+	  }).handle_error(
+	    crimson::ct_error::enoent::handle([](auto) {
+	      return SegmentCleaner::init_segments_ertr::now();
+	    }),
+	    crimson::ct_error::enodata::handle([](auto) {
+	      return SegmentCleaner::init_segments_ertr::now();
+	    }),
+	    crimson::ct_error::input_output_error::pass_further{}
+	  );
+	}).safe_then([&segments] {
+	  return seastar::make_ready_future<
+	    std::vector<std::pair<segment_id_t, segment_header_t>>>(
+	      std::move(segments));
+	});
+      }).safe_then([this, f=std::move(f)](auto&& segments) mutable {
+	return journal->replay(
+	  std::move(segments),
+	  std::forward<T>(std::move(f)));
+      }).safe_then([this] {
+	return journal->open_for_write();
+      });
     });
   }
 
@@ -134,11 +197,11 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     replay(
       [&advance,
        &delta_checker]
-      (auto seq, auto base, const auto &di) mutable {
+      (const auto &offsets, const auto &di) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");
 	}
-	if (!(*delta_checker)(base, di)) {
+	if (!(*delta_checker)(offsets.record_block_base, di)) {
 	  delta_checker = std::nullopt;
 	  advance();
 	}
@@ -160,10 +223,6 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
       handle).unsafe_get0();
     records.back().record_final_offset = addr;
     return addr;
-  }
-
-  seastar::future<> tear_down_fut() final {
-    return seastar::now();
   }
 
   extent_t generate_extent(size_t blocks) {
@@ -251,9 +310,9 @@ TEST_F(journal_test_t, roll_journal_and_replay)
        { generate_extent(1), generate_extent(2) },
        { generate_delta(23), generate_delta(30) }
      });
-   auto starting_segment = current.segment;
+   auto starting_segment = current.as_seg_paddr().get_segment_id();
    unsigned so_far = 0;
-   while (current.segment == starting_segment) {
+   while (current.as_seg_paddr().get_segment_id() == starting_segment) {
      current = submit_record(record_t{
 	 { generate_extent(512), generate_extent(512) },
 	 { generate_delta(23), generate_delta(400) }

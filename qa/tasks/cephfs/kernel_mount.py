@@ -6,7 +6,7 @@ import re
 from io import StringIO
 from textwrap import dedent
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
 
@@ -16,18 +16,23 @@ log = logging.getLogger(__name__)
 
 
 UMOUNT_TIMEOUT = 300
-
+# internal metadata directory
+DEBUGFS_META_DIR = 'meta'
 
 class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None, config={}):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
+                 client_config={}):
         super(KernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
-        self.rbytes = config.get('rbytes', False)
+        self.client_config = client_config
+        self.dynamic_debug = client_config.get('dynamic_debug', False)
+        self.rbytes = client_config.get('rbytes', False)
+        self.syntax_style = client_config.get('syntax', 'v2')
         self.inst = None
         self.addr = None
         self._mount_bin = ['adjust-ulimits', 'ceph-coverage', self.test_dir +\
@@ -41,6 +46,8 @@ class KernelMount(CephFSMount):
 
         if not self.cephfs_mntpt:
             self.cephfs_mntpt = '/'
+        if not self.cephfs_name:
+            self.cephfs_name = 'cephfs'
 
         self._create_mntpt()
 
@@ -49,6 +56,12 @@ class KernelMount(CephFSMount):
             return retval
 
         self._set_filemode_on_mntpt()
+
+        if self.dynamic_debug:
+            kmount_count = self.ctx.get(f'kmount_count.{self.client_remote.hostname}', 0)
+            if kmount_count == 0:
+                self.enable_dynamic_debug()
+            self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count + 1
 
         self.mounted = True
 
@@ -69,28 +82,47 @@ class KernelMount(CephFSMount):
                         mountcmd_stderr.getvalue())
         log.info('mount command passed')
 
+    def _make_mount_cmd_old_or_new_style(self):
+        optd = {}
+        mnt_stx = ''
+        if self.syntax_style == 'v1':
+            mnt_stx = f':{self.cephfs_mntpt}'
+            if self.client_id:
+                optd['name'] = self.client_id
+            if self.cephfs_name:
+                optd['mds_namespace'] = self.cephfs_name
+        elif self.syntax_style == 'v2':
+            mnt_stx = f'{self.client_id}@.{self.cephfs_name}={self.cephfs_mntpt}'
+        else:
+            assert 0, f'invalid syntax style: {self.syntax_style}'
+        return (mnt_stx, optd)
+
     def _get_mount_cmd(self, mntopts):
         opts = 'norequire_active_mds'
-        if self.client_id:
-            opts += ',name=' + self.client_id
         if self.client_keyring_path and self.client_id:
             opts += ',secret=' + self.get_key_from_keyfile()
         if self.config_path:
             opts += ',conf=' + self.config_path
-        if self.cephfs_name:
-            opts += ",mds_namespace=" + self.cephfs_name
         if self.rbytes:
             opts += ",rbytes"
         else:
             opts += ",norbytes"
-        if mntopts:
-            opts += ',' + ','.join(mntopts)
 
         mount_cmd = ['sudo'] + self._nsenter_args
-        mount_dev = ':' + self.cephfs_mntpt
-        mount_cmd += self._mount_bin + [mount_dev, self.hostfs_mntpt, '-v',
+        stx_opt = self._make_mount_cmd_old_or_new_style()
+        for opt_name, opt_val in stx_opt[1].items():
+            opts += f',{opt_name}={opt_val}'
+        if mntopts:
+            opts += ',' + ','.join(mntopts)
+        log.info(f'mounting using device: {stx_opt[0]}')
+        # do not fall-back to old-style mount (catch new-style
+        # mount syntax bugs in the kernel). exclude this config
+        # when using v1-style syntax, since old mount helpers
+        # (pre-quincy) would pass this option to the kernel.
+        if self.syntax_style != 'v1':
+            opts += ",nofallback"
+        mount_cmd += self._mount_bin + [stx_opt[0], self.hostfs_mntpt, '-v',
                                         '-o', opts]
-
         return mount_cmd
 
     def umount(self, force=False):
@@ -112,6 +144,13 @@ class KernelMount(CephFSMount):
                       run.Raw(';'), 'ps', 'auxf'],
                 timeout=(15*60), omit_sudo=False)
             raise e
+
+        if self.dynamic_debug:
+            kmount_count = self.ctx.get(f'kmount_count.{self.client_remote.hostname}')
+            assert kmount_count
+            if kmount_count == 1:
+                self.disable_dynamic_debug()
+            self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count - 1
 
         self.mounted = False
         self.cleanup()
@@ -200,6 +239,8 @@ class KernelMount(CephFSMount):
                 def get_id_to_dir():
                     result = {}
                     for dir in glob.glob("/sys/kernel/debug/ceph/*"):
+                        if os.path.basename(dir) == DEBUGFS_META_DIR:
+                            continue
                         mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
                         global_id = mds_sessions_lines[0].split()[1].strip('"')
                         client_id = mds_sessions_lines[1].split()[1].strip('"')
@@ -220,6 +261,32 @@ class KernelMount(CephFSMount):
                     self.client_id, ",".join(client_id_to_global_id.keys())
                 ))
                 raise
+
+    def _dynamic_debug_control(self, enable):
+        """
+        Write to dynamic debug control file.
+        """
+        if enable:
+            fdata = "module ceph +p"
+        else:
+            fdata = "module ceph -p"
+
+        self.run_shell_payload(f"""
+sudo modprobe ceph
+echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
+""")
+
+    def enable_dynamic_debug(self):
+        """
+        Enable the dynamic debug.
+        """
+        self._dynamic_debug_control(True)
+
+    def disable_dynamic_debug(self):
+        """
+        Disable the dynamic debug.
+        """
+        self._dynamic_debug_control(False)
 
     def get_global_id(self):
         """
@@ -282,7 +349,7 @@ class KernelMount(CephFSMount):
         return epoch, barrier
 
     def get_op_read_count(self):
-        buf = self.read_debug_file("metrics")
+        buf = self.read_debug_file("metrics/size")
         if buf is None:
             return 0
         else:

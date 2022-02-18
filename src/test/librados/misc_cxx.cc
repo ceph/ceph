@@ -21,10 +21,8 @@
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
 
+using namespace std;
 using namespace librados;
-using std::map;
-using std::ostringstream;
-using std::string;
 
 typedef RadosTestPP LibRadosMiscPP;
 typedef RadosTestECPP LibRadosMiscECPP;

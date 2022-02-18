@@ -23,6 +23,7 @@ THE SOFTWARE.
  */
 
 import { Component, Injector, OnDestroy } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 import { ActivatedRouteSnapshot, NavigationEnd, NavigationStart, Router } from '@angular/router';
 
 import { concat, from, Observable, of, Subscription } from 'rxjs';
@@ -48,7 +49,7 @@ export class BreadcrumbsComponent implements OnDestroy {
   subscription: Subscription;
   private defaultResolver = new BreadcrumbsResolver();
 
-  constructor(private router: Router, private injector: Injector) {
+  constructor(private router: Router, private injector: Injector, private titleService: Title) {
     this.subscription = this.router.events
       .pipe(filter((x) => x instanceof NavigationStart))
       .subscribe(() => {
@@ -73,6 +74,8 @@ export class BreadcrumbsComponent implements OnDestroy {
           .subscribe((x) => {
             this.finished = true;
             this.crumbs = x;
+            const title = this.getTitleFromCrumbs(this.crumbs);
+            this.titleService.setTitle(title);
           });
       });
   }
@@ -137,5 +140,18 @@ export class BreadcrumbsComponent implements OnDestroy {
     }
 
     return of(value as T);
+  }
+
+  private getTitleFromCrumbs(crumbs: IBreadcrumb[]): string {
+    const currentLocation = crumbs
+      .map((crumb: IBreadcrumb) => {
+        return crumb.text || '';
+      })
+      .join(' > ');
+    if (currentLocation.length > 0) {
+      return `Ceph: ${currentLocation}`;
+    } else {
+      return 'Ceph';
+    }
   }
 }

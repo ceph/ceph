@@ -1,5 +1,5 @@
 try:
-    from typing import List, Optional, Dict, Any
+    from typing import List, Optional, Dict, Any, Union
 except ImportError:
     pass  # for type checking
 
@@ -89,3 +89,15 @@ class Device(object):
         if self.sys_api is None or 'rotational' not in self.sys_api:
             return "unknown"
         return 'hdd' if self.sys_api["rotational"] == "1" else 'ssd'
+
+    def __repr__(self) -> str:
+        device_desc: Dict[str, Union[str, List[str]]] = {
+            'path': self.path if self.path is not None else 'unknown',
+            'lvs': self.lvs if self.lvs else 'None',
+            'available': str(self.available),
+        }
+        if not self.available and self.rejected_reasons:
+            device_desc['rejection reasons'] = self.rejected_reasons
+        return "Device({})".format(
+            ', '.join('{}={}'.format(key, device_desc[key]) for key in device_desc.keys())
+        )

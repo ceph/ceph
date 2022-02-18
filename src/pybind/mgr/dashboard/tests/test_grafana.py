@@ -11,14 +11,12 @@ from requests import RequestException
 from ..controllers.grafana import Grafana
 from ..grafana import GrafanaRestClient
 from ..settings import Settings
-from . import ControllerTestCase, KVStoreMockMixin  # pylint: disable=no-name-in-module
+from ..tests import ControllerTestCase, KVStoreMockMixin
 
 
 class GrafanaTest(ControllerTestCase, KVStoreMockMixin):
     @classmethod
     def setup_server(cls):
-        # pylint: disable=protected-access
-        Grafana._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Grafana])
 
     def setUp(self):

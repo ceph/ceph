@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/rados/librados.hpp"
@@ -13,6 +13,8 @@
 #include <errno.h>
 #include <string>
 #include <vector>
+
+using namespace std;
 
 static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();

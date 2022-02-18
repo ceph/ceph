@@ -8,7 +8,7 @@ except ImportError:
     from unittest.mock import Mock, patch
 
 from ..plugins.feature_toggles import Actions, Features, FeatureToggles
-from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
+from ..tests import KVStoreMockMixin
 
 
 class SettingsTest(unittest.TestCase, KVStoreMockMixin):
@@ -22,8 +22,8 @@ class SettingsTest(unittest.TestCase, KVStoreMockMixin):
         cls.mgr = mgr
 
         # Populate real endpoint map
-        from ..controllers import load_controllers
-        cls.controllers = load_controllers()
+        from ..controllers import BaseController
+        cls.controllers = BaseController.load_controllers()
 
         # Initialize FeatureToggles plugin
         cls.plugin = FeatureToggles()

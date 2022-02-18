@@ -87,7 +87,7 @@ struct CapSnap {
   uint32_t   mode = 0;
   uid_t      uid = 0;
   gid_t      gid = 0;
-  map<string,bufferptr> xattrs;
+  std::map<std::string,bufferptr> xattrs;
   version_t xattr_version = 0;
 
   bufferlist inline_data;
@@ -163,7 +163,11 @@ struct Inode : RefCountedObject {
   version_t  inline_version = 0;
   bufferlist inline_data;
 
-  bool fscrypt = false; // fscrypt enabled ?
+  std::vector<uint8_t> fscrypt_auth;
+  std::vector<uint8_t> fscrypt_file;
+  bool is_fscrypt_enabled() {
+    return !!fscrypt_auth.size();
+  }
 
   bool is_root()    const { return ino == CEPH_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
@@ -174,7 +178,7 @@ struct Inode : RefCountedObject {
     return layout != file_layout_t();
   }
 
-  __u32 hash_dentry_name(const string &dn) {
+  __u32 hash_dentry_name(const std::string &dn) {
     int which = dir_layout.dl_dir_hash;
     if (!which)
       which = CEPH_STR_HASH_LINUX;
@@ -217,11 +221,11 @@ struct Inode : RefCountedObject {
   SnapRealm *snaprealm = 0;
   xlist<Inode*>::item snaprealm_item;
   InodeRef snapdir_parent;  // only if we are a snapdir inode
-  map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
+  std::map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
-  map<int,int> open_by_mode;
-  map<int,int> cap_refs;
+  std::map<int,int> open_by_mode;
+  std::map<int,int> cap_refs;
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
@@ -231,10 +235,10 @@ struct Inode : RefCountedObject {
 
   uint64_t  ll_ref = 0;   // separate ref count for ll client
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
-  string    symlink;  // symlink content, if it's a symlink
-  map<string,bufferptr> xattrs;
-  map<frag_t,int> fragmap;  // known frag -> mds mappings
-  map<frag_t, std::vector<mds_rank_t>> frag_repmap; // non-auth mds mappings
+  std::string    symlink;  // symlink content, if it's a symlink
+  std::map<std::string,bufferptr> xattrs;
+  std::map<frag_t,int> fragmap;  // known frag -> mds mappings
+  std::map<frag_t, std::vector<mds_rank_t>> frag_repmap; // non-auth mds mappings
 
   std::list<ceph::condition_variable*> waitfor_caps;
   std::list<ceph::condition_variable*> waitfor_commit;
@@ -272,7 +276,7 @@ struct Inode : RefCountedObject {
       (flock_locks && !flock_locks->empty());
   }
 
-  list<Delegation> delegations;
+  std::list<Delegation> delegations;
 
   xlist<MetaRequest*> unsafe_ops;
 
@@ -356,6 +360,6 @@ private:
 
 };
 
-ostream& operator<<(ostream &out, const Inode &in);
+std::ostream& operator<<(std::ostream &out, const Inode &in);
 
 #endif

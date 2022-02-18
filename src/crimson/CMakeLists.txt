@@ -19,6 +19,7 @@ set(crimson_common_srcs
   common/formatter.cc
   common/perf_counters_collection.cc
   common/log.cc
+  common/logclient.cc
   common/operation.cc
   common/throttle.cc
   common/tri_mutex.cc)
@@ -87,6 +88,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
+  ${PROJECT_SOURCE_DIR}/src/compressor/Compressor.cc
   ${PROJECT_SOURCE_DIR}/src/crush/builder.c
   ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
   ${PROJECT_SOURCE_DIR}/src/crush/crush.c
@@ -134,7 +136,7 @@ set(crimson_common_deps
 
 if(WITH_JAEGER)
   include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
-  list(APPEND crimson_common_deps jaeger-base)
+  list(APPEND crimson_common_deps ${jaeger_base})
 endif()
 
 if(NOT WITH_SYSTEM_BOOST)
@@ -170,6 +172,7 @@ set(crimson_mon_srcs
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/crypto_onwire.cc
+  ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/frames_v2.cc
   net/Errors.cc
   net/Messenger.cc

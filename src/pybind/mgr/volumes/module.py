@@ -12,17 +12,21 @@ log = logging.getLogger(__name__)
 
 goodchars = '[A-Za-z0-9-_.]'
 
+
 class VolumesInfoWrapper():
     def __init__(self, f, context):
         self.f = f
         self.context = context
+
     def __enter__(self):
         log.info("Starting {}".format(self.context))
+
     def __exit__(self, exc_type, exc_value, tb):
         if exc_type is not None:
             log.error("Failed {}:\n{}".format(self.context, "".join(traceback.format_exception(exc_type, exc_value, tb))))
         else:
             log.info("Finishing {}".format(self.context))
+
 
 def mgr_cmd_wrap(f):
     def wrap(self, inbuf, cmd):
@@ -33,6 +37,7 @@ def mgr_cmd_wrap(f):
         with VolumesInfoWrapper(f, context):
             return f(self, inbuf, cmd)
     return wrap
+
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -53,6 +58,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=vol_name,type=CephString '
                    'name=yes-i-really-mean-it,type=CephString,req=false ',
             'desc': "Delete a FS volume by passing --yes-i-really-mean-it flag",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs volume rename '
+                   f'name=vol_name,type=CephString,goodchars={goodchars} '
+                   f'name=new_vol_name,type=CephString,goodchars={goodchars} '
+                   'name=yes_i_really_mean_it,type=CephBool,req=false ',
+            'desc': "Rename a CephFS volume by passing --yes-i-really-mean-it flag",
             'perm': 'rw'
         },
         {
@@ -412,6 +425,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.list_fs_volumes()
 
     @mgr_cmd_wrap
+    def _cmd_fs_volume_rename(self, inbuf, cmd):
+        return self.vc.rename_fs_volume(cmd['vol_name'],
+                                        cmd['new_vol_name'],
+                                        cmd.get('yes_i_really_mean_it', False))
+
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
@@ -527,8 +546,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_pin(self, inbuf, cmd):
         return self.vc.pin_subvolume_group(vol_name=cmd['vol_name'],
-            group_name=cmd['group_name'], pin_type=cmd['pin_type'],
-            pin_setting=cmd['pin_setting'])
+                                           group_name=cmd['group_name'], pin_type=cmd['pin_type'],
+                                           pin_setting=cmd['pin_setting'])
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
@@ -585,9 +604,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_pin(self, inbuf, cmd):
         return self.vc.subvolume_pin(vol_name=cmd['vol_name'],
-            sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
-            pin_setting=cmd['pin_setting'],
-            group_name=cmd.get('group_name', None))
+                                     sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
+                                     pin_setting=cmd['pin_setting'],
+                                     group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):
@@ -609,9 +628,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_clone_status(self, inbuf, cmd):
         return self.vc.clone_status(
-            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
-            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))

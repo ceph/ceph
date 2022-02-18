@@ -51,15 +51,15 @@ class SettingsTest(DashboardTestCase):
 
     def test_bulk_set(self):
         self._put('/api/settings', {
-            'RGW_API_HOST': 'somehost',
-            'RGW_API_PORT': 7777,
+            'RGW_API_ACCESS_KEY': 'dummy-key',
+            'RGW_API_SECRET_KEY': 'dummy-secret',
         })
         self.assertStatus(200)
 
-        host = self._get('/api/settings/rgw-api-host')['value']
+        access_key = self._get('/api/settings/rgw-api-access-key')['value']
         self.assertStatus(200)
-        self.assertEqual('somehost', host)
+        self.assertEqual('dummy-key', access_key)
 
-        port = self._get('/api/settings/rgw-api-port')['value']
+        secret_key = self._get('/api/settings/rgw-api-secret-key')['value']
         self.assertStatus(200)
-        self.assertEqual(7777, port)
+        self.assertEqual('dummy-secret', secret_key)

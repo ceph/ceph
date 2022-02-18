@@ -13,7 +13,7 @@ Manager Plugin
 
 Ceph Filesystem clients periodically forward various metrics to Ceph Metadata Servers (MDS)
 which in turn get forwarded to Ceph Manager by MDS rank zero. Each active MDS forward its
-respective set of metrics to MDS rank zero. Metrics are aggergated and forwarded to Ceph
+respective set of metrics to MDS rank zero. Metrics are aggregated and forwarded to Ceph
 Manager.
 
 Metrics are divided into two categories - global and per-mds. Global metrics represent
@@ -72,11 +72,11 @@ By default, `cephfs-top` connects to cluster name `ceph`. To use a non-default c
 
   $ cephfs-top --cluster <cluster>
 
-`cephfs-top` refreshes stats every second by default. To chose a different refresh interval use::
+`cephfs-top` refreshes stats every second by default. To choose a different refresh interval use::
 
   $ cephfs-top -d <seconds>
 
-Interval should be greater or equal to 0.5 second. Fractional seconds are honoured.
+Interval should be greater than or equal to 0.5 seconds. Fractional seconds are honoured.
 
 Sample screenshot running `cephfs-top` with 2 clients:
 

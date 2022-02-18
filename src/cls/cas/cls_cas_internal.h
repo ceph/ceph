@@ -157,12 +157,13 @@ struct chunk_refs_by_hash_t : public chunk_refs_t::refs_t {
   chunk_refs_by_hash_t(const chunk_refs_by_object_t *o) {
     total = o->count();
     for (auto& i : o->by_object) {
-      by_hash[make_pair(i.pool, i.get_hash())]++;
+      by_hash[std::make_pair(i.pool, i.get_hash())]++;
     }
   }
 
   std::string describe_encoding() const {
-    return "by_hash("s + stringify(hash_bits) + " bits)"s;
+    using namespace std::literals;
+    return "by_hash("s + stringify(hash_bits) + " bits)";
   }
 
   uint32_t mask() {
@@ -181,7 +182,7 @@ struct chunk_refs_by_hash_t : public chunk_refs_t::refs_t {
     old.swap(by_hash);
     auto m = mask();
     for (auto& i : old) {
-      by_hash[make_pair(i.first.first, i.first.second & m)] = i.second;
+      by_hash[std::make_pair(i.first.first, i.first.second & m)] = i.second;
     }
     return true;
   }
@@ -196,11 +197,11 @@ struct chunk_refs_by_hash_t : public chunk_refs_t::refs_t {
     return total;
   }
   void get(const hobject_t& o) override {
-    by_hash[make_pair(o.pool, o.get_hash() & mask())]++;
+    by_hash[std::make_pair(o.pool, o.get_hash() & mask())]++;
     ++total;
   }
   bool put(const hobject_t& o) override {
-    auto p = by_hash.find(make_pair(o.pool, o.get_hash() & mask()));
+    auto p = by_hash.find(std::make_pair(o.pool, o.get_hash() & mask()));
     if (p == by_hash.end()) {
       return false;
     }
@@ -242,7 +243,7 @@ struct chunk_refs_by_hash_t : public chunk_refs_t::refs_t {
       denc_signed_varint(poolid, p);
       memcpy(&hash, p.get_pos_add(hash_bytes), hash_bytes);
       denc_varint(count, p);
-      by_hash[make_pair(poolid, (uint32_t)hash)] = count;
+      by_hash[std::make_pair(poolid, (uint32_t)hash)] = count;
     }
     DENC_FINISH(p);
   }
@@ -265,7 +266,7 @@ WRITE_CLASS_DENC(chunk_refs_by_hash_t)
 
 struct chunk_refs_by_pool_t : public chunk_refs_t::refs_t {
   uint64_t total = 0;
-  map<int64_t,uint64_t> by_pool;
+  std::map<int64_t,uint64_t> by_pool;
 
   chunk_refs_by_pool_t() {}
   chunk_refs_by_pool_t(const chunk_refs_by_hash_t *o) {

@@ -1,6 +1,8 @@
 tasks:
 - install:
     branch: pacific
+    exclude_packages:
+      - ceph-volume
 - print: "**** done install task..."
 - print: "**** done start installing pacific cephadm ..."
 - cephadm:

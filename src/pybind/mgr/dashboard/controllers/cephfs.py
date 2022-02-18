@@ -10,9 +10,9 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
+from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache
-from . import ApiController, ControllerDoc, EndpointDoc, RESTController, \
-    UiApiController, allow_empty_body
+from . import APIDoc, APIRouter, EndpointDoc, RESTController, UIRouter, allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -20,11 +20,11 @@ GET_QUOTAS_SCHEMA = {
 }
 
 
-@ApiController('/cephfs', Scope.CEPHFS)
-@ControllerDoc("Cephfs Management API", "Cephfs")
+@APIRouter('/cephfs', Scope.CEPHFS)
+@APIDoc("Cephfs Management API", "Cephfs")
 class CephFS(RESTController):
     def __init__(self):  # pragma: no cover
-        super(CephFS, self).__init__()
+        super().__init__()
 
         # Stateful instances of CephFSClients, hold cached results.  Key to
         # dict is FSCID
@@ -364,6 +364,7 @@ class CephFS(RESTController):
         """
         return cfs.get_directory(os.sep.encode())
 
+    @handle_cephfs_error()
     @RESTController.Resource('GET')
     def ls_dir(self, fs_id, path=None, depth=1):
         """
@@ -490,8 +491,8 @@ class CephFSClients(object):
         return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
 
 
-@UiApiController('/cephfs', Scope.CEPHFS)
-@ControllerDoc("Dashboard UI helper function; not part of the public API", "CephFSUi")
+@UIRouter('/cephfs', Scope.CEPHFS)
+@APIDoc("Dashboard UI helper function; not part of the public API", "CephFSUi")
 class CephFsUi(CephFS):
     RESOURCE_ID = 'fs_id'
 
@@ -518,6 +519,7 @@ class CephFsUi(CephFS):
 
         return data
 
+    @handle_cephfs_error()
     @RESTController.Resource('GET')
     def ls_dir(self, fs_id, path=None, depth=1):
         """

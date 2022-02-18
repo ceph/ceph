@@ -21,21 +21,13 @@ either via the Ceph command-line interface (CLI) or via the dashboard (GUI).
 versions of Ceph.
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
 
     compatibility
     install
     adoption
     host-management
-    mon
-    osd
-    rgw
-    mds
-    nfs
-    iscsi
-    custom-container
-    monitoring
-    service-management
+    Service Management <services/index>
     upgrade
     Cephadm operations <operations>
     Client Setup <client-setup>

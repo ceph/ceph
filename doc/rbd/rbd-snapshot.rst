@@ -15,13 +15,13 @@ VM image) quickly and easily. Ceph block device snapshots are managed using the
 .. important:: To use RBD snapshots, you must have a running Ceph cluster.
 
 .. note:: Because RBD does not know about any filesystem within an image
-          (volume), snapshots are not `crash-consistent` unless they are
+          (volume), snapshots are only `crash-consistent` unless they are
           coordinated within the mounting (attaching) operating system.
           We therefore recommend that you pause or stop I/O before taking a snapshot.
-          If the volume contains a filesystem, it must be in an internally
-          consistent state before taking a snapshot.  Snapshots taken at
-          inconsistent points may need a `fsck` pass before subsequent
-          mounting.  To stop `I/O` you can use `fsfreeze` command. See
+          If the volume contains a filesystem, it should be in an internally
+          consistent state before taking a snapshot.  Snapshots taken without
+          write quiescing may need an `fsck` pass before subsequent
+          mounting.  To quiesce `I/O` you can use `fsfreeze` command. See
 	  `fsfreeze(8)` man page for more details.
 	  For virtual machines, `qemu-guest-agent` can be used to automatically
 	  freeze file systems when creating a snapshot.

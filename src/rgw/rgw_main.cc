@@ -23,6 +23,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
 #include "rgw_rest_admin.h"
+#include "rgw_rest_info.h"
 #include "rgw_rest_usage.h"
 #include "rgw_rest_user.h"
 #include "rgw_rest_bucket.h"
@@ -31,6 +32,7 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_sts.h"
+#include "rgw_rest_ratelimit.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -53,6 +55,9 @@
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include "rgw_lua.h"
 #endif
+#ifdef WITH_RADOSGW_DBSTORE
+#include "rgw_sal_dbstore.h"
+#endif
 
 #include "services/svc_zone.h"
 
@@ -61,6 +66,8 @@
 #endif
 
 #define dout_subsys ceph_subsys_rgw
+
+using namespace std;
 
 namespace {
 TracepointProvider::Traits rgw_op_tracepoint_traits("librgw_op_tp.so",
@@ -190,11 +197,13 @@ int radosgw_Main(int argc, const char **argv)
   map<string,string> defaults = {
     { "debug_rgw", "1/5" },
     { "keyring", "$rgw_data/keyring" },
-    { "objecter_inflight_ops", "24576" }
+    { "objecter_inflight_ops", "24576" },
+    // require a secure mon connection by default
+    { "ms_mon_client_mode", "secure" },
+    { "auth_client_required", "cephx" }
   };
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -325,7 +334,6 @@ int radosgw_Main(int argc, const char **argv)
   
   lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_local_datacache_enabled=" << cct->_conf->rgw_d3n_l1_local_datacache_enabled << dendl;
   if (cct->_conf->rgw_d3n_l1_local_datacache_enabled) {
-    lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_enable_ops_log=" << cct->_conf->rgw_enable_ops_log << dendl;
     lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_persistent_path='" << cct->_conf->rgw_d3n_l1_datacache_persistent_path << "'" << dendl;
     lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_datacache_size=" << cct->_conf->rgw_d3n_l1_datacache_size << dendl;
     lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_evict_cache_on_start=" << cct->_conf->rgw_d3n_l1_evict_cache_on_start << dendl;
@@ -333,10 +341,6 @@ int radosgw_Main(int argc, const char **argv)
     lsubdout(cct, rgw, 1) << "rgw_d3n: rgw_d3n_l1_eviction_policy=" << cct->_conf->rgw_d3n_l1_eviction_policy << dendl;
   }
   bool rgw_d3n_datacache_enabled = cct->_conf->rgw_d3n_l1_local_datacache_enabled;
-  if (rgw_d3n_datacache_enabled && !cct->_conf->rgw_enable_ops_log) {
-    lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that rgw_enable_ops_log will be enabled also)" << dendl;
-    rgw_d3n_datacache_enabled = false;
-  }
   if (rgw_d3n_datacache_enabled && (cct->_conf->rgw_max_chunk_size != cct->_conf->rgw_obj_stripe_size)) {
     lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that the chunk_size equals stripe_size)" << dendl;
     rgw_d3n_datacache_enabled = false;
@@ -347,9 +351,24 @@ int radosgw_Main(int argc, const char **argv)
   }
   lsubdout(cct, rgw, 1) << "D3N datacache enabled: " << rgw_d3n_datacache_enabled << dendl;
 
+  std::string rgw_store = (!rgw_d3n_datacache_enabled) ? "rados" : "d3n";
+
+  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_DBSTORE
+  if (config_store == "dbstore") {
+    rgw_store = "dbstore";
+  }
+#endif
+
+#ifdef WITH_RADOSGW_MOTR
+  if (config_store == "motr") {
+    rgw_store = "motr";
+  }
+#endif
+
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
-				 (!rgw_d3n_datacache_enabled) ? "rados" : "d3n",
+				 rgw_store,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,
@@ -435,17 +454,20 @@ int radosgw_Main(int argc, const char **argv)
     store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
   }
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-  rgw::lua::packages_t failed_packages;
-  std::string output;
-  r = rgw::lua::install_packages(&dp, store, null_yield, failed_packages, output);
-  if (r < 0) {
-    dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
-  }
-  if (!output.empty()) {
-    dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
-  }
-  for (const auto& p : failed_packages) {
-    dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
+  if (rados) { /* Supported for only RadosStore */
+    rgw::lua::packages_t failed_packages;
+    std::string output;
+    r = rgw::lua::install_packages(&dp, rados, null_yield, failed_packages, output);
+    if (r < 0) {
+      dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
+    }
+    if (!output.empty()) {
+      dout(10) << "INFO: lua packages installation output: \n" << output << dendl; 
+    }
+    for (const auto& p : failed_packages) {
+      dout(5) << "WARNING: failed to install lua package: " << p << " from allowlist" << dendl;
+    }
   }
 #endif
 
@@ -485,6 +507,7 @@ int radosgw_Main(int argc, const char **argv)
 
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
+    admin_resource->register_resource("info", new RGWRESTMgr_Info);
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);
     /* XXX dang part of this is RADOS specific */
@@ -496,6 +519,7 @@ int radosgw_Main(int argc, const char **argv)
     admin_resource->register_resource("log", new RGWRESTMgr_Log);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
+    admin_resource->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
     rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
   }
 
@@ -519,12 +543,22 @@ int radosgw_Main(int argc, const char **argv)
 
   rgw::dmclock::SchedulerCtx sched_ctx{cct.get()};
 
-  OpsLogSocket *olog = NULL;
+  OpsLogManifold *olog = new OpsLogManifold();
+  ActiveRateLimiter ratelimiting{cct.get()};
+  ratelimiting.start();
 
   if (!g_conf()->rgw_ops_log_socket_path.empty()) {
-    olog = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
-    olog->init(g_conf()->rgw_ops_log_socket_path);
+    OpsLogSocket* olog_socket = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
+    olog_socket->init(g_conf()->rgw_ops_log_socket_path);
+    olog->add_sink(olog_socket);
   }
+  OpsLogFile* ops_log_file;
+  if (!g_conf()->rgw_ops_log_file_path.empty()) {
+    ops_log_file = new OpsLogFile(g_ceph_context, g_conf()->rgw_ops_log_file_path, g_conf()->rgw_ops_log_data_backlog);
+    ops_log_file->start();
+    olog->add_sink(ops_log_file);
+  }
+  olog->add_sink(new OpsLogRados(store));
 
   r = signal_fd_init();
   if (r < 0) {
@@ -580,7 +614,7 @@ int radosgw_Main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, auth_registry };
+      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, auth_registry, &ratelimiting };
 
       fe = new RGWLoadGenFrontend(env, config);
     }
@@ -589,7 +623,7 @@ int radosgw_Main(int argc, const char **argv)
       config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
+      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry, &ratelimiting };
       fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
 
@@ -672,7 +706,6 @@ int radosgw_Main(int argc, const char **argv)
   shutdown_async_signal_handler();
 
   rgw_log_usage_finalize();
-
   delete olog;
 
   StoreManager::close_storage(store);

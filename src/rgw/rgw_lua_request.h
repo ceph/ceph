@@ -5,7 +5,7 @@
 
 class req_state;
 class RGWREST;
-class OpsLogSocket;
+class OpsLogSink;
 namespace rgw::sal {
   class Store;
 }
@@ -16,7 +16,7 @@ namespace rgw::lua::request {
 int execute(
     rgw::sal::Store* store,
     RGWREST* rest,
-    OpsLogSocket* olog,
+    OpsLogSink* olog,
     req_state *s, 
     const char* op_name,
     const std::string& script);

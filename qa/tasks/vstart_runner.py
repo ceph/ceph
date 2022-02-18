@@ -47,17 +47,16 @@ from IPy import IP
 import unittest
 import platform
 import logging
-import shlex
 
 from unittest import suite, loader
 
-from teuthology.orchestra.run import Raw, quote
+from teuthology.orchestra.run import Raw, quote, PIPE
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
 from teuthology.contextutil import safe_while
 from teuthology.contextutil import MaxWhileTries
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 try:
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -465,6 +464,10 @@ class LocalRemote(object):
             # as long as the input buffer is "small"
             if isinstance(stdin, str):
                 subproc.stdin.write(stdin.encode())
+            elif stdin == subprocess.PIPE or stdin == PIPE:
+                pass
+            elif isinstance(stdin, StringIO):
+                subproc.stdin.write(bytes(stdin.getvalue(),encoding='utf8'))
             else:
                 subproc.stdin.write(stdin)
 
@@ -532,13 +535,11 @@ class LocalDaemon(object):
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.debug("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[0])
-        if opt_log_ps_output:
-            log.debug("No match for {0} {1}: {2}".format(
-                self.daemon_type, self.daemon_id, ps_txt))
-        else:
-            log.debug("No match for {0} {1}".format(self.daemon_type,
-                     self.daemon_id))
-            return None
+        if not opt_log_ps_output:
+            ps_txt = '(omitted)'
+        log.debug("No match for {0} {1}: {2}".format(
+            self.daemon_type, self.daemon_id, ps_txt))
+        return None
 
     def wait(self, timeout):
         waited = 0
@@ -554,6 +555,8 @@ class LocalDaemon(object):
             return
 
         pid = self._get_pid()
+        if pid is None:
+            return
         log.debug("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
         os.kill(pid, signal.SIGTERM)
 
@@ -659,12 +662,16 @@ class LocalCephFSMount():
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def _run_python(self, pyscript, py_version='python'):
+    def _run_python(self, pyscript, py_version='python', sudo=False):
         """
         Override this to remove the daemon-helper prefix that is used otherwise
         to make the process killable.
         """
-        return self.client_remote.run(args=[py_version, '-c', pyscript],
+        args = []
+        if sudo:
+            args.append('sudo')
+        args += [py_version, '-c', pyscript]
+        return self.client_remote.run(args=args,
                                       wait=False, stdout=StringIO())
 
     def setup_netns(self):
@@ -706,9 +713,8 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
     def __init__(self, ctx, test_dir, client_id, client_keyring_path=None,
                  client_remote=None, hostfs_mntpt=None, cephfs_name=None,
                  cephfs_mntpt=None, brxnet=None):
-        super(LocalFuseMount, self).__init__(ctx=ctx, client_config=None,
-            test_dir=test_dir, client_id=client_id,
-            client_keyring_path=client_keyring_path,
+        super(LocalFuseMount, self).__init__(ctx=ctx, test_dir=test_dir,
+            client_id=client_id, client_keyring_path=client_keyring_path,
             client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
@@ -784,59 +790,30 @@ class LocalCephManager(CephManager):
         # methods to work though.
         self.pools = {}
 
+        # NOTE: These variables are being overriden here so that parent class
+        # can pick it up.
+        self.cephadm = False
+        self.rook = False
+        self.testdir = None
+        self.run_cluster_cmd_prefix = [CEPH_CMD]
+        # XXX: Ceph API test CI job crashes because "ceph -w" process launched
+        # by run_ceph_w() crashes when shell is set to True.
+        # See https://tracker.ceph.com/issues/49644.
+        #
+        # The 2 possible workaround this are either setting "shell" to "False"
+        # when command "ceph -w" is executed or to prepend "exec sudo" to
+        # command arguments. We are going with latter since former would make
+        # it necessary to pass "shell" parameter to run() method. This leads
+        # to incompatibility with the method teuthology.orchestra.run's run()
+        # since it doesn't accept "shell" as parameter.
+        self.run_ceph_w_prefix = ['exec', 'sudo', CEPH_CMD]
+
     def find_remote(self, daemon_type, daemon_id):
         """
         daemon_type like 'mds', 'osd'
         daemon_id like 'a', '0'
         """
         return LocalRemote()
-
-    # XXX: For reason behind setting "shell" to False, see
-    # https://tracker.ceph.com/issues/49644.
-    def run_ceph_w(self, watch_channel=None, shell=False):
-        """
-        :param watch_channel: Specifies the channel to be watched.
-                              This can be 'cluster', 'audit', ...
-        :type watch_channel: str
-        """
-        args = [CEPH_CMD, "-w"]
-        if watch_channel is not None:
-            args.append("--watch-channel")
-            args.append(watch_channel)
-        proc = self.controller.run(args=args, wait=False, stdout=StringIO(),
-                                   shell=shell)
-        return proc
-
-    def run_cluster_cmd(self, **kwargs):
-        """
-        Run a Ceph command and the object representing the process for the
-        command.
-
-        Accepts arguments same as teuthology.orchestra.remote.run().
-        """
-        if isinstance(kwargs['args'], str):
-            kwargs['args'] = shlex.split(kwargs['args'])
-        kwargs['args'] = [CEPH_CMD] + list(kwargs['args'])
-        return self.controller.run(**kwargs)
-
-    def raw_cluster_cmd(self, *args, **kwargs) -> str:
-        """
-        args like ["osd", "dump"}
-        return stdout string
-        """
-        if kwargs.get('args') is None and args:
-            kwargs['args'] = args
-        kwargs['stdout'] = kwargs.pop('stdout', StringIO())
-        return self.run_cluster_cmd(**kwargs).stdout.getvalue()
-
-    def raw_cluster_cmd_result(self, *args, **kwargs):
-        """
-        like raw_cluster_cmd but don't check status, just return rc
-        """
-        if kwargs.get('args') is None and args:
-            kwargs['args'] = args
-        kwargs['check_status'] = False
-        return self.run_cluster_cmd(**kwargs).exitstatus
 
     def admin_socket(self, daemon_type, daemon_id, command, check_status=True,
                      timeout=None, stdout=None):
@@ -1020,10 +997,13 @@ class LocalCluster(object):
 
 class LocalContext(object):
     def __init__(self):
-        self.config = {}
+        self.config = {'cluster': 'ceph'}
         self.teuthology_config = teuth_config
         self.cluster = LocalCluster()
         self.daemons = DaemonGroup()
+        if not hasattr(self, 'managers'):
+            self.managers = {}
+        self.managers[self.config['cluster']] = LocalCephManager()
 
         # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
         # tests that want to look these up via ctx can do so.
@@ -1080,7 +1060,6 @@ def load_tests(modules, loader):
 
 def scan_tests(modules):
     overall_suite = load_tests(modules, loader.TestLoader())
-
     max_required_mds = 0
     max_required_clients = 0
     max_required_mgr = 0
@@ -1351,6 +1330,8 @@ def exec_test():
     # tools that the tests might want to use (add more here if needed)
     require_binaries = ["ceph-dencoder", "cephfs-journal-tool", "cephfs-data-scan",
                         "cephfs-table-tool", "ceph-fuse", "rados", "cephfs-meta-injection"]
+    # What binaries may be required is task specific
+    require_binaries = ["ceph-dencoder",  "rados"]
     missing_binaries = [b for b in require_binaries if not os.path.exists(os.path.join(BIN_PREFIX, b))]
     if missing_binaries and not opt_ignore_missing_binaries:
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))

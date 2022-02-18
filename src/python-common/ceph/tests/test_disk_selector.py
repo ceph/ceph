@@ -1,6 +1,7 @@
 # flake8: noqa
 import pytest
 
+from ceph.deployment.drive_selection.matchers import _MatchInvalid
 from ceph.deployment.inventory import Devices, Device
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
@@ -142,7 +143,7 @@ class TestSizeMatcher(object):
     def test_to_byte_PB(self):
         """ Expect to raise """
 
-        with pytest.raises(ValueError):
+        with pytest.raises(_MatchInvalid):
             drive_selection.SizeMatcher('size', '10P').to_byte(('10', 'PB'))
         assert 'Unit \'P\' is not supported'
 
@@ -269,7 +270,7 @@ class TestSizeMatcher(object):
 
     def test_normalize_suffix_raises(self):
 
-        with pytest.raises(ValueError):
+        with pytest.raises(_MatchInvalid):
             drive_selection.SizeMatcher('10P', 'size')._normalize_suffix("P")
             pytest.fail("Unit 'P' not supported")
 
@@ -343,11 +344,6 @@ class TestDriveGroup(object):
                 }
 
             dgo = DriveGroupSpec.from_json(raw_sample)
-            if disk_format == 'filestore':
-                with pytest.raises(DriveGroupValidationError):
-                    dgo.validate()
-            else:
-                dgo.validate()
             return dgo
 
         return make_sample_data
@@ -423,19 +419,9 @@ class TestDriveGroup(object):
             limit=0,
         )
 
-    def test_journal_device_prop(self, test_fix):
-        test_fix = test_fix(disk_format='filestore')
-        assert test_fix.journal_devices == DeviceSelection(
-            size=':20G'
-        )
-
     def test_wal_device_prop_empty(self, test_fix):
         test_fix = test_fix(empty=True)
         assert test_fix.wal_devices is None
-
-    def test_filestore_format_prop(self, test_fix):
-        test_fix = test_fix(disk_format='filestore')
-        assert test_fix.objectstore == 'filestore'
 
     def test_bluestore_format_prop(self, test_fix):
         test_fix = test_fix(disk_format='bluestore')
@@ -444,10 +430,6 @@ class TestDriveGroup(object):
     def test_default_format_prop(self, test_fix):
         test_fix = test_fix(empty=True)
         assert test_fix.objectstore == 'bluestore'
-
-    def test_journal_size(self, test_fix):
-        test_fix = test_fix(disk_format='filestore')
-        assert test_fix.journal_size == '5G'
 
     def test_osds_per_device(self, test_fix):
         test_fix = test_fix(osds_per_device='3')
@@ -559,3 +541,14 @@ class TestDriveSelection(object):
         sel = drive_selection.DriveSelection(spec, inventory)
         assert [d.path for d in sel.data_devices()] == expected_data
         assert [d.path for d in sel.db_devices()] == expected_db
+
+    def test_disk_selection_raise(self):
+        spec = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern='*'),
+                service_id='foobar',
+                data_devices=DeviceSelection(size='wrong'),
+            )
+        inventory = _mk_inventory(_mk_device(rotational=True)*2)
+        m = 'Failed to validate OSD spec "foobar.data_devices": No filters applied'
+        with pytest.raises(DriveGroupValidationError, match=m):
+            drive_selection.DriveSelection(spec, inventory)

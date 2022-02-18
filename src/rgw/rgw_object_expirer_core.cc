@@ -43,6 +43,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string objexp_lock_name = "gc_process";
 
 static string objexp_hint_get_shardname(int shard_num)

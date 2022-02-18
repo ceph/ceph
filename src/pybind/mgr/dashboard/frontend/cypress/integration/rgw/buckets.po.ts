@@ -6,6 +6,8 @@ const pages = {
 };
 
 export class BucketsPageHelper extends PageHelper {
+  static readonly USERS = ['dashboard', 'testid'];
+
   pages = pages;
 
   versioningStateEnabled = 'Enabled';
@@ -136,7 +138,7 @@ export class BucketsPageHelper extends PageHelper {
     // Test invalid owner input
     // select some valid option. The owner drop down error message will not appear unless a valid user was selected at
     // one point before the invalid placeholder user is selected.
-    this.selectOwner('dev');
+    this.selectOwner(BucketsPageHelper.USERS[1]);
 
     // select the first option, which is invalid because it is a placeholder
     this.selectOwner('-- Select a user --');
@@ -150,7 +152,7 @@ export class BucketsPageHelper extends PageHelper {
     cy.get('#owner + .invalid-feedback').should('have.text', 'This field is required.');
 
     // Check invalid placement target input
-    this.selectOwner('dev');
+    this.selectOwner(BucketsPageHelper.USERS[1]);
     // The drop down error message will not appear unless a valid option is previsously selected.
     this.selectPlacementTarget('default-placement');
     this.selectPlacementTarget('-- Select a placement target --');

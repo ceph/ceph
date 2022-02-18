@@ -6,6 +6,8 @@
 # relies on this ordering
 export LC_ALL=C
 
+# If your ceph.conf is not in /etc/ceph, then set CEPH_CONF="-c /path/to/ceph.conf"
+
 out_dir="."
 temp_file=/tmp/temp.$$
 timestamp=$(date -u +%Y%m%d%H%M%S)
@@ -34,7 +36,7 @@ error_out() {
 prompt_pool() {
     # note: all prompts go to stderr so stdout contains just the result
     >&2 echo "Available pools:"
-    rados lspools >"$temp_file" 2>"$lspools_err"
+    rados ${CEPH_CONF} lspools >"$temp_file" 2>"$lspools_err"
     if [ "$?" -ne 0 ] ;then
 	error_out "rados lspools" "$lspools_err"
     fi
@@ -61,7 +63,7 @@ echo "running 'rados ls' at $(date)"
 rm -f "$rados_out" &> /dev/null
 for mypool in $pool ; do
     echo "running 'rados ls' on pool ${mypool}."
-    rados ls --pool="$mypool" --all >>"$rados_out" 2>"$rados_err"
+    rados ${CEPH_CONF} ls --pool="$mypool" --all >>"$rados_out" 2>"$rados_err"
     if [ "$?" -ne 0 ] ;then
 	error_out "rados ls" "$rados_err"
     fi
@@ -111,7 +113,7 @@ sort -u "$rados_out" >"$temp_file"
 mv -f "$temp_file" "$rados_out"
 
 echo "running 'radosgw-admin bucket radoslist' at $(date)"
-radosgw-admin bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
+radosgw-admin ${CEPH_CONF} bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
 if [ "$?" -ne 0 ] ;then
     error_out "radosgw-admin radoslist" "$rgwadmin_err"
 fi

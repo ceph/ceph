@@ -12,7 +12,7 @@ from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
@@ -129,6 +129,7 @@ def task(ctx, config):
                 p.spawn(_run_tests, ctx, refspec, role, tests,
                         config.get('env'),
                         basedir=config.get('basedir','qa/workunits'),
+                        subdir=config.get('subdir'),
                         timeout=timeout,
                         cleanup=cleanup,
                         coverage_and_limits=not config.get('no_coverage_and_limits', None))

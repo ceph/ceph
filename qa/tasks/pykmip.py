@@ -147,7 +147,8 @@ def setup_venv(ctx, config):
     assert isinstance(config, dict)
     log.info('Setting up virtualenv for pykmip...')
     for (client, _) in config.items():
-        run_in_pykmip_dir(ctx, client, ['virtualenv', '.pykmipenv'])
+        run_in_pykmip_dir(ctx, client, ['python3', '-m', 'venv', '.pykmipenv'])
+        run_in_pykmip_venv(ctx, client, ['pip', 'install', '--upgrade', 'pip'])
         run_in_pykmip_venv(ctx, client, ['pip', 'install', 'pytz', '-e', get_pykmip_dir(ctx)])
     yield
 

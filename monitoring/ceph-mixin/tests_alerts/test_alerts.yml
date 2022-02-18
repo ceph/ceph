@@ -1,0 +1,1993 @@
+rule_files:
+  - ../prometheus_alerts.yml
+evaluation_interval: 5m
+tests:
+ # health error
+ - interval: 5m
+   input_series:
+    - series: 'ceph_health_status{instance="ceph:9283",job="ceph"}'
+      values: '2 2 2 2 2 2 2'
+   promql_expr_test:
+    - expr: ceph_health_status == 2
+      eval_time: 5m
+      exp_samples:
+       - labels: 'ceph_health_status{instance="ceph:9283",job="ceph"}'
+         value: 2
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephHealthError
+    - eval_time: 6m
+      alertname: CephHealthError
+      exp_alerts:
+      - exp_labels:
+          instance: ceph:9283
+          job: ceph
+          oid: 1.3.6.1.4.1.50495.1.2.1.2.1
+          type: ceph_default
+          severity: critical
+        exp_annotations:
+          summary: Cluster is in an ERROR state
+          description: >
+            Ceph in HEALTH_ERROR state for more than 5 minutes.
+            Please check "ceph health detail" for more information.
+
+ # health warning
+ - interval: 5m
+   input_series:
+    - series: 'ceph_health_status{instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_status == 1
+       eval_time: 15m
+       exp_samples:
+         - labels: 'ceph_health_status{instance="ceph:9283",job="ceph"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 10m
+      alertname: CephHealthWarning
+    - eval_time: 20m
+      alertname: CephHealthWarning
+      exp_alerts:
+      - exp_labels:
+          instance: ceph:9283
+          job: ceph
+          type: ceph_default
+          severity: warning
+        exp_annotations:
+          summary: Cluster is in a WARNING state
+          description: >
+            Ceph has been in HEALTH_WARN for more than 15 minutes.
+            Please check "ceph health detail" for more information.
+
+ # 10% OSDs down
+ - interval: 1m
+   input_series:
+    - series: 'ceph_osd_up{ceph_daemon="osd.0",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_osd_up{ceph_daemon="osd.1",instance="ceph:9283",job="ceph"}'
+      values: '0 0 0 0 0'
+    - series: 'ceph_osd_up{ceph_daemon="osd.2",instance="ceph:9283",job="ceph"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1'
+   promql_expr_test:
+     - expr: count(ceph_osd_up == 0) / count(ceph_osd_up) * 100 >= 10
+       eval_time: 1m
+       exp_samples:
+         - labels: '{}'
+           value: 3.333333333333333E+01
+   alert_rule_test:
+     - eval_time: 1m
+       alertname: CephOSDDownHigh
+       exp_alerts:
+       - exp_labels:
+           oid: 1.3.6.1.4.1.50495.1.2.1.4.1
+           type: ceph_default
+           severity: critical
+         exp_annotations:
+           summary: More than 10% of OSDs are down
+           description: |
+             33.33% or 1 of 3 OSDs are down (>= 10%).
+
+             The following OSDs are down:
+               - osd.1 on ceph
+
+ # flapping OSD
+ - interval: 1s
+   input_series:
+    - series: 'ceph_osd_up{ceph_daemon="osd.0",instance="ceph:9283",job="ceph"}'
+      values: '1+1x100'
+    - series: 'ceph_osd_up{ceph_daemon="osd.1",instance="ceph:9283",job="ceph"}'
+      values: '1+0x100'
+    - series: 'ceph_osd_up{ceph_daemon="osd.2",instance="ceph:9283",job="ceph"}'
+      values: '1+0x100'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: |
+         (
+           rate(ceph_osd_up[5m])
+           * on(ceph_daemon) group_left(hostname) ceph_osd_metadata
+         ) * 60 > 1
+       eval_time: 1m
+       exp_samples:
+         - labels: '{ceph_daemon="osd.0", hostname="ceph", instance="ceph:9283",
+           job="ceph"}'
+           value: 1.2200000000000001E+01
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: CephOSDFlapping
+       exp_alerts:
+       - exp_labels:
+           ceph_daemon: osd.0
+           hostname: ceph
+           instance: ceph:9283
+           job: ceph
+           oid: 1.3.6.1.4.1.50495.1.2.1.4.4
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           documentation: https://docs.ceph.com/en/latest/rados/troubleshooting/troubleshooting-osd#flapping-osds
+           summary: Network issues are causing OSD's to flap (mark each other out)
+           description: >
+              OSD osd.0 on ceph was
+              marked down and back up at 20.1 times once a minute for 5 minutes.
+              This could indicate a network issue (latency, packet drop, disruption)
+              on the clusters "cluster network". Check the network environment on the
+              listed host(s).
+
+ # high pg count deviation
+ - interval: 1m
+   input_series:
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.0",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 160'
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.1",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 320'
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.2",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 160'
+    - series: 'ceph_osd_numpg{ceph_daemon="osd.3",instance="ceph:9283",
+      job="ceph"}'
+      values: '100 100 100 100 100 160'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.3",
+      ceph_version="ceph version 17.0.0-189-g3558fd72
+      (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",
+      cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
+      hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",
+      public_addr="172.20.0.2"}'
+      values: '1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: |
+         abs(
+           (
+             (ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0)
+             by (job)
+           ) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)
+         ) * on(ceph_daemon) group_left(hostname) ceph_osd_metadata > 0.30
+
+       eval_time: 5m
+       exp_samples:
+         - labels: '{ceph_daemon="osd.1", hostname="ceph", instance="ceph:9283",
+           job="ceph"}'
+           value: 6E-01
+   alert_rule_test:
+     - eval_time: 10m
+       alertname: CephPGImbalance
+       exp_alerts:
+       - exp_labels:
+           ceph_daemon: osd.1
+           hostname: ceph
+           instance: ceph:9283
+           job: ceph
+           oid: 1.3.6.1.4.1.50495.1.2.1.4.5
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           summary: PG allocations are not balanced across devices
+           description: >
+              OSD osd.1 on ceph deviates
+              by more than 30% from average PG count.
+
+ # pgs inactive
+ - interval: 1m
+   input_series:
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="2"}'
+      values: '1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="3"}'
+      values: '1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '32 32 32 32 32 32 32 32'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '33 32 32 32 32 33 33 32'
+    - series: 'ceph_pg_active{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_active{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '32 32 32 32 32 32 32 32'
+    - series: 'ceph_pg_active{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '32 32 32 32 32 32 32 32'
+   promql_expr_test:
+     - expr: ceph_pool_metadata * on(pool_id,instance) group_left()
+             (ceph_pg_total - ceph_pg_active) > 0
+       eval_time: 5m
+       exp_samples:
+         - labels: '{instance="ceph:9283", job="ceph",
+           name="device_health_metrics",
+           pool_id="3"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: CephPGsInactive
+       exp_alerts:
+       - exp_labels:
+           instance: ceph:9283
+           job: ceph
+           name: device_health_metrics
+           oid: 1.3.6.1.4.1.50495.1.2.1.7.1
+           pool_id: 3
+           severity: critical
+           type: ceph_default
+         exp_annotations:
+           summary: One or more Placement Groups are inactive
+           description: >
+              1 PGs have been inactive for more than 5 minutes in pool
+              device_health_metrics.
+              Inactive placement groups aren't able to serve read/write
+              requests.
+
+ #pgs unclean
+ - interval: 1m
+   input_series:
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="2"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="device_health_metrics",pool_id="3"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32
+      32 32 32'
+    - series: 'ceph_pg_total{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
+      33 33'
+    - series: 'ceph_pg_clean{instance="ceph:9283",job="ceph",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pg_clean{instance="ceph:9283",job="ceph",pool_id="2"}'
+      values: '32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32
+      32 32'
+    - series: 'ceph_pg_clean{instance="ceph:9283",job="ceph",pool_id="3"}'
+      values: '32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32 32
+      32 32'
+   promql_expr_test:
+     - expr: ceph_pool_metadata * on(pool_id,instance) group_left()
+             (ceph_pg_total - ceph_pg_clean) > 0
+       eval_time: 15m
+       exp_samples:
+         - labels: '{instance="ceph:9283", job="ceph",
+           name="device_health_metrics", pool_id="3"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 16m
+       alertname: CephPGsUnclean
+       exp_alerts:
+       - exp_labels:
+           instance: ceph:9283
+           job: ceph
+           name: device_health_metrics
+           oid: 1.3.6.1.4.1.50495.1.2.1.7.2
+           pool_id: 3
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           summary: One or more platcment groups are marked unclean
+           description: >
+              1 PGs haven't been clean for more than 15 minutes in pool
+              device_health_metrics.
+              Unclean PGs haven't been able to completely recover from a
+              previous failure.
+
+ # root volume full
+ - interval: 1m
+   input_series:
+    - series: 'node_filesystem_avail_bytes{device="/dev/mapper/fedora_localhost
+      --live-home",fstype="ext4",instance="node-exporter",job="node-exporter",
+      mountpoint="/"}'
+      values: '35336400896 35336400896 35336400896 35336400896 35336400896
+      3525385519.104 3533640089'
+    - series: 'node_filesystem_size_bytes{device="/dev/mapper/fedora_localhost
+      --live-home",fstype="ext4",instance="node-exporter",job="node-exporter",
+      mountpoint="/"}'
+      values: '73445531648 73445531648 73445531648 73445531648 73445531648
+      73445531648 73445531648'
+   promql_expr_test:
+     - expr: node_filesystem_avail_bytes{mountpoint="/"} /
+             node_filesystem_size_bytes{mountpoint="/"} * 100 < 5
+       eval_time: 5m
+       exp_samples:
+         - labels: '{device="/dev/mapper/fedora_localhost --live-home",
+           fstype="ext4", instance="node-exporter", job="node-exporter",
+           mountpoint="/"}'
+           value: 4.8E+00
+   alert_rule_test:
+     - eval_time: 10m
+       alertname: CephNodeRootFilesystemFull
+       exp_alerts:
+       - exp_labels:
+           device: /dev/mapper/fedora_localhost --live-home
+           fstype: ext4
+           instance: node-exporter
+           job: node-exporter
+           mountpoint: /
+           oid: 1.3.6.1.4.1.50495.1.2.1.8.1
+           severity: critical
+           type: ceph_default
+         exp_annotations:
+           summary: Root filesystem is dangerously full
+           description: >
+             Root volume (OSD and MON store) is dangerously full: 4.811% free.
+
+ # network packets dropped
+ - interval: 1s
+   input_series:
+    - series: 'node_network_receive_drop_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '1+1x500'
+    - series: 'node_network_transmit_drop_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '1+1x500'
+   promql_expr_test:
+     - expr: |
+         (
+           increase(node_network_receive_drop_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_drop_total{device!="lo"}[1m])
+         ) / (
+           increase(node_network_receive_packets_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_packets_total{device!="lo"}[1m])
+         ) >= 0.0001 or (
+           increase(node_network_receive_drop_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_drop_total{device!="lo"}[1m])
+         ) >= 10
+
+       eval_time: 5m
+       exp_samples:
+         - labels: '{device="eth0", instance="node-exporter",
+           job="node-exporter"}'
+           value: 1.2E+02
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: CephNodeNetworkPacketDrops
+       exp_alerts:
+       - exp_labels:
+           device: eth0
+           instance: node-exporter
+           job: node-exporter
+           oid: 1.3.6.1.4.1.50495.1.2.1.8.2
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           summary: One or more Nics is seeing packet drops
+           description: >
+             Node node-exporter experiences packet drop > 0.01% or >
+             10 packets/s on interface eth0.
+
+ # network packets errors
+ - interval: 1s
+   input_series:
+    - series: 'node_network_receive_errs_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '1+1x500'
+    - series: 'node_network_transmit_errs_total{device="eth0",
+      instance="node-exporter",job="node-exporter"}'
+      values: '1+1x500'
+   promql_expr_test:
+     - expr: |
+         (
+           increase(node_network_receive_errs_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_errs_total{device!="lo"}[1m])
+         ) / (
+           increase(node_network_receive_packets_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_packets_total{device!="lo"}[1m])
+         ) >= 0.0001 or (
+           increase(node_network_receive_errs_total{device!="lo"}[1m]) +
+           increase(node_network_transmit_errs_total{device!="lo"}[1m])
+         ) >= 10
+
+       eval_time: 5m
+       exp_samples:
+         - labels: '{device="eth0", instance="node-exporter",
+           job="node-exporter"}'
+           value: 1.2E+02
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: CephNodeNetworkPacketErrors
+       exp_alerts:
+       - exp_labels:
+           device: eth0
+           instance: node-exporter
+           job: node-exporter
+           oid: 1.3.6.1.4.1.50495.1.2.1.8.3
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           summary: One or more Nics is seeing packet errors
+           description: >
+             Node node-exporter experiences packet errors > 0.01% or > 10
+             packets/s on interface eth0.
+
+# Node Storage disk space filling up
+ - interval: 1m
+   # 20GB = 21474836480, 256MB = 268435456
+   input_series:
+    - series: 'node_filesystem_free_bytes{device="/dev/mapper/vg-root",
+      fstype="xfs",instance="node-1",mountpoint="/rootfs"}'
+      values: '21474836480-268435456x48'
+    - series: 'node_filesystem_free_bytes{device="/dev/mapper/vg-root",
+      fstype="xfs",instance="node-2",mountpoint="/rootfs"}'
+      values: '21474836480+0x48'
+    - series: 'node_uname_info{instance="node-1", nodename="node-1.unittests.com"}'
+      values: 1+0x48
+    - series: 'node_uname_info{instance="node-2", nodename="node-2.unittests.com"}'
+      values: 1+0x48
+   promql_expr_test:
+     - expr: |
+         predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) *
+          on(instance) group_left(nodename) node_uname_info < 0
+       eval_time: 5m
+       exp_samples:
+         - labels: '{device="/dev/mapper/vg-root",instance="node-1",fstype="xfs",
+         mountpoint="/rootfs",nodename="node-1.unittests.com"}'
+           value: -1.912602624E+12
+   alert_rule_test:
+     - eval_time: 5m
+       alertname: CephNodeDiskspaceWarning
+       exp_alerts:
+       - exp_labels:
+           severity: warning
+           type: ceph_default
+           oid: 1.3.6.1.4.1.50495.1.2.1.8.4
+           device: /dev/mapper/vg-root
+           fstype: xfs
+           instance: node-1
+           mountpoint: /rootfs
+           nodename: node-1.unittests.com
+         exp_annotations:
+           summary: Host filesystem freespace is getting low
+           description: >
+             Mountpoint /rootfs on node-1.unittests.com
+             will be full in less than 5 days assuming the average fill-up
+             rate of the past 48 hours.
+ # MTU Mismatch
+ - interval: 1m
+   input_series:
+    - series: 'node_network_mtu_bytes{device="eth0",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth1",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth2",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth3",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth4",instance="node-exporter",
+      job="node-exporter"}'
+      values: '9000 9000 9000 9000 9000'
+    - series: 'node_network_up{device="eth0",instance="node-exporter",
+      job="node-exporter"}'
+      values: '0 0 0 0 0'
+    - series: 'node_network_up{device="eth1",instance="node-exporter",
+      job="node-exporter"}'
+      values: '0 0 0 0 0'
+    - series: 'node_network_up{device="eth2",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth3",instance="node-exporter",
+      job="node-exporter"}'
+      values: '0 0 0 0 0'
+    - series: 'node_network_up{device="eth4",instance="node-exporter",
+      job="node-exporter"}'
+      values: '1 1 1 1 1'
+   promql_expr_test:
+     - expr: node_network_mtu_bytes{device!="lo"} * (node_network_up{device!="lo"} > 0) != on() group_left()
+             (quantile(0.5, node_network_mtu_bytes{device!="lo"}))
+       eval_time: 1m
+       exp_samples:
+         - labels: '{device="eth4", instance="node-exporter", job="node-exporter"}'
+           value: 9000
+   alert_rule_test:
+     - eval_time: 1m
+       alertname: CephNodeInconsistentMTU
+       exp_alerts:
+       - exp_labels:
+           device: eth4
+           instance: node-exporter
+           job: node-exporter
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           summary: MTU settings across Ceph hosts are inconsistent
+           description: >
+               Node node-exporter has a different MTU size (9000)
+               than the median value on device eth4.
+
+ # pool full, data series has 6 but using topk(5) so to ensure the
+ # results are working as expected
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="POOL_FULL"}'
+      values: '0 0 0 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_percent_used{pool_id="1"}'
+      values: '32+0x10'
+    - series: 'ceph_pool_percent_used{pool_id="2"}'
+      values: '96+0x10'
+    - series: 'ceph_pool_percent_used{pool_id="3"}'
+      values: '90+0x10'
+    - series: 'ceph_pool_percent_used{pool_id="4"}'
+      values: '72+0x10'
+    - series: 'ceph_pool_percent_used{pool_id="5"}'
+      values: '19+0x10'
+    - series: 'ceph_pool_percent_used{pool_id="6"}'
+      values: '10+0x10'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="cephfs_data",pool_id="1"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="rbd",pool_id="2"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="iscsi",pool_id="3"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="default.rgw.index",pool_id="4"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="default.rgw.log",pool_id="5"}'
+      values: '1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_pool_metadata{instance="ceph:9283",job="ceph",
+      name="dummy",pool_id="6"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="POOL_FULL"} > 0
+       eval_time: 5m
+       exp_samples:
+         - labels:  '{__name__="ceph_health_detail", name="POOL_FULL"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 1m
+       alertname: CephPoolFull
+     - eval_time: 10m
+       alertname: CephPoolFull
+       exp_alerts:
+       - exp_labels:
+           name: POOL_FULL
+           severity: critical
+           type: ceph_default
+           oid: 1.3.6.1.4.1.50495.1.2.1.9.1
+         exp_annotations:
+           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pool-full
+           summary: Pool is full - writes are blocked
+           description: |
+             A pool has reached it's MAX quota, or the OSDs supporting the pool
+             have reached their FULL threshold. Until this is resolved, writes to
+             the pool will be blocked.
+             Pool Breakdown (top 5)
+               - rbd at 96%
+               - iscsi at 90%
+               - default.rgw.index at 72%
+               - cephfs_data at 32%
+               - default.rgw.log at 19%
+             Either increase the pools quota, or add capacity to the cluster first
+             then increase it's quota (e.g. ceph osd pool set quota <pool_name> max_bytes <bytes>)
+ # slow OSD ops
+ - interval : 1m
+   input_series:
+    - series: 'ceph_healthcheck_slow_ops{instance="ceph:9283",job="ceph"}'
+      values: '1+0x120'
+   promql_expr_test:
+     - expr: ceph_healthcheck_slow_ops > 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_healthcheck_slow_ops", instance="ceph:9283",
+           job="ceph"}'
+           value: 1
+   alert_rule_test:
+     - eval_time: 20m
+       alertname: CephSlowOps
+       exp_alerts:
+       - exp_labels:
+           instance: ceph:9283
+           job: ceph
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops
+           summary: MON/OSD operations are slow to complete
+           description: >
+             1 OSD requests are taking too long to process
+             (osd_op_complaint_time exceeded)
+
+# CEPHADM orchestrator alert triggers
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="UPGRADE_EXCEPTION"}'
+      values: '1+0x40'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="UPGRADE_EXCEPTION"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="UPGRADE_EXCEPTION"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephadmUpgradeFailed
+    - eval_time: 5m
+      alertname: CephadmUpgradeFailed
+      exp_alerts:
+      - exp_labels:
+          name: UPGRADE_EXCEPTION
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.11.2
+        exp_annotations:
+          summary: Ceph version upgrade has failed
+          description: >
+            The cephadm cluster upgrade process has failed. The cluster remains in
+            an undetermined state.
+
+            Please review the cephadm logs, to understand the nature of the issue
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="CEPHADM_FAILED_DAEMON"}'
+      values: '1+0x40'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="CEPHADM_FAILED_DAEMON"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="CEPHADM_FAILED_DAEMON"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephadmDaemonFailed
+    - eval_time: 5m
+      alertname: CephadmDaemonFailed
+      exp_alerts:
+      - exp_labels:
+          name: CEPHADM_FAILED_DAEMON
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.11.1
+        exp_annotations:
+          summary: A ceph daemon manged by cephadm is down
+          description: >
+            A daemon managed by cephadm is no longer active. Determine, which
+            daemon is down with 'ceph health detail'. you may start daemons with
+            the 'ceph orch daemon start <daemon_id>'
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="CEPHADM_PAUSED"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="CEPHADM_PAUSED"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="CEPHADM_PAUSED"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephadmPaused
+    - eval_time: 5m
+      alertname: CephadmPaused
+      exp_alerts:
+      - exp_labels:
+          name: CEPHADM_PAUSED
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/cephadm/operations#cephadm-paused
+          summary: Orchestration tasks via cephadm are PAUSED
+          description: >
+            Cluster management has been paused manually. This will prevent the
+            orchestrator from service management and reconciliation. If this is
+            not intentional, resume cephadm operations with 'ceph orch resume'
+# MDS
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MDS_DAMAGE"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="MDS_DAMAGE"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="MDS_DAMAGE"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephFilesystemDamaged
+    - eval_time: 5m
+      alertname: CephFilesystemDamaged
+      exp_alerts:
+      - exp_labels:
+          name: MDS_DAMAGE
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.5.1
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages#cephfs-health-messages
+          summary: Ceph filesystem is damaged.
+          description: >
+            The filesystems metadata has been corrupted. Data access
+            may be blocked.
+
+            Either analyse the output from the mds daemon admin socket, or
+            escalate to support
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MDS_HEALTH_READ_ONLY"}'
+      values: '1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="MDS_HEALTH_READ_ONLY"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="MDS_HEALTH_READ_ONLY"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephFilesystemReadOnly
+    - eval_time: 5m
+      alertname: CephFilesystemReadOnly
+      exp_alerts:
+      - exp_labels:
+          name: MDS_HEALTH_READ_ONLY
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.5.2
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages#cephfs-health-messages
+          summary: Ceph filesystem in read only mode, due to write error(s)
+          description: >
+            The filesystem has switched to READ ONLY due to an unexpected
+            write error, when writing to the metadata pool
+
+            Either analyse the output from the mds daemon admin socket, or
+            escalate to support
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MDS_ALL_DOWN"}'
+      values: '0 0 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="MDS_ALL_DOWN"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="MDS_ALL_DOWN"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephFilesystemOffline
+    - eval_time: 10m
+      alertname: CephFilesystemOffline
+      exp_alerts:
+      - exp_labels:
+          name: MDS_ALL_DOWN
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.5.3
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#mds-all-down
+          summary: Ceph filesystem is offline
+          description: >
+            All MDS ranks are unavailable. The ceph daemons providing the metadata
+            for the Ceph filesystem are all down, rendering the filesystem offline.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="FS_DEGRADED"}'
+      values: '0 0 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="FS_DEGRADED"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="FS_DEGRADED"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephFilesystemDegraded
+    - eval_time: 10m
+      alertname: CephFilesystemDegraded
+      exp_alerts:
+      - exp_labels:
+          name: FS_DEGRADED
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.5.4
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#fs-degraded
+          summary: Ceph filesystem is degraded
+          description: >
+            One or more metdata daemons (MDS ranks) are failed or in a
+            damaged state. At best the filesystem is partially available,
+            worst case is the filesystem is completely unusable.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MDS_INSUFFICIENT_STANDBY"}'
+      values: '0 0 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="MDS_INSUFFICIENT_STANDBY"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="MDS_INSUFFICIENT_STANDBY"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephFilesystemInsufficientStandby
+    - eval_time: 10m
+      alertname: CephFilesystemInsufficientStandby
+      exp_alerts:
+      - exp_labels:
+          name: MDS_INSUFFICIENT_STANDBY
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#mds-insufficient-standby
+          summary: Ceph filesystem standby daemons too low
+          description: >
+            The minimum number of standby daemons determined by standby_count_wanted
+            is less than the actual number of standby daemons. Adjust the standby count
+            or increase the number of mds daemons within the filesystem.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="FS_WITH_FAILED_MDS"}'
+      values: '0 0 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="FS_WITH_FAILED_MDS"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="FS_WITH_FAILED_MDS"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephFilesystemFailureNoStandby
+    - eval_time: 10m
+      alertname: CephFilesystemFailureNoStandby
+      exp_alerts:
+      - exp_labels:
+          name: FS_WITH_FAILED_MDS
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.5.5
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#fs-with-failed-mds
+          summary: Ceph MDS daemon failed, no further standby available
+          description: >
+            An MDS daemon has failed, leaving only one active rank without
+            further standby. Investigate the cause of the failure or add a
+            standby daemon
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MDS_UP_LESS_THAN_MAX"}'
+      values: '0 0 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="MDS_UP_LESS_THAN_MAX"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="MDS_UP_LESS_THAN_MAX"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephFilesystemMDSRanksLow
+    - eval_time: 10m
+      alertname: CephFilesystemMDSRanksLow
+      exp_alerts:
+      - exp_labels:
+          name: MDS_UP_LESS_THAN_MAX
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#mds-up-less-than-max
+          summary: Ceph MDS daemon count is lower than configured
+          description: >
+            The filesystem's "max_mds" setting defined the number of MDS ranks in
+            the filesystem. The current number of active MDS daemons is less than
+            this setting.
+# MGR
+ - interval: 1m
+   input_series:
+    - series: 'up{job="ceph", instance="ceph-mgr:9283"}'
+      values: '1+0x2 0+0x10'
+   promql_expr_test:
+     - expr: up{job="ceph"} == 0
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="up", job="ceph", instance="ceph-mgr:9283"}'
+           value: 0
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephMgrPrometheusModuleInactive
+    - eval_time: 10m
+      alertname: CephMgrPrometheusModuleInactive
+      exp_alerts:
+      - exp_labels:
+          instance: ceph-mgr:9283
+          job: ceph
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.6.2
+        exp_annotations:
+          summary: Ceph's mgr/prometheus module is not available
+          description: >
+            The mgr/prometheus module at ceph-mgr:9283 is unreachable. This
+            could mean that the module has been disabled or the mgr itself is down.
+
+            Without the mgr/prometheus module metrics and alerts will no longer
+            function. Open a shell to ceph and use 'ceph -s' to to determine whether the
+            mgr is active. If the mgr is not active, restart it, otherwise you can check
+            the mgr/prometheus module is loaded with 'ceph mgr module ls'  and if it's
+            not listed as enabled, enable it with 'ceph mgr module enable prometheus'
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="RECENT_MGR_MODULE_CRASH"}'
+      values: '0+0x2 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="RECENT_MGR_MODULE_CRASH"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="RECENT_MGR_MODULE_CRASH"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephMgrModuleCrash
+    - eval_time: 15m
+      alertname: CephMgrModuleCrash
+      exp_alerts:
+      - exp_labels:
+          name: RECENT_MGR_MODULE_CRASH
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.6.1
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#recent-mgr-module-crash
+          summary: A mgr module has recently crashed
+          description: >
+            One or more mgr modules have crashed and are yet to be acknowledged by the administrator. A
+            crashed module may impact functionality within the cluster. Use the 'ceph crash' commands to
+            investigate which module has failed, and archive it to acknowledge the failure.
+# MON
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MON_DISK_CRIT"}'
+      values: '0+0x2 1+0x10'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.a", hostname="ceph-mon-a"}'
+      values: '1+0x13'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="MON_DISK_CRIT"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="MON_DISK_CRIT"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephMonDiskspaceCritical
+    - eval_time: 10m
+      alertname: CephMonDiskspaceCritical
+      exp_alerts:
+      - exp_labels:
+          name: "MON_DISK_CRIT"
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.3.2
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-disk-crit
+          summary: Disk space on at least one monitor is critically low
+          description: |
+            The free space available to a monitor's store is critically low (<5% by default).
+            You should increase the space available to the monitor(s). The
+            default location for the store sits under /var/lib/ceph. Your monitor hosts are;
+              - ceph-mon-a
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MON_DISK_LOW"}'
+      values: '0+0x2 1+0x10'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.a", hostname="ceph-mon-a"}'
+      values: '1+0x13'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="MON_DISK_LOW"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="MON_DISK_LOW"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephMonDiskspaceLow
+    - eval_time: 10m
+      alertname: CephMonDiskspaceLow
+      exp_alerts:
+      - exp_labels:
+          name: "MON_DISK_LOW"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-disk-low
+          summary: Disk space on at least one monitor is approaching full
+          description: |
+            The space available to a monitor's store is approaching full (>70% is the default).
+            You should increase the space available to the monitor store. The
+            default location for the store sits under /var/lib/ceph. Your monitor hosts are;
+              - ceph-mon-a
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MON_CLOCK_SKEW"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="MON_CLOCK_SKEW"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="MON_CLOCK_SKEW"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephMonClockSkew
+    - eval_time: 10m
+      alertname: CephMonClockSkew
+      exp_alerts:
+      - exp_labels:
+          name: "MON_CLOCK_SKEW"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-clock-skew
+          summary: Clock skew across the Monitor hosts detected
+          description: |
+            The ceph monitors rely on a consistent time reference to maintain
+            quorum and cluster consistency. This event indicates that at least
+            one of your mons is not sync'd correctly.
+
+            Review the cluster status with ceph -s. This will show which monitors
+            are affected. Check the time sync status on each monitor host.
+
+# Check 3 mons one down, quorum at risk
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="MON_DOWN"}'
+      values: '0+0x2 1+0x12'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.a"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.b"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.c"}'
+      values: '1+0x2 0+0x12'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.a", hostname="ceph-mon-1"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.b", hostname="ceph-mon-2"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.c", hostname="ceph-mon-3"}'
+      values: '1+0x14'
+   promql_expr_test:
+     - expr: ((ceph_health_detail{name="MON_DOWN"} == 1) * on() (count(ceph_mon_quorum_status == 1) == bool (floor(count(ceph_mon_metadata) / 2) + 1))) == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephMonDownQuorumAtRisk
+      # shouldn't fire
+    - eval_time: 10m
+      alertname: CephMonDownQuorumAtRisk
+      exp_alerts:
+      - exp_labels:
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.3.1
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-down
+          summary: Monitor quorum is at risk
+          description: |
+            Quorum requires a majority of monitors (x 2) to be active
+            Without quorum the cluster will become inoperable, affecting all connected clients and services.
+
+            The following monitors are down:
+              - mon.c on ceph-mon-3
+# check 5 mons, 1 down - warning only
+ - interval: 1m
+   input_series:
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.a"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.b"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.c"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.d"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_quorum_status{ceph_daemon="mon.e"}'
+      values: '1+0x2 0+0x12'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.a", hostname="ceph-mon-1"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.b", hostname="ceph-mon-2"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.c", hostname="ceph-mon-3"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.d", hostname="ceph-mon-4"}'
+      values: '1+0x14'
+    - series: 'ceph_mon_metadata{ceph_daemon="mon.e", hostname="ceph-mon-5"}'
+      values: '1+0x14'
+   promql_expr_test:
+     - expr: (count(ceph_mon_quorum_status == 0) <= (count(ceph_mon_metadata) - floor(count(ceph_mon_metadata) / 2) + 1))
+       eval_time: 3m
+       exp_samples:
+         - labels: '{}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephMonDown
+    - eval_time: 10m
+      alertname: CephMonDown
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-down
+          summary: One of more ceph monitors are down
+          description: |
+            You have 1 monitor down.
+            Quorum is still intact, but the loss of further monitors will make your cluster inoperable.
+
+            The following monitors are down:
+              - mon.e on ceph-mon-5
+# Device Health
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="DEVICE_HEALTH"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="DEVICE_HEALTH"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="DEVICE_HEALTH"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephDeviceFailurePredicted
+    - eval_time: 10m
+      alertname: CephDeviceFailurePredicted
+      exp_alerts:
+      - exp_labels:
+          name: "DEVICE_HEALTH"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#id2
+          summary: Device(s) have been predicted to fail soon
+          description: |
+            The device health module has determined that one or more devices will fail
+            soon. To review the device states use 'ceph device ls'. To show a specific
+            device use 'ceph device info <dev id>'.
+
+            Mark the OSD as out (so data may migrate to other OSDs in the cluster). Once
+            the osd is empty remove and replace the OSD.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="DEVICE_HEALTH_TOOMANY"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="DEVICE_HEALTH_TOOMANY"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="DEVICE_HEALTH_TOOMANY"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephDeviceFailurePredictionTooHigh
+    - eval_time: 10m
+      alertname: CephDeviceFailurePredictionTooHigh
+      exp_alerts:
+      - exp_labels:
+          name: "DEVICE_HEALTH_TOOMANY"
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.4.7
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-toomany
+          summary: Too many devices have been predicted to fail, unable to resolve
+          description: |
+            The device health module has determined that the number of devices predicted to
+            fail can not be remediated automatically, since it would take too many osd's out of
+            the cluster, impacting performance and potentially availabililty. You should add new
+            OSDs to the cluster to allow data to be relocated to avoid the data integrity issues.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="DEVICE_HEALTH_IN_USE"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="DEVICE_HEALTH_IN_USE"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="DEVICE_HEALTH_IN_USE"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephDeviceFailureRelocationIncomplete
+    - eval_time: 10m
+      alertname: CephDeviceFailureRelocationIncomplete
+      exp_alerts:
+      - exp_labels:
+          name: "DEVICE_HEALTH_IN_USE"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-in-use
+          summary: A device failure is predicted, but unable to relocate data
+          description: |
+            The device health module has determined that one or more devices will fail
+            soon, but the normal process of relocating the data on the device to other
+            OSDs in the cluster is blocked.
+
+            Check the the cluster has available freespace. It may be necessary to add
+            more disks to the cluster to allow the data from the failing device to
+            successfully migrate.
+# OSD
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="OSD_HOST_DOWN"}'
+      values: '0+0x2 1+0x10'
+    - series: 'ceph_osd_up{ceph_daemon="osd.0"}'
+      values: '1+0x2 0+0x10'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.0", hostname="ceph-osd-1"}'
+      values: '1+0x12'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="OSD_HOST_DOWN"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="OSD_HOST_DOWN"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDHostDown
+    - eval_time: 10m
+      alertname: CephOSDHostDown
+      exp_alerts:
+      - exp_labels:
+          name: "OSD_HOST_DOWN"
+          severity: warning
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.4.8
+        exp_annotations:
+          summary: An OSD host is offline
+          description: |
+            The following OSDs are down:
+            - ceph-osd-1 : osd.0
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="OSD_SLOW_PING_TIME_FRONT"}'
+      values: '0+0x2 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="OSD_SLOW_PING_TIME_FRONT"} == 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="OSD_SLOW_PING_TIME_FRONT"}'
+           value: 0
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDTimeoutsPublicNetwork
+    - eval_time: 10m
+      alertname: CephOSDTimeoutsPublicNetwork
+      exp_alerts:
+      - exp_labels:
+          name: "OSD_SLOW_PING_TIME_FRONT"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: Network issues delaying OSD heartbeats (public network)
+          description: |
+            OSD heartbeats on the cluster's 'public' network (frontend) are running slow. Investigate the network
+            for any latency issues on this subnet. Use 'ceph health detail' to show the affected OSDs.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="OSD_SLOW_PING_TIME_BACK"}'
+      values: '0+0x2 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="OSD_SLOW_PING_TIME_BACK"} == 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="OSD_SLOW_PING_TIME_BACK"}'
+           value: 0
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDTimeoutsClusterNetwork
+    - eval_time: 10m
+      alertname: CephOSDTimeoutsClusterNetwork
+      exp_alerts:
+      - exp_labels:
+          name: "OSD_SLOW_PING_TIME_BACK"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: Network issues delaying OSD heartbeats (cluster network)
+          description: |
+            OSD heartbeats on the cluster's 'cluster' network (backend) are running slow. Investigate the network
+            for any latency issues on this subnet. Use 'ceph health detail' to show the affected OSDs.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="BLUESTORE_DISK_SIZE_MISMATCH"}'
+      values: '0+0x2 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="BLUESTORE_DISK_SIZE_MISMATCH"} == 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="BLUESTORE_DISK_SIZE_MISMATCH"}'
+           value: 0
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDInternalDiskSizeMismatch
+    - eval_time: 10m
+      alertname: CephOSDInternalDiskSizeMismatch
+      exp_alerts:
+      - exp_labels:
+          name: "BLUESTORE_DISK_SIZE_MISMATCH"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#bluestore-disk-size-mismatch
+          summary: OSD size inconsistency error
+          description: |
+            One or more OSDs have an internal inconsistency between the size of the physical device and it's metadata.
+            This could lead to the OSD(s) crashing in future. You should redeploy the effected OSDs.
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="BLUESTORE_SPURIOUS_READ_ERRORS"}'
+      values: '0+0x2 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="BLUESTORE_SPURIOUS_READ_ERRORS"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="BLUESTORE_SPURIOUS_READ_ERRORS"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDReadErrors
+    - eval_time: 10m
+      alertname: CephOSDReadErrors
+      exp_alerts:
+      - exp_labels:
+          name: "BLUESTORE_SPURIOUS_READ_ERRORS"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#bluestore-spurious-read-errors
+          summary: Device read errors detected
+          description: >
+            An OSD has encountered read errors, but the OSD has recovered by retrying
+            the reads. This may indicate an issue with the Hardware or Kernel.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="OSD_DOWN"}'
+      values: '0+0x2 1+0x10'
+    - series: 'ceph_osd_up{ceph_daemon="osd.0"}'
+      values: '1+0x12'
+    - series: 'ceph_osd_up{ceph_daemon="osd.1"}'
+      values: '1+0x2 0+0x10'
+    - series: 'ceph_osd_up{ceph_daemon="osd.2"}'
+      values: '1+0x12'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.0", hostname="ceph-osd-1"}'
+      values: '1+0x12'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.1", hostname="ceph-osd-2"}'
+      values: '1+0x12'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.2", hostname="ceph-osd-3"}'
+      values: '1+0x12'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="OSD_DOWN"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="OSD_DOWN"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDDown
+    - eval_time: 10m
+      alertname: CephOSDDown
+      exp_alerts:
+      - exp_labels:
+          name: "OSD_DOWN"
+          severity: warning
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.4.2
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-down
+          summary: An OSD has been marked down/unavailable
+          description: |
+            1 OSD down for over 5mins.
+
+            The following OSD is down:
+              - osd.1 on ceph-osd-2
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="OSD_NEARFULL"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="OSD_NEARFULL"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="OSD_NEARFULL"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDNearFull
+    - eval_time: 10m
+      alertname: CephOSDNearFull
+      exp_alerts:
+      - exp_labels:
+          name: "OSD_NEARFULL"
+          severity: warning
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.4.3
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-nearfull
+          summary: OSD(s) running low on free space (NEARFULL)
+          description: |
+            One or more OSDs have reached their NEARFULL threshold
+
+            Use 'ceph health detail' to identify which OSDs have reached this threshold.
+            To resolve, either add capacity to the cluster, or delete unwanted data
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="OSD_FULL"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="OSD_FULL"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="OSD_FULL"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDFull
+    - eval_time: 10m
+      alertname: CephOSDFull
+      exp_alerts:
+      - exp_labels:
+          name: "OSD_FULL"
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.4.6
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-full
+          summary: OSD(s) is full, writes blocked
+          description: |
+            An OSD has reached it's full threshold. Writes from all pools that share the
+            affected OSD will be blocked.
+
+            To resolve, either add capacity to the cluster, or delete unwanted data
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="OSD_BACKFILLFULL"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="OSD_BACKFILLFULL"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="OSD_BACKFILLFULL"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDBackfillFull
+    - eval_time: 10m
+      alertname: CephOSDBackfillFull
+      exp_alerts:
+      - exp_labels:
+          name: "OSD_BACKFILLFULL"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-backfillfull
+          summary: OSD(s) too full for backfill operations
+          description: |
+            An OSD has reached it's BACKFILL FULL threshold. This will prevent rebalance operations
+            completing for some pools. Check the current capacity utilisation with 'ceph df'
+
+            To resolve, either add capacity to the cluster, or delete unwanted data
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="OSD_TOO_MANY_REPAIRS"}'
+      values: '0+0x2 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="OSD_TOO_MANY_REPAIRS"} == 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="OSD_TOO_MANY_REPAIRS"}'
+           value: 0
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephOSDTooManyRepairs
+    - eval_time: 10m
+      alertname: CephOSDTooManyRepairs
+      exp_alerts:
+      - exp_labels:
+          name: "OSD_TOO_MANY_REPAIRS"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-too-many-repairs
+          summary: OSD has hit a high number of read errors
+          description: |
+            Reads from an OSD have used a secondary PG to return data to the client, indicating
+            a potential failing disk.
+# Pools
+   # trigger percent full prediction on pools 1 and 2 only
+ - interval: 12h
+   input_series:
+    - series: 'ceph_pool_percent_used{pool_id="1"}'
+      values: '70 75 80 87 92'
+    - series: 'ceph_pool_percent_used{pool_id="2"}'
+      values: '22 22 23 23 24'
+    - series: 'ceph_pool_metadata{pool_id="1",name="rbd",type="replicated"}'
+      values: '1 1 1 1 1'
+    - series: 'ceph_pool_metadata{pool_id="2",name="default.rgw.index",type="replicated"}'
+      values: '1 1 1 1 1'
+   promql_expr_test:
+     - expr: |
+         (predict_linear(ceph_pool_percent_used[2d], 3600 * 24 * 5) * on(pool_id)
+              group_right ceph_pool_metadata) >= 95
+       eval_time: 36h
+       exp_samples:
+         - labels: '{name="rbd",pool_id="1",type="replicated"}'
+           value: 1.424E+02 # 142%
+   alert_rule_test:
+    - eval_time: 48h
+      alertname: CephPoolGrowthWarning
+      exp_alerts:
+      - exp_labels:
+          name: rbd
+          pool_id: 1
+          severity: warning
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.9.2
+        exp_annotations:
+          summary: Pool growth rate may soon exceed it's capacity
+          description: >
+            Pool 'rbd' will be full in less than 5 days
+            assuming the average fill-up rate of the past 48 hours.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="POOL_BACKFILLFULL"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="POOL_BACKFILLFULL"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="POOL_BACKFILLFULL"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephPoolBackfillFull
+    - eval_time: 5m
+      alertname: CephPoolBackfillFull
+      exp_alerts:
+      - exp_labels:
+          name: "POOL_BACKFILLFULL"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: Freespace in a pool is too low for recovery/rebalance
+          description: >
+            A pool is approaching it's near full threshold, which will
+            prevent rebalance operations from completing. You should
+            consider adding more capacity to the pool.
+
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="POOL_NEAR_FULL"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="POOL_NEAR_FULL"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="POOL_NEAR_FULL"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephPoolNearFull
+    - eval_time: 10m
+      alertname: CephPoolNearFull
+      exp_alerts:
+      - exp_labels:
+          name: "POOL_NEAR_FULL"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: One or more Ceph pools are getting full
+          description: |
+            A pool has exceeeded it warning (percent full) threshold, or the OSDs
+            supporting the pool have reached their NEARFULL thresholds. Writes may
+            continue, but you are at risk of the pool going read only if more capacity
+            isn't made available.
+
+            Determine the affected pool with 'ceph df detail', for example looking
+            at QUOTA BYTES and STORED. Either increase the pools quota, or add
+            capacity to the cluster first then increase it's quota
+            (e.g. ceph osd pool set quota <pool_name> max_bytes <bytes>)
+
+# PGs
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="PG_NOT_SCRUBBED"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="PG_NOT_SCRUBBED"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="PG_NOT_SCRUBBED"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephPGNotScrubbed
+    - eval_time: 10m
+      alertname: CephPGNotScrubbed
+      exp_alerts:
+      - exp_labels:
+          name: "PG_NOT_SCRUBBED"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-not-scrubbed
+          summary: Placement group(s) have not been scrubbed
+          description: |
+            One or more PGs have not been scrubbed recently. The scrub process is a data integrity
+            feature, protectng against bit-rot. It checks that objects and their metadata (size and
+            attributes) match across object replicas. When PGs miss their scrub window, it may
+            indicate the scrub window is too small, or PGs were not in a 'clean' state during the
+            scrub window.
+
+            You can manually initiate a scrub with: ceph pg scrub <pgid>
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="PG_DAMAGED"}'
+      values: '0+0x4 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name=~"PG_DAMAGED|OSD_SCRUB_ERRORS"} == 1
+       eval_time: 5m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="PG_DAMAGED"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephPGsDamaged
+    - eval_time: 10m
+      alertname: CephPGsDamaged
+      exp_alerts:
+      - exp_labels:
+          name: "PG_DAMAGED"
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.7.4
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-damaged
+          summary: Placement group damaged, manual intervention needed
+          description: >
+            During data consistency checks (scrub), at least one PG has been flagged as being
+            damaged or inconsistent.
+
+            Check to see which PG is affected, and attempt a manual repair if neccessary. To list
+            problematic placement groups, use 'rados list-inconsistent-pg <pool>'. To repair PGs use
+            the 'ceph pg repair <pg_num>' command.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="TOO_MANY_PGS"}'
+      values: '0+0x4 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="TOO_MANY_PGS"} == 1
+       eval_time: 5m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="TOO_MANY_PGS"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephPGsHighPerOSD
+    - eval_time: 10m
+      alertname: CephPGsHighPerOSD
+      exp_alerts:
+      - exp_labels:
+          name: "TOO_MANY_PGS"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#too-many-pgs
+          summary: Placement groups per OSD is too high
+          description: |
+            The number of placement groups per OSD is too high (exceeds the mon_max_pg_per_osd setting).
+
+            Check that the pg_autoscaler hasn't been disabled for any of the pools, with 'ceph osd pool autoscale-status'
+            and that the profile selected is appropriate. You may also adjust the target_size_ratio of a pool to guide
+            the autoscaler based on the expected relative size of the pool
+            (i.e. 'ceph osd pool set cephfs.cephfs.meta target_size_ratio .1')
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="PG_RECOVERY_FULL"}'
+      values: '0+0x2 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="PG_RECOVERY_FULL"} == 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="PG_RECOVERY_FULL"}'
+           value: 0
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephPGRecoveryAtRisk
+    - eval_time: 10m
+      alertname: CephPGRecoveryAtRisk
+      exp_alerts:
+      - exp_labels:
+          name: "PG_RECOVERY_FULL"
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.7.5
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-recovery-full
+          summary: OSDs are too full for automatic recovery
+          description: >
+            Data redundancy may be reduced, or is at risk, since one or more OSDs are at or above their
+            'full' threshold. Add more capacity to the cluster, or delete unwanted data.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="PG_BACKFILL_FULL"}'
+      values: '0+0x2 1+0x20'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="PG_BACKFILL_FULL"} == 0
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="PG_BACKFILL_FULL"}'
+           value: 0
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephPGBackfillAtRisk
+    - eval_time: 10m
+      alertname: CephPGBackfillAtRisk
+      exp_alerts:
+      - exp_labels:
+          name: "PG_BACKFILL_FULL"
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.7.6
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-backfill-full
+          summary: Backfill operations are blocked, due to lack of freespace
+          description: >
+            Data redundancy may be at risk due to lack of free space within the cluster. One or more OSDs
+            have breached their 'backfillfull' threshold. Add more capacity, or delete unwanted data.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="PG_AVAILABILITY"}'
+      values: '0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_health_detail{name="OSD_DOWN"}'
+      values: '0 0 0 1 1 1 1 1 1 0 0 0 0 0 0 0'
+   promql_expr_test:
+     - expr: ((ceph_health_detail{name="PG_AVAILABILITY"} == 1) - scalar(ceph_health_detail{name="OSD_DOWN"}))
+       eval_time: 1m
+       # empty set at 1m
+       exp_samples:
+   alert_rule_test:
+    # PG_AVAILABILITY and OSD_DOWN not firing .. no alert
+    - eval_time: 1m
+      alertname: CephPGUnavilableBlockingIO
+      exp_alerts:
+    # PG_AVAILABILITY firing, but osd_down is active .. no alert
+    - eval_time: 5m
+      alertname: CephPGUnavilableBlockingIO
+      exp_alerts:
+    # PG_AVAILABILITY firing, AND OSD_DOWN is not active...raise the alert
+    - eval_time: 15m
+      alertname: CephPGUnavilableBlockingIO
+      exp_alerts:
+      - exp_labels:
+          name: "PG_AVAILABILITY"
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.7.3
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-availability
+          summary: Placement group is unavailable, blocking some I/O
+          description: >
+            Data availability is reduced impacting the clusters abilty to service I/O to some data. One or
+            more placement groups (PGs) are in a state that blocks IO.
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="PG_NOT_DEEP_SCRUBBED"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="PG_NOT_DEEP_SCRUBBED"} == 1
+       eval_time: 3m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="PG_NOT_DEEP_SCRUBBED"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephPGNotDeepScrubbed
+    - eval_time: 10m
+      alertname: CephPGNotDeepScrubbed
+      exp_alerts:
+      - exp_labels:
+          name: "PG_NOT_DEEP_SCRUBBED"
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-not-deep-scrubbed
+          summary: Placement group(s) have not been deep scrubbed
+          description: |
+            One or more PGs have not been deep scrubbed recently. Deep scrub is a data integrity
+            feature, protectng against bit-rot. It compares the contents of objects and their
+            replicas for inconsistency. When PGs miss their deep scrub window, it may indicate
+            that the window is too small or PGs were not in a 'clean' state during the deep-scrub
+            window.
+
+            You can manually initiate a deep scrub with: ceph pg deep-scrub <pgid>
+
+# Prometheus
+ - interval: 1m
+   input_series:
+    - series: 'up{job="myjob"}'
+      values: '1+0x10'
+   promql_expr_test:
+     - expr: absent(up{job="ceph"})
+       eval_time: 1m
+       exp_samples:
+         - labels: '{job="ceph"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: PrometheusJobMissing
+      exp_alerts:
+      - exp_labels:
+          job: ceph
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.12.1
+        exp_annotations:
+          summary: The scrape job for Ceph is missing from Prometheus
+          description: |
+            The prometheus job that scrapes from Ceph is no longer defined, this
+            will effectively mean you'll have no metrics or alerts for the cluster.
+
+            Please review the job definitions in the prometheus.yml file of the prometheus
+            instance.
+# RADOS
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="OBJECT_UNFOUND"}'
+      values: '0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_up{ceph_daemon="osd.0"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_up{ceph_daemon="osd.1"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_up{ceph_daemon="osd.2"}'
+      values: '1 1 1 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.0"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.1"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.2"}'
+      values: '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: (ceph_health_detail{name="OBJECT_UNFOUND"} == 1) * on() (count(ceph_osd_up == 1) == bool count(ceph_osd_metadata)) == 1
+       eval_time: 1m
+       exp_samples:
+   alert_rule_test:
+    # OBJECT_UNFOUND but osd.2 is down, so don't fire
+    - eval_time: 5m
+      alertname: CephObjectMissing
+      exp_alerts:
+    # OBJECT_UNFOUND and all osd's are online, so fire
+    - eval_time: 15m
+      alertname: CephObjectMissing
+      exp_alerts:
+      - exp_labels:
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.10.1
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#object-unfound
+          summary: Object(s) has been marked UNFOUND
+          description: |
+            A version of a RADOS object can not be found, even though all OSDs are up. I/O
+            requests for this object from clients will block (hang). Resolving this issue may
+            require the object to be rolled back to a prior version manually, and manually verified.
+# Generic Alerts
+ - interval: 1m
+   input_series:
+    - series: 'ceph_health_detail{name="RECENT_CRASH"}'
+      values: '0 0 0 1 1 1 1 1 1 1 1'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="RECENT_CRASH"} == 1
+       eval_time: 1m
+       exp_samples:
+   alert_rule_test:
+    # not firing
+    - eval_time: 1m
+      alertname: CephDaemonCrash
+      exp_alerts:
+    # firing
+    - eval_time: 10m
+      alertname: CephDaemonCrash
+      exp_alerts:
+      - exp_labels:
+          name: RECENT_CRASH
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.1.2
+        exp_annotations:
+          documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks/#recent-crash
+          summary: One or more Ceph daemons have crashed, and are pending acknowledgement
+          description: |
+            One or more daemons have crashed recently, and need to be acknowledged. This notification
+            ensures that software crashes don't go unseen. To acknowledge a crash, use the
+            'ceph crash archive <id>' command.

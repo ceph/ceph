@@ -380,7 +380,7 @@ namespace {
   {
     librgw_data* data = static_cast<librgw_data*>(td->io_ops_data);
     const char* object = io_u->file->file_name;
-    struct rgw_file_handle* object_fh;
+    struct rgw_file_handle* object_fh = nullptr;
     size_t nbytes;
     int r = 0;
 

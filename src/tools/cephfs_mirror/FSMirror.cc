@@ -23,6 +23,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephfs::mirror::FSMirror " << __func__
 
+using namespace std;
+
 namespace cephfs {
 namespace mirror {
 

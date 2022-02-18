@@ -37,6 +37,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 RGWServices_Def::RGWServices_Def() = default;
 RGWServices_Def::~RGWServices_Def()
 {
@@ -314,6 +316,8 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
 
   return 0;
 }
+
+RGWServiceInstance::~RGWServiceInstance() {}
 
 int RGWServiceInstance::start(optional_yield y, const DoutPrefixProvider *dpp)
 {

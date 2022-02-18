@@ -8,6 +8,7 @@ ceph:
   - ceph-common
   - ceph-fuse
   - ceph-test
+  - ceph-volume
   - radosgw
   - python3-rados
   - python3-rgw
@@ -47,6 +48,7 @@ ceph:
   - ceph-mgr-rook
   - ceph-mgr-cephadm
   - ceph-fuse
+  - ceph-volume
   - librados-devel
   - libcephfs2
   - libcephfs-devel

@@ -22,6 +22,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 bool RGWAsyncRadosProcessor::RGWWQ::_enqueue(RGWAsyncRadosRequest *req) {
   if (processor->is_going_down()) {
     return false;
@@ -603,15 +605,21 @@ RGWRadosBILogTrimCR::RGWRadosBILogTrimCR(const DoutPrefixProvider *dpp,
                                          int shard_id,
                                          const std::string& start_marker,
                                          const std::string& end_marker)
-  : RGWSimpleCoroutine(store->ctx()), bs(store->getRados()),
+  : RGWSimpleCoroutine(store->ctx()), bucket_info(bucket_info),
+    shard_id(shard_id), bs(store->getRados()),
     start_marker(BucketIndexShardsManager::get_shard_marker(start_marker)),
     end_marker(BucketIndexShardsManager::get_shard_marker(end_marker))
 {
-  bs.init(dpp, bucket_info, bucket_info.layout.current_index, shard_id);
 }
 
 int RGWRadosBILogTrimCR::send_request(const DoutPrefixProvider *dpp)
 {
+  int r = bs.init(dpp, bucket_info, bucket_info.layout.current_index, shard_id);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: bucket shard init failed ret=" << r << dendl;
+    return r;
+  }
+
   bufferlist in;
   cls_rgw_bi_log_trim_op call;
   call.start_marker = std::move(start_marker);
@@ -724,7 +732,7 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        petag); /* string *petag, */
 
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "store->stat_remote_obj() returned r=" << r << dendl;
   }
   return r;
 }

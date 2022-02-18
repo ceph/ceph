@@ -141,6 +141,7 @@ extra_conf=""
 new=0
 standby=0
 debug=0
+trace=0
 ip=""
 nodaemon=0
 redirect=0
@@ -149,6 +150,7 @@ short=0
 ec=0
 cephadm=0
 parallel=true
+restart=1
 hitset=""
 overwrite_conf=0
 cephx=1 #turn cephx on by default
@@ -179,6 +181,7 @@ with_mgr_restful=false
 filestore_path=
 kstore_path=
 declare -a block_devs
+declare -a secondary_block_devs
 
 VSTART_SEC="client.vstart.sh"
 
@@ -197,6 +200,7 @@ read -r -d '' usage <<EOF || true
 usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 NFS=1 $0 -n -d
 options:
 	-d, --debug
+	-t, --trace
 	-s, --standby_mds: Generate standby-replay MDS for each active
 	-l, --localhost: use localhost instead of hostname
 	-i <ip>: bind to specific ip
@@ -221,6 +225,7 @@ options:
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
 	-f, --filestore use filestore as the osd objectstore backend
 	-K, --kstore use kstore as the osd objectstore backend
+	--cyanstore use cyanstore as the osd objectstore backend
 	--memstore use memstore as the osd objectstore backend
 	--cache <pool>: enable cache tiering on pool
 	--short: short object names only; necessary for ext4 dev
@@ -232,6 +237,7 @@ options:
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
 	--crimson: use crimson-osd instead of ceph-osd
+	--crimson-foreground: use crimson-osd, but run it in the foreground
 	--osd-args: specify any extra osd specific options
 	--bluestore-devs: comma-separated list of blockdevs to use for bluestore
 	--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)
@@ -239,8 +245,11 @@ options:
 	--inc-osd: append some more osds into existing vcluster
 	--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]
 	--no-parallel: dont start all OSDs in parallel
+	--no-restart: dont restart process when using ceph-run
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
+	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+\n
 EOF
 
 usage_exit() {
@@ -263,10 +272,28 @@ parse_block_devs() {
     done
 }
 
+parse_secondary_devs() {
+    local opt_name=$1
+    shift
+    local devs=$1
+    shift
+    local dev
+    IFS=',' read -r -a secondary_block_devs <<< "$devs"
+    for dev in "${secondary_block_devs[@]}"; do
+        if [ ! -b $dev ] || [ ! -w $dev ]; then
+            echo "All $opt_name must refer to writable block devices"
+            exit 1
+        fi
+    done
+}
+
 while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug)
         debug=1
+        ;;
+    -t | --trace)
+        trace=1
         ;;
     -s | --standby_mds)
         standby=1
@@ -300,6 +327,13 @@ case $1 in
         ;;
     --crimson)
         ceph_osd=crimson-osd
+        nodaemon=1
+        msgr=2
+        ;;
+    --crimson-foreground)
+        ceph_osd=crimson-osd
+        nodaemon=0
+        msgr=2
         ;;
     --osd-args)
         extra_osd_args="$2"
@@ -319,6 +353,9 @@ case $1 in
         ;;
     --no-parallel)
         parallel=false
+        ;;
+    --no-restart)
+        restart=0
         ;;
     --valgrind)
         [ -z "$2" ] && usage_exit
@@ -412,6 +449,9 @@ case $1 in
     --memstore)
         objectstore="memstore"
         ;;
+    --cyanstore)
+        objectstore="cyanstore"
+        ;;
     --seastore)
         objectstore="seastore"
         ;;
@@ -456,6 +496,10 @@ case $1 in
         ;;
     --seastore-devs)
         parse_block_devs --seastore-devs "$2"
+        shift
+        ;;
+    --seastore-secondary-devs)
+        parse_secondary_devs --seastore-devs "$2"
         shift
         ;;
     --bluestore-spdk)
@@ -536,10 +580,15 @@ run() {
     else
         if [ "$nodaemon" -eq 0 ]; then
             prun "$@"
-        elif [ "$redirect" -eq 0 ]; then
-            prunb ${CEPH_ROOT}/src/ceph-run "$@" -f
         else
-            ( prunb ${CEPH_ROOT}/src/ceph-run "$@" -f ) >$CEPH_OUT_DIR/$type.$num.stdout 2>&1
+            if [ "$restart" -eq 0 ]; then
+                set -- '--no-restart' "$@"
+            fi
+            if [ "$redirect" -eq 0 ]; then
+                prunb ${CEPH_ROOT}/src/ceph-run "$@" -f
+            else
+                ( prunb ${CEPH_ROOT}/src/ceph-run "$@" -f ) >$CEPH_OUT_DIR/$type.$num.stdout 2>&1
+            fi
         fi
     fi
 }
@@ -668,6 +717,7 @@ EOF
         auth cluster required = none
         auth service required = none
         auth client required = none
+        ms mon client mode = crc
 EOF
     fi
     if [ "$short" -eq 1 ]; then
@@ -728,6 +778,7 @@ $DAEMONOPTS
         mds root ino gid = `id -g`
         $(format_conf "${extra_conf}")
 [mgr]
+        mgr disabled modules = rook
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         cephadm path = $CEPH_ROOT/src/cephadm/cephadm
@@ -763,7 +814,6 @@ $COSDSHORT
 [mon]
         mon_data_avail_crit = 1
         mgr initial modules = $mgr_modules
-        mgr disabled modules = rook
 $DAEMONOPTS
 $CMONDEBUG
         $(format_conf "${extra_conf}")
@@ -905,6 +955,9 @@ start_osd() {
 	    if [ "$debug" -ne 0 ]; then
 		extra_seastar_args+=" --debug"
 	    fi
+            if [ "$trace" -ne 0 ]; then
+                extra_seastar_args+=" --trace"
+            fi
 	fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
             wconf <<EOF
@@ -931,6 +984,10 @@ EOF
                     dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
                     ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
                 fi
+                if [ -n "${secondary_block_devs[$osd]}" ]; then
+                    dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
+                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.segmented.1
+                fi
             fi
             if [ "$objectstore" == "bluestore" ]; then
                 wconf <<EOF
@@ -944,7 +1001,8 @@ EOF
             echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
             rm $CEPH_DEV_DIR/osd$osd/new.json
-            prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args
+            prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
+                2>&1 | tee $CEPH_OUT_DIR/osd-mkfs.$osd.log
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
             cat > $key_fn<<EOF
@@ -1164,7 +1222,7 @@ start_ganesha() {
     GANESHA_PORT=$(($CEPH_PORT + 4000))
     local ganesha=0
     test_user="$cluster_id"
-    pool_name="nfs-ganesha"
+    pool_name=".nfs"
     namespace=$cluster_id
     url="rados://$pool_name/$namespace/conf-nfs.$test_user"
 
@@ -1178,7 +1236,7 @@ start_ganesha() {
     ceph_adm orch set backend test_orchestrator
     ceph_adm test_orchestrator load_data -i $CEPH_ROOT/src/pybind/mgr/test_orchestrator/dummy_data.json
     prun ceph_adm nfs cluster create $cluster_id
-    prun ceph_adm nfs export create cephfs "a" $cluster_id "/cephfs"
+    prun ceph_adm nfs export create cephfs --fsname "a" --cluster-id $cluster_id --pseudo-path "/cephfs"
 
     for name in a b c d e f g h i j k l m n o p
     do
@@ -1207,7 +1265,7 @@ start_ganesha() {
         }
 
         RADOS_KV {
-           pool = $pool_name;
+           pool = '$pool_name';
            namespace = $namespace;
            UserId = $test_user;
            nodeid = $name;
@@ -1225,7 +1283,7 @@ start_ganesha() {
         ip = $IP
         port = $port
         ganesha data = $ganesha_dir
-        pid file = $ganesha_dir/ganesha-$name.pid
+        pid file = $CEPH_OUT_DIR/ganesha-$name.pid
 EOF
 
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
@@ -1240,10 +1298,6 @@ EOF
 
         echo "$test_user ganesha daemon $name started on port: $port"
     done
-
-    if $with_mgr_dashboard; then
-        ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace "$cluster_id:$pool_name/$cluster_id"
-    fi
 }
 
 if [ "$debug" -eq 0 ]; then
@@ -1455,21 +1509,6 @@ osd pool create ec erasure ec-profile
 EOF
 fi
 
-# Ganesha Daemons
-if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
-    pseudo_path="/cephfs"
-    if [ "$cephadm" -gt 0 ]; then
-        cluster_id="vstart"
-        prun ceph_adm nfs cluster create $cluster_id
-        prun ceph_adm nfs export create cephfs "a" $cluster_id $pseudo_path
-        port="2049"
-    else
-        start_ganesha
-        port="<ganesha-port-num>"
-    fi
-    echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
-fi
-
 do_cache() {
     while [ -n "$*" ]; do
         p="$1"
@@ -1501,13 +1540,34 @@ EOF
 }
 do_hitsets $hitset
 
+do_rgw_create_bucket()
+{
+   # Create RGW Bucket
+   local rgw_python_file='rgw-create-bucket.py'
+   echo "import boto
+import boto.s3.connection
+
+conn = boto.connect_s3(
+        aws_access_key_id = '$s3_akey',
+        aws_secret_access_key = '$s3_skey',
+        host = '$HOSTNAME',
+        port = 80,
+        is_secure=False,
+        calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+        )
+
+bucket = conn.create_bucket('nfs-bucket')
+print('created new bucket')" > "$CEPH_OUT_DIR/$rgw_python_file"
+   prun python $CEPH_OUT_DIR/$rgw_python_file
+}
+
 do_rgw_create_users()
 {
     # Create S3 user
-    local akey='0555b35654ad1656d804'
-    local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
+    s3_akey='0555b35654ad1656d804'
+    s3_skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
     debug echo "setting up user testid"
-    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $s3_akey --secret $s3_skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
 
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
@@ -1538,8 +1598,8 @@ do_rgw_create_users()
 
     echo ""
     echo "S3 User Info:"
-    echo "  access key:  $akey"
-    echo "  secret key:  $skey"
+    echo "  access key:  $s3_akey"
+    echo "  secret key:  $s3_skey"
     echo ""
     echo "Swift User Info:"
     echo "  account   : test"
@@ -1608,8 +1668,30 @@ if [ "$CEPH_NUM_RGW" -gt 0 ]; then
     do_rgw
 fi
 
+# Ganesha Daemons
+if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
+    pseudo_path="/cephfs"
+    if [ "$cephadm" -gt 0 ]; then
+        cluster_id="vstart"
+	port="2049"
+        prun ceph_adm nfs cluster create $cluster_id
+	if [ $CEPH_NUM_MDS -gt 0 ]; then
+            prun ceph_adm nfs export create cephfs --fsname "a" --cluster-id $cluster_id --pseudo-path $pseudo_path
+	    echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
+	fi
+	if [ "$CEPH_NUM_RGW" -gt 0 ]; then
+            pseudo_path="/rgw"
+            do_rgw_create_bucket
+	    prun ceph_adm nfs export create rgw --cluster-id $cluster_id --pseudo-path $pseudo_path --bucket "nfs-bucket"
+            echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
+	fi
+    else
+        start_ganesha
+	echo "Mount using: mount -t nfs -o port=<ganesha-port-num> $IP:$pseudo_path mountpoint"
+    fi
+fi
 
- docker_service(){
+docker_service(){
      local service=''
      #prefer podman
      if command -v podman > /dev/null; then
@@ -1629,7 +1711,7 @@ fi
      else
          echo "cannot find docker or podman, please restart service and rerun."
      fi
- }
+}
 
 echo ""
 if [ $with_jaeger -eq 1 ]; then
@@ -1642,9 +1724,8 @@ if [ $with_jaeger -eq 1 ]; then
   -p 16686:16686 \
   -p 14268:14268 \
   -p 14250:14250 \
-  jaegertracing/all-in-one:1.20
+  quay.io/jaegertracing/all-in-one
 fi
-
 
 debug echo "vstart cluster complete. Use stop.sh to stop. See out/* (e.g. 'tail -f out/????') for debug output."
 
@@ -1677,11 +1758,8 @@ echo ""
     echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
     echo "export PATH=$CEPH_DIR/bin:\$PATH"
-
-    if [ "$CEPH_DIR" != "$PWD" ]; then
-        echo "export CEPH_CONF=$conf_fn"
-        echo "export CEPH_KEYRING=$keyring_fn"
-    fi
+    echo "export CEPH_CONF=$conf_fn"
+    echo "export CEPH_KEYRING=$keyring_fn"
 
     if [ -n "$CEPHFS_SHELL" ]; then
         echo "alias cephfs-shell=$CEPHFS_SHELL"

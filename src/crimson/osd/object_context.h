@@ -234,6 +234,7 @@ class ObjectContextRegistry : public md_config_obs_t  {
 
 public:
   ObjectContextRegistry(crimson::common::ConfigProxy &conf);
+  ~ObjectContextRegistry();
 
   std::pair<ObjectContextRef, bool> get_cached_obc(const hobject_t &hoid) {
     return obc_lru.get_or_create(hoid);

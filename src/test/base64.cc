@@ -19,6 +19,8 @@
 
 #include "gtest/gtest.h"
 
+using namespace std;
+
 TEST(RoundTrip, SimpleRoundTrip) {
   static const int OUT_LEN = 4096;
   const char * const original = "abracadabra";

@@ -72,6 +72,7 @@ using std::hex;
 using std::list;
 using std::map;
 using std::make_pair;
+using std::multimap;
 using std::ostream;
 using std::ostringstream;
 using std::pair;
@@ -400,9 +401,10 @@ void LogMonitor::log_external(const LogEntry& le)
 	if (fd < 0) {
 	  int err = -errno;
 	  dout(1) << "unable to write to '" << log_file << "' for channel '"
-		  << p->first << "': " << cpp_strerror(err) << dendl;
+		  << channel << "': " << cpp_strerror(err) << dendl;
+	} else {
+	  channel_fds[channel] = fd;
 	}
-	channel_fds[channel] = fd;
       }
     } else {
       fd = p->second;

@@ -12,6 +12,9 @@ TYPE(uuid_d)
 #include "sstring.h"
 TYPE(sstring_wrapper)
 
+#include "str.h"
+TYPE(string_wrapper)
+
 #include "include/CompatSet.h"
 TYPE(CompatSet)
 

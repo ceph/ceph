@@ -48,11 +48,10 @@ General
 * `Cloudbase Solutions <https://cloudbase.it/>`_
 * `Clyso <https://www.clyso.com/en/>`_
 * `croit <http://www.croit.io/>`_
-* `DiDi <https://www.didiglobal.com/>`_
 * `EasyStack <https://www.easystack.io/>`_
 * `ISS <http://iss-integration.com/>`_
 * `Linode <https://linode.com/>`_
-* `QCT <https://www.qct.io/>`_
+* `OSNexus <https://osnexus.com/>`_
 * `SinoRail <http://www.sinorail.com/>`_
 * `Vexxhost <https://vexxhost.com>`_
 
@@ -106,7 +105,7 @@ Members
 * Matthew Leonard (Bloomberg)
 * Mike Perez (Red Hat) - Ceph community manager
 * Myoungwon Oh (Samsung Electronics)
-* Paul Emmerich (croit) - General member representative
+* Martin Verges (croit) - General member representative
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)

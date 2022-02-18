@@ -128,6 +128,8 @@ Since the Luminous release, devices may also have a *device class* assigned (e.g
 ``hdd`` or ``ssd`` or ``nvme``), allowing them to be conveniently targeted by
 CRUSH rules.  This is especially useful when mixing device types within hosts.
 
+.. _crush_map_default_types:
+
 Types and Buckets
 -----------------
 
@@ -714,7 +716,7 @@ The ``bobtail`` tunable profile fixes a few key misbehaviors:
 
  * For large clusters, some small percentages of PGs map to fewer than
    the desired number of OSDs.  This is more prevalent when there are
-   mutiple hierarchy layers in use (e.g., ``row``, ``rack``, ``host``, ``osd``).
+   multiple hierarchy layers in use (e.g., ``row``, ``rack``, ``host``, ``osd``).
 
  * When some OSDs are marked out, the data tends to get redistributed
    to nearby OSDs instead of across the entire hierarchy.
@@ -951,8 +953,7 @@ release notes and documentation carefully before changing the profile on a
 running cluster, and consider throttling recovery/backfill parameters to
 limit the impact of a bolus of backfill.
 
-
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/wp-content/uploads/2016/08/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/assets/pdfs/weil-crush-sc06.pdf
 
 
 Primary Affinity

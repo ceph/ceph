@@ -5,6 +5,8 @@
 #include <boost/scoped_ptr.hpp>
 #include "include/Context.h"
 
+using namespace std;
+
 class OnApplied : public Context {
   FileStoreTracker *tracker;
   list<pair<pair<coll_t, string>, uint64_t> > in_flight;

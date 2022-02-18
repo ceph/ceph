@@ -67,7 +67,7 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   std::uniform_int_distribution<uint32_t> distribution{0, 0xFFFFFFFF};
   uint32_t extra = distribution(generator);
 
-  ostringstream bid_ss;
+  std::ostringstream bid_ss;
   bid_ss << std::hex << bid << std::hex << extra;
   std::string id = bid_ss.str();
 
@@ -149,6 +149,9 @@ int create_ioctx(librados::IoCtx& src_io_ctx, const std::string& pool_desc,
 
   dst_io_ctx->set_namespace(
     pool_namespace ? *pool_namespace : src_io_ctx.get_namespace());
+  if (src_io_ctx.get_pool_full_try()) {
+    dst_io_ctx->set_pool_full_try();
+  }
   return 0;
 }
 

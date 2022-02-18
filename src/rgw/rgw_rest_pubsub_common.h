@@ -82,7 +82,7 @@ public:
 // delete a topic
 class RGWPSDeleteTopicOp : public RGWDefaultResponseOp {
 protected:
-  string topic_name;
+  std::string topic_name;
   std::optional<RGWPubSub> ps;
   
   virtual int get_params() = 0;
@@ -229,7 +229,7 @@ public:
 class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
 protected:
   std::optional<RGWPubSub> ps;
-  string bucket_name;
+  std::string bucket_name;
   RGWBucketInfo bucket_info;
 
   virtual int get_params() = 0;

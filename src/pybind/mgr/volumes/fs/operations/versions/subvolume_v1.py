@@ -18,7 +18,7 @@ from ..template import SubvolumeTemplate
 from ..snapshot_util import mksnap, rmsnap
 from ..access import allow_access, deny_access
 from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException, EvictionError
-from ...fs_util import listsnaps, is_inherited_snap
+from ...fs_util import listsnaps, is_inherited_snap, create_base_dir
 from ..template import SubvolumeOpType
 from ..group import Group
 from ..rankevicter import RankEvicter
@@ -93,6 +93,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
+            # create group directory with default mode(0o755) if it doesn't exist.
+            create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, mode)
             self.mark_subvolume()
@@ -149,6 +151,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             # source snapshot attrs are used to create clone subvolume.
             # attributes of subvolume's content though, are synced during the cloning process.
             attrs = source_subvolume.get_attrs(source_subvolume.snapshot_data_path(snapname))
+
+            # The source of the clone may have exceeded its quota limit as
+            # CephFS quotas are imprecise. Cloning such a source may fail if
+            # the quota on the destination is set before starting the clone
+            # copy. So always set the quota on destination after cloning is
+            # successful.
+            attrs["quota"] = None
 
             # override snapshot pool setting, if one is provided for the clone
             if pool is not None:

@@ -57,10 +57,21 @@
 
 #define BUCKET_TAG_TIMEOUT 30
 
+using namespace std;
+
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)
 static constexpr size_t listing_max_entries = 1000;
 
+void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id)
+{
+  b->tenant = t;
+  b->name = n;
+  b->marker = m;
+  b->bucket_id = id;
+  b->explicit_placement.data_pool = rgw_pool(dp);
+  b->explicit_placement.index_pool = rgw_pool(ip);
+}
 
 /*
  * The tenant_name is always returned on purpose. May be empty, of course.
@@ -293,12 +304,13 @@ void check_bad_user_bucket_mapping(rgw::sal::Store* store, rgw::sal::User* user,
   } while (user_buckets.is_truncated());
 }
 
-// note: function type conforms to RGWRados::check_filter_t
-bool rgw_bucket_object_check_filter(const string& oid)
+// returns true if entry is in the empty namespace. note: function
+// type conforms to type RGWBucketListNameFilter
+bool rgw_bucket_object_check_filter(const std::string& oid)
 {
-  rgw_obj_key key;
-  string ns;
-  return rgw_obj_key::oid_to_key_in_ns(oid, &key, ns);
+  const static std::string empty_ns;
+  rgw_obj_key key; // thrown away but needed for parsing
+  return rgw_obj_key::oid_to_key_in_ns(oid, &key, empty_ns);
 }
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::Bucket* bucket, rgw_obj_key& key)
@@ -312,139 +324,6 @@ int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
   return object->delete_object(dpp, &rctx, null_yield);
-}
-
-int rgw_remove_bucket_bypass_gc(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
-                                int concurrent_max, bool keep_index_consistent,
-                                optional_yield y,
-                                const DoutPrefixProvider *dpp)
-{
-  int ret;
-  map<RGWObjCategory, RGWStorageStats> stats;
-  map<string, bool> common_prefixes;
-  RGWObjectCtx obj_ctx(store);
-  CephContext *cct = store->ctx();
-
-  string bucket_ver, master_ver;
-
-  ret = bucket->get_bucket_info(dpp, null_yield);
-  if (ret < 0)
-    return ret;
-
-  ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
-  if (ret < 0)
-    return ret;
-
-  string prefix, delimiter;
-
-  ret = abort_bucket_multiparts(dpp, store, cct, bucket, prefix, delimiter);
-  if (ret < 0) {
-    return ret;
-  }
-
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
-
-  params.list_versions = true;
-  params.allow_unordered = true;
-
-  std::unique_ptr<rgw::sal::Completions> handles = store->get_completions();
-
-  int max_aio = concurrent_max;
-  results.is_truncated = true;
-
-  while (results.is_truncated) {
-    ret = bucket->list(dpp, params, listing_max_entries, results, null_yield);
-    if (ret < 0)
-      return ret;
-
-    std::vector<rgw_bucket_dir_entry>::iterator it = results.objs.begin();
-    for (; it != results.objs.end(); ++it) {
-      RGWObjState *astate = NULL;
-      std::unique_ptr<rgw::sal::Object> obj = bucket->get_object((*it).key);
-
-      ret = obj->get_obj_state(dpp, &obj_ctx, &astate, y, false);
-      if (ret == -ENOENT) {
-        ldpp_dout(dpp, 1) << "WARNING: cannot find obj state for obj " << obj << dendl;
-        continue;
-      }
-      if (ret < 0) {
-        ldpp_dout(dpp, -1) << "ERROR: get obj state returned with error " << ret << dendl;
-        return ret;
-      }
-
-      if (astate->manifest) {
-        RGWObjManifest& manifest = *astate->manifest;
-        RGWObjManifest::obj_iterator miter = manifest.obj_begin(dpp);
-	std::unique_ptr<rgw::sal::Object> head_obj = bucket->get_object(manifest.get_obj().key);
-        rgw_raw_obj raw_head_obj;
-	head_obj->get_raw_obj(&raw_head_obj);
-
-        for (; miter != manifest.obj_end(dpp) && max_aio--; ++miter) {
-          if (!max_aio) {
-            ret = handles->drain();
-            if (ret < 0) {
-              ldpp_dout(dpp, -1) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
-              return ret;
-            }
-            max_aio = concurrent_max;
-          }
-
-          rgw_raw_obj last_obj = miter.get_location().get_raw_obj(store);
-          if (last_obj == raw_head_obj) {
-            // have the head obj deleted at the end
-            continue;
-          }
-
-          ret = store->delete_raw_obj_aio(dpp, last_obj, handles.get());
-          if (ret < 0) {
-            ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
-            return ret;
-          }
-        } // for all shadow objs
-
-	ret = head_obj->delete_obj_aio(dpp, astate, handles.get(), keep_index_consistent, null_yield);
-        if (ret < 0) {
-          ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
-          return ret;
-        }
-      }
-
-      if (!max_aio) {
-        ret = handles->drain();
-        if (ret < 0) {
-          ldpp_dout(dpp, -1) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
-          return ret;
-        }
-        max_aio = concurrent_max;
-      }
-      obj_ctx.invalidate(obj->get_obj());
-    } // for all RGW objects
-  }
-
-  ret = handles->drain();
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
-    return ret;
-  }
-
-  bucket->sync_user_stats(dpp, y);
-  if (ret < 0) {
-     ldpp_dout(dpp, 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
-  }
-
-  RGWObjVersionTracker objv_tracker;
-
-  // this function can only be run if caller wanted children to be
-  // deleted, so we can ignore the check for children as any that
-  // remain are detritus from a prior bug
-  ret = bucket->remove_bucket(dpp, true, std::string(), std::string(), false, nullptr, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << bucket << dendl;
-    return ret;
-  }
-
-  return ret;
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -553,7 +432,7 @@ int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvid
   bucket = op_state.get_bucket()->clone();
 
   bucket->get_info().quota = op_state.quota;
-  int r = bucket->put_instance_info(dpp, false, real_time());
+  int r = bucket->put_info(dpp, false, real_time());
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
     return r;
@@ -592,8 +471,7 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
   formatter->open_object_section("usage");
   for (iter = stats.begin(); iter != stats.end(); ++iter) {
     RGWStorageStats& s = iter->second;
-    const char *cat_name = rgw_obj_category_name(iter->first);
-    formatter->open_object_section(cat_name);
+    formatter->open_object_section(to_string(iter->first));
     s.dump(formatter);
     formatter->close_section();
   }
@@ -727,8 +605,6 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
 
   bucket->set_tag_timeout(dpp, BUCKET_TAG_TIMEOUT);
 
-  string prefix;
-  string empty_delimiter;
   rgw::sal::Bucket::ListResults results;
   results.is_truncated = true;
 
@@ -736,15 +612,14 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   formatter->open_object_section("objects");
   while (results.is_truncated) {
     rgw::sal::Bucket::ListParams params;
-
     params.marker = results.next_marker;
-    params.prefix = prefix;
+    params.force_check_filter = rgw_bucket_object_check_filter;
 
     int r = bucket->list(dpp, params, listing_max_entries, results, y);
 
     if (r == -ENOENT) {
       break;
-    } else if (r < 0 && r != -ENOENT) {
+    } else if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
     }
 
@@ -798,7 +673,7 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
     bucket->get_info().flags |= BUCKET_DATASYNC_DISABLED;
   }
 
-  int r = bucket->put_instance_info(dpp, false, real_time());
+  int r = bucket->put_info(dpp, false, real_time());
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed writing bucket instance info:" + cpp_strerror(-r));
     return r;
@@ -1046,7 +921,7 @@ int RGWBucketAdminOp::link(rgw::sal::Store* store, RGWBucketAdminOpState& op_sta
     exclusive = true;
   }
 
-  r = loc_bucket->put_instance_info(dpp, exclusive, ceph::real_time());
+  r = loc_bucket->put_info(dpp, exclusive, ceph::real_time());
   if (r < 0) {
     set_err_msg(err, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
     return r;
@@ -1069,7 +944,19 @@ int RGWBucketAdminOp::link(rgw::sal::Store* store, RGWBucketAdminOpState& op_sta
 
   if (*loc_bucket != *old_bucket) {
     // like RGWRados::delete_bucket -- excepting no bucket_index work.
-    r = old_bucket->remove_metadata(dpp, &ep_data.ep_objv, null_yield);
+    r = static_cast<rgw::sal::RadosStore*>(store)->ctl()->bucket->remove_bucket_entrypoint_info(
+					old_bucket->get_key(), null_yield, dpp,
+					RGWBucketCtl::Bucket::RemoveParams()
+					.set_objv_tracker(&ep_data.ep_objv));
+    if (r < 0) {
+      set_err_msg(err, "failed to unlink old bucket " + old_bucket->get_tenant() + "/" + old_bucket->get_name());
+      return r;
+    }
+    r = static_cast<rgw::sal::RadosStore*>(store)->ctl()->bucket->remove_bucket_instance_info(
+					old_bucket->get_key(), old_bucket->get_info(),
+					null_yield, dpp,
+					RGWBucketCtl::BucketInstance::RemoveParams()
+					.set_objv_tracker(&ep_data.ep_objv));
     if (r < 0) {
       set_err_msg(err, "failed to unlink old bucket " + old_bucket->get_tenant() + "/" + old_bucket->get_name());
       return r;
@@ -1139,9 +1026,9 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Store* store, RGWBucketAdminOpStat
     return ret;
 
   if (bypass_gc)
-    ret = rgw_remove_bucket_bypass_gc(store, bucket.get(), op_state.get_max_aio(), keep_index_consistent, y, dpp);
+    ret = bucket->remove_bucket_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
   else
-    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(), string(), string(),
+    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(),
 				false, nullptr, y);
 
   return ret;
@@ -1186,7 +1073,7 @@ static int bucket_stats(rgw::sal::Store* store,
 
   string bucket_ver, master_ver;
   string max_marker;
-  ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+  ret = bucket->read_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
     return ret;
@@ -1286,14 +1173,14 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Store* store,
 				     * as we may now not reach the end of
 				     * the loop body */
 
-	ret = bucket->get_bucket_info(dpp, null_yield);
+	ret = bucket->load_bucket(dpp, null_yield);
 	if (ret < 0)
 	  continue;
 
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->get_bucket_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
+	ret = bucket->read_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
 
 	if (ret < 0)
 	  continue;
@@ -2044,6 +1931,8 @@ static void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
    f->flush(bl);
 
    MD5 hash;
+   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
    hash.Update((const unsigned char *)bl.c_str(), bl.length());
    hash.Final(m);
 
@@ -3004,7 +2893,6 @@ int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
                         const rgw_user& user_id, const std::string& display_name,
                         const std::string& marker, optional_yield y, const DoutPrefixProvider *dpp)
 {
-  RGWObjectCtx obj_ctx(store);
   map<string, bool> common_prefixes;
 
   rgw::sal::Bucket::ListParams params;
@@ -3020,6 +2908,7 @@ int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
   //Loop through objects and update object acls to point to bucket owner
 
   do {
+    RGWObjectCtx obj_ctx(store);
     results.objs.clear();
     int ret = bucket->list(dpp, params, max_entries, results, y);
     if (ret < 0) {
@@ -3190,5 +3079,43 @@ RGWBucketMetadataHandlerBase *RGWArchiveBucketMetaHandlerAllocator::alloc()
 RGWBucketInstanceMetadataHandlerBase *RGWArchiveBucketInstanceMetaHandlerAllocator::alloc()
 {
   return new RGWArchiveBucketInstanceMetadataHandler();
+}
+
+
+void RGWBucketEntryPoint::generate_test_instances(list<RGWBucketEntryPoint*>& o)
+{
+  RGWBucketEntryPoint *bp = new RGWBucketEntryPoint();
+  init_bucket(&bp->bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
+  bp->owner = "owner";
+  bp->creation_time = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
+
+  o.push_back(bp);
+  o.push_back(new RGWBucketEntryPoint);
+}
+
+void RGWBucketEntryPoint::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("owner", owner, f);
+  utime_t ut(creation_time);
+  encode_json("creation_time", ut, f);
+  encode_json("linked", linked, f);
+  encode_json("has_bucket_info", has_bucket_info, f);
+  if (has_bucket_info) {
+    encode_json("old_bucket_info", old_bucket_info, f);
+  }
+}
+
+void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("bucket", bucket, obj);
+  JSONDecoder::decode_json("owner", owner, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("creation_time", ut, obj);
+  creation_time = ut.to_real_time();
+  JSONDecoder::decode_json("linked", linked, obj);
+  JSONDecoder::decode_json("has_bucket_info", has_bucket_info, obj);
+  if (has_bucket_info) {
+    JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
+  }
 }
 

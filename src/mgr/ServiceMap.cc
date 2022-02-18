@@ -3,9 +3,7 @@
 
 #include "mgr/ServiceMap.h"
 
-#include <experimental/iterator>
 #include <fmt/format.h>
-#include <regex>
 
 #include "common/Formatter.h"
 
@@ -100,8 +98,8 @@ std::string ServiceMap::Service::get_summary() const
 	p != d.second.metadata.end()) {
       type = p->second;
     }
-    for (auto k : {make_pair("zone", "zone_id"),
-	  make_pair("host", "hostname")}) {
+    for (auto k : {std::make_pair("zone", "zone_id"),
+		   std::make_pair("host", "hostname")}) {
       auto p = d.second.metadata.find(k.second);
       if (p != d.second.metadata.end()) {
 	groupings[k.first].insert(p->second);

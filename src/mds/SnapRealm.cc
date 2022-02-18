@@ -28,8 +28,11 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mdcache->mds->get_nodeid(), inode, srnode.seq, this)
-static ostream& _prefix(std::ostream *_dout, int whoami, const CInode *inode,
-			uint64_t seq, const SnapRealm *realm) {
+
+using namespace std;
+
+static std::ostream& _prefix(std::ostream *_dout, int whoami, const CInode *inode,
+			     uint64_t seq, const SnapRealm *realm) {
   return *_dout << " mds." << whoami
 		<< ".cache.snaprealm(" << inode->ino()
 		<< " seq " << seq << " " << realm << ") ";

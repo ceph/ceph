@@ -60,8 +60,24 @@
 
 #include "osd/ECUtil.h"
 
+using namespace std::chrono_literals;
 using namespace librados;
 using ceph::util::generate_random_number;
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::less;
+using std::list;
+using std::map;
+using std::multiset;
+using std::ofstream;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::unique_ptr;
+using std::vector;
 
 // two steps seem to be necessary to do this right
 #define STR(x) _STR(x)
@@ -91,7 +107,7 @@ void usage(ostream& out)
 "   append <obj-name> <infile>       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
-"   rm <obj-name> ...[--force-full]  [force no matter full or not]remove object(s)\n"
+"   rm <obj-name> ... [--force-full] remove object(s), --force-full forces remove when cluster is full\n"
 "   cp <obj-name> [target-obj]       copy object\n"
 "   listxattr <obj-name>             list attrs of this object\n"
 "   getxattr <obj-name> <attr>       get the <attr> attribute of this object\n"
@@ -117,10 +133,10 @@ void usage(ostream& out)
 "   getomapval <obj-name> <key> [file] show the value for the specified key\n"
 "                                    in the object's object map\n"
 "   setomapval <obj-name> <key> <val | --input-file file>\n"
-"   rmomapkey <obj-name> <key>\n"
+"   rmomapkey <obj-name> <key>       Remove key from the object map of <obj-name>\n"
 "   clearomap <obj-name> [obj-name2 obj-name3...] clear all the omap keys for the specified objects\n"
-"   getomapheader <obj-name> [file]\n"
-"   setomapheader <obj-name> <val>\n"
+"   getomapheader <obj-name> [file]  Dump the hexadecimal value of the object map header of <obj-name>\n"
+"   setomapheader <obj-name> <val>   Set the value of the object map header of <obj-name>\n"
 "   watch <obj-name>                 add watcher on this object\n"
 "   notify <obj-name> <message>      notify watcher of this object with message\n"
 "   listwatchers <obj-name>          list the watchers of this object\n"
@@ -989,7 +1005,7 @@ int LoadGen::run()
       ++total_sec;
       std::streamsize original_precision = cout.precision();
       cout.precision(3);
-      cout << setw(5) << total_sec << ": throughput=" << rate  << "MB/sec" << " pending data=" << sent - completed << std::endl;
+      cout << std::setw(5) << total_sec << ": throughput=" << rate  << "MB/sec" << " pending data=" << sent - completed << std::endl;
       cout.precision(original_precision);
       stamp_time = now; 
     }
@@ -4031,8 +4047,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
 int main(int argc, const char **argv)
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);

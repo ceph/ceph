@@ -12,6 +12,7 @@ import _ from 'lodash';
 import { Observable, throwError as observableThrowError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
@@ -34,7 +35,6 @@ export class ApiInterceptorService implements HttpInterceptor {
   ) {}
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    const defaultVersion = '1.0';
     const acceptHeader = request.headers.get('Accept');
     let reqWithVersion: HttpRequest<any>;
     if (acceptHeader && acceptHeader.startsWith('application/vnd.ceph.api.v')) {
@@ -42,7 +42,7 @@ export class ApiInterceptorService implements HttpInterceptor {
     } else {
       reqWithVersion = request.clone({
         setHeaders: {
-          Accept: `application/vnd.ceph.api.v${defaultVersion}+json`
+          Accept: CdHelperClass.cdVersionHeader('1', '0')
         }
       });
     }

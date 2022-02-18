@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -18,6 +18,8 @@
 #include "gtest/gtest.h"
 
 #include <sstream>
+
+using namespace std;
 
 // input, parsed+printed addr output, leftover
 // if the parse fails, output + leftover should both be blank.

@@ -31,6 +31,7 @@
 #include <iterator>
 
 using ceph::bufferlist;
+using namespace std;
 
 bool index_data::is_timed_out(utime_t now, utime_t timeout) const {
   return prefix != "" && now - ts > timeout;
@@ -46,20 +47,20 @@ void IndexCache::push(const string &key, const index_data &idata) {
     return;
   }
   index_data old_idata;
-  map<key_data, pair<index_data, utime_t> >::iterator old_it =
+  std::map<key_data, std::pair<index_data, utime_t> >::iterator old_it =
       k2itmap.lower_bound(key_data(key));
   if (old_it != k2itmap.end()) {
     t2kmap.erase(old_it->second.second);
     k2itmap.erase(old_it);
   }
-  map<key_data, pair<index_data, utime_t> >::iterator new_it =
+  std::map<key_data, std::pair<index_data, utime_t> >::iterator new_it =
       k2itmap.find(idata.kdata);
   if (new_it != k2itmap.end()) {
     utime_t old_time = new_it->second.second;
     t2kmap.erase(old_time);
   }
   utime_t time = ceph_clock_now();
-  k2itmap[idata.kdata] = make_pair(idata, time);
+  k2itmap[idata.kdata] = std::make_pair(idata, time);
   t2kmap[time] = idata.kdata;
   if ((int)k2itmap.size() > cache_size) {
     pop();
@@ -77,7 +78,7 @@ void IndexCache::push(const index_data &idata) {
     k2itmap.erase(idata.kdata);
   }
   utime_t time = ceph_clock_now();
-  k2itmap[idata.kdata] = make_pair(idata, time);
+  k2itmap[idata.kdata] = std::make_pair(idata, time);
   t2kmap[time] = idata.kdata;
   if ((int)k2itmap.size() > cache_size) {
     pop();
@@ -88,7 +89,7 @@ void IndexCache::pop() {
   if (cache_size == 0) {
     return;
   }
-  map<utime_t, key_data>::iterator it = t2kmap.begin();
+  std::map<utime_t, key_data>::iterator it = t2kmap.begin();
   utime_t time = it->first;
   key_data kdata = it->second;
   k2itmap.erase(kdata);
@@ -113,7 +114,7 @@ int IndexCache::get(const string &key, index_data *idata) const {
   if ((int)k2itmap.size() == 0) {
     return -ENODATA;
   }
-  map<key_data, pair<index_data, utime_t> >::const_iterator it =
+  std::map<key_data, std::pair<index_data, utime_t> >::const_iterator it =
       k2itmap.lower_bound(key_data(key));
   if (it == k2itmap.end() || !(it->second.first.min_kdata < key_data(key))) {
     return -ENODATA;
@@ -128,7 +129,7 @@ int IndexCache::get(const string &key, index_data *idata,
   if (cache_size == 0) {
     return -ENODATA;
   }
-  map<key_data, pair<index_data, utime_t> >::const_iterator it =
+  std::map<key_data, std::pair<index_data, utime_t> >::const_iterator it =
       k2itmap.lower_bound(key_data(key));
   if (it == k2itmap.end() || ++it == k2itmap.end()) {
     return -ENODATA;
@@ -361,7 +362,7 @@ int KvFlatBtreeAsync::split(const index_data &idata) {
       args.odata.max_kdata, args.odata.name, args.odata.version));
 
   //for lower half object
-  map<std::string, bufferlist>::const_iterator it = args.odata.omap.begin();
+  std::map<std::string, bufferlist>::const_iterator it = args.odata.omap.begin();
   client_index_lock.lock();
   to_create.push_back(object_data(to_string(client_name, client_index++)));
   client_index_lock.unlock();
@@ -384,14 +385,14 @@ int KvFlatBtreeAsync::split(const index_data &idata) {
 
   //setting up operations
   librados::ObjectWriteOperation owos[6];
-  vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > ops;
+  vector<std::pair<std::pair<int, string>, librados::ObjectWriteOperation*> > ops;
   index_data out_data;
   set_up_prefix_index(to_create, to_delete, &owos[0], &out_data, &err);
-  ops.push_back(make_pair(
-      pair<int, string>(ADD_PREFIX, index_name),
+  ops.push_back(std::make_pair(
+      std::pair<int, string>(ADD_PREFIX, index_name),
       &owos[0]));
   for (int i = 1; i < 6; i++) {
-    ops.push_back(make_pair(make_pair(0,""), &owos[i]));
+    ops.push_back(std::make_pair(std::make_pair(0,""), &owos[i]));
   }
   set_up_ops(to_create, to_delete, &ops, out_data, &err);
 
@@ -539,9 +540,9 @@ int KvFlatBtreeAsync::rebalance(const index_data &idata1,
   vector<object_data> to_delete;
   librados::ObjectWriteOperation create[2];//possibly only 1 will be used
   librados::ObjectWriteOperation other_ops[6];
-  vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > ops;
-  ops.push_back(make_pair(
-      pair<int, string>(ADD_PREFIX, index_name),
+  vector<std::pair<std::pair<int, string>, librados::ObjectWriteOperation*> > ops;
+  ops.push_back(std::make_pair(
+      std::pair<int, string>(ADD_PREFIX, index_name),
       &other_ops[0]));
 
   if ((int)args1.odata.size + (int)args2.odata.size <= 2*k) {
@@ -550,13 +551,13 @@ int KvFlatBtreeAsync::rebalance(const index_data &idata1,
 	<< args1.odata.name
 	<< " and " << args2.odata.name << " to get " << o2w
 	<< std::endl;
-    map<string, bufferlist> write2_map;
+    std::map<string, bufferlist> write2_map;
     write2_map.insert(args1.odata.omap.begin(), args1.odata.omap.end());
     write2_map.insert(args2.odata.omap.begin(), args2.odata.omap.end());
     to_create.push_back(object_data(args1.odata.min_kdata,
 	args2.odata.max_kdata, o2w, write2_map));
-    ops.push_back(make_pair(
-	pair<int, string>(MAKE_OBJECT, o2w),
+    ops.push_back(std::make_pair(
+	std::pair<int, std::string>(MAKE_OBJECT, o2w),
 	&create[0]));
     ceph_assert((int)write2_map.size() <= 2*k);
   } else {
@@ -564,9 +565,9 @@ int KvFlatBtreeAsync::rebalance(const index_data &idata1,
     if (verbose) cout << "\t\t" << client_name << "-rebalance: rebalancing "
 	<< args1.odata.name
 	<< " and " << args2.odata.name << std::endl;
-    map<std::string, bufferlist> write1_map;
-    map<std::string, bufferlist> write2_map;
-    map<std::string, bufferlist>::iterator it;
+    std::map<std::string, bufferlist> write1_map;
+    std::map<std::string, bufferlist> write2_map;
+    std::map<std::string, bufferlist>::iterator it;
     client_index_lock.lock();
     string o1w = to_string(client_name, client_index++);
     client_index_lock.unlock();
@@ -589,7 +590,7 @@ int KvFlatBtreeAsync::rebalance(const index_data &idata1,
       write2_map.insert(args2.odata.omap.begin(), args2.odata.omap.end());
     } else {
       //args1.odata.omap was small, and write2_map still needs more
-      map<std::string, bufferlist>::iterator it2;
+      std::map<std::string, bufferlist>::iterator it2;
       for(it2 = args2.odata.omap.begin();
 	  (it2 != args2.odata.omap.end()) && ((int)write1_map.size()
 	      < target_size_1);
@@ -608,11 +609,11 @@ int KvFlatBtreeAsync::rebalance(const index_data &idata1,
 	o1w,write1_map));
     to_create.push_back(object_data( key_data(write1_map.rbegin()->first),
 	args2.odata.max_kdata, o2w, write2_map));
-    ops.push_back(make_pair(
-	pair<int, string>(MAKE_OBJECT, o1w),
+    ops.push_back(std::make_pair(
+	std::pair<int, std::string>(MAKE_OBJECT, o1w),
 	&create[0]));
-    ops.push_back(make_pair(
-	pair<int, string>(MAKE_OBJECT, o2w),
+    ops.push_back(std::make_pair(
+	std::pair<int, std::string>(MAKE_OBJECT, o2w),
 	&create[1]));
   }
 
@@ -621,7 +622,7 @@ int KvFlatBtreeAsync::rebalance(const index_data &idata1,
   to_delete.push_back(object_data(args2.odata.min_kdata,
       args2.odata.max_kdata, args2.odata.name, args2.odata.version));
   for (int i = 1; i < 6; i++) {
-    ops.push_back(make_pair(make_pair(0,""), &other_ops[i]));
+    ops.push_back(std::make_pair(std::make_pair(0,""), &other_ops[i]));
   }
 
   index_data out_data;
@@ -703,8 +704,8 @@ void KvFlatBtreeAsync::set_up_prefix_index(
     librados::ObjectWriteOperation * owo,
     index_data * idata,
     int * err) {
-  std::map<std::string, pair<bufferlist, int> > assertions;
-  map<string, bufferlist> to_insert;
+  std::map<std::string, std::pair<bufferlist, int> > assertions;
+  std::map<string, bufferlist> to_insert;
   idata->prefix = "1";
   idata->ts = ceph_clock_now();
   for(vector<object_data>::const_iterator it = to_create.begin();
@@ -732,7 +733,7 @@ void KvFlatBtreeAsync::set_up_prefix_index(
     this_entry.min_kdata = idata->min_kdata;
     this_entry.kdata = idata->kdata;
     this_entry.obj = idata->obj;
-    assertions[it->max_kdata.encoded()] = pair<bufferlist, int>
+    assertions[it->max_kdata.encoded()] = std::pair<bufferlist, int>
     (to_bl(this_entry),	CEPH_OSD_CMPXATTR_OP_EQ);
     if (verbose) cout << "\t\t\t" << client_name
 	<< "-setup_prefix: will assert "
@@ -749,20 +750,20 @@ void KvFlatBtreeAsync::set_up_prefix_index(
 void KvFlatBtreeAsync::set_up_ops(
     const vector<object_data> &create_vector,
     const vector<object_data> &delete_vector,
-    vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > * ops,
+    vector<std::pair<std::pair<int, string>, librados::ObjectWriteOperation*> > * ops,
     const index_data &idata,
     int * err) {
-  vector<pair<pair<int, string>,
+  vector<std::pair<std::pair<int, string>,
     librados::ObjectWriteOperation* > >::iterator it;
 
   //skip the prefixing part
   for(it = ops->begin(); it->first.first == ADD_PREFIX; ++it) {}
-  map<string, bufferlist> to_insert;
+  std::map<string, bufferlist> to_insert;
   std::set<string> to_remove;
-  map<string, pair<bufferlist, int> > assertions;
+  std::map<string, std::pair<bufferlist, int> > assertions;
   if (create_vector.size() > 0) {
     for (int i = 0; i < (int)idata.to_delete.size(); ++i) {
-      it->first = pair<int, string>(UNWRITE_OBJECT, idata.to_delete[i].obj);
+      it->first = std::pair<int, string>(UNWRITE_OBJECT, idata.to_delete[i].obj);
       set_up_unwrite_object(delete_vector[i].version, it->second);
       ++it;
     }
@@ -772,9 +773,9 @@ void KvFlatBtreeAsync::set_up_ops(
 	idata.to_create[i].obj);
     to_insert[idata.to_create[i].max.encoded()] = to_bl(this_entry);
     if (idata.to_create.size() <= 2) {
-      it->first = pair<int, string>(MAKE_OBJECT, idata.to_create[i].obj);
+      it->first = std::pair<int, string>(MAKE_OBJECT, idata.to_create[i].obj);
     } else {
-      it->first = pair<int, string>(AIO_MAKE_OBJECT, idata.to_create[i].obj);
+      it->first = std::pair<int, string>(AIO_MAKE_OBJECT, idata.to_create[i].obj);
     }
     set_up_make_object(create_vector[i].omap, it->second);
     ++it;
@@ -786,10 +787,10 @@ void KvFlatBtreeAsync::set_up_ops(
     this_entry.kdata = idata.to_delete[i].max;
     if (verbose) cout << "\t\t\t" << client_name << "-setup_ops: will assert "
 	<< this_entry.str() << std::endl;
-    assertions[idata.to_delete[i].max.encoded()] = pair<bufferlist, int>(
+    assertions[idata.to_delete[i].max.encoded()] = std::pair<bufferlist, int>(
 	to_bl(this_entry), CEPH_OSD_CMPXATTR_OP_EQ);
     to_remove.insert(idata.to_delete[i].max.encoded());
-    it->first = pair<int, string>(REMOVE_OBJECT, idata.to_delete[i].obj);
+    it->first = std::pair<int, string>(REMOVE_OBJECT, idata.to_delete[i].obj);
     set_up_delete_object(it->second);
     ++it;
   }
@@ -800,11 +801,11 @@ void KvFlatBtreeAsync::set_up_ops(
   it->second->omap_set(to_insert);
 
 
-  it->first = pair<int, string>(REMOVE_PREFIX, index_name);
+  it->first = std::pair<int, string>(REMOVE_PREFIX, index_name);
 }
 
 void KvFlatBtreeAsync::set_up_make_object(
-    const map<std::string, bufferlist> &to_set,
+    const std::map<std::string, bufferlist> &to_set,
     librados::ObjectWriteOperation *owo) {
   bufferlist inbl;
   encode(to_set, inbl);
@@ -834,11 +835,11 @@ void KvFlatBtreeAsync::set_up_delete_object(
 
 int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
     const index_data &idata,
-    vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > *ops) {
+    vector<std::pair<std::pair<int, string>, librados::ObjectWriteOperation*> > *ops) {
   int err = 0;
   vector<librados::AioCompletion*> aiocs(idata.to_create.size());
   int count = 0;
-  for (vector<pair<pair<int, string>,
+  for (vector<std::pair<std::pair<int, string>,
       librados::ObjectWriteOperation*> >::iterator it = ops->begin();
       it != ops->end(); ++it) {
     if ((((KeyValueStructure *)this)->*KvFlatBtreeAsync::interrupt)() == 1 ) {
@@ -994,8 +995,8 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
       << std::endl;
   int err = 0;
   ceph_assert(idata.prefix != "");
-  map<std::string,bufferlist> new_index;
-  map<std::string, pair<bufferlist, int> > assertions;
+  std::map<std::string,bufferlist> new_index;
+  std::map<std::string, std::pair<bufferlist, int> > assertions;
   switch (error) {
   case -EFIRSTOBJ: {
     //this happens if the split or rebalance failed to mark the first object,
@@ -1017,7 +1018,7 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
 	  << "-cleanup: will assert index contains "
   	<< this_entry.str() << std::endl;
       assertions[it->max.encoded()] =
-	  pair<bufferlist, int>(to_bl(this_entry),
+	  std::pair<bufferlist, int>(to_bl(this_entry),
 	      CEPH_OSD_CMPXATTR_OP_EQ);
     }
 
@@ -1063,7 +1064,7 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
 	  << "-cleanup: will assert index contains "
   	<< this_entry.str() << std::endl;
       assertions[it->max.encoded()] =
-	  pair<bufferlist, int>(to_bl(this_entry),
+	  std::pair<bufferlist, int>(to_bl(this_entry),
 	      CEPH_OSD_CMPXATTR_OP_EQ);
     }
     it = idata.to_delete.begin();
@@ -1114,10 +1115,10 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
 	<< std::endl;
     //all changes were created except for updating the index and possibly
     //deleting the objects. roll forward.
-    vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > ops;
+    vector<std::pair<std::pair<int, string>, librados::ObjectWriteOperation*> > ops;
     vector<librados::ObjectWriteOperation> owos(idata.to_delete.size() + 1);
     for (int i = 0; i <= (int)idata.to_delete.size(); ++i) {
-      ops.push_back(make_pair(pair<int, string>(0, ""), &owos[i]));
+      ops.push_back(std::make_pair(std::pair<int, std::string>(0, ""), &owos[i]));
     }
     set_up_ops(vector<object_data>(),
 	vector<object_data>(), &ops, idata, &err);
@@ -1139,9 +1140,9 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
     //roll back all changes.
     if (verbose) cout << "\t\t" << client_name << "-cleanup: rolling back"
 	<< std::endl;
-    map<std::string,bufferlist> new_index;
-    std::set<string> to_remove;
-    map<std::string, pair<bufferlist, int> > assertions;
+    std::map<std::string,bufferlist> new_index;
+    std::set<std::string> to_remove;
+    std::map<std::string, std::pair<bufferlist, int> > assertions;
 
     //mark the objects to be created. if someone else already has, die.
     for(vector<create_data >::const_reverse_iterator it =
@@ -1185,7 +1186,7 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
 	  << "-cleanup: will assert index contains "
   	<< this_entry.str() << std::endl;
       assertions[it->max.encoded()] =
-	  pair<bufferlist, int>(to_bl(this_entry),
+	  std::pair<bufferlist, int>(to_bl(this_entry),
 	      CEPH_OSD_CMPXATTR_OP_EQ);
       librados::ObjectWriteOperation restore;
       set_up_restore_object(&restore);
@@ -1344,7 +1345,7 @@ int KvFlatBtreeAsync::setup(int argc, const char** argv) {
 
   librados::ObjectWriteOperation make_index;
   make_index.create(true);
-  map<std::string,bufferlist> index_map;
+  std::map<std::string,bufferlist> index_map;
   index_data idata;
   idata.obj = client_name;
   idata.min_kdata.raw_key = "";
@@ -1691,7 +1692,7 @@ int KvFlatBtreeAsync::get_op(const string &key, bufferlist *val,
   int err = 0;
   std::set<std::string> key_set;
   key_set.insert(key);
-  map<std::string,bufferlist> omap;
+  std::map<std::string,bufferlist> omap;
   librados::ObjectReadOperation read;
   read.omap_get_vals_by_keys(key_set, &omap, &err);
   err = io_ctx.operate(idata.obj, &read, NULL);
@@ -1803,13 +1804,13 @@ void KvFlatBtreeAsync::aio_get(const string &key, bufferlist *val,
   pthread_detach(t);
 }
 
-int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
+int KvFlatBtreeAsync::set_many(const std::map<string, bufferlist> &in_map) {
   int err = 0;
   bufferlist inbl;
   bufferlist outbl;
   std::set<string> keys;
 
-  map<string, bufferlist> big_map;
+  std::map<string, bufferlist> big_map;
   for (map<string, bufferlist>::const_iterator it = in_map.begin();
       it != in_map.end(); ++it) {
     keys.insert(it->first);
@@ -1829,7 +1830,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
     return err;
   }
 
-  map<string, bufferlist> imap;//read from the index
+  std::map<string, bufferlist> imap;//read from the index
   auto blit = outbl.cbegin();
   decode(imap, blit);
 
@@ -1885,7 +1886,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
 
   vector<librados::ObjectWriteOperation> owos(2 + 2 * to_delete.size()
 					      + to_create.size());
-  vector<pair<pair<int, string>, librados::ObjectWriteOperation*> > ops;
+  vector<std::pair<std::pair<int, string>, librados::ObjectWriteOperation*> > ops;
 
 
   index_data idata;
@@ -1894,12 +1895,12 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
   if (verbose) cout << "finished making to_create and to_delete. "
       << std::endl;
 
-  ops.push_back(make_pair(
-      pair<int, string>(ADD_PREFIX, index_name),
+  ops.push_back(std::make_pair(
+      std::pair<int, string>(ADD_PREFIX, index_name),
       &owos[0]));
   for (int i = 1; i < 2 + 2 * (int)to_delete.size() + (int)to_create.size();
       i++) {
-    ops.push_back(make_pair(make_pair(0,""), &owos[i]));
+    ops.push_back(std::make_pair(std::make_pair(0,""), &owos[i]));
   }
 
   set_up_ops(to_create, to_delete, &ops, idata, &err);
@@ -1947,7 +1948,7 @@ int KvFlatBtreeAsync::remove_all() {
 
   librados::ObjectWriteOperation rm_index;
   librados::AioCompletion * rm_index_aioc = rados.aio_create_completion();
-  map<std::string,bufferlist> new_index;
+  std::map<std::string,bufferlist> new_index;
   new_index["1"] = index_set["1"];
   rm_index.omap_clear();
   rm_index.omap_set(new_index);
@@ -2007,7 +2008,7 @@ int KvFlatBtreeAsync::get_all_keys(std::set<std::string> *keys) {
 }
 
 int KvFlatBtreeAsync::get_all_keys_and_values(
-    map<std::string,bufferlist> *kv_map) {
+    std::map<std::string,bufferlist> *kv_map) {
   if (verbose) cout << client_name << ": getting all keys and values"
       << std::endl;
   int err = 0;
@@ -2022,7 +2023,7 @@ int KvFlatBtreeAsync::get_all_keys_and_values(
   for (std::set<std::string>::iterator it = index_set.begin();
       it != index_set.end(); ++it){
     librados::ObjectReadOperation sub;
-    map<std::string, bufferlist> ret;
+    std::map<std::string, bufferlist> ret;
     sub.omap_get_vals2("",LONG_MAX,&ret, nullptr, &err);
     io_ctx.operate(*it, &sub, NULL);
     kv_map->insert(ret.begin(), ret.end());
@@ -2035,7 +2036,7 @@ bool KvFlatBtreeAsync::is_consistent() {
   bool ret = true;
   if (verbose) cout << client_name << ": checking consistency" << std::endl;
   std::map<std::string,bufferlist> index;
-  map<std::string, std::set<std::string> > sub_objs;
+  std::map<std::string, std::set<std::string> > sub_objs;
   librados::ObjectReadOperation oro;
   oro.omap_get_vals2("",LONG_MAX,&index, nullptr, &err);
   io_ctx.operate(index_name, &oro, NULL);
@@ -2098,7 +2099,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	  special_names.insert(cit->obj);
 	}
       }
-      parsed_index.insert(make_pair(it->first, idata.obj));
+      parsed_index.insert(std::make_pair(it->first, idata.obj));
       onames.insert(idata.obj);
     }
   }

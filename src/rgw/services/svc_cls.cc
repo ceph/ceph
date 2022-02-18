@@ -15,6 +15,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static string log_lock_name = "rgw_log_lock";
 
 int RGWSI_Cls::do_start(optional_yield y, const DoutPrefixProvider *dpp)

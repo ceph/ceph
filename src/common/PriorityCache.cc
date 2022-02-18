@@ -84,7 +84,7 @@ namespace PriorityCache
               PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
 
     b.add_u64(MallocStats::M_UNMAPPED_BYTES, "unmapped_bytes",
-              "unmapped bytes that the kernel has yet to reclaimed", "u",
+              "unmapped bytes that the kernel has yet to reclaim", "u",
               PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
 
     b.add_u64(MallocStats::M_HEAP_BYTES, "heap_bytes",
@@ -305,12 +305,19 @@ namespace PriorityCache
 
       // Commit the new cache size
       int64_t committed = it->second->commit_cache_size(tuned_mem);
-
       // Update the perf counters
       int64_t alloc = it->second->get_cache_bytes();
 
       l.second->set(indexes[it->first][Extra::E_RESERVED], committed - alloc);
       l.second->set(indexes[it->first][Extra::E_COMMITTED], committed);
+    }
+  }
+
+  void Manager::shift_bins()
+  {
+    for (auto &l : loggers) {
+      auto it = caches.find(l.first);
+      it->second->shift_bins();
     }
   }
 

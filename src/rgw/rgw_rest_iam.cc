@@ -16,6 +16,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 void RGWHandler_REST_IAM::rgw_iam_parse_input()
 {
   if (post_body.size() > 0) {
@@ -77,6 +79,12 @@ RGWOp *RGWHandler_REST_IAM::op_post()
       return new RGWGetOIDCProvider;
     if (action.compare("DeleteOpenIDConnectProvider") == 0)
       return new RGWDeleteOIDCProvider;
+    if (action.compare("TagRole") == 0)
+      return new RGWTagRole;
+    if (action.compare("ListRoleTags") == 0)
+      return new RGWListRoleTags;
+    if (action.compare("UntagRole") == 0)
+      return new RGWUntagRole;
   }
 
   return nullptr;

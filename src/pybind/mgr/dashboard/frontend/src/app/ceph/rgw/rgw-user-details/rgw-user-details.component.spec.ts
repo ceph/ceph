@@ -71,4 +71,24 @@ describe('RgwUserDetailsComponent', () => {
 
     expect(detailsTab[11].textContent).toEqual('No');
   });
+
+  it('should show mfa ids only if length > 0', () => {
+    component.selection = {
+      uid: 'dashboard',
+      email: '',
+      system: 'true',
+      keys: [],
+      swift_keys: [],
+      mfa_ids: ['testMFA1', 'testMFA2']
+    };
+
+    component.ngOnChanges();
+    fixture.detectChanges();
+
+    const detailsTab = fixture.debugElement.nativeElement.querySelectorAll(
+      '.table.table-striped.table-bordered tr td'
+    );
+    expect(detailsTab[14].textContent).toEqual('MFAs(Id)');
+    expect(detailsTab[15].textContent).toEqual('testMFA1, testMFA2');
+  });
 });

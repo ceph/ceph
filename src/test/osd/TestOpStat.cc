@@ -17,10 +17,10 @@ void TestOpStat::end(TestOp *in) {
   stats[in->getType()].end(in);
 }
 
-void TestOpStat::TypeStatus::export_latencies(map<double,uint64_t> &in) const
+void TestOpStat::TypeStatus::export_latencies(std::map<double,uint64_t> &in) const
 {
-  map<double,uint64_t>::iterator i = in.begin();
-  multiset<uint64_t>::iterator j = latencies.begin();
+  auto i = in.begin();
+  auto j = latencies.begin();
   int count = 0;
   while (j != latencies.end() && i != in.end()) {
     count++;
@@ -31,22 +31,22 @@ void TestOpStat::TypeStatus::export_latencies(map<double,uint64_t> &in) const
     ++j;
   }
 }
-  
+
 std::ostream & operator<<(std::ostream &out, const TestOpStat &rhs)
 {
   std::lock_guard l{rhs.stat_lock};
   for (auto i = rhs.stats.begin();
        i != rhs.stats.end();
        ++i) {
-    map<double,uint64_t> latency;
+    std::map<double,uint64_t> latency;
     latency[10] = 0;
     latency[50] = 0;
     latency[90] = 0;
     latency[99] = 0;
     i->second.export_latencies(latency);
-    
+
     out << i->first << " latency: " << std::endl;
-    for (map<double,uint64_t>::iterator j = latency.begin();
+    for (auto j = latency.begin();
 	 j != latency.end();
 	 ++j) {
       if (j->second == 0) break;

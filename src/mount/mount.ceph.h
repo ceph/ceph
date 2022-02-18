@@ -24,11 +24,14 @@ extern "C" {
 /* 2k should be enough for anyone? */
 #define MON_LIST_BUFSIZE	2048
 
+#define CLUSTER_FSID_LEN        37
+
 void mount_ceph_debug(const char *fmt, ...);
 
 struct ceph_config_info {
 	char		cci_secret[SECRET_BUFSIZE];	// auth secret
 	char		cci_mons[MON_LIST_BUFSIZE];	// monitor addrs
+	char		cci_fsid[CLUSTER_FSID_LEN];	// cluster fsid
 };
 
 void mount_ceph_get_config_info(const char *config_file, const char *name,

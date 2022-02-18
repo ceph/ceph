@@ -44,7 +44,7 @@ void ShardedCache::SetStrictCapacityLimit(bool strict_capacity_limit) {
 }
 
 rocksdb::Status ShardedCache::Insert(const rocksdb::Slice& key, void* value, size_t charge,
-                            void (*deleter)(const rocksdb::Slice& key, void* value),
+                            DeleterFn deleter,
                             rocksdb::Cache::Handle** handle, Priority priority) {
   uint32_t hash = HashSlice(key);
   return GetShard(Shard(hash))
@@ -109,13 +109,36 @@ size_t ShardedCache::GetPinnedUsage() const {
   return usage;
 }
 
+#if (ROCKSDB_MAJOR >= 6 && ROCKSDB_MINOR >= 22)
+DeleterFn ShardedCache::GetDeleter(Handle* handle) const
+{
+  uint32_t hash = GetHash(handle);
+  return GetShard(Shard(hash))->GetDeleter(handle);
+}
+
+void ShardedCache::ApplyToAllEntries(
+    const std::function<void(const rocksdb::Slice& key, void* value, size_t charge,
+                             DeleterFn deleter)>& callback,
+    const ApplyToAllEntriesOptions& opts)
+{
+  int num_shards = 1 << num_shard_bits_;
+  for (int s = 0; s < num_shards; s++) {
+    GetShard(s)->ApplyToAllCacheEntries(callback, true /* thread_safe */);
+  }
+}
+#else
 void ShardedCache::ApplyToAllCacheEntries(void (*callback)(void*, size_t),
                                           bool thread_safe) {
   int num_shards = 1 << num_shard_bits_;
   for (int s = 0; s < num_shards; s++) {
-    GetShard(s)->ApplyToAllCacheEntries(callback, thread_safe);
+    GetShard(s)->ApplyToAllCacheEntries(
+      [callback](const rocksdb::Slice&, void* value, size_t charge, DeleterFn) {
+        callback(value, charge);
+      },
+      thread_safe);
   }
 }
+#endif
 
 void ShardedCache::EraseUnRefEntries() {
   int num_shards = 1 << num_shard_bits_;
@@ -131,7 +154,7 @@ std::string ShardedCache::GetPrintableOptions() const {
   char buffer[kBufferSize];
   {
     std::lock_guard<std::mutex> l(capacity_mutex_);
-    snprintf(buffer, kBufferSize, "    capacity : %" ROCKSDB_PRIszt "\n",
+    snprintf(buffer, kBufferSize, "    capacity : %zu\n",
              capacity_);
     ret.append(buffer);
     snprintf(buffer, kBufferSize, "    num_shard_bits : %d\n", num_shard_bits_);

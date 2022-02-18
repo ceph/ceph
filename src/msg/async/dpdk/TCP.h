@@ -395,7 +395,7 @@ class tcp {
    public:
     // callback
     void close_final_cleanup();
-    ostream& _prefix(std::ostream *_dout);
+    std::ostream& _prefix(std::ostream *_dout);
 
    public:
     tcb(tcp& t, connid id);
@@ -685,7 +685,7 @@ class tcp {
     uint16_t _port;
     int _fd = -1;
     int16_t _errno;
-    queue<connection> _q;
+    std::queue<connection> _q;
     size_t _q_max_length;
 
    private:

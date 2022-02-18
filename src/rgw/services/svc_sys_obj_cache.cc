@@ -13,6 +13,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 class RGWSI_SysObj_Cache_CB : public RGWSI_Notify::CB
 {
   RGWSI_SysObj_Cache *svc;

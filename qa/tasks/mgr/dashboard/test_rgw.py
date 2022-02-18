@@ -70,29 +70,20 @@ class RgwApiCredentialsTest(RgwTestCase):
 
     AUTH_ROLES = ['rgw-manager']
 
-    def setUp(self):
-        super(RgwApiCredentialsTest, self).setUp()
-        # Restart the Dashboard module to ensure that the connection to the
-        # RGW Admin Ops API is re-established with the new credentials.
-        self.logout()
-        self._ceph_cmd(['mgr', 'module', 'disable', 'dashboard'])
-        self._ceph_cmd(['mgr', 'module', 'enable', 'dashboard', '--force'])
-        # Set the default credentials.
-        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
-        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
-        super(RgwApiCredentialsTest, self).setUp()
-
-    def test_no_access_secret_key(self):
-        self._ceph_cmd(['dashboard', 'reset-rgw-api-secret-key'])
-        self._ceph_cmd(['dashboard', 'reset-rgw-api-access-key'])
+    def test_invalid_credentials(self):
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'invalid')
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'invalid')
         resp = self._get('/api/rgw/user')
-        self.assertStatus(500)
+        self.assertStatus(404)
         self.assertIn('detail', resp)
         self.assertIn('component', resp)
-        self.assertIn('No RGW credentials found', resp['detail'])
+        self.assertIn('Error connecting to Object Gateway', resp['detail'])
         self.assertEqual(resp['component'], 'rgw')
 
     def test_success(self):
+        # Set the default credentials.
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
         data = self._get('/api/rgw/status')
         self.assertStatus(200)
         self.assertIn('available', data)
@@ -192,13 +183,13 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['tenant'], '')
 
         # List all buckets.
-        data = self._get('/api/rgw/bucket')
+        data = self._get('/api/rgw/bucket', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 1)
         self.assertIn('teuth-test-bucket', data)
 
         # List all buckets with stats.
-        data = self._get('/api/rgw/bucket?stats=true')
+        data = self._get('/api/rgw/bucket?stats=true', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 1)
         self.assertSchema(data[0], JObj(sub_elems={
@@ -210,6 +201,11 @@ class RgwBucketTest(RgwTestCase):
             'usage': JObj(sub_elems={}, allow_unknown=True),
             'tenant': JLeaf(str),
         }, allow_unknown=True))
+
+        # List all buckets names without stats.
+        data = self._get('/api/rgw/bucket?stats=false', version='1.1')
+        self.assertStatus(200)
+        self.assertEqual(data, ['teuth-test-bucket'])
 
         # Get the bucket.
         data = self._get('/api/rgw/bucket/teuth-test-bucket')
@@ -287,7 +283,7 @@ class RgwBucketTest(RgwTestCase):
         # Delete the bucket.
         self._delete('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(204)
-        data = self._get('/api/rgw/bucket')
+        data = self._get('/api/rgw/bucket', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
 
@@ -310,7 +306,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertIsNone(data)
 
         # List all buckets.
-        data = self._get('/api/rgw/bucket')
+        data = self._get('/api/rgw/bucket', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 1)
         self.assertIn('testx/teuth-test-bucket', data)
@@ -383,7 +379,7 @@ class RgwBucketTest(RgwTestCase):
         self._delete('/api/rgw/bucket/{}'.format(
             parse.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(204)
-        data = self._get('/api/rgw/bucket')
+        data = self._get('/api/rgw/bucket', version='1.1')
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
 

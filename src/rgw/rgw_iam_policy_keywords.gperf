@@ -41,6 +41,12 @@ StringEqualsIgnoreCase, TokenKind::cond_op, TokenID::StringEqualsIgnoreCase, (ui
 StringNotEqualsIgnoreCase, TokenKind::cond_op, TokenID::StringNotEqualsIgnoreCase, (uint64_t) Type::string, true, true
 StringLike, TokenKind::cond_op, TokenID::StringLike, (uint64_t) Type::string, true, true,
 StringNotLike, TokenKind::cond_op, TokenID::StringNotLike, (uint64_t) Type::string, true, true
+ForAllValues:StringEquals, TokenKind::cond_op, TokenID::ForAllValuesStringEquals, (uint64_t) Type::string, true, true
+ForAnyValue:StringEquals, TokenKind::cond_op, TokenID::ForAnyValueStringEquals, (uint64_t) Type::string, true, true
+ForAllValues:StringLike, TokenKind::cond_op, TokenID::ForAllValuesStringLike, (uint64_t) Type::string, true, true
+ForAnyValue:StringLike, TokenKind::cond_op, TokenID::ForAnyValueStringLike, (uint64_t) Type::string, true, true
+ForAllValues:StringEqualsIgnoreCase, TokenKind::cond_op, TokenID::ForAllValuesStringEqualsIgnoreCase, (uint64_t) Type::string, true, true
+ForAnyValue:StringEqualsIgnoreCase, TokenKind::cond_op, TokenID::ForAnyValueStringEqualsIgnoreCase, (uint64_t) Type::string, true, true
 # Numeric
 NumericEquals, TokenKind::cond_op, TokenID::NumericEquals, (uint64_t) Type::number, true, true
 NumericNotEquals, TokenKind::cond_op, TokenID::NumericNotEquals, (uint64_t) Type::number, true, true

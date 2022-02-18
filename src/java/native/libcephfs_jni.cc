@@ -96,6 +96,8 @@
 #define JAVA_LOCK_NB 4
 #define JAVA_LOCK_UN 8
 
+using namespace std;
+
 /* Map JAVA_O_* open flags to values in libc */
 static inline int fixup_open_flags(jint jflags)
 {

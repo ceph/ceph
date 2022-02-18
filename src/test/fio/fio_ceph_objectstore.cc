@@ -32,6 +32,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 
+using namespace std;
+
 namespace {
 
 /// fio configuration options read from the job file

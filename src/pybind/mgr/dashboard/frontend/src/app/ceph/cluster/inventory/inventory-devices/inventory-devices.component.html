@@ -4,7 +4,7 @@
           [forceIdentifier]="true"
           [selectionType]="selectionType"
           columnMode="flex"
-          [autoReload]="false"
+          (fetchData)="getDevices()"
           [searchField]="false"
           (updateSelection)="updateSelection($event)"
           (columnFiltersChanged)="onColumnFiltersChanged($event)">

@@ -9,9 +9,10 @@
 <cd-table *ngIf="isPrometheusConfigured"
           [data]="prometheusAlertService.rules"
           [columns]="columns"
+          [selectionType]="'single'"
           [hasDetails]="true"
-          (updateSelection)="setExpandedRow($event)"
-          [selectionType]="'single'">
+          (setExpandedRow)="setExpandedRow($event)"
+          (updateSelection)="updateSelection($event)">
   <cd-table-key-value cdTableDetail
                       *ngIf="expandedRow"
                       [data]="expandedRow"

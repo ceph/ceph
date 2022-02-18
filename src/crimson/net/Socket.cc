@@ -3,10 +3,13 @@
 
 #include "Socket.h"
 
+#include <seastar/core/sleep.hh>
 #include <seastar/core/when_all.hh>
 
 #include "crimson/common/log.h"
 #include "Errors.h"
+
+using crimson::common::local_conf;
 
 namespace crimson::net {
 
@@ -72,7 +75,10 @@ seastar::future<bufferlist> Socket::read(size_t bytes)
       if (r.remaining) { // throw on short reads
         throw std::system_error(make_error_code(error::read_eof));
       }
-      return seastar::make_ready_future<bufferlist>(std::move(r.buffer));
+      inject_failure();
+      return inject_delay().then([this] {
+        return seastar::make_ready_future<bufferlist>(std::move(r.buffer));
+      });
     });
 #ifdef UNIT_TESTS_BUILT
   }).then([this] (auto buf) {
@@ -96,7 +102,11 @@ Socket::read_exactly(size_t bytes) {
       if (buf.size() < bytes) {
         throw std::system_error(make_error_code(error::read_eof));
       }
-      return seastar::make_ready_future<tmp_buf>(std::move(buf));
+      inject_failure();
+      return inject_delay(
+      ).then([buf = std::move(buf)] () mutable {
+        return seastar::make_ready_future<tmp_buf>(std::move(buf));
+      });
     });
 #ifdef UNIT_TESTS_BUILT
   }).then([this] (auto buf) {
@@ -132,6 +142,7 @@ seastar::future<> Socket::close() {
   closed = true;
 #endif
   return seastar::when_all_succeed(
+    inject_delay(),
     in.close(),
     close_and_handle_errors(out)
   ).then_unpack([] {
@@ -140,6 +151,33 @@ seastar::future<> Socket::close() {
     logger().error("Socket::close(): unexpected exception {}", eptr);
     ceph_abort();
   });
+}
+
+seastar::future<> Socket::inject_delay () {
+  if (float delay_period = local_conf()->ms_inject_internal_delays;
+      delay_period) {
+    logger().debug("{}: sleep for {}",
+                  __func__,
+                  delay_period);
+    return seastar::sleep(
+      std::chrono::milliseconds((int)(delay_period * 1000.0)));
+  }
+  return seastar::now();
+}
+
+void Socket::inject_failure()
+{
+  if (local_conf()->ms_inject_socket_failures) {
+    uint64_t rand =
+      ceph::util::generate_random_number<uint64_t>(1, RAND_MAX);
+      if (rand % local_conf()->ms_inject_socket_failures == 0) {
+      if (true) {
+        logger().warn("{} injecting socket failure", __func__);
+	throw std::system_error(make_error_code(
+	  crimson::net::error::negotiation_failure));
+      }
+    }
+  }
 }
 
 #ifdef UNIT_TESTS_BUILT
@@ -198,7 +236,7 @@ void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocke
 }
 #endif
 
-FixedCPUServerSocket::listen_ertr::future<>
+crimson::net::listen_ertr::future<>
 FixedCPUServerSocket::listen(entity_addr_t addr)
 {
   assert(seastar::this_shard_id() == cpu);
@@ -211,22 +249,20 @@ FixedCPUServerSocket::listen(entity_addr_t addr)
     lo.set_fixed_cpu(ss.cpu);
     ss.listener = seastar::listen(s_addr, lo);
   }).then([] {
-    return true;
-  }).handle_exception_type([addr] (const std::system_error& e) {
+    return listen_ertr::now();
+  }).handle_exception_type(
+    [addr] (const std::system_error& e) -> listen_ertr::future<> {
     if (e.code() == std::errc::address_in_use) {
       logger().trace("FixedCPUServerSocket::listen({}): address in use", addr);
-    } else {
-      logger().error("FixedCPUServerSocket::listen({}): "
-                     "got unexpeted error {}", addr, e);
-      ceph_abort();
-    }
-    return false;
-  }).then([] (bool success) -> listen_ertr::future<> {
-    if (success) {
-      return listen_ertr::now();
-    } else {
       return crimson::ct_error::address_in_use::make();
+    } else if (e.code() == std::errc::address_not_available) {
+      logger().trace("FixedCPUServerSocket::listen({}): address not available",
+                     addr);
+      return crimson::ct_error::address_not_available::make();
     }
+    logger().error("FixedCPUServerSocket::listen({}): "
+                   "got unexpeted error {}", addr, e);
+    ceph_abort();
   });
 }
 

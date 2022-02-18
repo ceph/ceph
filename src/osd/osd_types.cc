@@ -36,8 +36,10 @@ extern "C" {
 
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
+#include "include/utime_fmt.h"
 #include "OSDMap.h"
 #include "osd_types.h"
+#include "osd_types_fmt.h"
 #include "os/Transaction.h"
 
 using std::list;
@@ -46,6 +48,7 @@ using std::map;
 using std::ostream;
 using std::pair;
 using std::set;
+using std::shared_ptr;
 using std::string;
 using std::unique_ptr;
 using std::vector;
@@ -91,6 +94,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_FULL_FORCE: return "full_force";
   case CEPH_OSD_FLAG_IGNORE_REDIRECT: return "ignore_redirect";
   case CEPH_OSD_FLAG_RETURNVEC: return "returnvec";
+  case CEPH_OSD_FLAG_SUPPORTSPOOLEIO: return "supports_pool_eio";
   default: return "???";
   }
 }
@@ -754,6 +758,13 @@ char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
   return pgid.calc_name(buf, "");
 }
 
+std::string spg_t::calc_name_sring() const
+{
+  char buf[spg_t::calc_name_buf_size];
+  buf[spg_t::calc_name_buf_size - 1] = '\0';
+  return string{calc_name(buf + spg_t::calc_name_buf_size - 1, "")};
+}
+
 ostream& operator<<(ostream& out, const spg_t &pg)
 {
   char buf[spg_t::calc_name_buf_size];
@@ -1346,6 +1357,8 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	     pool_opts_t::FINGERPRINT_ALGORITHM, pool_opts_t::STR))
            ("pg_num_min", pool_opts_t::opt_desc_t(
 	     pool_opts_t::PG_NUM_MIN, pool_opts_t::INT))
+           ("pg_num_max", pool_opts_t::opt_desc_t(
+	     pool_opts_t::PG_NUM_MAX, pool_opts_t::INT))
            ("target_size_bytes", pool_opts_t::opt_desc_t(
 	     pool_opts_t::TARGET_SIZE_BYTES, pool_opts_t::INT))
            ("target_size_ratio", pool_opts_t::opt_desc_t(
@@ -2844,6 +2857,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_deep_scrub") << last_deep_scrub;
   f->dump_stream("last_deep_scrub_stamp") << last_deep_scrub_stamp;
   f->dump_stream("last_clean_scrub_stamp") << last_clean_scrub_stamp;
+  f->dump_int("objects_scrubbed", objects_scrubbed);
   f->dump_int("log_size", log_size);
   f->dump_int("ondisk_log_size", ondisk_log_size);
   f->dump_bool("stats_invalid", stats_invalid);
@@ -2854,6 +2868,8 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_bool("pin_stats_invalid", pin_stats_invalid);
   f->dump_bool("manifest_stats_invalid", manifest_stats_invalid);
   f->dump_unsigned("snaptrimq_len", snaptrimq_len);
+  f->dump_int("last_scrub_duration", last_scrub_duration);
+  f->dump_string("scrub_schedule", dump_scrub_schedule());
   stats.dump(f);
   f->open_array_section("up");
   for (auto p = up.cbegin(); p != up.cend(); ++p)
@@ -2906,9 +2922,50 @@ void pg_stat_t::dump_brief(Formatter *f) const
   f->dump_int("acting_primary", acting_primary);
 }
 
+std::string pg_stat_t::dump_scrub_schedule() const
+{
+  if (scrub_sched_status.m_is_active) {
+    return fmt::format(
+      "{}scrubbing for {}s",
+      ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
+      scrub_sched_status.m_duration_seconds);
+  }
+  switch (scrub_sched_status.m_sched_status) {
+    case pg_scrub_sched_status_t::unknown:
+      // no reported scrub schedule yet
+      return "--"s;
+    case pg_scrub_sched_status_t::not_queued:
+      return "no scrub is scheduled"s;
+    case pg_scrub_sched_status_t::scheduled:
+      return fmt::format(
+        "{} {}scrub scheduled @ {}",
+        (scrub_sched_status.m_is_periodic ? "periodic" : "user requested"),
+        ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""),
+        scrub_sched_status.m_scheduled_at);
+    case pg_scrub_sched_status_t::queued:
+      return fmt::format(
+        "queued for {}scrub",
+        ((scrub_sched_status.m_is_deep == scrub_level_t::deep) ? "deep " : ""));
+    default:
+      // a bug!
+      return "SCRUB STATE MISMATCH!"s;
+  }
+}
+
+bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
+{
+  return
+    l.m_sched_status == r.m_sched_status &&
+    l.m_scheduled_at == r.m_scheduled_at &&
+    l.m_duration_seconds == r.m_duration_seconds &&
+    l.m_is_active == r.m_is_active &&
+    l.m_is_deep == r.m_is_deep &&
+    l.m_is_periodic == r.m_is_periodic;
+}
+
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(26, 22, bl);
+  ENCODE_START(27, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -2956,6 +3013,15 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(manifest_stats_invalid, bl);
   encode(avail_no_missing, bl);
   encode(object_location_counts, bl);
+  encode(last_scrub_duration, bl);
+  encode(scrub_sched_status.m_scheduled_at, bl);
+  encode(scrub_sched_status.m_duration_seconds, bl);
+  encode((__u16)scrub_sched_status.m_sched_status, bl);
+  encode(scrub_sched_status.m_is_active, bl);
+  encode((scrub_sched_status.m_is_deep==scrub_level_t::deep), bl);
+  encode(scrub_sched_status.m_is_periodic, bl);
+  encode(objects_scrubbed, bl);
+
   ENCODE_FINISH(bl);
 }
 
@@ -2963,7 +3029,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(26, bl);
+  DECODE_START(27, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3030,6 +3096,21 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(avail_no_missing, bl);
       decode(object_location_counts, bl);
     }
+    if (struct_v >= 27) {
+      decode(last_scrub_duration, bl);
+      decode(scrub_sched_status.m_scheduled_at, bl);
+      decode(scrub_sched_status.m_duration_seconds, bl);
+      __u16 scrub_sched_as_u16;
+      decode(scrub_sched_as_u16, bl);
+      scrub_sched_status.m_sched_status = (pg_scrub_sched_status_t)(scrub_sched_as_u16);
+      decode(tmp, bl);
+      scrub_sched_status.m_is_active = tmp;
+      decode(tmp, bl);
+      scrub_sched_status.m_is_deep = tmp ? scrub_level_t::deep : scrub_level_t::shallow;
+      decode(tmp, bl);
+      scrub_sched_status.m_is_periodic = tmp;
+      decode(objects_scrubbed, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -3062,7 +3143,9 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.last_deep_scrub = eversion_t(13, 14);
   a.last_deep_scrub_stamp = utime_t(15, 16);
   a.last_clean_scrub_stamp = utime_t(17, 18);
+  a.last_scrub_duration = 3617;
   a.snaptrimq_len = 1048576;
+  a.objects_scrubbed = 0;
   list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
   a.stats = *l.back();
@@ -3135,7 +3218,10 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.pin_stats_invalid == r.pin_stats_invalid &&
     l.manifest_stats_invalid == r.manifest_stats_invalid &&
     l.purged_snaps == r.purged_snaps &&
-    l.snaptrimq_len == r.snaptrimq_len;
+    l.snaptrimq_len == r.snaptrimq_len &&
+    l.last_scrub_duration == r.last_scrub_duration &&
+    l.scrub_sched_status == r.scrub_sched_status &&
+    l.objects_scrubbed == r.objects_scrubbed;
 }
 
 // -- store_statfs_t --
@@ -6326,8 +6412,9 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("lost", (int)is_lost());
   vector<string> sv = get_flag_vector(flags);
   f->open_array_section("flags");
-  for (auto str: sv)
+  for (const auto& str: sv) {
     f->dump_string("flags", str);
+  }
   f->close_section();
   f->dump_unsigned("truncate_seq", truncate_seq);
   f->dump_unsigned("truncate_size", truncate_size);

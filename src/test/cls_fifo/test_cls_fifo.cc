@@ -33,6 +33,8 @@
 
 #include "gtest/gtest.h"
 
+using namespace std;
+
 namespace R = neorados;
 namespace ba = boost::asio;
 namespace bs = boost::system;

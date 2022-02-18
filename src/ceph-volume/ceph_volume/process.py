@@ -1,22 +1,14 @@
 from fcntl import fcntl, F_GETFL, F_SETFL
-from os import O_NONBLOCK, read
+from os import O_NONBLOCK, read, path
 import subprocess
 from select import select
 from ceph_volume import terminal
 from ceph_volume.util import as_bytes
+from ceph_volume.util.system import which, run_host_cmd, host_rootfs
 
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def which(executable):
-    """
-    Proxy function to ceph_volume.util.system.which because the ``system``
-    module does import ``process``
-    """
-    from ceph_volume.util import system
-    return system.which(executable)
 
 
 def log_output(descriptor, message, terminal_logging, logfile_logging):
@@ -103,7 +95,7 @@ def obfuscate(command_, on=None):
     return "Running command: %s" % ' '.join(command)
 
 
-def run(command, **kw):
+def run(command, run_on_host=False, **kw):
     """
     A real-time-logging implementation of a remote subprocess.Popen call where
     a command is just executed on the remote end and no other handling is done.
@@ -112,8 +104,10 @@ def run(command, **kw):
     :param stop_on_error: If a nonzero exit status is return, it raises a ``RuntimeError``
     :param fail_msg: If a nonzero exit status is returned this message will be included in the log
     """
-    executable = which(command.pop(0))
+    executable = which(command.pop(0), run_on_host)
     command.insert(0, executable)
+    if run_on_host and path.isdir(host_rootfs):
+        command = run_host_cmd + command
     stop_on_error = kw.pop('stop_on_error', True)
     command_msg = obfuscate(command, kw.pop('obfuscate', None))
     fail_msg = kw.pop('fail_msg', None)
@@ -157,7 +151,7 @@ def run(command, **kw):
             logger.warning(msg)
 
 
-def call(command, **kw):
+def call(command, run_on_host=False, **kw):
     """
     Similar to ``subprocess.Popen`` with the following changes:
 
@@ -180,8 +174,10 @@ def call(command, **kw):
     :param verbose_on_failure: On a non-zero exit status, it will forcefully set logging ON for
                                the terminal. Defaults to True
     """
-    executable = which(command.pop(0))
+    executable = which(command.pop(0), run_on_host)
     command.insert(0, executable)
+    if run_on_host and path.isdir(host_rootfs):
+        command = run_host_cmd + command
     terminal_verbose = kw.pop('terminal_verbose', False)
     logfile_verbose = kw.pop('logfile_verbose', True)
     verbose_on_failure = kw.pop('verbose_on_failure', True)

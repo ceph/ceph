@@ -31,6 +31,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
+using namespace std;
+
 namespace librados {
 
 MockTestMemIoCtxImpl &get_mock_io_ctx(IoCtx &ioctx) {
@@ -787,6 +789,13 @@ void IoCtx::set_namespace(const std::string& nspace) {
 std::string IoCtx::get_namespace() const {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->get_namespace();
+}
+
+void IoCtx::set_pool_full_try() {
+}
+
+bool IoCtx::get_pool_full_try() {
+  return false;
 }
 
 static int save_operation_result(int result, int *pval) {

@@ -59,11 +59,6 @@ if type ccache > /dev/null 2>&1 ; then
     ARGS+=" -DWITH_CCACHE=ON"
 fi
 
-if [[ ! "$ARGS $@" =~ "-DBOOST_J" ]] ; then
-    ncpu=$(getconf _NPROCESSORS_ONLN 2>&1)
-    [ -n "$ncpu" -a "$ncpu" -gt 1 ] && ARGS+=" -DBOOST_J=$(expr $ncpu / 2)"
-fi
-
 mkdir $BUILD_DIR
 cd $BUILD_DIR
 if type cmake3 > /dev/null 2>&1 ; then

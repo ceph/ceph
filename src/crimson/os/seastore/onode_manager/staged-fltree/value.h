@@ -201,6 +201,8 @@ class Value {
     return read_value_header()->payload_size;
   }
 
+  laddr_t get_hint() const;
+
   bool operator==(const Value& v) const { return p_cursor == v.p_cursor; }
   bool operator!=(const Value& v) const { return !(*this == v); }
 
@@ -208,10 +210,10 @@ class Value {
   Value(NodeExtentManager&, const ValueBuilder&, Ref<tree_cursor_t>&);
 
   /// Extends the payload size.
-  eagain_future<> extend(Transaction&, value_size_t extend_size);
+  eagain_ifuture<> extend(Transaction&, value_size_t extend_size);
 
   /// Trim and shrink the payload.
-  eagain_future<> trim(Transaction&, value_size_t trim_size);
+  eagain_ifuture<> trim(Transaction&, value_size_t trim_size);
 
   /// Get the permission to mutate the payload with the optional value recorder.
   template <typename PayloadT, typename ValueDeltaRecorderT>
@@ -240,7 +242,9 @@ class Value {
 
  private:
   const value_header_t* read_value_header() const;
-  context_t get_context(Transaction& t) { return {nm, vb, t}; }
+  context_t get_context(Transaction& t) {
+    return {nm, vb, t};
+  }
 
   std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
   do_prepare_mutate_payload(Transaction&);

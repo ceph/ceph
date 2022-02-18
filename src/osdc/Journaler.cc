@@ -26,6 +26,7 @@
 #define dout_prefix *_dout << objecter->messenger->get_myname() \
   << ".journaler." << name << (readonly ? "(ro) ":"(rw) ")
 
+using namespace std;
 using std::chrono::seconds;
 
 

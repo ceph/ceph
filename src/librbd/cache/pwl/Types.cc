@@ -70,7 +70,7 @@ void WriteLogCacheEntry::dump(Formatter *f) const {
   f->dump_unsigned("entry_index", entry_index);
 }
 
-void WriteLogCacheEntry::generate_test_instances(list<WriteLogCacheEntry*>& ls) {
+void WriteLogCacheEntry::generate_test_instances(std::list<WriteLogCacheEntry*>& ls) {
   ls.push_back(new WriteLogCacheEntry);
   ls.push_back(new WriteLogCacheEntry);
   ls.back()->sync_gen_number = 1;
@@ -98,7 +98,7 @@ void WriteLogPoolRoot::dump(Formatter *f) const {
   f->dump_unsigned("first_free_entry", first_free_entry);
   f->dump_unsigned("first_valid_entry", first_valid_entry); }
 
-void WriteLogPoolRoot::generate_test_instances(list<WriteLogPoolRoot*>& ls) {
+void WriteLogPoolRoot::generate_test_instances(std::list<WriteLogPoolRoot*>& ls) {
   ls.push_back(new WriteLogPoolRoot);
   ls.push_back(new WriteLogPoolRoot);
   ls.back()->layout_version = 2;
@@ -114,18 +114,18 @@ void WriteLogPoolRoot::generate_test_instances(list<WriteLogPoolRoot*>& ls) {
 
 std::ostream& operator<<(std::ostream& os,
                          const WriteLogCacheEntry &entry) {
-  os << "entry_valid=" << (bool)entry.entry_valid << ", "
-     << "sync_point=" << (bool)entry.sync_point << ", "
-     << "sequenced=" << (bool)entry.sequenced << ", "
-     << "has_data=" << (bool)entry.has_data << ", "
-     << "discard=" << (bool)entry.discard << ", "
-     << "writesame=" << (bool)entry.writesame << ", "
-     << "sync_gen_number=" << entry.sync_gen_number << ", "
-     << "write_sequence_number=" << entry.write_sequence_number << ", "
-     << "image_offset_bytes=" << entry.image_offset_bytes << ", "
-     << "write_bytes=" << entry.write_bytes << ", "
-     << "ws_datalen=" << entry.ws_datalen << ", "
-     << "entry_index=" << entry.entry_index;
+  os << "entry_valid=" << (bool)entry.entry_valid
+     << ", sync_point=" << (bool)entry.sync_point
+     << ", sequenced=" << (bool)entry.sequenced
+     << ", has_data=" << (bool)entry.has_data
+     << ", discard=" << (bool)entry.discard
+     << ", writesame=" << (bool)entry.writesame
+     << ", sync_gen_number=" << entry.sync_gen_number
+     << ", write_sequence_number=" << entry.write_sequence_number
+     << ", image_offset_bytes=" << entry.image_offset_bytes
+     << ", write_bytes=" << entry.write_bytes
+     << ", ws_datalen=" << entry.ws_datalen
+     << ", entry_index=" << entry.entry_index;
   return os;
 }
 

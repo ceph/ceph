@@ -51,7 +51,7 @@ Options
 
 .. option:: -k
 
-    Keep old configuration files instead of overwritting theses.
+    Keep old configuration files instead of overwriting these.
 
 .. option:: -K, --kstore
 
@@ -135,7 +135,7 @@ Environment variables
 
 {OSD,MDS,MON,RGW}
 
-Theses environment variables will contains the number of instances of the desired ceph process you want to start.
+These environment variables will contains the number of instances of the desired ceph process you want to start.
 
 Example: ::
 

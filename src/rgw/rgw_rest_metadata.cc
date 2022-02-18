@@ -30,6 +30,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 static inline void frame_metadata_key(req_state *s, string& out) {
   bool exists;
   string key = s->info.args.get("key", &exists);

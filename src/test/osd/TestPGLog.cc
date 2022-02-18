@@ -27,6 +27,7 @@
 #include "include/coredumpctl.h"
 #include "../objectstore/store_test_fixture.h"
 
+using namespace std;
 
 struct PGLogTestBase {
   static hobject_t mk_obj(unsigned id) {

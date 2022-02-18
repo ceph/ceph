@@ -71,7 +71,7 @@ def task(ctx, config):
                 args=[
                     'mkdir', '--', client_dir,
                     run.Raw('&&'),
-                    'virtualenv', '{tdir}/virtualenv'.format(tdir=testdir),
+                    'python3', '-m', 'venv', '{tdir}/virtualenv'.format(tdir=testdir),
                     run.Raw('&&'),
                     '{tdir}/virtualenv/bin/pip'.format(tdir=testdir),
                     'install', 'cram==0.6',

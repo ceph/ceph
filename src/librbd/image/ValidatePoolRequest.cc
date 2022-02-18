@@ -31,10 +31,9 @@ using util::create_async_context_callback;
 
 template <typename I>
 ValidatePoolRequest<I>::ValidatePoolRequest(librados::IoCtx& io_ctx,
-                                            asio::ContextWQ *op_work_queue,
                                             Context *on_finish)
     : m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
-      m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
+      m_on_finish(on_finish) {
     // validatation should occur in default namespace
     m_io_ctx.dup(io_ctx);
     m_io_ctx.set_namespace("");
@@ -97,11 +96,11 @@ void ValidatePoolRequest<I>::create_snapshot() {
 
   // allocate a self-managed snapshot id if this a new pool to force
   // self-managed snapshot mode
-  auto ctx = new LambdaContext([this](int r) {
-      r = m_io_ctx.selfmanaged_snap_create(&m_snap_id);
-      handle_create_snapshot(r);
-    });
-  m_op_work_queue->queue(ctx, 0);
+  auto comp = create_rados_callback<
+    ValidatePoolRequest<I>,
+    &ValidatePoolRequest<I>::handle_create_snapshot>(this);
+  m_io_ctx.aio_selfmanaged_snap_create(&m_snap_id, comp);
+  comp->release();
 }
 
 template <typename I>
@@ -161,11 +160,11 @@ template <typename I>
 void ValidatePoolRequest<I>::remove_snapshot() {
   ldout(m_cct, 5) << dendl;
 
-  auto ctx = new LambdaContext([this](int r) {
-      r = m_io_ctx.selfmanaged_snap_remove(m_snap_id);
-      handle_remove_snapshot(r);
-    });
-  m_op_work_queue->queue(ctx, 0);
+  auto comp = create_rados_callback<
+    ValidatePoolRequest<I>,
+    &ValidatePoolRequest<I>::handle_remove_snapshot>(this);
+  m_io_ctx.aio_selfmanaged_snap_remove(m_snap_id, comp);
+  comp->release();
 }
 
 template <typename I>

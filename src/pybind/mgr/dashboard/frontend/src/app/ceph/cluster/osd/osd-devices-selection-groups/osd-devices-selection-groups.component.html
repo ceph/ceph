@@ -19,7 +19,7 @@
               (click)="showSelectionModal()"
               data-toggle="tooltip"
               [title]="addButtonTooltip"
-              [disabled]="availDevices.length === 0 || !canSelect">
+              [disabled]="availDevices.length === 0 || !canSelect || expansionCanSelect">
         <i [ngClass]="[icons.add]"></i>
         <ng-container i18n>Add</ng-container>
       </button>

@@ -151,14 +151,14 @@ command:
 
   .. prompt:: bash #
 
-    ceph config set [global,osd] osd_mclock_profile <value>
+    ceph config set osd.N osd_mclock_profile <value>
 
-For example, to change the profile to allow faster recoveries, the following
-command can be used to switch to the *high_recovery_ops* profile:
+For example, to change the profile to allow faster recoveries on "osd.0", the
+following command can be used to switch to the *high_recovery_ops* profile:
 
   .. prompt:: bash #
 
-    ceph config set osd osd_mclock_profile high_recovery_ops
+    ceph config set osd.0 osd_mclock_profile high_recovery_ops
 
 .. note:: The *custom* profile is not recommended unless you are an advanced
           user.
@@ -179,9 +179,9 @@ cluster is brought up by using the following command:
 
   .. prompt:: bash #
 
-    ceph config show osd.x osd_mclock_max_capacity_iops_[hdd, ssd]
+    ceph config show osd.N osd_mclock_max_capacity_iops_[hdd, ssd]
 
-For example, the following command shows the max capacity for osd.0 on a Ceph
+For example, the following command shows the max capacity for "osd.0" on a Ceph
 node whose underlying device type is SSD:
 
   .. prompt:: bash #
@@ -195,6 +195,11 @@ Steps to Manually Benchmark an OSD (Optional)
 .. note:: These steps are only necessary if you want to override the OSD
           capacity already determined automatically during OSD initialization.
           Otherwise, you may skip this section entirely.
+
+.. tip:: If you have already determined the benchmark data and wish to manually
+         override the max osd capacity for an OSD, you may skip to section
+         `Specifying  Max OSD Capacity`_.
+
 
 Any existing benchmarking tool can be used for this purpose. In this case, the
 steps use the *Ceph OSD Bench* command described in the next section. Regardless
@@ -285,27 +290,24 @@ Specifying  Max OSD Capacity
 ````````````````````````````
 
 The steps in this section may be performed only if you want to override the
-max osd capacity automatically determined during OSD initialization. The option
-``osd_mclock_max_capacity_iops_[hdd, ssd]`` can be set by running the
+max osd capacity automatically set during OSD initialization. The option
+``osd_mclock_max_capacity_iops_[hdd, ssd]`` for an OSD can be set by running the
 following command:
 
   .. prompt:: bash #
 
-     ceph config set [global,osd] osd_mclock_max_capacity_iops_[hdd,ssd] <value>
+     ceph config set osd.N osd_mclock_max_capacity_iops_[hdd,ssd] <value>
 
-For example, the following command sets the max capacity for all the OSDs in a
-Ceph node whose underlying device type is SSDs:
-
-  .. prompt:: bash #
-
-    ceph config set osd osd_mclock_max_capacity_iops_ssd 25000
-
-To set the capacity for a specific OSD (for example "osd.0") whose underlying
-device type is HDD, use a command like this:
+For example, the following command sets the max capacity for a specific OSD
+(say "osd.0") whose underlying device type is HDD to 350 IOPS:
 
   .. prompt:: bash #
 
     ceph config set osd.0 osd_mclock_max_capacity_iops_hdd 350
+
+Alternatively, you may specify the max capacity for OSDs within the Ceph
+configuration file under the respective [osd.N] section. See
+:ref:`ceph-conf-settings` for more details.
 
 
 .. index:: mclock; config settings

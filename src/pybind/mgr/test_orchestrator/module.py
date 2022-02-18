@@ -227,7 +227,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return 'done'
 
     @handle_orch_error
-    def remove_service(self, service_name):
+    def remove_service(self, service_name, force = False):
         assert isinstance(service_name, str)
         return 'done'
 
@@ -284,7 +284,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return ''
 
     @handle_orch_error
-    def remove_host(self, host):
+    def remove_host(self, host, force: bool, offline: bool):
         assert isinstance(host, str)
         return 'done'
 

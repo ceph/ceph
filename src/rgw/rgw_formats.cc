@@ -25,6 +25,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 RGWFormatter_Plain::RGWFormatter_Plain(const bool ukv)
   : use_kv(ukv)
 {

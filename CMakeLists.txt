@@ -14,6 +14,9 @@ cmake_policy(SET CMP0065 NEW)
 cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0075 NEW)
 cmake_policy(SET CMP0093 NEW)
+if(POLICY CMP0127)
+  cmake_policy(SET CMP0127 NEW)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -163,8 +166,8 @@ endif(LINUX)
 
 option(WITH_OPENLDAP "OPENLDAP is here" ON)
 if(WITH_OPENLDAP)
-  find_package(OpenLdap REQUIRED)
-  set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
+  find_package(OpenLDAP REQUIRED)
+  set(HAVE_OPENLDAP ${OpenLDAP_FOUND})
 endif()
 
 option(WITH_GSSAPI "GSSAPI/KRB5 is here" OFF)
@@ -206,11 +209,8 @@ endif()
 
 # libcryptsetup is only available on linux
 if(WITH_RBD AND LINUX)
-  find_package(libcryptsetup REQUIRED)
+  find_package(libcryptsetup 2.0.5 REQUIRED)
   set(HAVE_LIBCRYPTSETUP ${LIBCRYPTSETUP_FOUND})
-  if(${LIBCRYPTSETUP_VERSION} VERSION_LESS 2.0.5)
-    set(LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT TRUE)
-  endif()
 endif()
 
 include(CMakeDependentOption)
@@ -285,7 +285,7 @@ if(WITH_LIBCEPHSQLITE)
 endif()
 
 # key-value store
-option(WITH_KVS "Key value store is here" ON)
+option(WITH_KVS "Key value store is here" OFF)
 
 option(WITH_KRBD "Enable Linux krbd support of 'rbd' utility" ON)
 
@@ -299,16 +299,6 @@ if(LINUX)
     set(HAVE_KEYUTILS ${KEYUTILS_FOUND})
   endif()
 endif()
-
-option(WITH_LEVELDB "LevelDB is here" ON)
-if(WITH_LEVELDB)
-  if(LEVELDB_PREFIX)
-    include_directories(SYSTEM ${LEVELDB_PREFIX}/include)
-    link_directories(${LEVELDB_PREFIX}/lib)
-  endif()
-  find_package(leveldb REQUIRED)
-  find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
-endif(WITH_LEVELDB)
 
 find_package(snappy REQUIRED)
 
@@ -403,6 +393,9 @@ option(WITH_RADOSGW_BEAST_OPENSSL "Rados Gateway's Beast frontend uses OpenSSL" 
 option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push endpoint" ON)
 option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka push endpoint" ON)
 option(WITH_RADOSGW_LUA_PACKAGES "Rados Gateway's support for dynamically adding lua packagess" ON)
+option(WITH_RADOSGW_DBSTORE "DBStore backend for Rados Gateway" ON)
+option(WITH_RADOSGW_MOTR "CORTX-Motr backend for Rados Gateway" OFF)
+option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" OFF)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
@@ -585,7 +578,7 @@ option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
   atomic chrono thread system regex random program_options date_time
-  iostreams context coroutine filesystem)
+  iostreams context coroutine)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
@@ -630,8 +623,8 @@ include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
 option(WITH_SYSTEM_NPM "Assume that dashboard build tools already installed through packages" OFF)
 if(WITH_SYSTEM_NPM)
-  find_program(NPM npm)
-  if(NOT NPM)
+  find_program(NPM_EXECUTABLE npm)
+  if(NOT NPM_EXECUTABLE)
     message(FATAL_ERROR "Can't find npm.")
   endif()
 endif()
@@ -670,7 +663,6 @@ option(WITH_SYSTEMD "build with systemd support" ON)
 add_subdirectory(src)
 
 add_subdirectory(qa)
-
 add_subdirectory(doc)
 if(WITH_MANPAGE)
   add_subdirectory(man)
@@ -685,9 +677,7 @@ if(LINUX)
 endif()
 
 option(WITH_GRAFANA "install grafana dashboards" OFF)
-if(WITH_GRAFANA)
-  add_subdirectory(monitoring/grafana/dashboards)
-endif()
+add_subdirectory(monitoring/ceph-mixin)
 
 CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
   "NOT WITH_SYSTEM_BOOST" OFF)

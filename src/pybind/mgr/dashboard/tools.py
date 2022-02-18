@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from distutils.util import strtobool
 
 import cherrypy
-from ceph.deployment.utils import wrap_ipv6
+from mgr_util import build_url
 
 from . import mgr
 from .exceptions import ViewCacheNoDataException
@@ -672,41 +672,6 @@ class Task(object):
         return self._begin_time
 
 
-def build_url(host, scheme=None, port=None):
-    """
-    Build a valid URL. IPv6 addresses specified in host will be enclosed in brackets
-    automatically.
-
-    >>> build_url('example.com', 'https', 443)
-    'https://example.com:443'
-
-    >>> build_url(host='example.com', port=443)
-    '//example.com:443'
-
-    >>> build_url('fce:9af7:a667:7286:4917:b8d3:34df:8373', port=80, scheme='http')
-    'http://[fce:9af7:a667:7286:4917:b8d3:34df:8373]:80'
-
-    :param scheme: The scheme, e.g. http, https or ftp.
-    :type scheme: str
-    :param host: Consisting of either a registered name (including but not limited to
-                 a hostname) or an IP address.
-    :type host: str
-    :type port: int
-    :rtype: str
-    """
-    netloc = wrap_ipv6(host)
-    if port:
-        netloc += ':{}'.format(port)
-    pr = urllib.parse.ParseResult(
-        scheme=scheme if scheme else '',
-        netloc=netloc,
-        path='',
-        params='',
-        query='',
-        fragment='')
-    return pr.geturl()
-
-
 def prepare_url_prefix(url_prefix):
     """
     return '' if no prefix, or '/prefix' without slash in the end.
@@ -863,3 +828,13 @@ def find_object_in_list(key, value, iterable):
         if key in obj and obj[key] == value:
             return obj
     return None
+
+
+def merge_list_of_dicts_by_key(target_list: list, source_list: list, key: str):
+    target_list = {d[key]: d for d in target_list}
+    for sdict in source_list:
+        if bool(sdict):
+            if sdict[key] in target_list:
+                target_list[sdict[key]].update(sdict)
+    target_list = [value for value in target_list.values()]
+    return target_list

@@ -3,7 +3,7 @@ import unittest
 import time
 import logging
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import CommandFailedError
 
 if TYPE_CHECKING:
     from tasks.mgr.mgr_test_case import MgrCluster
@@ -86,6 +86,11 @@ class CephTestCase(unittest.TestCase):
        self._mon_configs_set.add((section, key))
        self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "set", section, key, str(value))
 
+    def cluster_cmd(self, command: str):
+        assert self.ceph_cluster is not None
+        return self.ceph_cluster.mon_manager.raw_cluster_cmd(*(command.split(" ")))
+
+
     def assert_cluster_log(self, expected_pattern, invert_match=False,
                            timeout=10, watch_channel=None):
         """
@@ -110,10 +115,7 @@ class CephTestCase(unittest.TestCase):
                 return found
 
             def __enter__(self):
-                # XXX: For reason behind setting "shell" to False, see
-                # https://tracker.ceph.com/issues/49644.
-                self.watcher_process = ceph_manager.run_ceph_w(watch_channel,
-                                                               shell=False)
+                self.watcher_process = ceph_manager.run_ceph_w(watch_channel)
 
             def __exit__(self, exc_type, exc_val, exc_tb):
                 if not self.watcher_process.finished:
@@ -159,6 +161,7 @@ class CephTestCase(unittest.TestCase):
             log.debug("Not found expected summary strings yet ({0})".format(summary_strings))
             return False
 
+        log.info(f"waiting {timeout}s for health warning matching {pattern}")
         self.wait_until_true(seen_health_warning, timeout)
 
     def wait_for_health_clear(self, timeout):

@@ -264,6 +264,13 @@ public:
 
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
+
+    /// Notify PG that Primary/Replica status has changed (to update scrub registration)
+    virtual void on_primary_status_change(bool was_primary, bool now_primary) = 0;
+
+    /// Need to reschedule next scrub. Assuming no change in role
+    virtual void reschedule_scrub() = 0;
+
     /// Notify that a scrub has been requested
     virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 
@@ -1518,7 +1525,7 @@ public:
   }
 
   void update_heartbeat_peers();
-  void query_unfound(Formatter *f, string state);
+  void query_unfound(Formatter *f, std::string state);
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
   void remove_down_peer_info(const OSDMapRef &osdmap);
@@ -1578,18 +1585,18 @@ public:
     std::set<pg_shard_t> *acting_backfill,
     std::ostream &ss);
 
-  static std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
+  static std::pair<std::map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
   select_replicated_primary(
-    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     uint64_t force_auth_primary_missing_objects,
     const std::vector<int> &up,
     pg_shard_t up_primary,
-    const map<pg_shard_t, pg_info_t> &all_info,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
     const OSDMapRef osdmap,
-    ostream &ss);
+    std::ostream &ss);
 
   static void calc_replicated_acting(
-    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
     eversion_t oldest_auth_log_entry,
     unsigned size,
     const std::vector<int> &acting,
@@ -1604,7 +1611,7 @@ public:
     const PGPool& pool,
     std::ostream &ss);
   static void calc_replicated_acting_stretch(
-    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
     eversion_t oldest_auth_log_entry,
     unsigned size,
     const std::vector<int> &acting,
@@ -1801,6 +1808,9 @@ public:
   void update_stats(
     std::function<bool(pg_history_t &, pg_stat_t &)> f,
     ObjectStore::Transaction *t = nullptr);
+
+  void update_stats_wo_resched(
+    std::function<void(pg_history_t &, pg_stat_t &)> f);
 
   /**
    * adjust_purged_snaps
@@ -2086,6 +2096,7 @@ public:
   void clear_prior_readable_until_ub() {
     prior_readable_until_ub = ceph::signedspan::zero();
     prior_readable_down_osds.clear();
+    info.history.prior_readable_until_ub = ceph::signedspan::zero();
   }
 
   void renew_lease(ceph::signedspan now) {

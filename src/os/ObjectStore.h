@@ -78,12 +78,18 @@ public:
    * @param journal path (or other descriptor) for journal (optional)
    * @param flags which filestores should check if applicable
    */
+#ifndef WITH_SEASTAR
   static std::unique_ptr<ObjectStore> create(
     CephContext *cct,
     const std::string& type,
     const std::string& data,
     const std::string& journal,
     osflagbits_t flags = 0);
+#endif
+  static std::unique_ptr<ObjectStore> create(
+    CephContext *cct,
+    const std::string& type,
+    const std::string& data);
 
   /**
    * probe a block device to learn the uuid of the owning OSD

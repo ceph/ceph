@@ -31,7 +31,7 @@ RBD
 
 For RBD, the primary goal is for either an OSD-internal agent or a
 cluster-external agent to be able to transparently shift portions
-of the consituent 4MB extents between a dedup pool and a hot base
+of the constituent 4MB extents between a dedup pool and a hot base
 pool.
 
 As such, RBD operations (including class operations and snapshots)

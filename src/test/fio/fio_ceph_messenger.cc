@@ -22,6 +22,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 
+using namespace std;
+
 enum ceph_msgr_type {
   CEPH_MSGR_TYPE_UNDEF,
   CEPH_MSGR_TYPE_POSIX,

@@ -33,7 +33,7 @@ struct Server {
     msgr->set_require_authorizer(false);
   }
   DummyAuthClientServer dummy_auth;
-  unique_ptr<Messenger> msgr;
+  std::unique_ptr<Messenger> msgr;
   struct ServerDispatcher : Dispatcher {
     std::mutex mutex;
     std::condition_variable on_reply;
@@ -79,7 +79,7 @@ struct Server {
 };
 
 struct Client {
-  unique_ptr<Messenger> msgr;
+  std::unique_ptr<Messenger> msgr;
   Client(CephContext *cct)
     : dummy_auth(cct), dispatcher(cct)
   {
@@ -126,6 +126,7 @@ struct Client {
       return true;
     }
     bool ping(Messenger* msgr, const entity_inst_t& peer) {
+      using namespace std::chrono_literals;
       auto conn = msgr->connect_to(peer.name.type(),
                                    entity_addrvec_t{peer.addr});
       replied = false;

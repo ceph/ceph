@@ -64,7 +64,7 @@ void TestFixture::SetUp() {
   if (!seeded) {
     seeded = true;
     int seed = getpid();
-    cout << "seed " << seed << std::endl;
+    std::cout << "seed " << seed << std::endl;
     srand(seed);
   }
 

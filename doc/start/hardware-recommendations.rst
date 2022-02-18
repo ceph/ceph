@@ -67,8 +67,6 @@ The metadata daemon memory utilization depends on how much memory its cache is
 configured to consume.  We recommend 1 GB as a minimum for most systems.  See
 ``mds_cache_memory``.
 
-OSDs (ceph-osd)
----------------
 
 Memory
 ======
@@ -119,11 +117,6 @@ performance tradeoffs to consider when planning for data storage. Simultaneous
 OS operations, and simultaneous request for read and write operations from
 multiple daemons against a single drive can slow performance considerably.
 
-.. important:: Since Ceph has to write all data to the journal (or WAL+DB)
-   before it can ACK writes, having this metadata and OSD
-   performance in balance is really important!
-
-
 Hard Disk Drives
 ----------------
 
@@ -140,7 +133,7 @@ per gigabyte by 40%--rendering your cluster substantially less cost efficient.
 
 .. tip:: Running multiple OSDs on a single SAS / SATA drive
    is **NOT** a good idea.  NVMe drives, however, can achieve
-   improved performance by being split into two more more OSDs.
+   improved performance by being split into two or more OSDs.
 
 .. tip:: Running an OSD and a monitor or a metadata server on a single 
    drive is also **NOT** a good idea.
@@ -151,20 +144,10 @@ overall system performance--especially during recovery. We recommend using a
 dedicated (ideally mirrored) drive for the operating system and software, and
 one drive for each Ceph OSD Daemon you run on the host (modulo NVMe above).
 Many "slow OSD" issues not attributable to hardware failure arise from running
-an operating system, multiple OSDs, and/or multiple journals on the same drive.
-Since the cost of troubleshooting performance issues on a small cluster likely
-exceeds the cost of the extra disk drives, you can optimize your cluster
-design planning by avoiding the temptation to overtax the OSD storage drives.
+an operating system and multiple OSDs on the same drive. Since the cost of troubleshooting performance issues on a small cluster likely exceeds the cost of the extra disk drives, you can optimize your cluster design planning by avoiding the temptation to overtax the OSD storage drives.
 
 You may run multiple Ceph OSD Daemons per SAS / SATA drive, but this will likely
-lead to resource contention and diminish the overall throughput. You may store a
-journal and object data on the same drive, but this may increase the time it
-takes to journal a write and ACK to the client. Ceph must write to the journal
-before it can ACK the write.
-
-Ceph best practices dictate that you should run operating systems, OSD data and
-OSD journals on separate drives.
-
+lead to resource contention and diminish the overall throughput. 
 
 Solid State Drives
 ------------------
@@ -178,36 +161,15 @@ hard disk drive.
 SSDs do not have moving mechanical parts so they are not necessarily subject to
 the same types of limitations as hard disk drives. SSDs do have significant
 limitations though. When evaluating SSDs, it is important to consider the
-performance of sequential reads and writes. An SSD that has 400MB/s sequential
-write throughput may have much better performance than an SSD with 120MB/s of
-sequential write throughput when storing multiple journals for multiple OSDs.
+performance of sequential reads and writes.
 
 .. important:: We recommend exploring the use of SSDs to improve performance. 
    However, before making a significant investment in SSDs, we **strongly
    recommend** both reviewing the performance metrics of an SSD and testing the
    SSD in a test configuration to gauge performance. 
 
-Since SSDs have no moving mechanical parts, it makes sense to use them in the
-areas of Ceph that do not use a lot of storage space (e.g., journals).
 Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
-Acceptable IOPS are not enough when selecting an SSD for use with Ceph. There
-are a few important performance considerations for journals and SSDs:
-
-- **Write-intensive semantics:** Journaling involves write-intensive semantics, 
-  so you should ensure that the SSD you choose to deploy will perform equal to
-  or better than a hard disk drive when writing data. Inexpensive SSDs may 
-  introduce write latency even as they accelerate access time, because 
-  sometimes high performance hard drives can write as fast or faster than 
-  some of the more economical SSDs available on the market!
-  
-- **Sequential Writes:** When you store multiple journals on an SSD you must 
-  consider the sequential write limitations of the SSD too, since they may be 
-  handling requests to write to multiple OSD journals simultaneously.
-
-- **Partition Alignment:** A common problem with SSD performance is that 
-  people like to partition drives as a best practice, but they often overlook
-  proper partition alignment with SSDs, which can cause SSDs to transfer data 
-  much more slowly. Ensure that SSD partitions are properly aligned.
+Acceptable IOPS are not enough when selecting an SSD for use with Ceph. 
 
 SSDs have historically been cost prohibitive for object storage, though
 emerging QLC drives are closing the gap.  HDD OSDs may see a significant
@@ -235,6 +197,125 @@ costs.  Some RAID HBAs can be configured with an IT-mode "personality".
    performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write 
    Throughput 2`_ for additional details.
 
+
+Benchmarking
+------------
+
+BlueStore opens block devices in O_DIRECT and uses fsync frequently to ensure
+that data is safely persisted to media. You can evaluate a drive's low-level
+write performance using ``fio``. For example, 4kB random write performance is
+measured as follows:
+
+.. code-block:: console
+
+  # fio --name=/dev/sdX --ioengine=libaio --direct=1 --fsync=1 --readwrite=randwrite --blocksize=4k --runtime=300
+
+Write Caches
+------------
+
+Enterprise SSDs and HDDs normally include power loss protection features which
+use multi-level caches to speed up direct or synchronous writes.  These devices
+can be toggled between two caching modes -- a volatile cache flushed to
+persistent media with fsync, or a non-volatile cache written synchronously.
+
+These two modes are selected by either "enabling" or "disabling" the write
+(volatile) cache.  When the volatile cache is enabled, Linux uses a device in
+"write back" mode, and when disabled, it uses "write through".
+
+The default configuration (normally caching enabled) may not be optimal, and
+OSD performance may be dramatically increased in terms of increased IOPS and
+decreased commit_latency by disabling the write cache.
+
+Users are therefore encouraged to benchmark their devices with ``fio`` as
+described earlier and persist the optimal cache configuration for their
+devices.
+
+The cache configuration can be queried with ``hdparm``, ``sdparm``,
+``smartctl`` or by reading the values in ``/sys/class/scsi_disk/*/cache_type``,
+for example:
+
+.. code-block:: console
+
+  # hdparm -W /dev/sda
+
+  /dev/sda:
+   write-caching =  1 (on)
+
+  # sdparm --get WCE /dev/sda
+      /dev/sda: ATA       TOSHIBA MG07ACA1  0101
+  WCE           1  [cha: y]
+  # smartctl -g wcache /dev/sda
+  smartctl 7.1 2020-04-05 r5049 [x86_64-linux-4.18.0-305.19.1.el8_4.x86_64] (local build)
+  Copyright (C) 2002-19, Bruce Allen, Christian Franke, www.smartmontools.org
+
+  Write cache is:   Enabled
+
+  # cat /sys/class/scsi_disk/0\:0\:0\:0/cache_type
+  write back
+
+The write cache can be disabled with those same tools:
+
+.. code-block:: console
+
+  # hdparm -W0 /dev/sda
+
+  /dev/sda:
+   setting drive write-caching to 0 (off)
+   write-caching =  0 (off)
+
+  # sdparm --clear WCE /dev/sda
+      /dev/sda: ATA       TOSHIBA MG07ACA1  0101
+  # smartctl -s wcache,off /dev/sda
+  smartctl 7.1 2020-04-05 r5049 [x86_64-linux-4.18.0-305.19.1.el8_4.x86_64] (local build)
+  Copyright (C) 2002-19, Bruce Allen, Christian Franke, www.smartmontools.org
+
+  === START OF ENABLE/DISABLE COMMANDS SECTION ===
+  Write cache disabled
+
+Normally, disabling the cache using ``hdparm``, ``sdparm``, or ``smartctl``
+results in the cache_type changing automatically to "write through". If this is
+not the case, you can try setting it directly as follows. (Users should note
+that setting cache_type also correctly persists the caching mode of the device
+until the next reboot):
+
+.. code-block:: console
+
+  # echo "write through" > /sys/class/scsi_disk/0\:0\:0\:0/cache_type
+
+  # hdparm -W /dev/sda
+
+  /dev/sda:
+   write-caching =  0 (off)
+
+.. tip:: This udev rule (tested on CentOS 8) will set all SATA/SAS device cache_types to "write
+  through":
+
+  .. code-block:: console
+
+    # cat /etc/udev/rules.d/99-ceph-write-through.rules
+    ACTION=="add", SUBSYSTEM=="scsi_disk", ATTR{cache_type}:="write through"
+
+.. tip:: This udev rule (tested on CentOS 7) will set all SATA/SAS device cache_types to "write
+  through":
+
+  .. code-block:: console
+
+    # cat /etc/udev/rules.d/99-ceph-write-through-el7.rules
+    ACTION=="add", SUBSYSTEM=="scsi_disk", RUN+="/bin/sh -c 'echo write through > /sys/class/scsi_disk/$kernel/cache_type'"
+
+.. tip:: The ``sdparm`` utility can be used to view/change the volatile write
+  cache on several devices at once:
+
+  .. code-block:: console
+
+    # sdparm --get WCE /dev/sd*
+        /dev/sda: ATA       TOSHIBA MG07ACA1  0101
+    WCE           0  [cha: y]
+        /dev/sdb: ATA       TOSHIBA MG07ACA1  0101
+    WCE           0  [cha: y]
+    # sdparm --clear WCE /dev/sd*
+        /dev/sda: ATA       TOSHIBA MG07ACA1  0101
+        /dev/sdb: ATA       TOSHIBA MG07ACA1  0101
 
 Additional Considerations
 -------------------------
@@ -334,7 +415,7 @@ and development clusters can run successfully with modest hardware.
 +--------------+----------------+-----------------------------------------+
 | ``ceph-mon`` | Processor      | - 2 cores minimum                       |
 |              +----------------+-----------------------------------------+
-|              | RAM            |  24GB+ per daemon                       |
+|              | RAM            |  2-4GB+ per daemon                      |
 |              +----------------+-----------------------------------------+
 |              | Disk Space     |  60 GB per daemon                       |
 |              +----------------+-----------------------------------------+

@@ -109,11 +109,11 @@ struct MonSession : public RefCountedObject {
       get_peer_socket_addr());
   }
 
-  std::vector<string> get_allowed_fs_names() const {
+  std::vector<std::string> get_allowed_fs_names() const {
     return caps.allowed_fs_names();
   }
 
-  bool fs_name_capable(string_view fsname, __u8 mask) {
+  bool fs_name_capable(std::string_view fsname, __u8 mask) {
     return caps.fs_name_capable(entity_name, fsname, mask);
   }
 

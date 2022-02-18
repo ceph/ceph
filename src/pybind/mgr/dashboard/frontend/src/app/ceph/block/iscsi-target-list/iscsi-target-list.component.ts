@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -64,9 +64,10 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     private notAvailablePipe: NotAvailablePipe,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    protected ngZone: NgZone
   ) {
-    super();
+    super(ngZone);
     this.permission = this.authStorageService.getPermissions().iscsi;
 
     this.tableActions = [
@@ -124,27 +125,32 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     this.iscsiService.status().subscribe((result: any) => {
       this.available = result.available;
 
-      if (result.available) {
-        this.iscsiService.version().subscribe((res: any) => {
-          this.cephIscsiConfigVersion = res['ceph_iscsi_config_version'];
-          this.taskListService.init(
-            () => this.iscsiService.listTargets(),
-            (resp) => this.prepareResponse(resp),
-            (targets) => (this.targets = targets),
-            () => this.onFetchError(),
-            this.taskFilter,
-            this.itemFilter,
-            this.builders
-          );
-        });
-
-        this.iscsiService.settings().subscribe((settings: any) => {
-          this.settings = settings;
-        });
-      } else {
+      if (!result.available) {
         this.status = result.message;
       }
     });
+  }
+
+  getTargets() {
+    if (this.available) {
+      this.setTableRefreshTimeout();
+      this.iscsiService.version().subscribe((res: any) => {
+        this.cephIscsiConfigVersion = res['ceph_iscsi_config_version'];
+      });
+      this.taskListService.init(
+        () => this.iscsiService.listTargets(),
+        (resp) => this.prepareResponse(resp),
+        (targets) => (this.targets = targets),
+        () => this.onFetchError(),
+        this.taskFilter,
+        this.itemFilter,
+        this.builders
+      );
+
+      this.iscsiService.settings().subscribe((settings: any) => {
+        this.settings = settings;
+      });
+    }
   }
 
   ngOnDestroy() {

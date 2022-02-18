@@ -15,6 +15,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
   char buf[64];
   const auto len = snprintf(buf, sizeof(buf), "%010ld.%06ld.%s", (long)ts.sec(), (long)ts.usec(), hash.c_str());
@@ -172,6 +173,19 @@ bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv) {
   return std::includes(kv.begin(), kv.end(), filter.kv.begin(), filter.kv.end());
 }
 
+bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv) {
+  // all filter pairs must exist with the same value in the object's metadata/tags
+  // object metadata/tags may include items not in the filter
+  for (auto& filter : filter.kv) {
+    auto result = kv.equal_range(filter.first);
+    if (std::any_of(result.first, result.second, [&filter](const pair<string,string>& p) { return p.second == filter.second;}))
+      continue;
+    else
+      return false;
+  }
+  return true;
+}
+
 bool match(const rgw::notify::EventTypeList& events, rgw::notify::EventType event) {
   // if event list exists, and none of the events in the list matches the event type, filter the message
   if (!events.empty() && std::find(events.begin(), events.end(), event) == events.end()) {
@@ -223,9 +237,6 @@ void rgw_pubsub_s3_notification::dump_xml(Formatter *f) const {
 
 bool rgw_pubsub_s3_notifications::decode_xml(XMLObj *obj) {
   do_decode_xml_obj(list, "TopicConfiguration", obj);
-  if (list.empty()) {
-    throw RGWXMLDecoder::err("at least one 'TopicConfiguration' must exist");
-  }
   return true;
 }
 

@@ -8,10 +8,10 @@
 
 class RGWRestOIDCProvider : public RGWRESTOp {
 protected:
-  vector<string> client_ids;
-  vector<string> thumbprints;
-  string provider_url; //'iss' field in JWT
-  string provider_arn;
+  std::vector<std::string> client_ids;
+  std::vector<std::string> thumbprints;
+  std::string provider_url; //'iss' field in JWT
+  std::string provider_arn;
 public:
   int verify_permission(optional_yield y) override;
   void send_response() override;

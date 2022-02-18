@@ -1,0 +1,3 @@
+This test just verifies that upgrades work with no file system present. In
+particular, catch that MDSMonitor doesn't blow up somehow with version
+mismatches.

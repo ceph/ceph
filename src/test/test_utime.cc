@@ -3,6 +3,8 @@
 #include "include/stringify.h"
 #include "common/ceph_context.h"
 
+using namespace std;
+
 TEST(utime_t, localtime)
 {
   utime_t t(1556122013, 839991182);

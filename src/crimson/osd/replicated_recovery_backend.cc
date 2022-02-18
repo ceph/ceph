@@ -18,6 +18,10 @@ namespace {
   }
 }
 
+using std::less;
+using std::map;
+using std::string;
+
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::recover_object(
   const hobject_t& soid,
@@ -71,16 +75,19 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     });
   }).then_interruptible([this, soid] {
     auto &recovery = recovering.at(soid);
-    auto push_info = recovery.pushing.begin();
-    object_stat_sum_t stat = {};
-    if (push_info != recovery.pushing.end()) {
-      stat = push_info->second.stat;
+    if (auto push_info = recovery.pushing.begin();
+        push_info != recovery.pushing.end()) {
+      pg.get_recovery_handler()->on_global_recover(soid,
+                                                   push_info->second.stat,
+                                                   false);
+    } else if (recovery.pi) {
+      // no push happened (empty get_shards_to_push()) but pull actually did
+      pg.get_recovery_handler()->on_global_recover(soid,
+                                                   recovery.pi->stat,
+                                                   false);
     } else {
-      // no push happened, take pull_info's stat
-      assert(recovery.pi);
-      stat = recovery.pi->stat;
+      // no pulls, no pushes
     }
-    pg.get_recovery_handler()->on_global_recover(soid, stat, false);
     return seastar::make_ready_future<>();
   }).handle_exception_interruptible([this, soid](auto e) {
     auto &recovery = recovering.at(soid);
@@ -190,6 +197,7 @@ ReplicatedRecoveryBackend::on_local_recover_persist(
   logger().debug("{}", __func__);
   ceph::os::Transaction t;
   pg.get_recovery_handler()->on_local_recover(soid, _recovery_info, is_delete, t);
+  logger().debug("ReplicatedRecoveryBackend::on_local_recover_persist: do_transaction...");
   return interruptor::make_interruptible(
       shard_services.get_store().do_transaction(coll, std::move(t)))
   .then_interruptible(
@@ -213,6 +221,7 @@ ReplicatedRecoveryBackend::local_recover_delete(
 	[this, lomt = std::move(lomt)](auto& txn) {
 	return backend->remove(lomt->os, txn).then_interruptible(
 	  [this, &txn]() mutable {
+	  logger().debug("ReplicatedRecoveryBackend::local_recover_delete: do_transaction...");
 	  return shard_services.get_store().do_transaction(coll,
 							   std::move(txn));
 	});
@@ -458,7 +467,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     }
     logger().debug("read_metadata_for_push_op: {}", push_op->attrset[OI_ATTR]);
     object_info_t oi;
-    oi.decode(push_op->attrset[OI_ATTR]);
+    oi.decode_no_oid(push_op->attrset[OI_ATTR]);
     new_progress.first = false;
     return oi.version;
   });
@@ -585,6 +594,10 @@ RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 {
   logger().debug("{}: {}", __func__, *m);
+  if (pg.can_discard_replica_op(*m)) {
+    logger().debug("{}: discarding {}", __func__, *m);
+    return seastar::now();
+  }
   return seastar::do_with(m->take_pulls(), [this, from=m->from](auto& pulls) {
     return interruptor::parallel_for_each(pulls,
                                       [this, from](auto& pull_op) {
@@ -652,7 +665,7 @@ ReplicatedRecoveryBackend::_handle_pull_response(
       pi.recovery_info.soid, [&pi, &recovery_waiter, &pop](auto obc) {
         pi.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode(pop.attrset.at(OI_ATTR));
+        obc->obs.oi.decode_no_oid(pop.attrset.at(OI_ATTR), pop.soid);
         pi.recovery_info.oi = obc->obs.oi;
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error_interruptible(crimson::ct_error::assert_all{});
@@ -705,6 +718,10 @@ RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::handle_pull_response(
   Ref<MOSDPGPush> m)
 {
+  if (pg.can_discard_replica_op(*m)) {
+    logger().debug("{}: discarding {}", __func__, *m);
+    return seastar::now();
+  }
   const PushOp& pop = m->pushes[0]; //TODO: only one push per message for now.
   if (pop.version == eversion_t()) {
     // replica doesn't have it!
@@ -725,6 +742,7 @@ ReplicatedRecoveryBackend::handle_pull_response(
       return _handle_pull_response(from, pop, &response, &t).then_interruptible(
 	[this, &t](bool complete) {
 	epoch_t epoch_frozen = pg.get_osdmap_epoch();
+	logger().debug("ReplicatedRecoveryBackend::handle_pull_response: do_transaction...");
 	return shard_services.get_store().do_transaction(coll, std::move(t))
 	  .then([this, epoch_frozen, complete,
 	  last_complete = pg.get_info().last_complete] {
@@ -793,6 +811,10 @@ RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::handle_push(
   Ref<MOSDPGPush> m)
 {
+  if (pg.can_discard_replica_op(*m)) {
+    logger().debug("{}: discarding {}", __func__, *m);
+    return seastar::now();
+  }
   if (pg.is_primary()) {
     return handle_pull_response(m);
   }
@@ -805,6 +827,7 @@ ReplicatedRecoveryBackend::handle_push(
       return _handle_push(m->from, pop, &response, &t).then_interruptible(
 	[this, &t] {
 	epoch_t epoch_frozen = pg.get_osdmap_epoch();
+	logger().debug("ReplicatedRecoveryBackend::handle_push: do_transaction...");
 	return interruptor::make_interruptible(
 	    shard_services.get_store().do_transaction(coll, std::move(t))).then_interruptible(
 	  [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
@@ -951,7 +974,8 @@ ReplicatedRecoveryBackend::prep_push_target(
   if (!complete || !recovery_info.object_exist) {
     t->remove(coll->get_cid(), target_oid);
     t->touch(coll->get_cid(), target_oid);
-    object_info_t oi(attrs.at(OI_ATTR));
+    object_info_t oi;
+    oi.decode_no_oid(attrs.at(OI_ATTR));
     t->set_alloc_hint(coll->get_cid(), target_oid,
                       oi.expected_object_size,
                       oi.expected_write_size,

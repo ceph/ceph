@@ -57,6 +57,10 @@ class MonitorDBStore
     return devname;
   }
 
+  std::string get_path() {
+    return path;
+  }
+
   std::shared_ptr<PriorityCache::PriCache> get_priority_cache() const {
     return db->get_priority_cache();
   }

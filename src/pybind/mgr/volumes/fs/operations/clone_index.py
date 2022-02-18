@@ -1,7 +1,6 @@
 import os
 import uuid
 import stat
-import errno
 import logging
 from contextlib import contextmanager
 
@@ -12,6 +11,7 @@ from ..exception import IndexException, VolumeException
 from ..fs_util import list_one_entry_at_a_time
 
 log = logging.getLogger(__name__)
+
 
 class CloneIndex(Index):
     SUB_GROUP_NAME = "clone"
@@ -81,12 +81,14 @@ class CloneIndex(Index):
         except cephfs.Error as e:
             raise IndexException(-e.args[0], e.args[1])
 
+
 def create_clone_index(fs, vol_spec):
     clone_index = CloneIndex(fs, vol_spec)
     try:
         fs.mkdirs(clone_index.path, 0o700)
     except cephfs.Error as e:
         raise IndexException(-e.args[0], e.args[1])
+
 
 @contextmanager
 def open_clone_index(fs, vol_spec):

@@ -82,6 +82,12 @@ inline OrderingHandle get_dummy_ordering_handle() {
 }
 
 struct WritePipeline {
+  OrderedExclusivePhase reserve_projected_usage{
+    "WritePipeline::reserve_projected_usage"
+  };
+  UnorderedStage ool_writes{
+    "UnorderedStage::ool_writes_stage"
+  };
   OrderedExclusivePhase prepare{
     "WritePipeline::prepare_phase"
   };

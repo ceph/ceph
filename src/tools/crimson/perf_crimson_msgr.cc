@@ -22,6 +22,9 @@
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
 
+using namespace std;
+using namespace std::chrono_literals;
+
 namespace bpo = boost::program_options;
 
 namespace {
@@ -532,7 +535,7 @@ static seastar::future<> run(
           if (client.is_active()) {
             client.do_dispatch_messages(client.active_conn.get());
           }
-        }).then([this, ramptime] {
+        }).then([ramptime] {
           logger().info("[all clients]: ramping up {} seconds...", ramptime);
           return seastar::sleep(std::chrono::seconds(ramptime));
         }).then([this] {

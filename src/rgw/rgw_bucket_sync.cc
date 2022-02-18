@@ -1,4 +1,5 @@
-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_bucket_sync.h"
@@ -10,6 +11,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 ostream& operator<<(ostream& os, const rgw_sync_bucket_entity& e) {
   os << "{b=" << rgw_sync_bucket_entities::bucket_key(e.bucket) << ",z=" << e.zone.value_or(rgw_zone_id()) << ",az=" << (int)e.all_zones << "}";
@@ -349,31 +351,36 @@ bool RGWBucketSyncFlowManager::pipe_rules::find_basic_info_without_tags(const rg
     return false;
   }
 
-  bool conflict = false;
-
   std::optional<rgw_user> _user;
   std::optional<rgw_sync_pipe_acl_translation> _acl_translation;
   std::optional<string> _storage_class;
-  rgw_sync_pipe_params::Mode _mode;
+  rgw_sync_pipe_params::Mode _mode{rgw_sync_pipe_params::Mode::MODE_SYSTEM};
 
-  int i = 0;
+  // make sure all params are the same by saving the first one
+  // encountered and comparing all subsequent to it
+  bool first_iter = true;
   for (auto& iter : iters) {
-    auto& rule_params = iter->second->params;
-    if (++i == 0) {
+    const rgw_sync_pipe_params& rule_params = iter->second->params;
+    if (first_iter) {
       _user = rule_params.user;
       _acl_translation = rule_params.dest.acl_translation;
       _storage_class = rule_params.dest.storage_class;
       _mode = rule_params.mode;
-      continue;
-    }
-
-    conflict = !(_user == rule_params.user &&
-                 _acl_translation == rule_params.dest.acl_translation &&
-                 _storage_class == rule_params.dest.storage_class &&
-                 _mode == rule_params.mode);
-    if (conflict) {
-      *need_more_info = true;
-      return false;
+      first_iter = false;
+    } else {
+      // note: three of these == operators are comparing std::optional
+      // against std::optional; as one would expect they are equal a)
+      // if both do not contain values or b) if both do and those
+      // contained values are the same
+      const bool conflict =
+	!(_user == rule_params.user &&
+	  _acl_translation == rule_params.dest.acl_translation &&
+	  _storage_class == rule_params.dest.storage_class &&
+	  _mode == rule_params.mode);
+      if (conflict) {
+	*need_more_info = true;
+	return false;
+      }
     }
   }
 

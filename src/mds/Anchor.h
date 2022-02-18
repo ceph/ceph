@@ -69,5 +69,5 @@ public:
   mutable int nref = 0; // how many children
 };
 
-ostream& operator<<(ostream& out, const Anchor &a);
+std::ostream& operator<<(std::ostream& out, const Anchor &a);
 #endif

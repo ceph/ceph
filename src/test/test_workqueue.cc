@@ -3,6 +3,8 @@
 #include "common/WorkQueue.h"
 #include "common/ceph_argparse.h"
 
+using namespace std;
+
 TEST(WorkQueue, StartStop)
 {
   ThreadPool tp(g_ceph_context, "foo", "tp_foo", 10, "");

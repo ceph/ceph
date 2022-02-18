@@ -166,7 +166,7 @@ key/value into that node at the min would involve moving a bunch of
 bytes, which would be expensive (or verbose) to express purely as a
 sequence of byte operations.  As such, each delta indicates the type
 as well as the location of the corresponding extent.  Each block
-type can therefore implement CachedExtent::apply_delta as appopriate.
+type can therefore implement CachedExtent::apply_delta as appropriate.
 
 See src/os/crimson/seastore/cached_extent.h.
 See src/os/crimson/seastore/cache.h.

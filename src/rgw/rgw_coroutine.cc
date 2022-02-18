@@ -13,6 +13,7 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
+using namespace std;
 
 class RGWCompletionManager::WaitContext : public Context {
   RGWCompletionManager *manager;
@@ -189,6 +190,14 @@ stringstream& RGWCoroutine::Status::set_status()
   timestamp = ceph_clock_now();
 
   return status;
+}
+
+RGWCoroutinesManager::~RGWCoroutinesManager() {
+  stop();
+  completion_mgr->put();
+  if (cr_registry) {
+    cr_registry->remove(this);
+  }
 }
 
 int64_t RGWCoroutinesManager::get_next_io_id()

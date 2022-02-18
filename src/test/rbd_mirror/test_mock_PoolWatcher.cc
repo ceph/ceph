@@ -13,6 +13,8 @@
 #include "tools/rbd_mirror/pool_watcher/RefreshImagesRequest.h"
 #include "include/stringify.h"
 
+using namespace std::chrono_literals;
+
 namespace librbd {
 namespace {
 

@@ -178,12 +178,6 @@ void InitRequest<I>::handle_set_feature_bit(int r) {
     shutdown_image_cache();
   }
 
-  if (m_image_ctx.discard_granularity_bytes) {
-    ldout(cct, 1) << "RWL image cache is enabled and "
-                  << "set discard_granularity_bytes = 0." << dendl;
-    m_image_ctx.discard_granularity_bytes = 0;
-  }
-
   // Register RWL dispatch
   auto image_dispatch = new cache::WriteLogImageDispatch<I>(
     &m_image_ctx, m_image_cache, m_plugin_api);

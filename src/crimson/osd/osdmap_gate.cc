@@ -32,7 +32,7 @@ blocking_future<epoch_t> OSDMapGate::wait_for_map(epoch_t epoch)
   } else {
     logger().info("evt epoch is {}, i have {}, will wait", epoch, current);
     auto &blocker = waiting_peering.emplace(
-      epoch, make_pair(blocker_type, epoch)).first->second;
+      epoch, std::make_pair(blocker_type, epoch)).first->second;
     auto fut = blocker.promise.get_shared_future();
     if (shard_services) {
       return blocker.make_blocking_future(

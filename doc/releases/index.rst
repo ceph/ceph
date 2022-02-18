@@ -21,7 +21,6 @@ security fixes.
 
    Pacific (v16.2.*) <pacific>
    Octopus (v15.2.*) <octopus>
-   Nautilus (v14.2.*) <nautilus>
 
 .. ceph_releases:: releases.yml current
 
@@ -38,6 +37,7 @@ receive bug fixes or backports).
    :maxdepth: 1
    :hidden:
 
+   Nautilus (v14.2.*) <nautilus>
    Mimic (v13.2.*) <mimic>
    Luminous (v12.2.*) <luminous>
    Kraken (v11.2.*) <kraken>
@@ -55,10 +55,12 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
-.. ceph_timeline:: releases.yml dev pacific octopus nautilus mimic luminous
+.. ceph_timeline:: releases.yml pacific octopus nautilus
 
 
 .. _Pacific: pacific
+.. _16.2.7: pacific#v16-2-7-pacific
+.. _16.2.6: pacific#v16-2-6-pacific
 .. _16.2.5: pacific#v16-2-5-pacific
 .. _16.2.4: pacific#v16-2-4-pacific
 .. _16.2.3: pacific#v16-2-3-pacific
@@ -67,6 +69,8 @@ Release timeline
 .. _16.2.0: pacific#v16-2-0-pacific
 
 .. _Octopus: octopus
+.. _15.2.15: octopus#v15-2-15-octopus
+.. _15.2.14: octopus#v15-2-14-octopus
 .. _15.2.13: octopus#v15-2-13-octopus
 .. _15.2.12: octopus#v15-2-12-octopus
 .. _15.2.11: octopus#v15-2-11-octopus

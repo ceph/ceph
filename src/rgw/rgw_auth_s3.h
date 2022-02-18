@@ -56,7 +56,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const boost::optional<uint32_t>& perm_mask) const override {
+                            const std::optional<uint32_t>& perm_mask) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -65,13 +65,9 @@ class STSAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_role(CephContext* const cct,
                             const req_state* const s,
                             const rgw::auth::RoleApplier::Role& role,
-                            const rgw_user& user_id,
-                            const std::string& token_policy,
-                            const std::string& role_session_name,
-                            const std::vector<string>& token_claims,
-                            const std::string& token_issued_at) const override {
+                            const rgw::auth::RoleApplier::TokenAttrs& token_attrs) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::RoleApplier(cct, role, user_id, token_policy, role_session_name, token_claims, token_issued_at));
+      rgw::auth::RoleApplier(cct, role, token_attrs));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -178,7 +174,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const boost::optional<uint32_t>& perm_mask) const override {
+                            const std::optional<uint32_t>& perm_mask) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     /* TODO(rzarzynski): replace with static_ptr. */
@@ -458,6 +454,8 @@ static constexpr char AWS4_UNSIGNED_PAYLOAD_HASH[] = "UNSIGNED-PAYLOAD";
 static constexpr char AWS4_STREAMING_PAYLOAD_HASH[] = \
   "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
 
+bool is_non_s3_op(RGWOpType op_type);
+
 int parse_v4_credentials(const req_info& info,                     /* in */
 			 std::string_view& access_key_id,        /* out */
 			 std::string_view& credential_scope,     /* out */
@@ -612,7 +610,7 @@ get_v4_canonical_headers(const req_info& info,
                          bool force_boto2_compat);
 
 std::string gen_v4_canonical_headers(const req_info& info,
-                                     const map<string, string>& extra_headers,
+                                     const std::map<std::string, std::string>& extra_headers,
                                      string *signed_hdrs);
 
 extern sha256_digest_t

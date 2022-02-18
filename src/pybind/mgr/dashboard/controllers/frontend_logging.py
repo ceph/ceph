@@ -1,11 +1,11 @@
 import logging
 
-from . import BaseController, Endpoint, UiApiController
+from . import BaseController, Endpoint, UIRouter
 
 logger = logging.getLogger('frontend.error')
 
 
-@UiApiController('/logging', secure=False)
+@UIRouter('/logging', secure=False)
 class FrontendLogging(BaseController):
 
     @Endpoint('POST', path='js-error')

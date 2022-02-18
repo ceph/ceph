@@ -82,13 +82,25 @@ function(do_build_dpdk dpdk_dir)
     set(dpdk_source_dir ${CMAKE_SOURCE_DIR}/src/spdk/dpdk)
   endif()
 
+  set(extra_cflags "-fPIC")
+  include(CheckCCompilerFlag)
+  check_c_compiler_flag("-Wno-unused-but-set-variable"
+    HAVE_UNUSED_BUT_SET_VARIABLE)
+  if(HAVE_UNUSED_BUT_SET_VARIABLE)
+    string(APPEND extra_cflags " -Wno-unused-but-set-variable")
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(dpdk-ext
     SOURCE_DIR ${dpdk_source_dir}
     CONFIGURE_COMMAND ${make_cmd} config O=${dpdk_dir} T=${target}
-    BUILD_COMMAND ${make_cmd} O=${dpdk_dir} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=-fPIC
+    BUILD_COMMAND ${make_cmd} O=${dpdk_dir} CC=${CMAKE_C_COMPILER} EXTRA_CFLAGS=${extra_cflags}
     BUILD_IN_SOURCE 1
-    INSTALL_COMMAND "")
+    INSTALL_COMMAND ""
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_MERGED_STDOUTERR ON
+    LOG_OUTPUT_ON_FAILURE ON)
   if(NUMA_FOUND)
     set(numa "y")
   else()

@@ -71,6 +71,7 @@ you may write data with one API and retrieve it with the other.
    STS <STS>
    STS Lite <STSLite>
    Keycloak <keycloak>
+   Session Tags <session-tags>
    Role <role>
    Orphan List and Associated Tooling <orphans>
    OpenID Connect Provider <oidc>
@@ -80,4 +81,6 @@ you may write data with one API and retrieve it with the other.
    QAT Acceleration for Encryption and Compression <qat-accel>
    S3-select <s3select>
    Lua Scripting <lua-scripting>
+   D3N Data Cache <d3n_datacache>
+   Cloud Transition <cloud-transition>
 

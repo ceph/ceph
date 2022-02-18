@@ -39,16 +39,17 @@ namespace logging {
 }
 }
 
-int parse_log_client_options(CephContext *cct,
-			     std::map<std::string,std::string> &log_to_monitors,
-			     std::map<std::string,std::string> &log_to_syslog,
-			     std::map<std::string,std::string> &log_channels,
-			     std::map<std::string,std::string> &log_prios,
-			     std::map<std::string,std::string> &log_to_graylog,
-			     std::map<std::string,std::string> &log_to_graylog_host,
-			     std::map<std::string,std::string> &log_to_graylog_port,
-			     uuid_d &fsid,
-			     std::string &host);
+struct clog_targets_conf_t {
+  std::string log_to_monitors;
+  std::string log_to_syslog;
+  std::string log_channels;
+  std::string log_prios;
+  std::string log_to_graylog;
+  std::string log_to_graylog_host;
+  std::string log_to_graylog_port;
+  uuid_d fsid; // only 16B. Simpler as a copy.
+  std::string host;
+};
 
 /** Manage where we output to and at which priority
  *
@@ -153,19 +154,13 @@ public:
   typedef std::shared_ptr<LogChannel> Ref;
 
   /**
-   * update config values from parsed k/v std::map for each config option
+   * Query the configuration database in conf_cct for configuration
+   * parameters. Pick out the relevant values based on our channel name.
+   * Update the logger configuration based on these values.
    *
-   * Pick out the relevant value based on our channel.
+   * Return a collection of configuration strings.
    */
-  void update_config(std::map<std::string,std::string> &log_to_monitors,
-		     std::map<std::string,std::string> &log_to_syslog,
-		     std::map<std::string,std::string> &log_channels,
-		     std::map<std::string,std::string> &log_prios,
-		     std::map<std::string,std::string> &log_to_graylog,
-		     std::map<std::string,std::string> &log_to_graylog_host,
-		     std::map<std::string,std::string> &log_to_graylog_port,
-		     uuid_d &fsid,
-		     std::string &host);
+  clog_targets_conf_t parse_client_options(CephContext* conf_cct);
 
   void do_log(clog_type prio, std::stringstream& ss);
   void do_log(clog_type prio, const std::string& s);
@@ -181,6 +176,12 @@ private:
   bool log_to_monitors;
   std::shared_ptr<ceph::logging::Graylog> graylog;
 
+  /**
+   * update config values from parsed k/v std::map for each config option
+   */
+  void update_config(const clog_targets_conf_t& conf_strings);
+
+  clog_targets_conf_t parse_log_client_options(CephContext* conf_cct);
 };
 
 typedef LogChannel::Ref LogChannelRef;
@@ -194,7 +195,8 @@ public:
   };
 
   LogClient(CephContext *cct, Messenger *m, MonMap *mm,
-	    enum logclient_flag_t flags);
+          logclient_flag_t flags);
+
   virtual ~LogClient() {
     channels.clear();
   }

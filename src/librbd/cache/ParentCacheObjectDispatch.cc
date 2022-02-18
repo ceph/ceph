@@ -20,6 +20,7 @@
 #define dout_prefix *_dout << "librbd::cache::ParentCacheObjectDispatch: " \
                            << this << " " << __func__ << ": "
 
+using namespace std;
 using namespace ceph::immutable_obj_cache;
 using librbd::util::data_object_name;
 

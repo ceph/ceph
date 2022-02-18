@@ -59,7 +59,7 @@ namespace librbd {
 
 namespace {
 
-class SafeTimerSingleton : public SafeTimer {
+class SafeTimerSingleton : public CommonSafeTimer<ceph::mutex> {
 public:
   ceph::mutex lock = ceph::make_mutex("librbd::SafeTimerSingleton::lock");
 
@@ -802,7 +802,9 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     if (sparse_read_threshold_bytes == 0) {
       sparse_read_threshold_bytes = get_object_size();
     }
-    if (!skip_partial_discard) {
+
+    bool dirty_cache = test_features(RBD_FEATURE_DIRTY_CACHE);
+    if (!skip_partial_discard || dirty_cache) {
       discard_granularity_bytes = 0;
     }
 
@@ -938,6 +940,9 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     if (!snapc.snaps.empty()) {
       ctx->write_snap_context(
         {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+    }
+    if (data_ctx.get_pool_full_try()) {
+      ctx->full_try(true);
     }
 
     // atomically reset the data IOContext to new version

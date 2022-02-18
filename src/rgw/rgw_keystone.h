@@ -16,9 +16,9 @@
 
 #include <atomic>
 
-bool rgw_is_pki_token(const string& token);
-void rgw_get_token_id(const string& token, string& token_id);
-static inline std::string rgw_get_token_id(const string& token)
+bool rgw_is_pki_token(const std::string& token);
+void rgw_get_token_id(const std::string& token, std::string& token_id);
+static inline std::string rgw_get_token_id(const std::string& token)
 {
   std::string token_id;
   rgw_get_token_id(token, token_id);
@@ -98,8 +98,8 @@ public:
   class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
   public:
     RGWKeystoneHTTPTransceiver(CephContext * const cct,
-                               const string& method,
-                               const string& url,
+                               const std::string& method,
+                               const std::string& url,
                                bufferlist * const token_body_bl)
       : RGWHTTPTransceiver(cct, method, url, token_body_bl,
                            cct->_conf->rgw_keystone_verify_ssl,
@@ -119,14 +119,17 @@ public:
   typedef RGWKeystoneHTTPTransceiver RGWValidateKeystoneToken;
   typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
 
-  static int get_admin_token(CephContext* const cct,
+  static int get_admin_token(const DoutPrefixProvider *dpp,
+                             CephContext* const cct,
                              TokenCache& token_cache,
                              const Config& config,
                              std::string& token);
-  static int issue_admin_token_request(CephContext* const cct,
+  static int issue_admin_token_request(const DoutPrefixProvider *dpp,
+                                       CephContext* const cct,
                                        const Config& config,
                                        TokenEnvelope& token);
-  static int get_keystone_barbican_token(CephContext * const cct,
+  static int get_keystone_barbican_token(const DoutPrefixProvider *dpp,
+                                         CephContext * const cct,
                                          std::string& token);
 };
 
@@ -135,22 +138,22 @@ class TokenEnvelope {
 public:
   class Domain {
   public:
-    string id;
-    string name;
+    std::string id;
+    std::string name;
     void decode_json(JSONObj *obj);
   };
   class Project {
   public:
     Domain domain;
-    string id;
-    string name;
+    std::string id;
+    std::string name;
     void decode_json(JSONObj *obj);
   };
 
   class Token {
   public:
     Token() : expires(0) { }
-    string id;
+    std::string id;
     time_t expires;
     Project tenant_v2;
     void decode_json(JSONObj *obj);
@@ -158,24 +161,24 @@ public:
 
   class Role {
   public:
-    string id;
-    string name;
+    std::string id;
+    std::string name;
     void decode_json(JSONObj *obj);
   };
 
   class User {
   public:
-    string id;
-    string name;
+    std::string id;
+    std::string name;
     Domain domain;
-    list<Role> roles_v2;
+    std::list<Role> roles_v2;
     void decode_json(JSONObj *obj);
   };
 
   Token token;
   Project project;
   User user;
-  list<Role> roles;
+  std::list<Role> roles;
 
   void decode_v3(JSONObj* obj);
   void decode_v2(JSONObj* obj);
@@ -191,12 +194,12 @@ public:
   const std::string& get_project_name() const {return project.name;};
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
-  bool has_role(const string& r) const;
+  bool has_role(const std::string& r) const;
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
     return now >= static_cast<uint64_t>(get_expires());
   }
-  int parse(CephContext* cct,
+  int parse(const DoutPrefixProvider *dpp, CephContext* cct,
             const std::string& token_str,
             ceph::buffer::list& bl /* in */,
             ApiVersion version);
@@ -206,7 +209,7 @@ public:
 class TokenCache {
   struct token_entry {
     TokenEnvelope token;
-    list<string>::iterator lru_iter;
+    std::list<std::string>::iterator lru_iter;
   };
 
   std::atomic<bool> down_flag = { false };
@@ -257,7 +260,7 @@ public:
   void add(const std::string& token_id, const TokenEnvelope& token);
   void add_admin(const TokenEnvelope& token);
   void add_barbican(const TokenEnvelope& token);
-  void invalidate(const std::string& token_id);
+  void invalidate(const DoutPrefixProvider *dpp, const std::string& token_id);
   bool going_down() const;
 private:
   void add_locked(const std::string& token_id, const TokenEnvelope& token);

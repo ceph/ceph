@@ -12,6 +12,7 @@
 #include <list>
 #include <boost/scope_exit.hpp>
 
+using namespace std::chrono_literals;
 typedef std::list<journal::Entry> Entries;
 
 template <typename T>

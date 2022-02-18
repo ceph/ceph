@@ -6,16 +6,10 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
-namespace seastar::alien {
-class instance;
-}
-
 class FSDriver final : public BlockDriver {
 public:
-  FSDriver(config_t config,
-	   seastar::alien::instance& alien)
-  : config(config),
-    alien(alien)
+  FSDriver(config_t config)
+  : config(config)
   {}
   ~FSDriver() final {}
 
@@ -42,17 +36,36 @@ public:
 private:
   size_t size = 0;
   const config_t config;
-  seastar::alien::instance& alien;
   std::unique_ptr<crimson::os::FuturizedStore> fs;
-  std::map<unsigned, crimson::os::CollectionRef> collections;
+
+  struct pg_analogue_t {
+    crimson::os::CollectionRef collection;
+
+    ghobject_t log_object;
+    unsigned log_tail = 0;
+    unsigned log_head = 0;
+  };
+  std::map<unsigned, pg_analogue_t> collections;
 
   struct offset_mapping_t {
-    crimson::os::CollectionRef chandle;
+    pg_analogue_t &pg;
     ghobject_t object;
     off_t offset;
   };
   offset_mapping_t map_offset(off_t offset);
 
   seastar::future<> mkfs();
-  void init();
+  seastar::future<> init();
+
+  friend void populate_log(
+    ceph::os::Transaction &,
+    pg_analogue_t &,
+    unsigned,
+    unsigned);
+
+  friend void update_log(
+    ceph::os::Transaction &,
+    FSDriver::pg_analogue_t &,
+    unsigned,
+    unsigned);
 };

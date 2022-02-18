@@ -356,6 +356,7 @@ Some flags require you to confirm your intentions with "--yes-i-really-mean-it"
 or a similar string they will prompt you with. Consider these actions carefully
 before proceeding; they are placed on especially dangerous activities.
 
+.. _advanced-cephfs-admin-settings:
 
 Advanced
 --------
@@ -364,24 +365,6 @@ These commands are not required in normal operation, and exist
 for use in exceptional circumstances.  Incorrect use of these
 commands may cause serious problems, such as an inaccessible
 file system.
-
-::
-
-    mds compat rm_compat
-
-Removes an compatibility feature flag.
-
-::
-
-    mds compat rm_incompat
-
-Removes an incompatibility feature flag.
-
-::
-
-    mds compat show
-
-Show MDS compatibility flags.
 
 ::
 
@@ -395,3 +378,14 @@ This removes a rank from the failed set.
 
 This command resets the file system state to defaults, except for the name and
 pools. Non-zero ranks are saved in the stopped set.
+
+
+::
+
+    fs new <file system name> <metadata pool name> <data pool name> --fscid <fscid> --force
+
+This command creates a file system with a specific **fscid** (file system cluster ID).
+You may want to do this when an application expects the file system's ID to be
+stable after it has been recovered, e.g., after monitor databases are lost and
+rebuilt. Consequently, file system IDs don't always keep increasing with newer
+file systems.

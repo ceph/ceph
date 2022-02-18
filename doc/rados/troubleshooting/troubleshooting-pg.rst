@@ -15,6 +15,8 @@ and make appropriate adjustments.
 As a general rule, you should run your cluster with more than one OSD and a
 pool size greater than 1 object replica.
 
+.. _one-node-cluster:
+
 One Node Cluster
 ----------------
 

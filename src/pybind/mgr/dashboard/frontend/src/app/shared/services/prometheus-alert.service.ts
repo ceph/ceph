@@ -75,7 +75,10 @@ export class PrometheusAlertService {
       this.alertFormatter.convertToCustomAlerts(alerts),
       this.alertFormatter.convertToCustomAlerts(oldAlerts)
     );
-    const notifications = changedAlerts.map((alert) =>
+    const suppressedFiltered = _.filter(changedAlerts, (alert) => {
+      return alert.status !== 'suppressed';
+    });
+    const notifications = suppressedFiltered.map((alert) =>
       this.alertFormatter.convertAlertToNotification(alert)
     );
     this.alertFormatter.sendNotifications(notifications);

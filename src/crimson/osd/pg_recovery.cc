@@ -12,12 +12,6 @@
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_recovery.h"
 
-#include "messages/MOSDPGPull.h"
-#include "messages/MOSDPGPush.h"
-#include "messages/MOSDPGPushReply.h"
-#include "messages/MOSDPGRecoveryDelete.h"
-#include "messages/MOSDPGRecoveryDeleteReply.h"
-
 #include "osd/osd_types.h"
 #include "osd/PeeringState.h"
 
@@ -27,13 +21,17 @@ namespace {
   }
 }
 
+using std::map;
+using std::set;
+
 void PGRecovery::start_pglogbased_recovery()
 {
   using PglogBasedRecovery = crimson::osd::PglogBasedRecovery;
   (void) pg->get_shard_services().start_operation<PglogBasedRecovery>(
     static_cast<crimson::osd::PG*>(pg),
     pg->get_shard_services(),
-    pg->get_osdmap_epoch());
+    pg->get_osdmap_epoch(),
+    float(0.001));
 }
 
 PGRecovery::blocking_interruptible_future<bool>
@@ -320,6 +318,16 @@ void PGRecovery::on_local_recover(
   const bool is_delete,
   ceph::os::Transaction& t)
 {
+  if (const auto &log = pg->get_peering_state().get_pg_log();
+      !is_delete &&
+      log.get_missing().is_missing(recovery_info.soid) &&
+      log.get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
+    assert(pg->is_primary());
+    if (const auto* latest = log.get_log().objects.find(recovery_info.soid)->second;
+        latest->op == pg_log_entry_t::LOST_REVERT) {
+      ceph_abort("mark_unfound_lost (LOST_REVERT) is not implemented yet");
+    }
+  }
   pg->get_peering_state().recover_got(soid,
       recovery_info.version, is_delete, t);
 

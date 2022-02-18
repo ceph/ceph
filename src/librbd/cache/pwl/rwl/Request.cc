@@ -49,10 +49,10 @@ template <typename T>
 std::ostream &operator<<(std::ostream &os,
                          const C_CompAndWriteRequest<T> &req) {
   os << (C_WriteRequest<T>&)req
-     << "cmp_bl=" << req.cmp_bl << ", "
-     << "read_bl=" << req.read_bl << ", "
-     << "compare_succeeded=" << req.compare_succeeded << ", "
-     << "mismatch_offset=" << req.mismatch_offset;
+     << " cmp_bl=" << req.cmp_bl
+     << ", read_bl=" << req.read_bl
+     << ", compare_succeeded=" << req.compare_succeeded
+     << ", mismatch_offset=" << req.mismatch_offset;
   return os;
 }
 
@@ -62,6 +62,7 @@ void C_WriteSameRequest<T>::setup_buffer_resources(
     uint64_t *number_lanes, uint64_t *number_log_entries,
     uint64_t *number_unpublished_reserves) {
   ceph_assert(this->image_extents.size() == 1);
+  *number_log_entries = 1;
   *bytes_dirtied += this->image_extents[0].second;
   auto pattern_length = this->bl.length();
   this->m_resources.buffers.emplace_back();

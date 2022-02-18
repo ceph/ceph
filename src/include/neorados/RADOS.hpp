@@ -60,8 +60,6 @@
 #include "common/ceph_time.h"
 
 namespace neorados {
-using namespace std::literals;
-
 class Object;
 class IOContext;
 }
@@ -168,6 +166,9 @@ public:
 			  std::pair<std::uint64_t,
 			              std::vector<std::uint64_t>>> snapc);
 
+  bool full_try() const;
+  void full_try(bool _full_try);
+
   friend std::ostream& operator <<(std::ostream& m, const IOContext& o);
   friend bool operator <(const IOContext& lhs, const IOContext& rhs);
   friend bool operator <=(const IOContext& lhs, const IOContext& rhs);
@@ -183,7 +184,7 @@ private:
   std::aligned_storage_t<impl_size> impl;
 };
 
-inline constexpr std::string_view all_nspaces("\001"sv);
+inline constexpr std::string_view all_nspaces("\001");
 
 enum class cmpxattr_op : std::uint8_t {
   eq  = 1,

@@ -1,0 +1,7 @@
+lib/systemd/system/ceph-volume@.service
+usr/lib/python*/dist-packages/ceph_volume/*
+usr/lib/python*/dist-packages/ceph_volume-*
+usr/sbin/ceph-volume
+usr/sbin/ceph-volume-systemd
+usr/share/man/man8/ceph-volume.8
+usr/share/man/man8/ceph-volume-systemd.8

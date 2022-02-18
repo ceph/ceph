@@ -42,10 +42,10 @@ struct compression_block {
 WRITE_CLASS_ENCODER(compression_block)
 
 struct RGWCompressionInfo {
-  string compression_type;
+  std::string compression_type;
   uint64_t orig_size;
   boost::optional<int32_t> compressor_message;
-  vector<compression_block> blocks;
+  std::vector<compression_block> blocks;
 
   RGWCompressionInfo() : compression_type("none"), orig_size(0) {}
   RGWCompressionInfo(const RGWCompressionInfo& cs_info) : compression_type(cs_info.compression_type),

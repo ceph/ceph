@@ -11,17 +11,22 @@ using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
 
+#define MAX_OBJECT_SIZE (16<<20)
+#define DEFAULT_OBJECT_DATA_RESERVATION (16<<20)
+#define DEFAULT_OBJECT_METADATA_RESERVATION (16<<20)
+
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
   }
 }
 
-class TestOnode : public Onode {
+class TestOnode final : public Onode {
   onode_layout_t layout;
   bool dirty = false;
 
 public:
+  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr) {}
   const onode_layout_t &get_layout() const final {
     return layout;
   }
@@ -30,6 +35,7 @@ public:
     return layout;
   }
   bool is_dirty() const { return dirty; }
+  laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
 };
 
@@ -56,14 +62,16 @@ struct object_data_handler_test_t:
 	known_contents,
 	offset,
 	len));
-    return ObjectDataHandler().write(
-      ObjectDataHandler::context_t{
-	itm,
-	t,
-	*onode,
-      },
-      offset,
-      bl).unsafe_get0();
+    with_trans_intr(t, [&](auto &t) {
+      return ObjectDataHandler(MAX_OBJECT_SIZE).write(
+        ObjectDataHandler::context_t{
+          *tm,
+          t,
+          *onode,
+        },
+        offset,
+        bl);
+    }).unsafe_get0();
   }
   void write(objaddr_t offset, extent_len_t len, char fill) {
     auto t = create_mutate_transaction();
@@ -77,13 +85,15 @@ struct object_data_handler_test_t:
 	known_contents.c_str() + offset,
 	0,
 	size - offset);
-      ObjectDataHandler().truncate(
-	ObjectDataHandler::context_t{
-	  itm,
-	  t,
-	  *onode
-	},
-	offset).unsafe_get0();
+      with_trans_intr(t, [&](auto &t) {
+        return ObjectDataHandler(MAX_OBJECT_SIZE).truncate(
+          ObjectDataHandler::context_t{
+            *tm,
+            t,
+            *onode
+          },
+          offset);
+      }).unsafe_get0();
     }
     size = offset;
   }
@@ -94,14 +104,16 @@ struct object_data_handler_test_t:
   }
 
   void read(Transaction &t, objaddr_t offset, extent_len_t len) {
-    bufferlist bl = ObjectDataHandler().read(
-      ObjectDataHandler::context_t{
-	itm,
-	t,
-	*onode
-      },
-      offset,
-      len).unsafe_get0();
+    bufferlist bl = with_trans_intr(t, [&](auto &t) {
+      return ObjectDataHandler(MAX_OBJECT_SIZE).read(
+        ObjectDataHandler::context_t{
+          *tm,
+          t,
+          *onode
+        },
+        offset,
+        len);
+    }).unsafe_get0();
     bufferlist known;
     known.append(
       bufferptr(
@@ -125,7 +137,9 @@ struct object_data_handler_test_t:
   }
 
   seastar::future<> set_up_fut() final {
-    onode = new TestOnode{};
+    onode = new TestOnode(
+      DEFAULT_OBJECT_DATA_RESERVATION,
+      DEFAULT_OBJECT_METADATA_RESERVATION);
     known_contents = buffer::create(4<<20 /* 4MB */);
     memset(known_contents.c_str(), 0, known_contents.length());
     size = 0;

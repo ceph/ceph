@@ -717,6 +717,8 @@ Context *ImageWatcher<I>::remove_async_request(const AsyncRequestId &id,
                                                ceph::shared_mutex &lock) {
   ceph_assert(ceph_mutex_is_locked(lock));
 
+  ldout(m_image_ctx.cct, 20) << __func__ << ": " << id << dendl;
+
   auto it = m_async_requests.find(id);
   if (it != m_async_requests.end()) {
     Context *on_complete = it->second.first;

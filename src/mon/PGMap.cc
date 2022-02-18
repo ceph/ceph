@@ -925,7 +925,11 @@ void PGMapDigest::dump_object_stat_sum(
     if (verbose) {
       f->dump_int("quota_objects", pool->quota_max_objects);
       f->dump_int("quota_bytes", pool->quota_max_bytes);
-      f->dump_int("dirty", sum.num_objects_dirty);
+      if (pool->is_tier()) {
+        f->dump_int("dirty", sum.num_objects_dirty);
+      } else {
+        f->dump_int("dirty", 0);
+      }
       f->dump_int("rd", sum.num_rd);
       f->dump_int("rd_bytes", sum.num_rd_kb * 1024ull);
       f->dump_int("wr", sum.num_wr);
@@ -955,16 +959,17 @@ void PGMapDigest::dump_object_stat_sum(
         tbl << "N/A";
       else
         tbl << stringify(si_u_t(pool->quota_max_objects));
-
       if (pool->quota_max_bytes == 0)
         tbl << "N/A";
       else
         tbl << stringify(byte_u_t(pool->quota_max_bytes));
-
-      tbl << stringify(si_u_t(sum.num_objects_dirty))
-	  << stringify(byte_u_t(statfs.data_compressed_allocated))
-	  << stringify(byte_u_t(statfs.data_compressed_original))
-	  ;
+      if (pool->is_tier()) {
+        tbl << stringify(si_u_t(sum.num_objects_dirty));
+      } else {
+        tbl << "N/A";
+      }
+      tbl << stringify(byte_u_t(statfs.data_compressed_allocated));
+      tbl << stringify(byte_u_t(statfs.data_compressed_original));
     }
   }
 }
@@ -1559,6 +1564,21 @@ void PGMap::dump_pg_stats(ceph::Formatter *f, bool brief) const
   f->close_section();
 }
 
+void PGMap::dump_pg_progress(ceph::Formatter *f) const
+{
+  f->open_object_section("pgs");
+  for (auto& i : pg_stat) {
+    std::string n = stringify(i.first);
+    f->open_object_section(n.c_str());
+    f->dump_int("num_bytes_recovered", i.second.stats.sum.num_bytes_recovered);
+    f->dump_int("num_bytes", i.second.stats.sum.num_bytes);
+    f->dump_unsigned("reported_epoch", i.second.reported_epoch);
+    f->dump_string("state", pg_state_string(i.second.state));
+    f->close_section();
+  }
+  f->close_section();
+}
+
 void PGMap::dump_pool_stats(ceph::Formatter *f) const
 {
   f->open_array_section("pool_stats");
@@ -1603,7 +1623,7 @@ void PGMap::dump_osd_stats(ceph::Formatter *f, bool with_net) const
 void PGMap::dump_osd_ping_times(ceph::Formatter *f) const
 {
   f->open_array_section("osd_ping_times");
-  for (auto& [osd, stat] : osd_stat) {
+  for (const auto& [osd, stat] : osd_stat) {
     f->open_object_section("osd_ping_time");
     f->dump_int("osd", osd);
     stat.dump_ping_time(f);
@@ -1612,10 +1632,11 @@ void PGMap::dump_osd_ping_times(ceph::Formatter *f) const
   f->close_section();
 }
 
+// note: dump_pg_stats_plain() is static
 void PGMap::dump_pg_stats_plain(
   ostream& ss,
   const mempool::pgmap::unordered_map<pg_t, pg_stat_t>& pg_stats,
-  bool brief) const
+  bool brief)
 {
   TextTable tab;
 
@@ -1652,13 +1673,14 @@ void PGMap::dump_pg_stats_plain(
     tab.define_column("LAST_DEEP_SCRUB", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DEEP_SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("SNAPTRIMQ_LEN", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LAST_SCRUB_DURATION", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("SCRUB_SCHEDULING", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("OBJECTS_SCRUBBED", TextTable::LEFT, TextTable::RIGHT);
   }
 
-  for (auto i = pg_stats.begin();
-       i != pg_stats.end(); ++i) {
-    const pg_stat_t &st(i->second);
+  for (const auto& [pg, st] : pg_stats) {
     if (brief) {
-      tab << i->first
+      tab << pg
           << pg_state_string(st.state)
           << st.up
           << st.up_primary
@@ -1669,7 +1691,7 @@ void PGMap::dump_pg_stats_plain(
       ostringstream reported;
       reported << st.reported_epoch << ":" << st.reported_seq;
 
-      tab << i->first
+      tab << pg
           << st.stats.sum.num_objects
           << st.stats.sum.num_objects_missing_on_primary
           << st.stats.sum.num_objects_degraded
@@ -1693,6 +1715,9 @@ void PGMap::dump_pg_stats_plain(
           << st.last_deep_scrub
           << st.last_deep_scrub_stamp
           << st.snaptrimq_len
+          << st.last_scrub_duration
+          << st.dump_scrub_schedule()
+          << st.objects_scrubbed
           << TextTable::endrow;
     }
   }
@@ -2223,6 +2248,8 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   tab.define_column("ACTING", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEEP_SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("LAST_SCRUB_DURATION", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("SCRUB_SCHEDULING", TextTable::LEFT, TextTable::LEFT);
 
   for (auto i = pgs.begin(); i != pgs.end(); ++i) {
     const pg_stat_t& st = pg_stat.at(*i);
@@ -2250,7 +2277,9 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
         << actingstr.str()
         << st.last_scrub_stamp
         << st.last_deep_scrub_stamp
-        << TextTable::endrow;
+        << st.last_scrub_duration
+        << st.dump_scrub_schedule()
+      << TextTable::endrow;
   }
 
   ss << tab;
@@ -2259,7 +2288,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
 void PGMap::dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map,
                                         ceph::Formatter *f,
                                         stringstream *rs) const {
-  string pool_name = osd_map.get_pool_name(poolid);
+  const string& pool_name = osd_map.get_pool_name(poolid);
   if (f) {
     f->open_object_section("pool");
     f->dump_string("pool_name", pool_name.c_str());
@@ -2907,11 +2936,13 @@ void PGMap::get_health_checks(
 	if (mon_pg_warn_max_object_skew > 0 &&
 	    ratio > mon_pg_warn_max_object_skew) {
 	  ostringstream ss;
-	  ss << "pool " << name << " objects per pg ("
-	     << objects_per_pg << ") is more than " << ratio
-	     << " times cluster average ("
-	     << average_objects_per_pg << ")";
-	  many_detail.push_back(ss.str());
+	  if (pi->pg_autoscale_mode != pg_pool_t::pg_autoscale_mode_t::ON) {
+	      ss << "pool " << name << " objects per pg ("
+		 << objects_per_pg << ") is more than " << ratio
+		 << " times cluster average ("
+		 << average_objects_per_pg << ")";
+	      many_detail.push_back(ss.str());
+	  }
 	}
       }
     }

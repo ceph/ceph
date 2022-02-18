@@ -58,6 +58,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".journal "
 
+using std::list;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 // -----------------------
 // LogSegment
@@ -1291,7 +1298,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	ceph_assert(dn->last == fb.dnlast);
       }
       if (lump.is_importing())
-	dn->state_set(CDentry::STATE_AUTH);
+	dn->mark_auth();
 
       CInode *in = mds->mdcache->get_inode(fb.inode->ino, fb.dnlast);
       if (!in) {
@@ -1388,7 +1395,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	ceph_assert(dn->last == rb.dnlast);
       }
       if (lump.is_importing())
-	dn->state_set(CDentry::STATE_AUTH);
+	dn->mark_auth();
 
       if (!(++count % 1000))
         mds->heartbeat_reset();
@@ -1423,7 +1430,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       }
       olddir = dir;
       if (lump.is_importing())
-	dn->state_set(CDentry::STATE_AUTH);
+	dn->mark_auth();
 
       // Make null dentries the first things we trim
       dout(10) << "EMetaBlob.replay pushing to bottom of lru " << *dn << dendl;
@@ -1731,7 +1738,7 @@ void EPurged::replay(MDSRank *mds)
       dout(10) << "EPurged.replay inotable " << mds->inotable->get_version()
 	       << " < " << inotablev << " " << dendl;
       mds->inotable->replay_release_ids(inos);
-      assert(mds->inotable->get_version() == inotablev);
+      ceph_assert(mds->inotable->get_version() == inotablev);
     }
   }
   update_segment();

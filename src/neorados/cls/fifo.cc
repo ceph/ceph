@@ -35,6 +35,8 @@
 
 #include "fifo.h"
 
+using namespace std;
+
 namespace neorados::cls::fifo {
 namespace bs = boost::system;
 namespace cb = ceph::buffer;

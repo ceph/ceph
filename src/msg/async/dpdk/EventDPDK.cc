@@ -67,7 +67,7 @@ int DPDKDriver::resize_events(int newsize)
 	return 0;
 }
 
-int DPDKDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tvp)
+int DPDKDriver::event_wait(std::vector<FiredFileEvent> &fired_events, struct timeval *tvp)
 {
 	int num_events = 512;
 	int events[num_events];

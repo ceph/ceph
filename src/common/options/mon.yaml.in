@@ -290,6 +290,12 @@ options:
   desc: log health detail to cluster log
   default: true
   with_legacy: true
+- name: mon_warn_on_filestore_osds
+  type: bool
+  level: dev
+  desc: log health warn for filestore OSDs
+  default: true
+  with_legacy: true
 - name: mon_health_max_detail
   type: uint
   level: advanced
@@ -756,13 +762,21 @@ options:
 - name: mon_mds_force_trim_to
   type: int
   level: dev
-  desc: force mons to trim mdsmaps/fsmaps through this epoch
-  fmt_desc: Force monitor to trim mdsmaps to this point (0 disables it.
-    dangerous, use with care)
+  desc: force mons to trim mdsmaps/fsmaps up to this epoch
+  fmt_desc: Force monitor to trim mdsmaps up to but not including this FSMap
+    epoch. A value of 0 disables (the default) this config. This command is
+    potentially dangerous, use with care.
   default: 0
   services:
   - mon
   with_legacy: true
+- name: mds_beacon_mon_down_grace
+  type: secs
+  level: advanced
+  desc: tolerance in seconds for missed MDS beacons to monitors
+  fmt_desc: The interval without beacons before Ceph declares an MDS laggy
+    when a monitor is down.
+  default: 1_min
 # skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
 - name: mon_mds_skip_sanity
   type: bool

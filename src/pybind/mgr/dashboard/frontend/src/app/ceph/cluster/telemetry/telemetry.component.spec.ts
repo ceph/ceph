@@ -170,6 +170,139 @@ describe('TelemetryComponent', () => {
       expect(component).toBeTruthy();
     });
 
+    it('should only replace the ranges and values of a JSON object', () => {
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ]
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 0, 0]
+        ]
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: true
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: true
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: 1
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: 1
+      });
+
+      expect(
+        JSON.parse(
+          component.replacerTest({
+            ranges: [
+              [null, -1],
+              [0, 511],
+              [512, 1023]
+            ],
+            values: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0]
+            ],
+            other: { value: 0 }
+          })
+        )
+      ).toStrictEqual({
+        ranges: ['[null,-1]', '[0,511]', '[512,1023]'],
+        values: ['[0,0,0]', '[0,0,0]', '[0,0,0]'],
+        other: { value: 0 }
+      });
+    });
+
+    it('should remove perf channel fields from a report', () => {
+      expect(
+        JSON.parse(
+          component.formatReportTest({
+            perf_counters: {},
+            stats_per_pool: {},
+            stats_per_pg: {},
+            io_rate: {},
+            osd_perf_histograms: {},
+            mempool: {},
+            heap_stats: {},
+            rocksdb_stats: {}
+          })
+        )
+      ).toStrictEqual({});
+
+      expect(
+        JSON.parse(
+          component.formatReportTest({
+            perf_counters: {},
+            stats_per_pool: {},
+            stats_per_pg: {},
+            io_rate: {},
+            osd_perf_histograms: {},
+            mempool: {},
+            heap_stats: {},
+            rocksdb_stats: {},
+            other: {}
+          })
+        )
+      ).toStrictEqual({
+        other: {}
+      });
+    });
+
     it('should submit', () => {
       component.onSubmit();
       const req = httpTesting.expectOne('api/telemetry');

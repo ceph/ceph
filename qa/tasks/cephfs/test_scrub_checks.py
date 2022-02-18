@@ -168,15 +168,13 @@ done
         # Kill the rank 0
         self.fs.mds_stop(original_active)
 
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
         def promoted():
             active = self.fs.get_active_names()
             return active and active[0] in original_standbys
 
         log.info("Waiting for promotion of one of the original standbys {0}".format(
             original_standbys))
-        self.wait_until_true(promoted, timeout=grace*2)
+        self.wait_until_true(promoted, timeout=self.fs.beacon_timeout)
 
         self._check_task_status_na()
 

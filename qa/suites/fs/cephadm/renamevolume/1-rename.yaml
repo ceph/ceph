@@ -1,0 +1,11 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph fs volume rename foo bar --yes-i-really-mean-it
+- fs.ready:
+    timeout: 300
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        ceph orch ls mds --format=json | jq ".[] | .service_name" | grep "mds.bar"

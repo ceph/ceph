@@ -127,13 +127,14 @@ Options
 .. option:: --docker
 
    use docker instead of podman (default: False)
-.. option::data-dir DATA_DIR
 
-   base directory for daemon data (default:/var/lib/ceph)
+.. option:: --data-dir DATA_DIR
+
+   base directory for daemon data (default: /var/lib/ceph)
 
 .. option:: --log-dir LOG_DIR
 
-   base directory for daemon logs (default:.. option:: /var/log/ceph)
+   base directory for daemon logs (default: /var/log/ceph)
 
 .. option:: --logrotate-dir LOGROTATE_DIR
 

@@ -323,7 +323,7 @@ has been enabled by default since the Giant release. Moreover, enabling the
 client admin socket allows the collection of metrics and can be invaluable
 for troubleshooting.
 
-This socket can be accessed on the hypvervisor (Nova compute) node::
+This socket can be accessed on the hypervisor (Nova compute) node::
 
     ceph daemon /var/run/ceph/ceph-client.cinder.19195.32310016.asok help
 

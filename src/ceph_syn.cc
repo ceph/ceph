@@ -34,13 +34,14 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
+using namespace std;
+
 extern int syn_filer_flags;
 
 int main(int argc, const char **argv, char *envp[]) 
 {
   //cerr << "ceph-syn starting" << std::endl;
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);

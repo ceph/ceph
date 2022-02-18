@@ -58,13 +58,8 @@ public:
       guard.emplace(boost::asio::make_work_guard(ioctx));
       ioctx.restart();
       for (std::int16_t i = 0; i < threadcnt; ++i) {
-	// Mark this function as noexcept so any uncaught exceptions
-	// call terminate at point of throw. Otherwise, under
-	// libstdc++, they get caught by the thread cancellation
-	// infrastructure, unwinding the stack and making debugging
-	// much more difficult.
 	threadvec.emplace_back(make_named_thread("io_context_pool",
-						 [this]() noexcept {
+						 [this]() {
 						   ioctx.run();
 						 }));
       }

@@ -23,6 +23,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
+
 const string reshard_oid_prefix = "reshard.";
 const string reshard_lock_name = "reshard_process";
 const string bucket_instance_lock_name = "bucket_instance_lock";
@@ -347,15 +349,15 @@ static int create_new_bucket_instance(rgw::sal::RadosStore* store,
   new_bucket_info.new_bucket_instance_id.clear();
   new_bucket_info.reshard_status = cls_rgw_reshard_status::NOT_RESHARDING;
 
-  int ret = store->svc()->bi->init_index(dpp, new_bucket_info);
+  int ret = store->getRados()->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs, dpp);
   if (ret < 0) {
-    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
+    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
 
-  ret = store->getRados()->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs, dpp);
+  ret = store->svc()->bi->init_index(dpp, new_bucket_info);
   if (ret < 0) {
-    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
+    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
 
@@ -598,9 +600,10 @@ int RGWBucketReshard::do_reshard(int num_shards,
   for (int i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
     marker.clear();
+    const std::string null_object_filter; // empty string since we're not filtering by object
     while (is_truncated) {
       entries.clear();
-      ret = store->getRados()->bi_list(dpp, bucket_info, i, string(), marker, max_entries, &entries, &is_truncated);
+      ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter, marker, max_entries, &entries, &is_truncated);
       if (ret < 0 && ret != -ENOENT) {
 	derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
 	return ret;
@@ -753,7 +756,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   // resharding successful, so remove old bucket index shards; use
   // best effort and don't report out an error; the lock isn't needed
-  // at this point since all we're using a best effor to to remove old
+  // at this point since all we're using a best effort to remove old
   // shard objects
   ret = store->svc()->bi->clean_index(dpp, bucket_info);
   if (ret < 0) {
@@ -887,18 +890,17 @@ int RGWReshard::list(const DoutPrefixProvider *dpp, int logshard_num, string& ma
 
   int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
 
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << " " 
-    << "marker=" << marker << " " << cpp_strerror(ret) << dendl;
-    if (ret == -ENOENT) {
-      *is_truncated = false;
-      ret = 0;
-    } else {
-      if (ret == -EACCES) {
-        ldpp_dout(dpp, -1) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
-                          << ". Fix the pool access permissions of your client" << dendl;
-      }
-    } 
+  if (ret == -ENOENT) {
+    // these shard objects aren't created until we actually write something to
+    // them, so treat ENOENT as a successful empty listing
+    *is_truncated = false;
+    ret = 0;
+  } else if (ret == -EACCES) {
+    ldpp_dout(dpp, -1) << "ERROR: access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
+                      << ". Fix the pool access permissions of your client" << dendl;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to list reshard log entries, oid="
+        << logshard_oid << " marker=" << marker << " " << cpp_strerror(ret) << dendl;
   }
 
   return ret;

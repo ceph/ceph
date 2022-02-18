@@ -12,12 +12,13 @@
     </span>
 
     <ng-container formArrayName="clients">
-      <div *ngFor="let item of form.get('clients').value; let index = index; trackBy: trackByFn">
+      <div *ngFor="let item of clientsFormArray.controls; let index = index; trackBy: trackByFn">
         <div class="card"
-             [formGroupName]="index">
+             [formGroup]="item">
           <div class="card-header">
             {{ (index + 1) | ordinal }}
             <span class="float-right clickable"
+                  name="remove_client"
                   (click)="removeClient(index)"
                   ngbTooltip="Remove">&times;</span>
           </div>
@@ -26,7 +27,7 @@
             <!-- Addresses -->
             <div class="form-group row">
               <label i18n
-                     class="cd-col-form-label"
+                     class="cd-col-form-label required"
                      for="addresses">Addresses</label>
               <div class="cd-col-form-input">
                 <input type="text"
@@ -71,9 +72,11 @@
 
             <!-- Squash -->
             <div class="form-group row">
-              <label i18n
-                     class="cd-col-form-label"
-                     for="squash">Squash</label>
+              <label class="cd-col-form-label"
+                     for="squash">
+                <span i18n>Squash</span>
+                <ng-container *ngTemplateOutlet="squashHelperTpl"></ng-container>
+              </label>
               <div class="cd-col-form-input">
                 <select class="form-control custom-select"
                         name="squash"
@@ -94,7 +97,8 @@
       <div class="col-12">
         <div class="float-right">
           <button class="btn btn-light "
-                  (click)="addClient()">
+                  (click)="addClient()"
+                  name="add_client">
             <i [ngClass]="[icons.add]"></i>
             <ng-container i18n>Add clients</ng-container>
           </button>

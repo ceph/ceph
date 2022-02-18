@@ -4,7 +4,7 @@
 """To run this script first install the dependencies
 
 
-  virtualenv v
+  python3 -m venv v
   source v/bin/activate
   pip install githubpy GitPython requests
 
@@ -137,10 +137,14 @@ def _title_message(commit, pr, strict):
         # assume that a single line means the intention is to
         # re-write the PR title
         return (lines[0], None)
+    elif len(lines) < 3 and 'refs/pull' in lines[0]:
+        # assume the intent was rewriting the title and something like
+        # ptl-tool was used to generate the merge message
+        return (lines[1], None)
     message = "    " + "\n    ".join(lines)
     return (title, message)
 
-def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict, use_tags):
+def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict, use_tags, include_pr_messages):
 
     issue2prs = {}
     pr2issues = {}
@@ -242,7 +246,7 @@ def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict
                        issue + " " + str(prs))
 
     for (pr, (author, title, message)) in sorted(
-        pr2info.items(), key=lambda title: title[1][1]
+        pr2info.items(), key=lambda title: title[1][1].lower()
     ):
         if pr in pr2issues:
             if plaintext:
@@ -285,8 +289,9 @@ def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict
                 )
             )
         elif markdown:
+            markdown_title = title.replace('_', '\_').replace('.', '<span></span>.')
             print ("- {title} ({issues}[pr#{pr}](https://github.com/ceph/ceph/pull/{pr}), {author})\n".format(
-                    title=title,
+                    title=markdown_title,
                     issues=issues,
                     author=author, pr=pr
                 )
@@ -303,7 +308,7 @@ def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict
                     author=author, pr=pr
                 )
             )
-        if message:
+        if include_pr_messages and message:
             print (message)
 
 
@@ -349,6 +354,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--use-tags", default=False,
                         help="Use github tags to guess the component")
+    parser.add_argument("--include-pr-messages", default=False, action='store_true',
+                        help="Include full PR message in addition to PR title, if available")
 
     args = parser.parse_args()
     gh = github.GitHub(
@@ -363,5 +370,6 @@ if __name__ == "__main__":
         args.markdown,
         args.verbose,
         args.strict,
-        args.use_tags
+        args.use_tags,
+        args.include_pr_messages
     )

@@ -371,6 +371,7 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
 
   std::lock_guard locker{m_lock};
   if (m_on_shut_down != nullptr) {
+    m_async_op_tracker.finish_op();
     return;
   }
 

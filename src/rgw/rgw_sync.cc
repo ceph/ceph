@@ -3,12 +3,14 @@
 
 #include <boost/optional.hpp>
 
-#include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 #include "common/admin_socket.h"
 #include "common/errno.h"
+
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
 
 #include "rgw_common.h"
 #include "rgw_zone.h"
@@ -36,9 +38,13 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "meta sync: ")
 
+using namespace std;
+
 static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
+
+RGWContinuousLeaseCR::~RGWContinuousLeaseCR() {}
 
 RGWSyncErrorLogger::RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const string &oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
   for (int i = 0; i < num_shards; i++) {
@@ -232,11 +238,6 @@ public:
   }
   bool spawn_next() override;
 };
-
-RGWRemoteMetaLog::~RGWRemoteMetaLog()
-{
-  delete error_logger;
-}
 
 int RGWRemoteMetaLog::read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info)
 {
@@ -1296,14 +1297,14 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
         break;
       }
 
-      if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
-        ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
-        continue;
-      }
-
       if (sync_status < 0) {
-        tn->log(10, SSTR("failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status));
-        log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
+        if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
+          ldpp_dout(dpp, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
+          continue;
+        }
+
+        tn->log(10, SSTR("failed to read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status));
+        log_error() << "failed to read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
         yield call(sync_env->error_logger->log_error_cr(dpp, sync_env->conn->get_remote_id(), section, key, -sync_status,
                                                         string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
         return set_cr_error(sync_status);
@@ -1316,12 +1317,12 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
         tn->log(10, SSTR("storing local metadata entry"));
-          yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
+        yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
       } else {
         tn->log(10, SSTR("removing local metadata entry"));
-          yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
+        yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
       }
-      if (tries < NUM_TRANSIENT_ERROR_RETRIES - 1) {
+      if ((retcode < 0) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
         ldpp_dout(dpp, 20) << *this << ": failed to store metadata: " << section << ":" << key << ", got retcode=" << retcode << dendl;
         continue;
       }
@@ -1664,6 +1665,11 @@ public:
           yield lease_cr->go_down();
           drain_all();
           return retcode;
+        }
+        // clean up full sync index
+        yield {
+          auto oid = full_sync_index_shard_oid(shard_id);
+          call(new RGWRadosRemoveCR(sync_env->store, {pool, oid}));
         }
       }
 
@@ -2481,3 +2487,87 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries_complete()
 {
   return set_cr_done();
 }
+
+void rgw_meta_sync_info::decode_json(JSONObj *obj)
+{
+  string s;
+  JSONDecoder::decode_json("status", s, obj);
+  if (s == "init") {
+    state = StateInit;
+  } else if (s == "building-full-sync-maps") {
+    state = StateBuildingFullSyncMaps;
+  } else if (s == "sync") {
+    state = StateSync;
+  }
+  JSONDecoder::decode_json("num_shards", num_shards, obj);
+  JSONDecoder::decode_json("period", period, obj);
+  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
+}
+
+void rgw_meta_sync_info::dump(Formatter *f) const
+{
+  string s;
+  switch ((SyncState)state) {
+  case StateInit:
+    s = "init";
+    break;
+  case StateBuildingFullSyncMaps:
+    s = "building-full-sync-maps";
+    break;
+  case StateSync:
+    s = "sync";
+    break;
+  default:
+    s = "unknown";
+    break;
+  }
+  encode_json("status", s, f);
+  encode_json("num_shards", num_shards, f);
+  encode_json("period", period, f);
+  encode_json("realm_epoch", realm_epoch, f);
+}
+
+
+void rgw_meta_sync_marker::decode_json(JSONObj *obj)
+{
+  int s;
+  JSONDecoder::decode_json("state", s, obj);
+  state = s;
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("next_step_marker", next_step_marker, obj);
+  JSONDecoder::decode_json("total_entries", total_entries, obj);
+  JSONDecoder::decode_json("pos", pos, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("timestamp", ut, obj);
+  timestamp = ut.to_real_time();
+  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
+}
+
+void rgw_meta_sync_marker::dump(Formatter *f) const
+{
+  encode_json("state", (int)state, f);
+  encode_json("marker", marker, f);
+  encode_json("next_step_marker", next_step_marker, f);
+  encode_json("total_entries", total_entries, f);
+  encode_json("pos", pos, f);
+  encode_json("timestamp", utime_t(timestamp), f);
+  encode_json("realm_epoch", realm_epoch, f);
+}
+
+void rgw_meta_sync_status::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("info", sync_info, obj);
+  JSONDecoder::decode_json("markers", sync_markers, obj);
+}
+
+void rgw_meta_sync_status::dump(Formatter *f) const {
+  encode_json("info", sync_info, f);
+  encode_json("markers", sync_markers, f);
+}
+
+void rgw_sync_error_info::dump(Formatter *f) const {
+  encode_json("source_zone", source_zone, f);
+  encode_json("error_code", error_code, f);
+  encode_json("message", message, f);
+}
+

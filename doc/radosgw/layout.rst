@@ -117,7 +117,7 @@ These objects are accessed when listing buckets, when updating bucket
 contents, and updating and retrieving bucket statistics (e.g. for quota).
 
 See the user-visible, encoded class 'cls_user_bucket_entry' and its
-nested class 'cls_user_bucket' for the values of these omap entires.
+nested class 'cls_user_bucket' for the values of these omap entries.
 
 These listings are kept consistent with buckets in pool ".rgw".
 

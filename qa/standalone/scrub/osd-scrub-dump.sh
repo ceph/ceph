@@ -24,7 +24,6 @@ POOL_SIZE=3
 function run() {
     local dir=$1
     shift
-    local SLEEP=0
     local CHUNK_MAX=5
 
     export CEPH_MON="127.0.0.1:7184" # git grep '\<7184\>' : there must be only one
@@ -32,10 +31,13 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd_max_scrubs=$MAX_SCRUBS "
-    CEPH_ARGS+="--osd_scrub_sleep=$SLEEP "
     CEPH_ARGS+="--osd_scrub_chunk_max=$CHUNK_MAX "
     CEPH_ARGS+="--osd_scrub_sleep=$SCRUB_SLEEP "
     CEPH_ARGS+="--osd_pool_default_size=$POOL_SIZE "
+    # Set scheduler to "wpq" until there's a reliable way to query scrub states
+    # with "--osd-scrub-sleep" set to 0. The "mclock_scheduler" overrides the
+    # scrub sleep to 0 and as a result the checks in the test fail.
+    CEPH_ARGS+="--osd_op_queue=wpq "
 
     export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
@@ -91,10 +93,9 @@ function TEST_recover_unexpected() {
     ceph pg dump pgs
 
     max=$(CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) dump_scrub_reservations | jq '.osd_max_scrubs')
-    if [ $max != $MAX_SCRUBS];
-    then
-	echo "ERROR: Incorrect osd_max_scrubs from dump_scrub_reservations"
-	return 1
+    if [ $max != $MAX_SCRUBS ]; then
+        echo "ERROR: Incorrect osd_max_scrubs from dump_scrub_reservations"
+        return 1
     fi
 
     ceph osd unset noscrub
@@ -103,7 +104,7 @@ function TEST_recover_unexpected() {
     for i in $(seq 0 300)
     do
 	ceph pg dump pgs
-	if ceph pg dump pgs | grep scrubbing; then
+	if ceph pg dump pgs | grep '+scrubbing'; then
 	    ok=true
 	    break
 	fi
@@ -143,7 +144,7 @@ function TEST_recover_unexpected() {
     # Check that there are no more scrubs
     for i in $(seq 0 5)
     do
-        if ceph pg dump pgs | grep scrubbing; then
+        if ceph pg dump pgs | grep '+scrubbing'; then
 	    echo "ERROR: Extra scrubs after test completion...not expected"
 	    return 1
         fi

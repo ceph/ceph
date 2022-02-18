@@ -4,6 +4,7 @@
 
 .. confval:: mds_cache_mid
 .. confval:: mds_dir_max_commit_size
+.. confval:: mds_dir_max_entries
 .. confval:: mds_decay_halflife
 .. confval:: mds_beacon_interval
 .. confval:: mds_beacon_grace
@@ -60,3 +61,4 @@
 .. confval:: mds_wipe_ino_prealloc
 .. confval:: mds_skip_ino
 .. confval:: mds_min_caps_per_client
+.. confval:: mds_symlink_recovery

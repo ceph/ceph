@@ -21,6 +21,7 @@
 #include "Interceptor.h"
 #endif
 
+using std::ostream;
 using namespace crimson::net;
 using crimson::common::local_conf;
 
@@ -128,6 +129,10 @@ SocketConnection::close_clean(bool dispatch_reset)
 
 seastar::shard_id SocketConnection::shard_id() const {
   return messenger.shard_id();
+}
+
+seastar::socket_address SocketConnection::get_local_address() const {
+  return protocol->socket->get_local_address();
 }
 
 void SocketConnection::print(ostream& out) const {

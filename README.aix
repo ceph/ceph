@@ -19,7 +19,6 @@ The following AIX packages are required for developing and compilation, they hav
 	gettext
 	less
 	perl
-	gdbm
 	pcre
 	rsync
 	zlib

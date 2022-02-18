@@ -2,6 +2,7 @@
 
 ``activate``
 ============
+          
 Once :ref:`ceph-volume-lvm-prepare` is completed, and all the various steps
 that entails are done, the volume is ready to get "activated".
 
@@ -11,6 +12,9 @@ understand what OSD is enabled and needs to be mounted.
 
 .. note:: The execution of this call is fully idempotent, and there is no
           side-effects when running multiple times
+
+For OSDs deployed by cephadm, please refer to :ref:cephadm-osd-activate: 
+instead.
 
 New OSDs
 --------
@@ -24,6 +28,10 @@ need to be supplied. For example::
 
 Activating all OSDs
 -------------------
+
+.. note:: For OSDs deployed by cephadm, please refer to :ref:cephadm-osd-activate: 
+          instead.
+
 It is possible to activate all existing OSDs at once by using the ``--all``
 flag. For example::
 
@@ -88,7 +96,7 @@ Existing OSDs
 -------------
 For existing OSDs that have been deployed with ``ceph-disk``, they need to be
 scanned and activated :ref:`using the simple sub-command <ceph-volume-simple>`.
-If a different tooling was used then the only way to port them over to the new
+If a different tool was used then the only way to port them over to the new
 mechanism is to prepare them again (losing data). See
 :ref:`ceph-volume-lvm-existing-osds` for details on how to proceed.
 

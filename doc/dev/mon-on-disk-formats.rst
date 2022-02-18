@@ -64,7 +64,7 @@ AuthMonitor::upgrade_format() called by `PaxosService::_active()`::
 boil down
 ---------
 
-* if `format_version >= current_version` then format is uptodate, return.
+* if `format_version >= current_version` then format is up-to-date, return.
 * if `features doesn't contain LUMINOUS` then `current_version = 1`
 * else if `features doesn't contain MIMIC` then `current_version = 2`
 * else `current_version = 3`

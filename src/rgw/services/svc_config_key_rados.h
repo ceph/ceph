@@ -46,7 +46,9 @@ public:
 
   RGWSI_ConfigKey_RADOS(CephContext *cct) : RGWSI_ConfigKey(cct) {}
 
-  int get(const string& key, bool secure, bufferlist *result) override;
+  virtual ~RGWSI_ConfigKey_RADOS() override;
+
+  int get(const std::string& key, bool secure, bufferlist *result) override;
 };
 
 

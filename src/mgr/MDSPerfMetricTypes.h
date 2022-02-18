@@ -124,6 +124,8 @@ enum class MDSPerformanceCounterType : uint8_t {
   OPENED_FILES_METRIC = 5,
   PINNED_ICAPS_METRIC = 6,
   OPENED_INODES_METRIC = 7,
+  READ_IO_SIZES_METRIC = 8,
+  WRITE_IO_SIZES_METRIC = 9,
 };
 
 struct MDSPerformanceCounterDescriptor {
@@ -139,6 +141,8 @@ struct MDSPerformanceCounterDescriptor {
     case MDSPerformanceCounterType::OPENED_FILES_METRIC:
     case MDSPerformanceCounterType::PINNED_ICAPS_METRIC:
     case MDSPerformanceCounterType::OPENED_INODES_METRIC:
+    case MDSPerformanceCounterType::READ_IO_SIZES_METRIC:
+    case MDSPerformanceCounterType::WRITE_IO_SIZES_METRIC:
       return true;
     default:
       return false;

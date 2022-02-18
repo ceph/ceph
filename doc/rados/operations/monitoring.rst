@@ -410,12 +410,11 @@ on the number of replicas, clones and snapshots.
   to this pool.
 - **QUOTA OBJECTS:** The number of quota objects.
 - **QUOTA BYTES:** The number of bytes in the quota objects.
-- **DIRTY:** "DIRTY" is meaningful only when cache tiering is in use. If cache
-  tiering is in use, the "DIRTY" column lists the number of objects in the
-  cache pool that have been written to the cache pool but have not flushed yet
-  to the base pool.
+- **DIRTY:** The number of objects in the cache pool that have been written to
+  the cache pool but have not been flushed yet to the base pool. This field is
+  only available when cache tiering is in use.
 - **USED COMPR:** amount of space allocated for compressed data (i.e. this
-  includes comrpessed data plus all the allocation, replication and erasure
+  includes compressed data plus all the allocation, replication and erasure
   coding overhead).
 - **UNDER COMPR:** amount of data passed through compression (summed over all
   replicas) and beneficial enough to be stored in a compressed form.
@@ -448,7 +447,7 @@ Or:
   ceph osd dump
 	
 You can also check view OSDs according to their position in the CRUSH map by
-using the folloiwng command:
+using the following command:
 
 .. prompt:: bash #
 

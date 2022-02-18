@@ -2,6 +2,8 @@
 Cephadm Operations
 ==================
 
+.. _watching_cephadm_logs:
+
 Watching cephadm log messages
 =============================
 
@@ -15,7 +17,7 @@ up. Run the following command to see the logs in real time:
 
 By default, this command shows info-level events and above.  To see
 debug-level messages as well as info-level events, run the following
-command:
+commands:
 
 .. prompt:: bash #
 
@@ -41,17 +43,17 @@ monitor hosts as well as to the monitor daemons' stderr.
 Ceph daemon logs
 ================
 
-Logging to stdout
------------------
+Logging to journald
+-------------------
 
-Ceph daemons traditionally write logs to ``/var/log/ceph``. Ceph
-daemons log to stderr by default and Ceph logs are captured by the
-container runtime environment. By default, most systems send these
-logs to journald, which means that they are accessible via
-``journalctl``.
+Ceph daemons traditionally write logs to ``/var/log/ceph``. Ceph daemons log to
+journald by default and Ceph logs are captured by the container runtime
+environment. They are accessible via ``journalctl``.
 
-Example of logging to stdout 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. note:: Prior to Quincy, ceph daemons logged to stderr.
+
+Example of logging to journald
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For example, to view the logs for the daemon ``mon.foo`` for a cluster
 with ID ``5c5a50ae-272a-455d-99e9-32c6a013e694``, the command would be
@@ -63,25 +65,15 @@ something like:
 
 This works well for normal operations when logging levels are low.
 
-Disabling logging to stderr
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-To disable logging to stderr:
-
-.. prompt:: bash #
-
-  ceph config set global log_to_stderr false
-  ceph config set global mon_cluster_log_to_stderr false
-
 Logging to files
 ----------------
 
 You can also configure Ceph daemons to log to files instead of to
-stderr if you prefer logs to appear in files (as they did in earlier,
+journald if you prefer logs to appear in files (as they did in earlier,
 pre-cephadm, pre-Octopus versions of Ceph).  When Ceph logs to files,
 the logs appear in ``/var/log/ceph/<cluster-fsid>``. If you choose to
-configure Ceph to log to files instead of to stderr, remember to
-configure Ceph so that it will not log to stderr (the commands for
+configure Ceph to log to files instead of to journald, remember to
+configure Ceph so that it will not log to journald (the commands for
 this are covered below).
 
 Enabling logging to files
@@ -94,17 +86,22 @@ To enable logging to files, run the following commands:
   ceph config set global log_to_file true
   ceph config set global mon_cluster_log_to_file true
 
-Disabling logging to stderr
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Disabling logging to journald
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you choose to log to files, we recommend disabling logging to
-stderr (see above) or else everything will be logged twice. Run the
-following commands to disable logging to stderr:
+If you choose to log to files, we recommend disabling logging to journald or else
+everything will be logged twice. Run the following commands to disable logging
+to stderr:
 
 .. prompt:: bash #
 
   ceph config set global log_to_stderr false
   ceph config set global mon_cluster_log_to_stderr false
+  ceph config set global log_to_journald false
+  ceph config set global mon_cluster_log_to_journald false
+
+.. note:: You can change the default by passing --log-to-file during
+   bootstrapping a new cluster.
 
 Modifying the log retention schedule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -181,30 +178,30 @@ running, but are not registered as hosts managed by *cephadm*.  This
 means that those services cannot currently be managed by cephadm
 (e.g., restarted, upgraded, included in `ceph orch ps`).
 
-You can manage the host(s) by running the following command:
+* You can manage the host(s) by running the following command:
 
-.. prompt:: bash #
+  .. prompt:: bash #
 
-  ceph orch host add *<hostname>*
+    ceph orch host add *<hostname>*
 
-.. note::
+  .. note::
 
-  You might need to configure SSH access to the remote host
-  before this will work.
+    You might need to configure SSH access to the remote host
+    before this will work.
 
-Alternatively, you can manually connect to the host and ensure that
-services on that host are removed or migrated to a host that is
-managed by *cephadm*.
+* See :ref:`cephadm-fqdn` for more information about host names and
+  domain names.
 
-This warning can be disabled entirely by running the following
-command:
+* Alternatively, you can manually connect to the host and ensure that
+  services on that host are removed or migrated to a host that is
+  managed by *cephadm*.
 
-.. prompt:: bash #
+* This warning can be disabled entirely by running the following
+  command:
 
-  ceph config set mgr mgr/cephadm/warn_on_stray_hosts false
+  .. prompt:: bash #
 
-See :ref:`cephadm-fqdn` for more information about host names and
-domain names.
+    ceph config set mgr mgr/cephadm/warn_on_stray_hosts false
 
 CEPHADM_STRAY_DAEMON
 ~~~~~~~~~~~~~~~~~~~~
@@ -215,16 +212,30 @@ tool, or because they were started manually.  Those
 services cannot currently be managed by cephadm (e.g., restarted,
 upgraded, or included in `ceph orch ps`).
 
-If the daemon is a stateful one (monitor or OSD), it should be adopted
-by cephadm; see :ref:`cephadm-adoption`.  For stateless daemons, it is
-usually easiest to provision a new daemon with the ``ceph orch apply``
-command and then stop the unmanaged daemon.
+* If the daemon is a stateful one (monitor or OSD), it should be adopted
+  by cephadm; see :ref:`cephadm-adoption`.  For stateless daemons, it is
+  usually easiest to provision a new daemon with the ``ceph orch apply``
+  command and then stop the unmanaged daemon.
 
-This warning can be disabled entirely by running the following command:
+* If the stray daemon(s) are running on hosts not managed by cephadm, you can manage the host(s) by running the following command:
 
-.. prompt:: bash #
+  .. prompt:: bash #
 
-  ceph config set mgr mgr/cephadm/warn_on_stray_daemons false
+    ceph orch host add *<hostname>*
+
+  .. note::
+
+    You might need to configure SSH access to the remote host
+    before this will work.
+
+* See :ref:`cephadm-fqdn` for more information about host names and
+  domain names.
+
+* This warning can be disabled entirely by running the following command:
+
+  .. prompt:: bash #
+
+    ceph config set mgr mgr/cephadm/warn_on_stray_daemons false
 
 CEPHADM_HOST_CHECK_FAILED
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -387,6 +398,8 @@ The OS kernel version (maj.min) is checked for consistency across the hosts.
 The kernel version of the majority of the hosts is used as the basis for 
 identifying anomalies.
 
+.. _client_keyrings_and_configs:
+
 Client keyrings and configs
 ===========================
 
@@ -463,6 +476,7 @@ To disable management of a keyring file, run a command of the following form:
   This deletes any keyring files for this entity that were previously written
   to cluster nodes.
 
+.. _etc_ceph_conf_distribution:
 
 /etc/ceph/ceph.conf
 ===================
@@ -494,8 +508,38 @@ the following form:
 For example, to distribute configs to hosts with the ``bare_config`` label, run
 the following command:
 
+Distributing ceph.conf to hosts tagged with bare_config 
+-------------------------------------------------------
+
+For example, to distribute configs to hosts with the ``bare_config`` label, run the following command:
+
 .. prompt:: bash #
 
   ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf_hosts label:bare_config
 
 (See :ref:`orchestrator-cli-placement-spec` for more information about placement specs.)
+
+Purging a cluster
+=================
+
+.. danger:: THIS OPERATION WILL DESTROY ALL DATA STORED IN THIS CLUSTER
+
+In order to destroy a cluster and delete all data stored in this cluster, disable
+cephadm to stop all orchestration operations (so we avoid deploying new daemons).
+
+.. prompt:: bash #
+
+  ceph mgr module disable cephadm
+
+Then verify the FSID of the cluster:
+
+.. prompt:: bash #
+
+  ceph fsid
+
+Purge ceph daemons from all hosts in the cluster
+
+.. prompt:: bash #
+
+  # For each host:
+  cephadm rm-cluster --force --zap-osds --fsid <fsid>

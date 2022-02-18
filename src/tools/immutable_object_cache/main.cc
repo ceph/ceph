@@ -31,9 +31,8 @@ static void handle_signal(int signum) {
 }
 
 int main(int argc, const char **argv) {
-  std::vector<const char*> args;
+  auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
-  argv_to_vec(argc, argv, args);
 
   if (ceph_argparse_need_usage(args)) {
     usage();
@@ -56,8 +55,8 @@ int main(int argc, const char **argv) {
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
-  std::vector<const char*> cmd_args;
-  argv_to_vec(argc, argv, cmd_args);
+  auto cmd_args = argv_to_vec(argc, argv);
+
 
   cachectl = new ceph::immutable_obj_cache::CacheController(g_ceph_context,
                                                             cmd_args);

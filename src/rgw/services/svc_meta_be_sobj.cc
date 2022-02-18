@@ -11,6 +11,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace std;
 
 RGWSI_MetaBackend_SObj::RGWSI_MetaBackend_SObj(CephContext *cct) : RGWSI_MetaBackend(cct) {
 }

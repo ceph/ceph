@@ -28,7 +28,7 @@ out-of-band of the live acting set, similar to backfill, but still using
 the PG log to determine what needs to be done. This is known as *asynchronous
 recovery*.
 
-The threashold for performing asynchronous recovery instead of synchronous
+The threshold for performing asynchronous recovery instead of synchronous
 recovery is not a clear-cut. There are a few criteria which
 need to be met for asynchronous recovery:
 

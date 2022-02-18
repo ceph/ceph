@@ -19,6 +19,8 @@
 #define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
 #define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
 
+using namespace std;
+
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
 
@@ -627,5 +629,15 @@ XMLObj *RGWACLXMLParser_S3::alloc_obj(const char *el)
   }
 
   return obj;
+}
+
+ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
+{
+  if (uri.compare(rgw_uri_all_users) == 0)
+    return ACL_GROUP_ALL_USERS;
+  else if (uri.compare(rgw_uri_auth_users) == 0)
+    return ACL_GROUP_AUTHENTICATED_USERS;
+
+  return ACL_GROUP_NONE;
 }
 

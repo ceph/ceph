@@ -56,10 +56,18 @@
     quota set                  set quota params
     quota enable               enable quota
     quota disable              disable quota
+    ratelimit get              get ratelimit params
+    ratelimit set              set ratelimit params
+    ratelimit enable           enable ratelimit
+    ratelimit disable          disable ratelimit
     global quota get           view global quota params
     global quota set           set global quota params
     global quota enable        enable a global quota
     global quota disable       disable a global quota
+    global ratelimit get       view global ratelimit params
+    global ratelimit set       set global ratelimit params
+    global ratelimit enable    enable a ratelimit quota
+    global ratelimit disable   disable a ratelimit quota
     realm create               create a new realm
     realm rm                   remove a realm
     realm get                  show realm info
@@ -130,11 +138,13 @@
     metadata rm                remove metadata info
     metadata list              list metadata info
     mdlog list                 list metadata log
+    mdlog autotrim             auto trim metadata log
     mdlog trim                 trim metadata log (use marker)
     mdlog status               read metadata log status
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
     bilog status               read bucket index log status
+    bilog autotrim             auto trim bucket index log
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
@@ -144,14 +154,14 @@
     orphans list-jobs          deprecated -- list the current job-ids for orphans search
                              * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool
     role create                create a AWS role for use with STS
-    role rm                    remove a role
+    role delete                remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
     role modify                modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
-    role-policy rm             remove policy attached to a role
+    role-policy delete         remove policy attached to a role
     reshard add                schedule a resharding of a bucket
     reshard list               list all bucket resharding or scheduled to be resharded
     reshard status             read bucket resharding status
@@ -277,6 +287,7 @@
      --sync-stats              option to 'user stats', update user stats with current
                                stats reported by user's buckets indexes
      --reset-stats             option to 'user stats', reset stats in accordance with user buckets
+     --show-config             show configuration
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
@@ -306,6 +317,14 @@
      --max-objects             specify max objects (negative value to disable)
      --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
+  
+  Rate limiting options:
+     --max-read-ops            specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
+     --max-read-bytes          specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
+     --max-write-ops           specify max requests per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --max-write-bytes         specify max bytes per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --ratelimit-scope         scope of rate limiting: bucket, user, anonymous
+                               anonymous can be configured only with global rate limit
   
   Orphans search options:
      --num-shards              num of shards to use for keeping the temporary scan info

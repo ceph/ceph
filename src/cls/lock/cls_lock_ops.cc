@@ -18,6 +18,9 @@
 #include "cls/lock/cls_lock_ops.h"
 
 using namespace rados::cls::lock;
+using std::list;
+using std::map;
+using std::string;
 
 static void generate_lock_id(locker_id_t& i, int n, const string& cookie)
 {

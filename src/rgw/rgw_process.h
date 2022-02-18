@@ -10,7 +10,7 @@
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
-
+#include "rgw_ratelimit.h"
 #include "include/ceph_assert.h"
 
 #include "common/WorkQueue.h"
@@ -34,22 +34,24 @@ namespace rgw::dmclock {
 struct RGWProcessEnv {
   rgw::sal::Store* store;
   RGWREST *rest;
-  OpsLogSocket *olog;
+  OpsLogSink *olog;
   int port;
   std::string uri_prefix;
   std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
+  //maybe there is a better place to store the rate limit data structure
+  ActiveRateLimiter* ratelimiting;
 };
 
 class RGWFrontendConfig;
 class RGWRequest;
 
 class RGWProcess {
-  deque<RGWRequest*> m_req_queue;
+  std::deque<RGWRequest*> m_req_queue;
 protected:
   CephContext *cct;
   rgw::sal::Store* store;
   rgw_auth_registry_ptr_t auth_registry;
-  OpsLogSocket* olog;
+  OpsLogSink* olog;
   ThreadPool m_tp;
   Throttle req_throttle;
   RGWREST* rest;
@@ -157,7 +159,7 @@ public:
   void run() override;
   void checkpoint();
   void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override;
-  void gen_request(const string& method, const string& resource,
+  void gen_request(const std::string& method, const std::string& resource,
 		  int content_length, std::atomic<bool>* fail_flag);
 
   void set_access_key(RGWAccessKey& key) { access_key = key; }
@@ -169,18 +171,20 @@ extern int process_request(rgw::sal::Store* store,
                            const std::string& frontend_prefix,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
-                           OpsLogSocket* olog,
+                           OpsLogSink* olog,
                            optional_yield y,
                            rgw::dmclock::Scheduler *scheduler,
                            std::string* user,
                            ceph::coarse_real_clock::duration* latency,
+                           std::shared_ptr<RateLimiter> ratelimit,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,
                                      RGWRequest* req,
                                      req_state* s,
-				     optional_yield y,
+				                             optional_yield y,
+                                     rgw::sal::Store* store,
                                      bool skip_retarget = false);
 
 #if defined(def_dout_subsys)

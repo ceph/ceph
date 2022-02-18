@@ -32,6 +32,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "test_idempotent_sequence "
 
+using namespace std;
+
 void usage(const char *name, std::string command = "") {
   ceph_assert(name != NULL);
 
@@ -210,9 +212,8 @@ int run_command(std::string& command, std::vector<std::string>& args)
 
 int main(int argc, const char *argv[])
 {
-  vector<const char*> args;
   our_name = argv[0];
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
 
   auto cct = global_init(NULL, args,
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,

@@ -43,16 +43,32 @@
 #define tracepoint(...)
 #endif
 
-#ifdef HAVE_ASM_SYMVER
+#if defined(HAVE_ASM_SYMVER) || defined(HAVE_ATTR_SYMVER)
+// prefer __attribute__() over global asm(".symver"). because the latter
+// is not parsed by the compiler and is partitioned away by GCC if
+// lto-partitions is enabled, in other words, these asm() statements
+// are dropped by the -flto option by default. the way to address it is
+// to use __attribute__. so this information can be processed by the
+// C compiler, and be preserved after LTO partitions the code
+#ifdef HAVE_ATTR_SYMVER
+#define LIBRADOS_C_API_BASE(fn)               \
+  extern __typeof (_##fn##_base) _##fn##_base __attribute__((__symver__ (#fn "@")))
+#define LIBRADOS_C_API_BASE_DEFAULT(fn)       \
+  extern __typeof (_##fn) _##fn __attribute__((__symver__ (#fn "@@")))
+#define LIBRADOS_C_API_DEFAULT(fn, ver)       \
+  extern __typeof (_##fn) _##fn __attribute__((__symver__ (#fn "@@LIBRADOS_" #ver)))
+#else
 #define LIBRADOS_C_API_BASE(fn)               \
   asm(".symver _" #fn "_base, " #fn "@")
 #define LIBRADOS_C_API_BASE_DEFAULT(fn)       \
   asm(".symver _" #fn ", " #fn "@@")
 #define LIBRADOS_C_API_DEFAULT(fn, ver)       \
   asm(".symver _" #fn ", " #fn "@@LIBRADOS_" #ver)
+#endif
 
 #define LIBRADOS_C_API_BASE_F(fn) _ ## fn ## _base
 #define LIBRADOS_C_API_DEFAULT_F(fn) _ ## fn
+
 #else
 #define LIBRADOS_C_API_BASE(fn)
 #define LIBRADOS_C_API_BASE_DEFAULT(fn)
@@ -64,6 +80,8 @@
 #define LIBRADOS_C_API_DEFAULT_F(fn) fn
 #endif
 
+using std::ostringstream;
+using std::pair;
 using std::string;
 using std::map;
 using std::set;
@@ -299,8 +317,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_conf_parse_argv)(
   }
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   auto& conf = client->cct->_conf;
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  auto args = argv_to_vec(argc, argv);
   int ret = conf.parse_argv(args);
   if (ret) {
     tracepoint(librados, rados_conf_parse_argv_exit, ret);
@@ -530,21 +547,23 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_unset_osdmap_full_try)(
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   ctx->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
-LIBRADOS_C_API_BASE_DEFAULT(rados_unset_pool_full_try);
+LIBRADOS_C_API_BASE_DEFAULT(rados_unset_osdmap_full_try);
 
-extern "C" void _rados_set_pool_full_try(rados_ioctx_t io)
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_set_pool_full_try)(
+  rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   ctx->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_set_pool_full_try);
 
-extern "C" void _rados_unset_pool_full_try(rados_ioctx_t io)
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_unset_pool_full_try)(
+  rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   ctx->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
-LIBRADOS_C_API_BASE_DEFAULT(rados_unset_osdmap_full_try);
+LIBRADOS_C_API_BASE_DEFAULT(rados_unset_pool_full_try);
 
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_application_enable)(
   rados_ioctx_t io,

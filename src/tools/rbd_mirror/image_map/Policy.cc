@@ -380,6 +380,7 @@ bool Policy::can_shuffle_image(const std::string &global_image_id) {
 bool Policy::set_state(ImageState* image_state, StateTransition::State state,
                        bool ignore_current_state) {
   if (!ignore_current_state && image_state->state == state) {
+    image_state->next_state = boost::none;
     return false;
   } else if (StateTransition::is_idle(image_state->state)) {
     image_state->state = state;

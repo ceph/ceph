@@ -1,3 +1,5 @@
+.. _configuring-the-iscsi-initiators:
+
 --------------------------------
 Configuring the iSCSI Initiators
 --------------------------------

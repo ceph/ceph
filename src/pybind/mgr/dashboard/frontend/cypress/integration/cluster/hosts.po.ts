@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/hosts', id: 'cd-hosts' },
-  create: { url: '#/hosts/create', id: 'cd-host-form' }
+  add: { url: '#/hosts/(modal:add)', id: 'cd-host-form' }
 };
 
 export class HostsPageHelper extends PageHelper {
@@ -41,32 +41,33 @@ export class HostsPageHelper extends PageHelper {
       });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
-  clickHostTab(hostname: string, tabName: string) {
-    this.getExpandCollapseElement(hostname).click();
-    cy.get('cd-host-details').within(() => {
-      this.getTab(tabName).click();
-    });
-  }
-
-  @PageHelper.restrictTo(pages.create.url)
-  add(hostname: string, exist?: boolean, maintenance?: boolean) {
-    cy.get(`${this.pages.create.id}`).within(() => {
+  add(hostname: string, exist?: boolean, maintenance?: boolean, labels: string[] = []) {
+    cy.get(`${this.pages.add.id}`).within(() => {
       cy.get('#hostname').type(hostname);
       if (maintenance) {
         cy.get('label[for=maintenance]').click();
       }
-      cy.get('cd-submit-button').click();
+      if (exist) {
+        cy.get('#hostname').should('have.class', 'ng-invalid');
+      }
     });
-    if (exist) {
-      cy.get('#hostname').should('have.class', 'ng-invalid');
-    } else {
-      // back to host list
-      cy.get(`${this.pages.index.id}`);
+
+    if (labels.length) {
+      this.selectPredefinedLabels(labels);
+    }
+
+    cy.get('cd-submit-button').click();
+    // back to host list
+    cy.get(`${this.pages.index.id}`);
+  }
+
+  selectPredefinedLabels(labels: string[]) {
+    cy.get('a[data-testid=select-menu-edit]').click();
+    for (const label of labels) {
+      cy.get('.popover-body div.select-menu-item-content').contains(label).click();
     }
   }
 
-  @PageHelper.restrictTo(pages.index.url)
   checkExist(hostname: string, exist: boolean) {
     this.getTableCell(this.columnIndex.hostname, hostname).should(($elements) => {
       const hosts = $elements.map((_, el) => el.textContent).get();
@@ -78,13 +79,11 @@ export class HostsPageHelper extends PageHelper {
     });
   }
 
-  @PageHelper.restrictTo(pages.index.url)
-  delete(hostname: string) {
-    super.delete(hostname, this.columnIndex.hostname);
+  remove(hostname: string) {
+    super.delete(hostname, this.columnIndex.hostname, 'hosts');
   }
 
   // Add or remove labels on a host, then verify labels in the table
-  @PageHelper.restrictTo(pages.index.url)
   editLabels(hostname: string, labels: string[], add: boolean) {
     this.getTableCell(this.columnIndex.hostname, hostname).click();
     this.clickActionButton('edit');
@@ -104,7 +103,10 @@ export class HostsPageHelper extends PageHelper {
       }
     }
     cy.get('cd-modal cd-submit-button').click();
+    this.checkLabelExists(hostname, labels, add);
+  }
 
+  checkLabelExists(hostname: string, labels: string[], add: boolean) {
     // Verify labels are added or removed from Labels column
     // First find row with hostname, then find labels in the row
     this.getTableCell(this.columnIndex.hostname, hostname)
@@ -124,11 +126,14 @@ export class HostsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   maintenance(hostname: string, exit = false, force = false) {
+    this.clearTableSearchInput();
     if (force) {
       this.getTableCell(this.columnIndex.hostname, hostname).click();
       this.clickActionButton('enter-maintenance');
 
-      cy.contains('cd-modal button', 'Continue').click();
+      cy.get('cd-modal').within(() => {
+        cy.contains('button', 'Continue').click();
+      });
 
       this.getTableCell(this.columnIndex.hostname, hostname)
         .parent()
@@ -169,5 +174,18 @@ export class HostsPageHelper extends PageHelper {
           expect(status).to.include('maintenance');
         });
     }
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  drain(hostname: string) {
+    this.getTableCell(this.columnIndex.hostname, hostname).click();
+    this.clickActionButton('start-drain');
+    this.checkLabelExists(hostname, ['_no_schedule'], true);
+
+    this.clickTab('cd-host-details', hostname, 'Daemons');
+    cy.get('cd-host-details').within(() => {
+      cy.wait(20000);
+      this.expectTableCount('total', 0);
+    });
   }
 }

@@ -8,11 +8,7 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd.h"
 #include "crimson/common/type_helpers.h"
-#include "messages/MOSDPGPull.h"
-#include "messages/MOSDPGPush.h"
-#include "messages/MOSDPGPushReply.h"
-#include "messages/MOSDPGRecoveryDelete.h"
-#include "messages/MOSDPGRecoveryDeleteReply.h"
+#include "messages/MOSDFastDispatchOp.h"
 
 namespace crimson::osd {
 

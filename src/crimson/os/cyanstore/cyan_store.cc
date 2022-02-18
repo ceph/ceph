@@ -21,6 +21,7 @@ namespace {
   }
 }
 
+using std::string;
 using crimson::common::local_conf;
 
 namespace crimson::os {
@@ -33,13 +34,33 @@ CyanStore::CyanStore(const std::string& path)
 
 CyanStore::~CyanStore() = default;
 
-seastar::future<> CyanStore::mount()
+template <const char* MsgV>
+struct singleton_ec : std::error_code {
+  singleton_ec()
+    : error_code(42, this_error_category{}) {
+  };
+private:
+  struct this_error_category : std::error_category {
+    const char* name() const noexcept final {
+      // XXX: we could concatenate with MsgV at compile-time but the burden
+      // isn't worth the benefit.
+      return "singleton_ec";
+    }
+    std::string message([[maybe_unused]] const int ev) const final {
+      assert(ev == 42);
+      return MsgV;
+    }
+  };
+};
+
+CyanStore::mount_ertr::future<> CyanStore::mount()
 {
+  static const char read_file_errmsg[]{"read_file"};
   ceph::bufferlist bl;
   std::string fn = path + "/collections";
   std::string err;
   if (int r = bl.read_file(fn.c_str(), &err); r < 0) {
-    throw std::runtime_error("read_file");
+    return crimson::stateful_ec{ singleton_ec<read_file_errmsg>() };
   }
 
   std::set<coll_t> collections;
@@ -50,7 +71,7 @@ seastar::future<> CyanStore::mount()
     std::string fn = fmt::format("{}/{}", path, coll);
     ceph::bufferlist cbl;
     if (int r = cbl.read_file(fn.c_str(), &err); r < 0) {
-      throw std::runtime_error("read_file");
+      return crimson::stateful_ec{ singleton_ec<read_file_errmsg>() };
     }
     boost::intrusive_ptr<Collection> c{new Collection{coll}};
     auto p = cbl.cbegin();
@@ -58,7 +79,7 @@ seastar::future<> CyanStore::mount()
     coll_map[coll] = c;
     used_bytes += c->used_bytes();
   }
-  return seastar::now();
+  return mount_ertr::now();
 }
 
 seastar::future<> CyanStore::umount()
@@ -81,9 +102,12 @@ seastar::future<> CyanStore::umount()
   });
 }
 
-seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
+CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
-  return read_meta("fsid").then([=](auto&& ret) {
+  static const char read_meta_errmsg[]{"read_meta"};
+  static const char parse_fsid_errmsg[]{"failed to parse fsid"};
+  static const char match_ofsid_errmsg[]{"unmatched osd_fsid"};
+  return read_meta("fsid").then([=](auto&& ret) -> mkfs_ertr::future<> {
     auto& [r, fsid_str] = ret;
     if (r == -ENOENT) {
       if (new_osd_fsid.is_zero()) {
@@ -93,25 +117,25 @@ seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
       }
       return write_meta("fsid", fmt::format("{}", osd_fsid));
     } else if (r < 0) {
-      throw std::runtime_error("read_meta");
+      return crimson::stateful_ec{ singleton_ec<read_meta_errmsg>() };
     } else {
       logger().info("mkfs already has fsid {}", fsid_str);
       if (!osd_fsid.parse(fsid_str.c_str())) {
-        throw std::runtime_error("failed to parse fsid");
+        return crimson::stateful_ec{ singleton_ec<parse_fsid_errmsg>() };
       } else if (osd_fsid != new_osd_fsid) {
         logger().error("on-disk fsid {} != provided {}", osd_fsid, new_osd_fsid);
-        throw std::runtime_error("unmatched osd_fsid");
+        return crimson::stateful_ec{ singleton_ec<match_ofsid_errmsg>() };
       } else {
-	return seastar::now();
+	return mkfs_ertr::now();
       }
     }
-  }).then([this]{
+  }).safe_then([this]{
     std::string fn = path + "/collections";
     ceph::bufferlist bl;
     std::set<coll_t> collections;
     ceph::encode(collections, bl);
     return crimson::write_file(std::move(bl), fn);
-  }).then([this] {
+  }).safe_then([this] {
     return write_meta("type", "memstore");
   });
 }
@@ -376,8 +400,17 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         ceph::bufferlist bl;
         i.decode_bl(bl);
         std::map<std::string, bufferlist> to_set;
-	to_set.emplace(name, std::move(bl));
-        r = _setattrs(cid, oid, to_set);
+        to_set.emplace(name, std::move(bl));
+        r = _setattrs(cid, oid, std::move(to_set));
+      }
+      break;
+      case Transaction::OP_SETATTRS:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        std::map<std::string, bufferlist> aset;
+        i.decode_attrset(aset);
+        r = _setattrs(cid, oid, std::move(aset));
       }
       break;
       case Transaction::OP_RMATTR:
@@ -388,10 +421,22 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         r = _rm_attr(cid, oid, name);	
       }
       break;
+      case Transaction::OP_RMATTRS:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        r = _rm_attrs(cid, oid);
+      }
+      break;
       case Transaction::OP_MKCOLL:
       {
         coll_t cid = i.get_cid(op->cid);
         r = _create_collection(cid, op->split_bits);
+      }
+      break;
+      case Transaction::OP_SETALLOCHINT:
+      {
+        r = 0;
       }
       break;
       case Transaction::OP_OMAP_CLEAR:
@@ -574,8 +619,8 @@ int CyanStore::_omap_set_values(
     return -ENOENT;
 
   ObjectRef o = c->get_or_create_object(oid);
-  for (auto &&i: aset) {
-    o->omap.insert(std::move(i));
+  for (auto&& [key, val]: aset) {
+    o->omap.insert_or_assign(std::move(key), std::move(val));
   }
   return 0;
 }
@@ -659,7 +704,7 @@ int CyanStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size
 }
 
 int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
-                         std::map<std::string,bufferlist>& aset)
+                         std::map<std::string,bufferlist>&& aset)
 {
   logger().debug("{} cid={} oid={}",
                 __func__, cid, oid);
@@ -670,9 +715,9 @@ int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  for (std::map<std::string, bufferlist>::const_iterator p = aset.begin();
-       p != aset.end(); ++p)
-    o->xattr[p->first] = p->second;
+  for (auto&& [key, val]: aset) {
+    o->xattr.insert_or_assign(std::move(key), std::move(val));
+  }
   return 0;
 }
 
@@ -693,6 +738,21 @@ int CyanStore::_rm_attr(const coll_t& cid, const ghobject_t& oid,
     return -ENODATA;
   }
   o->xattr.erase(i);
+  return 0;
+}
+
+int CyanStore::_rm_attrs(const coll_t& cid, const ghobject_t& oid)
+{
+  logger().debug("{} cid={} oid={}", __func__, cid, oid);
+  auto c = _get_collection(cid);
+  if (!c) {
+    return -ENOENT;
+  }
+  ObjectRef o = c->get_object(oid);
+  if (!o) {
+    return -ENOENT;
+  }
+  o->xattr.clear();
   return 0;
 }
 
