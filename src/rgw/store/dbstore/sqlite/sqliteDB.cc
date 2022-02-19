@@ -1,7 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <memory>
 #include "sqliteDB.h"
+#include "common/database_exception.h"
 
 using namespace std;
 
@@ -23,6 +25,21 @@ using namespace std;
     ret = 0;					\
   } while(0);
 
+using statement_ptr = std::unique_ptr<sqlite3_stmt, int(*)(sqlite3_stmt*)>;
+
+// compile the schema into a prepared statement; may throw database_exception
+static statement_ptr prepare_statement(sqlite3* db, std::string_view schema)
+{
+  sqlite3_stmt* stmt = nullptr;
+  sqlite3_prepare_v2(db, schema.data(), schema.size(), &stmt, nullptr);
+  if (!stmt) {
+    throw database_exception(
+        fmt::format("failed to prepare statement: {}",
+                    sqlite3_errmsg(db)));
+  }
+  return {stmt, sqlite3_finalize};
+}
+
 #define SQL_BIND_INDEX(dpp, stmt, index, str, sdb)	\
   do {						\
     index = sqlite3_bind_parameter_index(stmt, str);     \
@@ -39,6 +56,18 @@ using namespace std;
     <<str<<") in stmt("<<stmt<<") is "  \
     <<index<< dendl;			     \
   }while(0);
+
+static int bind_index(sqlite3_stmt* stmt, const char* name)
+{
+  const int index = sqlite3_bind_parameter_index(stmt, name);
+  if (index <= 0) {
+    sqlite3* db = sqlite3_db_handle(stmt);
+    throw database_exception(
+        fmt::format("failed to bind parameter index for '{}': {}",
+                    name, sqlite3_errmsg(db)));
+  }
+  return index;
+}
 
 #define SQL_BIND_TEXT(dpp, stmt, index, str, sdb)			\
   do {								\
@@ -61,6 +90,19 @@ using namespace std;
     <<str<< dendl;			     \
   }while(0);
 
+static void bind_text(sqlite3_stmt* stmt, const char* name, const char* value)
+{
+  const int index = bind_index(stmt, name);
+
+  int rc = sqlite3_bind_text(stmt, index, value, -1, SQLITE_STATIC);
+  if (rc != SQLITE_OK) {
+    sqlite3* db = sqlite3_db_handle(stmt);
+    throw database_exception(
+        fmt::format("failed to bind text '{}' for parameter '{}': {}",
+                    value, name, sqlite3_errmsg(db)));
+  }
+}
+
 #define SQL_BIND_INT(dpp, stmt, index, num, sdb)			\
   do {								\
     rc = sqlite3_bind_int(stmt, index, num);		\
@@ -77,6 +119,19 @@ using namespace std;
     <<index<<") in stmt("<<stmt<<") is "  \
     <<num<< dendl;			     \
   }while(0);
+
+static void bind_int(sqlite3_stmt* stmt, const char* name, int value)
+{
+  const int index = bind_index(stmt, name);
+
+  int rc = sqlite3_bind_int(stmt, index, value);
+  if (rc != SQLITE_OK) {
+    sqlite3* db = sqlite3_db_handle(stmt);
+    throw database_exception(
+        fmt::format("failed to bind int value '{}' for parameter '{}': {}",
+                    value, name, sqlite3_errmsg(db)));
+  }
+}
 
 #define SQL_BIND_BLOB(dpp, stmt, index, blob, size, sdb)		\
   do {								\
@@ -98,6 +153,39 @@ using namespace std;
     encode(param, b);					\
     SQL_BIND_BLOB(dpp, stmt, index, b.c_str(), b.length(), sdb); \
   }while(0);
+
+static void bind_blob(sqlite3_stmt* stmt, const char* name,
+                      std::string_view value,
+                      sqlite3_destructor_type destructor)
+{
+  const int index = bind_index(stmt, name);
+
+  int rc = sqlite3_bind_blob(stmt, index, value.data(), value.size(), destructor);
+  if (rc != SQLITE_OK) {
+    sqlite3* db = sqlite3_db_handle(stmt);
+    throw database_exception(
+        fmt::format("failed to bind blob of size '{}' for parameter '{}': {}",
+                    value.size(), name, sqlite3_errmsg(db)));
+  }
+}
+
+template <typename T>
+static void bind_encoded(sqlite3_stmt* stmt, const char* name, const T& value)
+{
+  // encode into a bufferlist
+  bufferlist bl;
+  using ceph::encode;
+  encode(value, bl);
+
+  // collapse into a single buffer
+  const auto blob = std::string_view{bl.c_str(), bl.length()};
+
+  // TODO: have the Op or Params store the encoded bufferlist so sqlite doesn't
+  // need to keep a copy of it with SQLITE_TRANSIENT
+  const sqlite3_destructor_type destructor = SQLITE_TRANSIENT;
+
+  bind_blob(stmt, name, blob, destructor);
+}
 
 #define SQL_READ_BLOB(dpp, stmt, index, void_ptr, len)		\
   do {								\
@@ -123,6 +211,25 @@ using namespace std;
     \
     decode(param, b);					\
   }while(0);
+
+// read a blob and decode into the given type. may throw database_exception or
+// ceph::buffer::error
+template <typename T>
+void decode_blob(sqlite3_stmt* stmt, int index, T& value)
+{
+  auto void_ptr = sqlite3_column_blob(stmt, index);
+  const int len = sqlite3_column_bytes(stmt, index);
+  if (!void_ptr || len == 0) {
+    throw database_exception(
+        fmt::format("Null value for blob at index {}", index));
+  }
+  bufferlist bl;
+  // TODO: buffer::list::static_from_mem() to avoid copy
+  bl.append(reinterpret_cast<const char*>(void_ptr), len);
+
+  using ceph::decode;
+  decode(value, bl);
+}
 
 #define SQL_EXECUTE(dpp, params, stmt, cbk, args...) \
   do{						\
@@ -151,6 +258,19 @@ using namespace std;
       goto out;			\
     }					\
   }while(0);
+
+// evaluate a prepared statement that doesn't return any results.
+// throws database_exception on error
+void evaluate(sqlite3_stmt* stmt)
+{
+  const int ret = sqlite3_step(stmt);
+  if (ret != SQLITE_DONE) {
+    sqlite3* db = sqlite3_db_handle(stmt);
+    throw database_exception(
+        fmt::format("sqlite step failed: {}",
+                    sqlite3_errmsg(db)));
+  }
+}
 
 int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
                                 DBOpPrepareParams &p_params,
