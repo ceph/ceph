@@ -641,8 +641,8 @@ class DBOp {
     virtual ~DBOp() {}
     std::mutex mtx; // to protect prepared stmt
 
-    std::string CreateTableSchema(std::string_view type,
-                                  const DBOpParams *params) {
+    static std::string CreateTableSchema(std::string_view type,
+                                         const DBOpParams *params) {
       if (!type.compare("User"))
         return fmt::format(CreateUserTableQ,
             params->user_table);
@@ -677,10 +677,10 @@ class DBOp {
       ceph_abort_msgf("incorrect table type %.*s", type.size(), type.data());
     }
 
-    std::string DeleteTableSchema(std::string_view table) {
+    static std::string DeleteTableSchema(std::string_view table) {
       return fmt::format(DropQ, table);
     }
-    std::string ListTableSchema(std::string_view table) {
+    static std::string ListTableSchema(std::string_view table) {
       return fmt::format(ListAllQ, table);
     }
 
@@ -715,7 +715,7 @@ class InsertUserOp : virtual public DBOp {
   public:
     virtual ~InsertUserOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.user_table,
           params.op.user.user_id, params.op.user.tenant, params.op.user.ns,
           params.op.user.display_name, params.op.user.user_email,
@@ -742,7 +742,7 @@ class RemoveUserOp: virtual public DBOp {
   public:
     virtual ~RemoveUserOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.user_table,
           params.op.user.user_id);
     }
@@ -788,7 +788,7 @@ class GetUserOp: virtual public DBOp {
   public:
     virtual ~GetUserOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "email") {
         return fmt::format(QueryByEmail, params.user_table,
             params.op.user.user_email);
@@ -826,7 +826,7 @@ class InsertBucketOp: virtual public DBOp {
   public:
     virtual ~InsertBucketOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.bucket_table,
           params.op.bucket.bucket_name, params.op.bucket.tenant,
           params.op.bucket.marker, params.op.bucket.bucket_id,
@@ -866,7 +866,7 @@ class UpdateBucketOp: virtual public DBOp {
   public:
     virtual ~UpdateBucketOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "info") {
         return fmt::format(InfoQuery, params.bucket_table,
             params.op.bucket.tenant, params.op.bucket.marker, params.op.bucket.bucket_id,
@@ -906,7 +906,7 @@ class RemoveBucketOp: virtual public DBOp {
   public:
     virtual ~RemoveBucketOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.bucket_table,
           params.op.bucket.bucket_name);
     }
@@ -926,7 +926,7 @@ class GetBucketOp: virtual public DBOp {
   public:
     virtual ~GetBucketOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       //return fmt::format(Query, params.op.bucket.bucket_name,
       //          params.bucket_table, params.user_table);
       return fmt::format(Query,
@@ -963,7 +963,7 @@ class ListUserBucketsOp: virtual public DBOp {
   public:
     virtual ~ListUserBucketsOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "all") {
         return fmt::format(AllQuery, params.bucket_table,
           params.op.bucket.min_marker,
@@ -996,7 +996,7 @@ class PutObjectOp: virtual public DBOp {
   public:
     virtual ~PutObjectOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query,
           params.object_table, params.op.obj.obj_name,
           params.op.obj.obj_instance, params.op.obj.obj_ns,
@@ -1033,7 +1033,7 @@ class DeleteObjectOp: virtual public DBOp {
   public:
     virtual ~DeleteObjectOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.object_table,
           params.op.bucket.bucket_name,
           params.op.obj.obj_name,
@@ -1059,7 +1059,7 @@ class GetObjectOp: virtual public DBOp {
   public:
     virtual ~GetObjectOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query,
           params.object_table,
           params.op.bucket.bucket_name,
@@ -1087,7 +1087,7 @@ class ListBucketObjectsOp: virtual public DBOp {
   public:
     virtual ~ListBucketObjectsOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       /* XXX: Include obj_id, delim */
       return fmt::format(Query,
           params.object_table,
@@ -1128,7 +1128,7 @@ class UpdateObjectOp: virtual public DBOp {
   public:
     virtual ~UpdateObjectOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "omap") {
         return fmt::format(OmapQuery,
             params.object_table, params.op.obj.omap,
@@ -1195,7 +1195,7 @@ class PutObjectDataOp: virtual public DBOp {
   public:
     virtual ~PutObjectDataOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query,
           params.objectdata_table,
           params.op.obj.obj_name, params.op.obj.obj_instance,
@@ -1222,7 +1222,7 @@ class UpdateObjectDataOp: virtual public DBOp {
   public:
     virtual ~UpdateObjectDataOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query,
           params.objectdata_table,
           params.op.obj.mtime,
@@ -1241,7 +1241,7 @@ class GetObjectDataOp: virtual public DBOp {
   public:
     virtual ~GetObjectDataOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query,
           params.objectdata_table,
           params.op.bucket.bucket_name,
@@ -1259,7 +1259,7 @@ class DeleteObjectDataOp: virtual public DBOp {
   public:
     virtual ~DeleteObjectDataOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query,
           params.objectdata_table,
           params.op.bucket.bucket_name,
@@ -1277,7 +1277,7 @@ class DeleteStaleObjectDataOp: virtual public DBOp {
   public:
     virtual ~DeleteStaleObjectDataOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query,
           params.objectdata_table,
           params.objectdata_table,
@@ -1296,7 +1296,7 @@ class InsertLCEntryOp: virtual public DBOp {
   public:
     virtual ~InsertLCEntryOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.lc_entry_table,
           params.op.lc_entry.index, params.op.lc_entry.bucket_name,
           params.op.lc_entry.start_time, params.op.lc_entry.status);
@@ -1311,7 +1311,7 @@ class RemoveLCEntryOp: virtual public DBOp {
   public:
     virtual ~RemoveLCEntryOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.lc_entry_table,
           params.op.lc_entry.index, params.op.lc_entry.bucket_name);
     }
@@ -1329,7 +1329,7 @@ class GetLCEntryOp: virtual public DBOp {
   public:
     virtual ~GetLCEntryOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       if (params.op.query_str == "get_next_entry") {
         return fmt::format(NextQuery, params.lc_entry_table,
             params.op.lc_entry.index, params.op.lc_entry.bucket_name);
@@ -1349,7 +1349,7 @@ class ListLCEntriesOp: virtual public DBOp {
   public:
     virtual ~ListLCEntriesOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.lc_entry_table,
           params.op.lc_entry.index, params.op.lc_entry.min_marker,
           params.op.list_max_count);
@@ -1366,7 +1366,7 @@ class InsertLCHeadOp: virtual public DBOp {
   public:
     virtual ~InsertLCHeadOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.lc_head_table,
           params.op.lc_head.index, params.op.lc_head.marker,
           params.op.lc_head.start_date);
@@ -1381,7 +1381,7 @@ class RemoveLCHeadOp: virtual public DBOp {
   public:
     virtual ~RemoveLCHeadOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.lc_head_table,
           params.op.lc_head.index);
     }
@@ -1396,7 +1396,7 @@ class GetLCHeadOp: virtual public DBOp {
   public:
     virtual ~GetLCHeadOp() {}
 
-    std::string Schema(DBOpPrepareParams &params) {
+    static std::string Schema(DBOpPrepareParams &params) {
       return fmt::format(Query, params.lc_head_table,
           params.op.lc_head.index);
     }
