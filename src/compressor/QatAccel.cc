@@ -11,18 +11,26 @@
  * Foundation.  See file COPYING.
  *
  */
-
+#include <qatzip.h>
 #include "QatAccel.h"
+
+void QzSessionDeleter::operator() (struct QzSession_S *session) {
+  if (NULL != session->internal) {
+    qzTeardownSession(session);
+    qzClose(session);
+  }
+  delete session;
+}
 
 /* Estimate data expansion after decompression */
 static const unsigned int expansion_ratio[] = {5, 20, 50, 100, 200};
 
-QatAccel::~QatAccel() {
-  if (NULL != session.internal) {
-    qzTeardownSession(&session);
-    qzClose(&session);
-  }
+QatAccel::QatAccel() {
+  session.reset(new struct QzSession_S);
+  memset(session.get(), 0, sizeof(struct QzSession_S));
 }
+
+QatAccel::~QatAccel() {}
 
 bool QatAccel::init(const std::string &alg) {
   QzSessionParams_T params = {(QzHuffmanHdr_T)0,};
@@ -32,12 +40,8 @@ bool QatAccel::init(const std::string &alg) {
   if (rc != QZ_OK)
     return false;
   params.direction = QZ_DIR_BOTH;
-  if (alg == "snappy")
-    params.comp_algorithm = QZ_SNAPPY;
-  else if (alg == "zlib")
+  if (alg == "zlib")
     params.comp_algorithm = QZ_DEFLATE;
-  else if (alg == "lz4")
-    params.comp_algorithm = QZ_LZ4;
   else
     return false;
 
@@ -45,14 +49,14 @@ bool QatAccel::init(const std::string &alg) {
   if (rc != QZ_OK)
       return false;
 
-  rc = qzInit(&session, QZ_SW_BACKUP_DEFAULT);
+  rc = qzInit(session.get(), QZ_SW_BACKUP_DEFAULT);
   if (rc != QZ_OK && rc != QZ_DUPLICATE && rc != QZ_NO_HW)
     return false;
 
-  rc = qzSetupSession(&session, &params);
+  rc = qzSetupSession(session.get(), &params);
   if (rc != QZ_OK && rc != QZ_DUPLICATE && rc != QZ_NO_HW ) {
-    qzTeardownSession(&session);
-    qzClose(&session);
+    qzTeardownSession(session.get());
+    qzClose(session.get());
     return false;
   }
 
@@ -63,10 +67,10 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out, boost::optional<in
   for (auto &i : in.buffers()) {
     const unsigned char* c_in = (unsigned char*) i.c_str();
     unsigned int len = i.length();
-    unsigned int out_len = qzMaxCompressedLength(len);
+    unsigned int out_len = qzMaxCompressedLength(len, session.get());
 
     bufferptr ptr = buffer::create_small_page_aligned(out_len);
-    int rc = qzCompress(&session, c_in, &len, (unsigned char *)ptr.c_str(), &out_len, 1);
+    int rc = qzCompress(session.get(), c_in, &len, (unsigned char *)ptr.c_str(), &out_len, 1);
     if (rc != QZ_OK)
       return -1;
     out.append(ptr, 0, out_len);
@@ -107,9 +111,9 @@ int QatAccel::decompress(bufferlist::const_iterator &p,
     bufferptr ptr = buffer::create_small_page_aligned(out_len);
 
     if (joint)
-      rc = qzDecompress(&session, (const unsigned char*)tmp.c_str(), &len, (unsigned char*)ptr.c_str(), &out_len);
+      rc = qzDecompress(session.get(), (const unsigned char*)tmp.c_str(), &len, (unsigned char*)ptr.c_str(), &out_len);
     else
-      rc = qzDecompress(&session, (const unsigned char*)cur_ptr.c_str(), &len, (unsigned char*)ptr.c_str(), &out_len);
+      rc = qzDecompress(session.get(), (const unsigned char*)cur_ptr.c_str(), &len, (unsigned char*)ptr.c_str(), &out_len);
     if (rc == QZ_DATA_ERROR) {
       if (!joint) {
         tmp.append(cur_ptr.c_str(), cur_ptr.length());
