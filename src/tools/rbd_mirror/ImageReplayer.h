@@ -101,10 +101,8 @@ public:
     return m_global_image_id;
   }
 
-  void start(Context *on_finish = nullptr, bool manual = false,
-             bool restart = false);
-  void stop(Context *on_finish = nullptr, bool manual = false,
-            bool restart = false);
+  void start(Context *on_finish, bool manual = false, bool restart = false);
+  void stop(Context *on_finish, bool manual = false, bool restart = false);
   void restart(Context *on_finish = nullptr);
   void flush();
 
