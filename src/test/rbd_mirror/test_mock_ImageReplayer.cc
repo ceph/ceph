@@ -608,7 +608,7 @@ TEST_F(TestMockImageReplayer, BootstrapCancel) {
   MockStateBuilder mock_state_builder;
   EXPECT_CALL(mock_bootstrap_request, send())
     .WillOnce(Invoke([this, &mock_bootstrap_request]() {
-        m_image_replayer->stop();
+        m_image_replayer->stop(nullptr);
         mock_bootstrap_request.on_finish->complete(-ECANCELED);
       }));
   EXPECT_CALL(mock_bootstrap_request, cancel());
