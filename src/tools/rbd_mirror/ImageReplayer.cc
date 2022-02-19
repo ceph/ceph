@@ -526,10 +526,6 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
   {
     std::lock_guard locker{m_lock};
 
-    if (restart) {
-      m_restart_requested = true;
-    }
-
     if (!is_running_()) {
       running = false;
       if (!restart && m_restart_requested) {
@@ -537,23 +533,21 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
         m_restart_requested = false;
       }
     } else {
-      if (!is_stopped_()) {
-	if (m_state == STATE_STARTING) {
-	  dout(10) << "canceling start" << dendl;
-	  if (m_bootstrap_request != nullptr) {
-            bootstrap_request = m_bootstrap_request;
-            bootstrap_request->get();
-	  }
-	} else {
-	  dout(10) << "interrupting replay" << dendl;
-	  shut_down_replay = true;
-	}
-
-        ceph_assert(m_on_stop_finish == nullptr);
-        std::swap(m_on_stop_finish, on_finish);
-        m_stop_requested = true;
-        m_manual_stop = manual;
+      if (m_state == STATE_STARTING) {
+        dout(10) << "canceling start" << dendl;
+        if (m_bootstrap_request != nullptr) {
+          bootstrap_request = m_bootstrap_request;
+          bootstrap_request->get();
+        }
+      } else {
+        dout(10) << "interrupting replay" << dendl;
+        shut_down_replay = true;
       }
+
+      ceph_assert(m_on_stop_finish == nullptr);
+      std::swap(m_on_stop_finish, on_finish);
+      m_stop_requested = true;
+      m_manual_stop = manual;
     }
   }
 
@@ -574,8 +568,6 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
 
   if (shut_down_replay) {
     on_stop_journal_replay();
-  } else if (on_finish != nullptr) {
-    on_finish->complete(0);
   }
 }
 
