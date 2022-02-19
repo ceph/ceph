@@ -137,7 +137,7 @@ public:
     CollectionRef c,
     const ghobject_t& oid);
 
-  seastar::future<std::map<uint64_t, uint64_t>> fiemap(CollectionRef c,
+  read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(CollectionRef c,
 						       const ghobject_t& oid,
 						       uint64_t off,
 						       uint64_t len);

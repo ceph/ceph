@@ -230,7 +230,7 @@ public:
   interruptible_future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
-  interruptible_future<std::map<uint64_t, uint64_t>> fiemap(
+  read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef c,
     const ghobject_t& oid,
     uint64_t off,

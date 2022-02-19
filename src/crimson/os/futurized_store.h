@@ -158,7 +158,7 @@ public:
   virtual seastar::future<OmapIteratorRef> get_omap_iterator(
     CollectionRef ch,
     const ghobject_t& oid) = 0;
-  virtual seastar::future<std::map<uint64_t, uint64_t>> fiemap(
+  virtual read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef ch,
     const ghobject_t& oid,
     uint64_t off,
