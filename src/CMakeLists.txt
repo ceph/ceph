@@ -490,7 +490,7 @@ if(NOT WITH_SYSTEM_BOOST)
 endif()
 
 if(HAVE_QATZIP)
-  list(APPEND ceph_common_deps ${QATZIP_LIBRARIES})
+  list(APPEND ceph_common_deps ${qatzip_LIBRARIES})
 endif()
 
 if(WITH_DPDK)

@@ -270,10 +270,16 @@ endif()
 
 option(WITH_BLUEFS "libbluefs library" OFF)
 
+option(WITH_QAT "Enable Qat driver" OFF)
+if(WITH_QAT)
+  find_package(QatDrv REQUIRED COMPONENTS qat_s usdm_drv_s)
+  set(HAVE_QATDRV $(QatDrv_FOUND))
+endif()
+
 option(WITH_QATZIP "Enable QATZIP" OFF)
 if(WITH_QATZIP)
   find_package(qatzip REQUIRED)
-  set(HAVE_QATZIP ${QATZIP_FOUND})
+  set(HAVE_QATZIP ${qatzip_FOUND})
 endif(WITH_QATZIP)
 
 # needs mds and? XXX

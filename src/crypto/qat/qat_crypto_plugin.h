@@ -29,8 +29,7 @@ public:
   {}
   ~QccCryptoPlugin()
   {}
-  virtual int factory(CryptoAccelRef *cs,
-      ostream *ss)
+  virtual int factory(CryptoAccelRef *cs, std::ostream *ss)
   {
     std::lock_guard<std::mutex> l(qat_init);
     if (cryptoaccel == nullptr)
