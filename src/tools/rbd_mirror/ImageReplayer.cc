@@ -522,12 +522,11 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
 
   image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
-  bool running = true;
+  bool is_stopped = false;
   {
     std::lock_guard locker{m_lock};
 
     if (!is_running_()) {
-      running = false;
       if (manual && !m_manual_stop) {
         dout(10) << "marking manual" << dendl;
         m_manual_stop = true;
@@ -535,6 +534,15 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
       if (!restart && m_restart_requested) {
         dout(10) << "canceling restart" << dendl;
         m_restart_requested = false;
+      }
+      if (is_stopped_()) {
+        dout(10) << "already stopped" << dendl;
+        is_stopped = true;
+      } else {
+        dout(10) << "joining in-flight stop" << dendl;
+        if (on_finish != nullptr) {
+          m_on_stop_contexts.push_back(on_finish);
+        }
       }
     } else {
       if (m_state == STATE_STARTING) {
@@ -557,19 +565,18 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
     }
   }
 
+  if (is_stopped) {
+    if (on_finish) {
+      on_finish->complete(-EINVAL);
+    }
+    return;
+  }
+
   // avoid holding lock since bootstrap request will update status
   if (bootstrap_request != nullptr) {
     dout(10) << "canceling bootstrap" << dendl;
     bootstrap_request->cancel();
     bootstrap_request->put();
-  }
-
-  if (!running) {
-    dout(20) << "not running" << dendl;
-    if (on_finish) {
-      on_finish->complete(-EINVAL);
-    }
-    return;
   }
 
   if (shut_down_replay) {
