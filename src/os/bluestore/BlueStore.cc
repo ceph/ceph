@@ -7672,7 +7672,7 @@ int BlueStore::umount()
 {
   // move bluefs compaction to synchronous mode and force a compaction
   cct->_conf->bluefs_compact_log_sync = true;
-  bluefs->compact_log();
+  //bluefs->compact_log();
 
   ceph_assert(_kv_only || mounted);
   _osr_drain_all();
@@ -18393,7 +18393,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   uint64_t allocated = p_handle->file->fnode.get_allocated();
   dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
 
-#if 1
+#if 0
   bluefs->sync_metadata(false);
 #endif
   unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
