@@ -7670,8 +7670,10 @@ int BlueStore::_mount()
 
 int BlueStore::umount()
 {
-  // move bluefs compaction to synchronous mode
+  // move bluefs compaction to synchronous mode and force a compaction
   cct->_conf->bluefs_compact_log_sync = true;
+  bluefs->compact_log();
+
   ceph_assert(_kv_only || mounted);
   _osr_drain_all();
 
@@ -18362,13 +18364,6 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   // the easiest way to achieve it is to make sure db is closed
   ceph_assert(db == nullptr);
   utime_t  start_time = ceph_clock_now();
-
-#if 1
-  // remove me - try to prove a point!
-  //cct->_conf->bluefs_compact_log_sync = true;
-  bluefs->compact_log();
-#endif
-
   int ret = 0;
   // we need the label when tracing
   bluestore_bdev_label_t label;
