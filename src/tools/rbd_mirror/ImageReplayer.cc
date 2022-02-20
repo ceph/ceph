@@ -528,6 +528,10 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
 
     if (!is_running_()) {
       running = false;
+      if (manual && !m_manual_stop) {
+        dout(10) << "marking manual" << dendl;
+        m_manual_stop = true;
+      }
       if (!restart && m_restart_requested) {
         dout(10) << "canceling restart" << dendl;
         m_restart_requested = false;
