@@ -244,7 +244,7 @@ ImageReplayer<I>::~ImageReplayer()
   unregister_admin_socket_hook();
   ceph_assert(m_state_builder == nullptr);
   ceph_assert(m_on_start_finish == nullptr);
-  ceph_assert(m_on_stop_finish == nullptr);
+  ceph_assert(m_on_stop_contexts.empty());
   ceph_assert(m_bootstrap_request == nullptr);
   ceph_assert(m_update_status_task == nullptr);
   delete m_replayer_listener;
@@ -316,7 +316,7 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual, bool restart)
         ceph_assert(m_on_start_finish == nullptr);
         m_on_start_finish = on_finish;
       }
-      ceph_assert(m_on_stop_finish == nullptr);
+      ceph_assert(m_on_stop_contexts.empty());
     }
   }
 
@@ -548,8 +548,10 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
         shut_down_replay = true;
       }
 
-      ceph_assert(m_on_stop_finish == nullptr);
-      std::swap(m_on_stop_finish, on_finish);
+      ceph_assert(m_on_stop_contexts.empty());
+      if (on_finish != nullptr) {
+        m_on_stop_contexts.push_back(on_finish);
+      }
       m_stop_requested = true;
       m_manual_stop = manual;
     }
@@ -980,11 +982,11 @@ void ImageReplayer<I>::handle_shut_down(int r) {
 
   dout(10) << "stop complete" << dendl;
   Context *on_start = nullptr;
-  Context *on_stop = nullptr;
+  Contexts on_stop_contexts;
   {
     std::lock_guard locker{m_lock};
     std::swap(on_start, m_on_start_finish);
-    std::swap(on_stop, m_on_stop_finish);
+    on_stop_contexts = std::move(m_on_stop_contexts);
     m_stop_requested = false;
     ceph_assert(m_state == STATE_STOPPING);
     m_state = STATE_STOPPED;
@@ -995,9 +997,9 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     on_start->complete(r);
     r = 0;
   }
-  if (on_stop != nullptr) {
-    dout(10) << "on stop finish complete, r=" << r << dendl;
-    on_stop->complete(r);
+  for (auto ctx : on_stop_contexts) {
+    dout(10) << "on stop finish " << ctx << " complete, r=" << r << dendl;
+    ctx->complete(r);
   }
 }
 

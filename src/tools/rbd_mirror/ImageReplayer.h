@@ -148,6 +148,7 @@ protected:
 
 private:
   typedef std::set<Peer<ImageCtxT>> Peers;
+  typedef std::list<Context *> Contexts;
 
   enum State {
     STATE_UNKNOWN,
@@ -214,7 +215,7 @@ private:
   ReplayerListener* m_replayer_listener = nullptr;
 
   Context *m_on_start_finish = nullptr;
-  Context *m_on_stop_finish = nullptr;
+  Contexts m_on_stop_contexts;
   bool m_stop_requested = false;
   bool m_manual_stop = false;
 
