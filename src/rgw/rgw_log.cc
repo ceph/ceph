@@ -208,7 +208,9 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   bool error = s->err.is_err();
   if (error && s->err.http_ret == 404) {
-    bucket_name = "-"; /* bucket not found, use the invalid '-' as bucket name */
+    if (bucket_name.empty()) {
+      bucket_name = "-"; /* bucket not found, use the invalid '-' as bucket name */
+    }
   }
 
   string u = user.to_str();
