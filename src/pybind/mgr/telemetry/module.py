@@ -771,12 +771,16 @@ class Module(MgrModule):
     def gather_device_report(self) -> Dict[str, Dict[str, Dict[str, str]]]:
         try:
             time_format = self.remote('devicehealth', 'get_time_format')
-        except Exception:
+        except Exception as e:
+            self.log.debug('Unable to format time: {}'.format(e))
             return {}
         cutoff = datetime.utcnow() - timedelta(hours=self.interval * 2)
         min_sample = cutoff.strftime(time_format)
 
         devices = self.get('devices')['devices']
+        if not devices:
+            self.log.debug('Unable to get device info from the mgr.')
+            return {}
 
         # anon-host-id -> anon-devid -> { timestamp -> record }
         res: Dict[str, Dict[str, Dict[str, str]]] = {}
@@ -786,13 +790,15 @@ class Module(MgrModule):
                 # this is a map of stamp -> {device info}
                 m = self.remote('devicehealth', 'get_recent_device_metrics',
                                 devid, min_sample)
-            except Exception:
+            except Exception as e:
+                self.log.debug('Unable to get recent metrics from device with id "{}": {}'.format(devid, e))
                 continue
 
             # anonymize host id
             try:
                 host = d['location'][0]['host']
-            except (KeyError, IndexError):
+            except (KeyError, IndexError) as e:
+                self.log.debug('Unable to get host from device with id "{}": {}'.format(devid, e))
                 continue
             anon_host = self.get_store('host-id/%s' % host)
             if not anon_host:
@@ -1321,23 +1327,27 @@ class Module(MgrModule):
             elif e == self.EndPoint.device:
                 if 'device' in self.get_active_channels():
                     devices = self.gather_device_report()
-                    assert devices
-                    num_devs = 0
-                    num_hosts = 0
-                    for host, ls in devices.items():
-                        self.log.debug('host %s devices %s' % (host, ls))
-                        if not len(ls):
-                            continue
-                        fail_reason = self._try_post('devices', self.device_url,
-                                                     ls)
-                        if fail_reason:
-                            failed.append(fail_reason)
-                        else:
-                            num_devs += len(ls)
-                            num_hosts += 1
-                    if num_devs:
-                        success.append('Reported %d devices across %d hosts' % (
-                            num_devs, len(devices)))
+                    if devices:
+                        num_devs = 0
+                        num_hosts = 0
+                        for host, ls in devices.items():
+                            self.log.debug('host %s devices %s' % (host, ls))
+                            if not len(ls):
+                                continue
+                            fail_reason = self._try_post('devices', self.device_url,
+                                                         ls)
+                            if fail_reason:
+                                failed.append(fail_reason)
+                            else:
+                                num_devs += len(ls)
+                                num_hosts += 1
+                        if num_devs:
+                            success.append('Reported %d devices from %d hosts across a total of %d hosts' % (
+                                num_devs, num_hosts, len(devices)))
+                    else:
+                        fail_reason = 'Unable to send device report: Device channel is on, but the generated report was empty.'
+                        failed.append(fail_reason)
+                        self.log.error(fail_reason)
         if failed:
             return 1, '', '\n'.join(success + failed)
         return 0, '', '\n'.join(success)
