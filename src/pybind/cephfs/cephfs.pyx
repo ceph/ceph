@@ -176,7 +176,8 @@ class NotDirectory(OSError):
 
 class DiskQuotaExceeded(OSError):
     pass
-
+class PermissionDenied(OSError):
+    pass
 
 cdef errno_to_exception =  {
     CEPHFS_EPERM      : PermissionError,
@@ -192,6 +193,7 @@ cdef errno_to_exception =  {
     CEPHFS_ENOTEMPTY  : ObjectNotEmpty,
     CEPHFS_ENOTDIR    : NotDirectory,
     CEPHFS_EDQUOT     : DiskQuotaExceeded,
+    CEPHFS_EACCES     : PermissionDenied,
 }
 
 
@@ -939,7 +941,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_opendir(self.cluster, _path, &handle);
         if ret < 0:
-            raise make_ex(ret, "opendir failed")
+            raise make_ex(ret, "opendir failed at {}".format(path.decode('utf-8')))
         d = DirResult()
         d.lib = self
         d.handle = handle
