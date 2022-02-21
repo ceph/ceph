@@ -107,8 +107,8 @@ public :
     EXPECT_CALL(*(mparent_image_cache.get_cache_client()),
                 lookup_object(_, _, _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([cache_path](CacheGenContextURef on_finish) {
-        auto ack = new ObjectCacheReadReplyData(RBDSC_READ_REPLY, 0, cache_path);
-        on_finish.release()->complete(ack);
+        ObjectCacheReadReplyData ack(RBDSC_READ_REPLY, 0, cache_path);
+        on_finish.release()->complete(&ack);
       })));
   }
 
