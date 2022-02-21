@@ -462,6 +462,52 @@ out:
 
 int MotrUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  // Remove user info from cache
+  // Delete access keys for user
+  // Delete user info
+  // Delete user from user index
+  // Delete email for user - TODO
+  bufferlist bl;
+  int rc;
+  // Remove the user info from cache.
+  store->get_user_cache()->remove(dpp, info.user_id.id);
+
+  // Delete all access key of user
+  if (!info.access_keys.empty()) {
+    for(auto acc_key = info.access_keys.begin(); acc_key != info.access_keys.end(); acc_key++) {
+      auto access_key = acc_key->first;
+      rc = store->do_idx_op_by_name(RGW_IAM_MOTR_ACCESS_KEY,
+                              M0_IC_DEL, access_key, bl);
+      // TODO 
+      // Check error code for access_key does not exist
+      // Continue to next step only if delete failed because key doesn't exists
+      if (rc < 0){
+        ldpp_dout(dpp, 0) << "Unable to delete access key" << rc << dendl;
+      }
+    }
+  }
+  
+  // Delete user info index
+  string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
+  store->delete_motr_idx_by_name(user_info_iname);
+  ldpp_dout(dpp, 10) << "Deleted user info index - " << user_info_iname << dendl;
+
+  // Delete user from user index
+  rc = store->do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
+                           M0_IC_DEL, info.user_id.to_str(), bl);
+  if (rc < 0){
+    ldpp_dout(dpp, 0) << "Unable to delete user from user index " << rc << dendl;
+    return rc;
+  }
+
+  // TODO 
+  // Delete email for user
+  // rc = store->do_idx_op_by_name(RGW_IAM_MOTR_EMAIL_KEY,
+  //                          M0_IC_DEL, info.user_email, bl);
+  // if (rc < 0){
+  //   ldpp_dout(dpp, 0) << "Unable to delete email for user" << rc << dendl;
+  //   return rc;
+  // }
   return 0;
 }
 
