@@ -82,7 +82,7 @@ std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs)
 {
   return out << "LBAPin(" << rhs.get_key() << "~" << rhs.get_length()
-	     << "->" << rhs.get_paddr();
+	     << "->" << rhs.get_val();
 }
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs)

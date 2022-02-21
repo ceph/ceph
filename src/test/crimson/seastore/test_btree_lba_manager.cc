@@ -404,7 +404,7 @@ struct btree_lba_manager_test : btree_test_base {
       std::make_pair(
 	ret->get_key(),
 	test_extent_t{
-	  ret->get_paddr(),
+	  ret->get_val(),
 	  ret->get_length(),
 	  1
         }
@@ -495,7 +495,7 @@ struct btree_lba_manager_test : btree_test_base {
 	}).unsafe_get0();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.addr, ret->get_paddr());
+      EXPECT_EQ(i.second.addr, ret->get_val());
       EXPECT_EQ(laddr, ret->get_key());
       EXPECT_EQ(len, ret->get_length());
 
@@ -505,7 +505,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  return lba_manager->get_mapping(
 	    t, laddr);
 	}).unsafe_get0();
-      EXPECT_EQ(i.second.addr, ret_pin->get_paddr());
+      EXPECT_EQ(i.second.addr, ret_pin->get_val());
       EXPECT_EQ(laddr, ret_pin->get_key());
       EXPECT_EQ(len, ret_pin->get_length());
     }

@@ -667,28 +667,29 @@ private:
 
 class LogicalCachedExtent;
 
-template <typename key_t>
+template <typename key_t, typename>
 class PhysicalNodePin;
 
-template <typename key_t>
-using PhysicalNodePinRef = std::unique_ptr<PhysicalNodePin<key_t>>;
+template <typename key_t, typename val_t>
+using PhysicalNodePinRef = std::unique_ptr<PhysicalNodePin<key_t, val_t>>;
 
-template <typename key_t>
+template <typename key_t, typename val_t>
 class PhysicalNodePin {
 public:
   virtual void link_extent(LogicalCachedExtent *ref) = 0;
-  virtual void take_pin(PhysicalNodePin<key_t> &pin) = 0;
+  virtual void take_pin(PhysicalNodePin<key_t, val_t> &pin) = 0;
   virtual extent_len_t get_length() const = 0;
-  virtual paddr_t get_paddr() const = 0;
+  virtual extent_types_t get_type() const = 0;
+  virtual val_t get_val() const = 0;
   virtual key_t get_key() const = 0;
-  virtual PhysicalNodePinRef<key_t> duplicate() const = 0;
+  virtual PhysicalNodePinRef<key_t, val_t> duplicate() const = 0;
   virtual bool has_been_invalidated() const = 0;
 
   virtual ~PhysicalNodePin() {}
 };
 
-using LBAPin = PhysicalNodePin<laddr_t>;
-using LBAPinRef = PhysicalNodePinRef<laddr_t>;
+using LBAPin = PhysicalNodePin<laddr_t, paddr_t>;
+using LBAPinRef = PhysicalNodePinRef<laddr_t, paddr_t>;
 
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
 
