@@ -59,8 +59,8 @@ public:
   {}
 
   int lock(const DoutPrefixProvider *dpp);
-  void unlock();
-  int renew(const Clock::time_point&);
+  void unlock(const DoutPrefixProvider *dpp);
+  int renew(const Clock::time_point& now, const DoutPrefixProvider *dpp);
 
   bool should_renew(const Clock::time_point& now) const {
     return now >= renew_thresh;

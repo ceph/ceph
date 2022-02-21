@@ -698,7 +698,7 @@ int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp)
     ret = clear_resharding(store, bucket_info, bucket_attrs, dpp);
   }
 
-  reshard_lock.unlock();
+  reshard_lock.unlock(dpp);
   return ret;
 }
 
@@ -735,31 +735,38 @@ int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp) {
   }
 
   if (ret == -EBUSY) {
-    ldout(store->ctx(), 0) << "INFO: RGWReshardLock::" << __func__ <<
+    ldpp_dout(dpp, 5) << "INFO: RGWBucketReshardLock::" << __func__ <<
       " found lock on " << lock_oid <<
-      " to be held by another RGW process; skipping for now" << dendl;
+      " already held; skipping for now" << dendl;
     return ret;
   } else if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: RGWReshardLock::" << __func__ <<
+    ldpp_dout(dpp, 0) << "ERROR: RGWBucketReshardLock::" << __func__ <<
       " failed to acquire lock on " << lock_oid << ": " <<
       cpp_strerror(-ret) << dendl;
     return ret;
   }
 
   reset_time(Clock::now());
+    
+  ldpp_dout(dpp, 20) << "INFO: RGWBucketReshardLock::" << __func__ <<
+      " lock on " << lock_oid <<
+      " successfully taken" << dendl;
 
   return 0;
 }
 
-void RGWBucketReshardLock::unlock() {
+void RGWBucketReshardLock::unlock(const DoutPrefixProvider *dpp) {
   int ret = internal_lock.unlock(&store->getRados()->reshard_pool_ctx, lock_oid);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "WARNING: RGWBucketReshardLock::" << __func__ <<
+    ldpp_dout(dpp, 0) << "ERROR: RGWBucketReshardLock::" << __func__ <<
       " failed to drop lock on " << lock_oid << " ret=" << ret << dendl;
   }
+  ldpp_dout(dpp, 20) << "INFO: RGWBucketReshardLock::" << __func__ <<
+      " lock on " << lock_oid <<
+      " successfully released" << dendl;
 }
 
-int RGWBucketReshardLock::renew(const Clock::time_point& now) {
+int RGWBucketReshardLock::renew(const Clock::time_point& now, const DoutPrefixProvider *dpp) {
   internal_lock.set_must_renew(true);
   int ret;
   if (ephemeral) {
@@ -775,14 +782,15 @@ int RGWBucketReshardLock::renew(const Clock::time_point& now) {
     } else {
       error_s << ret << " (" << cpp_strerror(-ret) << ")";
     }
-    ldout(store->ctx(), 5) << __func__ << "(): failed to renew lock on " <<
+    ldpp_dout(dpp, 5) << "WARNING: RGWBucketReshardLock::" << __func__ << "(): failed to renew lock on " <<
       lock_oid << " with error " << error_s.str() << dendl;
     return ret;
   }
   internal_lock.set_must_renew(false);
 
   reset_time(now);
-  ldout(store->ctx(), 20) << __func__ << "(): successfully renewed lock on " <<
+  ldout(store->ctx(), 20) << "INFO: RGWBucketReshardLock::" << __func__ << 
+    "(): successfully renewed lock on " <<
     lock_oid << dendl;
 
   return 0;
@@ -884,12 +892,12 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 	  // assume outer locks have timespans at least the size of ours, so
 	  // can call inside conditional
 	  if (outer_reshard_lock) {
-	    ret = outer_reshard_lock->renew(now);
+	    ret = outer_reshard_lock->renew(now, dpp);
 	    if (ret < 0) {
 	      return ret;
 	    }
 	  }
-	  ret = reshard_lock.renew(now);
+	  ret = reshard_lock.renew(now, dpp);
 	  if (ret < 0) {
 	    ldpp_dout(dpp, -1) << "Error renewing bucket lock: " << ret << dendl;
 	    return ret;
@@ -939,7 +947,7 @@ int RGWBucketReshard::execute(int num_shards,
     return ret;
   }
   // unlock when scope exits
-  auto unlock = make_scope_guard([this] { reshard_lock.unlock(); });
+  auto unlock = make_scope_guard([this, dpp] { reshard_lock.unlock(dpp); });
 
   if (reshard_log) {
     ret = reshard_log->update(dpp, bucket_info);
@@ -1294,7 +1302,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
       Clock::time_point now = Clock::now();
       if (logshard_lock.should_renew(now)) {
-        ret = logshard_lock.renew(now);
+        ret = logshard_lock.renew(now, dpp);
         if (ret < 0) {
           return ret;
         }
@@ -1304,7 +1312,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
     } // entry for loop
   } while (truncated);
 
-  logshard_lock.unlock();
+  logshard_lock.unlock(dpp);
   return 0;
 }
 

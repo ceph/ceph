@@ -1444,7 +1444,7 @@ void get_stale_instances(rgw::sal::Store* store, const std::string& bucket_name,
                              << "failed to take reshard lock; reshard underway likey" << dendl;
       return;
     }
-    auto sg = make_scope_guard([&reshard_lock](){ reshard_lock.unlock();} );
+    auto sg = make_scope_guard([&reshard_lock, dpp](){ reshard_lock.unlock(dpp);} );
     // this should be fast enough that we may not need to renew locks and check
     // exit status?, should we read the values of the instances again?
     stale_instances.insert(std::end(stale_instances),
