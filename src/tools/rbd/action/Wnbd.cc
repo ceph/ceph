@@ -187,8 +187,6 @@ int execute_unmap(const po::variables_map &vm,
   return call_wnbd_cmd(vm, args, ceph_global_init_args);
 }
 
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
-
 } // namespace wnbd
 } // namespace action
 } // namespace rbd

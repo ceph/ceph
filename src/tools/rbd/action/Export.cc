@@ -308,7 +308,6 @@ int execute_diff(const po::variables_map &vm,
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({at::WHOLE_OBJECT});
 Shell::Action action_diff(
   {"export-diff"}, {}, "Export incremental diff to file.", "",
   &get_arguments_diff, &execute_diff);

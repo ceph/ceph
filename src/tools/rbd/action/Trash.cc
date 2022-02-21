@@ -515,7 +515,6 @@ int execute_restore(const po::variables_map &vm,
   return r;
 }
 
-
 Shell::Action action_move(
   {"trash", "move"}, {"trash", "mv"}, "Move an image to the trash.", "",
   &get_move_arguments, &execute_move);
@@ -528,7 +527,6 @@ Shell::Action action_purge(
   {"trash", "purge"}, {}, "Remove all expired images from trash.", "",
   &get_purge_arguments, &execute_purge);
 
-Shell::SwitchArguments switched_arguments({"long", "l"});
 Shell::Action action_list(
   {"trash", "list"}, {"trash", "ls"}, "List trash images.", "",
   &get_list_arguments, &execute_list);
