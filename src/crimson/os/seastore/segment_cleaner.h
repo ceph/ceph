@@ -11,7 +11,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/extent_reader.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
@@ -676,44 +676,10 @@ public:
     ExtentReaderRef&& scanner,
     bool detailed = false);
 
-  void mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms) {
-    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
-      "SegmentCleaner::mount: {} segment managers", sms.size());
-    init_complete = false;
-    stats = {};
-    journal_tail_target = journal_seq_t{};
-    journal_tail_committed = journal_seq_t{};
-    journal_head = journal_seq_t{};
-    journal_device_id = pdevice_id;
-
-    space_tracker.reset(
-      detailed ?
-      (SpaceTrackerI*)new SpaceTrackerDetailed(
-	sms) :
-      (SpaceTrackerI*)new SpaceTrackerSimple(
-	sms));
-
-    segments.clear();
-    for (auto sm : sms) {
-      // sms is a vector that is indexed by device id and
-      // always has "max_device" elements, some of which
-      // may be null.
-      if (!sm) {
-	continue;
-      }
-      segments.add_segment_manager(*sm);
-      stats.empty_segments += sm->get_num_segments();
-    }
-    metrics.clear();
-    register_metrics();
-  }
-
-  using init_segments_ertr = crimson::errorator<
+  using mount_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using init_segments_ret_bare =
-    std::vector<std::pair<segment_id_t, segment_header_t>>;
-  using init_segments_ret = init_segments_ertr::future<init_segments_ret_bare>;
-  init_segments_ret init_segments();
+  using mount_ret = mount_ertr::future<>;
+  mount_ret mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms);
 
   get_segment_ret get_segment(
       device_id_t id, segment_seq_t seq) final;
