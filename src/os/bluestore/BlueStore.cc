@@ -6687,11 +6687,9 @@ void BlueStore::_close_db()
       _open_bluefs(false, false);
     }
 #endif
-    alloc->prepare_for_shutdown();
     int ret = store_allocator(alloc);
 #if 1
     if (!m_fast_shutdown) {
-      alloc->clear_shutdown();
       // restore conf value
       cct->_conf->bluefs_replay_recovery_disable_compact = keep_bluefs_replay_recovery_disable_compact;
     }
@@ -7721,15 +7719,16 @@ int BlueStore::umount()
     }
     dout(20) << __func__ << " closing" << dendl;
   }
-#if 0
+
   // stop new allocations and raise debug level
   if (unlikely(m_fast_shutdown)) {
+    alloc->prepare_for_shutdown();
     cct->_conf.set_val("debug_osd", "20");
     cct->_conf.set_val("debug_bluestore", "20");
     cct->_conf.set_val("debug_bluefs", "20");
     cct->_conf.set_val("debug_rocksdb", "20");
   }
-#endif
+
   _close_db_and_around();
   // disable fsck on fast-shutdown
   if (cct->_conf->bluestore_fsck_on_umount && !m_fast_shutdown) {
@@ -18387,9 +18386,6 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   ceph_assert(db == nullptr);
   utime_t  start_time = ceph_clock_now();
   int ret = 0;
-  // we need the label when tracing
-  bluestore_bdev_label_t label;
-  _read_bdev_label(cct, path, &label);
 
   // create dir if doesn't exist already
   if (!bluefs->dir_exists(allocator_dir) ) {
@@ -18403,7 +18399,6 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   // reuse previous file-allocation if exists
   ret = bluefs->stat(allocator_dir, allocator_file, nullptr, nullptr);
   bool overwrite_file = (ret == 0);
-  //derr <<  __func__ << "bluefs->open_for_write(" << overwrite_file << ")" << dendl;
   BlueFS::FileWriter *p_handle = nullptr;
   ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
   if (ret != 0) {
@@ -18415,10 +18410,13 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   uint64_t allocated = p_handle->file->fnode.get_allocated();
   dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
 
-#if 0
-  bluefs->sync_metadata(false);
-#endif
+  // The system must be in stable state when we collect allocations map
+  alloc->prepare_for_shutdown();
   unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
+  // We will need to allocate space for the allocator-file, so must clear shutdown indication
+  // TBD: preallcoate the space and then we can better assert against allocations from new activity
+  alloc->clear_shutdown();
+
   if (!allocator) {
     bluefs->close_writer(p_handle);
     return -1;
@@ -18489,7 +18487,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
-  dout(5) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << ", serial=" << s_serial << ", label=" << label << dendl;
+  dout(5) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << ", serial=" << s_serial << dendl;
   dout(5) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
