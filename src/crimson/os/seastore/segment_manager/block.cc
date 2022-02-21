@@ -4,6 +4,8 @@
 #include <sys/mman.h>
 #include <string.h>
 
+#include <fmt/format.h>
+
 #include "include/buffer.h"
 
 #include "crimson/common/config_proxy.h"
@@ -23,6 +25,28 @@ SET_SUBSYS(seastore_device);
  * - DEBUG: INFO details, major read and write operations
  * - TRACE: DEBUG details
  */
+
+using segment_state_t = crimson::os::seastore::Segment::segment_state_t;
+
+template <> struct fmt::formatter<segment_state_t>: fmt::formatter<std::string_view> {
+  // parse is inherited from formatter<string_view>.
+  template <typename FormatContext>
+  auto format(segment_state_t s, FormatContext& ctx) {
+    std::string_view name = "unknown";
+    switch (s) {
+    case segment_state_t::EMPTY:
+      name = "empty";
+      break;
+    case segment_state_t::OPEN:
+      name = "open";
+      break;
+    case segment_state_t::CLOSED:
+      name = "closed";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
 
 namespace crimson::os::seastore::segment_manager::block {
 
