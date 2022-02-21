@@ -6393,7 +6393,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
     dout(5) << __func__ << "::NCB::Commit to Null-Manager" << dendl;
     commit_to_null_manager();
     need_to_destage_allocation_file = true;
-    dout(10) << __func__ << "::NCB::need_to_destage_allocation_file was set" << dendl;
+    dout(1) << __func__ << "::NCB::need_to_destage_allocation_file was set" << dendl;
   }
 
   return 0;
@@ -6667,7 +6667,7 @@ void BlueStore::_close_db_leave_bluefs()
 
 void BlueStore::_close_db()
 {
-  dout(10) << __func__ << ":read_only=" << db_was_opened_read_only << " fm=" << fm << " destage_alloc_file=" << need_to_destage_allocation_file << dendl;
+  dout(1) << __func__ << ":read_only=" << db_was_opened_read_only << " fm=" << fm << " destage_alloc_file=" << need_to_destage_allocation_file << dendl;
   _close_db_leave_bluefs();
 
   if (need_to_destage_allocation_file) {
@@ -7524,7 +7524,7 @@ int BlueStore::expand_devices(ostream& out)
     // we grow the allocation range, must reflect it in the allocation file
     alloc->init_add_free(size0, size - size0);
     need_to_destage_allocation_file = true;
-
+    dout(1) << __func__ << "::NCB::need_to_destage_allocation_file was set" << dendl;
     _close_db_and_around();
 
     // mount in read/write to sync expansion changes
@@ -18224,7 +18224,7 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
 {
   // mark that allocation-file was invalidated and we should destage a new copy whne closing db
   need_to_destage_allocation_file = true;
-  dout(10) << "need_to_destage_allocation_file was set" << dendl;
+  dout(1) << "need_to_destage_allocation_file was set" << dendl;
 
   BlueFS::FileWriter *p_handle = nullptr;
   if (!bluefs->dir_exists(allocator_dir)) {
@@ -18431,6 +18431,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   int ret = 0;
 
   // Get a consistent view of the shared-allocator
+  dout(1) << " Calling create_allocator_snapshot" << dendl;
   unique_ptr<Allocator> allocator(create_allocator_snapshot(src_allocator));
   if (!allocator) {
     return -1;
@@ -18524,10 +18525,11 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
-  dout(5) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << ", serial=" << s_serial << dendl;
+  dout(1) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << ", serial=" << s_serial << dendl;
   dout(5) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
+  dout(1) << "::NCB::need_to_destage_allocation_file was cleared" << dendl;
   need_to_destage_allocation_file = false;
   return 0;
 }
@@ -19199,6 +19201,7 @@ int BlueStore::verify_shared_alloc_against_onodes_allocation_info()
   }
 #else
   // Get a consistent view of the shared-allocator
+  dout(1) << " Calling create_allocator_snapshot" << dendl;
   unique_ptr<Allocator> allocator2(create_allocator_snapshot(alloc));
   if (!allocator2) {
     return -1;
