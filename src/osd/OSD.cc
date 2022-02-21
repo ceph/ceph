@@ -4278,7 +4278,7 @@ int OSD::shutdown()
       _exit(0);
     }
     // disable BlueFS compaction during fast-shutdown
-    cct->_conf->bluefs_replay_recovery_disable_compact;
+    cct->_conf->bluefs_replay_recovery_disable_compact = true;
   } else if (!service.prepare_to_stop()) {
     return 0; // already shutting down
   }

@@ -6674,11 +6674,13 @@ void BlueStore::_close_db()
     ceph_assert(fm && fm->is_null_manager());
 #if 1
     // force bluefs sync
+    dout(1) << __func__ << "::NCB::force bluefs sync -- _close_bluefs()" << dendl;
     _close_bluefs();
     // disable BlueFS compaction until after store_allocator()
     auto keep_bluefs_replay_recovery_disable_compact = cct->_conf->bluefs_replay_recovery_disable_compact;
     cct->_conf->bluefs_replay_recovery_disable_compact = true;
     // need bluefs open to store allocation-file
+    dout(1) << __func__ << "::NCB::force bluefs sync -- _open_bluefs()" << dendl;
     _open_bluefs(false, false);
 #endif
     alloc->prepare_for_shutdown();
@@ -19167,7 +19169,7 @@ int BlueStore::verify_shared_alloc_against_onodes_allocation_info()
   uint64_t memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
   ret = compare_allocators(allocator.get(), alloc, stats.insert_count, memory_target);
   if (ret == 0) {
-    dout(5) << "Allocator drive - file integrity check OK" << dendl;
+    dout(1) << "Allocator drive - file integrity check OK" << dendl;
   } else {
     derr << "FAILURE. Allocator from file and allocator from metadata differ::ret=" << ret << dendl;
   }
