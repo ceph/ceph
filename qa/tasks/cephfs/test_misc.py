@@ -144,7 +144,8 @@ class TestMisc(CephFSTestCase):
                                             '--pg_num_min', str(self.fs.pg_num_min))
         self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
                                             self.fs.metadata_pool_name,
-                                            data_pool_name)
+                                            data_pool_name,
+                                            '--allow_dangerous_metadata_overlay')
 
     def test_cap_revoke_nonresponder(self):
         """
