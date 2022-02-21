@@ -566,9 +566,9 @@ TEST_F(TestMockMirrorStatusUpdater, RemoveImmediateUpdate) {
   mock_mirror_status_updater.set_mirror_image_status("1", {}, false);
 
   C_SaferCond ctx;
-  expect_work_queue(true);
-  expect_work_queue(true);
+  expect_work_queue(false);
   expect_mirror_status_removes({"1"}, 0);
+  expect_work_queue(false);
   mock_mirror_status_updater.remove_mirror_image_status("1", true, &ctx);
   ASSERT_EQ(0, ctx.wait());
 
