@@ -182,6 +182,7 @@ po::options_description make_usage() {
     ("debug", ": enable debug")
     ("pgid", ": set pgid")
     ("chunk-dedup-threshold", po::value<uint32_t>(), ": set the threshold for chunk dedup (number of duplication) ")
+    ("sampling-ratio", po::value<int>(), ": set the sampling ratio (percentile)")
   ;
   desc.add(op_desc);
   return desc;
@@ -588,9 +589,12 @@ public:
   struct SampleDedupGlobal {
     FpStore fp_store;
     double object_dedup_threshold = -1;
+    double sampling_ratio = -1;
     SampleDedupGlobal(
-      int chunk_threshold) :
-      fp_store(chunk_threshold) { }
+      int chunk_threshold,
+      int sampling_ratio) :
+      fp_store(chunk_threshold),
+      sampling_ratio(static_cast<double>(sampling_ratio) / 100) { }
   };
 
   SampleDedupWorkerThread(
@@ -663,10 +667,10 @@ void SampleDedupWorkerThread::crawl()
     // Get the list of object IDs to deduplicate
     std::tie(objects, current_object) = get_objects(current_object, end, 100);
 
-    // Pick few objects to be processed. Crawling mode decides how many
-    // objects to pick (sampling ratio). Lower sampling ratio makes crawler
-    // have lower crawling overhead but find less duplication.
-    std::set<size_t> sampled_indexes = sample_object(objects.size());
+    // Pick few objects to be processed. Sampling ratio decides how many
+    // objects to pick. Lower sampling ratio makes crawler have lower crawling
+    // overhead but find less duplication.
+    auto sampled_indexes = sample_object(objects.size());
     for (size_t index : sampled_indexes) {
       ObjectItem target = objects[index];
       try_dedup_and_accumulate_result(target);
@@ -720,12 +724,18 @@ std::tuple<std::vector<ObjectItem>, ObjectCursor> SampleDedupWorkerThread::get_o
   return std::make_tuple(objects, next);
 }
 
-std::set<size_t> SampleDedupWorkerThread::sample_object(size_t count)
+std::vector<size_t> SampleDedupWorkerThread::sample_object(size_t count)
 {
-  std::set<size_t> indexes;
-  for (size_t index = 0 ; index < count ; index++) {
-    indexes.insert(index);
+  std::vector<size_t> indexes(count);
+  for (size_t i = 0 ; i < count ; i++) {
+    indexes[i] = i;
   }
+  default_random_engine generator;
+  shuffle(indexes.begin(), indexes.end(), generator);
+  size_t sampling_count = static_cast<double>(count) *
+    sample_dedup_global.sampling_ratio;
+  indexes.resize(sampling_count);
+
   return indexes;
 }
 
@@ -1545,6 +1555,10 @@ int make_crawling_daemon(const po::variables_map &opts)
   string chunk_pool_name = get_opts_chunk_pool(opts);
   unsigned max_thread = get_opts_max_thread(opts);
 
+  int sampling_ratio = -1;
+  if (opts.count("sampling-ratio")) {
+    sampling_ratio = opts["sampling-ratio"].as<int>();
+  }
   size_t chunk_size = 8192;
   if (opts.count("chunk-size")) {
     chunk_size = opts["chunk-size"].as<int>();
@@ -1554,7 +1568,7 @@ int make_crawling_daemon(const po::variables_map &opts)
 
   uint32_t chunk_dedup_threshold = -1;
   if (opts.count("chunk-dedup-threshold")) {
-    chunk_size = opts["chunk-dedup-threshold"].as<uint32_t>();
+    chunk_dedup_threshold = opts["chunk-dedup-threshold"].as<uint32_t>();
   }
 
   std::string chunk_algo = get_opts_chunk_algo(opts);
@@ -1613,8 +1627,15 @@ int make_crawling_daemon(const po::variables_map &opts)
     cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
     return ret;
   }
+  ret = rados.mon_command(
+      make_pool_str(base_pool_name, "dedup_tier", chunk_pool_name),
+      inbl, NULL, NULL);
+  if (ret < 0) {
+    cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
 
-  cout << "Object Dedup Threshold : " << object_dedup_threshold << std::endl
+  cout << "SampleRatio : " << sampling_ratio << std::endl
     << "Chunk Dedup Threshold : " << chunk_dedup_threshold << std::endl
     << "Chunk Size : " << chunk_size << std::endl
     << std::endl;
@@ -1641,7 +1662,7 @@ int make_crawling_daemon(const po::variables_map &opts)
 
     estimate_threads.clear();
     SampleDedupWorkerThread::SampleDedupGlobal sample_dedup_global(
-      chunk_dedup_threshold);
+      chunk_dedup_threshold, sampling_ratio);
 
     for (unsigned i = 0; i < max_thread; i++) {
       cout << " add thread.. " << std::endl;
