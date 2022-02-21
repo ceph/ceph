@@ -155,8 +155,8 @@ po::options_description make_usage() {
      ": perform a chunk dedup---deduplicate only a chunk, which is a part of object.")
     ("op object-dedup --pool <POOL> --object <OID> --chunk-pool <POOL> --fingerprint-algorithm <FP> --dedup-cdc-chunk-size <CHUNK_SIZE> [--snap]",
      ": perform a object dedup---deduplicate the entire object, not a chunk. Related snapshots are also deduplicated if --snap is given")
-    ("op sample-dedup --pool <POOL> --chunk-pool <POOL> --chunk-algorithm <ALGO> --fingerprint-algorithm <FP>",
-     ": perform a sample dedup---make crawling threads which crawl objeccts in base pool and deduplicate them based on their deduplication efficiency")
+    ("op sample-dedup --pool <POOL> --chunk-pool <POOL> --chunk-algorithm <ALGO> --fingerprint-algorithm <FP> --daemon --loop",
+     ": perform a sample dedup---make crawling threads which crawl objects in base pool and deduplicate them based on their deduplication efficiency")
     ;
   po::options_description op_desc("Opational arguments");
   op_desc.add_options()
@@ -183,6 +183,9 @@ po::options_description make_usage() {
     ("pgid", ": set pgid")
     ("chunk-dedup-threshold", po::value<uint32_t>(), ": set the threshold for chunk dedup (number of duplication) ")
     ("sampling-ratio", po::value<int>(), ": set the sampling ratio (percentile)")
+    ("daemon", ": execute sample dedup in daemon mode")
+    ("loop", ": execute sample dedup in a loop until terminated. Sleeps 'wakeup-period' seconds between iterations")
+    ("wakeup-period", po::value<int>(), ": set the wakeup period of crawler thread (sec)")
   ;
   desc.add(op_desc);
   return desc;
@@ -1555,6 +1558,26 @@ int make_crawling_daemon(const po::variables_map &opts)
   string chunk_pool_name = get_opts_chunk_pool(opts);
   unsigned max_thread = get_opts_max_thread(opts);
 
+  if (opts.count("daemon")) {
+    pid_t pid = fork();
+    if (pid < 0) {
+      cerr << "daemon process creation failed\n";
+      return -EINVAL;
+    }
+
+    if (pid != 0) {
+      return 0;
+    }
+    signal(SIGHUP, SIG_IGN);
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+  }
+
+  bool loop = false;
+  if (opts.count("loop")) {
+    loop = true;
+  }
+
   int sampling_ratio = -1;
   if (opts.count("sampling-ratio")) {
     sampling_ratio = opts["sampling-ratio"].as<int>();
@@ -1583,6 +1606,12 @@ int make_crawling_daemon(const po::variables_map &opts)
   if (ret) {
     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
     return -EINVAL;
+  }
+  int wakeup_period = 100;
+  if (opts.count("wakeup-period")) {
+    wakeup_period = opts["wakeup-period"].as<int>();
+  } else {
+    cout << "100 second is set as wakeup period by default" << std::endl;
   }
 
   std::string fp_algo = get_opts_fp_algo(opts);
@@ -1694,7 +1723,11 @@ int make_crawling_daemon(const po::variables_map &opts)
     for (auto &p : estimate_threads) {
       p->join();
     }
-    break;
+    if (loop) {
+      sleep(wakeup_period);
+    } else {
+      break;
+    }
   }
 
   return 0;
