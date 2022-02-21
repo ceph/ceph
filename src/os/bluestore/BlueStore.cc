@@ -6672,28 +6672,7 @@ void BlueStore::_close_db()
 
   if (need_to_destage_allocation_file) {
     ceph_assert(fm && fm->is_null_manager());
-#if 1
-    auto keep_bluefs_replay_recovery_disable_compact = cct->_conf->bluefs_replay_recovery_disable_compact;
-    dout(1) << __func__ << "::NCB::cct->_conf->bluefs_replay_recovery_disable_compact ="
-	    << cct->_conf->bluefs_replay_recovery_disable_compact << dendl;
-    if (!m_fast_shutdown) {
-      // force bluefs sync
-      dout(1) << __func__ << "::NCB::force bluefs sync -- _close_bluefs()" << dendl;
-      _close_bluefs();
-      // disable BlueFS compaction until after store_allocator()
-      cct->_conf->bluefs_replay_recovery_disable_compact = true;
-      // need bluefs open to store allocation-file
-      dout(1) << __func__ << "::NCB::force bluefs sync -- _open_bluefs()" << dendl;
-      _open_bluefs(false, false);
-    }
-#endif
     int ret = store_allocator(alloc);
-#if 1
-    if (!m_fast_shutdown) {
-      // restore conf value
-      cct->_conf->bluefs_replay_recovery_disable_compact = keep_bluefs_replay_recovery_disable_compact;
-    }
-#endif
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
     }
@@ -18376,6 +18355,70 @@ static uint32_t flush_extent_buffer_with_crc(BlueFS::FileWriter *p_handle, const
   return crc;
 }
 
+//---------------------------------------------------------
+Allocator* BlueStore::clone_allocator_without_bluefs_safe(Allocator *src_allocator, interval_set<uint64_t> &bluefs_extents)
+{
+  uint64_t   bdev_size = bdev->get_size();
+  Allocator* allocator = create_bitmap_allocator(bdev_size);
+  if (allocator) {
+    dout(5) << "bitmap-allocator=" << allocator << dendl;
+  } else {
+    derr << "****failed create_bitmap_allocator()" << dendl;
+    return nullptr;
+  }
+
+  uint64_t num_entries = 0;
+  copy_allocator(src_allocator, allocator, &num_entries);
+
+
+  // BlueFS stores its internal allocation outside RocksDB (FM) so we should not destage them to the allcoator-file
+  // we are going to hide bluefs allocation during allocator-destage as they are stored elsewhere
+  {
+    std::vector<extent_t> bluefs_extents_vec;
+
+    // load current bluefs internal allocation into a vector
+    for (auto itr = bluefs_extents.begin(); itr != bluefs_extents.end(); itr++) {
+      extent_t e = { .offset = itr.get_start(), .length = itr.get_len() };
+      bluefs_extents_vec.push_back(e);
+    }
+    dout(5) <<  "BlueFS extent_count=" << bluefs_extents_vec.size() << dendl;
+
+    // then remove them from the shared allocator before dumping it to disk (bluefs stored them internally)
+    for (auto itr = bluefs_extents_vec.begin(); itr != bluefs_extents_vec.end(); ++itr) {
+      allocator->init_add_free(itr->offset, itr->length);
+    }
+  }
+
+  return allocator;
+}
+
+//-----------------------------------------------------------------------------------
+Allocator* BlueStore::create_allocator_snapshot(Allocator* src_allocator)
+{
+  Allocator* allocator = nullptr;
+  if (bluefs) {
+    // Get a consistent view of the shared-allocator
+    interval_set<uint64_t> bluefs_extents;
+    bluefs->umount(db_was_opened_read_only || m_fast_shutdown, bluefs_layout.shared_bdev, &bluefs_extents);
+    _minimal_close_bluefs();
+
+    // The system must be in stable state when we collect allocations map
+    alloc->prepare_for_shutdown();
+    allocator = clone_allocator_without_bluefs_safe(src_allocator, bluefs_extents);
+    // We will need to allocate space for the allocator-file, so must clear shutdown indication
+    // TBD: preallcoate the space and then we can better assert against allocations from new activity
+    alloc->clear_shutdown();
+    _open_bluefs(false, false);
+  } else {
+    allocator = create_bitmap_allocator(bdev->get_size());
+    if (allocator) {
+      uint64_t num_entries = 0;
+      copy_allocator(src_allocator, allocator, &num_entries);
+    }
+  }
+  return allocator;
+}
+
 const unsigned MAX_EXTENTS_IN_BUFFER = 4 * 1024; // 4K extents = 64KB of data
 // write the allocator to a flat bluefs file - 4K extents at a time
 //-----------------------------------------------------------------------------------
@@ -18386,6 +18429,12 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   ceph_assert(db == nullptr);
   utime_t  start_time = ceph_clock_now();
   int ret = 0;
+
+  // Get a consistent view of the shared-allocator
+  unique_ptr<Allocator> allocator(create_allocator_snapshot(src_allocator));
+  if (!allocator) {
+    return -1;
+  }
 
   // create dir if doesn't exist already
   if (!bluefs->dir_exists(allocator_dir) ) {
@@ -18409,18 +18458,6 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   uint64_t file_size = p_handle->file->fnode.size;
   uint64_t allocated = p_handle->file->fnode.get_allocated();
   dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
-
-  // The system must be in stable state when we collect allocations map
-  alloc->prepare_for_shutdown();
-  unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
-  // We will need to allocate space for the allocator-file, so must clear shutdown indication
-  // TBD: preallcoate the space and then we can better assert against allocations from new activity
-  alloc->clear_shutdown();
-
-  if (!allocator) {
-    bluefs->close_writer(p_handle);
-    return -1;
-  }
 
   // store all extents (except for the bluefs extents we removed) in a single flat file
   utime_t                 timestamp = ceph_clock_now();
@@ -19154,12 +19191,19 @@ int BlueStore::verify_shared_alloc_against_onodes_allocation_info()
     copy_simple_bitmap_to_allocator(&sbmap, allocator.get(), min_alloc_size);
   }
 
+#if 0
   // add allocation space used by the bluefs itself
   ret = add_existing_bluefs_allocation(allocator.get(), stats);
   if (ret < 0) {
     return ret;
   }
-
+#else
+  // Get a consistent view of the shared-allocator
+  unique_ptr<Allocator> allocator2(create_allocator_snapshot(alloc));
+  if (!allocator2) {
+    return -1;
+  }
+#endif
   duration = ceph_clock_now() - start;
   stats.insert_count = 0;
   auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
@@ -19167,7 +19211,12 @@ int BlueStore::verify_shared_alloc_against_onodes_allocation_info()
   };
   allocator->dump(count_entries);
   uint64_t memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
+
+#if 0
   ret = compare_allocators(allocator.get(), alloc, stats.insert_count, memory_target);
+#else
+  ret = compare_allocators(allocator.get(), allocator2.get(), stats.insert_count, memory_target);
+#endif
   if (ret == 0) {
     dout(1) << "Allocator drive - file integrity check OK" << dendl;
   } else {

@@ -528,7 +528,17 @@ public:
   int mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout);
   int mount();
   int maybe_verify_layout(const bluefs_layout_t& layout) const;
-  void umount(bool avoid_compact = false);
+  void umount(bool avoid_compact = false, unsigned id = -1, interval_set<uint64_t> *extents = nullptr);
+
+  auto lock_allocations() {
+    return new std::lock_guard(nodes.lock);
+  }
+#if 0
+  void unlock_allocations(std::lock_guard* nlp) {
+    delete nlp;
+  }
+#endif
+
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();

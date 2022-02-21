@@ -3743,6 +3743,8 @@ private:
   int  db_cleanup(int ret);
   int  reset_fm_for_restore();
   int  verify_rocksdb_allocations(Allocator *allocator);
+  Allocator* create_allocator_snapshot(Allocator* src_allocator);
+  Allocator* clone_allocator_without_bluefs_safe(Allocator *src_allocator, interval_set<uint64_t> &bluefs_extents);
   Allocator* clone_allocator_without_bluefs(Allocator *src_allocator);
   Allocator* initialize_allocator_from_freelist(FreelistManager *real_fm);
   void copy_allocator_content_to_fm(Allocator *allocator, FreelistManager *real_fm);

@@ -949,7 +949,7 @@ int BlueFS::maybe_verify_layout(const bluefs_layout_t& layout) const
   return 0;
 }
 
-void BlueFS::umount(bool avoid_compact)
+void BlueFS::umount(bool avoid_compact, unsigned id, interval_set<uint64_t> *extents)
 {
   dout(1) << __func__ << dendl;
 
@@ -963,6 +963,13 @@ void BlueFS::umount(bool avoid_compact)
 
   vselector.reset(nullptr);
   _stop_alloc();
+
+  // store a copy of all allocation
+  if (extents) {
+    dout(1) << __func__ << "::NCB::copying allocation map before umount" << dendl;
+    get_block_extents(id, extents);
+  }
+
   nodes.file_map.clear();
   nodes.dir_map.clear();
   super = bluefs_super_t();
