@@ -1640,13 +1640,18 @@ int RGWRados::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWU
   }
 
   map<string, rgw_usage_log_info>::iterator liter;
-
+  int r = 0;
   for (liter = log_objs.begin(); liter != log_objs.end(); ++liter) {
-    int r = cls_obj_usage_log_add(dpp, liter->first, liter->second);
-    if (r < 0)
-      return r;
+    r = cls_obj_usage_log_add(dpp, liter->first, liter->second);
+    if (r < 0) {
+       ldpp_dout(dpp, 0) << "error: RGWRados::log_usage(): add usage fail" << liter->first << ",r=" << r << dendl;
+	   for(auto entry: liter->second.entries) {
+	       ldpp_dout(dpp, 0) << "error: RGWRados::log_usage(): add usage fail,user=" << entry.owner << dendl;
+	   }
+       continue;
+	}
   }
-  return 0;
+  return r;
 }
 
 int RGWRados::read_usage(const DoutPrefixProvider *dpp, const rgw_user& user, const string& bucket_name, uint64_t start_epoch, uint64_t end_epoch,
