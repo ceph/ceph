@@ -6251,7 +6251,8 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
 
 void BlueStore::_close_bluefs()
 {
-  bluefs->umount(db_was_opened_read_only);
+  // disable BlueFS compaction during fast_shutdown
+  bluefs->umount(db_was_opened_read_only || m_fast_shutdown);
   _minimal_close_bluefs();
 }
 
@@ -6671,7 +6672,13 @@ void BlueStore::_close_db()
 
   if (need_to_destage_allocation_file) {
     ceph_assert(fm && fm->is_null_manager());
+
+    alloc->prepare_for_shutdown();
     int ret = store_allocator(alloc);
+    if (!m_fast_shutdown) {
+      alloc->clear_shutdown();
+    }
+
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
     }
@@ -7700,7 +7707,7 @@ int BlueStore::umount()
 
   // stop new allocations and raise debug level
   if (unlikely(m_fast_shutdown)) {
-    alloc->prepare_for_fast_shutdown();
+    alloc->prepare_for_shutdown();
 
     //cct->_conf.set_val("debug_osd", "20");
     //cct->_conf.set_val("debug_bluestore", "20");
@@ -18695,13 +18702,7 @@ int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint6
     if (perform_bluestore_qfsck && cct->_conf->bluestore_qfsck_on_mount) {
       perform_bluestore_qfsck = false;
       dout(0) << __func__ << "::NCB::bluestore_qfsck_on_mount was initiated ... " << dendl;
-      int ret = _open_collections();
-      if (ret < 0) {
-	return ret;
-      }
-
       ceph_assert(verify_shared_alloc_against_onodes_allocation_info() == 0);
-      _shutdown_cache(); // ????
     }
   }
 
@@ -19109,10 +19110,25 @@ int BlueStore::add_existing_bluefs_allocation(Allocator* allocator, read_alloc_s
 //---------------------------------------------------------
 int BlueStore::verify_shared_alloc_against_onodes_allocation_info()
 {
-  int                ret = 0;
   utime_t            duration;
   read_alloc_stats_t stats = {};
   utime_t            start = ceph_clock_now();
+  int                ret   = 0;
+  bool               need_to_shutdown_cache = false;
+
+  if (coll_map.empty()) {
+    ret = _open_collections();
+    if (ret < 0) {
+      return ret;
+    }
+    need_to_shutdown_cache =  true;
+  }
+
+  auto shutdown_cache = make_scope_guard([&] {
+    if (need_to_shutdown_cache) {
+      _shutdown_cache();
+    }
+  });
 
   auto allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
   //reconstruct allocations into a temp simple-bitmap and copy into allocator
@@ -19164,15 +19180,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
     return ret;
   }
 
-  ret = _open_collections();
-  if (ret < 0) {
-    _close_db_and_around();
-    return ret;
-  }
-
   ret = verify_shared_alloc_against_onodes_allocation_info();
-
-  _shutdown_cache();
   _close_db_and_around();
 
   return ret;

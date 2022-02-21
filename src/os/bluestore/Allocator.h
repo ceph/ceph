@@ -65,8 +65,12 @@ public:
   }
   virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
-  void prepare_for_fast_shutdown() {
+  void prepare_for_shutdown() {
     m_fast_shutdown = true;
+  }
+
+  void clear_shutdown() {
+    m_fast_shutdown = false;
   }
 
   static Allocator *create(
