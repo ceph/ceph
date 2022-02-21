@@ -46,10 +46,12 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
-  segment_cleaner->mount(
+  return segment_cleaner->mount(
     segment_manager.get_device_id(),
-    scanner.get_segment_managers());
-  return journal->open_for_write().safe_then([this, FNAME](auto addr) {
+    scanner.get_segment_managers()
+  ).safe_then([this] {
+    return journal->open_for_write();
+  }).safe_then([this, FNAME](auto addr) {
     segment_cleaner->init_mkfs(addr);
     return with_transaction_intr(
       Transaction::src_t::MUTATE,
@@ -83,22 +85,20 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   LOG_PREFIX(TransactionManager::mount);
   INFO("enter");
   cache->init();
-  segment_cleaner->mount(
+  return segment_cleaner->mount(
     segment_manager.get_device_id(),
-    scanner.get_segment_managers());
-  return segment_cleaner->init_segments().safe_then(
-    [this](auto&& segments) {
+    scanner.get_segment_managers()
+  ).safe_then([this] {
     return journal->replay(
-      std::move(segments),
       [this](const auto &offsets, const auto &e) {
-      auto start_seq = offsets.write_result.start_seq;
-      segment_cleaner->update_journal_tail_target(
-          cache->get_oldest_dirty_from().value_or(start_seq));
-      return cache->replay_delta(
-          start_seq,
-          offsets.record_block_base,
-          e);
-    });
+	auto start_seq = offsets.write_result.start_seq;
+	segment_cleaner->update_journal_tail_target(
+	  cache->get_oldest_dirty_from().value_or(start_seq));
+	return cache->replay_delta(
+	  start_seq,
+	  offsets.record_block_base,
+	  e);
+      });
   }).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this, FNAME](auto addr) {

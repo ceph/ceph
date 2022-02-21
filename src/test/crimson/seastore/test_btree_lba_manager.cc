@@ -74,14 +74,15 @@ struct btree_test_base :
   seastar::future<> set_up_fut() final {
     segment_manager = segment_manager::create_test_ephemeral();
     scanner.reset(new ExtentReader());
-    journal.reset(new Journal(*segment_manager, *scanner));
+    auto& scanner_ref = *scanner.get();
+    journal = journal::make_segmented(
+      *segment_manager, scanner_ref, *this);
     epm.reset(new ExtentPlacementManager());
-    cache.reset(new Cache(*scanner, *epm));
+    cache.reset(new Cache(scanner_ref, *epm));
 
     block_size = segment_manager->get_block_size();
     next = segment_id_t{segment_manager->get_device_id(), 0};
-    scanner->add_segment_manager(segment_manager.get());
-    journal->set_segment_provider(this);
+    scanner_ref.add_segment_manager(segment_manager.get());
     journal->set_write_pipeline(&pipeline);
 
     return segment_manager->init(

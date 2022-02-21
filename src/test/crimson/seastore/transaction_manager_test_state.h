@@ -79,7 +79,10 @@ auto get_transaction_manager(
     SegmentCleaner::config_t::get_default(),
     std::move(scanner),
     true);
-  auto journal = std::make_unique<Journal>(segment_manager, scanner_ref);
+  auto journal = journal::make_segmented(
+    segment_manager,
+    scanner_ref,
+    *segment_cleaner);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(scanner_ref, *epm);
   auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache);
@@ -89,8 +92,6 @@ auto get_transaction_manager(
     std::make_unique<SegmentedAllocator>(
       *segment_cleaner,
       segment_manager));
-
-  journal->set_segment_provider(&*segment_cleaner);
 
   return std::make_unique<TransactionManager>(
     segment_manager,
