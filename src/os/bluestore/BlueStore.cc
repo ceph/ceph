@@ -6673,24 +6673,28 @@ void BlueStore::_close_db()
   if (need_to_destage_allocation_file) {
     ceph_assert(fm && fm->is_null_manager());
 #if 1
-    // force bluefs sync
-    dout(1) << __func__ << "::NCB::force bluefs sync -- _close_bluefs()" << dendl;
-    _close_bluefs();
-    // disable BlueFS compaction until after store_allocator()
     auto keep_bluefs_replay_recovery_disable_compact = cct->_conf->bluefs_replay_recovery_disable_compact;
-    cct->_conf->bluefs_replay_recovery_disable_compact = true;
-    // need bluefs open to store allocation-file
-    dout(1) << __func__ << "::NCB::force bluefs sync -- _open_bluefs()" << dendl;
-    _open_bluefs(false, false);
+    dout(1) << __func__ << "::NCB::cct->_conf->bluefs_replay_recovery_disable_compact ="
+	    << cct->_conf->bluefs_replay_recovery_disable_compact << dendl;
+    if (!m_fast_shutdown) {
+      // force bluefs sync
+      dout(1) << __func__ << "::NCB::force bluefs sync -- _close_bluefs()" << dendl;
+      _close_bluefs();
+      // disable BlueFS compaction until after store_allocator()
+      cct->_conf->bluefs_replay_recovery_disable_compact = true;
+      // need bluefs open to store allocation-file
+      dout(1) << __func__ << "::NCB::force bluefs sync -- _open_bluefs()" << dendl;
+      _open_bluefs(false, false);
+    }
 #endif
     alloc->prepare_for_shutdown();
     int ret = store_allocator(alloc);
+#if 1
     if (!m_fast_shutdown) {
       alloc->clear_shutdown();
+      // restore conf value
+      cct->_conf->bluefs_replay_recovery_disable_compact = keep_bluefs_replay_recovery_disable_compact;
     }
-#if 1
-    // restore conf value
-    cct->_conf->bluefs_replay_recovery_disable_compact = keep_bluefs_replay_recovery_disable_compact;
 #endif
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
@@ -7717,17 +7721,15 @@ int BlueStore::umount()
     }
     dout(20) << __func__ << " closing" << dendl;
   }
-
+#if 0
   // stop new allocations and raise debug level
   if (unlikely(m_fast_shutdown)) {
-    alloc->prepare_for_shutdown();
-
-    //cct->_conf.set_val("debug_osd", "20");
-    //cct->_conf.set_val("debug_bluestore", "20");
-    //cct->_conf.set_val("debug_bluefs", "20");
-    //cct->_conf.set_val("debug_rocksdb", "20");
+    cct->_conf.set_val("debug_osd", "20");
+    cct->_conf.set_val("debug_bluestore", "20");
+    cct->_conf.set_val("debug_bluefs", "20");
+    cct->_conf.set_val("debug_rocksdb", "20");
   }
-
+#endif
   _close_db_and_around();
   // disable fsck on fast-shutdown
   if (cct->_conf->bluestore_fsck_on_umount && !m_fast_shutdown) {
