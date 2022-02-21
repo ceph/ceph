@@ -4872,6 +4872,9 @@ def finish_bootstrap_config(
             'restart',
             get_unit_name(fsid, 'mon', mon_id)
         ])
+    elif 'image' in ctx and ctx.image:
+        # we still want to assimilate the given container image if provided
+        cli(['config', 'set', 'global', 'container_image', f'{ctx.image}'])
 
     if mon_network:
         logger.info(f'Setting mon public_network to {mon_network}')
