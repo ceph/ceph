@@ -545,6 +545,26 @@ ff792c06d8544b983.scope not found.: OCI runtime error"""
         with mock.patch('os.listdir', return_value=test_input):
             assert cd.get_ceph_cluster_count(ctx) == expected
 
+    def test_set_image_minimize_config(self):
+        def throw_cmd(cmd):
+            raise cd.Error(' '.join(cmd))
+        ctx = cd.CephadmContext()
+        ctx.image = 'test_image'
+        ctx.no_minimize_config = True
+        fake_cli = lambda cmd, __=None, ___=None: throw_cmd(cmd)
+        with pytest.raises(cd.Error, match='config set global container_image test_image'):
+            cd.finish_bootstrap_config(
+                ctx=ctx,
+                fsid=cd.make_fsid(),
+                config='',
+                mon_id='a', mon_dir='mon_dir',
+                mon_network=None, ipv6=False,
+                cli=fake_cli,
+                cluster_network=None,
+                ipv6_cluster_network=False
+            )
+
+
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
 
