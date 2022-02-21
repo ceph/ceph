@@ -310,7 +310,7 @@ struct DBOpLCHeadPrepareInfo {
 
 struct DBOpPrepareInfo {
   DBOpUserPrepareInfo user;
-  std::string query_str = ":query_str";
+  std::string_view query_str; // view into DBOpInfo::query_str
   DBOpBucketPrepareInfo bucket;
   DBOpObjectPrepareInfo obj;
   DBOpObjectDataPrepareInfo obj_data;
