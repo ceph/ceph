@@ -6672,13 +6672,24 @@ void BlueStore::_close_db()
 
   if (need_to_destage_allocation_file) {
     ceph_assert(fm && fm->is_null_manager());
-
+#if 1
+    // force bluefs sync
+    _close_bluefs();
+    // disable BlueFS compaction until after store_allocator()
+    auto keep_bluefs_replay_recovery_disable_compact = cct->_conf->bluefs_replay_recovery_disable_compact;
+    cct->_conf->bluefs_replay_recovery_disable_compact = true;
+    // need bluefs open to store allocation-file
+    _open_bluefs(false, false);
+#endif
     alloc->prepare_for_shutdown();
     int ret = store_allocator(alloc);
     if (!m_fast_shutdown) {
       alloc->clear_shutdown();
     }
-
+#if 1
+    // restore conf value
+    cct->_conf->bluefs_replay_recovery_disable_compact = keep_bluefs_replay_recovery_disable_compact;
+#endif
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
     }
