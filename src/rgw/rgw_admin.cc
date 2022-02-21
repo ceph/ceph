@@ -9608,6 +9608,12 @@ next:
     if (totp_window > 0) {
       config.window = totp_window;
     }
+    
+	RGWUserInfo& user_info = user_op.get_user_info();
+	if(!user_op.has_existing_user()) {
+		cerr << "ERROR: user not found, unable to create mfa " << std::endl;
+		return EINVAL;
+	}
 
     real_time mtime = real_clock::now();
     string oid = static_cast<rgw::sal::RadosStore*>(store)->svc()->cls->mfa.get_mfa_oid(user->get_id());
@@ -9624,7 +9630,6 @@ next:
       return -ret;
     }
     
-    RGWUserInfo& user_info = user_op.get_user_info();
     user_info.mfa_ids.insert(totp_serial);
     user_op.set_mfa_ids(user_info.mfa_ids);
     string err;
