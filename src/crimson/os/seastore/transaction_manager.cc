@@ -472,7 +472,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 	t,
 	laddr).si_then([=, &t] (LBAPinRef pin) -> inner_ret {
 	  ceph_assert(pin->get_key() == laddr);
-	  if (pin->get_paddr() == addr) {
+	  if (pin->get_val() == addr) {
 	    if (pin->get_length() != (extent_len_t)len) {
 	      ERRORT(
 		"Invalid pin {}~{} {} found for "
@@ -480,7 +480,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 		t,
 		pin->get_key(),
 		pin->get_length(),
-		pin->get_paddr(),
+		pin->get_val(),
 		type,
 		laddr,
 		len,

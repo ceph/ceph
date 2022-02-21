@@ -92,8 +92,8 @@ struct fixed_kv_node_meta_le_t {
     const fixed_kv_node_meta_le_t<bound_le_t> &) = default;
   explicit fixed_kv_node_meta_le_t(
     const fixed_kv_node_meta_t<typename bound_le_t::orig_type> &val)
-    : begin(ceph_le64(val.begin)),
-      end(ceph_le64(val.end)),
+    : begin(val.begin),
+      end(val.end),
       depth(init_depth_le(val.depth)) {}
 
   operator fixed_kv_node_meta_t<typename bound_le_t::orig_type>() const {
@@ -222,7 +222,7 @@ public:
 	       << ")";
   }
 
-  template <typename>
+  template <typename, typename>
   friend class BtreeNodePin;
   ~btree_range_pin_t()
   {
@@ -415,8 +415,8 @@ public:
   }
 };
 
-template <typename key_t>
-class BtreeNodePin : public PhysicalNodePin<key_t> {
+template <typename key_t, typename val_t>
+class BtreeNodePin : public PhysicalNodePin<key_t, val_t> {
 
   /**
    * parent
@@ -426,17 +426,20 @@ class BtreeNodePin : public PhysicalNodePin<key_t> {
    */
   CachedExtentRef parent;
 
-  paddr_t paddr;
+  val_t value;
+  extent_len_t len;
   btree_range_pin_t<key_t> pin;
 
 public:
+  using val_type = val_t;
   BtreeNodePin() = default;
 
   BtreeNodePin(
     CachedExtentRef parent,
-    paddr_t paddr,
+    val_t &value,
+    extent_len_t len,
     fixed_kv_node_meta_t<key_t> &&meta)
-    : parent(parent), paddr(paddr) {
+    : parent(parent), value(value), len(len) {
     pin.set_range(std::move(meta));
   }
 
@@ -458,28 +461,34 @@ public:
 
   extent_len_t get_length() const final {
     ceph_assert(pin.range.end > pin.range.begin);
-    return pin.range.end - pin.range.begin;
+    return len;
   }
 
-  paddr_t get_paddr() const final {
-    return paddr;
+  extent_types_t get_type() const override {
+    ceph_abort("should never happen");
+    return extent_types_t::ROOT;
+  }
+
+  val_t get_val() const final {
+    return value;
   }
 
   key_t get_key() const final {
     return pin.range.begin;
   }
 
-  PhysicalNodePinRef<key_t> duplicate() const final {
-    auto ret = std::unique_ptr<BtreeNodePin<key_t>>(
-      new BtreeNodePin<key_t>);
+  PhysicalNodePinRef<key_t, val_t> duplicate() const final {
+    auto ret = std::unique_ptr<BtreeNodePin<key_t, val_t>>(
+      new BtreeNodePin<key_t, val_t>);
     ret->pin.set_range(pin.range);
-    ret->paddr = paddr;
+    ret->value = value;
     ret->parent = parent;
+    ret->len = len;
     return ret;
   }
 
-  void take_pin(PhysicalNodePin<key_t> &opin) final {
-    pin.take_pin(static_cast<BtreeNodePin<key_t>&>(opin).pin);
+  void take_pin(PhysicalNodePin<key_t, val_t> &opin) final {
+    pin.take_pin(static_cast<BtreeNodePin<key_t, val_t>&>(opin).pin);
   }
 
   bool has_been_invalidated() const final {

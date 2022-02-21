@@ -14,6 +14,10 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/btree/btree_range_pin.h"
 
+namespace crimson::os::seastore::lba_manager::btree {
+struct lba_map_val_t;
+}
+
 namespace crimson::os::seastore {
 
 template <typename node_key_t>
@@ -31,6 +35,7 @@ template <
   typename node_val_t,
   typename internal_node_t,
   typename leaf_node_t,
+  typename pin_t,
   size_t node_size>
 class FixedKVBtree {
   static constexpr size_t MAX_DEPTH = 16;
@@ -39,6 +44,7 @@ class FixedKVBtree {
     node_val_t,
     internal_node_t,
     leaf_node_t,
+    pin_t,
     node_size>;
 public:
   using InternalNodeRef = TCachedExtentRef<internal_node_t>;
@@ -167,7 +173,11 @@ public:
     node_val_t get_val() const {
       assert(!is_end());
       auto ret = leaf.node->iter_idx(leaf.pos).get_val();
-      ret.paddr = ret.paddr.maybe_relative_to(leaf.node->get_paddr());
+      if constexpr (
+        std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
+                       node_val_t>) {
+        ret.paddr = ret.paddr.maybe_relative_to(leaf.node->get_paddr());
+      }
       return ret;
     }
 
@@ -184,13 +194,13 @@ public:
       return leaf.pos == 0;
     }
 
-    PhysicalNodePinRef<node_key_t> get_pin() const {
+    PhysicalNodePinRef<node_key_t, typename pin_t::val_type> get_pin() const {
       assert(!is_end());
       auto val = get_val();
       auto key = get_key();
-      return std::make_unique<BtreeNodePin<node_key_t>>(
+      return std::make_unique<pin_t>(
 	leaf.node,
-	val.paddr,
+	val,
 	fixed_kv_node_meta_t<node_key_t>{ key, key + val.len, 0 });
     }
 
@@ -1559,8 +1569,8 @@ private:
     op_context_t<node_key_t> c,
     depth_t depth,
     paddr_t addr,
-    laddr_t begin,
-    laddr_t end) {
+    node_key_t begin,
+    node_key_t end) {
     assert(depth == 1);
     return get_leaf_node(c, addr, begin, end);
   }
@@ -1571,8 +1581,8 @@ private:
     op_context_t<node_key_t> c,
     depth_t depth,
     paddr_t addr,
-    laddr_t begin,
-    laddr_t end) {
+    node_key_t begin,
+    node_key_t end) {
     return get_internal_node(c, depth, addr, begin, end);
   }
 
@@ -1687,6 +1697,7 @@ template <
   typename node_val_t,
   typename internal_node_t,
   typename leaf_node_t,
+  typename pin_t,
   size_t node_size>
 struct is_fixed_kv_tree<
   FixedKVBtree<
@@ -1694,6 +1705,7 @@ struct is_fixed_kv_tree<
     node_val_t,
     internal_node_t,
     leaf_node_t,
+    pin_t,
     node_size>> : std::true_type {};
 
 template <typename T>
