@@ -1114,19 +1114,19 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.tenant.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.tenant, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.tenant.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.ns.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.ns, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.ns.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.display_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.display_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.display_name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_email.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_email, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
 
   if (!params->op.user.uinfo.access_keys.empty()) {
@@ -1138,74 +1138,74 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
     access_key = k.id;
     key = k.key;
 
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_id, sdb);
     SQL_BIND_TEXT(dpp, stmt, index, access_key.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_secret.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_secret, sdb);
     SQL_BIND_TEXT(dpp, stmt, index, key.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.access_keys, sdb);
   }
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.swift_keys.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.swift_keys, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.swift_keys, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.subusers.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.subusers, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.subusers, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.suspended.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.suspended, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.suspended, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.max_buckets.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.max_buckets, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.max_buckets, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.op_mask.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.op_mask, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.op_mask, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_caps.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_caps, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.caps, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.admin.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.admin, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.admin, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.system.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.system, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.system, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.default_placement.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_storage_class.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_storage_class, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.default_placement.storage_class.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_tags.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_tags, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.placement_tags, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.bucket_quota.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.bucket_quota, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.bucket_quota, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.temp_url_keys.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.temp_url_keys, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.temp_url_keys, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_quota.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_quota, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.user_quota, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.type.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.type, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.type, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.mfa_ids.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.mfa_ids, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.mfa_ids, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.assumed_role_arn.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.assumed_role_arn, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.assumed_role_arn.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_attrs.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_attrs, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.user_attrs, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_ver.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_ver, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.user.user_version.ver, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_ver_tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_ver_tag, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.user_version.tag.c_str(), sdb);
 
 out:
@@ -1244,7 +1244,7 @@ int SQLRemoveUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
 out:
@@ -1292,7 +1292,7 @@ int SQLGetUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   struct DBOpPrepareParams p_params = PrepareParams;
 
   if (params->op.query_str == "email") { 
-    SQL_BIND_INDEX(dpp, email_stmt, index, p_params.op.user.user_email.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, email_stmt, index, p_params.op.user.user_email, sdb);
     SQL_BIND_TEXT(dpp, email_stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
   } else if (params->op.query_str == "access_key") { 
     if (!params->op.user.uinfo.access_keys.empty()) {
@@ -1302,20 +1302,20 @@ int SQLGetUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
       const RGWAccessKey& k = it->second;
       access_key = k.id;
 
-      SQL_BIND_INDEX(dpp, ak_stmt, index, p_params.op.user.access_keys_id.c_str(), sdb);
+      SQL_BIND_INDEX(dpp, ak_stmt, index, p_params.op.user.access_keys_id, sdb);
       SQL_BIND_TEXT(dpp, ak_stmt, index, access_key.c_str(), sdb);
     }
   } else if (params->op.query_str == "user_id") { 
-    SQL_BIND_INDEX(dpp, userid_stmt, index, p_params.op.user.tenant.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, userid_stmt, index, p_params.op.user.tenant, sdb);
     SQL_BIND_TEXT(dpp, userid_stmt, index, params->op.user.uinfo.user_id.tenant.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, userid_stmt, index, p_params.op.user.user_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, userid_stmt, index, p_params.op.user.user_id, sdb);
     SQL_BIND_TEXT(dpp, userid_stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, userid_stmt, index, p_params.op.user.ns.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, userid_stmt, index, p_params.op.user.ns, sdb);
     SQL_BIND_TEXT(dpp, userid_stmt, index, params->op.user.uinfo.user_id.ns.c_str(), sdb);
   } else { // by default by userid
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
     SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
   }
 
@@ -1366,88 +1366,88 @@ int SQLInsertBucket::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   struct DBOpPrepareParams p_params = PrepareParams;
 
   // user_id here is copied as OwnerID in the bucket table.
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.tenant.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.tenant, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.tenant.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.marker.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.marker, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.marker.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.bucket_id.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.size.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.size, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.ent.size, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.size_rounded.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.size_rounded, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.ent.size_rounded, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.creation_time, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.bucket.info.creation_time, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.count.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.count, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.ent.count, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.placement_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.placement_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.placement_rule.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.placement_storage_class.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.placement_storage_class, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.placement_rule.storage_class.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.flags.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.flags, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.info.flags, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.zonegroup.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.zonegroup, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.zonegroup.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.has_instance_obj.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.has_instance_obj, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.info.has_instance_obj, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.quota.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.quota, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.bucket.info.quota, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.requester_pays.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.requester_pays, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.info.requester_pays, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.has_website.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.has_website, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.info.has_website, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.website_conf.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.website_conf, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.bucket.info.website_conf, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.swift_versioning.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.swift_versioning, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.info.swift_versioning, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.swift_ver_location.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.swift_ver_location, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.swift_ver_location.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.mdsearch_config.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.mdsearch_config, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.bucket.info.mdsearch_config, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.new_bucket_instance_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.new_bucket_instance_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.new_bucket_instance_id.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.obj_lock.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.obj_lock, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.bucket.info.obj_lock, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.sync_policy_info_groups.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.sync_policy_info_groups, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.bucket.info.sync_policy, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_attrs.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_attrs, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.bucket.bucket_attrs, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_ver.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_ver, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.bucket.bucket_version.ver, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_ver_tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_ver_tag, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.bucket_version.tag.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.mtime.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.mtime, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.bucket.mtime, sdb);
 
 out:
@@ -1526,83 +1526,83 @@ int SQLUpdateBucket::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   }
 
   if (params->op.query_str == "attrs") { 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_attrs.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_attrs, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.bucket_attrs, sdb);
   } else if (params->op.query_str == "owner") { 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.creation_time, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.info.creation_time, sdb);
   } else if (params->op.query_str == "info") { 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.tenant.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.tenant, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.bucket.tenant.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.marker.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.marker, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.bucket.marker.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_id, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.bucket.bucket_id.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.creation_time.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.creation_time, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.info.creation_time, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.count.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.count, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.bucket.ent.count, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.placement_name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.placement_name, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.placement_rule.name.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.placement_storage_class.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.placement_storage_class, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.placement_rule.storage_class.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.flags.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.flags, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.bucket.info.flags, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.zonegroup.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.zonegroup, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.zonegroup.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.has_instance_obj.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.has_instance_obj, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.bucket.info.has_instance_obj, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.quota.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.quota, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.info.quota, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.requester_pays.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.requester_pays, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.bucket.info.requester_pays, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.has_website.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.has_website, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.bucket.info.has_website, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.website_conf.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.website_conf, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.info.website_conf, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.swift_versioning.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.swift_versioning, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.bucket.info.swift_versioning, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.swift_ver_location.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.swift_ver_location, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.swift_ver_location.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.mdsearch_config.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.mdsearch_config, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.info.mdsearch_config, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.new_bucket_instance_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.new_bucket_instance_id, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.new_bucket_instance_id.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.obj_lock.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.obj_lock, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.info.obj_lock, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.sync_policy_info_groups.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.sync_policy_info_groups, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.info.sync_policy, sdb);
   }
 
-  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.user.user_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.user.user_id, sdb);
   SQL_BIND_TEXT(dpp, *stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_ver.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_ver, sdb);
   SQL_BIND_INT(dpp, *stmt, index, params->op.bucket.bucket_version.ver, sdb);
 
-  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.mtime.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.mtime, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.mtime, sdb);
 
 out:
@@ -1655,7 +1655,7 @@ int SQLRemoveBucket::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
@@ -1698,7 +1698,7 @@ int SQLGetBucket::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
@@ -1758,14 +1758,14 @@ int SQLListUserBuckets::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *p
   }
 
   if (params->op.query_str != "all") { 
-    SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.user.user_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.user.user_id, sdb);
     SQL_BIND_TEXT(dpp, *pstmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
   }
 
-  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.bucket.min_marker.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.bucket.min_marker, sdb);
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.bucket.min_marker.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.list_max_count.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.list_max_count, sdb);
   SQL_BIND_INT(dpp, *pstmt, index, params->op.list_max_count, sdb);
 
 out:
@@ -1808,148 +1808,148 @@ int SQLPutObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_ns.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_ns, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.ns.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.acls.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.acls, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.acls, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.index_ver.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.index_ver, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.index_ver, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tag, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.tag.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.flags.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.flags, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.flags, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.versioned_epoch.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.versioned_epoch, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.versioned_epoch, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_category.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_category, sdb);
   SQL_BIND_INT(dpp, stmt, index, (uint8_t)(params->op.obj.category), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.etag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.etag, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.etag.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.owner.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.owner, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.owner.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.owner_display_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.owner_display_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.owner_display_name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.storage_class.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.storage_class, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.storage_class.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.appendable.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.appendable, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.appendable, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.content_type.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.content_type, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.content_type.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.index_hash_source.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.index_hash_source, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.index_hash_source.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_size.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_size, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.size, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.accounted_size.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.accounted_size, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.accounted_size, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.mtime, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.epoch.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.epoch, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.epoch, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_tag, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.obj_tag, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_tag, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.tail_tag, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.write_tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.write_tag, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.write_tag.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.fake_tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.fake_tag, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.fake_tag, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.shadow_obj.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.shadow_obj, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.shadow_obj.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.has_data.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.has_data, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.has_data, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.is_olh.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.is_olh, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.is_olh, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.olh_tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.olh_tag, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.olh_tag, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.pg_ver.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.pg_ver, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.pg_ver, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.zone_short_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.zone_short_id, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.zone_short_id, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_version.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_version, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.objv_tracker.read_version.ver, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_version_tag.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_version_tag, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.objv_tracker.read_version.tag.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_attrs.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_attrs, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.attrset, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.head_size.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.head_size, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.head_size, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.max_head_size.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.max_head_size, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.max_head_size, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_instance, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.tail_instance.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.head_placement_rule_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.head_placement_rule_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.head_placement_rule.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.head_placement_storage_class.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.head_placement_storage_class, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.head_placement_rule.storage_class.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_placement_rule_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_placement_rule_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.tail_placement.placement_rule.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_placement_storage_class.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.tail_placement_storage_class, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.tail_placement.placement_rule.storage_class.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.manifest_part_objs.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.manifest_part_objs, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.objs, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.manifest_part_rules.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.manifest_part_rules, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.rules, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.omap.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.omap, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.omap, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.is_multipart.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.is_multipart, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.is_multipart, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mp_parts.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mp_parts, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.mp_parts, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.head_data.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.head_data, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.head_data, sdb);
 
 
@@ -1989,13 +1989,13 @@ int SQLDeleteObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 out:
   return rc;
@@ -2033,13 +2033,13 @@ int SQLGetObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
 out:
@@ -2109,161 +2109,161 @@ int SQLUpdateObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
     goto out;
   }
 
-  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_instance, sdb);
   SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.mtime.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.mtime, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.state.mtime, sdb);
 
   if (params->op.query_str == "omap") { 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.omap.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.omap, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.omap, sdb);
   }
   if (params->op.query_str == "attrs") { 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_attrs.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_attrs, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.state.attrset, sdb);
   }
   if (params->op.query_str == "mp") { 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.mp_parts.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.mp_parts, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.mp_parts, sdb);
   }
   if (params->op.query_str == "meta") { 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_ns.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_ns, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.state.obj.key.ns.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.acls.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.acls, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.acls, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.index_ver.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.index_ver, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.index_ver, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tag.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tag, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.tag.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.flags.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.flags, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.flags, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.versioned_epoch.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.versioned_epoch, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.versioned_epoch, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_category.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_category, sdb);
     SQL_BIND_INT(dpp, *stmt, index, (uint8_t)(params->op.obj.category), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.etag.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.etag, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.etag.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.owner.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.owner, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.owner.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.owner_display_name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.owner_display_name, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.owner_display_name.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.storage_class.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.storage_class, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.storage_class.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.appendable.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.appendable, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.appendable, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.content_type.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.content_type, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.content_type.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.index_hash_source.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.index_hash_source, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.state.obj.index_hash_source.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_size.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_size, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.size, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.accounted_size.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.accounted_size, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.accounted_size, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.epoch.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.epoch, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.epoch, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_tag.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_tag, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.state.obj_tag, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_tag.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_tag, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.state.tail_tag, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.write_tag.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.write_tag, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.state.write_tag.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.fake_tag.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.fake_tag, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.fake_tag, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.shadow_obj.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.shadow_obj, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.state.shadow_obj.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.has_data.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.has_data, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.has_data, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.is_olh.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.is_olh, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.is_olh, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.olh_tag.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.olh_tag, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.state.olh_tag, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.pg_ver.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.pg_ver, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.pg_ver, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.zone_short_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.zone_short_id, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.zone_short_id, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_version.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_version, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.state.objv_tracker.read_version.ver, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_version_tag.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_version_tag, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.state.objv_tracker.read_version.tag.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_attrs.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_attrs, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.state.attrset, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.head_size.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.head_size, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.head_size, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.max_head_size.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.max_head_size, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.max_head_size, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.obj_id, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_instance.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_instance, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.tail_instance.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.head_placement_rule_name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.head_placement_rule_name, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.head_placement_rule.name.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.head_placement_storage_class.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.head_placement_storage_class, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.head_placement_rule.storage_class.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_placement_rule_name.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_placement_rule_name, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.tail_placement.placement_rule.name.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_placement_storage_class.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.tail_placement_storage_class, sdb);
     SQL_BIND_TEXT(dpp, *stmt, index, params->op.obj.tail_placement.placement_rule.storage_class.c_str(), sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.manifest_part_objs.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.manifest_part_objs, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.objs, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.manifest_part_rules.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.manifest_part_rules, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.rules, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.omap.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.omap, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.omap, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.is_multipart.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.is_multipart, sdb);
     SQL_BIND_INT(dpp, *stmt, index, params->op.obj.is_multipart, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.mp_parts.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.mp_parts, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.mp_parts, sdb);
 
-    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.head_data.c_str(), sdb);
+    SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.obj.head_data, sdb);
     SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.obj.head_data, sdb);
   }
 
@@ -2319,13 +2319,13 @@ int SQLListBucketObjects::Bind(const DoutPrefixProvider *dpp, struct DBOpParams 
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.min_marker.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.min_marker, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.min_marker.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
 
 out:
@@ -2365,45 +2365,45 @@ int SQLPutObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_ns.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_ns, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.ns.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.part_num.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.part_num, sdb);
 
   SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.part_num, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.offset.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.offset, sdb);
 
   SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.offset, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.data.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.data, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj_data.data, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.size.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.size, sdb);
 
   SQL_BIND_INT(dpp, stmt, index, params->op.obj_data.size, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.multipart_part_str.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj_data.multipart_part_str, sdb);
 
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj_data.multipart_part_str.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.mtime, sdb);
 
 out:
@@ -2442,19 +2442,19 @@ int SQLUpdateObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.mtime, sdb);
 
 out:
@@ -2493,16 +2493,16 @@ int SQLGetObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
 out:
@@ -2541,16 +2541,16 @@ int SQLDeleteObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_instance, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.instance.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_id, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.obj_id.c_str(), sdb);
 
 out:
@@ -2589,7 +2589,7 @@ int SQLDeleteStaleObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpPar
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.mtime, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.obj.state.mtime, sdb);
 
 out:
@@ -2629,16 +2629,16 @@ int SQLInsertLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.status.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.status, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.status, sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.start_time.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.start_time, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.lc_entry.entry.start_time, sdb);
 
 out:
@@ -2678,10 +2678,10 @@ int SQLRemoveLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
 
 out:
@@ -2733,10 +2733,10 @@ int SQLGetLCEntry::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   } else {
     pstmt = &stmt;
   }
-  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.index, sdb);
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.index.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.bucket_name.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.lc_entry.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, *pstmt, index, params->op.lc_entry.entry.bucket.c_str(), sdb);
 
 out:
@@ -2783,13 +2783,13 @@ int SQLListLCEntries::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.index, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.index.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.min_marker.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_entry.min_marker, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_entry.min_marker.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
 
 out:
@@ -2829,13 +2829,13 @@ int SQLInsertLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.index.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.marker.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.marker, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.head.marker.c_str(), sdb);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.start_date.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.start_date, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.lc_head.head.start_date, sdb);
 
 out:
@@ -2875,7 +2875,7 @@ int SQLRemoveLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.index.c_str(), sdb);
 
 out:
@@ -2915,7 +2915,7 @@ int SQLGetLCHead::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index.c_str(), sdb);
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.lc_head.index, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.lc_head.index.c_str(), sdb);
 
 out:
