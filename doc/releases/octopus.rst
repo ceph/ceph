@@ -1962,7 +1962,7 @@ Upgrade compatibility notes
 
 * Previously, ``ceph tell mgr ...`` could be used to call commands
   implemented by mgr modules.  This is no longer supported.  Since
-  luminous, using ``tell`` has not been necessary: those same commands
+  Luminous, using ``tell`` has not been necessary: those same commands
   are also accessible without the ``tell mgr`` portion (e.g., ``ceph
   tell mgr influx foo`` is the same as ``ceph influx foo``.  ``ceph
   tell mgr ...`` will now call admin commands--the same set of
@@ -1988,7 +1988,7 @@ Upgrade compatibility notes
 
 * The format of MDSs in ``ceph fs dump`` has changed.
 
-* The ``mds_cache_size`` config option is completely removed. Since luminous,
+* The ``mds_cache_size`` config option is completely removed. Since Luminous,
   the ``mds_cache_memory_limit`` config option has been preferred to configure
   the MDS's cache limits.
 
