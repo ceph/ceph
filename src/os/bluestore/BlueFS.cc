@@ -530,9 +530,9 @@ void BlueFS::dump_block_extents(ostream& out)
   }
 }
 
-int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
+// this function must be called while holding nodes.lock
+void BlueFS::get_block_extents_with_lock(unsigned id, interval_set<uint64_t> *extents)
 {
-  std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " bdev " << id << dendl;
   ceph_assert(id < alloc.size());
   for (auto& p : nodes.file_map) {
@@ -542,6 +542,12 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
       }
     }
   }
+}
+
+int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
+{
+  std::lock_guard nl(nodes.lock);
+  get_block_extents_with_lock(id, extents);
   return 0;
 }
 

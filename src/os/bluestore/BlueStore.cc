@@ -18391,7 +18391,33 @@ Allocator* BlueStore::clone_allocator_without_bluefs_safe(Allocator *src_allocat
 
   return allocator;
 }
-
+#if 1
+//-----------------------------------------------------------------------------------
+Allocator* BlueStore::create_allocator_snapshot(Allocator* src_allocator)
+{
+  Allocator* allocator = nullptr;
+  if (bluefs) {
+    // Get a consistent view of the shared-allocator
+    interval_set<uint64_t> bluefs_extents;
+    bluefs->lock_allocations();
+    // The system must be in stable state when we collect allocations map
+    alloc->prepare_for_shutdown();
+    bluefs->get_block_extents_with_lock(bluefs_layout.shared_bdev, &bluefs_extents);
+    allocator = clone_allocator_without_bluefs_safe(src_allocator, bluefs_extents);
+    // We will need to allocate space for the allocator-file, so must clear shutdown indication
+    // TBD: preallcoate the space and then we can better assert against allocations from new activity
+    alloc->clear_shutdown();
+    bluefs->unlock_allocations();
+  } else {
+    allocator = create_bitmap_allocator(bdev->get_size());
+    if (allocator) {
+      uint64_t num_entries = 0;
+      copy_allocator(src_allocator, allocator, &num_entries);
+    }
+  }
+  return allocator;
+}
+#else
 //-----------------------------------------------------------------------------------
 Allocator* BlueStore::create_allocator_snapshot(Allocator* src_allocator)
 {
@@ -18418,7 +18444,7 @@ Allocator* BlueStore::create_allocator_snapshot(Allocator* src_allocator)
   }
   return allocator;
 }
-
+#endif
 const unsigned MAX_EXTENTS_IN_BUFFER = 4 * 1024; // 4K extents = 64KB of data
 // write the allocator to a flat bluefs file - 4K extents at a time
 //-----------------------------------------------------------------------------------

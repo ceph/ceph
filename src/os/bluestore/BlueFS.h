@@ -531,13 +531,16 @@ public:
   void umount(bool avoid_compact = false, unsigned id = -1, interval_set<uint64_t> *extents = nullptr);
 
   auto lock_allocations() {
-    return new std::lock_guard(nodes.lock);
+    log.lock.lock();
+    nodes.lock.lock();
+    dirty.lock.lock();
   }
-#if 0
-  void unlock_allocations(std::lock_guard* nlp) {
-    delete nlp;
+
+  void unlock_allocations() {
+    dirty.lock.unlock();
+    nodes.lock.unlock();
+    log.lock.unlock();
   }
-#endif
 
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
@@ -571,6 +574,8 @@ public:
 
   /// get current extents that we own for given block device
   int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
+  // this function must be called while holding nodes.lock
+  void get_block_extents_with_lock(unsigned id, interval_set<uint64_t> *extents);
 
   int open_for_write(
     std::string_view dir,
