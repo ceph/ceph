@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dbstore.h>
-#include <sqliteDB.h>
+#include <sqlite/sqliteDB.h>
 #include "rgw_common.h"
 
 using namespace std;

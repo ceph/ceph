@@ -18,7 +18,7 @@ set(dbstore_mgr_srcs
 
 add_library(dbstore_lib ${dbstore_srcs})
 target_include_directories(dbstore_lib PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
-target_include_directories(dbstore_lib PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+target_include_directories(dbstore_lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 set(link_targets spawn)
 if(WITH_JAEGER)
   list(APPEND link_targets ${jaeger_base})
@@ -29,11 +29,10 @@ set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} dbstore_lib)
 
 IF(USE_SQLITE)
   add_subdirectory(sqlite)
-  set(CMAKE_INCLUDE_DIR ${CMAKE_INCLUDE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/sqlite")
   add_compile_definitions(SQLITE_ENABLED=1)
   set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} rgw_common)
   set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} sqlite_db)
-  add_dependencies(sqlite_db dbstore_lib)
+  target_link_libraries(sqlite_db dbstore_lib)
 ENDIF()
 
 # add pthread library
@@ -46,8 +45,8 @@ else()
 	message(WARNING "Gtest not enabled")
 endif()
 
-include_directories(${CMAKE_INCLUDE_DIR})
 add_library(dbstore STATIC ${dbstore_mgr_srcs})
+target_include_directories(dbstore PUBLIC ${CMAKE_INCLUDE_DIR})
 target_link_libraries(dbstore ${CMAKE_LINK_LIBRARIES})
 
 # testing purpose
