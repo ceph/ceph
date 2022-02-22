@@ -131,6 +131,7 @@ describe('CreateClusterComponent', () => {
   });
 
   it('should ensure osd creation did not happen when no devices are selected', () => {
+    component.simpleDeployment = false;
     const osdServiceSpy = spyOn(osdService, 'create').and.callThrough();
     component.onSubmit();
     fixture.detectChanges();

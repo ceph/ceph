@@ -52,11 +52,12 @@
              class="ml-5">
           <h4 class="title"
               i18n>Create OSDs</h4>
-          <br>
           <div class="alignForm">
             <cd-osd-form [hideTitle]="true"
                          [hideSubmitBtn]="true"
-                         (emitDriveGroup)="getDriveGroup($event)"></cd-osd-form>
+                         (emitDriveGroup)="setDriveGroup($event)"
+                         (emitDeploymentOption)="setDeploymentOptions($event)"
+                         (emitMode)="setDeploymentMode($event)"></cd-osd-form>
           </div>
         </div>
         <div *ngSwitchCase="'3'"
