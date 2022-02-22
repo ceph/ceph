@@ -51,6 +51,7 @@ public:
   static const int TYPE_OSD = CEPH_ENTITY_TYPE_OSD;
   static const int TYPE_CLIENT = CEPH_ENTITY_TYPE_CLIENT;
   static const int TYPE_MGR = CEPH_ENTITY_TYPE_MGR;
+  static const int TYPE_EXPORTER = CEPH_ENTITY_TYPE_EXPORTER;
 
   static const int64_t NEW = -1;
 
@@ -66,6 +67,7 @@ public:
   static entity_name_t OSD(int64_t i=NEW) { return entity_name_t(TYPE_OSD, i); }
   static entity_name_t CLIENT(int64_t i=NEW) { return entity_name_t(TYPE_CLIENT, i); }
   static entity_name_t MGR(int64_t i=NEW) { return entity_name_t(TYPE_MGR, i); }
+  static entity_name_t EXPORTER(int64_t i=NEW) { return entity_name_t(TYPE_EXPORTER, i); }
 
   int64_t num() const { return _num; }
   int type() const { return _type; }
@@ -80,6 +82,7 @@ public:
   bool is_osd() const { return type() == TYPE_OSD; }
   bool is_mon() const { return type() == TYPE_MON; }
   bool is_mgr() const { return type() == TYPE_MGR; }
+  bool is_exporter() const { return type() == TYPE_EXPORTER; }
 
   operator ceph_entity_name() const {
     ceph_entity_name n = { _type, ceph_le64(_num) };
