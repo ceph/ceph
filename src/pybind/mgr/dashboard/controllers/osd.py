@@ -14,6 +14,7 @@ from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_orchestrator_error, handle_send_command_error
 from ..services.orchestrator import OrchClient, OrchFeature
+from ..services.osd import HostStorageSummary, OsdDeploymentOptions
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, Task, UIRouter, \
@@ -47,35 +48,22 @@ EXPORT_INDIV_FLAGS_GET_SCHEMA = {
 }
 
 
-class DeploymentOption:
-    def __init__(self, name: str, available=False, capacity=0, used=0, hdd_used=0,
-                 ssd_used=0, nvme_used=0):
-        self.name = name
-        self.available = available
-        self.capacity = capacity
-        self.used = used
-        self.hdd_used = hdd_used
-        self.ssd_used = ssd_used
-        self.nvme_used = nvme_used
-
-    def as_dict(self):
-        return {
-            'name': self.name,
-            'available': self.available,
-            'capacity': self.capacity,
-            'used': self.used,
-            'hdd_used': self.hdd_used,
-            'ssd_used': self.ssd_used,
-            'nvme_used': self.nvme_used
-        }
-
-
 class DeploymentOptions:
     def __init__(self):
         self.options = {
-            'cost-capacity': DeploymentOption('cost-capacity'),
-            'throughput': DeploymentOption('throughput-optimized'),
-            'iops': DeploymentOption('iops-optimized'),
+            OsdDeploymentOptions.COST_CAPACITY:
+                HostStorageSummary(OsdDeploymentOptions.COST_CAPACITY,
+                                   title='Cost/Capacity-optimized',
+                                   desc='All the available HDDs are selected'),
+            OsdDeploymentOptions.THROUGHPUT:
+                HostStorageSummary(OsdDeploymentOptions.THROUGHPUT,
+                                   title='Throughput-optimized',
+                                   desc="HDDs/SSDs are selected for data"
+                                   "devices and SSDs/NVMes for DB/WAL devices"),
+            OsdDeploymentOptions.IOPS:
+                HostStorageSummary(OsdDeploymentOptions.IOPS,
+                                   title='IOPS-optimized',
+                                   desc='All the available NVMes are selected'),
         }
         self.recommended_option = None
 
@@ -87,17 +75,19 @@ class DeploymentOptions:
 
 
 predefined_drive_groups = {
-    'cost-capacity': {
+    OsdDeploymentOptions.COST_CAPACITY: {
         'service_type': 'osd',
+        'service_id': 'cost_capacity',
         'placement': {
             'host_pattern': '*'
         },
         'data_devices': {
             'rotational': 1
-        }
+        },
+        'encrypted': False
     },
-    'throughput': {},
-    'iops': {},
+    OsdDeploymentOptions.THROUGHPUT: {},
+    OsdDeploymentOptions.IOPS: {},
 }
 
 
@@ -351,10 +341,12 @@ class Osd(RESTController):
 
     def _create_predefined_drive_group(self, data):
         orch = OrchClient.instance()
-        if data == 'cost-capacity':
+        if OsdDeploymentOptions(data[0]['option']) == OsdDeploymentOptions.COST_CAPACITY:
             try:
+                predefined_drive_groups[
+                    OsdDeploymentOptions.COST_CAPACITY]['encrypted'] = data[0]['encrypted']
                 orch.osds.create([DriveGroupSpec.from_json(
-                    predefined_drive_groups['cost-capacity'])])
+                    predefined_drive_groups[OsdDeploymentOptions.COST_CAPACITY])])
             except (ValueError, TypeError, DriveGroupValidationError) as e:
                 raise DashboardException(e, component='osd')
 
@@ -477,7 +469,7 @@ class Osd(RESTController):
 @UIRouter('/osd', Scope.OSD)
 @APIDoc("Dashboard UI helper function; not part of the public API", "OsdUI")
 class OsdUi(Osd):
-    @Endpoint('GET', version=APIVersion.EXPERIMENTAL)
+    @Endpoint('GET')
     @ReadPermission
     @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
     @handle_orchestrator_error('host')
@@ -488,6 +480,7 @@ class OsdUi(Osd):
         nvmes = 0
         res = DeploymentOptions()
         devices = {}
+
         for inventory_host in orch.inventory.list(hosts=None, refresh=True):
             for device in inventory_host.devices.devices:
                 if device.available:
@@ -499,8 +492,8 @@ class OsdUi(Osd):
                     elif device.human_readable_type == 'nvme':
                         nvmes += 1
         if hdds:
-            res.options['cost-capacity'].available = True
-            res.recommended_option = 'cost-capacity'
+            res.options[OsdDeploymentOptions.COST_CAPACITY].available = True
+            res.recommended_option = OsdDeploymentOptions.COST_CAPACITY
         return res.as_dict()
 
 
