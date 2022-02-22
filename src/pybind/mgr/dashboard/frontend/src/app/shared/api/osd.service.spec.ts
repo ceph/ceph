@@ -27,6 +27,7 @@ describe('OsdService', () => {
   });
 
   it('should call create', () => {
+    const trackingId = 'all_hdd, host1_ssd';
     const post_data = {
       method: 'drive_groups',
       data: [
@@ -47,9 +48,9 @@ describe('OsdService', () => {
           }
         }
       ],
-      tracking_id: 'all_hdd, host1_ssd'
+      tracking_id: trackingId
     };
-    service.create(post_data.data).subscribe();
+    service.create(post_data.data, trackingId).subscribe();
     const req = httpTesting.expectOne('api/osd');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual(post_data);
@@ -171,6 +172,12 @@ describe('OsdService', () => {
   it('should call the devices endpoint to retrieve smart data', () => {
     service.getDevices(1).subscribe();
     const req = httpTesting.expectOne('api/osd/1/devices');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getDeploymentOptions', () => {
+    service.getDeploymentOptions().subscribe();
+    const req = httpTesting.expectOne('ui-api/osd/deployment_options');
     expect(req.request.method).toBe('GET');
   });
 });

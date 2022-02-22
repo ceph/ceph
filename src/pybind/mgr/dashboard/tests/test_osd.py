@@ -5,11 +5,11 @@ from typing import Any, Dict, List, Optional
 from unittest import mock
 
 from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec  # type: ignore
-from ceph.deployment.service_spec import PlacementSpec  # type: ignore
+from ceph.deployment.service_spec import PlacementSpec
 
 from .. import mgr
-from ..controllers._version import APIVersion
 from ..controllers.osd import Osd, OsdUi
+from ..services.osd import OsdDeploymentOptions
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 from .helper import update_dict  # pylint: disable=import-error
@@ -404,19 +404,19 @@ class OsdTest(ControllerTestCase):
         ]
         inventory_host = create_invetory_host(devices_data)
         fake_client.inventory.list.return_value = [inventory_host]
-        self._get('/ui-api/osd/deployment_options', version=APIVersion(0, 1))
+        self._get('/ui-api/osd/deployment_options')
         self.assertStatus(200)
         res = self.json_body()
-        self.assertTrue(res['options']['cost-capacity']['available'])
-        assert res['recommended_option'] == 'cost-capacity'
+        self.assertTrue(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
+        assert res['recommended_option'] == OsdDeploymentOptions.COST_CAPACITY
 
         for data in devices_data:
             data['type'] = 'ssd'
         inventory_host = create_invetory_host(devices_data)
         fake_client.inventory.list.return_value = [inventory_host]
 
-        self._get('/ui-api/osd/deployment_options', version=APIVersion(0, 1))
+        self._get('/ui-api/osd/deployment_options')
         self.assertStatus(200)
         res = self.json_body()
-        self.assertFalse(res['options']['cost-capacity']['available'])
+        self.assertFalse(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
         self.assertIsNone(res['recommended_option'])
