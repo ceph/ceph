@@ -92,8 +92,6 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
 DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
                   const DBOpParams *params)
 {
-  if (!Op.compare("InsertUser"))
-    return dbops.InsertUser;
   if (!Op.compare("RemoveUser"))
     return dbops.RemoveUser;
   if (!Op.compare("GetUser"))
@@ -366,11 +364,14 @@ int DB::store_user(const DoutPrefixProvider *dpp,
     params.op.user.user_attrs = *pattrs;
   }
 
-  ret = ProcessOp(dpp, "InsertUser", &params);
-
-  if (ret) {
-    ldpp_dout(dpp, 0)<<"store_user failed with err:(" <<ret<<") " << dendl;
-    goto out;
+  try {
+    InsertUser(params.user_table,
+               params.op.user.uinfo,
+               params.op.user.user_version,
+               params.op.user.user_attrs);
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "store_user failed: " << e.what() << dendl;
+    return -1;
   }
 
   if (pobjv) {
@@ -378,8 +379,7 @@ int DB::store_user(const DoutPrefixProvider *dpp,
     pobjv->write_version = obj_ver;
   }
 
-out:
-  return ret;
+  return 0;
 }
 
 int DB::remove_user(const DoutPrefixProvider *dpp,

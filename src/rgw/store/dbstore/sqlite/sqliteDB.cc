@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <memory>
 #include "sqliteDB.h"
 #include "common/database_exception.h"
 
@@ -24,8 +23,6 @@ using namespace std;
     <<") schema("<<schema<<") stmt("<<stmt<<")"<< dendl;	\
     ret = 0;					\
   } while(0);
-
-using statement_ptr = std::unique_ptr<sqlite3_stmt, int(*)(sqlite3_stmt*)>;
 
 // compile the schema into a prepared statement; may throw database_exception
 static statement_ptr prepare_statement(sqlite3* db, std::string_view schema)
@@ -711,7 +708,6 @@ static int list_lc_head(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stm
 int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
 {
   (void)createTables(dpp);
-  dbops.InsertUser = new SQLInsertUser(&this->db, this->getDBname(), cct);
   dbops.RemoveUser = new SQLRemoveUser(&this->db, this->getDBname(), cct);
   dbops.GetUser = new SQLGetUser(&this->db, this->getDBname(), cct);
   dbops.InsertBucket = new SQLInsertBucket(&this->db, this->getDBname(), cct);
@@ -727,12 +723,14 @@ int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
   dbops.RemoveLCHead = new SQLRemoveLCHead(&this->db, this->getDBname(), cct);
   dbops.GetLCHead = new SQLGetLCHead(&this->db, this->getDBname(), cct);
 
+  // compile prepared statements
+  auto sdb = reinterpret_cast<sqlite3*>(db);
+  insert_user_stmt = prepare_statement(sdb, InsertUserSchema(getUserTable()));
   return 0;
 }
 
 int SQLiteDB::FreeDBOps(const DoutPrefixProvider *dpp)
 {
-  delete dbops.InsertUser;
   delete dbops.RemoveUser;
   delete dbops.GetUser;
   delete dbops.InsertBucket;
@@ -1211,134 +1209,68 @@ int SQLObjectOp::FreeObjectOps(const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int SQLInsertUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+// bind the parameters for InsertUser
+static void bind_insert_user(sqlite3_stmt* stmt,
+                             const RGWUserInfo& info,
+                             const obj_version& ver,
+                             const rgw::sal::Attrs& attrs)
 {
-  int ret = -1;
-  struct DBOpPrepareParams p_params = PrepareParams;
+  using P = DBOpUserPrepareInfo; // static parameter names
 
-  if (!*sdb) {
-    ldpp_dout(dpp, 0)<<"In SQLInsertUser - no db" << dendl;
-    goto out;
+  bind_text(stmt, P::tenant, info.user_id.tenant.c_str());
+  bind_text(stmt, P::user_id, info.user_id.id.c_str());
+  bind_text(stmt, P::ns, info.user_id.ns.c_str());
+  bind_text(stmt, P::display_name, info.display_name.c_str());
+  bind_text(stmt, P::user_email, info.user_email.c_str());
+
+  if (!info.access_keys.empty()) {
+    auto it = info.access_keys.begin();
+
+    bind_text(stmt, P::access_keys_id, it->second.id.c_str());
+    bind_text(stmt, P::access_keys_secret, it->second.key.c_str());
+    bind_encoded(stmt, P::access_keys, info.access_keys);
   }
 
-  InitPrepareParams(dpp, p_params, params);
-
-  SQL_PREPARE(dpp, p_params, sdb, stmt, ret, "PrepareInsertUser");
-out:
-  return ret;
+  bind_encoded(stmt, P::swift_keys, info.swift_keys);
+  bind_encoded(stmt, P::subusers, info.subusers);
+  bind_int(stmt, P::suspended, info.suspended);
+  bind_int(stmt, P::max_buckets, info.max_buckets);
+  bind_int(stmt, P::op_mask, info.op_mask);
+  bind_encoded(stmt, P::user_caps, info.caps);
+  bind_int(stmt, P::admin, info.admin);
+  bind_int(stmt, P::system, info.system);
+  bind_text(stmt, P::placement_name, info.default_placement.name.c_str());
+  bind_text(stmt, P::placement_storage_class,
+            info.default_placement.storage_class.c_str());
+  bind_encoded(stmt, P::placement_tags, info.placement_tags);
+  bind_encoded(stmt, P::bucket_quota, info.bucket_quota);
+  bind_encoded(stmt, P::temp_url_keys, info.temp_url_keys);
+  bind_encoded(stmt, P::user_quota, info.user_quota);
+  bind_int(stmt, P::type, info.type);
+  bind_encoded(stmt, P::mfa_ids, info.mfa_ids);
+  bind_text(stmt, P::assumed_role_arn, info.assumed_role_arn.c_str());
+  bind_encoded(stmt, P::user_attrs, attrs);
+  bind_int(stmt, P::user_ver, ver.ver);
+  bind_text(stmt, P::user_ver_tag, ver.tag.c_str());
 }
 
-int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
+void SQLiteDB::InsertUser(std::string_view user_table,
+                          const RGWUserInfo& info,
+                          const obj_version& ver,
+                          const rgw::sal::Attrs& attrs)
 {
-  int index = -1;
-  int rc = 0;
-  struct DBOpPrepareParams p_params = PrepareParams;
+  // TODO: only allow one binding at a time
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.tenant, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.tenant.c_str(), sdb);
+  ceph_assert(insert_user_stmt); // must have called InitializeDBOps
+  sqlite3_stmt* stmt = insert_user_stmt.get();
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+  // clear bindings and reset the evaluation on return
+  auto binding = statement_ptr{stmt, &sqlite3_clear_bindings};
+  auto reset = statement_ptr{stmt, &sqlite3_reset};
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.ns, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.ns.c_str(), sdb);
+  bind_insert_user(stmt, info, ver, attrs);
 
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.display_name, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.display_name.c_str(), sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_email, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_email.c_str(), sdb);
-
-  if (!params->op.user.uinfo.access_keys.empty()) {
-    string access_key;
-    string key;
-    map<string, RGWAccessKey>::const_iterator it =
-      params->op.user.uinfo.access_keys.begin();
-    const RGWAccessKey& k = it->second;
-    access_key = k.id;
-    key = k.key;
-
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_id, sdb);
-    SQL_BIND_TEXT(dpp, stmt, index, access_key.c_str(), sdb);
-
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys_secret, sdb);
-    SQL_BIND_TEXT(dpp, stmt, index, key.c_str(), sdb);
-
-    SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.access_keys, sdb);
-    SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.access_keys, sdb);
-  }
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.swift_keys, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.swift_keys, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.subusers, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.subusers, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.suspended, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.suspended, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.max_buckets, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.max_buckets, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.op_mask, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.op_mask, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_caps, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.caps, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.admin, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.admin, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.system, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.system, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_name, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.default_placement.name.c_str(), sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_storage_class, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.default_placement.storage_class.c_str(), sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.placement_tags, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.placement_tags, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.bucket_quota, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.bucket_quota, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.temp_url_keys, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.temp_url_keys, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_quota, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.user_quota, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.type, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.type, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.mfa_ids, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.mfa_ids, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.assumed_role_arn, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.assumed_role_arn.c_str(), sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_attrs, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.user_attrs, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_ver, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.user.user_version.ver, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_ver_tag, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.user_version.tag.c_str(), sdb);
-
-out:
-  return rc;
-}
-
-int SQLInsertUser::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *params)
-{
-  int ret = -1;
-
-  SQL_EXECUTE(dpp, params, stmt, NULL);
-out:
-  return ret;
+  evaluate(stmt);
 }
 
 int SQLRemoveUser::Prepare(const DoutPrefixProvider *dpp, struct DBOpParams *params)

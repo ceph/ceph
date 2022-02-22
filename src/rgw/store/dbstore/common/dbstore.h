@@ -337,7 +337,6 @@ struct DBOpPrepareParams {
 };
 
 struct DBOps {
-  class InsertUserOp *InsertUser;
   class RemoveUserOp *RemoveUser;
   class GetUserOp *GetUser;
   class InsertBucketOp *InsertBucket;
@@ -689,50 +688,51 @@ class DBOp {
     virtual int Execute(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; }
 };
 
-class InsertUserOp : virtual public DBOp {
-  private:
-    /* For existing entires, -
-     * (1) INSERT or REPLACE - it will delete previous entry and then
-     * inserts new one. Since it deletes previos enties, it will
-     * trigger all foriegn key cascade deletes or other triggers.
-     * (2) INSERT or UPDATE - this will set NULL values to unassigned
-     * fields.
-     * more info: https://code-examples.net/en/q/377728
-     *
-     * For now using INSERT or REPLACE. If required of updating existing
-     * record, will use another query.
-     */
-    static constexpr std::string_view Query = "INSERT OR REPLACE INTO '{}'	\
-                          (UserID, Tenant, NS, DisplayName, UserEmail, \
-                           AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
-                           SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
-                           System, PlacementName, PlacementStorageClass, PlacementTags, \
-                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
-                           UserAttrs, UserVersion, UserVersionTag) \
-                          VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+// TODO: move to dbstore.cc
+inline std::string InsertUserSchema(std::string_view user_table)
+{
+  /* For existing entires, -
+   * (1) INSERT or REPLACE - it will delete previous entry and then
+   * inserts new one. Since it deletes previos enties, it will
+   * trigger all foriegn key cascade deletes or other triggers.
+   * (2) INSERT or UPDATE - this will set NULL values to unassigned
+   * fields.
+   * more info: https://code-examples.net/en/q/377728
+   *
+   * For now using INSERT or REPLACE. If required of updating existing
+   * record, will use another query.
+   */
+  static constexpr std::string_view Query = R"(
+INSERT OR REPLACE INTO '{}'
+(UserID, Tenant, NS, DisplayName, UserEmail,
+ AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,
+ SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin,
+ System, PlacementName, PlacementStorageClass, PlacementTags,
+ BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN,
+ UserAttrs, UserVersion, UserVersionTag)
+VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+  {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});)";
 
-  public:
-    virtual ~InsertUserOp() {}
+  using P = DBOpUserPrepareInfo;
 
-    static std::string Schema(DBOpPrepareParams &params) {
-      return fmt::format(Query, params.user_table,
-          params.op.user.user_id, params.op.user.tenant, params.op.user.ns,
-          params.op.user.display_name, params.op.user.user_email,
-          params.op.user.access_keys_id, params.op.user.access_keys_secret,
-          params.op.user.access_keys, params.op.user.swift_keys,
-          params.op.user.subusers, params.op.user.suspended,
-          params.op.user.max_buckets, params.op.user.op_mask,
-          params.op.user.user_caps, params.op.user.admin, params.op.user.system,
-          params.op.user.placement_name, params.op.user.placement_storage_class,
-          params.op.user.placement_tags, params.op.user.bucket_quota,
-          params.op.user.temp_url_keys, params.op.user.user_quota,
-          params.op.user.type, params.op.user.mfa_ids,
-          params.op.user.assumed_role_arn, params.op.user.user_attrs,
-          params.op.user.user_ver, params.op.user.user_ver_tag);
-    }
-
-};
+  return fmt::format(Query, user_table,
+      P::user_id, P::tenant, P::ns,
+      P::display_name, P::user_email,
+      P::access_keys_id, P::access_keys_secret,
+      P::access_keys, P::swift_keys,
+      P::subusers, P::suspended,
+      P::max_buckets, P::op_mask,
+      P::user_caps, P::admin, P::system,
+      P::placement_name, P::placement_storage_class,
+      P::placement_tags, P::bucket_quota,
+      P::temp_url_keys, P::user_quota,
+      P::type,
+      P::mfa_ids,
+      P::assumed_role_arn,
+      P::user_attrs,
+      P::user_ver,
+      P::user_ver_tag);
+}
 
 class RemoveUserOp: virtual public DBOp {
   private:
@@ -1510,6 +1510,12 @@ class DB {
     DBOp* getDBOp(const DoutPrefixProvider *dpp, std::string_view Op, const DBOpParams *params);
     int objectmapInsert(const DoutPrefixProvider *dpp, std::string bucket, class ObjectOp* ptr);
     int objectmapDelete(const DoutPrefixProvider *dpp, std::string bucket);
+
+    // low-level ops; may throw on error
+    virtual void InsertUser(std::string_view user_table,
+                            const RGWUserInfo& info,
+                            const obj_version& ver,
+                            const rgw::sal::Attrs& attrs) = 0;
 
     virtual uint64_t get_blob_limit() { return 0; };
     virtual void *openDB(const DoutPrefixProvider *dpp) { return NULL; }

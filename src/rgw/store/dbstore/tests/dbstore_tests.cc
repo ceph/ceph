@@ -117,7 +117,6 @@ namespace {
 
 TEST_F(DBStoreTest, InsertUser) {
   struct DBOpParams params = GlobalParams;
-  int ret = -1;
 
   params.op.user.uinfo.user_id.tenant = "tenant";
   params.op.user.uinfo.user_email = "user1@dbstore.com";
@@ -132,8 +131,10 @@ TEST_F(DBStoreTest, InsertUser) {
   params.op.user.user_version.ver = 1;    
   params.op.user.user_version.tag = "UserTAG";    
 
-  ret = db->ProcessOp(dpp, "InsertUser", &params);
-  ASSERT_EQ(ret, 0);
+  ASSERT_NO_THROW(db->InsertUser(params.user_table,
+                                 params.op.user.uinfo,
+                                 params.op.user.user_version,
+                                 params.op.user.user_attrs));
 }
 
 TEST_F(DBStoreTest, GetUser) {
@@ -1182,7 +1183,6 @@ TEST_F(DBStoreTest, RemoveUser) {
 
 TEST_F(DBStoreTest, InsertTestIDUser) {
   struct DBOpParams params = GlobalParams;
-  int ret = -1;
 
   params.op.user.uinfo.user_id.id = "testid";
   params.op.user.uinfo.display_name = "M. Tester";
@@ -1193,8 +1193,10 @@ TEST_F(DBStoreTest, InsertTestIDUser) {
   params.op.user.user_version.ver = 1;    
   params.op.user.user_version.tag = "UserTAG";    
 
-  ret = db->ProcessOp(dpp, "InsertUser", &params);
-  ASSERT_EQ(ret, 0);
+  ASSERT_NO_THROW(db->InsertUser(params.user_table,
+                                 params.op.user.uinfo,
+                                 params.op.user.user_version,
+                                 params.op.user.user_attrs));
 }
 
 int main(int argc, char **argv)

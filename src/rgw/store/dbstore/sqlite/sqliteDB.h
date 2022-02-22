@@ -5,6 +5,7 @@
 #define SQLITE_DB_H
 
 #include <errno.h>
+#include <memory>
 #include <stdlib.h>
 #include <string>
 #include <sqlite3.h>
@@ -12,9 +13,14 @@
 
 using namespace rgw::store;
 
+using statement_ptr = std::unique_ptr<sqlite3_stmt, int(*)(sqlite3_stmt*)>;
+
 class SQLiteDB : public DB, virtual public DBOp {
   private:
     sqlite3_mutex *mutex = NULL;
+
+    // prepared statements
+    statement_ptr insert_user_stmt;
 
   protected:
     CephContext *cct;
@@ -23,12 +29,24 @@ class SQLiteDB : public DB, virtual public DBOp {
     sqlite3_stmt *stmt = NULL;
     DBOpPrepareParams PrepareParams;
 
-    SQLiteDB(sqlite3 *dbi, std::string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
+    SQLiteDB(sqlite3 *dbi, std::string db_name, CephContext *_cct)
+        : DB(db_name, _cct),
+          insert_user_stmt(nullptr, &sqlite3_finalize),
+          cct(_cct) {
       db = (void*)dbi;
     }
-    SQLiteDB(std::string db_name, CephContext *_cct) : DB(db_name, _cct), cct(_cct) {
+    SQLiteDB(std::string db_name, CephContext *_cct)
+        : DB(db_name, _cct),
+          insert_user_stmt(nullptr, &sqlite3_finalize),
+          cct(_cct) {
     }
     ~SQLiteDB() {}
+
+    // low-level ops
+    void InsertUser(std::string_view user_table,
+                    const RGWUserInfo& info,
+                    const obj_version& ver,
+                    const rgw::sal::Attrs& attrs) override;
 
     uint64_t get_blob_limit() override { return SQLITE_LIMIT_LENGTH; }
     void *openDB(const DoutPrefixProvider *dpp) override;
@@ -83,22 +101,6 @@ class SQLObjectOp : public ObjectOp {
 
     int InitializeObjectOps(std::string db_name, const DoutPrefixProvider *dpp);
     int FreeObjectOps(const DoutPrefixProvider *dpp);
-};
-
-class SQLInsertUser : public SQLiteDB, public InsertUserOp {
-  private:
-    sqlite3 **sdb = NULL;
-    sqlite3_stmt *stmt = NULL; // Prepared statement
-
-  public:
-    SQLInsertUser(void **db, std::string db_name, CephContext *cct) : SQLiteDB((sqlite3 *)(*db), db_name, cct), sdb((sqlite3 **)db) {}
-    ~SQLInsertUser() {
-      if (stmt)
-        sqlite3_finalize(stmt);
-    }
-    int Prepare(const DoutPrefixProvider *dpp, DBOpParams *params);
-    int Execute(const DoutPrefixProvider *dpp, DBOpParams *params);
-    int Bind(const DoutPrefixProvider *dpp, DBOpParams *params);
 };
 
 class SQLRemoveUser : public SQLiteDB, public RemoveUserOp {

@@ -59,8 +59,14 @@ void* process(void *arg)
   params.op.user.uinfo.access_keys.insert(make_pair("key1", k1));
   params.op.user.uinfo.access_keys.insert(make_pair("key2", k2));
 
-  ret = db->ProcessOp(dpp, "InsertUser", &params);
-  cout << "InsertUser return value: " <<  ret << "\n";
+  try {
+    InsertUser(params.user_table,
+               params.op.user.uinfo,
+               params.op.user.user_version,
+               params.op.user.user_attrs);
+  } catch (const std::exception& e) {
+    cout << "InsertUser failed: " << e.what() << '\n';
+  }
 
   DBOpParams params2 = {};
   params.op.user.uinfo.user_id.tenant = "tenant2";
