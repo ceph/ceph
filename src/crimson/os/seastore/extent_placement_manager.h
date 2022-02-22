@@ -14,115 +14,6 @@
 namespace crimson::os::seastore {
 
 /**
- * ool_record_t
- *
- * Encapsulates logic for building and encoding an ool record destined for
- * an ool segment.
- *
- * Uses a metadata header to enable scanning the ool segment for gc purposes.
- * Introducing a seperate physical->logical mapping would enable removing the
- * metadata block overhead.
- */
-class ool_record_t {
-  class OolExtent {
-  public:
-    OolExtent(LogicalCachedExtentRef& lextent)
-      : lextent(lextent) {}
-
-    void set_ool_paddr(paddr_t addr) {
-      ool_offset = addr;
-    }
-    paddr_t get_ool_paddr() const {
-      return ool_offset;
-    }
-    bufferptr& get_bptr() {
-      return lextent->get_bptr();
-    }
-    LogicalCachedExtentRef& get_lextent() {
-      return lextent;
-    }
-  private:
-    paddr_t ool_offset;
-    LogicalCachedExtentRef lextent;
-  };
-
-public:
-  ool_record_t(
-    size_t block_size,
-    record_commit_type_t commit_type)
-    : block_size(block_size),
-      commit_type(commit_type) {}
-  record_group_size_t get_encoded_record_length() {
-    assert(extents.size() == record.extents.size());
-    return record_group_size_t(record.size, block_size);
-  }
-  size_t get_wouldbe_encoded_record_length(LogicalCachedExtentRef& extent) {
-    record_size_t rsize = record.size;
-    rsize.account_extent(extent->get_bptr().length());
-    return record_group_size_t(rsize, block_size).get_encoded_length();
-  }
-  ceph::bufferlist encode(segment_id_t segment,
-                          segment_nonce_t nonce) {
-    assert(extents.size() == record.extents.size());
-    assert(!record.deltas.size());
-    auto commit_time = seastar::lowres_system_clock::now();
-    record.commit_time = commit_time.time_since_epoch().count();
-    record.commit_type = commit_type;
-    auto record_group = record_group_t(std::move(record), block_size);
-    seastore_off_t extent_offset = base + record_group.size.get_mdlength();
-    for (auto& extent : extents) {
-      extent.set_ool_paddr(
-        paddr_t::make_seg_paddr(segment, extent_offset));
-      if (commit_type == record_commit_type_t::MODIFY) {
-        extent.get_lextent()->set_last_modified(commit_time);
-      } else {
-        assert(commit_type == record_commit_type_t::REWRITE);
-        extent.get_lextent()->set_last_rewritten(commit_time);
-      }
-      extent_offset += extent.get_bptr().length();
-    }
-    assert(extent_offset ==
-           (seastore_off_t)(base + record_group.size.get_encoded_length()));
-    return encode_records(record_group, JOURNAL_SEQ_NULL, nonce);
-  }
-  void add_extent(LogicalCachedExtentRef& extent) {
-    extents.emplace_back(extent);
-    ceph::bufferlist bl;
-    bl.append(extent->get_bptr());
-    record.push_back(extent_t{
-      extent->get_type(),
-      extent->get_laddr(),
-      std::move(bl),
-      extent->get_last_modified().time_since_epoch().count()});
-  }
-  std::vector<OolExtent>& get_extents() {
-    return extents;
-  }
-  void set_base(seastore_off_t b) {
-    base = b;
-  }
-  seastore_off_t get_base() const {
-    return base;
-  }
-  void clear() {
-    record = {};
-    extents.clear();
-    base = MAX_SEG_OFF;
-  }
-  uint64_t get_num_extents() const {
-    return extents.size();
-  }
-
-private:
-  std::vector<OolExtent> extents;
-  record_t record;
-  size_t block_size;
-  seastore_off_t base = MAX_SEG_OFF;
-  record_commit_type_t commit_type =
-    record_commit_type_t::NONE;
-};
-
-/**
  * ExtentOolWriter
  *
  * Interface through which final write to ool segment is performed.
@@ -208,7 +99,8 @@ class SegmentedAllocator : public ExtentAllocator {
 
     write_iertr::future<> _write(
       Transaction& t,
-      ool_record_t& record);
+      record_t&& record,
+      std::list<LogicalCachedExtentRef>&& extents);
 
     journal::SegmentAllocator segment_allocator;
     std::optional<seastar::shared_promise<>> roll_promise;
