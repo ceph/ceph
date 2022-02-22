@@ -4907,10 +4907,20 @@ void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
 SnapRealm *Client::get_snap_realm(inodeno_t r)
 {
   SnapRealm *realm = snap_realms[r];
-  if (!realm)
+
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << ", nref was "
+                 << (realm ? realm->nref : 0) << dendl;
+  if (!realm) {
     snap_realms[r] = realm = new SnapRealm(r);
-  ldout(cct, 20) << __func__ << " " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
+
+    // Do not release the global snaprealm until unmounting.
+    if (r == CEPH_INO_GLOBAL_SNAPREALM)
+      realm->nref++;
+  }
+
   realm->nref++;
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << ", nref now is "
+                 << realm->nref << dendl;
   return realm;
 }
 
@@ -6597,6 +6607,13 @@ void Client::_unmount(bool abort)
   upkeep_cond.notify_one();
 
   _close_sessions();
+
+  // release the global snapshot realm
+  SnapRealm *global_realm = snap_realms[CEPH_INO_GLOBAL_SNAPREALM];
+  if (global_realm) {
+    ceph_assert(global_realm->nref == 1);
+    put_snap_realm(global_realm);
+  }
 
   mref_writer.update_state(CLIENT_UNMOUNTED);
 
