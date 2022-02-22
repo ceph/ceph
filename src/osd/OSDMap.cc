@@ -4931,6 +4931,27 @@ int OSDMap::calc_pg_upmaps(
   return num_changed;
 }
 
+
+map<uint64_t,set<pg_t>> OSDMap::get_pgs_by_osd()
+{
+  OSDMap tmp_osd_map;
+  tmp_osd_map.deepish_copy_from(*this);
+
+  map<uint64_t,set<pg_t>> pgs_by_osd;
+  for (auto& [pid, pdata] : pools) {
+    for (unsigned ps = 0; ps < pdata.get_pg_num(); ++ps) {
+      pg_t pg(ps, pid);
+      vector<int> up;
+      tmp_osd_map.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
+      for (auto osd : up) {
+	if (osd != CRUSH_ITEM_NONE)
+	  pgs_by_osd[osd].insert(pg);
+      }
+    }
+  }
+  return pgs_by_osd;
+}
+
 float OSDMap::build_pool_pgs_info (
   CephContext *cct,
   const std::set<int64_t>& only_pools,        ///< [optional] restrict to pool
