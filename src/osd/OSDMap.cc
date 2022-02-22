@@ -4631,6 +4631,42 @@ bool OSDMap::try_pg_upmap(
   return true;
 }
 
+map<uint64_t,float> OSDMap::calc_desired_primary_distribution(
+    CephContext *cct,
+    vector<uint64_t> *osds,
+    pg_pool_t *pool)
+{
+  map<uint64_t,float> desired_primary_distribution; // will return a perfect distribution of floats
+				                    // without calculating the floor of each value
+  // This function only handles replicated pools.
+  if (pool->is_replicated()) {
+    ldout(cct, 10) << __func__ << "calculating distribution for replicated pool" << dendl;
+    uint64_t replica_count = pool->get_size();
+    map<uint64_t,set<pg_t>> pgs_by_osd = get_pgs_by_osd();
+
+    // First calculate the array using primary affinity
+    for (uint64_t osd : *osds) {
+      float osd_primary_count = (pgs_by_osd[osd].size() / replica_count) * get_primary_affinity(osd);
+      desired_primary_distribution.insert({osd, osd_primary_count});
+    }
+    // Next, calculate sum of the distribution
+    float sum = 0.0;
+    for (auto [osd, osd_primary_count] : desired_primary_distribution) {
+      sum += osd_primary_count;
+    }
+    // Then, stretch the values
+    float factor;
+    for (auto [osd, osd_primary_count]: desired_primary_distribution) {
+      factor = pgs_by_osd[osd].size() / sum;
+      desired_primary_distribution[osd] *= factor;
+    }
+  } else {
+    ldout(cct, 10) << __func__ << "skipping erasure pool " << dendl;
+  }
+
+  return desired_primary_distribution;
+}
+
 int OSDMap::calc_pg_upmaps(
   CephContext *cct,
   uint32_t max_deviation,

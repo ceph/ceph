@@ -1425,6 +1425,11 @@ public:
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
+  std::map<uint64_t,float> calc_desired_primary_distribution(
+    CephContext *cct,
+    std::vector<uint64_t> *osds, // vector of osd ids
+    pg_pool_t *pool); // a single pool
+
   int calc_pg_upmaps(
     CephContext *cct,
     uint32_t max_deviation, ///< max deviation from target (value >= 1)
