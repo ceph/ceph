@@ -812,6 +812,96 @@ class TestSubvolumeGroups(TestVolumesHelper):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    def test_subvolume_group_create_idempotence(self):
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # try creating w/ same subvolume group name -- should be idempotent
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence_mode(self):
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # try creating w/ same subvolume group name with mode -- should set mode
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--mode=766")
+
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        # check subvolumegroup's  mode
+        mode = self.mount_a.run_shell(['stat', '-c' '%a', group_path]).stdout.getvalue().strip()
+        self.assertEqual(mode, "766")
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence_uid_gid(self):
+        desired_uid = 1000
+        desired_gid = 1000
+
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # try creating w/ same subvolume group name with uid/gid -- should set uid/gid
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--uid", str(desired_uid), "--gid", str(desired_gid))
+
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        # verify the uid and gid
+        actual_uid = int(self.mount_a.run_shell(['stat', '-c' '%u', group_path]).stdout.getvalue().strip())
+        actual_gid = int(self.mount_a.run_shell(['stat', '-c' '%g', group_path]).stdout.getvalue().strip())
+        self.assertEqual(desired_uid, actual_uid)
+        self.assertEqual(desired_gid, actual_gid)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence_data_pool(self):
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        default_pool = self.mount_a.getfattr(group_path, "ceph.dir.layout.pool")
+        new_pool = "new_pool"
+        self.assertNotEqual(default_pool, new_pool)
+
+        # add data pool
+        newid = self.fs.add_data_pool(new_pool)
+
+        # try creating w/ same subvolume group name with new data pool -- should set pool
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--pool_layout", new_pool)
+        desired_pool = self.mount_a.getfattr(group_path, "ceph.dir.layout.pool")
+        try:
+            self.assertEqual(desired_pool, new_pool)
+        except AssertionError:
+            self.assertEqual(int(desired_pool), newid) # old kernel returns id
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_create_idempotence_resize(self):
+        # create group
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # try creating w/ same subvolume name with size -- should set quota
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # get group metadata
+        group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
+        self.assertEqual(group_info["bytes_quota"], 1000000000)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
     def test_subvolume_group_quota_subvolume_removal(self):
         """
         Tests subvolume removal if it's group quota is set.
