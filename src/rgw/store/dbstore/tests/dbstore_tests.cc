@@ -29,7 +29,8 @@ namespace gtest {
 
       void SetUp() override {
         cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-            CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1)->get();
+            CODE_ENVIRONMENT_DAEMON,
+            CINIT_FLAG_NO_DEFAULT_CONFIG_FILE | CINIT_FLAG_NO_MON_CONFIG | CINIT_FLAG_NO_DAEMON_ACTIONS)->get();
         if (!db_type.compare("SQLite")) {
           db = new SQLiteDB(tenant, cct);
           ASSERT_TRUE(db != nullptr);

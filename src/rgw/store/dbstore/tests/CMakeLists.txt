@@ -8,5 +8,6 @@ set(dbstore_tests_srcs
 
 include_directories(${CMAKE_INCLUDE_DIR})
 
-add_executable(dbstore-tests ${dbstore_tests_srcs})
-target_link_libraries(dbstore-tests ${CMAKE_LINK_LIBRARIES})
+add_executable(unittest_dbstore_tests ${dbstore_tests_srcs})
+target_link_libraries(unittest_dbstore_tests ${CMAKE_LINK_LIBRARIES})
+add_ceph_unittest(unittest_dbstore_tests)
