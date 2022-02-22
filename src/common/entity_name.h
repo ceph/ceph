@@ -60,6 +60,7 @@ struct EntityName
   bool is_mds() const { return get_type() == CEPH_ENTITY_TYPE_MDS; }
   bool is_client() const { return get_type() == CEPH_ENTITY_TYPE_CLIENT; }
   bool is_mon() const { return get_type() == CEPH_ENTITY_TYPE_MON; }
+  bool is_exporter() const { return get_type() == CEPH_ENTITY_TYPE_EXPORTER; }
 
   std::string_view get_type_name() const;
   const std::string &get_id() const;
@@ -78,7 +79,7 @@ private:
     uint32_t type;
     const char *str;
   };
-  static const std::array<str_to_entity_type_t, 6> STR_TO_ENTITY_TYPE;
+  static const std::array<str_to_entity_type_t, 7> STR_TO_ENTITY_TYPE;
 
   uint32_t type = 0;
   std::string id;
