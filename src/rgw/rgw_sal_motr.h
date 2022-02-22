@@ -42,6 +42,7 @@ class MotrStore;
 #define RGW_MOTR_BUCKET_INST_IDX_NAME "motr.rgw.bucket.instances"
 #define RGW_MOTR_BUCKET_HD_IDX_NAME   "motr.rgw.bucket.headers"
 #define RGW_IAM_MOTR_ACCESS_KEY       "motr.rgw.accesskeys"
+#define RGW_IAM_MOTR_EMAIL_KEY        "motr.rgw.emails"
 
 //#define RGW_MOTR_BUCKET_ACL_IDX_NAME  "motr.rgw.bucket.acls"
 
@@ -135,6 +136,30 @@ struct MotrUserInfo {
   }
 };
 WRITE_CLASS_ENCODER(MotrUserInfo);
+
+struct MotrEmailInfo {
+  std::string user_id;
+  std::string email_id;
+
+  MotrEmailInfo() {}
+  MotrEmailInfo(std::string _user_id, std::string _email_id )
+    : user_id(std::move(_user_id)), email_id(std::move(_email_id)) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 2, bl);
+    encode(user_id, bl);
+    encode(email_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
+     decode(user_id, bl);
+     decode(email_id, bl);
+      DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(MotrEmailInfo);
 
 struct MotrAccessKey {
   std::string id; // AccessKey
@@ -998,6 +1023,7 @@ class MotrStore : public Store {
                           std::string key_str, bufferlist &bl, bool update=true);
     int check_n_create_global_indices();
     int store_access_key(const DoutPrefixProvider *dpp, optional_yield y, MotrAccessKey access_key);
+    int store_email_info(const DoutPrefixProvider *dpp, optional_yield y, MotrEmailInfo& email_info);
 
     int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct);
     MotrMetaCache* get_obj_meta_cache() {return obj_meta_cache;}

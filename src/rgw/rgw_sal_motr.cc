@@ -58,7 +58,8 @@ static std::string motr_global_indices[] = {
   RGW_MOTR_USERS_IDX_NAME,
   RGW_MOTR_BUCKET_INST_IDX_NAME,
   RGW_MOTR_BUCKET_HD_IDX_NAME,
-  RGW_IAM_MOTR_ACCESS_KEY
+  RGW_IAM_MOTR_ACCESS_KEY,
+  RGW_IAM_MOTR_EMAIL_KEY
 };
 
 void MotrMetaCache::invalid(const DoutPrefixProvider *dpp,
@@ -392,7 +393,6 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   obj_version& obj_ver = objv_tr.read_version;
 
   ldpp_dout(dpp, 20) << "Store_user(): User = " << info.user_id.id << dendl;
-
   orig_info.user_id = info.user_id;
   // XXX: we open and close motr idx 2 times in this method:
   // 1) on load_user_from_idx() here and 2) on do_idx_op_by_name(PUT) below.
@@ -443,6 +443,11 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
     secret_key = k.key;
     MotrAccessKey MGWUserKeys(access_key, secret_key, info.user_id.to_str());
     store->store_access_key(dpp, y, MGWUserKeys);
+  }
+
+  if (!info.user_email.empty()) {
+     MotrEmailInfo MGWEmailInfo(info.user_id.to_str(), info.user_email);
+     store->store_email_info(dpp, y, MGWEmailInfo);
   }
 
   // Create user info index to store all buckets that are belong
@@ -3091,6 +3096,31 @@ int MotrStore::get_user_by_access_key(const DoutPrefixProvider *dpp, const std::
 
 int MotrStore::get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user)
 {
+  int rc;
+  User *u;
+  bufferlist bl;
+  RGWUserInfo uinfo;
+  MotrEmailInfo email_info; 
+  rc = do_idx_op_by_name(RGW_IAM_MOTR_EMAIL_KEY,
+                           M0_IC_GET, email, bl);
+  if (rc < 0){
+    ldout(cctx, 0) << "Email Id not found: rc = " << rc << dendl;
+    return rc;
+  }
+  auto iter = bl.cbegin();
+  email_info.decode(iter);
+  ldout(cctx, 0) << "Loading user: " << email_info.user_id << dendl;
+  uinfo.user_id.from_str(email_info.user_id);
+  rc = MotrUser().load_user_from_idx(dpp, this, uinfo, nullptr, nullptr);
+  if (rc < 0){
+    ldout(cctx, 0) << "Failed to load user: rc = " << rc << dendl;
+    return rc;
+  }
+  u = new MotrUser(this, uinfo);
+  if (!u)
+    return -ENOMEM;
+
+  user->reset(u);  
   return 0;
 }
 
@@ -3111,6 +3141,19 @@ int MotrStore::store_access_key(const DoutPrefixProvider *dpp, optional_yield y,
     ldout(cctx, 0) << "Failed to store key: rc = " << rc << dendl;
     return rc;
   }
+  return rc;
+}
+
+int MotrStore::store_email_info(const DoutPrefixProvider *dpp, optional_yield y, MotrEmailInfo& email_info )
+{
+  int rc;
+  bufferlist bl;
+  email_info.encode(bl);
+  rc = do_idx_op_by_name(RGW_IAM_MOTR_EMAIL_KEY,
+                                M0_IC_PUT, email_info.email_id, bl);
+  if (rc < 0) {
+    ldout(cctx, 0) << "Failed to store the user by email as key: rc = " << rc << dendl;
+  } 
   return rc;
 }
 
