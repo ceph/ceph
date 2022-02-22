@@ -1340,10 +1340,10 @@ public:
           obligation_counter = state->counter;
           progress = ceph::real_time{};
 
-          ldout(cct, 4) << "starting sync on " << bucket_shard_str{state->key}
+          ldout(cct, 4) << "starting sync on " << bucket_shard_str{state->key.first}
               << ' ' << *state->obligation << dendl;
           yield call(new RGWRunBucketSourcesSyncCR(sc, lease_cr,
-                                                   state->key, tn,
+                                                   state->key.first, tn,
                                                    state->obligation->gen,
 						   &progress));
           if (retcode < 0) {
@@ -1355,7 +1355,7 @@ public:
         complete = std::move(*state->obligation);
         state->obligation.reset();
 
-        tn->log(10, SSTR("sync finished on " << bucket_shard_str{state->key}
+        tn->log(10, SSTR("sync finished on " << bucket_shard_str{state->key.first}
                          << " progress=" << progress << ' ' << complete << " r=" << retcode));
       }
       sync_status = retcode;
@@ -1481,7 +1481,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
                                   std::optional<uint64_t> gen,
                                   const std::string& marker,
                                   ceph::real_time timestamp, bool retry) {
-    auto state = bucket_shard_cache->get(src);
+    auto state = bucket_shard_cache->get(src, gen);
     auto obligation = rgw_data_sync_obligation{src, gen, marker, timestamp, retry};
     return new RGWDataSyncSingleEntryCR(sc, std::move(state), std::move(obligation),
                                         &*marker_tracker, error_repo,
