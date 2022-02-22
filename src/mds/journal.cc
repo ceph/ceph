@@ -1355,7 +1355,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	in->state_clear(CInode::STATE_AUTH);
       ceph_assert(g_conf()->mds_kill_journal_replay_at != 2);
 
-      if (!(++count % 1000))
+      if (!(++count % mds->heartbeat_reset_grace()))
         mds->heartbeat_reset();
     }
 
@@ -1390,7 +1390,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       if (lump.is_importing())
 	dn->state_set(CDentry::STATE_AUTH);
 
-      if (!(++count % 1000))
+      if (!(++count % mds->heartbeat_reset_grace()))
         mds->heartbeat_reset();
     }
 
@@ -1428,7 +1428,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       // Make null dentries the first things we trim
       dout(10) << "EMetaBlob.replay pushing to bottom of lru " << *dn << dendl;
 
-      if (!(++count % 1000))
+      if (!(++count % mds->heartbeat_reset_grace()))
         mds->heartbeat_reset();
     }
   }
@@ -1461,7 +1461,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  else
 	    dir->state_set(CDir::STATE_AUTH);
 
-          if (!(++count % 1000))
+          if (!(++count % mds->heartbeat_reset_grace()))
             mds->heartbeat_reset();
 	}
       }
@@ -1493,7 +1493,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	dir->state_clear(CDir::STATE_AUTH);
 	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
 
-        if (!(++count % 1000))
+        if (!(++count % mds->heartbeat_reset_grace()))
           mds->heartbeat_reset();
       }
     }
@@ -1506,7 +1506,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       ceph_assert(p->first->is_dir());
       mds->mdcache->adjust_subtree_after_rename(p->first, p->second, false);
 
-      if (!(++count % 1000))
+      if (!(++count % mds->heartbeat_reset_grace()))
         mds->heartbeat_reset();
     }
   }
@@ -1524,7 +1524,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       } else
 	mds->mdcache->remove_inode_recursive(in);
 
-      if (!(++count % 1000))
+      if (!(++count % mds->heartbeat_reset_grace()))
         mds->heartbeat_reset();
     }
   }
@@ -1537,7 +1537,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     if (client)
       client->got_journaled_agree(p.second, logseg);
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -1627,7 +1627,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     ceph_assert(in);
     mds->mdcache->add_recovered_truncate(in, logseg);
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
   for (const auto& p : truncate_finish) {
@@ -1638,7 +1638,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       mds->mdcache->remove_recovered_truncate(in, ls);
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -1660,7 +1660,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
       }
 
-      if (!(++count % 1000))
+      if (!(++count % mds->heartbeat_reset_grace()))
         mds->heartbeat_reset();
     }
     mds->mdcache->open_file_table.note_destroyed_inos(logseg->seq, destroyed_inodes);
@@ -1682,7 +1682,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       }
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -1698,7 +1698,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
       }
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
