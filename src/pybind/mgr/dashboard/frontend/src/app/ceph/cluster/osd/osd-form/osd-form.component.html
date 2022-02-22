@@ -1,136 +1,213 @@
 <cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
 
-<div class="cd-col-form"
+<div class="card"
      *cdFormLoading="loading">
-  <form name="form"
-        #formDir="ngForm"
-        [formGroup]="form"
-        novalidate>
-    <div class="card">
-      <div i18n="form title|Example: Create Pool@@formTitle"
-           class="card-header"
-           *ngIf="!hideTitle">{{ action | titlecase }} {{ resource | upperFirst }}</div>
-      <div class="card-body">
-        <fieldset>
-          <cd-osd-devices-selection-groups #dataDeviceSelectionGroups
-                                           name="Primary"
-                                           type="data"
-                                           [availDevices]="availDevices"
-                                           [canSelect]="availDevices.length !== 0"
-                                           (selected)="onDevicesSelected($event)"
-                                           (cleared)="onDevicesCleared($event)">
-          </cd-osd-devices-selection-groups>
-        </fieldset>
+  <div i18n="form title|Example: Create Pool@@formTitle"
+       class="card-header"
+       *ngIf="!hideTitle">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+  <div class="card-body ml-2">
+    <form name="form"
+          #formDir="ngForm"
+          [formGroup]="form"
+          novalidate>
+      <div class="accordion">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="mb-0">
+              <button class="btn btn-link btn-block text-left dropdown-toggle"
+                      data-toggle="collapse"
+                      aria-label="toggle deployment options"
+                      [attr.aria-expanded]="simpleDeployment"
+                      (click)="emitDeploymentMode()"
+                      i18n>Deployment Options</button>
+            </h2>
+          </div>
+        </div>
+        <div class="collapse"
+             [ngClass]="{show: simpleDeployment}">
+          <div class="card-body d-flex flex-column">
+            <div class="pt-3 pb-3"
+                 *ngFor="let optionName of optionNames">
+              <div class="custom-control custom-radio custom-control-inline">
+                <input class="custom-control-input"
+                       type="radio"
+                       name="deploymentOption"
+                       [id]="optionName"
+                       [value]="optionName"
+                       formControlName="deploymentOption"
+                       (change)="emitDeploymentSelection()"
+                       [attr.disabled]="!deploymentOptions?.options[optionName].available ? true : null">
+                <label class="custom-control-label"
+                       [id]="'label_' + optionName"
+                       [for]="optionName"
+                       i18n>{{ deploymentOptions?.options[optionName].title }}
+                       {{ deploymentOptions.recommended_option === optionName ? "(Recommended)" : "" }}
+                  <cd-helper>
+                    <span>{{ deploymentOptions?.options[optionName].desc }}</span>
+                  </cd-helper>
+                </label>
+              </div>
+            </div>
+            <!-- @TODO: Visualize the storage used on a chart -->
+            <!-- <div class="pie-chart">
+              <h4 class="text-center">Selected Capacity</h4>
+              <h5 class="margin text-center">10 Hosts | 30 NVMes </h5>
+              <div class="char-i-contain">
+                <cd-health-pie [data]="data"
+                               [config]="rawCapacityChartConfig"
+                               [isBytesData]="true"
+                               (prepareFn)="prepareRawUsage($event[0], $event[1])">
+                </cd-health-pie>
+              </div>
+            </div> -->
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h2 class="mb-0">
+              <button class="btn btn-link btn-block text-left dropdown-toggle"
+                      data-toggle="collapse"
+                      aria-label="toggle advanced mode"
+                      [attr.aria-expanded]="!simpleDeployment"
+                      (click)="emitDeploymentMode()"
+                      i18n>Advanced Mode</button>
+            </h2>
+          </div>
+        </div>
+        <div class="collapse"
+             [ngClass]="{show: !simpleDeployment}">
+          <div class="card-body">
+            <div class="card-body">
+              <fieldset>
+                <cd-osd-devices-selection-groups #dataDeviceSelectionGroups
+                                                 name="Primary"
+                                                 type="data"
+                                                 [availDevices]="availDevices"
+                                                 [canSelect]="availDevices.length !== 0"
+                                                 (selected)="onDevicesSelected($event)"
+                                                 (cleared)="onDevicesCleared($event)">
+                </cd-osd-devices-selection-groups>
+              </fieldset>
 
-        <!-- Shared devices -->
-        <fieldset>
-          <legend i18n>Shared devices</legend>
+              <!-- Shared devices -->
+              <fieldset>
+                <legend i18n>Shared devices</legend>
 
-          <!-- WAL devices button and table -->
-          <cd-osd-devices-selection-groups #walDeviceSelectionGroups
-                                           name="WAL"
-                                           type="wal"
-                                           [availDevices]="availDevices"
-                                           [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
-                                           (selected)="onDevicesSelected($event)"
-                                           (cleared)="onDevicesCleared($event)">
-          </cd-osd-devices-selection-groups>
+                <!-- WAL devices button and table -->
+                <cd-osd-devices-selection-groups #walDeviceSelectionGroups
+                                                 name="WAL"
+                                                 type="wal"
+                                                 [availDevices]="availDevices"
+                                                 [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+                                                 (selected)="onDevicesSelected($event)"
+                                                 (cleared)="onDevicesCleared($event)">
+                </cd-osd-devices-selection-groups>
 
-          <!-- WAL slots -->
-          <div class="form-group row"
-               *ngIf="walDeviceSelectionGroups.devices.length !== 0">
-            <label class="cd-col-form-label"
-                   for="walSlots">
-              <ng-container i18n>WAL slots</ng-container>
-              <cd-helper>
-                <span i18n>How many OSDs per WAL device.</span>
-                <br>
-                <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
-              </cd-helper>
-            </label>
-            <div class="cd-col-form-input">
-              <input class="form-control"
-                     id="walSlots"
-                     name="walSlots"
-                     type="number"
-                     min="0"
-                     formControlName="walSlots">
-              <span class="invalid-feedback"
-                    *ngIf="form.showError('walSlots', formDir, 'min')"
-                    i18n>Value should be greater than or equal to 0</span>
+                <!-- WAL slots -->
+                <div class="form-group row"
+                     *ngIf="walDeviceSelectionGroups.devices.length !== 0">
+                  <label class="cd-col-form-label"
+                         for="walSlots">
+                    <ng-container i18n>WAL slots</ng-container>
+                    <cd-helper>
+                      <span i18n>How many OSDs per WAL device.</span>
+                      <br>
+                      <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
+                    </cd-helper>
+                  </label>
+                  <div class="cd-col-form-input">
+                    <input class="form-control"
+                           id="walSlots"
+                           name="walSlots"
+                           type="number"
+                           min="0"
+                           formControlName="walSlots">
+                    <span class="invalid-feedback"
+                          *ngIf="form.showError('walSlots', formDir, 'min')"
+                          i18n>Value should be greater than or equal to 0</span>
+                  </div>
+                </div>
+
+                <!-- DB devices button and table -->
+                <cd-osd-devices-selection-groups #dbDeviceSelectionGroups
+                                                 name="DB"
+                                                 type="db"
+                                                 [availDevices]="availDevices"
+                                                 [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
+                                                 (selected)="onDevicesSelected($event)"
+                                                 (cleared)="onDevicesCleared($event)">
+                </cd-osd-devices-selection-groups>
+
+                <!-- DB slots -->
+                <div class="form-group row"
+                     *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
+                  <label class="cd-col-form-label"
+                         for="dbSlots">
+                    <ng-container i18n>DB slots</ng-container>
+                    <cd-helper>
+                      <span i18n>How many OSDs per DB device.</span>
+                      <br>
+                      <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
+                    </cd-helper>
+                  </label>
+                  <div class="cd-col-form-input">
+                    <input class="form-control"
+                           id="dbSlots"
+                           name="dbSlots"
+                           type="number"
+                           min="0"
+                           formControlName="dbSlots">
+                    <span class="invalid-feedback"
+                          *ngIf="form.showError('dbSlots', formDir, 'min')"
+                          i18n>Value should be greater than or equal to 0</span>
+                  </div>
+                </div>
+              </fieldset>
             </div>
           </div>
+        </div>
 
-          <!-- DB devices button and table -->
-          <cd-osd-devices-selection-groups #dbDeviceSelectionGroups
-                                           name="DB"
-                                           type="db"
-                                           [availDevices]="availDevices"
-                                           [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
-                                           (selected)="onDevicesSelected($event)"
-                                           (cleared)="onDevicesCleared($event)">
-          </cd-osd-devices-selection-groups>
-
-          <!-- DB slots -->
-          <div class="form-group row"
-               *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
-            <label class="cd-col-form-label"
-                   for="dbSlots">
-              <ng-container i18n>DB slots</ng-container>
-              <cd-helper>
-                <span i18n>How many OSDs per DB device.</span>
-                <br>
-                <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
-              </cd-helper>
-            </label>
-            <div class="cd-col-form-input">
-              <input class="form-control"
-                     id="dbSlots"
-                     name="dbSlots"
-                     type="number"
-                     min="0"
-                     formControlName="dbSlots">
-              <span class="invalid-feedback"
-                    *ngIf="form.showError('dbSlots', formDir, 'min')"
-                    i18n>Value should be greater than or equal to 0</span>
-            </div>
+        <!-- Features -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="mb-0">
+              <button class="btn btn-link btn-block text-left dropdown-toggle"
+                      data-toggle="collapse"
+                      aria-label="features"
+                      aria-expanded="true"
+                      i18n>Features</button>
+            </h2>
           </div>
-        </fieldset>
-
-        <!-- Configuration -->
-        <fieldset>
-          <legend i18n>Configuration</legend>
-
-          <!-- Features -->
-          <div class="form-group row"
-               formGroupName="features">
-            <label i18n
-                   class="cd-col-form-label"
-                   for="features">Features</label>
-            <div class="cd-col-form-input">
+        </div>
+        <div class="collapse show">
+          <div class="card-body d-flex flex-column">
+            <div class="pt-3 pb-3"
+                 formGroupName="features">
               <div class="custom-control custom-checkbox"
                    *ngFor="let feature of featureList">
                 <input type="checkbox"
                        class="custom-control-input"
                        id="{{ feature.key }}"
                        name="{{ feature.key }}"
-                       formControlName="{{ feature.key }}">
+                       formControlName="{{ feature.key }}"
+                       (change)="emitDeploymentSelection()">
                 <label class="custom-control-label"
                        for="{{ feature.key }}">{{ feature.desc }}</label>
               </div>
             </div>
           </div>
-        </fieldset>
+        </div>
       </div>
-      <div class="card-footer"
-           *ngIf="!hideSubmitBtn">
-        <cd-form-button-panel #previewButtonPanel
-                              (submitActionEvent)="submit()"
-                              [form]="form"
-                              [disabled]="dataDeviceSelectionGroups.devices.length === 0"
-                              [submitText]="actionLabels.PREVIEW"
-                              wrappingClass="text-right"></cd-form-button-panel>
-      </div>
-    </div>
-  </form>
+    </form>
+  </div>
+
+  <div class="card-footer"
+       *ngIf="!hideSubmitBtn">
+    <cd-form-button-panel #previewButtonPanel
+                          (submitActionEvent)="submit()"
+                          [form]="form"
+                          [disabled]="dataDeviceSelectionGroups.devices.length === 0 && !simpleDeployment"
+                          [submitText]="simpleDeployment ? 'Create OSDs' : actionLabels.PREVIEW"
+                          wrappingClass="text-right"></cd-form-button-panel>
+  </div>
 </div>

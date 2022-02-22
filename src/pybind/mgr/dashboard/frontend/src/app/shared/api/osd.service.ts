@@ -7,6 +7,7 @@ import { map } from 'rxjs/operators';
 
 import { CdDevice } from '../models/devices';
 import { InventoryDeviceType } from '../models/inventory-device-type.model';
+import { DeploymentOptions } from '../models/osd-deployment-options';
 import { OsdSettings } from '../models/osd-settings';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
@@ -16,6 +17,8 @@ import { DeviceService } from '../services/device.service';
 })
 export class OsdService {
   private path = 'api/osd';
+  private uiPath = 'ui-api/osd';
+
   osdDevices: InventoryDeviceType[] = [];
 
   osdRecvSpeedModalPriorities = {
@@ -65,11 +68,11 @@ export class OsdService {
 
   constructor(private http: HttpClient, private deviceService: DeviceService) {}
 
-  create(driveGroups: Object[]) {
+  create(driveGroups: Object[], trackingId: string, method = 'drive_groups') {
     const request = {
-      method: 'drive_groups',
+      method: method,
       data: driveGroups,
-      tracking_id: _.join(_.map(driveGroups, 'service_id'), ', ')
+      tracking_id: trackingId
     };
     return this.http.post(this.path, request, { observe: 'response' });
   }
@@ -102,6 +105,10 @@ export class OsdService {
 
   scrub(id: string, deep: boolean) {
     return this.http.post(`${this.path}/${id}/scrub?deep=${deep}`, null);
+  }
+
+  getDeploymentOptions() {
+    return this.http.get<DeploymentOptions>(`${this.uiPath}/deployment_options`);
   }
 
   getFlags() {
