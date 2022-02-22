@@ -20,12 +20,13 @@
 using std::string;
 
 
-const std::array<EntityName::str_to_entity_type_t, 6> EntityName::STR_TO_ENTITY_TYPE = {{
+const std::array<EntityName::str_to_entity_type_t, 7> EntityName::STR_TO_ENTITY_TYPE = {{
   { CEPH_ENTITY_TYPE_AUTH, "auth" },
   { CEPH_ENTITY_TYPE_MON, "mon" },
   { CEPH_ENTITY_TYPE_OSD, "osd" },
   { CEPH_ENTITY_TYPE_MDS, "mds" },
   { CEPH_ENTITY_TYPE_MGR, "mgr" },
+  { CEPH_ENTITY_TYPE_EXPORTER, "exporter" },
   { CEPH_ENTITY_TYPE_CLIENT, "client" },
 }};
 

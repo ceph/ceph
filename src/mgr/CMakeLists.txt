@@ -33,7 +33,14 @@ if(WITH_MGR)
     StandbyPyModules.cc
     mgr_commands.cc
     $<TARGET_OBJECTS:mgr_cap_obj>)
+  set(exporter_srcs
+    ${CMAKE_SOURCE_DIR}/src/ceph_exporter.cc
+    DaemonMetricCollector.cc
+    )
   add_executable(ceph-mgr ${mgr_srcs})
+  add_executable(ceph-exporter ${exporter_srcs})
+  target_link_libraries(ceph-exporter
+    global-static ceph-common)
   target_compile_definitions(ceph-mgr PRIVATE PY_SSIZE_T_CLEAN)
   if(WITH_LIBCEPHSQLITE)
     target_link_libraries(ceph-mgr cephsqlite SQLite3::SQLite3)
