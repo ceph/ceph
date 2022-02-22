@@ -28,6 +28,9 @@ bool entity_name_t::parse(std::string_view s)
   } else if (s.find("mgr.") == 0) {
     _type = TYPE_MGR;
     start += 4;
+  } else if (s.find("exporter.") == 0) {
+    _type = TYPE_EXPORTER;
+    start += 8;
   } else {
     return false;
   }
