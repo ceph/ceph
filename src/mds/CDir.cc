@@ -2520,21 +2520,21 @@ void CDir::_omap_commit(int op_prio)
     // fnode.snap_purged_thru = realm->get_last_destroyed();
   }
 
-  size_t count = 0;
+  size_t items_count = 0;
   if (state_test(CDir::STATE_FRAGMENTING) && is_new()) {
-    count = get_num_head_items() + get_num_snap_items();
+    items_count = get_num_head_items() + get_num_snap_items();
   } else {
     for (elist<CDentry*>::iterator it = dirty_dentries.begin(); !it.end(); ++it)
-      ++count;
+      ++items_count;
   }
 
   vector<string> to_remove;
   // reverve enough memories, which maybe larger than the actually needed
-  to_remove.reserve(count);
+  to_remove.reserve(items_count);
 
   vector<dentry_commit_item> to_set;
   // reverve enough memories, which maybe larger than the actually needed
-  to_set.reserve(count);
+  to_set.reserve(items_count);
 
   // for dir fragtrees
   bufferlist dfts(CEPH_PAGE_SIZE);
