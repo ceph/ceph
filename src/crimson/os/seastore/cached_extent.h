@@ -192,6 +192,10 @@ public:
     return false;
   }
 
+  virtual bool may_conflict() const {
+    return true;
+  }
+
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {

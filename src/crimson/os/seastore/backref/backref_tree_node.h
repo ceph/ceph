@@ -65,6 +65,10 @@ public:
   extent_types_t get_type() const final {
     return TYPE;
   }
+
+  bool may_conflict() const final {
+    return false;
+  }
 };
 using BackrefInternalNodeRef = BackrefInternalNode::Ref;
 
@@ -84,6 +88,10 @@ public:
 
   extent_types_t get_type() const final  {
     return TYPE;
+  }
+
+  bool may_conflict() const final {
+    return false;
   }
 
   const_iterator insert(

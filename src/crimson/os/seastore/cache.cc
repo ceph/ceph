@@ -718,6 +718,11 @@ void Cache::invalidate_extent(
     Transaction& t,
     CachedExtent& extent)
 {
+  if (!extent.may_conflict()) {
+    assert(extent.transactions.empty());
+    return;
+  }
+
   LOG_PREFIX(Cache::invalidate_extent);
   bool do_conflict_log = true;
   for (auto &&i: extent.transactions) {
