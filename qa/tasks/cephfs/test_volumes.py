@@ -812,6 +812,89 @@ class TestSubvolumeGroups(TestVolumesHelper):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    def test_subvolume_group_quota_subvolume_removal(self):
+        """
+        Tests subvolume removal if it's group quota is set.
+        """
+        # create group with size -- should set quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--group_name", group)
+
+        # remove subvolume
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_legacy_subvolume_removal(self):
+        """
+        Tests legacy subvolume removal if it's group quota is set.
+        """
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # emulate a old-fashioned subvolume -- in a custom group
+        createpath1 = os.path.join(".", "volumes", group, subvolume)
+        self.mount_a.run_shell(['mkdir', '-p', createpath1], sudo=True)
+
+        # this would auto-upgrade on access without anyone noticing
+        subvolpath1 = self._fs_cmd("subvolume", "getpath", self.volname, subvolume, "--group-name", group)
+        self.assertNotEqual(subvolpath1, None)
+        subvolpath1 = subvolpath1.rstrip() # remove "/" prefix and any trailing newline
+
+        # and... the subvolume path returned should be what we created behind the scene
+        self.assertEqual(createpath1[1:], subvolpath1)
+
+        # Set subvolumegroup quota on idempotent subvolumegroup creation
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # remove subvolume
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_v1_subvolume_removal(self):
+        """
+        Tests v1 subvolume removal if it's group quota is set.
+        """
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # emulate a v1 subvolume -- in a custom group
+        self._create_v1_subvolume(subvolume, subvol_group=group, has_snapshot=False)
+
+        # Set subvolumegroup quota on idempotent subvolumegroup creation
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+
+        # remove subvolume
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm' command to succeed if group quota is set")
+
+        # remove subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_group_resize_fail_invalid_size(self):
         """
         That a subvolume group cannot be resized to an invalid size and the quota did not change
