@@ -8344,6 +8344,11 @@ std::vector<Option> get_mds_options() {
     .set_default(15)
     .set_description("tolerance in seconds for MDS internal heartbeat"),
 
+    Option("mds_heartbeat_reset_grace", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1000)
+    .set_description("the basic unit of tolerance in how many circles in a loop, which will"
+	"keep running by holding the mds_lock, it must trigger to reset heartbeat"),
+
     Option("mds_enforce_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("require MDS name is unique in the cluster"),
