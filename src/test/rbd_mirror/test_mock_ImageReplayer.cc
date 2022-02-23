@@ -608,7 +608,7 @@ TEST_F(TestMockImageReplayer, BootstrapCancel) {
   MockStateBuilder mock_state_builder;
   EXPECT_CALL(mock_bootstrap_request, send())
     .WillOnce(Invoke([this, &mock_bootstrap_request]() {
-        m_image_replayer->stop();
+        m_image_replayer->stop(nullptr);
         mock_bootstrap_request.on_finish->complete(-ECANCELED);
       }));
   EXPECT_CALL(mock_bootstrap_request, cancel());
@@ -838,6 +838,110 @@ TEST_F(TestMockImageReplayer, ReplayerRenamed) {
   auto image_spec = image_replayer::util::compute_image_spec(
     m_local_io_ctx, "NEW NAME");
   ASSERT_EQ(image_spec, m_image_replayer->get_name());
+}
+
+TEST_F(TestMockImageReplayer, StopJoinInterruptedReplayer) {
+  // START
+  create_local_image();
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+  expect_add_event_after_repeatedly(mock_threads);
+
+  MockReplayer mock_replayer;
+  expect_get_replay_status(mock_replayer);
+  expect_set_mirror_image_status_repeatedly();
+
+  InSequence seq;
+  MockBootstrapRequest mock_bootstrap_request;
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, false, 0);
+
+  expect_create_replayer(mock_state_builder, mock_replayer);
+  expect_init(mock_replayer, 0);
+
+  create_image_replayer(mock_threads);
+
+  C_SaferCond start_ctx;
+  m_image_replayer->start(&start_ctx);
+  ASSERT_EQ(0, start_ctx.wait());
+
+  // NOTIFY
+  EXPECT_CALL(mock_replayer, is_resync_requested())
+    .WillOnce(Return(false));
+  EXPECT_CALL(mock_replayer, is_replaying())
+    .WillOnce(Return(false));
+  EXPECT_CALL(mock_replayer, get_error_code())
+    .WillOnce(Return(-EINVAL));
+  EXPECT_CALL(mock_replayer, get_error_description())
+    .WillOnce(Return("INVALID"));
+  const double DELAY = 10;
+  EXPECT_CALL(mock_replayer, shut_down(_))
+    .WillOnce(Invoke([this, DELAY](Context* ctx) {
+		m_threads->timer->add_event_after(DELAY, ctx);
+              }));
+  EXPECT_CALL(mock_replayer, destroy());
+  expect_close(mock_state_builder, 0);
+  expect_mirror_image_status_exists(false);
+
+  mock_replayer.replayer_listener->handle_notification();
+  ASSERT_FALSE(m_image_replayer->is_running());
+
+  C_SaferCond stop_ctx;
+  m_image_replayer->stop(&stop_ctx);
+  ASSERT_EQ(ETIMEDOUT, stop_ctx.wait_for(DELAY * 3 / 4));
+  ASSERT_EQ(0, stop_ctx.wait_for(DELAY));
+}
+
+TEST_F(TestMockImageReplayer, StopJoinRequestedStop) {
+  // START
+  create_local_image();
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+  expect_add_event_after_repeatedly(mock_threads);
+
+  MockReplayer mock_replayer;
+  expect_get_replay_status(mock_replayer);
+  expect_set_mirror_image_status_repeatedly();
+
+  InSequence seq;
+  MockBootstrapRequest mock_bootstrap_request;
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+              false, false, 0);
+
+  expect_create_replayer(mock_state_builder, mock_replayer);
+  expect_init(mock_replayer, 0);
+
+  create_image_replayer(mock_threads);
+
+  C_SaferCond start_ctx;
+  m_image_replayer->start(&start_ctx);
+  ASSERT_EQ(0, start_ctx.wait());
+
+  // STOP
+  const double DELAY = 10;
+  EXPECT_CALL(mock_replayer, shut_down(_))
+    .WillOnce(Invoke([this, DELAY](Context* ctx) {
+		m_threads->timer->add_event_after(DELAY, ctx);
+              }));
+  EXPECT_CALL(mock_replayer, destroy());
+  expect_close(mock_state_builder, 0);
+  expect_mirror_image_status_exists(false);
+
+  C_SaferCond stop_ctx1;
+  m_image_replayer->stop(&stop_ctx1);
+
+  C_SaferCond stop_ctx2;
+  m_image_replayer->stop(&stop_ctx2);
+  ASSERT_EQ(ETIMEDOUT, stop_ctx2.wait_for(DELAY * 3 / 4));
+  ASSERT_EQ(0, stop_ctx2.wait_for(DELAY));
+
+  ASSERT_EQ(0, stop_ctx1.wait_for(0));
 }
 
 } // namespace mirror

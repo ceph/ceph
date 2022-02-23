@@ -101,10 +101,8 @@ public:
     return m_global_image_id;
   }
 
-  void start(Context *on_finish = nullptr, bool manual = false,
-             bool restart = false);
-  void stop(Context *on_finish = nullptr, bool manual = false,
-            bool restart = false);
+  void start(Context *on_finish, bool manual = false, bool restart = false);
+  void stop(Context *on_finish, bool manual = false, bool restart = false);
   void restart(Context *on_finish = nullptr);
   void flush();
 
@@ -150,6 +148,7 @@ protected:
 
 private:
   typedef std::set<Peer<ImageCtxT>> Peers;
+  typedef std::list<Context *> Contexts;
 
   enum State {
     STATE_UNKNOWN,
@@ -216,7 +215,7 @@ private:
   ReplayerListener* m_replayer_listener = nullptr;
 
   Context *m_on_start_finish = nullptr;
-  Context *m_on_stop_finish = nullptr;
+  Contexts m_on_stop_contexts;
   bool m_stop_requested = false;
   bool m_manual_stop = false;
 
