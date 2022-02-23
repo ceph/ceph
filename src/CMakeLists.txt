@@ -526,7 +526,7 @@ add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
 add_dependencies(common legacy-option-headers ${jaeger_base})
 
-add_library(ceph-common SHARED ${ceph_common_objs})
+add_library(ceph-common ${CEPH_SHARED} ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
 add_dependencies(ceph-common legacy-option-headers ${jaeger_base})
 # appease dpkg-shlibdeps
