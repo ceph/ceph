@@ -33,6 +33,7 @@ class TestBatch(object):
         mocked_device.return_value = MagicMock(
             is_partition=True,
             has_gpt_headers=False,
+            has_partitions=False,
         )
         with pytest.raises(ArgumentError):
             arg_validators.ValidBatchDevice()('foo')
