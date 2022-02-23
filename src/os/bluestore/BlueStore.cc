@@ -18399,6 +18399,7 @@ Allocator* BlueStore::create_allocator_snapshot(Allocator* src_allocator)
   if (bluefs) {
     // Get a consistent view of the shared-allocator
     interval_set<uint64_t> bluefs_extents;
+    utime_t  start_time_func = ceph_clock_now();
     bluefs->lock_allocations();
     // The system must be in stable state when we collect allocations map
     alloc->prepare_for_shutdown();
@@ -18408,6 +18409,8 @@ Allocator* BlueStore::create_allocator_snapshot(Allocator* src_allocator)
     // TBD: preallcoate the space and then we can better assert against allocations from new activity
     alloc->clear_shutdown();
     bluefs->unlock_allocations();
+    utime_t end_time = ceph_clock_now();
+    dout(0) << __func__ << "::lock duration:" << end_time - start_time_func << " seconds" << dendl;
   } else {
     allocator = create_bitmap_allocator(bdev->get_size());
     if (allocator) {
