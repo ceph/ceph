@@ -16,14 +16,22 @@ require {
 	type targetd_etc_rw_t;
 	type amqp_port_t;
 	type soundd_port_t;
+        type systemd_logind_t;
+        type sudo_exec_t;
+        type shadow_t;
+        type chkpwd_exec_t;
 	class sock_file unlink;
 	class tcp_socket name_connect_t;
 	class lnk_file { create getattr read unlink };
 	class dir { add_name create getattr open read remove_name rmdir search write };
-	class file { create getattr open read rename unlink write ioctl };
+	class file { create execute execute_no_trans getattr map open read rename unlink write ioctl };
 	class blk_file { getattr ioctl open read write };
+        class capability { audit_write sys_resource };
 	class capability2 block_suspend;
+        class process setrlimit;
 	class process2 { nnp_transition nosuid_transition };
+        class netlink_audit_socket { create nlmsg_relay };
+        class dbus send_msg;
 }
 
 ########################################
@@ -161,3 +169,15 @@ fsadm_manage_pid(ceph_t)
 
 #============= setfiles_t ==============
 allow setfiles_t ceph_var_lib_t:file write;
+
+# allows for sudo smartctl
+allow ceph_t chkpwd_exec_t:file map;
+allow ceph_t chkpwd_exec_t:file { execute execute_no_trans open read };
+allow ceph_t self:capability { audit_write sys_resource };
+allow ceph_t self:netlink_audit_socket { create nlmsg_relay };
+allow ceph_t self:process setrlimit;
+allow ceph_t shadow_t:file { getattr open read };
+allow ceph_t sudo_exec_t:file map;
+allow ceph_t sudo_exec_t:file { execute execute_no_trans open read };
+allow ceph_t systemd_logind_t:dbus send_msg;
+allow systemd_logind_t ceph_t:dbus send_msg;
