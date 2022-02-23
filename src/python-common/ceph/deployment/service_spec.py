@@ -737,12 +737,13 @@ class NFSServiceSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
             'nfs', service_id=service_id,
             placement=placement, unmanaged=unmanaged, preview_only=preview_only,
-            config=config, networks=networks)
+            config=config, networks=networks, extra_container_args=extra_container_args)
 
         self.port = port
 
@@ -799,6 +800,7 @@ class RGWSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  subcluster: Optional[str] = None,  # legacy, only for from_json on upgrade
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -809,7 +811,8 @@ class RGWSpec(ServiceSpec):
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks)
+            preview_only=preview_only, config=config, networks=networks,
+            extra_container_args=extra_container_args)
 
         #: The RGW realm associated with this service. Needs to be manually created
         self.rgw_realm: Optional[str] = rgw_realm
@@ -866,12 +869,14 @@ class IscsiServiceSpec(ServiceSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'iscsi'
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
                                                preview_only=preview_only,
-                                               config=config, networks=networks)
+                                               config=config, networks=networks,
+                                               extra_container_args=extra_container_args)
 
         #: RADOS pool where ceph-iscsi config data is stored.
         self.pool = pool
@@ -932,13 +937,15 @@ class IngressSpec(ServiceSpec):
                  virtual_ip: Optional[str] = None,
                  virtual_interface_networks: Optional[List[str]] = [],
                  unmanaged: bool = False,
-                 ssl: bool = False
+                 ssl: bool = False,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'ingress'
         super(IngressSpec, self).__init__(
             'ingress', service_id=service_id,
             placement=placement, config=config,
-            networks=networks
+            networks=networks,
+            extra_container_args=extra_container_args
         )
         self.backend_service = backend_service
         self.frontend_port = frontend_port
@@ -1060,6 +1067,7 @@ class MonitoringSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  port: Optional[int] = None,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager']
 
@@ -1067,7 +1075,7 @@ class MonitoringSpec(ServiceSpec):
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config,
-            networks=networks)
+            networks=networks, extra_container_args=extra_container_args)
 
         self.service_type = service_type
         self.port = port
@@ -1099,12 +1107,14 @@ class AlertManagerSpec(MonitoringSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'alertmanager'
         super(AlertManagerSpec, self).__init__(
             'alertmanager', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks, port=port)
+            preview_only=preview_only, config=config, networks=networks, port=port,
+            extra_container_args=extra_container_args)
 
         # Custom configuration.
         #
@@ -1146,13 +1156,15 @@ class GrafanaSpec(MonitoringSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
-                 initial_admin_password: Optional[str] = None
+                 initial_admin_password: Optional[str] = None,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'grafana'
         super(GrafanaSpec, self).__init__(
             'grafana', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks, port=port)
+            preview_only=preview_only, config=config, networks=networks, port=port,
+            extra_container_args=extra_container_args)
 
         self.initial_admin_password = initial_admin_password
 
@@ -1199,6 +1211,7 @@ class SNMPGatewaySpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  port: Optional[int] = None,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'snmp-gateway'
 
@@ -1206,7 +1219,8 @@ class SNMPGatewaySpec(ServiceSpec):
             service_type,
             placement=placement,
             unmanaged=unmanaged,
-            preview_only=preview_only)
+            preview_only=preview_only,
+            extra_container_args=extra_container_args)
 
         self.service_type = service_type
         self.snmp_version = snmp_version
@@ -1315,12 +1329,14 @@ class MDSSpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'mds'
         super(MDSSpec, self).__init__('mds', service_id=service_id,
                                       placement=placement,
                                       unmanaged=unmanaged,
-                                      preview_only=preview_only)
+                                      preview_only=preview_only,
+                                      extra_container_args=extra_container_args)
 
     def validate(self) -> None:
         super(MDSSpec, self).validate()
