@@ -37,10 +37,10 @@ class ValidDevice(object):
         # __init__
         elif device.has_gpt_headers and not self.gpt_ok:
             error = "GPT headers found, they must be removed on: %s" % dev_path
-
+        if device.has_partitions:
+            raise RuntimeError("Device {} has partitions.".format(dev_path))
         if error:
             raise argparse.ArgumentError(None, error)
-
         return device
 
 
