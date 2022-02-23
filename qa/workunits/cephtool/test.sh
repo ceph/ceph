@@ -2759,9 +2759,16 @@ function test_mgr_tell()
 
 function test_mgr_devices()
 {
-  ceph device ls
+  ceph device ls | grep osd
+  ceph device ls | grep mon
   expect_false ceph device info doesnotexist
   expect_false ceph device get-health-metrics doesnotexist
+}
+
+function test_devices_smart()
+{
+  ceph daemon mon.a smart | jq -e '. | length > 0'
+  ceph daemon osd.0 smart | jq -e '. | length > 0'
 }
 
 function test_per_pool_scrub_status()
