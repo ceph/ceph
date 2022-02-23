@@ -37,7 +37,9 @@ def resolve_ip(hostname: str) -> str:
 def create_ganesha_pool(mgr: 'MgrModule') -> None:
     pool_list = [p['pool_name'] for p in mgr.get_osdmap().dump().get('pools', [])]
     if POOL_NAME not in pool_list:
-        mgr.check_mon_command({'prefix': 'osd pool create', 'pool': POOL_NAME})
+        mgr.check_mon_command({'prefix': 'osd pool create',
+                               'pool': POOL_NAME,
+                               'yes_i_really_mean_it': True})
         mgr.check_mon_command({'prefix': 'osd pool application enable',
                                'pool': POOL_NAME,
                                'app': 'nfs'})
