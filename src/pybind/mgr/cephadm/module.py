@@ -1869,9 +1869,16 @@ Then run the following:
                 continue
             if service_name is not None and service_name != nm:
                 continue
+
+            if spec.service_type != 'osd':
+                size = spec.placement.get_target_count(self._schedulable_hosts())
+            else:
+                # osd counting is special
+                size = 0
+
             sm[nm] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=spec.placement.get_target_count(self._schedulable_hosts()),
+                size=size,
                 running=0,
                 events=self.events.get_for_service(spec.service_name()),
                 created=self.spec_store.spec_created[nm],
