@@ -1061,6 +1061,12 @@ void OpenFileTable::_prefetch_dirfrags()
     CInode *diri = mdcache->get_inode(ino);
     if (!diri)
       continue;
+
+    if (!diri->is_dir()) {
+      dout(10) << " " << *diri << " is not dir" << dendl;
+      continue;
+    }
+
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
 
