@@ -6,6 +6,7 @@
         {
           "available": true,
           "device_id": "",
+          "created": "2022-02-11T10:58:23.177450Z",
           "human_readable_type": "ssd",
           "lvs": [],
           "path": "/dev/vdb",
@@ -62,6 +63,7 @@
         {
           "available": true,
           "device_id": "",
+          "created": "2022-02-11T10:58:23.177450Z",
           "human_readable_type": "hdd",
           "lvs": [],
           "path": "/dev/vdd",
@@ -134,6 +136,7 @@
         {
           "available": true,
           "device_id": "",
+          "created": "2022-02-11T10:58:23.177450Z",
           "human_readable_type": "ssd",
           "lvs": [],
           "path": "/dev/vdb",
@@ -190,6 +193,7 @@
         {
           "available": true,
           "device_id": "",
+          "created": "2022-02-11T10:58:23.177450Z",
           "human_readable_type": "hdd",
           "lvs": [],
           "path": "/dev/vdd",
