@@ -948,12 +948,7 @@ void RGWIndexCompletionManager::process()
         continue;
       }
 
-      r = store->svc.datalog_rados->add_entry(&dpp, bucket_info,
-					      bucket_info.layout.logs.back(),
-					      bs.shard_id);
-      if (r < 0) {
-        ldpp_dout(&dpp, -1) << "ERROR: failed writing data log" << dendl;
-      }
+      add_datalog_entry(&dpp, store->svc.datalog_rados, bucket_info, bs.shard_id);
     }
   }
 }
@@ -6191,27 +6186,34 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
   for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
     int ret = get_bucket_shard(&bs, dpp);
     if (ret < 0) {
-      ldpp_dout(dpp, 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to get BucketShard object. obj=" << 
+        obj_instance.key << ". ret=" << ret << dendl;
       return ret;
     }
     r = call(bs);
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }
-    ldpp_dout(dpp, 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
+    ldpp_dout(dpp, 0) << "NOTICE: resharding operation on bucket index detected, blocking. obj=" << 
+      obj_instance.key << dendl;
     r = store->block_while_resharding(bs, obj_instance, target->bucket_info, null_yield, dpp);
     if (r == -ERR_BUSY_RESHARDING) {
+      ldpp_dout(dpp, 0) << "ERROR: block_while_resharding() still busy. obj=" << dendl;
       continue;
     }
     if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: block_while_resharding() failed. obj=" << 
+        obj_instance.key << ". ret=" << r << dendl;
       return r;
     }
-    ldpp_dout(dpp, 20) << "reshard completion identified" << dendl;
+    ldpp_dout(dpp, 20) << "reshard completion identified. obj=" << obj_instance.key << dendl;
     i = 0; /* resharding is finished, make sure we can retry */
     invalidate_bs();
   } // for loop
 
   if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket shard callback failed. obj=" << 
+      obj_instance.key << ". ret=" << r << dendl;
     return r;
   }
 
