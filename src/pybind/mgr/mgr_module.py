@@ -896,6 +896,13 @@ class API:
     expose = DecoratorFactory('expose', default=False)(True)
 
 
+class PerfCounters:
+    # Tags for perf counters
+    TAGS_NONE = 0
+    TAGS_PROMETHEUS = 1 << 0
+    TAGS_TELEMETRY = 1 << 1
+
+
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MGR_POOL_NAME = ".mgr"
 
@@ -1950,7 +1957,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def get_all_perf_counters(self, prio_limit: int = PRIO_USEFUL,
                               services: Sequence[str] = ("mds", "mon", "osd",
                                                          "rbd-mirror", "rgw",
-                                                         "tcmu-runner")) -> Dict[str, dict]:
+                                                         "tcmu-runner"),
+                              tags: int = PerfCounters.TAGS_NONE
+                              ) -> Dict[str, dict]:
         """
         Return the perf counters currently known to this ceph-mgr
         instance, filtered by priority equal to or greater than `prio_limit`.
@@ -1991,6 +2000,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     priority = counter_schema['priority']
                     assert isinstance(priority, int)
                     if priority < prio_limit:
+                        continue
+
+                    # Fetch all counters if no tags are specified,
+                    # Otherwise, skip counters not matching tags.
+                    if not (tags is PerfCounters.TAGS_NONE or
+                            tags & counter_schema['tags']):
                         continue
 
                     tp = counter_schema['type']

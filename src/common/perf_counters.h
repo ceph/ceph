@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -8,9 +8,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -81,32 +81,45 @@ public:
     PRIO_UNINTERESTING = 2,
     PRIO_DEBUGONLY = 0,
   };
+
+  enum tags_t {
+    TAGS_NONE = 0,
+    TAGS_PROMETHEUS = 1 << 0,
+    TAGS_TELEMETRY = 1 << 1,
+  };
+
   void add_u64(int key, const char *name,
 	       const char *description=NULL, const char *nick = NULL,
-	       int prio=0, int unit=UNIT_NONE);
+	       int prio=0, int unit=UNIT_NONE,
+               int tags = TAGS_NONE);
   void add_u64_counter(int key, const char *name,
 		       const char *description=NULL,
 		       const char *nick = NULL,
-		       int prio=0, int unit=UNIT_NONE);
+		       int prio=0, int unit=UNIT_NONE,
+                       int tags = TAGS_NONE);
   void add_u64_avg(int key, const char *name,
 		   const char *description=NULL,
 		   const char *nick = NULL,
-		   int prio=0, int unit=UNIT_NONE);
+		   int prio=0, int unit=UNIT_NONE,
+                   int tags = TAGS_NONE);
   void add_time(int key, const char *name,
 		const char *description=NULL,
 		const char *nick = NULL,
-		int prio=0);
+		int prio=0,
+                int tags = TAGS_NONE);
   void add_time_avg(int key, const char *name,
 		    const char *description=NULL,
 		    const char *nick = NULL,
-		    int prio=0);
+		    int prio=0,
+                    int tags = TAGS_NONE);
   void add_u64_counter_histogram(
     int key, const char* name,
     PerfHistogramCommon::axis_config_d x_axis_config,
     PerfHistogramCommon::axis_config_d y_axis_config,
     const char *description=NULL,
     const char* nick = NULL,
-    int prio=0, int unit=UNIT_NONE);
+    int prio=0, int unit=UNIT_NONE,
+    int tags = TAGS_NONE);
 
   void set_prio_default(int prio_)
   {
@@ -119,6 +132,7 @@ private:
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
                 const char *description, const char *nick, int prio, int ty, int unit=UNIT_NONE,
+                int tags = TAGS_NONE,
                 std::unique_ptr<PerfHistogram<>> histogram = nullptr);
 
   PerfCounters *m_perf_counters;
@@ -129,7 +143,7 @@ private:
 /*
  * A PerfCounters object is usually associated with a single subsystem.
  * It contains counters which we modify to track performance and throughput
- * over time. 
+ * over time.
  *
  * PerfCounters can track several different types of values:
  * 1) integer values & counters
@@ -160,16 +174,18 @@ public:
       : name(NULL),
         description(NULL),
         nick(NULL),
-	 type(PERFCOUNTER_NONE),
-	 unit(UNIT_NONE)
+        type(PERFCOUNTER_NONE),
+        unit(UNIT_NONE),
+        tags(PerfCountersBuilder::TAGS_NONE)
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),
         description(other.description),
         nick(other.nick),
-	 type(other.type),
-	 unit(other.unit),
-	 u64(other.u64.load()) {
+        type(other.type),
+        unit(other.unit),
+        tags(other.tags),
+        u64(other.u64.load()) {
       auto a = other.read_avg();
       u64 = a.first;
       avgcount = a.second;
@@ -185,6 +201,7 @@ public:
     uint8_t prio = 0;
     enum perfcounter_type_d type;
     enum unit_t unit;
+    PerfCountersBuilder::tags_t tags;
     std::atomic<uint64_t> u64 = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
@@ -356,7 +373,7 @@ private:
 
   perf_counters_set_t m_loggers;
 
-  CounterMap by_path; 
+  CounterMap by_path;
 };
 
 

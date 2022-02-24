@@ -133,7 +133,7 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
     const std::string &counter) const
 {
   f->open_object_section("perfcounter_collection");
-  
+
   for (perf_counters_set_t::iterator l = m_loggers.begin();
        l != m_loggers.end(); ++l) {
     // Optionally filter on logger name, pass through counter filter
@@ -357,7 +357,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     bool histograms, const std::string &counter) const
 {
   f->open_object_section(m_name.c_str());
-  
+
   for (perf_counter_data_vec_t::const_iterator d = m_data.begin();
        d != m_data.end(); ++d) {
     if (!counter.empty() && counter != d->name) {
@@ -411,9 +411,11 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
         f->dump_string("nick", "");
       }
       f->dump_int("priority", get_adjusted_priority(d->prio));
-      
+
+      f->dump_int("tags", d->tags);
+
       if (d->unit == UNIT_NONE) {
-	f->dump_string("units", "none"); 
+	f->dump_string("units", "none");
       } else if (d->unit == UNIT_BYTES) {
 	f->dump_string("units", "bytes");
       }
@@ -502,56 +504,56 @@ PerfCountersBuilder::~PerfCountersBuilder()
 
 void PerfCountersBuilder::add_u64_counter(
   int idx, const char *name,
-  const char *description, const char *nick, int prio, int unit)
+  const char *description, const char *nick, int prio, int unit, int tags)
 {
   add_impl(idx, name, description, nick, prio,
-	   PERFCOUNTER_U64 | PERFCOUNTER_COUNTER, unit);
+	   PERFCOUNTER_U64 | PERFCOUNTER_COUNTER, unit, tags);
 }
 
 void PerfCountersBuilder::add_u64(
   int idx, const char *name,
-  const char *description, const char *nick, int prio, int unit)
+  const char *description, const char *nick, int prio, int unit, int tags)
 {
-  add_impl(idx, name, description, nick, prio, PERFCOUNTER_U64, unit);
+  add_impl(idx, name, description, nick, prio, PERFCOUNTER_U64, unit, tags);
 }
 
 void PerfCountersBuilder::add_u64_avg(
   int idx, const char *name,
-  const char *description, const char *nick, int prio, int unit)
+  const char *description, const char *nick, int prio, int unit, int tags)
 {
   add_impl(idx, name, description, nick, prio,
-	   PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG, unit);
+	   PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG, unit, tags);
 }
 
 void PerfCountersBuilder::add_time(
   int idx, const char *name,
-  const char *description, const char *nick, int prio)
+  const char *description, const char *nick, int prio, int tags)
 {
-  add_impl(idx, name, description, nick, prio, PERFCOUNTER_TIME);
+  add_impl(idx, name, description, nick, prio, PERFCOUNTER_TIME, tags);
 }
 
 void PerfCountersBuilder::add_time_avg(
   int idx, const char *name,
-  const char *description, const char *nick, int prio)
+  const char *description, const char *nick, int prio, int tags)
 {
   add_impl(idx, name, description, nick, prio,
-	   PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
+	   PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG, tags);
 }
 
 void PerfCountersBuilder::add_u64_counter_histogram(
   int idx, const char *name,
   PerfHistogramCommon::axis_config_d x_axis_config,
   PerfHistogramCommon::axis_config_d y_axis_config,
-  const char *description, const char *nick, int prio, int unit)
+  const char *description, const char *nick, int prio, int unit, int tags)
 {
   add_impl(idx, name, description, nick, prio,
-	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER, unit,
+	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER, unit, tags,
            std::unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axis_config, y_axis_config}});
 }
 
 void PerfCountersBuilder::add_impl(
   int idx, const char *name,
-  const char *description, const char *nick, int prio, int ty, int unit,
+  const char *description, const char *nick, int prio, int ty, int unit, int tags,
   std::unique_ptr<PerfHistogram<>> histogram)
 {
   ceph_assert(idx > m_perf_counters->m_lower_bound);
@@ -570,6 +572,7 @@ void PerfCountersBuilder::add_impl(
   data.prio = prio ? prio : prio_default;
   data.type = (enum perfcounter_type_d)ty;
   data.unit = (enum unit_t) unit;
+  data.tags = (enum PerfCountersBuilder::tags_t) tags;
   data.histogram = std::move(histogram);
 }
 

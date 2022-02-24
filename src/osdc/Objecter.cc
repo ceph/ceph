@@ -265,9 +265,9 @@ void Objecter::init()
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
     pcb.add_u64_counter(l_osdc_op_r, "op_r", "Read operations", "rd",
-			PerfCountersBuilder::PRIO_CRITICAL);
+			PerfCountersBuilder::PRIO_CRITICAL, PerfCountersBuilder::TAGS_PROMETHEUS);
     pcb.add_u64_counter(l_osdc_op_w, "op_w", "Write operations", "wr",
-			PerfCountersBuilder::PRIO_CRITICAL);
+			PerfCountersBuilder::PRIO_CRITICAL, PerfCountersBuilder::TAGS_PROMETHEUS);
     pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw", "Read-modify-write operations",
 			"rdwr", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_osdc_op_pg, "op_pg", "PG operation");
@@ -661,7 +661,7 @@ bs::error_code Objecter::_normalize_watch_error(bs::error_code ec)
 
 void Objecter::_linger_reconnect(LingerOp *info, bs::error_code ec)
 {
-  ldout(cct, 10) << __func__ << " " << info->linger_id << " = " << ec 
+  ldout(cct, 10) << __func__ << " " << info->linger_id << " = " << ec
 		 << " (last_error " << info->last_error << ")" << dendl;
   std::unique_lock wl(info->watch_lock);
   if (ec) {
