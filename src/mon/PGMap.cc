@@ -1597,6 +1597,21 @@ void PGMap::dump_pg_stats(ceph::Formatter *f, bool brief) const
   f->close_section();
 }
 
+void PGMap::dump_pg_progress(ceph::Formatter *f) const
+{
+  f->open_object_section("pgs");
+  for (auto& i : pg_stat) {
+    std::string n = stringify(i.first);
+    f->open_object_section(n.c_str());
+    f->dump_int("num_bytes_recovered", i.second.stats.sum.num_bytes_recovered);
+    f->dump_int("num_bytes", i.second.stats.sum.num_bytes);
+    f->dump_unsigned("reported_epoch", i.second.reported_epoch);
+    f->dump_string("state", pg_state_string(i.second.state));
+    f->close_section();
+  }
+  f->close_section();
+}
+
 void PGMap::dump_pool_stats(ceph::Formatter *f) const
 {
   f->open_array_section("pool_stats");

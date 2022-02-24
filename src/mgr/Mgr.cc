@@ -597,7 +597,7 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
       break;
     case MSG_SERVICE_MAP:
       handle_service_map(ref_cast<MServiceMap>(m));
-      py_module_registry->notify_all("service_map", "");
+      //no users: py_module_registry->notify_all("service_map", "");
       break;
     case MSG_LOG:
       handle_log(ref_cast<MLog>(m));
@@ -745,7 +745,7 @@ void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)
   dout(10) << m->mon_status_json.length() << dendl;
   dout(10) << m->health_json.length() << dendl;
   cluster_state.load_digest(m.get());
-  py_module_registry->notify_all("mon_status", "");
+  //no users: py_module_registry->notify_all("mon_status", "");
   py_module_registry->notify_all("health", "");
 
   // Hack: use this as a tick/opportunity to prompt python-land that

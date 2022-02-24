@@ -1,4 +1,4 @@
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, CommandResult, NotifyType
 import json
 import threading
 
@@ -47,13 +47,14 @@ class Module(MgrModule):
             'runtime': True,
         },
     ]
+    NOTIFY_TYPES = [NotifyType.osd_map]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.serve_event = threading.Event()
 
     def notify(self, notify_type, notify_id):
-        if notify_type == 'osd_map':
+        if notify_type == NotifyType.osd_map:
             self.handle_osd_map()
 
     def handle_osd_map(self):

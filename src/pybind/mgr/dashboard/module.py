@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         from typing_extensions import Literal
 
 from mgr_module import CLIWriteCommand, HandleCommandResult, MgrModule, \
-    MgrStandbyModule, Option, _get_localized_key
+    MgrStandbyModule, NotifyType, Option, _get_localized_key
 from mgr_util import ServerConfigException, build_url, \
     create_self_signed_cert, get_default_addr, verify_tls_files
 
@@ -276,6 +276,8 @@ class Module(MgrModule, CherryPyConfig):
     for options in PLUGIN_MANAGER.hook.get_options() or []:
         MODULE_OPTIONS.extend(options)
 
+    NOTIFY_TYPES = [NotifyType.clog]
+
     __pool_stats = collections.defaultdict(lambda: collections.defaultdict(
         lambda: collections.deque(maxlen=10)))  # type: dict
 
@@ -430,8 +432,8 @@ class Module(MgrModule, CherryPyConfig):
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))
 
-    def notify(self, notify_type, notify_id):
-        NotificationQueue.new_notification(notify_type, notify_id)
+    def notify(self, notify_type: NotifyType, notify_id):
+        NotificationQueue.new_notification(str(notify_type), notify_id)
 
     def get_updated_pool_stats(self):
         df = self.get('df')

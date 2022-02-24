@@ -85,6 +85,9 @@ private:
   int load_options();
   std::map<std::string, MgrMap::ModuleOption> options;
 
+  int load_notify_types();
+  std::set<std::string> notify_types;
+
 public:
   static std::string mgr_store_prefix;
 
@@ -151,6 +154,10 @@ public:
   bool is_failed() const { std::lock_guard l(lock) ; return failed; }
   bool is_loaded() const { std::lock_guard l(lock) ; return loaded; }
   bool is_always_on() const { std::lock_guard l(lock) ; return always_on; }
+
+  bool should_notify(const std::string& notify_type) const {
+    return notify_types.count(notify_type);
+  }
 
   const std::string &get_name() const {
     std::lock_guard l(lock) ; return module_name;

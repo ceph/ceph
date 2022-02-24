@@ -4,7 +4,7 @@ Device health monitoring
 
 import errno
 import json
-from mgr_module import MgrModule, CommandResult, CLICommand, Option
+from mgr_module import MgrModule, CommandResult, CLICommand, Option, NotifyType
 import operator
 import rados
 from threading import Event
@@ -107,6 +107,7 @@ class Module(MgrModule):
             runtime=True,
         ),
     ]
+    NOTIFY_TYPES = [NotifyType.osd_map]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
@@ -243,8 +244,8 @@ class Module(MgrModule):
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
-    def notify(self, notify_type: str, notify_id: str) -> None:
-        if notify_type == "osd_map" and self.enable_monitoring:
+    def notify(self, notify_type: NotifyType, notify_id: str) -> None:
+        if notify_type == NotifyType.osd_map and self.enable_monitoring:
             # create device_health_metrics pool if it doesn't exist
             self.maybe_create_device_pool()
 

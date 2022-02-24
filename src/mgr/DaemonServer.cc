@@ -669,9 +669,11 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
   }
 
   // if there are any schema updates, notify the python modules
+  /* no users currently
   if (!m->declare_types.empty() || !m->undeclare_types.empty()) {
     py_modules.notify_all("perf_schema_update", ceph::to_string(key));
   }
+  */
 
   if (m->get_connection()->peer_is_osd()) {
     osd_perf_metric_collector.process_reports(m->osd_perf_metric_reports);
@@ -2765,15 +2767,24 @@ void DaemonServer::adjust_pgs()
 	    } else {
 	      active = false;
 	    }
+	    unsigned pg_gap = p.get_pg_num() - p.get_pgp_num();
+	    unsigned max_jump = cct->_conf->mgr_max_pg_num_change;
 	    if (!active) {
 	      dout(10) << "pool " << i.first
 		       << " pg_num_target " << p.get_pg_num_target()
 		       << " pg_num " << p.get_pg_num()
 		       << " - not all pgs active"
 		       << dendl;
+	    } else if (pg_gap >= max_jump) {
+	      dout(10) << "pool " << i.first
+		       << " pg_num " << p.get_pg_num()
+		       << " - pgp_num " << p.get_pgp_num()
+		       << " gap > max_pg_num_change " << max_jump
+		       << " - must scale pgp_num first"
+		       << dendl;
 	    } else {
 	      unsigned add = std::min(
-		left,
+		std::min(left, max_jump - pg_gap),
 		p.get_pg_num_target() - p.get_pg_num());
 	      unsigned target = p.get_pg_num() + add;
 	      left -= add;
