@@ -31,6 +31,7 @@ TYPE(librbd::cache::pwl::ssd::SuperBlockWrapper)
 #include "cls/rbd/cls_rbd.h"
 TYPE_FEATUREFUL(cls_rbd_parent)
 TYPE_FEATUREFUL(cls_rbd_snap)
+TYPE_FEATUREFUL(cls_rbd_rwlcache_map)
 
 #include "cls/rbd/cls_rbd_types.h"
 TYPE(cls::rbd::ParentImageSpec)

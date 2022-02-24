@@ -304,6 +304,23 @@ struct cls_rbd_rwlcache_map {
       decode(daemon_addr, it);
       DECODE_FINISH(it);
     }
+
+    void dump(ceph::Formatter *f) const {
+      f->dump_unsigned("id", id);
+      f->dump_string("rdma_address", rdma_address);
+      f->dump_int("rdma_port", rdma_port);
+      f->dump_unsigned("total_size", total_size);
+      f->dump_unsigned("free_size", free_size);
+      f->open_array_section("need_free_caches");
+      for (auto cache_id : need_free_caches) {
+        f->dump_unsigned("cache_id", cache_id);
+      }
+      f->close_section();
+      f->dump_stream("expiration") << expiration;
+      f->open_object_section("daemon_addr");
+      daemon_addr.dump(f);
+      f->close_section();
+    }
   };
 
   std::map<uint64_t, struct Daemon> daemons;
@@ -357,6 +374,21 @@ struct cls_rbd_rwlcache_map {
       decode(daemons, it);
       DECODE_FINISH(it);
     }
+
+    void dump(ceph::Formatter *f) const {
+      f->dump_unsigned("cache_id", cache_id);
+      f->dump_unsigned("primary_id", primary_id);
+      f->open_object_section("primary_addr");
+      primary_addr.dump(f);
+      f->close_section();
+      f->dump_unsigned("cache_size", cache_size);
+      f->dump_unsigned("copies", copies);
+      f->open_array_section("daemons");
+      for (auto id : daemons) {
+        f->dump_unsigned("id", id);
+      }
+      f->close_section();
+    }
   };
 
   // cache allocated but not receive ack in uncommitted_caches
@@ -395,9 +427,52 @@ struct cls_rbd_rwlcache_map {
   }
 
   void dump(ceph::Formatter *f) const {
-    f->open_array_section("librbd rwlcache infos");
+    f->dump_unsigned("current_cache_id", current_cache_id);
+
+    f->open_array_section("daemons");
+    for (const auto& [key, value] : daemons) {
+      f->open_object_section(std::to_string(key));
+      value.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+
+    f->open_array_section("uncommitted_caches");
+    for (const auto& [key, value] : uncommitted_caches) {
+      f->open_object_section(std::to_string(key));
+      f->dump_stream("expiration") << value.first;
+      f->open_object_section("cache info");
+      value.second.dump(f);
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+
+    f->open_array_section("caches");
+    for (const auto& [key, value] : caches) {
+      f->open_object_section(std::to_string(key));
+      f->dump_stream("expiration") << value.first;
+      f->open_object_section("cache info");
+      value.second.dump(f);
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+
+    f->open_array_section("free_daemon_space_caches");
+    for (const auto& [key, value] : free_daemon_space_caches) {
+      f->open_object_section(std::to_string(key));
+      value.dump(f);
+      f->close_section();
+    }
+
     f->close_section();
   }
+
+  static void generate_test_instances(std::list<cls_rbd_rwlcache_map*>& o) {
+    o.push_back(new cls_rbd_rwlcache_map{});
+  }
+
 };
 WRITE_CLASS_ENCODER_FEATURES(cls_rbd_rwlcache_map)
 WRITE_CLASS_ENCODER_FEATURES(cls_rbd_rwlcache_map::Daemon)
