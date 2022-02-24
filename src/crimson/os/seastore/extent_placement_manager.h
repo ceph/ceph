@@ -4,11 +4,11 @@
 #pragma once
 
 #include "seastar/core/gate.hh"
+#include "seastar/core/shared_future.hh"
 
-#include "crimson/common/condition_variable.h"
 #include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
@@ -151,17 +151,6 @@ public:
 };
 using ExtentAllocatorRef = std::unique_ptr<ExtentAllocator>;
 
-struct open_segment_wrapper_t : public boost::intrusive_ref_counter<
-  open_segment_wrapper_t,
-  boost::thread_unsafe_counter> {
-  SegmentRef segment;
-  std::list<seastar::future<>> inflight_writes;
-  bool outdated = false;
-};
-
-using open_segment_wrapper_ref =
-  boost::intrusive_ptr<open_segment_wrapper_t>;
-
 class SegmentProvider;
 
 /**
@@ -180,51 +169,33 @@ class SegmentProvider;
 class SegmentedAllocator : public ExtentAllocator {
   class Writer : public ExtentOolWriter {
   public:
-    Writer(
-      SegmentProvider& sp,
-      SegmentManager& sm)
-      : segment_provider(sp),
-        segment_manager(sm)
-    {}
+    Writer(SegmentProvider& sp, SegmentManager& sm)
+      : segment_allocator(segment_type_t::OOL, sp, sm) {}
+
     Writer(Writer &&) = default;
 
     write_iertr::future<> write(
       Transaction& t,
       std::list<LogicalCachedExtentRef>& extent) final;
+
     stop_ertr::future<> stop() final {
-      return writer_guard.close().then([this] {
-        return crimson::do_for_each(open_segments, [](auto& seg_wrapper) {
-          return seg_wrapper->segment->close();
-        });
+      return write_guard.close().then([this] {
+        return segment_allocator.close();
       });
     }
+
   private:
-    bool _needs_roll(seastore_off_t length) const;
+    write_iertr::future<> do_write(
+      Transaction& t,
+      std::list<LogicalCachedExtentRef>& extent);
 
     write_iertr::future<> _write(
       Transaction& t,
       ool_record_t& record);
 
-    using roll_segment_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    roll_segment_ertr::future<> roll_segment(bool);
-
-    using init_segment_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    init_segment_ertr::future<> init_segment(Segment& segment);
-
-    void add_extent_to_write(
-      ool_record_t&,
-      LogicalCachedExtentRef& extent);
-
-    SegmentProvider& segment_provider;
-    SegmentManager& segment_manager;
-    open_segment_wrapper_ref current_segment;
-    std::list<open_segment_wrapper_ref> open_segments;
-    seastore_off_t allocated_to = 0;
-    crimson::condition_variable segment_rotation_guard;
-    seastar::gate writer_guard;
-    bool rolling_segment = false;
+    journal::SegmentAllocator segment_allocator;
+    std::optional<seastar::shared_promise<>> roll_promise;
+    seastar::gate write_guard;
   };
 public:
   SegmentedAllocator(
@@ -261,8 +232,6 @@ public:
     });
   }
 private:
-  SegmentProvider& segment_provider;
-  SegmentManager& segment_manager;
   std::vector<Writer> writers;
 };
 

@@ -272,10 +272,7 @@ private:
  */
 class SegmentProvider {
 public:
-  using get_segment_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using get_segment_ret = get_segment_ertr::future<segment_id_t>;
-  virtual get_segment_ret get_segment(
+  virtual segment_id_t get_segment(
       device_id_t id, segment_seq_t seq) = 0;
 
   virtual void close_segment(segment_id_t) {}
@@ -681,7 +678,7 @@ public:
   using mount_ret = mount_ertr::future<>;
   mount_ret mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms);
 
-  get_segment_ret get_segment(
+  segment_id_t get_segment(
       device_id_t id, segment_seq_t seq) final;
 
   void close_segment(segment_id_t segment) final;
