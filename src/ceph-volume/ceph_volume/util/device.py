@@ -476,6 +476,15 @@ class Device(object):
                 vg_free -= extent_size
             return [vg_free]
 
+    @property
+    def has_partitions(self):
+        '''
+        Boolean to determine if a given device has partitions.
+        '''
+        if self.sys_api.get('partitions'):
+            return True
+        return False
+
     def _check_generic_reject_reasons(self):
         reasons = [
             ('removable', 1, 'removable'),
@@ -514,6 +523,8 @@ class Device(object):
 
         if self.has_gpt_headers:
             rejected.append('Has GPT headers')
+        if self.has_partitions:
+            rejected.append('Has partitions')
         return rejected
 
     def _check_lvm_reject_reasons(self):
