@@ -106,7 +106,7 @@ namespace {
          * special based on fop. Hence its okay to do
          * global initialization once.
          */
-        ret = db->InitializeParams(dpp, "", &GlobalParams);
+        ret = db->InitializeParams(dpp, &GlobalParams);
         ASSERT_EQ(ret, 0);
       }
 

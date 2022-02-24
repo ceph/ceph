@@ -43,7 +43,7 @@ void* process(void *arg)
   DBOpParams params = {};
   const DoutPrefixProvider *dpp = db->get_def_dpp();
 
-  db->InitializeParams(dpp, "InsertUser", &params);
+  db->InitializeParams(dpp, &params);
 
   params.op.user.uinfo.display_name = user1;
   params.op.user.uinfo.user_id.tenant = "tenant";
@@ -65,7 +65,7 @@ void* process(void *arg)
   DBOpParams params2 = {};
   params.op.user.uinfo.user_id.tenant = "tenant2";
 
-  db->InitializeParams(dpp, "GetUser", &params2);
+  db->InitializeParams(dpp, &params2);
   params2.op.user.uinfo.display_name = user1;
   ret = db->ProcessOp(dpp, "GetUser", &params2);
 
