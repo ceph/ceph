@@ -487,7 +487,7 @@ void SegmentedJournal::JournalSegmentManager::mark_committed(
 {
   LOG_PREFIX(JournalSegmentManager::mark_committed);
   TRACE("{} => {}", committed_to, new_committed_to);
-  assert(committed_to == journal_seq_t() ||
+  assert(committed_to == JOURNAL_SEQ_NULL ||
          committed_to <= new_committed_to);
   committed_to = new_committed_to;
 }

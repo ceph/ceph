@@ -69,7 +69,7 @@ public:
     }
     assert(extent_offset ==
            (seastore_off_t)(base + record_group.size.get_encoded_length()));
-    return encode_records(record_group, journal_seq_t(), nonce);
+    return encode_records(record_group, JOURNAL_SEQ_NULL, nonce);
   }
   void add_extent(LogicalCachedExtentRef& extent) {
     extents.emplace_back(extent);

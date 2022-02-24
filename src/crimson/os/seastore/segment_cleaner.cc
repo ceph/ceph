@@ -238,8 +238,8 @@ void SegmentCleaner::update_journal_tail_target(journal_seq_t target)
     __func__,
     target,
     journal_tail_target);
-  assert(journal_tail_target == journal_seq_t() || target >= journal_tail_target);
-  if (journal_tail_target == journal_seq_t() || target > journal_tail_target) {
+  assert(journal_tail_target == JOURNAL_SEQ_NULL || target >= journal_tail_target);
+  if (journal_tail_target == JOURNAL_SEQ_NULL || target > journal_tail_target) {
     journal_tail_target = target;
   }
   gc_process.maybe_wake_on_space_used();
@@ -248,7 +248,7 @@ void SegmentCleaner::update_journal_tail_target(journal_seq_t target)
 
 void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 {
-  if (journal_tail_committed == journal_seq_t() ||
+  if (journal_tail_committed == JOURNAL_SEQ_NULL ||
       committed > journal_tail_committed) {
     logger().debug(
       "{}: update journal_tail_committed {}",
@@ -256,7 +256,7 @@ void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
       committed);
     journal_tail_committed = committed;
   }
-  if (journal_tail_target == journal_seq_t() ||
+  if (journal_tail_target == JOURNAL_SEQ_NULL ||
       committed > journal_tail_target) {
     logger().debug(
       "{}: update journal_tail_target {}",
@@ -356,7 +356,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 {
   if (!scan_cursor) {
     journal_seq_t next = get_next_gc_target();
-    if (next == journal_seq_t()) {
+    if (next == JOURNAL_SEQ_NULL) {
       logger().debug(
 	"SegmentCleaner::do_gc: no segments to gc");
       return seastar::now();
@@ -440,9 +440,9 @@ SegmentCleaner::mount_ret SegmentCleaner::mount(
     "SegmentCleaner::mount: {} segment managers", sms.size());
   init_complete = false;
   stats = {};
-  journal_tail_target = journal_seq_t{};
-  journal_tail_committed = journal_seq_t{};
-  journal_head = journal_seq_t{};
+  journal_tail_target = JOURNAL_SEQ_NULL;
+  journal_tail_committed = JOURNAL_SEQ_NULL;
+  journal_head = JOURNAL_SEQ_NULL;
   journal_device_id = pdevice_id;
   
   space_tracker.reset(

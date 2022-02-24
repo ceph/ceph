@@ -619,7 +619,7 @@ public:
         extents.size(),
         extents.get_bytes(),
         dirty.size(),
-        get_oldest_dirty_from().value_or(journal_seq_t{}));
+        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL));
 
     // journal replay should has been finished at this point,
     // Cache::root should have been inserted to the dirty list
@@ -660,7 +660,7 @@ public:
           extents.size(),
           extents.get_bytes(),
           dirty.size(),
-          get_oldest_dirty_from().value_or(journal_seq_t{}));
+          get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL));
     });
   }
 
@@ -724,7 +724,7 @@ public:
       return std::nullopt;
     } else {
       auto oldest = dirty.begin()->get_dirty_from();
-      if (oldest == journal_seq_t()) {
+      if (oldest == JOURNAL_SEQ_NULL) {
 	return std::nullopt;
       } else {
 	return oldest;
