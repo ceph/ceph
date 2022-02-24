@@ -581,6 +581,26 @@ public:
   }
 };
 
+void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
+
+  if (capped) // shutting down the MDS
+    return;
+
+  if (mds->mdcache->open_file_table.is_any_committing())
+    return;
+
+  // when there have dirty items, maybe there has no any new log event
+  if (mds->mdcache->open_file_table.is_any_dirty() ||
+      last_seq > mds->mdcache->open_file_table.get_committed_log_seq()) {
+    submit_mutex.unlock();
+    mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
+                                         last_seq, CEPH_MSG_PRIO_HIGH);
+    submit_mutex.lock();
+  }
+}
+
 void MDLog::trim(int m)
 {
   unsigned max_segments = g_conf()->mds_log_max_segments;
@@ -684,17 +704,7 @@ void MDLog::trim(int m)
     }
   }
 
-  if (!capped &&
-      !mds->mdcache->open_file_table.is_any_committing()) {
-    uint64_t last_seq = get_last_segment_seq();
-    if (mds->mdcache->open_file_table.is_any_dirty() ||
-	last_seq > mds->mdcache->open_file_table.get_committed_log_seq()) {
-      submit_mutex.unlock();
-      mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
-					   last_seq, CEPH_MSG_PRIO_HIGH);
-      submit_mutex.lock();
-    }
-  }
+  try_to_commit_open_file_table(get_last_segment_seq());
 
   // discard expired segments and unlock submit_mutex
   _trim_expired_segments();
@@ -730,14 +740,7 @@ int MDLog::trim_all()
   uint64_t last_seq = 0;
   if (!segments.empty()) {
     last_seq = get_last_segment_seq();
-    if (!capped &&
-	!mds->mdcache->open_file_table.is_any_committing() &&
-	last_seq > mds->mdcache->open_file_table.get_committed_log_seq()) {
-      submit_mutex.unlock();
-      mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
-					   last_seq, CEPH_MSG_PRIO_DEFAULT);
-      submit_mutex.lock();
-    }
+    try_to_commit_open_file_table(last_seq);
   }
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
