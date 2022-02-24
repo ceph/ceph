@@ -4633,6 +4633,8 @@ bool OSDMap::try_pg_upmap(
 
 map<uint64_t,float> OSDMap::calc_desired_primary_distribution(
     CephContext *cct,
+    //TODO: pass the vector by reference and as const
+    //TODO: const vector <uint64_t> &osds, 
     vector<uint64_t> *osds,
     pg_pool_t *pool)
 {
@@ -4649,18 +4651,23 @@ map<uint64_t,float> OSDMap::calc_desired_primary_distribution(
       float osd_primary_count = (pgs_by_osd[osd].size() / replica_count) * get_primary_affinity(osd);
       desired_primary_distribution.insert({osd, osd_primary_count});
     }
+    //TODO: You can do this in the above loop, no need for additional loop.
     // Next, calculate sum of the distribution
     float sum = 0.0;
     for (auto [osd, osd_primary_count] : desired_primary_distribution) {
       sum += osd_primary_count;
     }
     // Then, stretch the values
+    // TODO: The factor is a single number for teh entire pool and should be calculated outside the loop
+    // TODO: factor = osds->size() / sum;
     float factor;
     for (auto [osd, osd_primary_count]: desired_primary_distribution) {
       factor = pgs_by_osd[osd].size() / sum;
       desired_primary_distribution[osd] *= factor;
     }
   } else {
+    //TODO: I believe you need a space before the message " skipping"
+    //TODO: I would also add the pool name here.
     ldout(cct, 10) << __func__ << "skipping erasure pool " << dendl;
   }
 
