@@ -3289,6 +3289,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pg_max_concurrent_snap_trims", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2)
+    .set_min(1)
     .set_description(""),
 
     Option("osd_max_trimming_pgs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
