@@ -29,7 +29,7 @@ def get_ata_wear_level(data: Dict[Any, Any]) -> Optional[float]:
     Extract wear level (as float) from smartctl -x --json output for SATA SSD
     """
     for page in data.get("ata_device_statistics", {}).get("pages", []):
-        if page.get("number") != 7:
+        if page is None or page.get("number") != 7:
             continue
         for item in page.get("table", []):
             if item["offset"] == 8:
