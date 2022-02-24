@@ -133,7 +133,7 @@ class SELinux(Task):
             'comm="ksmtuned"',
             'comm="sssd"',
             'comm="sss_cache"',
-            'scontext=system_u:system_r:NetworkManager_dispatcher_t:s0',
+            'context=system_u:system_r:NetworkManager_dispatcher_t:s0',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
