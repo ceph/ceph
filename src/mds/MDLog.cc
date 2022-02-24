@@ -732,7 +732,7 @@ int MDLog::trim_all()
     last_seq = get_last_segment_seq();
     if (!capped &&
 	!mds->mdcache->open_file_table.is_any_committing() &&
-	last_seq > mds->mdcache->open_file_table.get_committing_log_seq()) {
+	last_seq > mds->mdcache->open_file_table.get_committed_log_seq()) {
       submit_mutex.unlock();
       mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
 					   last_seq, CEPH_MSG_PRIO_DEFAULT);
