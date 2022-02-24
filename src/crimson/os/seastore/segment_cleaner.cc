@@ -207,28 +207,26 @@ void SegmentCleaner::register_metrics()
   });
 }
 
-SegmentCleaner::get_segment_ret SegmentCleaner::get_segment(
-    device_id_t id, segment_seq_t seq)
+segment_id_t SegmentCleaner::get_segment(
+    device_id_t device_id, segment_seq_t seq)
 {
+  LOG_PREFIX(SegmentCleaner::get_segment);
   assert(segment_seq_to_type(seq) != segment_type_t::NULL_SEG);
-  for (auto it = segments.device_begin(id);
-       it != segments.device_end(id);
+  for (auto it = segments.device_begin(device_id);
+       it != segments.device_end(device_id);
        ++it) {
-    auto id = it->first;
+    auto seg_id = it->first;
     auto& segment_info = it->second;
     if (segment_info.is_empty()) {
-      logger().debug("{}: returning segment {} {}",
-                     __func__, id, segment_seq_printer_t{seq});
-      mark_open(id, seq);
-      return get_segment_ret(
-	get_segment_ertr::ready_future_marker{},
-	id);
+      DEBUG("returning segment {} {}", seg_id, segment_seq_printer_t{seq});
+      mark_open(seg_id, seq);
+      return seg_id;
     }
   }
-  assert(0 == "out of space handling todo");
-  return get_segment_ret(
-    get_segment_ertr::ready_future_marker{},
-    NULL_SEG_ID);
+  ERROR("(TODO) handle out of space from device {} with segment_seq={}",
+        device_id, segment_seq_printer_t{seq});
+  ceph_abort();
+  return NULL_SEG_ID;
 }
 
 void SegmentCleaner::update_journal_tail_target(journal_seq_t target)
