@@ -226,7 +226,7 @@ function version_lt {
 
 function ensure_decent_gcc_on_rh {
     local old=$(gcc -dumpversion)
-    local expected=5.1
+    local expected=10.2
     local dts_ver=$1
     if version_lt $old $expected; then
 	if test -t 1; then
@@ -429,13 +429,13 @@ EOF
 		    case "$ARCH" in
 			x86_64)
 			    $SUDO dnf -y install centos-release-scl
-			    dts_ver=8
+			    dts_ver=10
 			    ;;
 			aarch64)
 			    $SUDO dnf -y install centos-release-scl-rh
 			    $SUDO dnf config-manager --disable centos-sclo-rh
 			    $SUDO dnf config-manager --enable centos-sclo-rh-testing
-			    dts_ver=8
+			    dts_ver=10
 			    ;;
 		    esac
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
@@ -447,7 +447,7 @@ EOF
 			  --enable rhel-server-rhscl-8-rpms \
 			  --enable rhel-8-server-optional-rpms \
 			  --enable rhel-8-server-devtools-rpms
-                    dts_ver=8
+                    dts_ver=10
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
