@@ -298,6 +298,8 @@ private:
   void _prepare_new_segment();
   void _journal_segment_subtree_map(MDSContext *onsync);
 
+  void try_to_commit_open_file_table(uint64_t last_seq);
+
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
   void _expired(LogSegment *ls);
