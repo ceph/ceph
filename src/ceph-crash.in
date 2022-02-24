@@ -79,7 +79,7 @@ def scrape_path(path):
                     (metapath, p, os.path.join('posted/', p))
                 )
 
-def handler(signum):
+def handler(signum, frame):
     print('*** Interrupted with signal %d ***' % signum)
     sys.exit(0)
 
