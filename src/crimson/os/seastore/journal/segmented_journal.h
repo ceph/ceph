@@ -139,7 +139,7 @@ private:
       current_segment_nonce = 0;
       current_journal_segment.reset();
       written_to = 0;
-      committed_to = {};
+      committed_to = JOURNAL_SEQ_NULL;
     }
 
     // prepare segment for writes, writes out segment header

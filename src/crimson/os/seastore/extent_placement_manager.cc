@@ -86,7 +86,7 @@ SegmentedAllocator::Writer::_write(
       auto& lextent = ool_extent.get_lextent();
       auto paddr = ool_extent.get_ool_paddr();
       TRACET("ool extent written at {} -- {}", t, *lextent, paddr);
-      lextent->hint = {};
+      lextent->hint = placement_hint_t::NUM_HINTS; // invalidate hint
       t.mark_delayed_extent_ool(lextent, paddr);
     }
     record.clear();

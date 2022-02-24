@@ -977,7 +977,7 @@ record_t Cache::prepare_record(Transaction &t)
       record.push_back(
 	delta_info_t{
 	  extent_types_t::ROOT,
-	  paddr_t{},
+	  P_ADDR_NULL,
 	  L_ADDR_NULL,
 	  0,
 	  0,
@@ -1103,7 +1103,7 @@ record_t Cache::prepare_record(Transaction &t)
       "{} delta, {} retire, {}(md={}B, data={}B, fill={}) ool-records, "
       "{}B md, {}B data",
       t, (void*)&t.get_handle(),
-      get_oldest_dirty_from().value_or(journal_seq_t{}),
+      get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
       read_stat,
       fresh_stat,
       fresh_invalid_stat,
@@ -1253,7 +1253,7 @@ Cache::close_ertr::future<> Cache::close()
   INFO("close with {}({}B) dirty from {}, {}({}B) lru, totally {}({}B) indexed extents",
        dirty.size(),
        stats.dirty_bytes,
-       get_oldest_dirty_from().value_or(journal_seq_t{}),
+       get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
        lru.get_current_contents_extents(),
        lru.get_current_contents_bytes(),
        extents.size(),
@@ -1371,7 +1371,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
-    ceph_assert(dirty_from != journal_seq_t() &&
+    ceph_assert(dirty_from != JOURNAL_SEQ_NULL &&
                 dirty_from != JOURNAL_SEQ_MAX &&
                 dirty_from != NO_DELTAS);
     if (dirty_from < seq) {
