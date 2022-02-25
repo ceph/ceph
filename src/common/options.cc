@@ -2812,6 +2812,11 @@ std::vector<Option> get_global_options() {
     .set_description("set nosizechange flag on new pools")
     .add_service("mon"),
 
+    Option("osd_pool_default_flag_bulk", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("set bulk flag on new pools")
+    .add_service("mon"),
+
     Option("osd_pool_default_hit_set_bloom_fpp", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.05)
     .set_description("")

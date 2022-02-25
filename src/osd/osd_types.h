@@ -1220,6 +1220,7 @@ struct pg_pool_t {
     FLAG_SELFMANAGED_SNAPS = 1<<13, // pool uses selfmanaged snaps
     FLAG_POOL_SNAPS = 1<<14,        // pool has pool snaps
     FLAG_CREATING = 1<<15,          // initial pool PGs are being created
+    FLAG_BULK = 1<<17, //pool is large
   };
 
   static const char *get_flag_name(int f) {
@@ -1240,6 +1241,7 @@ struct pg_pool_t {
     case FLAG_SELFMANAGED_SNAPS: return "selfmanaged_snaps";
     case FLAG_POOL_SNAPS: return "pool_snaps";
     case FLAG_CREATING: return "creating";
+    case FLAG_BULK: return "bulk";
     default: return "???";
     }
   }
@@ -1290,6 +1292,8 @@ struct pg_pool_t {
       return FLAG_POOL_SNAPS;
     if (name == "creating")
       return FLAG_CREATING;
+    if (name == "bulk")
+      return FLAG_BULK;
     return 0;
   }
 

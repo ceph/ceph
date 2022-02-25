@@ -34,6 +34,14 @@
 
 >=16.2.8
 --------
+
+* MON/MGR: Pools can now be created with `--bulk` flag. Any pools created with `bulk`
+  will use a profile of the `pg_autoscaler` that provides more performance from the start.
+  However, any pools created without the `--bulk` flag will remain using it's old behavior
+  by default. For more details, see:
+
+  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+
 * MGR: The pg_autoscaler can now be turned `on` and `off` globally
   with the `noautoscale` flag. By default this flag is unset and
   the default pg_autoscale mode remains the same.
