@@ -53,18 +53,15 @@ os._exit = os_exit_noop   # type: ignore
 
 _global_instance = None  # type: Optional[Module]
 cherrypy.config.update({
-    'response.headers.server': 'Ceph-Prometheus'
+    'response.headers.server': 'Ceph-Prometheus',
+    'tools.gzip.on': True,
 })
 
 
-def health_status_to_number(status: str) -> int:
-    if status == 'HEALTH_OK':
-        return 0
-    elif status == 'HEALTH_WARN':
-        return 1
-    elif status == 'HEALTH_ERR':
-        return 2
-    raise ValueError(f'unknown status "{status}"')
+class ClusterHealth(enum.IntEnum):
+    HEALTH_OK = 0
+    HEALTH_WARN = 1
+    HEALTH_ERR = 2
 
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
@@ -122,6 +119,22 @@ HEALTH_CHECKS = [
 ]
 
 HEALTHCHECK_DETAIL = ('name', 'severity')
+
+PERFCOUNTERS = (
+    'bluefs.wal_total_bytes', 'bluestore.onode_hits', 'bluestore.onode_misses',
+    'mds_server.handle_client_request',
+    'mon.num_elections',
+    'objecter.op_r', 'objecter.op_w',
+    'osd.numpg',
+    'osd.op_r', 'osd.op_r_latency', 'osd.op_r_out_bytes',
+    'osd.op_w', 'osd.op_w_in_bytes', 'osd.op_w_latency',
+    'osd.recovery_ops', 'osd.stat_bytes', 'osd.stat_bytes_used',
+    'rgw.failed_req',
+    'rgw.get', 'rgw.get_b', 'rgw.get_initial_lat',
+    'rgw.metadata',
+    'rgw.put', 'rgw.put_b', 'rgw.put_initial_lat',
+    'rgw.req'
+)
 
 
 class Severity(enum.Enum):
@@ -305,13 +318,44 @@ class HealthHistory:
         return yaml.safe_dump(self.as_dict(), explicit_start=True, default_flow_style=False)
 
 
+class MetricClass(str, enum.Enum):
+    HEALTH = 'HEALTH'
+    DF = 'DF'
+    POOL_STATS = 'POOL_STATS'
+    FS = 'FS'
+    OSD_STATS = 'OSD_STATS'
+    QUORUM_STATUS = 'QUORUM_STATUS'
+    MGR_STATUS = 'MGR_STATUS'
+    METADATA = 'METADATA'
+    PG_STATUS = 'PG_STATUS'
+    NUM_OBJECTS = 'NUM_OBJECTS'
+    PERF_COUNTERS = 'PERF_COUNTERS'
+    RBD_STATS = 'RBD_STATS',
+    RGW_MULTISITE = 'RGW_MULTISITE'
+    PROMETHEUS = 'PROMETHEUS'
+
+
+def MetricClassEndpoint(mclass: MetricClass, collector: Callable):
+    mgr = _global_instance
+    for metric in mgr.metrics.values():
+        if metric.mclass == mclass:
+            metric.clear()
+    collector()
+    yield (metric.str_expfmt()
+           for metric in mgr.metrics.values()
+            if metric.mclass == mclass)
+
+
+
 class Metric(object):
-    def __init__(self, mtype: str, name: str, desc: str, labels: Optional[LabelValues] = None) -> None:
+    def __init__(self, mtype: str, name: str, desc: str, labels: Optional[LabelValues] = None,
+                 mclass: MetricClass = None ) -> None:
         self.mtype = mtype
         self.name = name
         self.desc = desc
         self.labelnames = labels  # tuple if present
         self.value: Dict[LabelValues, Number] = {}
+        self.mclass = mclass
 
     def clear(self) -> None:
         self.value = {}
@@ -469,8 +513,9 @@ class MetricCounter(Metric):
     def __init__(self,
                  name: str,
                  desc: str,
-                 labels: Optional[LabelValues] = None) -> None:
-        super(MetricCounter, self).__init__('counter', name, desc, labels)
+                 labels: Optional[LabelValues] = None,
+                 mclass: MetricClass = None) -> None:
+        super(MetricCounter, self).__init__('counter', name, desc, labels, mclass)
         self.value = defaultdict(lambda: 0)
 
     def clear(self) -> None:
@@ -637,61 +682,71 @@ class Module(MgrModule):
         metrics['health_status'] = Metric(
             'untyped',
             'health_status',
-            'Cluster health status'
+            'Cluster health status',
+            mclass=MetricClass.HEALTH
         )
         metrics['mon_quorum_status'] = Metric(
             'gauge',
             'mon_quorum_status',
             'Monitors in quorum',
-            ('ceph_daemon',)
+            ('ceph_daemon',),
+            mclass=MetricClass.QUORUM_STATUS
         )
         metrics['fs_metadata'] = Metric(
             'untyped',
             'fs_metadata',
             'FS Metadata',
-            FS_METADATA
+            FS_METADATA,
+            mclass=MetricClass.FS
         )
         metrics['mds_metadata'] = Metric(
             'untyped',
             'mds_metadata',
             'MDS Metadata',
-            MDS_METADATA
+            MDS_METADATA,
+            mclass=MetricClass.FS
         )
         metrics['mon_metadata'] = Metric(
             'untyped',
             'mon_metadata',
             'MON Metadata',
-            MON_METADATA
+            MON_METADATA,
+            mclass=MetricClass.QUORUM_STATUS
         )
         metrics['mgr_metadata'] = Metric(
             'gauge',
             'mgr_metadata',
             'MGR metadata',
-            MGR_METADATA
+            MGR_METADATA,
+            mclass=MetricClass.MGR_STATUS
         )
         metrics['mgr_status'] = Metric(
             'gauge',
             'mgr_status',
             'MGR status (0=standby, 1=active)',
-            MGR_STATUS
+            MGR_STATUS,
+            mclass=MetricClass.MGR_STATUS
         )
         metrics['mgr_module_status'] = Metric(
             'gauge',
             'mgr_module_status',
             'MGR module status (0=disabled, 1=enabled, 2=auto-enabled)',
-            MGR_MODULE_STATUS
+            MGR_MODULE_STATUS,
+            mclass=MetricClass.MGR_STATUS
         )
         metrics['mgr_module_can_run'] = Metric(
             'gauge',
             'mgr_module_can_run',
             'MGR module runnable state i.e. can it run (0=no, 1=yes)',
-            MGR_MODULE_CAN_RUN
+            MGR_MODULE_CAN_RUN,
+            mclass=MetricClass.MGR_STATUS
         )
         metrics['osd_metadata'] = Metric(
             'untyped',
             'osd_metadata',
             'OSD Metadata',
-            OSD_METADATA
+            OSD_METADATA,
+            mclass=MetricClass.METADATA
         )
 
         # The reason for having this separate to OSD_METADATA is
@@ -701,7 +756,8 @@ class Module(MgrModule):
             'untyped',
             'disk_occupation',
             'Associate Ceph daemon with disk used',
-            DISK_OCCUPATION
+            DISK_OCCUPATION,
+            mclass=MetricClass.METADATA
         )
 
         metrics['disk_occupation_human'] = Metric(
@@ -710,41 +766,47 @@ class Module(MgrModule):
             'Associate Ceph daemon with disk used for displaying to humans,'
             ' not for joining tables (vector matching)',
             DISK_OCCUPATION,  # label names are automatically decimated on grouping
+            mclass=MetricClass.METADATA
         )
 
         metrics['pool_metadata'] = Metric(
             'untyped',
             'pool_metadata',
             'POOL Metadata',
-            POOL_METADATA
+            POOL_METADATA,
+            mclass=MetricClass.POOL_STATS
         )
 
         metrics['rgw_metadata'] = Metric(
             'untyped',
             'rgw_metadata',
             'RGW Metadata',
-            RGW_METADATA
+            RGW_METADATA,
+            mclass=MetricClass.METADATA
         )
 
         metrics['rbd_mirror_metadata'] = Metric(
             'untyped',
             'rbd_mirror_metadata',
             'RBD Mirror Metadata',
-            RBD_MIRROR_METADATA
+            RBD_MIRROR_METADATA,
+            mclass=MetricClass.METADATA
         )
 
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
             'PG Total Count per Pool',
-            ('pool_id',)
+            ('pool_id',),
+            mclass=MetricClass.METADATA
         )
 
         metrics['health_detail'] = Metric(
             'gauge',
             'health_detail',
             'healthcheck status by type (0=inactive, 1=active)',
-            HEALTHCHECK_DETAIL
+            HEALTHCHECK_DETAIL,
+            mclass=MetricClass.HEALTH
         )
 
         for flag in OSD_FLAGS:
@@ -752,7 +814,8 @@ class Module(MgrModule):
             metrics[path] = Metric(
                 'untyped',
                 path,
-                'OSD Flag {}'.format(flag)
+                'OSD Flag {}'.format(flag),
+                mclass=MetricClass.METADATA
             )
         for state in OSD_STATUS:
             path = 'osd_{}'.format(state)
@@ -760,7 +823,8 @@ class Module(MgrModule):
                 'untyped',
                 path,
                 'OSD status {}'.format(state),
-                ('ceph_daemon',)
+                ('ceph_daemon',),
+                mclass=MetricClass.METADATA
             )
         for stat in OSD_STATS:
             path = 'osd_{}'.format(stat)
@@ -768,7 +832,8 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 'OSD stat {}'.format(stat),
-                ('ceph_daemon',)
+                ('ceph_daemon',),
+                mclass=MetricClass.OSD_STATS
             )
         for stat in OSD_POOL_STATS:
             path = 'pool_{}'.format(stat)
@@ -776,7 +841,8 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 "OSD pool stats: {}".format(stat),
-                ('pool_id',)
+                ('pool_id',),
+                mclass=MetricClass.POOL_STATS
             )
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
@@ -784,7 +850,8 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 'PG {} per pool'.format(state),
-                ('pool_id',)
+                ('pool_id',),
+                mclass=MetricClass.PG_STATUS
             )
         for state in DF_CLUSTER:
             path = 'cluster_{}'.format(state)
@@ -792,6 +859,7 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 'DF {}'.format(state),
+                mclass=MetricClass.DF
             )
         for state in DF_POOL:
             path = 'pool_{}'.format(state)
@@ -799,7 +867,8 @@ class Module(MgrModule):
                 'counter' if state in ('rd', 'rd_bytes', 'wr', 'wr_bytes') else 'gauge',
                 path,
                 'DF pool {}'.format(state),
-                ('pool_id',)
+                ('pool_id',),
+                mclass=MetricClass.DF
             )
         for state in NUM_OBJECTS:
             path = 'num_objects_{}'.format(state)
@@ -807,6 +876,7 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 'Number of {} objects'.format(state),
+                mclass=MetricClass.NUM_OBJECTS
             )
 
         for check in HEALTH_CHECKS:
@@ -815,6 +885,7 @@ class Module(MgrModule):
                 'gauge',
                 path,
                 check.description,
+                mclass=MetricClass.HEALTH
             )
 
         return metrics
@@ -832,7 +903,7 @@ class Module(MgrModule):
         health = json.loads(self.get('health')['json'])
         # set overall health
         self.metrics['health_status'].set(
-            health_status_to_number(health['status'])
+            ClusterHealth[health['status']].value
         )
 
         # Examine the health to see if any health checks triggered need to
@@ -1227,6 +1298,57 @@ class Module(MgrModule):
             self.metrics[stat].set(pg_sum[stat])
 
     @profile_method()
+    def get_perf_counters(self) -> None:
+        for daemon, counters in self.get_all_perf_counters(allowlist = None).items():
+            for path, counter_info in counters.items():
+                # Skip histograms, they are represented by long running avgs
+                stattype = self._stattype_to_str(counter_info['type'])
+                if not stattype or stattype == 'histogram':
+                    self.log.debug('ignoring %s, type %s' % (path, stattype))
+                    continue
+
+                path, label_names, labels = self._perfpath_to_path_labels(
+                    daemon, path)
+
+                # Get the value of the counter
+                value = self._perfvalue_to_value(
+                    counter_info['type'], counter_info['value'])
+
+                # Represent the long running avgs as sum/count pairs
+                if counter_info['type'] & self.PERFCOUNTER_LONGRUNAVG:
+                    _path = path + '_sum'
+                    if _path not in self.metrics:
+                        self.metrics[_path] = Metric(
+                            stattype,
+                            _path,
+                            counter_info['description'] + ' Total',
+                            label_names,
+                            mclass=MetricClass.PERF_COUNTERS
+                        )
+                    self.metrics[_path].set(value, labels)
+
+                    _path = path + '_count'
+                    if _path not in self.metrics:
+                        self.metrics[_path] = Metric(
+                            'counter',
+                            _path,
+                            counter_info['description'] + ' Count',
+                            label_names,
+                            mclass=MetricClass.PERF_COUNTERS
+                        )
+                    self.metrics[_path].set(counter_info['count'], labels,)
+                else:
+                    if path not in self.metrics:
+                        self.metrics[path] = Metric(
+                            stattype,
+                            path,
+                            counter_info['description'],
+                            label_names,
+                            mclass=MetricClass.PERF_COUNTERS
+                        )
+                    self.metrics[path].set(value, labels)
+
+    @profile_method()
     def get_rbd_stats(self) -> None:
         # Per RBD image stats is collected by registering a dynamic osd perf
         # stats query that tells OSDs to group stats for requests associated
@@ -1398,6 +1520,7 @@ class Module(MgrModule):
                                     path,
                                     counter_info['desc'],
                                     label_names,
+                                    mclass=MetricClass.RBD_STATS
                                 )
                             self.metrics[path].set(counters[i][0], labels)
                         elif counter_info['type'] == self.PERFCOUNTER_LONGRUNAVG:
@@ -1408,6 +1531,7 @@ class Module(MgrModule):
                                     path,
                                     counter_info['desc'] + ' Total',
                                     label_names,
+                                    mclass=MetricClass.RBD_STATS
                                 )
                             self.metrics[path].set(counters[i][0], labels)
                             path = 'rbd_' + key + '_count'
@@ -1417,6 +1541,7 @@ class Module(MgrModule):
                                     path,
                                     counter_info['desc'] + ' Count',
                                     label_names,
+                                    mclass=MetricClass.RBD_STATS
                                 )
                             self.metrics[path].set(counters[i][1], labels)
                         i += 1
@@ -1493,7 +1618,8 @@ class Module(MgrModule):
                         metrics.mtype,
                         new_path,
                         metrics.desc,
-                        cast(LabelValues, metrics.labelnames) + ('source_zone',)
+                        cast(LabelValues, metrics.labelnames) + ('source_zone',),
+                        mclass=MetricClass.RGW_MULTISITE
                     )
                 for label_values, value in metrics.value.items():
                     new_metrics[new_path].set(value, label_values + (match.group(1),))
@@ -1507,13 +1633,17 @@ class Module(MgrModule):
             sum_metric = MetricCounter(
                 'prometheus_collect_duration_seconds_sum',
                 'The sum of seconds took to collect all metrics of this exporter',
-                ('method',))
+                ('method',),
+                mclass = MetricClass.PROMETHEUS
+                )
             self.metrics['prometheus_collect_duration_seconds_sum'] = sum_metric
         if count_metric is None:
             count_metric = MetricCounter(
                 'prometheus_collect_duration_seconds_count',
                 'The amount of metrics gathered for this exporter',
-                ('method',))
+                ('method',),
+                mclass = MetricClass.PROMETHEUS
+                )
             self.metrics['prometheus_collect_duration_seconds_count'] = count_metric
 
         # Collect all timing data and make it available as metric, excluding the
@@ -1543,52 +1673,7 @@ class Module(MgrModule):
         self.get_metadata_and_osd_status()
         self.get_pg_status()
         self.get_num_objects()
-
-        for daemon, counters in self.get_all_perf_counters().items():
-            for path, counter_info in counters.items():
-                # Skip histograms, they are represented by long running avgs
-                stattype = self._stattype_to_str(counter_info['type'])
-                if not stattype or stattype == 'histogram':
-                    self.log.debug('ignoring %s, type %s' % (path, stattype))
-                    continue
-
-                path, label_names, labels = self._perfpath_to_path_labels(
-                    daemon, path)
-
-                # Get the value of the counter
-                value = self._perfvalue_to_value(
-                    counter_info['type'], counter_info['value'])
-
-                # Represent the long running avgs as sum/count pairs
-                if counter_info['type'] & self.PERFCOUNTER_LONGRUNAVG:
-                    _path = path + '_sum'
-                    if _path not in self.metrics:
-                        self.metrics[_path] = Metric(
-                            stattype,
-                            _path,
-                            counter_info['description'] + ' Total',
-                            label_names,
-                        )
-                    self.metrics[_path].set(value, labels)
-
-                    _path = path + '_count'
-                    if _path not in self.metrics:
-                        self.metrics[_path] = Metric(
-                            'counter',
-                            _path,
-                            counter_info['description'] + ' Count',
-                            label_names,
-                        )
-                    self.metrics[_path].set(counter_info['count'], labels,)
-                else:
-                    if path not in self.metrics:
-                        self.metrics[path] = Metric(
-                            stattype,
-                            path,
-                            counter_info['description'],
-                            label_names,
-                        )
-                    self.metrics[path].set(value, labels)
+        self.get_perf_counters()
 
         self.add_fixed_name_metrics()
         self.get_rbd_stats()
@@ -1607,23 +1692,21 @@ class Module(MgrModule):
         '''
         Return file_sd compatible prometheus config for mgr cluster
         '''
-        servers = self.list_servers()
-        targets = []
-        for server in servers:
-            hostname = server.get('hostname', '')
-            for service in cast(List[ServiceInfoT], server.get('services', [])):
-                if service['type'] != 'mgr':
-                    continue
-                id_ = service['id']
-                port = self._get_module_option('server_port', DEFAULT_PORT, id_)
-                targets.append(f'{hostname}:{port}')
+        targets = [
+            '{hostname}:{port}'.format(
+                hostname=server.get('hostname', ''),
+                port=self._get_module_option('server_port', localized_prefix=service['id'])
+            )
+            for server in self.list_servers()
+            for service in server.get('services', []) if service['type'] == 'mgr'
+        ]
         ret = [
             {
                 "targets": targets,
                 "labels": {}
             }
         ]
-        return 0, json.dumps(ret), ""
+        return HandleCommandResult(stdout=json.dumps(ret))
 
     def self_test(self) -> None:
         self.collect()
@@ -1648,6 +1731,66 @@ class Module(MgrModule):
         <p><a href='/metrics'>Metrics</a></p>
     </body>
 </html>'''
+
+            @cherrypy.expose
+            def health(self):
+                cherrypy.response.headers['Content-Type'] = 'text/plain'
+                mgr = _global_instance
+
+                for metric in mgr.metrics.values():
+                    metric.clear()
+
+                mgr.get_health()
+                mgr.get_df()
+                mgr.get_pool_stats()
+                mgr.get_fs()
+                mgr.get_osd_stats()
+                mgr.get_quorum_status()
+                mgr.get_mgr_status()
+                mgr.get_metadata_and_osd_status()
+                mgr.get_pg_status()
+                mgr.get_num_objects()
+                mgr.get_perf_counters()
+                mgr.add_fixed_name_metrics()
+                mgr.get_rbd_stats()
+                mgr.get_collect_time_metrics()
+
+                # Return formatted metrics and clear no longer used data
+                for metric in mgr.metrics.values():
+                    yield metric.str_expfmt()
+                yield '\n'
+
+                #yield MetricClassEndpoint(MetricClass.HEALTH, _global_instance.get_health)
+            health._cp_config = {'response.stream': True}
+
+            @cherrypy.expose
+            def health2(self):
+                cherrypy.response.headers['Content-Type'] = 'text/plain'
+                mgr = _global_instance
+
+                for metric in mgr.metrics.values():
+                    metric.clear()
+
+                mgr.get_health()
+                mgr.get_df()
+                mgr.get_pool_stats()
+                mgr.get_fs()
+                mgr.get_osd_stats()
+                mgr.get_quorum_status()
+                mgr.get_mgr_status()
+                mgr.get_metadata_and_osd_status()
+                mgr.get_pg_status()
+                mgr.get_num_objects()
+                mgr.get_perf_counters()
+                mgr.add_fixed_name_metrics()
+                mgr.get_rbd_stats()
+                mgr.get_collect_time_metrics()
+
+                # Return formatted metrics and clear no longer used data
+                return ''.join([metric.str_expfmt() for metric in mgr.metrics.values()])
+
+                #yield MetricClassEndpoint(MetricClass.HEALTH, _global_instance.get_health)
+            health2._cp_config = {'response.stream': True}
 
             @cherrypy.expose
             def metrics(self) -> Optional[str]:

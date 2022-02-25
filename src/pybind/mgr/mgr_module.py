@@ -101,6 +101,7 @@ class NotifyType(str, Enum):
     # perf_schema_update = 'perf_schema_update'
 
 
+
 class CommandResult(object):
     """
     Use with MgrModule.send_command
@@ -1771,7 +1772,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def _get_module_option(self,
                            key: str,
-                           default: OptionValue,
+                           default: OptionValue = None,
                            localized_prefix: str = "") -> OptionValue:
         r = self._ceph_get_module_option(self.module_name, key,
                                          localized_prefix)
@@ -1950,7 +1951,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def get_all_perf_counters(self, prio_limit: int = PRIO_USEFUL,
                               services: Sequence[str] = ("mds", "mon", "osd",
                                                          "rbd-mirror", "rgw",
-                                                         "tcmu-runner")) -> Dict[str, dict]:
+                                                         "tcmu-runner"),
+                              allowlist: Sequence[str] = None
+                              ) -> Dict[str, dict]:
         """
         Return the perf counters currently known to this ceph-mgr
         instance, filtered by priority equal to or greater than `prio_limit`.
@@ -1988,6 +1991,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     # self.log.debug("{0}: {1}".format(
                     #     counter_path, json.dumps(counter_schema)
                     # ))
+
+                    if allowlist is not None and counter_path not in allowlist:
+                        continue
+
                     priority = counter_schema['priority']
                     assert isinstance(priority, int)
                     if priority < prio_limit:
