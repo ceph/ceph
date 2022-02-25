@@ -231,6 +231,11 @@ PGBackend::read_ierrorator::future<>
 PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
                 object_stat_sum_t& delta_stats)
 {
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: {} DNE", __func__, os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+
   const auto& op = osd_op.op;
   logger().trace("sparse_read: {} {}~{}",
                  os.oi.soid, op.extent.offset, op.extent.length);
