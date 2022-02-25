@@ -586,9 +586,14 @@ AlienStore::read_errorator::future<std::map<uint64_t, uint64_t>> AlienStore::fie
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, &destmap] {
       auto c = static_cast<AlienCollection*>(ch.get());
       return store->fiemap(c->collection, oid, off, len, destmap);
-    }).then([&destmap](int i) {
-      return read_errorator::make_ready_future<std::map<uint64_t, uint64_t>>(
-        std::move(destmap));
+    }).then([&destmap](int r)
+      -> read_errorator::future<std::map<uint64_t, uint64_t>> {
+      if (r == -ENOENT) {
+        return crimson::ct_error::enoent::make();
+      } else {
+        return read_errorator::make_ready_future<std::map<uint64_t, uint64_t>>(
+          std::move(destmap));
+      }
     });
   });
 }
