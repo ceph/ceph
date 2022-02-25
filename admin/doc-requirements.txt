@@ -16,3 +16,4 @@ typed-ast
 sphinxcontrib-openapi
 sphinxcontrib-seqdiag
 mistune < 2.0.0
+natsort
