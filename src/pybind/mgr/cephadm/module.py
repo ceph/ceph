@@ -2832,12 +2832,26 @@ Then run the following:
         return self.to_remove_osds.all_osds()
 
     @handle_orch_error
-    def drain_host(self, hostname):
-        # type: (str) -> str
+    def drain_host(self, hostname, force=False):
+        # type: (str, bool) -> str
         """
         Drain all daemons from a host.
         :param host: host name
         """
+
+        # if we drain the last admin host we could end up removing the only instance
+        # of the config and keyring and cause issues
+        if not force:
+            p = PlacementSpec(label='_admin')
+            admin_hosts = p.filter_matching_hostspecs(self.inventory.all_specs())
+            if len(admin_hosts) == 1 and admin_hosts[0] == hostname:
+                raise OrchestratorValidationError(f"Host {hostname} is the last host with the '_admin'"
+                                                  " label.\nDraining this host could cause the removal"
+                                                  " of the last cluster config/keyring managed by cephadm.\n"
+                                                  "It is recommended to add the _admin label to another host"
+                                                  " before completing this operation.\nIf you're certain this is"
+                                                  " what you want rerun this command with --force.")
+
         self.add_host_label(hostname, '_no_schedule')
 
         daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_host(hostname)
