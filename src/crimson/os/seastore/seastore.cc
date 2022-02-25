@@ -526,23 +526,27 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::readv(
   interval_set<uint64_t>& m,
   uint32_t op_flags)
 {
-  return seastar::do_with(
-    ceph::bufferlist{},
-    [=, &oid, &m](auto &ret) {
-    return crimson::do_for_each(
-      m,
-      [=, &oid, &ret](auto &p) {
-      return read(
-	ch, oid, p.first, p.second, op_flags
-	).safe_then([&ret](auto bl) {
-        ret.claim_append(bl);
-      });
-    }).safe_then([&ret] {
-      return read_errorator::make_ready_future<ceph::bufferlist>
-        (std::move(ret));
-    });
+  LOG_PREFIX(SeaStore::readv);
+  DEBUG("oid {} interval_set {}", oid, m);
+  return repeat_with_onode<ceph::bufferlist>(
+    ch,
+    oid,
+    Transaction::src_t::READ,
+    "readv_obj",
+    op_type_t::READ,
+  [=, &m](auto &t, auto &onode) -> ObjectDataHandler::read_ret {
+    size_t size = onode.get_layout().size;
+    if (m.range_start() >= size) {
+      return seastar::make_ready_future<ceph::bufferlist>();
+    }
+    return ObjectDataHandler(max_object_size).readv(
+      ObjectDataHandler::context_t{
+        *transaction_manager,
+        t,
+        onode,
+      },
+      m);
   });
-  return read_errorator::make_ready_future<ceph::bufferlist>();
 }
 
 using crimson::os::seastore::omap_manager::BtreeOMapManager;

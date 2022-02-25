@@ -74,6 +74,10 @@ public:
     objaddr_t offset,
     extent_len_t len);
 
+  read_ret readv(
+    context_t ctx,
+    interval_set<uint64_t>& m);
+
   /// sparse read data, get range interval in [offset, offset + len)
   using fiemap_iertr = base_iertr;
   using fiemap_ret = fiemap_iertr::future<std::map<uint64_t, uint64_t>>;

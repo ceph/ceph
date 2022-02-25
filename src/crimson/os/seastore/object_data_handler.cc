@@ -551,6 +551,85 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
     });
 }
 
+ObjectDataHandler::read_ret ObjectDataHandler::readv(
+  context_t ctx,
+  interval_set<uint64_t>& m)
+{
+  return seastar::do_with(
+    bufferlist(),
+    [ctx, &m](auto &ret) {
+      return with_object_data(
+	ctx,
+	[ctx, &m, &ret](const auto &object_data) {
+	  LOG_PREFIX(ObjectDataHandler::readv);
+	  DEBUGT("reading {}~{}",
+		 ctx.t,
+		 object_data.get_reserved_data_base(),
+		 object_data.get_reserved_data_len());
+	  /* Assumption: callers ensure that onode size is <= reserved
+	   * size and that len is adjusted here prior to call */
+	  ceph_assert(!object_data.is_null());
+	  return trans_intr::do_for_each(
+	    m,
+	    [ctx, &object_data, &ret](auto miter) {
+	    auto [obj_offset, len] = miter;
+	    ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
+	    ceph_assert(len > 0);
+	    laddr_t loffset =
+	      object_data.get_reserved_data_base() + obj_offset;
+	    return ctx.tm.get_pins(
+	      ctx.t,
+	      loffset,
+	      len
+	    ).si_then([ctx, loffset, len, &ret](auto _pins) {
+	      // offset~len falls within reserved region and len > 0
+	      ceph_assert(_pins.size() >= 1);
+	      ceph_assert((*_pins.begin())->get_laddr() <= loffset);
+	      return seastar::do_with(
+	        std::move(_pins),
+	        loffset,
+	        [ctx, loffset, len, &ret](auto &pins, auto &current) {
+		return trans_intr::do_for_each(
+		  pins,
+		  [ctx, loffset, len, &current, &ret](auto &pin)
+		  -> read_iertr::future<> {
+		    ceph_assert(current <= (loffset + len));
+		    ceph_assert(
+		      (loffset + len) > pin->get_laddr());
+		    laddr_t end = std::min(
+		      pin->get_laddr() + pin->get_length(),
+		      loffset + len);
+		    ceph_assert(!pin->get_paddr().is_zero());
+		    return ctx.tm.pin_to_extent<ObjectDataBlock>(
+		      ctx.t,
+		      std::move(pin)
+		    ).si_then([&ret, &current, end](auto extent) {
+		      ceph_assert(
+			(extent->get_laddr() + extent->get_length()) >= end);
+			ceph_assert(end > current);
+			ret.append(
+			  bufferptr(
+			    extent->get_bptr(),
+			    current - extent->get_laddr(),
+			    end - current));
+			current = end;
+			return seastar::now();
+		    }).handle_error_interruptible(
+			read_iertr::pass_further{},
+			crimson::ct_error::assert_all{
+			  "ObjectDataHandler::read hit invalid error"
+			}
+		     );
+		  });
+	      });
+	    });
+	  });
+	}).si_then([&ret] {
+	  return std::move(ret);
+	});
+    });
+}
+
 ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
   context_t ctx,
   objaddr_t obj_offset,
