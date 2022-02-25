@@ -5,6 +5,25 @@ import orchestrator
 if TYPE_CHECKING:
     from nfs.module import Module
 
+EXPORT_PREFIX: str = "export-"
+CONF_PREFIX: str = "conf-nfs."
+USER_CONF_PREFIX: str = "userconf-nfs."
+
+
+def export_obj_name(export_id: int) -> str:
+    """Return a rados object name for the export."""
+    return f"{EXPORT_PREFIX}{export_id}"
+
+
+def conf_obj_name(cluster_id: str) -> str:
+    """Return a rados object name for the config."""
+    return f"{CONF_PREFIX}{cluster_id}"
+
+
+def user_conf_obj_name(cluster_id: str) -> str:
+    """Returna a rados object name for the user config."""
+    return f"{USER_CONF_PREFIX}{cluster_id}"
+
 
 def available_clusters(mgr: 'Module') -> List[str]:
     '''
