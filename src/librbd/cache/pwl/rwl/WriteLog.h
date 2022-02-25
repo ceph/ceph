@@ -77,6 +77,8 @@ private:
   void inc_allocated_cached_bytes(
       std::shared_ptr<pwl::GenericLogEntry> log_entry) override;
   void persist_pmem_superblock();
+  void flush_local_and_replica(const void* addr, size_t len);
+  void drain_local_and_replica();
 
 protected:
   using AbstractWriteLog<ImageCtxT>::m_lock;

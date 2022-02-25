@@ -45,7 +45,6 @@ void WriteLog<I>::persist_pmem_superblock() {
   new_superblock = reinterpret_cast<struct WriteLogSuperblock *>(m_pool_head);
   uint32_t crc = 0;
   uint64_t flushed_sync_gen;
-  size_t offset{0};
 
   ceph_assert(ceph_mutex_is_locked_by_me(this->m_log_append_lock));
   {
@@ -55,7 +54,6 @@ void WriteLog<I>::persist_pmem_superblock() {
   if (m_sequence_num % 2) {
     new_superblock = reinterpret_cast<struct WriteLogSuperblock *>(
                      m_pool_head + SECOND_SUPERBLOCK_OFFSET);
-    offset = SECOND_SUPERBLOCK_OFFSET;
   }
   /* Don't move the flushed sync gen num backwards. */
   if (new_superblock->flushed_sync_gen < flushed_sync_gen) {
@@ -73,7 +71,7 @@ void WriteLog<I>::persist_pmem_superblock() {
   new_superblock->crc = crc;
 
   if (m_replica_pool) {
-    m_replica_pool->write(offset, MAX_SUPERBLOCK_LEN);
+    m_replica_pool->write(new_superblock, MAX_SUPERBLOCK_LEN);
   }
   pmem_persist(new_superblock, MAX_SUPERBLOCK_LEN);
   if (m_replica_pool) {
@@ -81,6 +79,23 @@ void WriteLog<I>::persist_pmem_superblock() {
   }
  
   ++m_sequence_num;
+}
+
+template <typename I>
+void WriteLog<I>::flush_local_and_replica(const void* addr, size_t len) {
+  ceph_assert(addr);
+  pmem_flush(addr, len);
+  if (m_replica_pool) {
+    m_replica_pool->write(addr, len);
+  }
+}
+
+template <typename I>
+void WriteLog<I>::drain_local_and_replica() {
+  pmem_drain();
+  if (m_replica_pool) {
+    m_replica_pool->flush();
+  }
 }
 
 template <typename I>
@@ -210,10 +225,7 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
   flush_op_log_entries(entries_to_flush);
 
   /* Drain once for all */
-  pmem_drain();
-  if (m_replica_pool) {
-    m_replica_pool->flush();
-  }
+  drain_local_and_replica();
 
   /*
    * Atomically advance the log head pointer
@@ -252,12 +264,8 @@ void WriteLog<I>::flush_op_log_entries(GenericLogOperationsVector &ops)
                              << " bytes="
                              << ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry))
                              << dendl;
-  pmem_flush(ops.front()->get_log_entry()->cache_entry,
+  flush_local_and_replica(ops.front()->get_log_entry()->cache_entry,
              ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry)));
-  if (m_replica_pool) {
-    m_replica_pool->write((size_t)((char*)(ops.front()->get_log_entry()->cache_entry) - m_log_pool->get_head_addr()),
-                          ops.size() * sizeof(*(ops.front()->get_log_entry()->cache_entry)));
-  }
 }
 
 template <typename I>
@@ -975,18 +983,12 @@ void WriteLog<I>::flush_pmem_buffer(V& ops)
   for (auto &operation : ops) {
     if(operation->is_writing_op()) {
       auto log_entry = static_pointer_cast<WriteLogEntry>(operation->get_log_entry());
-      pmem_flush(log_entry->cache_buffer, log_entry->write_bytes());
-      if (m_replica_pool) {
-        m_replica_pool->write((size_t)(log_entry->cache_buffer - m_log_pool->get_head_addr()), log_entry->write_bytes());
-      }
+      flush_local_and_replica(log_entry->cache_buffer, log_entry->write_bytes());
     }
   }
 
   /* Drain once for all */
-  pmem_drain();
-  if (m_replica_pool) {
-    m_replica_pool->flush();
-  }
+  drain_local_and_replica();
 
   now = ceph_clock_now();
   for (auto &operation : ops) {
