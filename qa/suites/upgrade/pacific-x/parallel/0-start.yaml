@@ -2,6 +2,7 @@ roles:
 - - mon.a
   - mon.c
   - mgr.y
+  - mds.a
   - osd.0
   - osd.1
   - osd.2
@@ -11,6 +12,7 @@ roles:
   - alertmanager.a
 - - mon.b
   - mgr.x
+  - mds.b
   - osd.4
   - osd.5
   - osd.6

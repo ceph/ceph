@@ -24,6 +24,5 @@ tasks:
 
 - print: "**** done start parallel"
 - parallel:
-    - workload
     - upgrade-sequence
 - print: "**** done end parallel"
