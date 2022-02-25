@@ -355,7 +355,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def drain_host(self, hostname: str) -> OrchResult[str]:
+    def drain_host(self, hostname: str, force: bool = False) -> OrchResult[str]:
         """
         drain all daemons from a host
 
