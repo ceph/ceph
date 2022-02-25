@@ -4,6 +4,7 @@ import time
 import errno
 import logging
 from contextlib import contextmanager
+from typing import Dict, Union
 
 import cephfs
 from mgr_util import lock_timeout_log
@@ -185,12 +186,35 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     if should_cancel():
         raise VolumeException(-errno.EINTR, "clone operation interrupted")
 
+def set_quota_on_clone(fs_handle, clone_volumes_pair):
+    attrs = {}  # type: Dict[str, Union[int, str, None]]
+    src_path = clone_volumes_pair[1].snapshot_data_path(clone_volumes_pair[2])
+    dst_path = clone_volumes_pair[0].path
+    try:
+        attrs["quota"] = int(fs_handle.getxattr(src_path,
+                                                'ceph.quota.max_bytes'
+                                                ).decode('utf-8'))
+    except cephfs.NoData:
+        attrs["quota"] = None
+
+    if attrs["quota"] is not None:
+        clone_volumes_pair[0].set_attrs(dst_path, attrs)
+
 def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(fs_client, volname) as fs_handle:
         with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
             src_path = clone_volumes[1].snapshot_data_path(clone_volumes[2])
             dst_path = clone_volumes[0].path
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
+            set_quota_on_clone(fs_handle, clone_volumes)
+
+def log_clone_failure(volname, groupname, subvolname, ve):
+    if ve.errno == -errno.EINTR:
+        log.info("Clone cancelled: ({0}, {1}, {2})".format(volname, groupname, subvolname))
+    elif ve.errno == -errno.EDQUOT:
+        log.error("Clone failed: ({0}, {1}, {2}, reason -> Disk quota exceeded)".format(volname, groupname, subvolname))
+    else:
+        log.error("Clone failed: ({0}, {1}, {2}, reason -> {3})".format(volname, groupname, subvolname, ve))
 
 def handle_clone_in_progress(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
@@ -199,6 +223,7 @@ def handle_clone_in_progress(fs_client, volspec, volname, index, groupname, subv
                                               SubvolumeStates.STATE_INPROGRESS,
                                               SubvolumeActions.ACTION_SUCCESS)
     except VolumeException as ve:
+        log_clone_failure(volname, groupname, subvolname, ve)
         next_state = get_next_state_on_error(ve.errno)
     except OpSmException as oe:
         raise VolumeException(oe.errno, oe.error_str)
@@ -329,10 +354,14 @@ class Cloner(AsyncJobs):
                         if not track_idx:
                             log.warning("cannot lookup clone tracking index for {0}".format(clone_subvolume.base_path))
                             raise VolumeException(-errno.EINVAL, "error canceling clone")
-                        if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state):
-                            # clone has not started yet -- cancel right away.
-                            self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
-                            return
+                        clone_job = (track_idx, clone_subvolume.base_path)
+                        jobs = [j[0] for j in self.jobs[volname]]
+                        with lock_timeout_log(self.lock):
+                            if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state) and not clone_job in jobs:
+                                logging.debug("Cancelling pending job {0}".format(clone_job))
+                                # clone has not started yet -- cancel right away.
+                                self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
+                                return
             # cancelling an on-going clone would persist "canceled" state in subvolume metadata.
             # to persist the new state, async cloner accesses the volume in exclusive mode.
             # accessing the volume in exclusive mode here would lead to deadlock.

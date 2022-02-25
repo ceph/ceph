@@ -251,7 +251,8 @@ class AsyncJobs(threading.Thread):
         canceled = False
         log.info("canceling job {0} for volume {1}".format(job, volname))
         try:
-            if not volname in self.q and not volname in self.jobs and not job in self.jobs[volname]:
+            vol_jobs = [j[0] for j in self.jobs.get(volname, [])]
+            if not volname in self.q and not job in vol_jobs:
                 return canceled
             for j in self.jobs[volname]:
                 if j[0] == job:

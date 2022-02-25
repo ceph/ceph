@@ -148,7 +148,7 @@ class SubvolumeV2(SubvolumeV1):
                 raise VolumeException(-e.args[0], e.args[1])
         else:
             log.info("cleaning up subvolume with path: {0}".format(self.subvolname))
-            self.remove()
+            self.remove(internal_cleanup=True)
 
     def _set_incarnation_metadata(self, subvolume_type, qpath, initial_state):
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_TYPE, subvolume_type.value)
@@ -218,6 +218,13 @@ class SubvolumeV2(SubvolumeV1):
             # source snapshot attrs are used to create clone subvolume
             # attributes of subvolume's content though, are synced during the cloning process.
             attrs = source_subvolume.get_attrs(source_subvolume.snapshot_data_path(snapname))
+
+            # The source of the clone may have exceeded its quota limit as
+            # CephFS quotas are imprecise. Cloning such a source may fail if
+            # the quota on the destination is set before starting the clone
+            # copy. So always set the quota on destination after cloning is
+            # successful.
+            attrs["quota"] = None
 
             # override snapshot pool setting, if one is provided for the clone
             if pool is not None:
@@ -339,11 +346,25 @@ class SubvolumeV2(SubvolumeV1):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-    def remove(self, retainsnaps=False):
+    @staticmethod
+    def safe_to_remove_subvolume_clone(subvol_state):
+        # Both the STATE_FAILED and STATE_CANCELED are handled by 'handle_clone_failed' in the state
+        # machine which removes the entry from the index. Hence, it's safe to removed clone with
+        # force option for both.
+        acceptable_rm_clone_states = [SubvolumeStates.STATE_COMPLETE, SubvolumeStates.STATE_CANCELED,
+                                      SubvolumeStates.STATE_FAILED]
+        if subvol_state not in acceptable_rm_clone_states:
+            return False
+        return True
+
+    def remove(self, retainsnaps=False, internal_cleanup=False):
         if self.list_snapshots():
             if not retainsnaps:
                 raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(self.subvolname))
         else:
+            if not internal_cleanup and not self.safe_to_remove_subvolume_clone(self.state):
+                raise VolumeException(-errno.EAGAIN,
+                                      "{0} clone in-progress -- please cancel the clone and retry".format(self.subvolname))
             if not self.has_pending_purges:
                 self.trash_base_dir()
                 # Delete the volume meta file, if it's not already deleted
