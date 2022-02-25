@@ -20,7 +20,7 @@
 #define CEPH_RGW_TAG_TIMEOUT 120
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
 #define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
-
+using namespace std;
 class JSONObj;
 
 using ceph::operator <<;
@@ -55,6 +55,7 @@ struct rgw_zone_set_entry {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<rgw_zone_set_entry*>& rz);
 };
 WRITE_CLASS_ENCODER(rgw_zone_set_entry)
 
@@ -69,7 +70,9 @@ struct rgw_zone_set {
     /* no DECODE_START, DECODE_END for backward compatibility */
     ceph::decode(entries, bl);
   }
-
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<rgw_zone_set*>& rz);
   void insert(const std::string& zone, std::optional<std::string> location_key);
   bool exists(const std::string& zone, std::optional<std::string> location_key) const;
 };
@@ -570,6 +573,7 @@ struct rgw_cls_bi_entry {
 
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
 		rgw_bucket_category_stats *accounted_stats);
+  static void generate_test_instances(std::list<rgw_cls_bi_entry*>& r);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
@@ -651,6 +655,7 @@ struct rgw_bucket_olh_entry {
   }
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<rgw_bucket_olh_entry*>& ro);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
 
@@ -755,6 +760,7 @@ struct rgw_bucket_category_stats {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_bucket_category_stats*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
@@ -816,6 +822,7 @@ struct cls_rgw_bucket_instance_entry {
   }
 
   void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<cls_rgw_bucket_instance_entry*>& o);
 
   void clear() {
@@ -892,6 +899,7 @@ struct rgw_bucket_dir_header {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_bucket_dir_header*>& o);
 
   bool resharding() const {
@@ -920,6 +928,7 @@ struct rgw_bucket_dir {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_bucket_dir*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir)
@@ -950,7 +959,9 @@ struct rgw_usage_data {
     decode(successful_ops, bl);
     DECODE_FINISH(bl);
   }
-
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<rgw_usage_data*>& ro);
   void aggregate(const rgw_usage_data& usage) {
     bytes_sent += usage.bytes_sent;
     bytes_received += usage.bytes_received;
@@ -1044,6 +1055,7 @@ struct rgw_usage_log_entry {
   }
 
   void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_usage_log_entry*>& o);
 
 };
@@ -1063,7 +1075,9 @@ struct rgw_usage_log_info {
     decode(entries, bl);
     DECODE_FINISH(bl);
   }
-
+  void decode_json(JSONObj *obj);
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<rgw_usage_log_info*>& o);
   rgw_usage_log_info() {}
 };
 WRITE_CLASS_ENCODER(rgw_usage_log_info)
@@ -1088,7 +1102,10 @@ struct rgw_user_bucket {
     decode(bucket, bl);
     DECODE_FINISH(bl);
   }
-
+  void decode_json(JSONObj *obj);
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<rgw_user_bucket*>& o);
+  
   bool operator<(const rgw_user_bucket& ub2) const {
     int comp = user.compare(ub2.user);
     if (comp < 0)
@@ -1140,6 +1157,7 @@ struct cls_rgw_obj {
     f->dump_string("key", loc);
     f->dump_string("instance", key.instance);
   }
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<cls_rgw_obj*>& ls) {
     ls.push_back(new cls_rgw_obj);
     ls.push_back(new cls_rgw_obj);
@@ -1184,6 +1202,9 @@ struct cls_rgw_obj_chain {
     }
     f->close_section();
   }
+  void decode_json(JSONObj *obj){
+    
+  }
   static void generate_test_instances(std::list<cls_rgw_obj_chain*>& ls) {
     ls.push_back(new cls_rgw_obj_chain);
   }
@@ -1225,6 +1246,9 @@ struct cls_rgw_gc_obj_info
     f->close_section();
     f->dump_stream("time") << time;
   }
+  void decode_json(JSONObj *obj){
+    
+  }
   static void generate_test_instances(std::list<cls_rgw_gc_obj_info*>& ls) {
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.push_back(new cls_rgw_gc_obj_info);
@@ -1260,6 +1284,7 @@ struct cls_rgw_lc_obj_head
   }
 
   void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<cls_rgw_lc_obj_head*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
@@ -1293,7 +1318,8 @@ struct cls_rgw_lc_entry {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_entry);
 
@@ -1334,6 +1360,7 @@ struct cls_rgw_reshard_entry
   }
 
   void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<cls_rgw_reshard_entry*>& o);
 
   static void generate_key(const std::string& tenant, const std::string& bucket_name, std::string *key);

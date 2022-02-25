@@ -4,7 +4,7 @@
 #include "include/types.h"
 
 #include <errno.h>
-
+#include <list>
 #include <boost/algorithm/string.hpp>
 
 #include "objclass/objclass.h"
@@ -17,6 +17,7 @@
 #include "include/compat.h"
 #include <boost/lexical_cast.hpp>
 
+using namespace std;
 using std::pair;
 using std::list;
 using std::map;

@@ -2,14 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/rgw/cls_rgw_ops.h"
-
+#include<list>
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
 using std::list;
 using std::map;
-
+using namespace std;
 using ceph::Formatter;
 
 void rgw_cls_tag_timeout_op::dump(Formatter *f) const
