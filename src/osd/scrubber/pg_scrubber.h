@@ -255,8 +255,9 @@ ostream& operator<<(ostream& out, const scrub_flags_t& sf);
  * am forced to strongly decouple the state-machine implementation details from
  * the actual scrubbing code.
  */
-class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
-
+class PgScrubber : public ScrubPgIF,
+                   public ScrubMachineListener,
+                   public SnapMapperAccessor {
  public:
   explicit PgScrubber(PG* pg);
 
@@ -508,6 +509,12 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   utime_t scrub_begin_stamp;
   std::ostream& gen_prefix(std::ostream& out) const final;
+
+  //  fetching the snap-set for a given object (used by the scrub-backend)
+  int get_snaps(const hobject_t& hoid, std::set<snapid_t>* snaps_set) const final
+  {
+    return m_pg->snap_mapper.get_snaps(hoid, snaps_set);
+  }
 
  protected:
   bool state_test(uint64_t m) const { return m_pg->state_test(m); }
@@ -815,9 +822,8 @@ private:
 
   Scrub::MapsCollectionStatus m_maps_status;
 
-
-  /// Maps from object with errors to good peers
-  std::map<hobject_t, std::list<std::pair<ScrubMap::object, pg_shard_t>>> m_authoritative;
+  void persist_scrub_results(inconsistent_objs_t&& all_errors);
+  void apply_snap_mapper_fixes(const std::vector<snap_mapper_fix_t>& fix_list);
 
   // ------------ members used if we are a replica
 
