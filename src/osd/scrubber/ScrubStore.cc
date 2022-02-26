@@ -124,11 +124,21 @@ Store::~Store()
   ceph_assert(results.empty());
 }
 
+void Store::add_error(int64_t pool, const inconsistent_obj_wrapper& e)
+{
+  add_object_error(pool, e);
+}
+
 void Store::add_object_error(int64_t pool, const inconsistent_obj_wrapper& e)
 {
   bufferlist bl;
   e.encode(bl);
   results[to_object_key(pool, e.object)] = bl;
+}
+
+void Store::add_error(int64_t pool, const inconsistent_snapset_wrapper& e)
+{
+  add_snap_error(pool, e);
 }
 
 void Store::add_snap_error(int64_t pool, const inconsistent_snapset_wrapper& e)

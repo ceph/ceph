@@ -306,12 +306,12 @@ public:
     stats.objects_scrubbed = 0;
   }
 
-  void reset_objects_scrubbed() {
-    recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
-  reset_objects_scrubbed(stats);
-  return true;
-      });
+  void reset_objects_scrubbed()
+  {
+    recovery_state.update_stats([=](auto& history, auto& stats) {
+      reset_objects_scrubbed(stats);
+      return true;
+    });
   }
 
   bool is_deleting() const {
