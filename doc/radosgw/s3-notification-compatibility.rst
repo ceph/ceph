@@ -110,6 +110,14 @@ Event Types
 +------------------------------------------------+-----------------+-------------------------------------------+
 | ``s3:ObjectLifecycle:Transition:NonCurrent``   | Supported, Ceph extension                                   |
 +------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectSynced:*``                          | Supported, Ceph extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectSynced:Create``                     | Supported, Ceph Extension                                   |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectSynced:Delete``                     | Defined, Ceph extension (not generated)                     |
++------------------------------------------------+-----------------+-------------------------------------------+
+| ``s3:ObjectSynced:DeletionMarkerCreated``      | Defined, Ceph extension (not generated)                     |
++------------------------------------------------+-----------------+-------------------------------------------+
 | ``s3:ObjectRestore:Post``                      | Not applicable to Ceph                                      |
 +------------------------------------------------+-----------------+-------------------------------------------+
 | ``s3:ObjectRestore:Complete``                  | Not applicable to Ceph                                      |
@@ -124,6 +132,10 @@ Event Types
 .. note::
 
    In case of multipart upload, an ``ObjectCreated:CompleteMultipartUpload`` notification will be sent at the end of the process.
+   
+.. note::
+
+   The ``s3:ObjectSynced:Create`` event is sent when an object successfully syncs to a zone. It must be explicitely set for each zone. 
 
 Topic Configuration
 -------------------
