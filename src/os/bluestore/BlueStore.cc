@@ -7702,10 +7702,10 @@ int BlueStore::umount()
   // stop new allocations and raise debug level
   if (unlikely(m_fast_shutdown)) {
     alloc->prepare_for_shutdown();
-    cct->_conf.set_val("debug_osd", "20");
-    cct->_conf.set_val("debug_bluestore", "20");
-    cct->_conf.set_val("debug_bluefs", "20");
-    cct->_conf.set_val("debug_rocksdb", "20");
+    //cct->_conf.set_val("debug_osd", "20");
+    //cct->_conf.set_val("debug_bluestore", "20");
+    //cct->_conf.set_val("debug_bluefs", "20");
+    //cct->_conf.set_val("debug_rocksdb", "20");
   }
 
   _close_db_and_around();
@@ -18113,7 +18113,7 @@ struct allocator_image_trailer {
   utime_t  timestamp;		// 0x18
 
   uint32_t serial;		// 0x20
-  uint32_t pad;		// 0x24
+  uint32_t pad;	        	// 0x24
   uint64_t entries_count;	// 0x28
   uint64_t allocation_size;	// 0x30
 
@@ -18247,13 +18247,12 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
     return -1;
   }
 
-  dout(5) << "invalidate using bluefs->truncate(p_handle, 0)" << dendl;
-  ret = bluefs->truncate(p_handle, 0);
-  if (ret != 0) {
-    derr << "Failed truncate with error-code " << ret << dendl;
-    bluefs->close_writer(p_handle);
-    return -1;
-  }
+  // keep allocation unmodified
+  dout(5) << "invalidate by overwriting with a 4KB zeroed out buffer " << dendl;
+  char buffer[4*1024];
+  // fill buffer with zero to overwrite header and any valid extents
+  memset(buffer, 0, sizeof(buffer));
+  p_handle->append(buffer, sizeof(buffer));
 
   bluefs->fsync(p_handle);
   bluefs->close_writer(p_handle);
@@ -18391,7 +18390,7 @@ Allocator* BlueStore::clone_allocator_without_bluefs_safe(Allocator *src_allocat
 
   return allocator;
 }
-#if 1
+#if 0
 //-----------------------------------------------------------------------------------
 Allocator* BlueStore::create_allocator_snapshot(Allocator* src_allocator)
 {
@@ -18459,13 +18458,6 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   utime_t  start_time = ceph_clock_now();
   int ret = 0;
 
-  // Get a consistent view of the shared-allocator
-  dout(1) << " Calling create_allocator_snapshot" << dendl;
-  unique_ptr<Allocator> allocator(create_allocator_snapshot(src_allocator));
-  if (!allocator) {
-    return -1;
-  }
-
   // create dir if doesn't exist already
   if (!bluefs->dir_exists(allocator_dir) ) {
     ret = bluefs->mkdir(allocator_dir);
@@ -18487,7 +18479,34 @@ int BlueStore::store_allocator(Allocator* src_allocator)
 
   uint64_t file_size = p_handle->file->fnode.size;
   uint64_t allocated = p_handle->file->fnode.get_allocated();
-  dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
+
+  uint64_t extents_count = 0;
+  auto count_extents = [&](uint64_t extent_offset, uint64_t extent_length) {
+    extents_count++;
+  };
+  src_allocator->dump(count_extents);
+
+  // we count extents with lock so need to add some extra space
+  uint64_t required_space = (extents_count + 64*1024)*sizeof(extent_t);
+
+  dout(1) << "file_size=" << file_size <<", allocated=" << allocated <<", required_space=" << required_space << ", extents_count="<< extents_count << dendl;
+  if (allocated < required_space) {
+    // double file size if we need more space
+    ret = bluefs->preallocate(p_handle->file, allocated, allocated);
+    if (ret != 0) {
+      derr <<  __func__ << "Failed preallocate(offset=" << allocated << ", len=" << allocated << ") with error-code=" << ret << dendl;
+      return ret;
+    }
+    bluefs->sync_metadata(false);
+    dout(1) << "After preallocate: file_size=" << p_handle->file->fnode.size <<", allocated=" << p_handle->file->fnode.get_allocated() << dendl;
+  }
+
+  // Get a consistent view of the shared-allocator
+  dout(1) << " Calling create_allocator_snapshot" << dendl;
+  unique_ptr<Allocator> allocator(create_allocator_snapshot(src_allocator));
+  if (!allocator) {
+    return -1;
+  }
 
   // store all extents (except for the bluefs extents we removed) in a single flat file
   utime_t                 timestamp = ceph_clock_now();
@@ -18554,8 +18573,8 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
-  dout(1) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << ", serial=" << s_serial << dendl;
-  dout(5) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
+  dout(1) <<"WRITE-extent_count=" << extent_count << ", alloc_size=" << allocation_size << ", serial=" << s_serial << dendl;
+  dout(5) <<"p_handle->pos=" << p_handle->pos << ", file_size=" << p_handle->file->fnode.size << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
   dout(1) << "::NCB::need_to_destage_allocation_file was cleared" << dendl;
@@ -19222,20 +19241,13 @@ int BlueStore::verify_shared_alloc_against_onodes_allocation_info()
     copy_simple_bitmap_to_allocator(&sbmap, allocator.get(), min_alloc_size);
   }
 
-#if 0
-  // add allocation space used by the bluefs itself
-  ret = add_existing_bluefs_allocation(allocator.get(), stats);
-  if (ret < 0) {
-    return ret;
-  }
-#else
   // Get a consistent view of the shared-allocator
   dout(1) << " Calling create_allocator_snapshot" << dendl;
   unique_ptr<Allocator> allocator2(create_allocator_snapshot(alloc));
   if (!allocator2) {
     return -1;
   }
-#endif
+
   duration = ceph_clock_now() - start;
   stats.insert_count = 0;
   auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
@@ -19243,12 +19255,7 @@ int BlueStore::verify_shared_alloc_against_onodes_allocation_info()
   };
   allocator->dump(count_entries);
   uint64_t memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
-
-#if 0
-  ret = compare_allocators(allocator.get(), alloc, stats.insert_count, memory_target);
-#else
   ret = compare_allocators(allocator.get(), allocator2.get(), stats.insert_count, memory_target);
-#endif
   if (ret == 0) {
     dout(1) << "Allocator drive - file integrity check OK" << dendl;
   } else {
