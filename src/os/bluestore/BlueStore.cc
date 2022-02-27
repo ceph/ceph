@@ -18045,7 +18045,10 @@ struct allocator_image_header {
   uint32_t valid_signature;	// 0x04
   utime_t  timestamp;		// 0x08
   uint32_t serial;		// 0x10
-  uint32_t pad[0x7];		// 0x14
+  uint32_t pad[0x3];		// 0x14
+  uint64_t entries_count;	// 0x20
+  uint64_t allocation_size;	// 0x38
+
 
   allocator_image_header() {
     memset((char*)this, 0, sizeof(allocator_image_header));
@@ -18070,6 +18073,8 @@ struct allocator_image_header {
 	out << "header.pad[" << i << "] = " << header.pad[i] << std::endl;
       }
     }
+    out << "entries_count   = " << header.entries_count   << std::endl;
+    out << "allocation_size = " << header.allocation_size << std::endl;
     return out;
   }
 
@@ -18082,6 +18087,8 @@ struct allocator_image_header {
     for (auto& pad: v.pad) {
       denc(pad, p);
     }
+    denc(v.entries_count, p);
+    denc(v.allocation_size, p);
   }
 
 
@@ -18489,24 +18496,50 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   // we count extents with lock so need to add some extra space
   uint64_t required_space = (extents_count + 64*1024)*sizeof(extent_t);
 
-  dout(1) << "file_size=" << file_size <<", allocated=" << allocated <<", required_space=" << required_space << ", extents_count="<< extents_count << dendl;
+  dout(1) << "1)file_size=" << file_size <<", allocated=" << allocated <<", required_space=" << required_space << ", extents_count="<< extents_count<< dendl;
   if (allocated < required_space) {
+#if 0
     // double file size if we need more space
     ret = bluefs->preallocate(p_handle->file, allocated, allocated);
     if (ret != 0) {
       derr <<  __func__ << "Failed preallocate(offset=" << allocated << ", len=" << allocated << ") with error-code=" << ret << dendl;
       return ret;
     }
-    bluefs->sync_metadata(false);
-    dout(1) << "After preallocate: file_size=" << p_handle->file->fnode.size <<", allocated=" << p_handle->file->fnode.get_allocated() << dendl;
+#else
+    char buff[64*1024];
+    memset(buff, 0, sizeof(buff));
+    unsigned count = div_round_up(required_space, sizeof(buff));
+    for (unsigned i = 0; i < count; i++) {
+      p_handle->append(buff, sizeof(buff));
+    }
+#endif
+    bluefs->fsync(p_handle);
+    file_size = p_handle->file->fnode.size;
+    allocated = p_handle->file->fnode.get_allocated();
+    dout(1) << "After preallocate: file_size=" << file_size <<", allocated=" << allocated << dendl;
   }
 
+  // create_allocator_snapshot call bluefs->umount() so need to close writer
+  bluefs->close_writer(p_handle);
+  bluefs->sync_metadata(false);
+  overwrite_file = true;
   // Get a consistent view of the shared-allocator
   dout(1) << " Calling create_allocator_snapshot" << dendl;
   unique_ptr<Allocator> allocator(create_allocator_snapshot(src_allocator));
   if (!allocator) {
     return -1;
   }
+
+  // reopen file now after we forced BlueFS SYNC
+  ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
+  if (ret != 0) {
+    derr <<  __func__ << "Failed second open_for_write with error-code " << ret << dendl;
+    return -1;
+  }
+
+  file_size = p_handle->file->fnode.size;
+  allocated = p_handle->file->fnode.get_allocated();
+  dout(1) << "2)file_size=" << file_size <<", allocated=" << allocated <<", required_space=" << required_space <<", extents_count="<< extents_count << dendl;
 
   // store all extents (except for the bluefs extents we removed) in a single flat file
   utime_t                 timestamp = ceph_clock_now();
@@ -18569,15 +18602,43 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   }
 
   bluefs->fsync(p_handle);
+#if 0
   bluefs->truncate(p_handle, p_handle->pos);
+#else
+  // there is no simple method to change offset, so close and reopen writer
+  bluefs->close_writer(p_handle);
+  ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
+  if (ret != 0) {
+    derr <<  __func__ << "Failed third open_for_write with error-code " << ret << dendl;
+    return -1;
+  }
+
+  // now that we know the entries count and allocation size we can fill them in the header
+  {
+    bufferlist              header_bl;
+    allocator_image_header  header(timestamp, s_format_version, s_serial);
+    header.entries_count   = extent_count;
+    header.allocation_size = allocation_size;
+
+    crc = -1;
+    encode(header, header_bl);
+    crc = header_bl.crc32c(crc);
+    encode(crc, header_bl);
+    p_handle->append(header_bl);
+  }
+#endif
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
   dout(1) <<"WRITE-extent_count=" << extent_count << ", alloc_size=" << allocation_size << ", serial=" << s_serial << dendl;
-  dout(5) <<"p_handle->pos=" << p_handle->pos << ", file_size=" << p_handle->file->fnode.size << " WRITE-duration=" << duration << " seconds" << dendl;
+  dout(1) <<"p_handle->pos=" << p_handle->pos << ", file_size=" << p_handle->file->fnode.size << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
   dout(1) << "::NCB::need_to_destage_allocation_file was cleared" << dendl;
+
+  // increment version for next store
+  s_serial++;
+
   need_to_destage_allocation_file = false;
   return 0;
 }
@@ -18678,9 +18739,6 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
       derr << "header = \n" << header << dendl;
       return -1;
     }
-
-    // increment version for next store
-    s_serial = header.serial + 1;
   }
 
   // then read the payload (extents list) using a recycled buffer
@@ -18688,7 +18746,10 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
   uint32_t        crc                = -1;
   int             trailer_size       = calc_allocator_image_trailer_size();
   uint64_t        extent_count       = 0;
-  uint64_t        extents_bytes_left = file_size - (header_size + trailer_size + sizeof(crc));
+  //uint64_t        extents_bytes_left = file_size - (header_size + trailer_size + sizeof(crc));
+  uint64_t        extents_bytes_left = header.entries_count * sizeof(extent_t);
+  extents_bytes_left += div_round_up(header.entries_count, MAX_EXTENTS_IN_BUFFER)*sizeof(crc);
+  extents_bytes_left -= sizeof(crc);
   while (extents_bytes_left) {
     int req_bytes  = std::min(extents_bytes_left, sizeof(buffer));
     int read_bytes = bluefs->read(p_handle.get(), offset, req_bytes, nullptr, (char*)buffer);
@@ -18737,7 +18798,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
 
   }
 
-  // finally, read teh trailer and verify it is in good shape and that we got all the extents
+  // finally, read the trailer and verify it is in good shape and that we got all the extents
   {
     bufferlist trailer_bl,temp_bl;
     int        read_bytes = bluefs->read(p_handle.get(), offset, trailer_size, &temp_bl, nullptr);
@@ -18765,6 +18826,9 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
       derr << "trailer=\n" << trailer << dendl;
       return -1;
     }
+
+    ceph_assert(header.entries_count   == trailer.entries_count);
+    ceph_assert(header.allocation_size == trailer.allocation_size);
   }
 
   utime_t duration = ceph_clock_now() - start_time;
