@@ -40,6 +40,15 @@ FuncT = TypeVar('FuncT', bound=Callable)
 log = logging.getLogger(__name__)
 
 
+def known_cluster_ids(mgr: 'Module') -> Set[str]:
+    """Return the set of known cluster IDs."""
+    try:
+        clusters = set(available_clusters(mgr))
+    except NoOrchestrator:
+        clusters = nfs_rados_configs(mgr.rados)
+    return clusters
+
+
 def export_cluster_checker(func: FuncT) -> FuncT:
     def cluster_check(
             export: 'ExportMgr',
@@ -49,10 +58,7 @@ def export_cluster_checker(func: FuncT) -> FuncT:
         """
         This method checks if cluster exists
         """
-        try:
-            clusters = set(available_clusters(export.mgr))
-        except NoOrchestrator:
-            clusters = nfs_rados_configs(export.mgr.rados)
+        clusters = known_cluster_ids(export.mgr)
         cluster_id: str = kwargs['cluster_id']
         log.debug("checking for %r in known nfs clusters: %r",
                   cluster_id, clusters)
@@ -187,7 +193,7 @@ class ExportMgr:
         if self._exports is None:
             self._exports = {}
             log.info("Begin export parsing")
-            for cluster_id in available_clusters(self.mgr):
+            for cluster_id in known_cluster_ids(self.mgr):
                 self.export_conf_objs = []  # type: List[Export]
                 self._read_raw_config(cluster_id)
                 self.exports[cluster_id] = self.export_conf_objs
