@@ -1379,6 +1379,10 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
     }
   }
 
+  // Skip opening an empty object.
+  if(source->get_obj_size() == 0)
+    return 0;
+
   // Open the object here.
   if (source->category == RGWObjCategory::MultiMeta) {
     ldpp_dout(dpp, 20) <<__func__<< ": open obj parts..." << dendl;
