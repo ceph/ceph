@@ -3285,9 +3285,8 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
       }
     }
   }
-  if (flushed_sum) {
-    _maybe_compact_log_LNF_NF_LD_D();
-  }
+  // remove _maybe_compact_log_LNF_NF_LD_D() check since _flush_F()
+  // won't increase log fnode size, there's no need to check.
 }
 
 void BlueFS::flush(FileWriter *h, bool force)/*_WF_LNF_NF_LD_D*/
@@ -3299,9 +3298,8 @@ void BlueFS::flush(FileWriter *h, bool force)/*_WF_LNF_NF_LD_D*/
     r = _flush_F(h, force, &flushed);
     ceph_assert(r == 0);
   }
-  if (r == 0 && flushed) {
-    _maybe_compact_log_LNF_NF_LD_D();
-  }
+  // remove _maybe_compact_log_LNF_NF_LD_D() check since _flush_F()
+  // won't increase log fnode size, there's no need to check.
 }
 
 int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
