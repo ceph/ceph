@@ -14,6 +14,12 @@ users update to this release.
 Notable Changes
 ---------------
 
+* Fix in the read lease logic to prevent PGs from going into WAIT state
+  after OSD restart.
+
+* Several bug fixes in BlueStore, including a fix for object listing bug, which
+  could cause stat mismatch scrub errors.
+
 Changelog
 ---------
 

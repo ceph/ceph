@@ -36,7 +36,7 @@ releases:
     target_eol: 2022-06-01
     releases:
       - version: 15.2.16
-        released: 2022-02-21
+        released: 2022-03-01
       - version: 15.2.15  
         released: 2021-10-20
       - version: 15.2.14
