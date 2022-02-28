@@ -4952,10 +4952,16 @@ int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp
   }
 
   string tag = (state->tail_tag.length() > 0 ? state->tail_tag.to_str() : state->obj_tag.to_str());
-  auto ret = store->gc->send_chain(chain, tag); // do it synchronously
-  if (ret < 0) {
-    //Delete objects inline if send chain to gc fails
+  if (store->gc == nullptr) {
+    ldpp_dout(dpp, 0) << "deleting objects inline since gc isn't initialized" << dendl;
+    //Delete objects inline just in case gc hasn't been initialised, prevents crashes
     store->delete_objs_inline(dpp, chain, tag);
+  } else {
+    auto ret = store->gc->send_chain(chain, tag); // do it synchronously
+    if (ret < 0) {
+      //Delete objects inline if send chain to gc fails
+      store->delete_objs_inline(dpp, chain, tag);
+    }
   }
   return 0;
 }
