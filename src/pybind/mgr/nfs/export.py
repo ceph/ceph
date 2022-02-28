@@ -20,8 +20,7 @@ from orchestrator import NoOrchestrator
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
 from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
-from .exception import NFSException, NFSInvalidOperation, FSNotFound, \
-    ClusterNotFound
+from .exception import NFSException, NFSInvalidOperation, FSNotFound
 from .utils import (
     CONF_PREFIX,
     EXPORT_PREFIX,
@@ -716,8 +715,6 @@ class ExportMgr:
         for k in ['path', 'pseudo']:
             if k not in new_export_dict:
                 raise NFSInvalidOperation(f'Export missing required field {k}')
-        if cluster_id not in available_clusters(self.mgr):
-            raise ClusterNotFound()
         if cluster_id not in self.exports:
             self.exports[cluster_id] = []
 
