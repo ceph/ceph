@@ -6,6 +6,8 @@
 #include <sstream>
 #include <string_view>
 
+#include <seastar/core/metrics.hh>
+
 #include "crimson/os/seastore/logging.h"
 #include "crimson/common/config_proxy.h"
 
@@ -120,28 +122,26 @@ void Cache::register_metrics()
   namespace sm = seastar::metrics;
   using src_t = Transaction::src_t;
 
-  auto src_label = sm::label("src");
   std::map<src_t, sm::label_instance> labels_by_src {
-    {src_t::MUTATE,  src_label("MUTATE")},
-    {src_t::READ,    src_label("READ")},
-    {src_t::CLEANER_TRIM, src_label("CLEANER_TRIM")},
-    {src_t::CLEANER_RECLAIM, src_label("CLEANER_RECLAIM")},
+    {src_t::MUTATE, sm::label_instance("src", "MUTATE")},
+    {src_t::READ, sm::label_instance("src", "READ")},
+    {src_t::CLEANER_TRIM, sm::label_instance("src", "CLEANER_TRIM")},
+    {src_t::CLEANER_RECLAIM, sm::label_instance("src", "CLEANER_RECLAIM")},
   };
 
-  auto ext_label = sm::label("ext");
   std::map<extent_types_t, sm::label_instance> labels_by_ext {
-    {extent_types_t::ROOT,                ext_label("ROOT")},
-    {extent_types_t::LADDR_INTERNAL,      ext_label("LADDR_INTERNAL")},
-    {extent_types_t::LADDR_LEAF,          ext_label("LADDR_LEAF")},
-    {extent_types_t::OMAP_INNER,          ext_label("OMAP_INNER")},
-    {extent_types_t::OMAP_LEAF,           ext_label("OMAP_LEAF")},
-    {extent_types_t::ONODE_BLOCK_STAGED,  ext_label("ONODE_BLOCK_STAGED")},
-    {extent_types_t::COLL_BLOCK,          ext_label("COLL_BLOCK")},
-    {extent_types_t::OBJECT_DATA_BLOCK,   ext_label("OBJECT_DATA_BLOCK")},
-    {extent_types_t::RETIRED_PLACEHOLDER, ext_label("RETIRED_PLACEHOLDER")},
-    {extent_types_t::RBM_ALLOC_INFO,      ext_label("RBM_ALLOC_INFO")},
-    {extent_types_t::TEST_BLOCK,          ext_label("TEST_BLOCK")},
-    {extent_types_t::TEST_BLOCK_PHYSICAL, ext_label("TEST_BLOCK_PHYSICAL")}
+    {extent_types_t::ROOT,                sm::label_instance("ext", "ROOT")},
+    {extent_types_t::LADDR_INTERNAL,      sm::label_instance("ext", "LADDR_INTERNAL")},
+    {extent_types_t::LADDR_LEAF,          sm::label_instance("ext", "LADDR_LEAF")},
+    {extent_types_t::OMAP_INNER,          sm::label_instance("ext", "OMAP_INNER")},
+    {extent_types_t::OMAP_LEAF,           sm::label_instance("ext", "OMAP_LEAF")},
+    {extent_types_t::ONODE_BLOCK_STAGED,  sm::label_instance("ext", "ONODE_BLOCK_STAGED")},
+    {extent_types_t::COLL_BLOCK,          sm::label_instance("ext", "COLL_BLOCK")},
+    {extent_types_t::OBJECT_DATA_BLOCK,   sm::label_instance("ext", "OBJECT_DATA_BLOCK")},
+    {extent_types_t::RETIRED_PLACEHOLDER, sm::label_instance("ext", "RETIRED_PLACEHOLDER")},
+    {extent_types_t::RBM_ALLOC_INFO,      sm::label_instance("ext", "RBM_ALLOC_INFO")},
+    {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
+    {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")}
   };
 
   /*
