@@ -144,8 +144,6 @@ class SnapSchedClient(CephfsClient):
 
     def __init__(self, mgr: Any) -> None:
         super(SnapSchedClient, self).__init__(mgr)
-        # TODO maybe iterate over all fs instance in fsmap and load snap dbs?
-        #
         # Each db connection is now guarded by a Lock; this is required to
         # avoid concurrent DB transactions when more than one paths in a
         # file-system are scheduled at the same interval eg. 1h; without the
@@ -154,6 +152,14 @@ class SnapSchedClient(CephfsClient):
         self.sqlite_connections: Dict[str, DBInfo] = {}
         self.active_timers: Dict[Tuple[str, str], List[Timer]] = {}
         self.conn_lock: Lock = Lock()  # lock to protect add/lookup db connections
+
+        # restart old schedules
+        for fs_name in self.get_all_filesystems():
+            with self.get_schedule_db(fs_name) as conn_mgr:
+                db = conn_mgr.dbinfo.db
+                sched_list = Schedule.list_all_schedules(db, fs_name)
+                for sched in sched_list:
+                    self.refresh_snap_timers(fs_name, sched.path, db)
 
     @property
     def allow_minute_snaps(self) -> None:
