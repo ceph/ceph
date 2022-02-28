@@ -6,6 +6,8 @@
 
 #include <fmt/format.h>
 
+#include <seastar/core/metrics.hh>
+
 #include "include/buffer.h"
 
 #include "crimson/common/config_proxy.h"
@@ -687,9 +689,8 @@ void BlockSegmentManager::register_metrics()
   LOG_PREFIX(BlockSegmentManager::register_metrics);
   DEBUG("D{}", get_device_id());
   namespace sm = seastar::metrics;
-  sm::label label("device_id");
   std::vector<sm::label_instance> label_instances;
-  label_instances.push_back(label(get_device_id()));
+  label_instances.push_back(sm::label_instance("device_id", get_device_id()));
   stats.reset();
   metrics.add_group(
     "segment_manager",

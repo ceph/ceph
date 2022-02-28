@@ -150,16 +150,15 @@ void SeaStore::register_metrics()
 {
   namespace sm = seastar::metrics;
   using op_type_t = SeaStore::op_type_t;
-  auto lat_label = sm::label("latency");
   std::pair<op_type_t, sm::label_instance> labels_by_op_type[] = {
-    {op_type_t::TRANSACTION,     lat_label("TRANSACTION")},
-    {op_type_t::READ,            lat_label("READ")},
-    {op_type_t::WRITE,           lat_label("WRITE")},
-    {op_type_t::GET_ATTR,        lat_label("GET_ATTR")},
-    {op_type_t::GET_ATTRS,       lat_label("GET_ATTRS")},
-    {op_type_t::STAT,            lat_label("STAT")},
-    {op_type_t::OMAP_GET_VALUES, lat_label("OMAP_GET_VALUES")},
-    {op_type_t::OMAP_LIST,       lat_label("OMAP_LIST")},
+    {op_type_t::TRANSACTION,     sm::label_instance("latency", "TRANSACTION")},
+    {op_type_t::READ,            sm::label_instance("latency", "READ")},
+    {op_type_t::WRITE,           sm::label_instance("latency", "WRITE")},
+    {op_type_t::GET_ATTR,        sm::label_instance("latency", "GET_ATTR")},
+    {op_type_t::GET_ATTRS,       sm::label_instance("latency", "GET_ATTRS")},
+    {op_type_t::STAT,            sm::label_instance("latency", "STAT")},
+    {op_type_t::OMAP_GET_VALUES, sm::label_instance("latency",  "OMAP_GET_VALUES")},
+    {op_type_t::OMAP_LIST,       sm::label_instance("latency", "OMAP_LIST")},
   };
 
   for (auto& [op_type, label] : labels_by_op_type) {
