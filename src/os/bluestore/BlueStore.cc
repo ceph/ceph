@@ -18055,12 +18055,14 @@ struct allocator_image_header {
   }
 
   // create header in CEPH format
-  allocator_image_header(utime_t timestamp, uint32_t format_version, uint32_t serial) {
+  allocator_image_header(utime_t timestamp, uint32_t format_version, uint32_t serial, uint64_t entries_count, uint64_t allocation_size) {
     this->format_version  = format_version;
     this->timestamp       = timestamp;
     this->valid_signature = ALLOCATOR_IMAGE_VALID_SIGNATURE;
     this->serial          = serial;
     memset(this->pad, 0, sizeof(this->pad));
+    this->entries_count   = entries_count;
+    this->allocation_size = allocation_size;
   }
 
   friend std::ostream& operator<<(std::ostream& out, const allocator_image_header& header) {
@@ -18180,6 +18182,18 @@ struct allocator_image_trailer {
       if (timestamp != p_header->timestamp) {
 	derr << "Illegal trailer: header->timestamp(" << p_header->timestamp
 	     << ") != trailer->timestamp(" << timestamp << ")" << dendl;
+	return -1;
+      }
+
+      if (this->entries_count != p_header->entries_count) {
+	derr << "Illegal trailer: header->entries_count(" << p_header->entries_count << ") != trailer->entries_count("
+	     << this->entries_count << ")" << dendl;
+	return -1;
+      }
+
+      if (this->allocation_size != p_header->allocation_size) {
+	derr << "Illegal trailer: header->allocation_size(" << p_header->allocation_size << ") != trailer->allocation_size("
+	     << this->allocation_size << ")" << dendl;
 	return -1;
       }
 
@@ -18487,9 +18501,10 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   uint64_t file_size = p_handle->file->fnode.size;
   uint64_t allocated = p_handle->file->fnode.get_allocated();
 
-  uint64_t extents_count = 0;
+  uint64_t extents_count = 0, allocation_size = 0;
   auto count_extents = [&](uint64_t extent_offset, uint64_t extent_length) {
-    extents_count++;
+    extents_count   ++;
+    allocation_size += extent_length;
   };
   src_allocator->dump(count_extents);
 
@@ -18530,6 +18545,11 @@ int BlueStore::store_allocator(Allocator* src_allocator)
     return -1;
   }
 
+  // count extents and allocation_size in final allocator
+  extents_count   = 0;
+  allocation_size = 0;
+  allocator->dump(count_extents);
+
   // reopen file now after we forced BlueFS SYNC
   ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
   if (ret != 0) {
@@ -18545,7 +18565,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   utime_t                 timestamp = ceph_clock_now();
   uint32_t                crc       = -1;
   {
-    allocator_image_header  header(timestamp, s_format_version, s_serial);
+    allocator_image_header  header(timestamp, s_format_version, s_serial, extents_count, allocation_size);
     bufferlist              header_bl;
     encode(header, header_bl);
     crc = header_bl.crc32c(crc);
@@ -18557,18 +18577,18 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   extent_t        buffer[MAX_EXTENTS_IN_BUFFER]; // 64KB
   extent_t       *p_curr          = buffer;
   const extent_t *p_end           = buffer + MAX_EXTENTS_IN_BUFFER;
-  uint64_t        extent_count    = 0;
-  uint64_t        allocation_size = 0;
+  uint64_t        _extents_count   = 0;
+  uint64_t        _allocation_size = 0;
   auto iterated_allocation = [&](uint64_t extent_offset, uint64_t extent_length) {
     if (extent_length == 0) {
-      derr <<  __func__ << "" << extent_count << "::[" << extent_offset << "," << extent_length << "]" << dendl;
+      derr <<  __func__ << "" << _extents_count << "::[" << extent_offset << "," << extent_length << "]" << dendl;
       ret = -1;
       return;
     }
     p_curr->offset = HTOCEPH_64(extent_offset);
     p_curr->length = HTOCEPH_64(extent_length);
-    extent_count++;
-    allocation_size += extent_length;
+    _extents_count   ++;
+    _allocation_size += extent_length;
     p_curr++;
 
     if (p_curr == p_end) {
@@ -18591,8 +18611,10 @@ int BlueStore::store_allocator(Allocator* src_allocator)
     crc = flush_extent_buffer_with_crc(p_handle, (const char*)buffer, (const char*)p_curr, crc);
   }
 
+  ceph_assert(_extents_count   == extents_count);
+  ceph_assert(_allocation_size == allocation_size);
   {
-    allocator_image_trailer trailer(timestamp, s_format_version, s_serial, extent_count, allocation_size);
+    allocator_image_trailer trailer(timestamp, s_format_version, s_serial, extents_count, allocation_size);
     bufferlist trailer_bl;
     encode(trailer, trailer_bl);
     uint32_t crc = -1;
@@ -18604,33 +18626,10 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   bluefs->fsync(p_handle);
 #if 0
   bluefs->truncate(p_handle, p_handle->pos);
-#else
-  // there is no simple method to change offset, so close and reopen writer
-  bluefs->close_writer(p_handle);
-  ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
-  if (ret != 0) {
-    derr <<  __func__ << "Failed third open_for_write with error-code " << ret << dendl;
-    return -1;
-  }
-
-  // now that we know the entries count and allocation size we can fill them in the header
-  {
-    bufferlist              header_bl;
-    allocator_image_header  header(timestamp, s_format_version, s_serial);
-    header.entries_count   = extent_count;
-    header.allocation_size = allocation_size;
-
-    crc = -1;
-    encode(header, header_bl);
-    crc = header_bl.crc32c(crc);
-    encode(crc, header_bl);
-    p_handle->append(header_bl);
-  }
-#endif
   bluefs->fsync(p_handle);
-
+#endif
   utime_t duration = ceph_clock_now() - start_time;
-  dout(1) <<"WRITE-extent_count=" << extent_count << ", alloc_size=" << allocation_size << ", serial=" << s_serial << dendl;
+  dout(1) <<"WRITE-extent_count=" << extents_count << ", alloc_size=" << allocation_size << ", serial=" << s_serial << dendl;
   dout(1) <<"p_handle->pos=" << p_handle->pos << ", file_size=" << p_handle->file->fnode.size << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
@@ -18662,7 +18661,7 @@ Allocator* BlueStore::create_bitmap_allocator(uint64_t bdev_size) {
 size_t calc_allocator_image_header_size()
 {
   utime_t                 timestamp = ceph_clock_now();
-  allocator_image_header  header(timestamp, s_format_version, s_serial);
+  allocator_image_header  header(timestamp, s_format_version, s_serial, 0, 0);
   bufferlist              header_bl;
   encode(header, header_bl);
   uint32_t crc = -1;
