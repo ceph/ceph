@@ -44,7 +44,7 @@ Details of the JSON command output are as follows:
           This can happen in cases such as (temporary) network issue between MDS rank zero
           and other active MDSs.
 
-Metrics can be fetched for a partcilar client and/or for a set of active MDSs. To fetch metrics
+Metrics can be fetched for a particular client and/or for a set of active MDSs. To fetch metrics
 for a particular client (e.g., for client-id: 1234)::
 
   $ ceph fs perf stats --client_id=1234
