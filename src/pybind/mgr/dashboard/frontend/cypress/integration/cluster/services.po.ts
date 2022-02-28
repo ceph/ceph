@@ -17,7 +17,7 @@ export class ServicesPageHelper extends PageHelper {
   };
 
   serviceDetailColumnIndex = {
-    daemonName: 1,
+    daemonName: 2,
     status: 7
   };
 
@@ -120,7 +120,7 @@ export class ServicesPageHelper extends PageHelper {
     // we'll need to manually override the indexes when this check is being
     // done for the daemons in host details page. So we'll get the url and
     // verify if the current page is not the services index page
-    cy.url().then(url => {
+    cy.url().then((url) => {
       if (!url.includes(pages.index.url)) {
         daemonNameIndex = 1;
         statusIndex = 6;

@@ -140,14 +140,8 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         filterable: true
       },
       {
-        name: $localize`Daemon type`,
-        prop: 'daemon_type',
-        flexGrow: 1,
-        filterable: true
-      },
-      {
-        name: $localize`Daemon ID`,
-        prop: 'daemon_id',
+        name: $localize`Daemon name`,
+        prop: 'daemon_name',
         flexGrow: 1,
         filterable: true
       },
