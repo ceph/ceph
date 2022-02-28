@@ -9,7 +9,7 @@ import logging
 from os import environ
 import re
 import sqlite3
-from typing import Tuple, Any
+from typing import Tuple, Any, List
 
 log = logging.getLogger(__name__)
 
@@ -233,6 +233,14 @@ class Schedule(object):
                 c = db.execute(cls.PROTO_GET_SCHEDULES + ' path = ?',
                                (f'{path}',))
         return [cls._from_db_row(row, fs) for row in c.fetchall()]
+
+    @classmethod
+    def list_all_schedules(cls,
+                           db: sqlite3.Connection,
+                           fs: str) -> List['Schedule']:
+        with db:
+            c = db.execute(cls.PROTO_GET_SCHEDULES + " path LIKE '%'")
+            return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     INSERT_SCHEDULE = '''INSERT INTO
         schedules(path, subvol, retention, rel_path)
