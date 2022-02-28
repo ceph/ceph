@@ -84,9 +84,9 @@ std::string_view SnapInfo::get_long_name() const
   if (long_name.empty() ||
       long_name.compare(1, name.size(), name) ||
       long_name.find_last_of("_") != name.size() + 1) {
-    char nm[80];
-    snprintf(nm, sizeof(nm), "_%s_%llu", name.c_str(), (unsigned long long)ino);
-    long_name = nm;
+    std::ostringstream oss;
+    oss << "_" << name << "_" << (unsigned long long)ino;
+    long_name = oss.str();
   }
   return long_name;
 }
