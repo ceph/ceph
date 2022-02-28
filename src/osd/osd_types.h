@@ -1039,6 +1039,9 @@ inline std::ostream& operator<<(std::ostream& out, const pool_snap_info_t& si) {
  * pool options.
  */
 
+// The order of items in the list is important, therefore,
+// you should always add to the end of the list when adding new options.
+
 class pool_opts_t {
 public:
   enum key_t {
@@ -1065,6 +1068,7 @@ public:
     DEDUP_TIER,
     DEDUP_CHUNK_ALGORITHM,
     DEDUP_CDC_CHUNK_SIZE,
+    PG_NUM_MAX, // max pg_num
   };
 
   enum type_t {
