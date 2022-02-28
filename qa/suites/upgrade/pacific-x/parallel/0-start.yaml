@@ -2,6 +2,7 @@ roles:
 - - mon.a
   - mon.c
   - mgr.y
+  - mds.a
   - osd.0
   - osd.1
   - osd.2
@@ -10,6 +11,7 @@ roles:
   - node-exporter.a
   - alertmanager.a
 - - mon.b
+  - mds.b
   - mgr.x
   - osd.4
   - osd.5
