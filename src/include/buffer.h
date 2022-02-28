@@ -41,6 +41,7 @@
 #include <iosfwd>
 #include <iomanip>
 #include <list>
+#include <memory>
 #include <vector>
 #include <string>
 #if __cplusplus >= 201703L
