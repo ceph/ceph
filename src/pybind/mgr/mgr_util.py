@@ -321,6 +321,15 @@ class CephfsClient(Generic[Module_T]):
             return fs['mdsmap']['metadata_pool']
         return None
 
+    def get_all_filesystems(self) -> List[str]:
+        fs_list: List[str] = []
+        fs_map = self.mgr.get('fs_map')
+        if fs_map['filesystems']:
+            for fs in fs_map['filesystems']:
+                fs_list.append(fs['mdsmap']['fs_name'])
+        return fs_list
+
+
 
 @contextlib.contextmanager
 def open_filesystem(fsc: CephfsClient, fs_name: str) -> Generator["cephfs.LibCephFS", None, None]:
