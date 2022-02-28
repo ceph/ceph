@@ -196,7 +196,7 @@ class ExportMgr:
             for cluster_id in known_cluster_ids(self.mgr):
                 self.export_conf_objs = []  # type: List[Export]
                 self._read_raw_config(cluster_id)
-                self.exports[cluster_id] = self.export_conf_objs
+                self._exports[cluster_id] = self.export_conf_objs
                 log.info("Exports parsed successfully %s", self.exports.items())
         return self._exports
 
