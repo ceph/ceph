@@ -15,15 +15,21 @@
 #ifndef CEPH_QATACCEL_H
 #define CEPH_QATACCEL_H
 
-#include <qatzip.h>
+#include <memory>
 #include <boost/optional.hpp>
 #include "include/buffer.h"
 
+extern "C" struct QzSession_S; //struct QzSession_S comes from QAT libraries
+
+struct QzSessionDeleter {
+  void operator() (struct QzSession_S *session);
+};
+
 class QatAccel {
-  QzSession_T session;
+  std::unique_ptr<struct QzSession_S, QzSessionDeleter> session;
 
  public:
-  QatAccel() : session({0}) {}
+  QatAccel();
   ~QatAccel();
 
   bool init(const std::string &alg);
