@@ -1323,6 +1323,9 @@ void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
 
 // -- pool_opts_t --
 
+// The order of items in the list is important, therefore,
+// you should always add to the end of the list when adding new options.
+
 typedef std::map<std::string, pool_opts_t::opt_desc_t> opt_mapping_t;
 static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	   ("scrub_min_interval", pool_opts_t::opt_desc_t(
@@ -1357,8 +1360,6 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	     pool_opts_t::FINGERPRINT_ALGORITHM, pool_opts_t::STR))
            ("pg_num_min", pool_opts_t::opt_desc_t(
 	     pool_opts_t::PG_NUM_MIN, pool_opts_t::INT))
-           ("pg_num_max", pool_opts_t::opt_desc_t(
-	     pool_opts_t::PG_NUM_MAX, pool_opts_t::INT))
            ("target_size_bytes", pool_opts_t::opt_desc_t(
 	     pool_opts_t::TARGET_SIZE_BYTES, pool_opts_t::INT))
            ("target_size_ratio", pool_opts_t::opt_desc_t(
@@ -1372,7 +1373,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("dedup_chunk_algorithm", pool_opts_t::opt_desc_t(
 	     pool_opts_t::DEDUP_CHUNK_ALGORITHM, pool_opts_t::STR))
            ("dedup_cdc_chunk_size", pool_opts_t::opt_desc_t(
-	     pool_opts_t::DEDUP_CDC_CHUNK_SIZE, pool_opts_t::INT));
+	     pool_opts_t::DEDUP_CDC_CHUNK_SIZE, pool_opts_t::INT))
+	   ("pg_num_max", pool_opts_t::opt_desc_t(
+             pool_opts_t::PG_NUM_MAX, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name)
 {
