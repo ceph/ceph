@@ -233,6 +233,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what.substr(0, 7) == "osd_map") {
     without_gil_t no_gil;
     cluster_state.with_osdmap([&](const OSDMap &osd_map){
+      no_gil.acquire_gil();
       if (what == "osd_map") {
         osd_map.dump(&f);
       } else if (what == "osd_map_tree") {
