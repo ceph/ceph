@@ -18639,6 +18639,16 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   s_serial++;
 
   need_to_destage_allocation_file = false;
+
+#if 1
+  auto temp_allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
+  uint64_t num, bytes;
+  ret = __restore_allocator(temp_allocator.get(), &num, &bytes);
+  if (ret != 0) {
+    return ret;
+  }
+#endif
+
   return 0;
 }
 
@@ -18831,9 +18841,9 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
   }
 
   utime_t duration = ceph_clock_now() - start_time;
-  dout(5) << "READ--extent_count=" << extent_count << ", read_alloc_size=  "
+  dout(1) << "READ--extent_count=" << extent_count << ", read_alloc_size=  "
 	    << read_alloc_size << ", file_size=" << file_size << dendl;
-  dout(5) << "READ duration=" << duration << " seconds, serial=" << header.serial << dendl;
+  dout(1) << "READ duration=" << duration << " seconds, serial=" << header.serial << dendl;
   *num   = extent_count;
   *bytes = read_alloc_size;
   return 0;
