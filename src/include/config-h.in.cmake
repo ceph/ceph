@@ -121,9 +121,6 @@
 #cmakedefine HAVE_LIBTCMALLOC
 #cmakedefine LIBTCMALLOC_MISSING_ALIGNED_ALLOC
 
-/* Define if have curl_multi_wait() */
-#cmakedefine HAVE_CURL_MULTI_WAIT 1
-
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA
 
