@@ -30,7 +30,10 @@ protected:
 
 public:
   ETagVerifier(CephContext* cct_, rgw::putobj::DataProcessor *next)
-    : Pipe(next), cct(cct_) {}
+    : Pipe(next), cct(cct_) {
+      // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+      hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+    }
 
   virtual void calculate_etag() = 0;
   string get_calculated_etag() { return calculated_etag;}
@@ -62,7 +65,10 @@ public:
                              rgw::putobj::DataProcessor *next)
     : ETagVerifier(cct, next),
       part_ofs(std::move(part_ofs))
-  {}
+  {
+    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  }
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
