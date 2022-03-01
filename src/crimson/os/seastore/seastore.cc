@@ -522,13 +522,14 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
 
 SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::readv(
   CollectionRef ch,
-  const ghobject_t& oid,
+  const ghobject_t& _oid,
   interval_set<uint64_t>& m,
   uint32_t op_flags)
 {
   return seastar::do_with(
+    _oid,
     ceph::bufferlist{},
-    [=, &oid, &m](auto &ret) {
+    [=, &m](auto &oid, auto &ret) {
     return crimson::do_for_each(
       m,
       [=, &oid, &ret](auto &p) {
