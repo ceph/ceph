@@ -183,7 +183,7 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
-BuildRequires:	gcc-toolset-10-gcc-c++ >= 10.2
+BuildRequires:	gcc-toolset-11-gcc-c++
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
 %if 0%{?fedora} || 0%{?rhel} >= 8
