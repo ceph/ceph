@@ -11,6 +11,7 @@
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
+#include <seastar/core/metrics.hh>
 #include <seastar/core/shared_mutex.hh>
 
 #include "common/safe_io.h"

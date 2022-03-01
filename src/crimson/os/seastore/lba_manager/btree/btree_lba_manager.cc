@@ -4,6 +4,8 @@
 #include <sys/mman.h>
 #include <string.h>
 
+#include <seastar/core/metrics.hh>
+
 #include "include/buffer.h"
 #include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
