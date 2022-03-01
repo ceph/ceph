@@ -3911,6 +3911,7 @@ int main(int argc, const char **argv)
 			 OPT::OBJECTS_EXPIRE_STALE_RM,
 			 OPT::LC_PROCESS,
              OPT::BUCKET_SYNC_RUN,
+             OPT::DATA_SYNC_RUN,
     };
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
