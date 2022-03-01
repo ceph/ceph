@@ -27,7 +27,8 @@
             <p *ngFor="let line of clog">
               <span class="timestamp">{{ line.stamp | cdDate }}</span>
               <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
-              <span class="message">{{ line.message }}</span>
+              <span class="message"
+                    [innerHTML]="line.message | searchHighlight: search"></span>
             </p>
 
             <ng-container *ngIf="clog.length != 0 else noEntriesTpl"></ng-container>
@@ -57,7 +58,8 @@
             <p *ngFor="let line of audit_log">
               <span class="timestamp">{{ line.stamp | cdDate }}</span>
               <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
-              <span class="message">{{ line.message }}</span>
+              <span class="message"
+                    [innerHTML]="line.message | searchHighlight: search"></span>
             </p>
 
             <ng-container *ngIf="audit_log.length != 0 else noEntriesTpl"></ng-container>
