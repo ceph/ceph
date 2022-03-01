@@ -1286,6 +1286,7 @@ public:
   struct LCHead {
     time_t start_date{0};
     std::string marker;
+    time_t shard_rollover_date{0};
 
     LCHead() = default;
     LCHead(time_t _date, std::string& _marker) : start_date(_date), marker(_marker) {}
