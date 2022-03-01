@@ -44,6 +44,7 @@ General
 -------
 
 * `ARM <http://www.arm.com/>`_
+* `ArvanCloud <https://www.arvancloud.com>`_
 * `Canonical <https://www.canonical.com/>`_
 * `Cloudbase Solutions <https://cloudbase.it/>`_
 * `Clyso <https://www.clyso.com/en/>`_
