@@ -132,12 +132,14 @@
                   <input type="checkbox"
                          class="custom-control-input"
                          id="channel_ident"
-                         formControlName="channel_ident">
+                         formControlName="channel_ident"
+                         (click)="toggleIdent()">
                   <label class="custom-control-label"
                          for="channel_ident"></label>
                 </div>
               </div>
             </div>
+            <ng-container *ngIf="showContactInfo">
             <legend>
               <ng-container i18n>Contact Information</ng-container>
               <cd-helper i18n>Submitting any contact information is completely optional and disabled by default.</cd-helper>
@@ -167,6 +169,20 @@
                        i18n-placeholder>
               </div>
             </div>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="organization"
+                     i18n>Organization</label>
+              <div class="cd-col-form-input">
+                <input id="organization"
+                       class="form-control"
+                       type="text"
+                       formControlName="organization"
+                       placeholder="Organization name"
+                       i18n-placeholder>
+              </div>
+            </div>
+          </ng-container>
             <legend i18n>Advanced Settings</legend>
             <div class="form-group row">
               <label class="cd-col-form-label"

@@ -80,6 +80,35 @@ describe('TelemetryComponent', () => {
       expect(component).toBeTruthy();
     });
 
+    it('should show/hide ident fields on checking/unchecking', () => {
+      const getContactField = () =>
+        fixture.debugElement.nativeElement.querySelector('input[id=contact]');
+      const getDescriptionField = () =>
+        fixture.debugElement.nativeElement.querySelector('input[id=description]');
+      const checkVisibility = () => {
+        if (component.showContactInfo) {
+          expect(getContactField()).toBeTruthy();
+          expect(getDescriptionField()).toBeTruthy();
+        } else {
+          expect(getContactField()).toBeFalsy();
+          expect(getDescriptionField()).toBeFalsy();
+        }
+      };
+
+      // Initial check.
+      checkVisibility();
+
+      // toggle fields.
+      component.toggleIdent();
+      fixture.detectChanges();
+      checkVisibility();
+
+      // toggle fields again.
+      component.toggleIdent();
+      fixture.detectChanges();
+      checkVisibility();
+    });
+
     it('should set module enability to true correctly', () => {
       expect(component.moduleEnabled).toBeTruthy();
     });
@@ -94,16 +123,6 @@ describe('TelemetryComponent', () => {
       _.forEach(Object.keys(component.options), (option) => {
         expect(component.requiredFields).toContain(option);
       });
-    });
-
-    it('should update the Telemetry configuration', () => {
-      component.updateConfig();
-      const req = httpTesting.expectOne('api/mgr/module/telemetry');
-      expect(req.request.method).toBe('PUT');
-      expect(req.request.body).toEqual({
-        config: {}
-      });
-      req.flush({});
     });
 
     it('should disable the Telemetry module', () => {
@@ -164,14 +183,22 @@ describe('TelemetryComponent', () => {
 
     it('should submit', () => {
       component.onSubmit();
-      const req = httpTesting.expectOne('api/telemetry');
-      expect(req.request.method).toBe('PUT');
-      expect(req.request.body).toEqual({
+      const req1 = httpTesting.expectOne('api/telemetry');
+      expect(req1.request.method).toBe('PUT');
+      expect(req1.request.body).toEqual({
         enable: true,
         license_name: 'sharing-1-0'
       });
-      req.flush({});
-      expect(router.navigate).toHaveBeenCalledWith(['']);
+      req1.flush({});
+      const req2 = httpTesting.expectOne({
+        url: 'api/mgr/module/telemetry',
+        method: 'PUT'
+      });
+      expect(req2.request.body).toEqual({
+        config: {}
+      });
+      req2.flush({});
+      expect(router.url).toBe('/');
     });
   });
 });
