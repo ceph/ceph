@@ -297,9 +297,8 @@ static ghobject_t test_ops_get_object_name(
     }
     if (pool < 0) {
       // the return type of `fmt::format` is `std::string`
-      using namespace fmt::literals;
       throw std::invalid_argument{
-        "Invalid pool '{}'"_format(*pool_arg)
+        fmt::format("Invalid pool '{}'", *pool_arg)
       };
     }
     return pool;
