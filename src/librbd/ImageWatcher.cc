@@ -166,7 +166,7 @@ void ImageWatcher<I>::handle_async_complete(const AsyncRequestId &request,
   }
 
   std::unique_lock async_request_locker{m_async_request_lock};
-  m_async_pending.erase(request);
+  mark_async_request_complete(request, r);
   m_async_op_tracker.finish_op();
 }
 
@@ -490,6 +490,44 @@ void ImageWatcher<I>::notify_lock_owner(const Payload& payload,
 }
 
 template <typename I>
+bool ImageWatcher<I>::is_new_request(const AsyncRequestId &id) const {
+  ceph_assert(ceph_mutex_is_locked(m_async_request_lock));
+
+  return m_async_pending.count(id) == 0 && m_async_complete.count(id) == 0;
+}
+
+template <typename I>
+bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id,
+                                                  int r) {
+  ceph_assert(ceph_mutex_is_locked(m_async_request_lock));
+
+  bool found = m_async_pending.erase(id);
+
+  auto now = ceph_clock_now();
+
+  auto it = m_async_complete_expiration.begin();
+  while (it != m_async_complete_expiration.end() && it->first < now) {
+    m_async_complete.erase(it->second);
+    it = m_async_complete_expiration.erase(it);
+  }
+
+  if (!m_async_complete.insert({id, r}).second) {
+    for (it = m_async_complete_expiration.begin();
+         it != m_async_complete_expiration.end(); it++) {
+      if (!(it->second != id)) {
+        m_async_complete_expiration.erase(it);
+        break;
+      }
+    }
+  }
+  auto expiration_time = now;
+  expiration_time += 600;
+  m_async_complete_expiration.insert({expiration_time, id});
+
+  return found;
+}
+
+template <typename I>
 Context *ImageWatcher<I>::remove_async_request(const AsyncRequestId &id) {
   std::unique_lock async_request_locker{m_async_request_lock};
   auto it = m_async_requests.find(id);
@@ -570,13 +608,20 @@ int ImageWatcher<I>::prepare_async_request(const AsyncRequestId& async_request_i
     return -ERESTART;
   } else {
     std::unique_lock l{m_async_request_lock};
-    if (m_async_pending.count(async_request_id) == 0) {
+    if (is_new_request(async_request_id)) {
       m_async_pending.insert(async_request_id);
       *new_request = true;
       *prog_ctx = new RemoteProgressContext(*this, async_request_id);
       *ctx = new RemoteContext(*this, async_request_id, *prog_ctx);
     } else {
       *new_request = false;
+      auto it = m_async_complete.find(async_request_id);
+      if (it != m_async_complete.end()) {
+        int r = it->second;
+        // reset complete request expiration time
+        mark_async_request_complete(async_request_id, r);
+        return r;
+      }
     }
   }
   return 0;
