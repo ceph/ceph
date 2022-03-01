@@ -10333,7 +10333,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
 
     encode(snap_name, dnbl);
     //infinite lease
-    LeaseStat e(CEPH_LEASE_VALID, -1, 0);
+    LeaseStat e(CEPH_LEASE_VALID, -1, 0, p->second->ino != diri->ino());
     mds->locker->encode_lease(dnbl, mdr->session->info, e);
     dout(20) << "encode_infinite_lease" << dendl;
 

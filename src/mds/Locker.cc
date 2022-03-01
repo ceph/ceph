@@ -4300,11 +4300,12 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
 			  const LeaseStat& ls)
 {
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(ls.mask, bl);
     encode(ls.duration_ms, bl);
     encode(ls.seq, bl);
     encode(ls.alternate_name, bl);
+    encode(ls.is_long_snap_name, bl);
     ENCODE_FINISH(bl);
   }
   else {

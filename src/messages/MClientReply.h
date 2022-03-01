@@ -53,19 +53,23 @@ struct LeaseStat {
   __u32 duration_ms = 0;
   __u32 seq = 0;
   std::string alternate_name;
+  __u8 is_long_snap_name = 0;
 
   LeaseStat() = default;
-  LeaseStat(__u16 msk, __u32 dur, __u32 sq) : mask{msk}, duration_ms{dur}, seq{sq} {}
+  LeaseStat(__u16 msk, __u32 dur, __u32 sq, __u8 lsn = 0)
+    : mask{msk}, duration_ms{dur}, seq{sq}, is_long_snap_name(lsn) {}
 
   void decode(ceph::buffer::list::const_iterator &bl, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(2, bl);
+      DECODE_START(3, bl);
       decode(mask, bl);
       decode(duration_ms, bl);
       decode(seq, bl);
       if (struct_v >= 2)
         decode(alternate_name, bl);
+      if (struct_v >= 3)
+        decode(is_long_snap_name, bl);
       DECODE_FINISH(bl);
     }
     else {
