@@ -18875,7 +18875,9 @@ int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint6
     if (perform_bluestore_qfsck && cct->_conf->bluestore_qfsck_on_mount) {
       //perform_bluestore_qfsck = false;
       dout(0) << __func__ << "::NCB::bluestore_qfsck_on_mount was initiated ... " << dendl;
-      ceph_assert(verify_shared_alloc_against_onodes_allocation_info() == 0);
+      if (verify_shared_alloc_against_onodes_allocation_info() != 0) {
+	derr << "Failed QFSCK!!" << dendl;
+      }
     }
   }
 
