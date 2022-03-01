@@ -18640,7 +18640,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
 
   need_to_destage_allocation_file = false;
 
-#if 1
+#if 0
   auto temp_allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
   uint64_t num, bytes;
   ret = __restore_allocator(temp_allocator.get(), &num, &bytes);
@@ -18873,7 +18873,7 @@ int BlueStore::restore_allocator(Allocator* dest_allocator, uint64_t *num, uint6
   {
     static bool perform_bluestore_qfsck = true;
     if (perform_bluestore_qfsck && cct->_conf->bluestore_qfsck_on_mount) {
-      perform_bluestore_qfsck = false;
+      //perform_bluestore_qfsck = false;
       dout(0) << __func__ << "::NCB::bluestore_qfsck_on_mount was initiated ... " << dendl;
       ceph_assert(verify_shared_alloc_against_onodes_allocation_info() == 0);
     }
