@@ -377,13 +377,9 @@ public:
       return index > rhs.index;
     }
 
-    bool operator==(const iter_t &rhs) const {
-      assert(node == rhs.node);
-      return rhs.index == index;
-    }
-
-    bool operator!=(const iter_t &rhs) const {
-      return !(*this == rhs);
+    friend bool operator==(const iter_t &lhs, const iter_t &rhs) {
+      assert(lhs.node == rhs.node);
+      return lhs.index == rhs.index;
     }
 
   private:
