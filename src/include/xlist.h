@@ -159,10 +159,15 @@ public:
     remove(_back);
   }
 
-  class iterator: std::iterator<std::forward_iterator_tag, T> {
+  class iterator {
   private:
     item *cur;
   public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T*;
+    using reference = T&;
     iterator(item *i = 0) : cur(i) {}
     T operator*() { return static_cast<T>(cur->_item); }
     iterator& operator++() {
