@@ -2097,6 +2097,21 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   return ret;
 } /* RGWLC::process_bucket */
 
+static inline bool allow_shard_rollover(CephContext* cct, time_t now, time_t shard_rollover_date)
+{
+  /* return true iff:
+   *    - non-debug scheduling is in effect, and
+   *    - the current shard has not rolled over in the last 24 hours
+   */
+  if (((shard_rollover_date < now) &&
+       (now - shard_rollover_date > 24*60*60)) ||
+      (! shard_rollover_date /* no rollover date stored */) ||
+      (cct->_conf->rgw_lc_debug_interval > 0 /* defaults to -1 == disabled */)) {
+    return true;
+  }
+  return false;
+}
+
 int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 		   bool once = false)
 {
@@ -2147,7 +2162,15 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
     /* if there is nothing at head, try to reinitialize head.marker with the
      * first entry in the queue */
-    if (head.marker.empty()) {
+    if (head.marker.empty() &&
+	allow_shard_rollover(cct, now, head.shard_rollover_date) /* prevent multiple passes by diff.
+								  * rgws,in same cycle */) {
+
+      ldpp_dout(this, 5) << "RGWLC::process() process shard rollover lc_shard=" << lc_shard
+			 << " head.marker=" << head.marker
+			 << " head.shard_rollover_date=" << head.shard_rollover_date
+			 << dendl;
+
       vector<rgw::sal::Lifecycle::LCEntry> entries;
       int ret = sal_lc->list_entries(lc_shard, head.marker, 1, entries);
       if (ret < 0) {
@@ -2159,6 +2182,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	entry = entries.front();
 	head.marker = entry.bucket;
 	head.start_date = now;
+	head.shard_rollover_date = 0;
       }
     } else {
       ldpp_dout(this, 0) << "RGWLC::process() head.marker !empty() at START for shard=="
@@ -2190,8 +2214,9 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
         }
       }
     } else {
-      ldpp_dout(this, 0) << "RGWLC::process() entry.bucket.empty() == true at START 1"
-			 << " (this is impossible, but stop now)"
+      ldpp_dout(this, 5) << "RGWLC::process() entry.bucket.empty() == true at START 1"
+			 << " (this is possible mainly before any lc policy has been stored"
+			 << " or after removal of an lc_shard object)"
                          << dendl;
       goto exit;
     }
@@ -2281,6 +2306,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	"RGWLC::process() cycle finished lc_shard="
 			 << lc_shard
 			 << dendl;
+      head.shard_rollover_date = ceph_clock_now();
       ret = sal_lc->put_head(lc_shard,  head);
       if (ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
