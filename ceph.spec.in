@@ -286,10 +286,10 @@ BuildRequires:  libasan
 BuildRequires:  libatomic
 %endif
 %if 0%{?rhel}
-BuildRequires:  gcc-toolset-9-annobin
-BuildRequires:  gcc-toolset-9-libubsan-devel
-BuildRequires:  gcc-toolset-9-libasan-devel
-BuildRequires:  gcc-toolset-9-libatomic-devel
+BuildRequires:  gcc-toolset-11-annobin
+BuildRequires:  gcc-toolset-11-libubsan-devel
+BuildRequires:  gcc-toolset-11-libasan-devel
+BuildRequires:  gcc-toolset-11-libatomic-devel
 %endif
 %endif
 #################################################################################
@@ -1220,9 +1220,7 @@ This package provides Ceph default alerts for Prometheus.
 %define _lto_cflags %{nil}
 %endif
 
-%if 0%{with seastar} && 0%{?rhel}
-. /opt/rh/gcc-toolset-9/enable
-%endif
+. /opt/rh/gcc-toolset-11/enable
 
 %if 0%{with cephfs_java}
 # Find jni.h
