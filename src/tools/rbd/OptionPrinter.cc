@@ -3,6 +3,7 @@
 
 #include "tools/rbd/OptionPrinter.h"
 #include "tools/rbd/IndentStream.h"
+#include "include/ceph_assert.h"
 
 namespace rbd {
 
@@ -19,38 +20,75 @@ OptionPrinter::OptionPrinter(const OptionsDescription &positional,
 }
 
 void OptionPrinter::print_short(std::ostream &os, size_t initial_offset) {
-  size_t name_width = std::min(initial_offset, MAX_DESCRIPTION_OFFSET) + 1;
-
-  IndentStream indent_stream(name_width, initial_offset, LINE_WIDTH, os);
-  indent_stream.set_delimiter("[");
+  size_t max_option_width = 0;
+  std::vector<std::string> optionals;
   for (size_t i = 0; i < m_optional.options().size(); ++i) {
+    std::stringstream option;
+
     bool required = m_optional.options()[i]->semantic()->is_required();
     if (!required) {
-      indent_stream << "[";
+      option << "[";
     }
-    indent_stream << "--" << m_optional.options()[i]->long_name();
+    option << "--" << m_optional.options()[i]->long_name();
     if (m_optional.options()[i]->semantic()->max_tokens() != 0) {
-      indent_stream << " <" << m_optional.options()[i]->long_name() << ">";
+      option << " <" << m_optional.options()[i]->long_name() << ">";
     }
     if (!required) {
-      indent_stream << "]";
+      option << "]";
     }
-    indent_stream << " ";
+    max_option_width = std::max(max_option_width, option.str().size());
+    optionals.emplace_back(option.str());
   }
 
-  if (m_optional.options().size() > 0 || m_positional.options().size() == 0) {
+  std::vector<std::string> positionals;
+  for (size_t i = 0; i < m_positional.options().size(); ++i) {
+    std::stringstream option;
+
+    // we overload po::value<std::string>()->default_value("") to signify
+    // an optional positional argument (purely for help printing purposes)
+    boost::any v;
+    bool required = !m_positional.options()[i]->semantic()->apply_default(v);
+    if (!required) {
+      auto ptr = boost::any_cast<std::string>(&v);
+      ceph_assert(ptr && ptr->empty());
+      option << "[";
+    }
+    option << "<" << m_positional.options()[i]->long_name() << ">";
+    if (m_positional.options()[i]->semantic()->max_tokens() > 1) {
+      option << " [<" << m_positional.options()[i]->long_name() << "> ...]";
+    }
+    if (!required) {
+      option << "]";
+    }
+
+    max_option_width = std::max(max_option_width, option.str().size());
+    positionals.emplace_back(option.str());
+
+    if (m_positional.options()[i]->semantic()->max_tokens() > 1) {
+      break;
+    }
+  }
+
+  size_t indent = std::min(initial_offset, MAX_DESCRIPTION_OFFSET) + 1;
+  if (indent + max_option_width + 2 > LINE_WIDTH) {
+    // decrease the indent so that we don't wrap past the end of the line
+    indent = LINE_WIDTH - max_option_width - 2;
+  }
+
+  IndentStream indent_stream(indent, initial_offset, LINE_WIDTH, os);
+  indent_stream.set_delimiter("[");
+  for (auto& option : optionals) {
+    indent_stream << option << " ";
+  }
+
+  if (optionals.size() > 0 || positionals.size() == 0) {
     indent_stream << std::endl;
   }
 
-  if (m_positional.options().size() > 0) {
+  if (positionals.size() > 0) {
     indent_stream.set_delimiter(" ");
-    for (size_t i = 0; i < m_positional.options().size(); ++i) {
-      indent_stream << "<" << m_positional.options()[i]->long_name() << "> ";
-      if (m_positional.options()[i]->semantic()->max_tokens() > 1) {
-        indent_stream << "[<" << m_positional.options()[i]->long_name()
-                      << "> ...]";
-        break;
-      }
+    for (auto& option : positionals) {
+      indent_stream << option << " ";
     }
     indent_stream << std::endl;
   }
