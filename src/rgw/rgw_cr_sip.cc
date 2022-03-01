@@ -418,7 +418,7 @@ struct SIProviderRESTCRs {
       reenter(this) {
         yield {
           rgw_http_param_pair pairs[] = { { nullptr, nullptr } };
-          call(new RGWReadRESTResourceCR(mgr->ctx(),
+          call(new RGWReadRESTResourceCR<std::vector<std::string> >(mgr->ctx(),
                                          mgr->conn,
                                          mgr->http_manager,
                                          path,
@@ -470,7 +470,7 @@ struct SIProviderRESTCRs {
 					  { stage_type_key, stage_type_val },
 					  { instance_key, instance_val },
 	                                  { nullptr, nullptr } };
-          call(new RGWReadRESTResourceCR(mgri->ctx(),
+          call(new RGWReadRESTResourceCR<SIProvider::Info>(mgri->ctx(),
                                          mgri->conn,
                                          mgri->http_manager,
                                          path,
@@ -603,7 +603,7 @@ struct SIProviderRESTCRs {
 					  { "max" , max_buf },
 					  { "marker" , marker.c_str() },
 	                                  { nullptr, nullptr } };
-          call(new RGWReadRESTResourceCR(mgri->ctx(),
+          call(new RGWReadRESTResourceCR<bufferlist>(mgri->ctx(),
                                          mgri->conn,
                                          mgri->http_manager,
                                          path,
@@ -651,7 +651,7 @@ struct SIProviderRESTCRs {
 
     string path;
 
-    struct {
+    struct _status {
       struct {
         rgw_sip_pos start;
         rgw_sip_pos current;
@@ -699,7 +699,7 @@ struct SIProviderRESTCRs {
 					  { "stage-id" , sid.c_str() },
 					  { "shard-id" , shard_id_buf },
 	                                  { nullptr, nullptr } };
-          call(new RGWReadRESTResourceCR(mgri->ctx(),
+          call(new RGWReadRESTResourceCR<_status>(mgri->ctx(),
                                          mgri->conn,
                                          mgri->http_manager,
                                          path,
