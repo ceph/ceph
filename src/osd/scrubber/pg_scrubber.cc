@@ -2188,6 +2188,11 @@ std::ostream& PgScrubber::gen_prefix(std::ostream& out) const
   }
 }
 
+void PgScrubber::log_cluster_warning(const std::string& warning) const
+{
+  m_osds->clog->do_log(CLOG_WARN, warning);
+}
+
 ostream& PgScrubber::show(ostream& out) const
 {
   return out << " [ " << m_pg_id << ": " << m_flags << " ] ";
