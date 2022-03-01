@@ -491,6 +491,15 @@ int MotrUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
       }
     }
   }
+
+  //Delete email id 
+  if (!info.user_email.empty()) {
+    rc = store->do_idx_op_by_name(RGW_IAM_MOTR_EMAIL_KEY,
+		             M0_IC_DEL, info.user_email, bl);
+    if (rc < 0 && rc != -ENOENT) {
+       ldpp_dout(dpp, 0) << "Unable to delete email id " << rc << dendl;
+    }
+  }
   
   // Delete user info index
   string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
