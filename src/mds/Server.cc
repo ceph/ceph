@@ -2009,7 +2009,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_RENAMESNAP:
     code = l_mdss_req_renamesnap_latency;
     break;
-  default: ceph_abort();
+  default:
+    dout(1) << ": unknown client op" << dendl;
+    return;
   }
   logger->tinc(code, lat);   
 }
