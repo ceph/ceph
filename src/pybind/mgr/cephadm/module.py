@@ -2283,6 +2283,8 @@ Then run the following:
             for dep_type in need.get(daemon_type, []):
                 for dd in self.cache.get_daemons_by_type(dep_type):
                     deps.append(dd.name())
+            if daemon_type == 'prometheus':
+                deps.append(str(self.get_module_option_ex('prometheus', 'server_port', 9283)))
         return sorted(deps)
 
     @forall_hosts
