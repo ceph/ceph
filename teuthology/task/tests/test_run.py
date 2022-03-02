@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from StringIO import StringIO
+from io import StringIO
 
 from teuthology.exceptions import CommandFailedError
 
