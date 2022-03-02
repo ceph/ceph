@@ -418,13 +418,20 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'type': 'int',
             'default': 4,
             'desc': 'Number of asynchronous cloner threads',
-        }
+        },
+        {
+            'name': 'snapshot_clone_delay',
+            'type': 'int',
+            'default':0,
+            'desc':'Delay clone begin operation by snapshot_clone_delay seconds',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
         self.inited = False
         # for mypy
         self.max_concurrent_clones = None
+        self.snapshot_clone_delay = None
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -455,6 +462,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 if self.inited:
                     if opt['name'] == "max_concurrent_clones":
                         self.vc.cloner.reconfigure_max_concurrent_clones(self.max_concurrent_clones)
+                    elif opt['name'] == "snapshot_clone_delay":
+                        self.vc.cloner.reconfigure_snapshot_clone_delay(self.snapshot_clone_delay)
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
