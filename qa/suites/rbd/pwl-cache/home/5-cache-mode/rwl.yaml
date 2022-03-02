@@ -3,3 +3,4 @@ overrides:
     conf:
       client:
         rbd_persistent_cache_mode: rwl
+        rbd_persistent_cache_allow_simulation: true

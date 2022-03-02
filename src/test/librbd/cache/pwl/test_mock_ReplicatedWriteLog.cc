@@ -161,6 +161,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_shutdown) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   MockContextRWL finish_ctx1;
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
@@ -186,6 +187,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, write) {
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
 
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   MockContextRWL finish_ctx1;
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
@@ -219,6 +221,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush) {
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
 
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -259,7 +262,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_shutdown) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
-  
+
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -299,6 +303,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_internal) {
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
 
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -337,6 +342,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_user) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -376,6 +382,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_hit_rwl_cache) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -419,6 +426,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_hit_part_rwl_cache) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -466,6 +474,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_miss_rwl_cache) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -508,6 +517,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, discard) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -556,6 +566,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, writesame) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -598,6 +609,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, invalidate) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -638,6 +650,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, compare_and_write_compare_matched) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -692,6 +705,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, compare_and_write_compare_failed) {
   MockReplicatedWriteLog rwl(
       mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
+  mock_image_ctx.cct->_conf.set_val("rbd_persistent_cache_allow_simulation", "true");
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
