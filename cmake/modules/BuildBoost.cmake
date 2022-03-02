@@ -153,14 +153,10 @@ function(do_build_boost root_dir version)
     set(boost_version 1.75.0)
     set(boost_sha256 953db31e016db7bb207f11432bef7df100516eeb746843fa0486a222e3fd49cb)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
-    set(boost_url 
-      https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
-    if(CMAKE_VERSION VERSION_GREATER 3.7)
-      set(boost_url
-        "${boost_url} http://downloads.sourceforge.net/project/boost/boost/${boost_version}/boost_${boost_version_underscore}.tar.bz2")
-      set(boost_url
-        "${boost_url} https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2")
-    endif()
+    string(JOIN " " boost_url
+      https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2
+      https://downloads.sourceforge.net/project/boost/boost/${boost_version}/boost_${boost_version_underscore}.tar.bz2
+      https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2)
     set(source_dir
       URL ${boost_url}
       URL_HASH SHA256=${boost_sha256}
