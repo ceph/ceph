@@ -799,7 +799,7 @@ Usage:
                 method=method,
             )
         except (TypeError, KeyError, ValueError) as e:
-            msg = f"Invalid host:device spec: '{svc_arg}': {e}" + usage
+            msg = f"Invalid 'host:device' spec: '{svc_arg}': {e}" + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
         completion = self.create_osds(drive_group)
