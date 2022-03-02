@@ -10332,8 +10332,10 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
       break;
 
     encode(snap_name, dnbl);
+
     //infinite lease
     LeaseStat e(CEPH_LEASE_VALID, -1, 0);
+    e.alternate_name = std::string(p->second->alternate_name);
     mds->locker->encode_lease(dnbl, mdr->session->info, e);
     dout(20) << "encode_infinite_lease" << dendl;
 
@@ -10496,6 +10498,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   info.ino = diri->ino();
   info.snapid = snapid;
   info.name = snapname;
+  info.alternate_name = req->get_alternate_name();
   info.stamp = mdr->get_op_stamp();
   info.metadata = payload.metadata;
 
