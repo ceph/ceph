@@ -4240,7 +4240,8 @@ int main(int argc, const char **argv)
 			 OPT::OBJECTS_EXPIRE,
 			 OPT::OBJECTS_EXPIRE_STALE_RM,
 			 OPT::LC_PROCESS,
-       OPT::BUCKET_SYNC_RUN
+       OPT::BUCKET_SYNC_RUN,
+       OPT::DATA_SYNC_RUN
     };
 
     raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
