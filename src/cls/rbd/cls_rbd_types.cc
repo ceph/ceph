@@ -784,7 +784,7 @@ void MirrorSnapshotNamespace::dump(Formatter *f) const {
   }
 }
 
-class EncodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+class EncodeSnapshotNamespaceVisitor {
 public:
   explicit EncodeSnapshotNamespaceVisitor(bufferlist &bl) : m_bl(bl) {
   }
@@ -800,7 +800,7 @@ private:
   bufferlist &m_bl;
 };
 
-class DecodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+class DecodeSnapshotNamespaceVisitor {
 public:
   DecodeSnapshotNamespaceVisitor(bufferlist::const_iterator &iter)
     : m_iter(iter) {
@@ -814,7 +814,7 @@ private:
   bufferlist::const_iterator &m_iter;
 };
 
-class DumpSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+class DumpSnapshotNamespaceVisitor {
 public:
   explicit DumpSnapshotNamespaceVisitor(Formatter *formatter, const std::string &key)
     : m_formatter(formatter), m_key(key) {}
@@ -830,7 +830,7 @@ private:
   std::string m_key;
 };
 
-class GetTypeVisitor : public boost::static_visitor<SnapshotNamespaceType> {
+class GetTypeVisitor {
 public:
   template <typename T>
   inline SnapshotNamespaceType operator()(const T&) const {
@@ -840,8 +840,8 @@ public:
 
 SnapshotNamespaceType get_snap_namespace_type(
     const SnapshotNamespace& snapshot_namespace) {
-  return static_cast<SnapshotNamespaceType>(boost::apply_visitor(
-    GetTypeVisitor(), snapshot_namespace));
+  return static_cast<SnapshotNamespaceType>(snapshot_namespace.visit(
+    GetTypeVisitor()));
 }
 
 void SnapshotInfo::encode(bufferlist& bl) const {
@@ -869,8 +869,7 @@ void SnapshotInfo::decode(bufferlist::const_iterator& it) {
 void SnapshotInfo::dump(Formatter *f) const {
   f->dump_unsigned("id", id);
   f->open_object_section("namespace");
-  boost::apply_visitor(DumpSnapshotNamespaceVisitor(f, "type"),
-                       snapshot_namespace);
+  snapshot_namespace.visit(DumpSnapshotNamespaceVisitor(f, "type"));
   f->close_section();
   f->dump_string("name", name);
   f->dump_unsigned("image_size", image_size);
@@ -899,7 +898,7 @@ void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
 
 void SnapshotNamespace::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  boost::apply_visitor(EncodeSnapshotNamespaceVisitor(bl), *this);
+  visit(EncodeSnapshotNamespaceVisitor(bl));
   ENCODE_FINISH(bl);
 }
 
@@ -925,13 +924,12 @@ void SnapshotNamespace::decode(bufferlist::const_iterator &p)
       *this = UnknownSnapshotNamespace();
       break;
   }
-  boost::apply_visitor(DecodeSnapshotNamespaceVisitor(p), *this);
+  visit(DecodeSnapshotNamespaceVisitor(p));
   DECODE_FINISH(p);
 }
 
 void SnapshotNamespace::dump(Formatter *f) const {
-  boost::apply_visitor(
-    DumpSnapshotNamespaceVisitor(f, "snapshot_namespace_type"), *this);
+  visit(DumpSnapshotNamespaceVisitor(f, "snapshot_namespace_type"));
 }
 
 void SnapshotNamespace::generate_test_instances(std::list<SnapshotNamespace*> &o) {
@@ -953,6 +951,12 @@ void SnapshotNamespace::generate_test_instances(std::list<SnapshotNamespace*> &o
   o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED,
                                                             {"peer uuid"},
                                                             "uuid", 123)));
+}
+
+std::ostream& operator<<(std::ostream& os, const SnapshotNamespace& ns) {
+  return ns.visit([&os](const auto& val) -> std::ostream& {
+    return os << val;
+  });
 }
 
 std::ostream& operator<<(std::ostream& os, const SnapshotNamespaceType& type) {
