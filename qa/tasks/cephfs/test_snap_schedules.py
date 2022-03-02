@@ -41,8 +41,11 @@ class TestSnapSchedules(CephFSTestCase):
     def fs_snap_schedule_cmd(self, *args, **kwargs):
         fs = kwargs.pop('fs', self.volname)
         args += ('--fs', fs)
+        if 'format' in kwargs:
+            fmt = kwargs.pop('format')
+            args += ('--format', fmt)
         for name, val in kwargs.items():
-            args += (f'--{name}', str(val))
+            args += (str(val),)
         res = self._fs_cmd('snap-schedule', *args)
         log.debug(f'res={res}')
         return res
@@ -223,11 +226,12 @@ class TestSnapSchedules(CephFSTestCase):
 
         def verify_added(snaps_added):
             log.debug(f'snapshots added={snaps_added}')
-            self.assertEquals(len(snaps_added), 1)
+            self.assertEqual(len(snaps_added), 1)
             snapname = snaps_added[0]
-            if snapname.startswith('scheduled-') and snapname[10:] == snap_sfx:
-                self.check_scheduled_snapshot(exec_time, timo)
-                return True
+            if snapname.startswith('scheduled-'):
+                if snapname[10:26] == snap_sfx[:16]:
+                    self.check_scheduled_snapshot(exec_time, timo)
+                    return True
             return False
         self.add_snap_create_cbk(verify_added)
         self.verify(TestSnapSchedules.TEST_DIRECTORY, to_wait)
@@ -261,19 +265,21 @@ class TestSnapSchedules(CephFSTestCase):
 
         def verify_added_1(snaps_added):
             log.debug(f'snapshots added={snaps_added}')
-            self.assertEquals(len(snaps_added), 1)
+            self.assertEqual(len(snaps_added), 1)
             snapname = snaps_added[0]
-            if snapname.startswith('scheduled-') and snapname[10:] == snap_sfx_1:
-                self.check_scheduled_snapshot(exec_time, timo_1)
-                return True
+            if snapname.startswith('scheduled-'):
+                if snapname[10:26] == snap_sfx_1[:16]:
+                    self.check_scheduled_snapshot(exec_time, timo_1)
+                    return True
             return False
         def verify_added_2(snaps_added):
             log.debug(f'snapshots added={snaps_added}')
-            self.assertEquals(len(snaps_added), 1)
+            self.assertEqual(len(snaps_added), 1)
             snapname = snaps_added[0]
-            if snapname.startswith('scheduled-') and snapname[10:] == snap_sfx_2:
-                self.check_scheduled_snapshot(exec_time, timo_2)
-                return True
+            if snapname.startswith('scheduled-'):
+                if snapname[10:26] == snap_sfx_2[:16]:
+                    self.check_scheduled_snapshot(exec_time, timo_2)
+                    return True
             return False
         self.add_snap_create_cbk(verify_added_1)
         self.add_snap_create_cbk(verify_added_2)
@@ -306,11 +312,12 @@ class TestSnapSchedules(CephFSTestCase):
 
         def verify_added(snaps_added):
             log.debug(f'snapshots added={snaps_added}')
-            self.assertEquals(len(snaps_added), 1)
+            self.assertEqual(len(snaps_added), 1)
             snapname = snaps_added[0]
-            if snapname.startswith('scheduled-') and snapname[10:] == snap_sfx:
-                self.check_scheduled_snapshot(exec_time, timo_1)
-                return True
+            if snapname.startswith('scheduled-'):
+                if snapname[10:26] == snap_sfx[:16]:
+                    self.check_scheduled_snapshot(exec_time, timo_1)
+                    return True
             return False
         self.add_snap_create_cbk(verify_added)
         self.verify(TestSnapSchedules.TEST_DIRECTORY, to_wait)
@@ -319,11 +326,12 @@ class TestSnapSchedules(CephFSTestCase):
         timo_2 = timo_1 + 60 # expected snapshot removal timeout
         def verify_removed(snaps_removed):
             log.debug(f'snapshots removed={snaps_removed}')
-            self.assertEquals(len(snaps_removed), 1)
+            self.assertEqual(len(snaps_removed), 1)
             snapname = snaps_removed[0]
-            if snapname.startswith('scheduled-') and snapname[10:] == snap_sfx:
-                self.check_scheduled_snapshot(exec_time, timo_2)
-                return True
+            if snapname.startswith('scheduled-'):
+                if snapname[10:26] == snap_sfx[:16]:
+                    self.check_scheduled_snapshot(exec_time, timo_2)
+                    return True
             return False
         log.debug(f'expecting removal of snap {TestSnapSchedules.TEST_DIRECTORY}/.snap/scheduled-{snap_sfx} in ~{timo_2}s...')
         to_wait = timo_2
@@ -338,3 +346,56 @@ class TestSnapSchedules(CephFSTestCase):
         self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY)
 
         self.mount_a.run_shell(['rmdir', TestSnapSchedules.TEST_DIRECTORY])
+
+    def verify_snap_stats(self, dir_path):
+        snap_path = f"{dir_path}/.snap"[1:]
+        snapshots = self.mount_a.ls(path=snap_path)
+        fs_count = len(snapshots)
+        log.debug('snapshots: {snapshots}');
+
+        result = self.fs_snap_schedule_cmd('status', path=dir_path, snap_schedule='1M', format='json')
+        json_res = json.loads(result)[0]
+        db_count = int(json_res['created_count'])
+        log.debug(f'json_res: {json_res}')
+
+        self.assertTrue(fs_count == db_count)
+
+    def test_concurrent_snap_creates(self):
+        """
+        Test snap creates at same cadence on same fs to verify correct stats.
+        A single SQLite DB Connection handle cannot be used to run concurrent
+        transactions and results transaction aborts. This test makes sure that
+        proper care has been taken in the code to avoid such situation by
+        verifying number of dirs created on the file system with the
+        created_count in the schedule_meta table for the specific path.
+        """
+        self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
+
+        testdirs = []
+        for d in range(10):
+            testdirs.append(os.path.join("/", TestSnapSchedules.TEST_DIRECTORY, "dir" + str(d)))
+
+        for d in testdirs:
+            self.mount_a.run_shell(['mkdir', '-p', d[1:]])
+            self.fs_snap_schedule_cmd('add', path=d, snap_schedule='1M')
+
+        exec_time = time.time()
+        timo_1, snap_sfx = self.calc_wait_time_and_snap_name(exec_time, '1M')
+
+        for d in testdirs:
+            self.fs_snap_schedule_cmd('activate', path=d, snap_schedule='1M')
+
+        # we wait for 10 snaps to be taken
+        wait_time = timo_1 + 10 * 60 + 15
+        time.sleep(wait_time)
+
+        for d in testdirs:
+            self.fs_snap_schedule_cmd('deactivate', path=d, snap_schedule='1M')
+
+        for d in testdirs:
+            self.verify_snap_stats(d)
+
+        for d in testdirs:
+            self.fs_snap_schedule_cmd('remove', path=d, snap_schedule='1M')
+            self.remove_snapshots(d[1:])
+            self.mount_a.run_shell(['rmdir', d[1:]])
