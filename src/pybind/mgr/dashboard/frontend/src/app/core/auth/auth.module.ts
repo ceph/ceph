@@ -4,6 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
+import { FormioModule } from 'angular-formio';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -23,6 +24,7 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
+    FormioModule,
     SharedModule,
     NgbNavModule,
     NgbPopoverModule,

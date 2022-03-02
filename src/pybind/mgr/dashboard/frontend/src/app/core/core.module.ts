@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
 import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { FormioModule } from 'angular-formio';
 import { BlockUIModule } from 'ng-block-ui';
 
 import { ContextComponent } from '~/app/core/context/context.component';
@@ -17,6 +18,7 @@ import { NavigationModule } from './navigation/navigation.module';
   imports: [
     BlockUIModule.forRoot(),
     CommonModule,
+    FormioModule,
     NavigationModule,
     NgbDropdownModule,
     RouterModule,
