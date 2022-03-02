@@ -125,6 +125,11 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     bluefs_fnode_t fnode;
+    // use this variable to rack submitted but not completed data flush size
+    // when data are not flushed on disk, fnode's size won't be updated.
+    // so that when compact_log is triggered, we won't dump fnode's size containing
+    // data that are still inflight.
+    uint64_t inflight_flush_size;
     int refs;
     uint64_t dirty_seq;
     bool locked;
@@ -146,6 +151,7 @@ public:
     FRIEND_MAKE_REF(File);
     File()
       :
+	inflight_flush_size(0),
 	refs(0),
 	dirty_seq(0),
 	locked(false),

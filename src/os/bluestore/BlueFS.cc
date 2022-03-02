@@ -2367,7 +2367,17 @@ void BlueFS::_compact_log_dump_metadata_NF(bluefs_transaction_t *t,
       e.bdev = bdev_new;
     }
     dout(20) << __func__ << " op_file_update " << file_ref->fnode << dendl;
-    t->op_file_update(file_ref->fnode);
+
+    // if inflight_flush_size != 0, we need to exclude these unpersistent data from
+    // fnode's size to avoid data inconsistency.
+    if (file_ref->inflight_flush_size > 0) {
+      // make a copy of the fnode and update the size
+      bluefs_fnode_t fnode = file_ref->fnode;
+      fnode.size -= file_ref->inflight_flush_size;
+      t->op_file_update(fnode);
+    } else {
+      t->op_file_update(file_ref->fnode);
+    }
   }
   for (auto& [path, dir_ref] : nodes.dir_map) {
     dout(20) << __func__ << " op_dir_create " << path << dendl;
@@ -2401,7 +2411,19 @@ void BlueFS::_compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
       dout(20) << __func__ << " op_file_update just modified, dirty_seq="
 	       << file_ref->dirty_seq << " " << file_ref->fnode << dendl;
     }
-    t->op_file_update(file_ref->fnode);
+
+    // if inflight_flush_size > 0, we need exclude it from fnode's size to avoid
+    // data inconsistency, since these data are still not persistent on disk.
+    // for allocated extent updates, it's OK to contain since we can consider it
+    // as preallocated space.
+    if (file_ref->inflight_flush_size > 0) {
+      // make a copy of the fnode and update the size
+      bluefs_fnode_t fnode = file_ref->fnode;
+      fnode.size -= file_ref->inflight_flush_size;
+      t->op_file_update(fnode);
+    } else {
+      t->op_file_update(file_ref->fnode);
+    }
   }
   for (auto& [path, dir_ref] : nodes.dir_map) {
     dout(20) << __func__ << " op_dir_create " << path << dendl;
@@ -3086,6 +3108,18 @@ void BlueFS::flush_range(FileWriter *h, uint64_t offset, uint64_t length)/*_WF*/
   _maybe_check_vselector_LNF();
   std::unique_lock hl(h->lock);
   _flush_range_F(h, offset, length);
+
+  // For bluefs_buffered_io=false, data is submitted via libaio
+  // we need to make sure aio is returned before updating the fnode's size
+  _flush_bdev(h);
+
+  // reset the fnode's inflight_flush_size since they are on disk now.
+  // if compact_log is triggered before this step, it dumps this fnode
+  // with size that excludes inflight_flush_size which is fine, since flush()
+  // doesn't guarantee metadata is updated on this file and we didn't break the
+  // semantics. if compact_log is triggered after this step, it dumps fnode contains
+  // the newly flushed data which is also accurate.
+  h->file->inflight_flush_size = 0;
 }
 
 int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
@@ -3137,6 +3171,9 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
     h->file->is_dirty = true;
   }
   if (h->file->fnode.size < offset + length) {
+    // here we track inflight flush size. when compact_log is triggered
+    // we correct the fnode's size by excluding its still inflight flush size.
+    h->file->inflight_flush_size += (offset + length) - h->file->fnode.size;
     h->file->fnode.size = offset + length;
     h->file->is_dirty = true;
   }
@@ -3298,6 +3335,17 @@ void BlueFS::flush(FileWriter *h, bool force)/*_WF_LNF_NF_LD_D*/
     std::unique_lock hl(h->lock);
     r = _flush_F(h, force, &flushed);
     ceph_assert(r == 0);
+    // For bluefs_buffered_io=false, data is submitted via libaio
+    // we need to make sure aio is returned before updating the fnode's size
+    _flush_bdev(h);
+
+    // reset the fnode's inflight_flush_size since they are on disk now.
+    // if compact_log is triggered before this step, it dumps this fnode
+    // with size that excludes inflight_flush_size which is fine, since flush()
+    // doesn't guarantee metadata is updated on this file and we didn't break the
+    // semantics. if compact_log is triggered after this step, it dumps fnode contains
+    // the newly flushed data which is also accurate.
+    h->file->inflight_flush_size = 0;
   }
   if (r == 0 && flushed) {
     _maybe_compact_log_LNF_NF_LD_D();
