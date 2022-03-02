@@ -11,6 +11,7 @@
 
 #include <optional>
 #include <seastar/core/future.hh>
+#include <seastar/core/metrics_types.hh>
 
 #include "include/uuid.h"
 
