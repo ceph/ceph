@@ -697,7 +697,7 @@ class CephadmServe:
                 slot = slot.assign_name(self.mgr.get_unique_name(
                     slot.daemon_type,
                     slot.hostname,
-                    daemons,
+                    [d for d in daemons if d not in daemons_to_remove],
                     prefix=spec.service_id,
                     forcename=slot.name,
                     rank=slot.rank,
@@ -727,18 +727,20 @@ class CephadmServe:
             # create daemons
             daemon_place_fails = []
             for slot in slots_to_add:
-                # first remove daemon on conflicting port?
-                if slot.ports:
+                # first remove daemon with conflicting port or name?
+                if slot.ports or slot.name in [d.name() for d in daemons_to_remove]:
                     for d in daemons_to_remove:
-                        if d.hostname != slot.hostname:
+                        if (
+                            d.hostname != slot.hostname
+                            or not (set(d.ports or []) & set(slot.ports))
+                            or (d.ip and slot.ip and d.ip != slot.ip)
+                            and d.name() != slot.name
+                        ):
                             continue
-                        if not (set(d.ports or []) & set(slot.ports)):
-                            continue
-                        if d.ip and slot.ip and d.ip != slot.ip:
-                            continue
-                        self.log.info(
-                            f'Removing {d.name()} before deploying to {slot} to avoid a port conflict'
-                        )
+                        if d.name() != slot.name:
+                            self.log.info(
+                                f'Removing {d.name()} before deploying to {slot} to avoid a port or conflict'
+                            )
                         # NOTE: we don't check ok-to-stop here to avoid starvation if
                         # there is only 1 gateway.
                         self._remove_daemon(d.name(), d.hostname)
