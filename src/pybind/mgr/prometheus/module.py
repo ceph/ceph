@@ -550,7 +550,10 @@ class Module(MgrModule):
         ),
         Option(
             'server_port',
-            type='int'
+            type='int',
+            default=DEFAULT_PORT,
+            desc='the port on which the module listens for HTTP requests',
+            runtime=True
         ),
         Option(
             'scrape_interval',
@@ -814,6 +817,31 @@ class Module(MgrModule):
             )
 
         return metrics
+
+    def get_server_addr(self) -> str:
+        """
+        Return the current mgr server IP.
+        """
+        server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
+        if server_addr in ['::', '0.0.0.0']:
+            return self.get_mgr_ip()
+        return server_addr
+
+    def config_notify(self) -> None:
+        """
+        This method is called whenever one of our config options is changed.
+        """
+        # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
+        # if we omit the line: cherrypy.server.httpserver = None
+        # then the cherrypy server is not restarted correctly
+        self.log.info('Restarting engine...')
+        cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
+        server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
+        self.set_uri(build_url(scheme='http', host=self.get_server_addr(), port=server_port, path='/'))
+        cherrypy.config.update({'server.socket_port': server_port})
+        cherrypy.engine.start()
+        self.log.info('Engine started.')
 
     @profile_method()
     def get_health(self) -> None:
@@ -1728,9 +1756,7 @@ class Module(MgrModule):
         })
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        if server_addr in ['::', '0.0.0.0']:
-            server_addr = self.get_mgr_ip()
-        self.set_uri(build_url(scheme='http', host=server_addr, port=server_port, path='/'))
+        self.set_uri(build_url(scheme='http', host=self.get_server_addr(), port=server_port, path='/'))
 
         cherrypy.tree.mount(Root(), "/")
         self.log.info('Starting engine...')
@@ -1742,6 +1768,7 @@ class Module(MgrModule):
         # tell metrics collection thread to stop collecting new metrics
         self.metrics_thread.stop()
         cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
         self.log.info('Engine stopped.')
         self.shutdown_rbd_stats()
         # wait for the metrics collection thread to stop
@@ -1838,6 +1865,7 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event.wait()
         self.shutdown_event.clear()
         cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
         self.log.info('Engine stopped.')
 
     def shutdown(self) -> None:
