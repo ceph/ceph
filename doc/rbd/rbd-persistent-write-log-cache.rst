@@ -60,6 +60,11 @@ Here are some cache configuration settings:
 - ``rbd_persistent_cache_size`` The cache size per image. The minimum cache
   size is 1 GB.
 
+- ``rbd_persistent_cache_allow_simulation`` This is a debug option. It is
+  used to allow ``rwl`` mode to run on any device, suggested to be used only
+  when `DAX`_ feature cannot be used on the device. By default the value is
+  false.
+
 The above configurations can be set per-host, per-pool, per-image etc. Eg, to
 set per-host, add the overrides to the appropriate `section`_ in the host's
 ``ceph.conf`` file. To set per-pool, per-image, etc, please refer to the

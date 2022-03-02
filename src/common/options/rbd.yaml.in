@@ -846,6 +846,13 @@ options:
   default: /tmp
   services:
   - rbd
+- name: rbd_persistent_cache_allow_simulation
+  type: bool
+  level: advanced
+  desc: allow rwl to be run on any device, not only pmem
+  default: false
+  services:
+  - rbd
 - name: rbd_quiesce_notification_attempts
   type: uint
   level: dev
