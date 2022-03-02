@@ -2487,7 +2487,7 @@ Then run the following:
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
                 'loki': PlacementSpec(count=1),
-                'promtail': PlacementSpec(count=1),
+                'promtail': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
