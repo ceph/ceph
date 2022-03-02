@@ -183,3 +183,23 @@ class TestRemote(object):
         assert remote.Remote._format_size(1024**5).strip() == '1TB'
         assert remote.Remote._format_size(1021112).strip() == '997KB'
         assert remote.Remote._format_size(1021112**2).strip() == '971GB'
+
+    def test_is_container(self):
+        m_transport = MagicMock()
+        m_transport.getpeername.return_value = ('name', 22)
+        self.m_ssh.get_transport.return_value = m_transport
+        m_run = MagicMock()
+        args = []
+        proc = RemoteProcess(
+            client=self.m_ssh,
+            args=args,
+        )
+        proc.returncode = 0
+        m_run.return_value = proc
+        rem = remote.Remote(name='jdoe@xyzzy.example.com', ssh=self.m_ssh)
+        rem._runner = m_run
+        assert rem.is_container
+        proc.returncode = 1
+        rem2 = remote.Remote(name='jdoe@xyzzy.example.com', ssh=self.m_ssh)
+        rem2._runner = m_run
+        assert not rem2.is_container

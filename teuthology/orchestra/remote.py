@@ -680,6 +680,15 @@ class Remote(RemoteShell):
         return self._is_vm
 
     @property
+    def is_container(self):
+        if not hasattr(self, '_is_container'):
+            self._is_container = not bool(self.run(
+                args="test -f /run/.containerenv -o -f /.dockerenv",
+                check_status=False,
+            ).returncode)
+        return self._is_container
+
+    @property
     def init_system(self):
         """
         Which init system does the remote use?
