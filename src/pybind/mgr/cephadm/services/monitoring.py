@@ -217,6 +217,7 @@ class AlertmanagerService(CephadmService):
 class PrometheusService(CephadmService):
     TYPE = 'prometheus'
     DEFAULT_SERVICE_PORT = 9095
+    DEFAULT_MGR_PROMETHEUS_PORT = 9283
 
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
@@ -247,13 +248,19 @@ class PrometheusService(CephadmService):
         # scrape mgrs
         mgr_scrape_list = []
         mgr_map = self.mgr.get('mgr_map')
-        port = None
+        port = cast(int, self.mgr.get_module_option_ex(
+            'prometheus', 'server_port', self.DEFAULT_MGR_PROMETHEUS_PORT))
+        deps.append(str(port))
         t = mgr_map.get('services', {}).get('prometheus', None)
         if t:
             p_result = urlparse(t)
-            t = t.split('/')[2]
-            mgr_scrape_list.append(t)
-            port = p_result.port or 9283
+            # urlparse .hostname removes '[]' from the hostname in case
+            # of ipv6 addresses so if this is the case then we just
+            # append the brackets when building the final scrape endpoint
+            if '[' in p_result.netloc and ']' in p_result.netloc:
+                mgr_scrape_list.append(f"[{p_result.hostname}]:{port}")
+            else:
+                mgr_scrape_list.append(f"{p_result.hostname}:{port}")
         # scan all mgrs to generate deps and to get standbys too.
         # assume that they are all on the same port as the active mgr.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
