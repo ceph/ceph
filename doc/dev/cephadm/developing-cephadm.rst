@@ -264,9 +264,18 @@ In order to setup Cephadm's box run::
 
 .. note:: It is recommended to run box with verbose (-v).
 
-After getting all needed images we can run::
+After getting all needed images we can create a simple cluster without osds and hosts with::
 
-  sudo box -v cluster start --osds 3 --hosts 3
+  sudo box -v cluster start
+
+If you want to deploy the cluster with more osds and hosts::
+  # 3 osds and 3 hosts by default
+  sudo box -v cluster start --extended
+  # explicitly change number of hosts and osds
+  sudo box -v cluster start --extended --osds 5 --hosts 5
+
+Without the extended option, explicitly adding either more hosts or osds won't change the state
+of the cluster.
 
 .. note:: Cluster start will try to setup even if cluster setup was not called.
 .. note:: Osds are created with loopback devices and hence, sudo is needed to

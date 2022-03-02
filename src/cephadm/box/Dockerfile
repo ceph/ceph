@@ -5,7 +5,7 @@ ENV CEPHADM_PATH=/usr/local/sbin/cephadm
 
 # Centos met EOL and the content of the CentOS 8 repos has been moved to vault.centos.org
 RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-Linux-*
-RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*
+RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=https://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*
 
 RUN dnf -y install chrony firewalld lvm2 \
   openssh-server openssh-clients python3 \
