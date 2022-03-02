@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <seastar/core/metrics.hh>
+
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/logging.h"
 

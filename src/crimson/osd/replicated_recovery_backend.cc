@@ -1095,7 +1095,7 @@ void ReplicatedRecoveryBackend::submit_push_complete(
   ObjectStore::Transaction *t)
 {
   for (const auto& [oid, extents] : recovery_info.clone_subset) {
-    for (const auto [off, len] : extents) {
+    for (const auto& [off, len] : extents) {
       logger().debug(" clone_range {} {}~{}", oid, off, len);
       t->clone_range(coll->get_cid(), ghobject_t(oid), ghobject_t(recovery_info.soid),
                      off, len, off);
