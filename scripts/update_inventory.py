@@ -31,5 +31,6 @@ def main():
     for rem_name in remotes:
         rem_name = teuthology.misc.canonicalize_hostname(rem_name)
         remote = teuthology.orchestra.remote.Remote(rem_name)
+        remote.connect()
         inventory_info = remote.inventory_info
         teuthology.lock.ops.update_inventory(inventory_info)
