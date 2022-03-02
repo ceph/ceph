@@ -523,14 +523,6 @@ class Monitoring(object):
                 if code == 0:
                     break
             cmd = 'alertmanager'  # reset cmd for version extraction
-        elif daemon_type == 'loki':
-            _, err, code = call(ctx, [
-                ctx.container_engine.path, 'exec', container_id, cmd, '--version'
-            ], verbosity=CallVerbosity.DEBUG)
-            if code == 0:
-                ver = err.index('version')
-                brnch = err.index('branch')
-                version = (err[ver + 7:brnch - 2])
         else:
             _, err, code = call(ctx, [
                 ctx.container_engine.path, 'exec', container_id, cmd, '--version'
