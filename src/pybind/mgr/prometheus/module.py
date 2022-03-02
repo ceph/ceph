@@ -69,7 +69,7 @@ def health_status_to_number(status: str) -> int:
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
-DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
+DF_POOL = ['max_avail', 'avail_raw', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes',
            'compress_bytes_used', 'compress_under_bytes', 'bytes_used', 'percent_used']
 
