@@ -257,7 +257,7 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
       return;
     }
 
-    if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) ==
+    if (std::get_if<cls::rbd::UserSnapshotNamespace>(&snap_namespace) ==
           nullptr) {
       continue;
     }
@@ -347,7 +347,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
 
     if (m_snap_seqs.find(src_snap_id) == m_snap_seqs.end()) {
       // the source snapshot is not in our mapping table, ...
-      if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) !=
+      if (std::get_if<cls::rbd::UserSnapshotNamespace>(&snap_namespace) !=
             nullptr) {
         // ... create it since it's a user snapshot
         break;

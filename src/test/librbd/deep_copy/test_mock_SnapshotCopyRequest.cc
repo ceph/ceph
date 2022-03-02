@@ -252,7 +252,7 @@ public:
     }
 
     if (protect) {
-      EXPECT_TRUE(boost::get<cls::rbd::UserSnapshotNamespace>(&snap_ns) !=
+      EXPECT_TRUE(std::get_if<cls::rbd::UserSnapshotNamespace>(&snap_ns) !=
                     nullptr);
       r = image_ctx->operations->snap_protect(snap_ns, snap_name.c_str());
       if (r < 0) {

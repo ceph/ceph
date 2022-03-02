@@ -68,9 +68,9 @@ void UnlinkPeerRequest<I>::unlink_peer() {
        snap_it != m_image_ctx->snap_info.end(); ++snap_it) {
     if (snap_it->first == m_snap_id) {
       r = 0;
-      mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+      mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
         &snap_it->second.snap_namespace);
-    } else if (boost::get<cls::rbd::MirrorSnapshotNamespace>(
+    } else if (std::get_if<cls::rbd::MirrorSnapshotNamespace>(
                  &snap_it->second.snap_namespace) != nullptr) {
       ldout(cct, 15) << "located newer mirror snapshot" << dendl;
       m_newer_mirror_snapshots = true;
@@ -186,7 +186,7 @@ void UnlinkPeerRequest<I>::remove_snapshot() {
     return;
   }
 
-  auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+  auto info = std::get<cls::rbd::MirrorSnapshotNamespace>(
     snap_namespace);
 
   info.mirror_peer_uuids.erase(m_mirror_peer_uuid);

@@ -2326,7 +2326,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  if (boost::get<cls::rbd::UnknownSnapshotNamespace>(
+  if (std::get_if<cls::rbd::UnknownSnapshotNamespace>(
         &snap_meta.snapshot_namespace) != nullptr) {
     CLS_ERR("Unknown snapshot namespace provided");
     return -EINVAL;
@@ -5708,7 +5708,7 @@ int image_snapshot_unlink_peer(cls_method_context_t hctx,
     return r;
   }
 
-  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
     &snap.snapshot_namespace);
   if (mirror_ns == nullptr) {
     CLS_LOG(5, "mirror_image_snapshot_unlink_peer " \
@@ -5726,7 +5726,7 @@ int image_snapshot_unlink_peer(cls_method_context_t hctx,
     // should remove the snapshot instead.
     auto search_lambda = [snap_id](const cls_rbd_snap& snap_meta) {
       if (snap_meta.id > snap_id &&
-          boost::get<cls::rbd::MirrorSnapshotNamespace>(
+          std::get_if<cls::rbd::MirrorSnapshotNamespace>(
                    &snap_meta.snapshot_namespace) != nullptr) {
         return -EEXIST;
       }
@@ -5763,7 +5763,7 @@ int image_snapshot_set_copy_progress(cls_method_context_t hctx,
     return r;
   }
 
-  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+  auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
     &snap.snapshot_namespace);
   if (mirror_ns == nullptr) {
     CLS_LOG(5, "mirror_image_snapshot_set_copy_progress " \
