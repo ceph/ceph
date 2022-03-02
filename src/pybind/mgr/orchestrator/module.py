@@ -788,10 +788,12 @@ Usage:
             host_name, block_device = svc_arg.split(":")
             block_devices = block_device.split(',')
             devs = DeviceSelection(paths=block_devices)
-            drive_group = DriveGroupSpec(placement=PlacementSpec(
-                host_pattern=host_name), data_devices=devs)
-        except (TypeError, KeyError, ValueError):
-            msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
+            drive_group = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern=host_name),
+                data_devices=devs,
+            )
+        except (TypeError, KeyError, ValueError) as e:
+            msg = f"Invalid 'host:device' spec: '{svc_arg}': {e}" + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
         completion = self.create_osds(drive_group)
