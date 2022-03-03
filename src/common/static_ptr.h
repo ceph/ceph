@@ -330,15 +330,7 @@ bool operator ==(const static_ptr<Base, Size>& s, std::nullptr_t) {
   return !s;
 }
 template<typename Base, std::size_t Size>
-bool operator ==(std::nullptr_t, const static_ptr<Base, Size>& s) {
-  return !s;
-}
-template<typename Base, std::size_t Size>
 bool operator ==(static_ptr<Base, Size>& s, std::nullptr_t) {
-  return !s;
-}
-template<typename Base, std::size_t Size>
-bool operator ==(std::nullptr_t, static_ptr<Base, Size>& s) {
   return !s;
 }
 
