@@ -3589,7 +3589,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
     refs);
   bool need_inc_ref = false;
   if (!refs.is_empty()) {
-    ManifestOpRef mop(std::make_shared<ManifestOp>());
+    ManifestOpRef mop(std::make_shared<ManifestOp>(ctx->obc, nullptr));
     for (auto c : set_chunk.chunk_map) {
       auto p = refs.find(c.second.oid);
       if (p == refs.end()) {
@@ -7113,7 +7113,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // start
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
-	  ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
+	  ManifestOpRef mop = std::make_shared<ManifestOp>(ctx->obc, new RefCountCallback(ctx, osd_op));
 	  auto* fin = new C_SetManifestRefCountDone(this, soid, 0);
 	  ceph_tid_t tid = refcount_manifest(soid, target, 
 					      refcount_t::INCREMENT_REF, fin, std::nullopt);
@@ -10463,7 +10463,7 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
    * The operations to make dedup chunks are tracked by a ManifestOp.
    * This op will be finished if all the operations are completed.
    */
-  ManifestOpRef mop(std::make_shared<ManifestOp>());
+  ManifestOpRef mop(std::make_shared<ManifestOp>(obc, nullptr));
 
   // cdc
   std::map<uint64_t, bufferlist> chunks; 
@@ -10619,12 +10619,8 @@ int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_
     // there are on-going works
     return -EINPROGRESS;
   }
-  ObjectContextRef obc = get_object_context(oid, false);
-  if (!obc) {
-    if (mop->op)
-      osd->reply_op_error(mop->op, -EINVAL);
-    return -EINVAL;
-  }
+  ObjectContextRef obc = mop->obc;
+  ceph_assert(obc);
   ceph_assert(obc->is_blocked());
   obc->stop_block();
   kick_object_context_blocked(obc);
