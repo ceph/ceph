@@ -206,6 +206,7 @@ class MotrUser : public User {
     struct m0_idx      idx;
 
   public:
+    std::set<std::string> access_key_tracker;
     MotrUser(MotrStore *_st, const rgw_user& _u) : User(_u), store(_st) { }
     MotrUser(MotrStore *_st, const RGWUserInfo& _i) : User(_i), store(_st) { }
     MotrUser(MotrStore *_st) : store(_st) { }
@@ -1023,6 +1024,7 @@ class MotrStore : public Store {
                           std::string key_str, bufferlist &bl, bool update=true);
     int check_n_create_global_indices();
     int store_access_key(const DoutPrefixProvider *dpp, optional_yield y, MotrAccessKey access_key);
+    int delete_access_key(const DoutPrefixProvider *dpp, optional_yield y, std::string access_key);
     int store_email_info(const DoutPrefixProvider *dpp, optional_yield y, MotrEmailInfo& email_info);
 
     int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct);

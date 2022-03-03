@@ -359,6 +359,12 @@ int MotrUser::load_user_from_idx(const DoutPrefixProvider *dpp,
     objv_tracker.read_version = objv_tr->read_version;
   }
 
+  if (!info.access_keys.empty()) {
+    for(auto key : info.access_keys) {
+      access_key_tracker.insert(key.first);
+    }
+  }
+
   return 0;
 }
 
@@ -443,6 +449,25 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
     secret_key = k.key;
     MotrAccessKey MGWUserKeys(access_key, secret_key, info.user_id.to_str());
     store->store_access_key(dpp, y, MGWUserKeys);
+    access_key_tracker.insert(access_key);
+  }
+
+  // Check if any key need to be deleted
+  if (access_key_tracker.size() != info.access_keys.size()) {
+    std::string key_for_deletion;
+    for (auto key : access_key_tracker) {
+      if (!info.get_key(key)) {
+        key_for_deletion = key;
+        ldpp_dout(dpp, 0) << "Deleting access key: " << key_for_deletion << dendl;
+        store->delete_access_key(dpp, y, key_for_deletion);
+        if (rc < 0) {
+          ldpp_dout(dpp, 0) << "Unable to delete access key" << rc << dendl;
+        }
+      }
+    }
+    if(rc >= 0){
+      access_key_tracker.erase(key_for_deletion);
+    }
   }
 
   if (!info.user_email.empty()) {
@@ -481,8 +506,7 @@ int MotrUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
   if (!info.access_keys.empty()) {
     for(auto acc_key = info.access_keys.begin(); acc_key != info.access_keys.end(); acc_key++) {
       auto access_key = acc_key->first;
-      rc = store->do_idx_op_by_name(RGW_IAM_MOTR_ACCESS_KEY,
-                              M0_IC_DEL, access_key, bl);
+      rc = store->delete_access_key(dpp, y, access_key);
       // TODO 
       // Check error code for access_key does not exist
       // Continue to next step only if delete failed because key doesn't exists
@@ -3153,6 +3177,18 @@ int MotrStore::store_access_key(const DoutPrefixProvider *dpp, optional_yield y,
   if (rc < 0){
     ldout(cctx, 0) << "Failed to store key: rc = " << rc << dendl;
     return rc;
+  }
+  return rc;
+}
+
+int MotrStore::delete_access_key(const DoutPrefixProvider *dpp, optional_yield y, std::string access_key)
+{
+  int rc;
+  bufferlist bl;
+  rc = do_idx_op_by_name(RGW_IAM_MOTR_ACCESS_KEY,
+                                M0_IC_DEL, access_key, bl);
+  if (rc < 0){
+    ldout(cctx, 0) << "Failed to delete key: rc = " << rc << dendl;
   }
   return rc;
 }
