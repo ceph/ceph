@@ -37,7 +37,9 @@ class TeuthologyContextPlugin(object):
     # this is pytest hook for generating tests with custom parameters
     def pytest_generate_tests(self, metafunc):
         # pass the teuthology ctx and config to each test method
-        metafunc.parametrize(["ctx", "config"], [(self.ctx, self.config),])
+        if "ctx" in metafunc.fixturenames and \
+                "config" in metafunc.fixturenames:
+            metafunc.parametrize(["ctx", "config"], [(self.ctx, self.config),])
 
     # log the outcome of each test
     def pytest_runtest_makereport(self, __multicall__, item, call):
