@@ -14,6 +14,8 @@ An example::
 import logging
 import pytest
 
+from teuthology.job_status import set_status
+
 
 log = logging.getLogger(__name__)
 
@@ -92,12 +94,12 @@ def task(ctx, config):
             plugins=[TeuthologyContextPlugin(ctx, config)]
         )
     except Exception:
-        log.exception("Saw failure running pytest")
-        ctx.summary["status"] = "dead"
+        log.exception("Saw non-test failure!")
+        set_status(ctx.summary, "dead")
     else:
         if status == 0:
             log.info("OK. All tests passed!")
-            ctx.summary["status"] = "pass"
+            set_status(ctx.summary, "pass")
         else:
             log.error("FAIL. Saw test failures...")
-            ctx.summary["status"] = "fail"
+            set_status(ctx.summary, "fail")
