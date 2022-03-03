@@ -5,6 +5,7 @@ from unittest.mock import patch, call, Mock
 
 from teuthology import run
 from scripts import run as scripts_run
+from teuthology.test import skipif_teuthology_process
 
 
 class TestRun(object):
@@ -108,6 +109,13 @@ class TestRun(object):
         assert {'internal.vm_setup': None} in result
         assert {'internal.buildpackages_prep': None} in result
 
+    # When tests are run in a teuthology process using the py.test 
+    # API, tasks will have already been imported. Patching sys.path 
+    # (and even calling sys.path_importer_cache.clear()) doesn't seem 
+    # to help "forget" where the tasks are, keeping this test from 
+    # passing. The test isn't critical to run in every single 
+    # environment, so skip.
+    @skipif_teuthology_process
     @patch("teuthology.run.fetch_qa_suite")
     def test_fetch_tasks_if_needed(self, m_fetch_qa_suite):
         config = {"suite_path": "/some/suite/path", "suite_branch": "feature_branch",

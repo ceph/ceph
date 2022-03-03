@@ -5,6 +5,7 @@ import signal
 from unittest.mock import patch, Mock
 
 from teuthology import exit
+from teuthology.test import skipif_teuthology_process
 
 
 class TestExiter(object):
@@ -39,6 +40,7 @@ class TestExiter(object):
         self.patcher_kill.stop()
         del self.m_kill
 
+    @skipif_teuthology_process
     def test_noop(self):
         sig = 15
         obj = self.klass()
