@@ -1747,8 +1747,11 @@ echo ""
     echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
     echo "export PATH=$CEPH_DIR/bin:\$PATH"
-    echo "export CEPH_CONF=$conf_fn"
-    echo "export CEPH_KEYRING=$keyring_fn"
+
+    if [ "$CEPH_DIR" != "$PWD" ]; then
+        echo "export CEPH_CONF=$conf_fn"
+        echo "export CEPH_KEYRING=$keyring_fn"
+    fi
 
     if [ -n "$CEPHFS_SHELL" ]; then
         echo "alias cephfs-shell=$CEPHFS_SHELL"
