@@ -201,6 +201,19 @@ TEST_F(LibRadosIoPP, SparseReadOpPP) {
     ASSERT_EQ(0, rval);
     assert_eq_sparse(bl, extents, read_bl);
   }
+  {
+    bufferlist bl;
+    bl.append(buf, sizeof(buf) / 2);
+
+    std::map<uint64_t, uint64_t> extents;
+    bufferlist read_bl;
+    int rval = -1;
+    ObjectReadOperation op;
+    op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval, sizeof(buf) / 2, 1);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_EQ(0, rval);
+    assert_eq_sparse(bl, extents, read_bl);
+  }
 }
 
 TEST_F(LibRadosIoPP, RoundTripPP) {
