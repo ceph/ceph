@@ -2823,6 +2823,7 @@ options:
   type: uint
   level: advanced
   default: 2
+  min: 1
   with_legacy: true
 # max number of trimming pgs
 - name: osd_max_trimming_pgs

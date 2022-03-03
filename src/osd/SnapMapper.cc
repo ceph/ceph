@@ -322,6 +322,10 @@ int SnapMapper::get_next_objects_to_trim(
 {
   ceph_assert(out);
   ceph_assert(out->empty());
+
+  // if max would be 0, we return ENOENT and the caller would mistakenly
+  // trim the snaptrim queue
+  ceph_assert(max > 0);
   int r = 0;
   for (set<string>::iterator i = prefixes.begin();
        i != prefixes.end() && out->size() < max && r == 0;
