@@ -1,0 +1,25 @@
+meta:
+- desc: |
+   setup ceph/pacific v16.2.5
+
+tasks:
+- install:
+    tag: v16.2.5
+    exclude_packages:
+      - ceph-volume
+- print: "**** done install task..."
+- cephadm:
+    roleless: true
+    image: docker.io/ceph/ceph:v16.2.5
+    cephadm_branch: v16.2.5
+    cephadm_git_url: https://github.com/ceph/ceph
+    # needed for v16.2.5 due to --skip-admin-label
+    avoid_pacific_features: true
+- print: "**** done starting v16.2.5"
+- cephadm.shell:
+    host.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
