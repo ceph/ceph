@@ -831,7 +831,7 @@ seastar::future<FuturizedStore::OmapIteratorRef> CyanStore::get_omap_iterator(
 	    new CyanStore::CyanOmapIterator(o));
 }
 
-seastar::future<std::map<uint64_t, uint64_t>>
+CyanStore::read_errorator::future<std::map<uint64_t, uint64_t>>
 CyanStore::fiemap(
     CollectionRef ch,
     const ghobject_t& oid,

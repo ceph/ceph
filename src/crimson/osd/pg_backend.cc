@@ -231,12 +231,17 @@ PGBackend::read_ierrorator::future<>
 PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
                 object_stat_sum_t& delta_stats)
 {
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: {} DNE", __func__, os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
+
   const auto& op = osd_op.op;
   logger().trace("sparse_read: {} {}~{}",
                  os.oi.soid, op.extent.offset, op.extent.length);
   return interruptor::make_interruptible(store->fiemap(coll, ghobject_t{os.oi.soid},
 		       op.extent.offset,
-		       op.extent.length)).then_interruptible(
+		       op.extent.length)).safe_then_interruptible(
     [&delta_stats, &os, &osd_op, this](auto&& m) {
     return seastar::do_with(interval_set<uint64_t>{std::move(m)},
 			    [&delta_stats, &os, &osd_op, this](auto&& extents) {
@@ -1363,7 +1368,7 @@ PGBackend::stat(
   return store->stat(c, oid);
 }
 
-PGBackend::interruptible_future<std::map<uint64_t, uint64_t>>
+PGBackend::read_errorator::future<std::map<uint64_t, uint64_t>>
 PGBackend::fiemap(
   CollectionRef c,
   const ghobject_t& oid,
