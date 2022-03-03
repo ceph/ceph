@@ -1483,19 +1483,31 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
 {
   ldpp_dout(dpp, 20) << "delete " << source->get_key().to_str() << " from " << source->get_bucket()->get_name() << dendl;
 
+  rgw_bucket_dir_entry ent;
+  int rc = source->get_bucket_dir_ent(dpp, ent);
+  if (rc < 0) {
+    return rc;
+  }
+
+  //TODO: When integrating with background GC for object deletion,
+  // we should consider adding object entry to GC before deleting the metadata.
   // Delete from the cache first.
   source->store->get_obj_meta_cache()->remove(dpp, source->get_key().to_str());
 
   // Delete the object's entry from the bucket index.
   bufferlist bl;
   string bucket_index_iname = "motr.rgw.bucket.index." + source->get_bucket()->get_name();
-  int rc = source->store->do_idx_op_by_name(bucket_index_iname,
+  rc = source->store->do_idx_op_by_name(bucket_index_iname,
                                             M0_IC_DEL, source->get_key().to_str(), bl);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << "Failed to del object's entry from bucket index. " << dendl;
     return rc;
   }
 
+  if (ent.meta.size == 0) {
+    ldpp_dout(dpp, 0) << __func__ << ": Object size is 0, not deleting motr object." << dendl;
+    return 0;
+  }
   // Remove the motr objects.
   if (source->category == RGWObjCategory::MultiMeta)
     rc = source->delete_part_objs(dpp);
@@ -1932,7 +1944,7 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
     keys[0] = this->get_name();
     rc = store->next_query_by_name(bucket_index_iname, keys, vals);
     if (rc < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: NEXT query failed. " << rc << dendl;
+      ldpp_dout(dpp, 0) << __func__ << "ERROR: NEXT query failed. " << rc << dendl;
       return rc;
     }
 
@@ -1959,7 +1971,7 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
       rc = this->store->do_idx_op_by_name(bucket_index_iname,
                                           M0_IC_GET, this->get_key().to_str(), bl);
       if (rc < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to get object's entry from bucket index: rc="
+        ldpp_dout(dpp, 0) << __func__ << "ERROR: failed to get object's entry from bucket index: rc="
                           << rc << dendl;
         return rc;
       }
