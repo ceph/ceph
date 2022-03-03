@@ -4,7 +4,7 @@
 #include "block_driver.h"
 
 #include "crimson/os/seastore/cache.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/cleaner/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/segment_manager/block.h"
 #include "crimson/os/seastore/transaction_manager.h"

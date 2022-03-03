@@ -16,7 +16,7 @@
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/cleaner/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
 
@@ -557,7 +557,7 @@ public:
     Transaction &t,            ///< [in, out] current transaction
     paddr_t final_block_start, ///< [in] offset of initial block
     journal_seq_t seq,         ///< [in] journal commit seq
-    SegmentCleaner *cleaner=nullptr ///< [out] optional segment stat listener
+    Cleaner *cleaner=nullptr ///< [out] optional segment stat listener
   );
 
   /**

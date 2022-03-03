@@ -6,7 +6,7 @@
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/logging.h"
 
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/cleaner/segment_cleaner.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
 namespace {
@@ -17,7 +17,7 @@ namespace {
 
 SET_SUBSYS(seastore_cleaner);
 
-namespace crimson::os::seastore {
+namespace crimson::os::seastore::cleaner {
 
 void segment_info_set_t::segment_info_t::set_open(segment_seq_t seq) {
   assert(state == Segment::segment_state_t::EMPTY);
@@ -161,15 +161,17 @@ void SpaceTrackerDetailed::SegmentMap::dump_usage(extent_len_t block_size) const
   }
 }
 
-void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
+void SpaceTrackerDetailed::dump_usage(paddr_t addr) const
 {
+  segment_id_t id = addr.as_seg_paddr().get_segment_id();
   logger().debug("SpaceTrackerDetailed::dump_usage {}", id);
   segment_usage[id].dump_usage(
     block_size_by_segment_manager[id.device_id()]);
 }
 
-void SpaceTrackerSimple::dump_usage(segment_id_t id) const
+void SpaceTrackerSimple::dump_usage(paddr_t addr) const
 {
+  segment_id_t id = addr.as_seg_paddr().get_segment_id();
   logger().info(
     "SpaceTrackerSimple::dump_usage id: {}, live_bytes: {}",
     id,
@@ -177,7 +179,7 @@ void SpaceTrackerSimple::dump_usage(segment_id_t id) const
 }
 
 SegmentCleaner::SegmentCleaner(
-  config_t config,
+  seg_cleaner_config_t config,
   ExtentReaderRef&& scr,
   bool detailed)
   : detailed(detailed),
@@ -500,9 +502,9 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 }
 
 SegmentCleaner::mount_ret SegmentCleaner::mount(
-  device_id_t pdevice_id,
-  std::vector<SegmentManager*>& sms)
+  device_id_t pdevice_id)
 {
+  std::vector<SegmentManager*>& sms = scanner->get_segment_managers();
   logger().debug(
     "SegmentCleaner::mount: {} segment managers", sms.size());
   init_complete = false;
@@ -675,6 +677,23 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
     segment_id,
     header.journal_segment_seq);
   return seastar::now();
+}
+
+SegmentCleaner::release_ertr::future<> SegmentCleaner::release_if_needed(
+  Transaction& t)
+{
+  auto to_release = t.get_segment_to_release();
+  if (to_release != NULL_SEG_ID) {
+    logger().debug("SegmentCleaner::release_if_needed: {} releasing segment {}",
+      (void*)&t, to_release);
+    auto seg_managers = scanner->get_segment_managers();
+    return seg_managers[to_release.device_id()]->release(to_release
+    ).safe_then([this, to_release] {
+      mark_segment_released(to_release);
+    });
+  } else {
+    return SegmentManager::release_ertr::now();
+  }
 }
 
 }

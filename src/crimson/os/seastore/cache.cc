@@ -1164,7 +1164,7 @@ void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start,
   journal_seq_t seq,
-  SegmentCleaner *cleaner)
+  Cleaner *cleaner)
 {
   LOG_PREFIX(Cache::complete_commit);
   SUBTRACET(seastore_t, "final_block_start={}, seq={}",

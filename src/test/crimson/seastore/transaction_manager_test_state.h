@@ -5,7 +5,7 @@
 
 #include <random>
 
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/cleaner/segment_cleaner.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
@@ -17,6 +17,7 @@
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
+using namespace crimson::os::seastore::cleaner;
 
 class EphemeralTestState {
 protected:
@@ -76,13 +77,13 @@ auto get_transaction_manager(
   scanner->add_segment_manager(&segment_manager);
   auto& scanner_ref = *scanner.get();
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
-    SegmentCleaner::config_t::get_default(),
+    seg_cleaner_config_t::get_default(),
     std::move(scanner),
     true);
   auto journal = journal::make_segmented(
     segment_manager,
     scanner_ref,
-    *segment_cleaner);
+    segment_cleaner->as_seg_provider());
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(scanner_ref, *epm);
   auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache);
@@ -90,7 +91,7 @@ auto get_transaction_manager(
   epm->add_allocator(
     device_type_t::SEGMENTED,
     std::make_unique<SegmentedAllocator>(
-      *segment_cleaner,
+      segment_cleaner->as_seg_provider(),
       segment_manager));
 
   return std::make_unique<TransactionManager>(

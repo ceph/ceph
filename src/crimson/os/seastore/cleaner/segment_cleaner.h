@@ -16,8 +16,39 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/cleaner.h"
 
 namespace crimson::os::seastore {
+/**
+ * Callback interface for managing available segments
+ */
+class SegmentProvider {
+public:
+  virtual segment_id_t get_segment(
+      device_id_t id, segment_seq_t seq) = 0;
+
+  virtual void close_segment(segment_id_t) {}
+
+  virtual journal_seq_t get_journal_tail_target() const = 0;
+
+  virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
+
+  virtual segment_seq_t get_seq(segment_id_t id) { return 0; }
+
+  virtual seastar::lowres_system_clock::time_point get_last_modified(
+    segment_id_t id) const = 0;
+
+  virtual seastar::lowres_system_clock::time_point get_last_rewritten(
+    segment_id_t id) const = 0;
+
+  virtual void update_segment_avail_bytes(paddr_t offset) = 0;
+
+  virtual ~SegmentProvider() {}
+};
+
+}
+
+namespace crimson::os::seastore::cleaner {
 
 class SegmentCleaner;
 
@@ -281,62 +312,6 @@ private:
   friend class SegmentCleaner;
 };
 
-/**
- * Callback interface for managing available segments
- */
-class SegmentProvider {
-public:
-  virtual segment_id_t get_segment(
-      device_id_t id, segment_seq_t seq) = 0;
-
-  virtual void close_segment(segment_id_t) {}
-
-  virtual journal_seq_t get_journal_tail_target() const = 0;
-
-  virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
-
-  virtual segment_seq_t get_seq(segment_id_t id) { return 0; }
-
-  virtual seastar::lowres_system_clock::time_point get_last_modified(
-    segment_id_t id) const = 0;
-
-  virtual seastar::lowres_system_clock::time_point get_last_rewritten(
-    segment_id_t id) const = 0;
-
-  virtual void update_segment_avail_bytes(paddr_t offset) = 0;
-
-  virtual ~SegmentProvider() {}
-};
-
-class SpaceTrackerI {
-public:
-  virtual int64_t allocate(
-    segment_id_t segment,
-    seastore_off_t offset,
-    extent_len_t len) = 0;
-
-  virtual int64_t release(
-    segment_id_t segment,
-    seastore_off_t offset,
-    extent_len_t len) = 0;
-
-  virtual int64_t get_usage(
-    segment_id_t segment) const = 0;
-
-  virtual bool equals(const SpaceTrackerI &other) const = 0;
-
-  virtual std::unique_ptr<SpaceTrackerI> make_empty() const = 0;
-
-  virtual void dump_usage(segment_id_t) const = 0;
-
-  virtual double calc_utilization(segment_id_t segment) const = 0;
-
-  virtual void reset() = 0;
-
-  virtual ~SpaceTrackerI() = default;
-};
-using SpaceTrackerIRef = std::unique_ptr<SpaceTrackerI>;
-
 class SpaceTrackerSimple : public SpaceTrackerI {
   struct segment_bytes_t {
     int64_t live_bytes = 0;
@@ -368,29 +343,29 @@ public:
   }
 
   int64_t allocate(
-    segment_id_t segment,
-    seastore_off_t offset,
+    paddr_t addr,
     extent_len_t len) final {
-    return update_usage(segment, len);
+    return update_usage(addr.as_seg_paddr().get_segment_id(), len);
   }
 
   int64_t release(
-    segment_id_t segment,
-    seastore_off_t offset,
+    paddr_t addr,
     extent_len_t len) final {
-    return update_usage(segment, -(int64_t)len);
+    return update_usage(addr.as_seg_paddr().get_segment_id(), -(int64_t)len);
   }
 
-  int64_t get_usage(segment_id_t segment) const final {
+  int64_t get_usage(paddr_t addr) const final {
+    segment_id_t segment = addr.as_seg_paddr().get_segment_id();
     return live_bytes_by_segment[segment].live_bytes;
   }
 
-  double calc_utilization(segment_id_t segment) const final {
+  double calc_utilization(paddr_t addr) const final {
+    segment_id_t segment = addr.as_seg_paddr().get_segment_id();
     auto& seg_bytes = live_bytes_by_segment[segment];
     return (double)seg_bytes.live_bytes / (double)seg_bytes.total_bytes;
   }
 
-  void dump_usage(segment_id_t) const final;
+  void dump_usage(paddr_t) const final;
 
   void reset() final {
     for (auto &i : live_bytes_by_segment) {
@@ -482,36 +457,37 @@ public:
   }
 
   int64_t allocate(
-    segment_id_t segment,
-    seastore_off_t offset,
+    paddr_t addr,
     extent_len_t len) final {
+    auto segment = addr.as_seg_paddr().get_segment_id();
     return segment_usage[segment].allocate(
       segment.device_segment_id(),
-      offset,
+      addr.as_seg_paddr().get_segment_off(),
       len,
       block_size_by_segment_manager[segment.device_id()]);
   }
 
   int64_t release(
-    segment_id_t segment,
-    seastore_off_t offset,
+    paddr_t addr,
     extent_len_t len) final {
+    auto segment = addr.as_seg_paddr().get_segment_id();
     return segment_usage[segment].release(
       segment.device_segment_id(),
-      offset,
+      addr.as_seg_paddr().get_segment_off(),
       len,
       block_size_by_segment_manager[segment.device_id()]);
   }
 
-  int64_t get_usage(segment_id_t segment) const final {
-    return segment_usage[segment].get_usage();
+  int64_t get_usage(paddr_t addr) const final {
+    return segment_usage[addr.as_seg_paddr().get_segment_id()].get_usage();
   }
 
-  double calc_utilization(segment_id_t segment) const final {
+  double calc_utilization(paddr_t addr) const final {
+    segment_id_t segment = addr.as_seg_paddr().get_segment_id();
     return segment_usage[segment].calc_utilization();
   }
 
-  void dump_usage(segment_id_t seg) const final;
+  void dump_usage(paddr_t addr) const final;
 
   void reset() final {
     for (auto &i: segment_usage) {
@@ -528,149 +504,40 @@ public:
   bool equals(const SpaceTrackerI &other) const;
 };
 
+/// Config
+struct seg_cleaner_config_t {
+  size_t target_journal_segments = 0;
+  size_t max_journal_segments = 0;
+  double available_ratio_gc_max = 0;
+  double reclaim_ratio_hard_limit = 0;
+  double reclaim_ratio_gc_threshhold = 0;
 
-class SegmentCleaner : public SegmentProvider {
-public:
-  /// Config
-  struct config_t {
-    size_t target_journal_segments = 0;
-    size_t max_journal_segments = 0;
+  double available_ratio_hard_limit = 0;
 
-    double available_ratio_gc_max = 0;
-    double reclaim_ratio_hard_limit = 0;
-    double reclaim_ratio_gc_threshhold = 0;
+  /// Number of bytes to reclaim on each cycle
+  size_t reclaim_bytes_stride = 0;
 
-    double available_ratio_hard_limit = 0;
+  /// Number of bytes of journal entries to rewrite per cycle
+  size_t journal_rewrite_per_cycle = 0;
 
-    /// Number of bytes to reclaim on each cycle
-    size_t reclaim_bytes_stride = 0;
+  static seg_cleaner_config_t get_default() {
+    return seg_cleaner_config_t{
+	2,    // target_journal_segments
+	4,    // max_journal_segments
+	.9,   // available_ratio_gc_max
+	.8,   // reclaim_ratio_hard_limit
+	.6,   // reclaim_ratio_gc_threshhold
+	.1,   // available_ratio_hard_limit
+	1<<20,// reclaim 1MB per gc cycle
+	1<<20 // rewrite 1MB of journal entries per gc cycle
+      };
+  }
+};
 
-    /// Number of bytes of journal entries to rewrite per cycle
-    size_t journal_rewrite_per_cycle = 0;
-
-    static config_t get_default() {
-      return config_t{
-	  2,    // target_journal_segments
-	  4,    // max_journal_segments
-	  .9,   // available_ratio_gc_max
-	  .8,   // reclaim_ratio_hard_limit
-	  .6,   // reclaim_ratio_gc_threshhold
-	  .2,   // available_ratio_hard_limit
-	  1<<25,// reclaim 64MB per gc cycle
-	  1<<25 // rewrite 64MB of journal entries per gc cycle
-	};
-    }
-  };
-
-  /// Callback interface for querying and operating on segments
-  class ExtentCallbackInterface {
-  public:
-    virtual ~ExtentCallbackInterface() = default;
-
-    virtual TransactionRef create_transaction(
-        Transaction::src_t, const char*) = 0;
-
-    /// Creates empty transaction with interruptible context
-    template <typename Func>
-    auto with_transaction_intr(
-        Transaction::src_t src,
-        const char* name,
-        Func &&f) {
-      return seastar::do_with(
-        create_transaction(src, name),
-        [f=std::forward<Func>(f)](auto &ref_t) mutable {
-          return with_trans_intr(
-            *ref_t,
-            [f=std::forward<Func>(f)](auto& t) mutable {
-              return f(t);
-            }
-          );
-        }
-      );
-    }
-
-    /// See Cache::get_next_dirty_extents
-    using get_next_dirty_extents_iertr = trans_iertr<
-      crimson::errorator<
-        crimson::ct_error::input_output_error>
-      >;
-    using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
-      std::vector<CachedExtentRef>>;
-    virtual get_next_dirty_extents_ret get_next_dirty_extents(
-      Transaction &t,     ///< [in] current transaction
-      journal_seq_t bound,///< [in] return extents with dirty_from < bound
-      size_t max_bytes    ///< [in] return up to max_bytes of extents
-    ) = 0;
-
-    using extent_mapping_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error,
-      crimson::ct_error::eagain>;
-    using extent_mapping_iertr = trans_iertr<
-      crimson::errorator<
-	crimson::ct_error::input_output_error>
-      >;
-
-    /**
-     * rewrite_extent
-     *
-     * Updates t with operations moving the passed extents to a new
-     * segment.  extent may be invalid, implementation must correctly
-     * handle finding the current instance if it is still alive and
-     * otherwise ignore it.
-     */
-    using rewrite_extent_iertr = extent_mapping_iertr;
-    using rewrite_extent_ret = rewrite_extent_iertr::future<>;
-    virtual rewrite_extent_ret rewrite_extent(
-      Transaction &t,
-      CachedExtentRef extent) = 0;
-
-    /**
-     * get_extent_if_live
-     *
-     * Returns extent at specified location if still referenced by
-     * lba_manager and not removed by t.
-     *
-     * See TransactionManager::get_extent_if_live and
-     * LBAManager::get_physical_extent_if_live.
-     */
-    using get_extent_if_live_iertr = extent_mapping_iertr;
-    using get_extent_if_live_ret = get_extent_if_live_iertr::future<
-      CachedExtentRef>;
-    virtual get_extent_if_live_ret get_extent_if_live(
-      Transaction &t,
-      extent_types_t type,
-      paddr_t addr,
-      laddr_t laddr,
-      seastore_off_t len) = 0;
-
-    /**
-     * release_segment
-     *
-     * Release segment.
-     */
-    using release_segment_ertr = SegmentManager::release_ertr;
-    using release_segment_ret = release_segment_ertr::future<>;
-    virtual release_segment_ret release_segment(
-      segment_id_t id) = 0;
-
-    /**
-     * submit_transaction_direct
-     *
-     * Submits transaction without any space throttling.
-     */
-    using submit_transaction_direct_iertr = trans_iertr<
-      crimson::errorator<
-        crimson::ct_error::input_output_error>
-      >;
-    using submit_transaction_direct_ret =
-      submit_transaction_direct_iertr::future<>;
-    virtual submit_transaction_direct_ret submit_transaction_direct(
-      Transaction &t) = 0;
-  };
-
+class SegmentCleaner : public Cleaner, SegmentProvider {
 private:
   const bool detailed;
-  const config_t config;
+  const seg_cleaner_config_t config;
 
   ExtentReaderRef scanner;
 
@@ -711,21 +578,26 @@ private:
 
   device_id_t journal_device_id;
 
-  ExtentCallbackInterface *ecb = nullptr;
+  Cleaner::ExtentCallbackInterface *ecb = nullptr;
 
   /// populated if there is an IO blocked on hard limits
   std::optional<seastar::promise<>> blocked_io_wake;
 
 public:
   SegmentCleaner(
-    config_t config,
+    seg_cleaner_config_t config,
     ExtentReaderRef&& scanner,
     bool detailed = false);
+  ~SegmentCleaner() {}
+
+  SegmentProvider& as_seg_provider() {
+    return *static_cast<SegmentProvider*>(this);
+  }
 
   using mount_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   using mount_ret = mount_ertr::future<>;
-  mount_ret mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms);
+  mount_ret mount(device_id_t pdevice_id);
 
   segment_id_t get_segment(
       device_id_t id, segment_seq_t seq) final;
@@ -752,6 +624,8 @@ public:
     segments.update_segment_avail_bytes(head.offset);
     gc_process.maybe_wake_on_space_used();
   }
+
+  release_ertr::future<> release_if_needed(Transaction& t);
 
   void update_segment_avail_bytes(paddr_t offset) final {
     segments.update_segment_avail_bytes(offset);
@@ -790,12 +664,11 @@ public:
       return;
 
     stats.used_bytes += len;
-    auto old_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
+    auto old_usage = space_tracker->calc_utilization(addr);
     [[maybe_unused]] auto ret = space_tracker->allocate(
-      seg_addr.get_segment_id(),
-      seg_addr.get_segment_off(),
+      addr,
       len);
-    auto new_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
+    auto new_usage = space_tracker->calc_utilization(addr);
     adjust_segment_util(old_usage, new_usage);
 
     // use the last extent's last modified time for the calculation of the projected
@@ -836,12 +709,11 @@ public:
     assert(seg_addr.get_segment_id().device_segment_id() <
       segments[seg_addr.get_segment_id().device_id()]->num_segments);
 
-    auto old_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
+    auto old_usage = space_tracker->calc_utilization(addr);
     [[maybe_unused]] auto ret = space_tracker->release(
-      seg_addr.get_segment_id(),
-      seg_addr.get_segment_off(),
+      addr,
       len);
-    auto new_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
+    auto new_usage = space_tracker->calc_utilization(addr);
     adjust_segment_util(old_usage, new_usage);
     maybe_wake_gc_blocked_io();
     assert(ret >= 0);
@@ -896,7 +768,8 @@ private:
   // journal status helpers
 
   double calc_gc_benefit_cost(segment_id_t id) const {
-    double util = space_tracker->calc_utilization(id);
+    double util = space_tracker->calc_utilization(
+      paddr_t::make_seg_paddr(id, 0));
     auto cur_time = seastar::lowres_system_clock::now();
     auto segment = segments[id];
     assert(cur_time >= segment.last_modified);
@@ -1366,9 +1239,10 @@ private:
       segments[segment.device_id()]->num_segments);
     assert(segment_info.is_closed());
     segments.segment_emptied(segment);
-    if (space_tracker->get_usage(segment) != 0) {
-      space_tracker->dump_usage(segment);
-      assert(space_tracker->get_usage(segment) == 0);
+    paddr_t addr = paddr_t::make_seg_paddr(segment, 0);
+    if (space_tracker->get_usage(addr) != 0) {
+      space_tracker->dump_usage(addr);
+      assert(space_tracker->get_usage(addr) == 0);
     }
     auto s_type = segment_info.get_type();
     segment_info.set_empty();

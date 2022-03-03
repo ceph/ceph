@@ -22,7 +22,7 @@
 
 #include "crimson/os/futurized_collection.h"
 
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/cleaner/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/segment_manager/block.h"
 #include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
@@ -1511,19 +1511,22 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   ).then([&device](auto sm) {
     auto scanner = std::make_unique<ExtentReader>();
     auto& scanner_ref = *scanner.get();
-    auto segment_cleaner = std::make_unique<SegmentCleaner>(
-      SegmentCleaner::config_t::get_default(),
+    CleanerRef cleaner = cleaner::make_segmented(
+      cleaner::seg_cleaner_config_t::get_default(),
       std::move(scanner),
       false /* detailed */);
 
-    auto journal = journal::make_segmented(*sm, scanner_ref, *segment_cleaner);
+    auto journal = journal::make_segmented(
+      *sm,
+      scanner_ref,
+      static_cast<SegmentCleaner*>(cleaner.get())->as_seg_provider());
     auto epm = std::make_unique<ExtentPlacementManager>();
     auto cache = std::make_unique<Cache>(scanner_ref, *epm);
     auto lba_manager = lba_manager::create_lba_manager(*sm, *cache);
 
     auto tm = std::make_unique<TransactionManager>(
       *sm,
-      std::move(segment_cleaner),
+      std::move(cleaner),
       std::move(journal),
       std::move(cache),
       std::move(lba_manager),

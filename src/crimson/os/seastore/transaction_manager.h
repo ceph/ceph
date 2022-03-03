@@ -21,7 +21,7 @@
 #include "crimson/osd/exceptions.h"
 
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/cleaner/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -31,6 +31,10 @@
 
 namespace crimson::os::seastore {
 class Journal;
+namespace cleaner {
+  class SegmentCleaner;
+}
+using SegmentCleaner = cleaner::SegmentCleaner;
 
 template <typename F>
 auto repeat_eagain(F &&f) {
@@ -58,14 +62,14 @@ auto repeat_eagain(F &&f) {
  * Abstraction hiding reading and writing to persistence.
  * Exposes transaction based interface with read isolation.
  */
-class TransactionManager : public SegmentCleaner::ExtentCallbackInterface {
+class TransactionManager : public Cleaner::ExtentCallbackInterface {
 public:
   using base_ertr = Cache::base_ertr;
   using base_iertr = Cache::base_iertr;
 
   TransactionManager(
     SegmentManager &segment_manager,
-    SegmentCleanerRef segment_cleaner,
+    CleanerRef cleaner,
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
@@ -376,8 +380,8 @@ public:
   using submit_transaction_iertr = base_iertr;
   submit_transaction_iertr::future<> submit_transaction(Transaction &);
 
-  /// SegmentCleaner::ExtentCallbackInterface
-  using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
+  /// Cleaner::ExtentCallbackInterface
+  using Cleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
   submit_transaction_direct_ret submit_transaction_direct(
     Transaction &t) final;
 
@@ -390,18 +394,18 @@ public:
    */
   seastar::future<> flush(OrderingHandle &handle);
 
-  using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
+  using Cleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
 
-  using SegmentCleaner::ExtentCallbackInterface::rewrite_extent_ret;
+  using Cleaner::ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) final;
 
-  using SegmentCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
+  using Cleaner::ExtentCallbackInterface::get_extent_if_live_ret;
   get_extent_if_live_ret get_extent_if_live(
     Transaction &t,
     extent_types_t type,
@@ -410,7 +414,7 @@ public:
     seastore_off_t len) final;
 
   using release_segment_ret =
-    SegmentCleaner::ExtentCallbackInterface::release_segment_ret;
+    Cleaner::ExtentCallbackInterface::release_segment_ret;
   release_segment_ret release_segment(
     segment_id_t id) final {
     LOG_PREFIX(TransactionManager::release_segment);
@@ -538,7 +542,7 @@ public:
   }
 
   store_statfs_t store_stat() const {
-    return segment_cleaner->stat();
+    return cleaner->stat();
   }
 
   void add_segment_manager(SegmentManager* sm) {
@@ -548,7 +552,7 @@ public:
     epm->add_allocator(
       device_type_t::SEGMENTED,
       std::make_unique<SegmentedAllocator>(
-	*segment_cleaner,
+	get_segment_cleaner()->as_seg_provider(),
 	*sm));
   }
 
@@ -561,7 +565,7 @@ private:
   // only one of them are supposed to hold the journal. This
   // segment manager is that device
   SegmentManager &segment_manager;
-  SegmentCleanerRef segment_cleaner;
+  CleanerRef cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
@@ -575,8 +579,8 @@ private:
     LogicalCachedExtentRef extent);
 public:
   // Testing interfaces
-  auto get_segment_cleaner() {
-    return segment_cleaner.get();
+  SegmentCleaner* get_segment_cleaner() {
+    return static_cast<SegmentCleaner*>(cleaner.get());
   }
 
   auto get_lba_manager() {

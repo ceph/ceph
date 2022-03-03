@@ -8,7 +8,7 @@
 #include "test/crimson/gtest_seastar.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/cleaner/segment_cleaner.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
@@ -392,8 +392,7 @@ struct transaction_manager_test_t :
 	  t,
 	  [&tracker](auto offset, auto len) {
 	    tracker->allocate(
-	      offset.as_seg_paddr().get_segment_id(),
-	      offset.as_seg_paddr().get_segment_off(),
+	      offset,
 	      len);
 	  });
       }).unsafe_get0();

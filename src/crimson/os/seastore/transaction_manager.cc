@@ -24,21 +24,21 @@ namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(
   SegmentManager &_segment_manager,
-  SegmentCleanerRef _segment_cleaner,
+  CleanerRef _cleaner,
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef&& epm,
   ExtentReader& scanner)
   : segment_manager(_segment_manager),
-    segment_cleaner(std::move(_segment_cleaner)),
+    cleaner(std::move(_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
     scanner(scanner)
 {
-  segment_cleaner->set_extent_callback(this);
+  cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
 }
 
@@ -46,13 +46,12 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
-  return segment_cleaner->mount(
-    segment_manager.get_device_id(),
-    scanner.get_segment_managers()
+  return cleaner->mount(
+    segment_manager.get_device_id()
   ).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this, FNAME](auto addr) {
-    segment_cleaner->init_mkfs(addr);
+    cleaner->init_mkfs(addr);
     return with_transaction_intr(
       Transaction::src_t::MUTATE,
       "mkfs_tm",
@@ -85,14 +84,13 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   LOG_PREFIX(TransactionManager::mount);
   INFO("enter");
   cache->init();
-  return segment_cleaner->mount(
-    segment_manager.get_device_id(),
-    scanner.get_segment_managers()
+  return cleaner->mount(
+    segment_manager.get_device_id()
   ).safe_then([this] {
     return journal->replay(
       [this](const auto &offsets, const auto &e, auto last_modified) {
 	auto start_seq = offsets.write_result.start_seq;
-	segment_cleaner->update_journal_tail_target(
+	cleaner->update_journal_tail_target(
 	  cache->get_oldest_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
 	  start_seq,
@@ -103,7 +101,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this, FNAME](auto addr) {
-    segment_cleaner->set_journal_head(addr);
+    cleaner->set_journal_head(addr);
     return seastar::do_with(
       create_weak_transaction(
         Transaction::src_t::READ, "mount"),
@@ -114,8 +112,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	    return cache->init_cached_extents(t, [this](auto &t, auto &e) {
 	      return lba_manager->init_cached_extent(t, e);
 	    }).si_then([this, FNAME, &t] {
-	      assert(segment_cleaner->debug_check_space(
-		       *segment_cleaner->get_empty_space_tracker()));
+	      assert(cleaner->debug_check_space(
+		       *cleaner->get_empty_space_tracker()));
 	      return lba_manager->scan_mapped_space(
 		t,
 		[this, FNAME, &t](paddr_t addr, extent_len_t len) {
@@ -125,7 +123,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    addr,
 		    len);
 		  if (addr.is_real()) {
-		    segment_cleaner->mark_space_used(
+		    cleaner->mark_space_used(
 		      addr,
 		      len ,
 		      seastar::lowres_system_clock::time_point(),
@@ -137,7 +135,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  });
       });
   }).safe_then([this, FNAME] {
-    segment_cleaner->complete_init();
+    cleaner->complete_init();
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -150,7 +148,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 TransactionManager::close_ertr::future<> TransactionManager::close() {
   LOG_PREFIX(TransactionManager::close);
   INFO("enter");
-  return segment_cleaner->stop(
+  return cleaner->stop(
   ).then([this] {
     return cache->close();
   }).safe_then([this] {
@@ -269,12 +267,12 @@ TransactionManager::submit_transaction(
     size_t projected_usage = t.get_allocation_size();
     SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
     return trans_intr::make_interruptible(
-      segment_cleaner->reserve_projected_usage(projected_usage)
+      cleaner->reserve_projected_usage(projected_usage)
     ).then_interruptible([this, &t] {
       return submit_transaction_direct(t);
     }).finally([this, FNAME, projected_usage, &t] {
       SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
-      segment_cleaner->release_projected_usage(projected_usage);
+      cleaner->release_projected_usage(projected_usage);
     });
   });
 }
@@ -326,25 +324,16 @@ TransactionManager::submit_transaction_direct(
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
       auto end_seq = submit_result.write_result.get_end_seq();
-      segment_cleaner->set_journal_head(end_seq);
+      cleaner->set_journal_head(end_seq);
       cache->complete_commit(
           tref,
           submit_result.record_block_base,
           start_seq,
-          segment_cleaner.get());
+          cleaner.get());
       lba_manager->complete_transaction(tref);
-      segment_cleaner->update_journal_tail_target(
+      cleaner->update_journal_tail_target(
 	cache->get_oldest_dirty_from().value_or(start_seq));
-      auto to_release = tref.get_segment_to_release();
-      if (to_release != NULL_SEG_ID) {
-        SUBDEBUGT(seastore_t, "releasing segment {}", tref, to_release);
-	return segment_manager.release(to_release
-	).safe_then([this, to_release] {
-	  segment_cleaner->mark_segment_released(to_release);
-	});
-      } else {
-	return SegmentManager::release_ertr::now();
-      }
+      return cleaner->release_if_needed(tref);
     }).safe_then([FNAME, &tref] {
       SUBTRACET(seastore_t, "completed", tref);
       return tref.get_handle().complete();

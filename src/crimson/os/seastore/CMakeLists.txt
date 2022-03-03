@@ -9,7 +9,7 @@ set(crimson_seastore_srcs
   cache.cc
   extent_reader.cc
   lba_manager.cc
-  segment_cleaner.cc
+  cleaner/segment_cleaner.cc
   lba_manager/btree/btree_lba_manager.cc
   lba_manager/btree/lba_btree_node.cc
   omap_manager.cc
@@ -39,6 +39,7 @@ set(crimson_seastore_srcs
   journal/segmented_journal.cc
   journal/segment_allocator.cc
   journal.cc
+  cleaner.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)

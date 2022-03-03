@@ -10,7 +10,10 @@
 
 namespace crimson::os::seastore {
 
-class SegmentCleaner;
+namespace cleaner{
+  class SegmentCleaner;
+}
+using SegmentCleaner = cleaner::SegmentCleaner;
 class TransactionManager;
 
 class ExtentReader {
@@ -126,6 +129,7 @@ private:
       std::size_t& budget_used);
 
   friend class TransactionManager;
+  friend class cleaner::SegmentCleaner;
 };
 
 using ExtentReaderRef = std::unique_ptr<ExtentReader>;

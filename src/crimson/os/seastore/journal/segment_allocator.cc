@@ -4,7 +4,7 @@
 #include "segment_allocator.h"
 
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/cleaner/segment_cleaner.h"
 
 SET_SUBSYS(seastore_journal);
 
