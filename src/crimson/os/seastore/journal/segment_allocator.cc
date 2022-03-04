@@ -198,8 +198,7 @@ SegmentAllocator::close_segment(bool is_rolling)
 {
   LOG_PREFIX(SegmentAllocator::close_segment);
   assert(can_write());
-  auto seg_to_close = std::move(current_segment);
-  auto close_segment_id = seg_to_close->get_segment_id();
+  auto close_segment_id = current_segment->get_segment_id();
   INFO("{} {} close segment id={}, seq={}, written_to={}, nonce={}",
        type, get_device_id(),
        close_segment_id,
@@ -209,8 +208,44 @@ SegmentAllocator::close_segment(bool is_rolling)
   if (is_rolling) {
     segment_provider.close_segment(close_segment_id);
   }
-  return seg_to_close->close(
-  ).safe_then([seg_to_close=std::move(seg_to_close)] {
+  segment_seq_t cur_segment_seq;
+  if (type == segment_type_t::JOURNAL) {
+    cur_segment_seq = next_segment_seq - 1;
+  } else { // OOL
+    cur_segment_seq = next_segment_seq;
+  }
+  journal_seq_t cur_journal_tail;
+  if (type == segment_type_t::JOURNAL) {
+    cur_journal_tail = segment_provider.get_journal_tail_target();
+  } else { // OOL
+    cur_journal_tail = NO_DELTAS;
+  }
+  auto tail = segment_tail_t{
+    cur_segment_seq,
+    close_segment_id,
+    cur_journal_tail,
+    current_segment_nonce};
+  ceph::bufferlist bl;
+  encode(tail, bl);
+
+  bufferptr bp(
+    ceph::buffer::create_page_aligned(
+      segment_manager.get_block_size()));
+  bp.zero();
+  auto iter = bl.cbegin();
+  iter.copy(bl.length(), bp.c_str());
+  bl.clear();
+  bl.append(bp);
+
+  assert(bl.length() ==
+    (size_t)segment_manager.get_rounded_tail_length());
+  return current_segment->write(
+    segment_manager.get_segment_size()
+      - segment_manager.get_rounded_tail_length(),
+    bl).safe_then([this] {
+    return current_segment->close();
+  }).safe_then([this] {
+    current_segment.reset();
   }).handle_error(
     close_segment_ertr::pass_further{},
     crimson::ct_error::assert_all{
