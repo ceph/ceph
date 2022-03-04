@@ -238,6 +238,11 @@ public:
     ceph_assert(get_size() % get_segment_size() == 0);
     return ((device_segment_id_t)(get_size() / get_segment_size()));
   }
+  seastore_off_t get_rounded_tail_length() const {
+    return p2roundup(
+      ceph::encoded_sizeof_bounded<segment_tail_t>(),
+      (size_t)get_block_size());
+  }
   virtual const seastore_meta_t &get_meta() const = 0;
 
   virtual device_id_t get_device_id() const = 0;
