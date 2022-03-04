@@ -20,7 +20,10 @@ LockPersonality=true
 MemoryDenyWriteExecute=true
 # Need NewPrivileges via `sudo smartctl`
 NoNewPrivileges=false
-PrivateDevices=yes
+# We need access to block devices to check the health of the disk backing the
+# monitor DB store. It can be set to `true` if you're not interested in that
+# feature.
+PrivateDevices=false
 PrivateTmp=true
 ProtectControlGroups=true
 ProtectHome=true
