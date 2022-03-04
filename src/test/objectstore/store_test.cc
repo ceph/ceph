@@ -9159,6 +9159,122 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
 
 }
 
+TEST_P(StoreTestSpecificAUSize, BluestoreObjectMissingShardsRepairTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+
+  StartDeferred(0x1000);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  int r;
+
+  cerr << "initializing" << std::endl;
+  {
+    const size_t col_count = 1;
+    const size_t obj_count = 8;
+    const char* obj_names[obj_count] =
+      {"Vale_decem",
+       "Alis_grave",
+       "Ad_perpetuam",
+       "Memoriam",
+       "Gratis_tibi_ago",
+       "Ad_aeternam",
+       "Numquam_singularis",
+       "Dum_spiro_fido"
+      };
+    const size_t object_size = 1 * 1024 * 1024;
+    ObjectStore::CollectionHandle ch[col_count];
+    ghobject_t hoid[col_count][obj_count];
+
+    unique_ptr<coll_t> cid[col_count];
+
+    for (size_t i = 0; i < col_count; i++) {
+      cid[i].reset(new coll_t(spg_t(pg_t(0, i), shard_id_t::NO_SHARD)));
+      ch[i] = store->create_new_collection(*cid[i]);
+      for (size_t j = 0; j < obj_count; j++) {
+	hoid[i][j] = make_object(obj_names[j], i);
+      }
+    }
+
+    for (size_t i = 0; i < col_count; i++) {
+      ObjectStore::Transaction t;
+      t.create_collection(*cid[i], 0);
+      r = queue_transaction(store, ch[i], std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    cerr << "onode preparing" << std::endl;
+    bufferlist bl;
+    string s(0x1000, 'a');
+    bl.append(s);
+
+    for (size_t pos = 0; pos < object_size; pos += bl.length()) {
+      for (size_t i = 0; i < col_count; i++) {
+	for (size_t j = 0; j < obj_count; j++) {
+	  ObjectStore::Transaction t;
+	  t.write(*cid[i], hoid[i][j], pos, bl.length(), bl);
+	  r = queue_transaction(store, ch[i], std::move(t));
+	  ASSERT_EQ(r, 0);
+	}
+      }
+    }
+
+    bstore->umount();
+    cerr << "damaging objects" << std::endl;
+    int r;
+    KeyValueDB* db;
+    r = bstore->open_db_environment(&db, false);
+    ASSERT_EQ(r, 0);
+    KeyValueDB::Transaction t = db->get_transaction();
+    {
+      auto iter = db->get_iterator("O", KeyValueDB::ITERATOR_NOCACHE);
+      iter->seek_to_first();
+      int wing_counter = 0;
+      while (iter->valid()) {
+	cerr << pretty_binary_string(iter->key()) << std::endl;
+	bool do_delete = false;
+	bool is_extent = iter->key().back() == 'x';
+	if (iter->key().find("Numquam_singularis") != std::string::npos) {
+	  //delete main object key in Never alone
+	  if (!is_extent) do_delete = true;
+	}
+	if (iter->key().find("Gratis_tibi_ago") != std::string::npos) {
+	  //delete all shard keys in Thank you
+	  if (is_extent) do_delete = true;
+	}
+	if (iter->key().find("Alis_grave") != std::string::npos) {
+	  //delete second shard key in Heavy wings
+	  if (is_extent) {
+	    ++wing_counter;
+	    if (wing_counter == 2) do_delete = true;
+	  }
+	}
+	if (do_delete) {
+	  cerr << "delete key" << std::endl;
+	  t->rmkey("O", iter->key());
+	}
+	iter->next();
+      }
+    }
+    ASSERT_EQ(db->submit_transaction_sync(t), 0);
+    bstore->close_db_environment();
+    cerr << "objects damaged" << std::endl;
+
+    cerr << "fscking/fixing" << std::endl;
+    ASSERT_GE(bstore->fsck(false), 3);
+    ASSERT_LE(bstore->repair(false), 0);
+    ASSERT_EQ(bstore->fsck(false), 1); //still statfs wrong
+    ASSERT_LE(bstore->repair(false), 0);
+    ASSERT_EQ(bstore->fsck(false), 0);
+  }
+
+  cerr << "Completing" << std::endl;
+  bstore->mount();
+}
+
 TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
