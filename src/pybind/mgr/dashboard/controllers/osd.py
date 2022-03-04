@@ -16,8 +16,8 @@ from ..services.exception import handle_orchestrator_error, handle_send_command_
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
-    allow_empty_body
+    EndpointDoc, ReadPermission, RESTController, Task, UIRouter, \
+    UpdatePermission, allow_empty_body
 from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
 
@@ -44,6 +44,60 @@ EXPORT_INDIV_FLAGS_SCHEMA = {
 EXPORT_INDIV_FLAGS_GET_SCHEMA = {
     "osd": (int, "OSD ID"),
     "flags": ([str], "List of active flags")
+}
+
+
+class DeploymentOption:
+    def __init__(self, name: str, available=False, capacity=0, used=0, hdd_used=0,
+                 ssd_used=0, nvme_used=0):
+        self.name = name
+        self.available = available
+        self.capacity = capacity
+        self.used = used
+        self.hdd_used = hdd_used
+        self.ssd_used = ssd_used
+        self.nvme_used = nvme_used
+
+    def as_dict(self):
+        return {
+            'name': self.name,
+            'available': self.available,
+            'capacity': self.capacity,
+            'used': self.used,
+            'hdd_used': self.hdd_used,
+            'ssd_used': self.ssd_used,
+            'nvme_used': self.nvme_used
+        }
+
+
+class DeploymentOptions:
+    def __init__(self):
+        self.options = {
+            'cost-capacity': DeploymentOption('cost-capacity'),
+            'throughput': DeploymentOption('throughput-optimized'),
+            'iops': DeploymentOption('iops-optimized'),
+        }
+        self.recommended_option = None
+
+    def as_dict(self):
+        return {
+            'options': {k: v.as_dict() for k, v in self.options.items()},
+            'recommended_option': self.recommended_option
+        }
+
+
+predefined_drive_groups = {
+    'cost-capacity': {
+        'service_type': 'osd',
+        'placement': {
+            'host_pattern': '*'
+        },
+        'data_devices': {
+            'rotational': 1
+        }
+    },
+    'throughput': {},
+    'iops': {},
 }
 
 
@@ -295,6 +349,15 @@ class Osd(RESTController):
             id=int(svc_id),
             weight=float(weight))
 
+    def _create_predefined_drive_group(self, data):
+        orch = OrchClient.instance()
+        if data == 'cost-capacity':
+            try:
+                orch.osds.create([DriveGroupSpec.from_json(
+                    predefined_drive_groups['cost-capacity'])])
+            except (ValueError, TypeError, DriveGroupValidationError) as e:
+                raise DashboardException(e, component='osd')
+
     def _create_bare(self, data):
         """Create a OSD container that has no associated device.
 
@@ -334,6 +397,8 @@ class Osd(RESTController):
             return self._create_bare(data)
         if method == 'drive_groups':
             return self._create_with_drive_groups(data)
+        if method == 'predefined':
+            return self._create_predefined_drive_group(data)
         raise DashboardException(
             component='osd', http_status_code=400, msg='Unknown method: {}'.format(method))
 
@@ -407,6 +472,36 @@ class Osd(RESTController):
     def devices(self, svc_id):
         # (str) -> dict
         return CephService.send_command('mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+
+
+@UIRouter('/osd', Scope.OSD)
+@APIDoc("Dashboard UI helper function; not part of the public API", "OsdUI")
+class OsdUi(Osd):
+    @Endpoint('GET', version=APIVersion.EXPERIMENTAL)
+    @ReadPermission
+    @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
+    @handle_orchestrator_error('host')
+    def deployment_options(self):
+        orch = OrchClient.instance()
+        hdds = 0
+        ssds = 0
+        nvmes = 0
+        res = DeploymentOptions()
+        devices = {}
+        for inventory_host in orch.inventory.list(hosts=None, refresh=True):
+            for device in inventory_host.devices.devices:
+                if device.available:
+                    devices[device.path] = device
+                    if device.human_readable_type == 'hdd':
+                        hdds += 1
+                    elif device.human_readable_type == 'ssd':
+                        ssds += 1
+                    elif device.human_readable_type == 'nvme':
+                        nvmes += 1
+        if hdds:
+            res.options['cost-capacity'].available = True
+            res.recommended_option = 'cost-capacity'
+        return res.as_dict()
 
 
 @APIRouter('/osd/flags', Scope.OSD)
