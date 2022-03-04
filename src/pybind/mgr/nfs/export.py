@@ -19,7 +19,12 @@ from rados import TimedOut, ObjectNotFound, Rados, LIBRADOS_ALL_NSPACES
 from orchestrator import NoOrchestrator
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
-from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
+from .ganesha_conf import (
+    CephFSFSAL,
+    Export,
+    GaneshaConfParser,
+    RGWFSAL,
+    RawBlock)
 from .exception import NFSException, NFSInvalidOperation, FSNotFound
 from .utils import (
     CONF_PREFIX,
