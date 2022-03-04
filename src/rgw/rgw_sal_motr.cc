@@ -1844,7 +1844,7 @@ out:
 int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t end, RGWGetDataCB* cb)
 {
   int rc;
-  unsigned bs, actual;
+  unsigned bs, actual, left;
   struct m0_op *op;
   struct m0_bufvec buf;
   struct m0_bufvec attr;
@@ -1874,10 +1874,13 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
   if (rc < 0)
     goto out;
 
-  actual = bs;
-  for (; off < end; off += actual) {
-    if (end - off < bs)
-        actual = end - off;
+  left = end - off;
+  for (; left > 0; off += actual) {
+    if (left < bs)
+      bs = this->get_optimal_bs(left);
+    actual = bs;
+    if (left < bs)
+      actual = left;
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): off=" << off <<
                                             " actual=" << actual << dendl;
     bufferlist bl;
@@ -1887,23 +1890,27 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
     ext.iv_vec.v_count[0] = bs;
     attr.ov_vec.v_count[0] = 0;
 
+    left -= actual;
     // Read from Motr.
     op = nullptr;
     rc = m0_obj_op(this->mobj, M0_OC_READ, &ext, &buf, &attr, 0, 0, &op);
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): init read op rc=" << rc << dendl;
-    if (rc != 0)
+    if (rc != 0) {
+      ldpp_dout(dpp, 0) << __func__ << ": read failed during m0_obj_op, rc=" << rc << dendl;
       goto out;
+    }
     m0_op_launch(&op, 1);
     rc = m0_op_wait(op, M0_BITS(M0_OS_FAILED, M0_OS_STABLE), M0_TIME_NEVER) ?:
          m0_rc(op);
     m0_op_fini(op);
     m0_op_free(op);
-    if (rc != 0)
+    if (rc != 0) {
+      ldpp_dout(dpp, 0) << __func__ << ": read failed, m0_op_wait rc=" << rc << dendl;
       goto out;
-
+    }
     // Call `cb` to process returned data.
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): call cb to process data" << dendl;
-    cb->handle_data(bl, off, actual);
+    cb->handle_data(bl, 0, actual);
   }
 
 out:
