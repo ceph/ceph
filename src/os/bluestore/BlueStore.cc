@@ -18488,6 +18488,30 @@ int BlueStore::store_allocator(Allocator* src_allocator)
     }
   }
 
+  // We calculate space used by Bluestore using this formula:
+  // {bluestore_used_space} = {space_used_by_allocator} \ {space_used_by_bluefs}
+  // For this formula to be correct, we must make sure that snapshots of
+  // {space_used_by_allocator} and {space_used_by_bluefs} are in logical sync.
+  //
+  // In the first glance snapshot can be taken at any time there is
+  // no bluefs activity, as space held by bluefs and held by allocator should cancel out.
+  // There is an implementation detail that disturbs the picture here.
+  // When we release extents previously used by bluefs we keep them until we properly sync the log.
+  // Each flush_and_sync_log ends with returning {pending_release} extents to allocator.
+  // With *one exception*: when flush_and_sync_log triggers compaction of bluefs log,
+  // then extents of old log are now in {pending_release} state.
+  // If we capture snapshot now, then our {space_used_by_allocator} will be off by
+  // the content of {pending_release}.
+  //
+  // To make sure above condition does not happen, we do:
+  // 1) force bluefs log compaction (to clear conditions for compaction soon)
+  // 2) trigger flush_and_sync_log (to release extents produced by compaction)
+  //
+  // TODO - switch 2) to some dedicated API call to release pending allocations
+
+  // This is 1) of secure allocation calculation
+  bluefs->compact_log();
+
   // reuse previous file-allocation if exists
   ret = bluefs->stat(allocator_dir, allocator_file, nullptr, nullptr);
   bool overwrite_file = (ret == 0);
@@ -18536,6 +18560,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
 
   // create_allocator_snapshot call bluefs->umount() so need to close writer
   bluefs->close_writer(p_handle);
+  // sync_metadata works is 2) of secure allocation calculation
   bluefs->sync_metadata(false);
   overwrite_file = true;
   // Get a consistent view of the shared-allocator
