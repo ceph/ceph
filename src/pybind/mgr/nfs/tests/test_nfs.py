@@ -13,7 +13,7 @@ from rados import ObjectNotFound
 from ceph.deployment.service_spec import NFSServiceSpec
 from nfs import Module
 from nfs.export import ExportMgr, normalize_path
-from nfs.export_utils import GaneshaConfParser, Export, RawBlock
+from nfs.ganesha_conf import GaneshaConfParser, Export, RawBlock
 from nfs.cluster import NFSCluster
 from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
@@ -229,7 +229,7 @@ EXPORT {
                 mock.patch('nfs.cluster.restart_nfs_service'), \
                 mock.patch.object(MgrModule, 'tool_exec', mock_exec), \
                 mock.patch('nfs.export.check_fs', return_value=True), \
-                mock.patch('nfs.export_utils.check_fs', return_value=True), \
+                mock.patch('nfs.ganesha_conf.check_fs', return_value=True), \
                 mock.patch('nfs.export.ExportMgr._create_user_key',
                            return_value='thekeyforclientabc'):
 
@@ -559,7 +559,7 @@ NFS_CORE_PARAM {
         blocks = GaneshaConfParser(block).parse()
         export = Export.from_export_block(blocks[0], self.cluster_id)
         nfs_mod = Module('nfs', '', '')
-        with mock.patch('nfs.export_utils.check_fs', return_value=True):
+        with mock.patch('nfs.ganesha_conf.check_fs', return_value=True):
             export.validate(nfs_mod)
 
     def test_update_export(self):
