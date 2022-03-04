@@ -876,7 +876,7 @@ tests:
           documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#fs-degraded
           summary: Ceph filesystem is degraded
           description: >
-            One or more metdata daemons (MDS ranks) are failed or in a
+            One or more metadata daemons (MDS ranks) are failed or in a
             damaged state. At best the filesystem is partially available,
             worst case is the filesystem is completely unusable.
  - interval: 1m
@@ -1738,7 +1738,7 @@ tests:
             During data consistency checks (scrub), at least one PG has been flagged as being
             damaged or inconsistent.
 
-            Check to see which PG is affected, and attempt a manual repair if neccessary. To list
+            Check to see which PG is affected, and attempt a manual repair if necessary. To list
             problematic placement groups, use 'rados list-inconsistent-pg <pool>'. To repair PGs use
             the 'ceph pg repair <pg_num>' command.
  - interval: 1m
@@ -1858,7 +1858,7 @@ tests:
           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-availability
           summary: Placement group is unavailable, blocking some I/O
           description: >
-            Data availability is reduced impacting the clusters abilty to service I/O to some data. One or
+            Data availability is reduced impacting the clusters ability to service I/O to some data. One or
             more placement groups (PGs) are in a state that blocks IO.
  - interval: 1m
    input_series:
