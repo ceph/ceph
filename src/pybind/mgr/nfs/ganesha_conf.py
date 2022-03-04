@@ -149,33 +149,6 @@ class GaneshaConfParser:
             blocks.append(self.parse_block_or_section())
         return blocks
 
-    @staticmethod
-    def write_block_body(block: RawBlock, depth: int = 0) -> str:
-        conf_str = ""
-        for blo in block.blocks:
-            conf_str += GaneshaConfParser.write_block(blo, depth)
-
-        for key, val in block.values.items():
-            if val is not None:
-                conf_str += _indentation(depth)
-                fval = _format_val(block.block_name, key, val)
-                conf_str += '{} = {};\n'.format(key, fval)
-        return conf_str
-
-    @staticmethod
-    def write_block(block: RawBlock, depth: int = 0) -> str:
-        if block.block_name == "%url":
-            return '%url "{}"\n\n'.format(block.values['value'])
-
-        conf_str = ""
-        conf_str += _indentation(depth)
-        conf_str += format(block.block_name)
-        conf_str += " {\n"
-        conf_str += GaneshaConfParser.write_block_body(block, depth + 1)
-        conf_str += _indentation(depth)
-        conf_str += "}\n"
-        return conf_str
-
 
 class FSAL(object):
     def __init__(self, name: str) -> None:
@@ -518,3 +491,33 @@ class Export:
         if not isinstance(other, Export):
             return False
         return self.to_dict() == other.to_dict()
+
+
+def _format_block_body(block: RawBlock, depth: int = 0) -> str:
+    conf_str = ""
+    for blo in block.blocks:
+        conf_str += format_block(blo, depth)
+
+    for key, val in block.values.items():
+        if val is not None:
+            conf_str += _indentation(depth)
+            fval = _format_val(block.block_name, key, val)
+            conf_str += '{} = {};\n'.format(key, fval)
+    return conf_str
+
+
+def format_block(block: RawBlock, depth: int = 0) -> str:
+    """Format a raw block object into text suitable as a ganesha configuration
+    block.
+    """
+    if block.block_name == "%url":
+        return '%url "{}"\n\n'.format(block.values['value'])
+
+    conf_str = ""
+    conf_str += _indentation(depth)
+    conf_str += format(block.block_name)
+    conf_str += " {\n"
+    conf_str += _format_block_body(block, depth + 1)
+    conf_str += _indentation(depth)
+    conf_str += "}\n"
+    return conf_str
