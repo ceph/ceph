@@ -10,6 +10,13 @@ if TYPE_CHECKING:
     from nfs.module import Module
 
 
+def _indentation(depth: int, size: int = 4) -> str:
+    conf_str = ""
+    for _ in range(0, depth * size):
+        conf_str += " "
+    return conf_str
+
+
 class RawBlock():
     def __init__(self, block_name: str, blocks: List['RawBlock'] = [], values: Dict[str, Any] = {}):
         if not values:  # workaround mutable default argument
@@ -135,13 +142,6 @@ class GaneshaConfParser:
         return blocks
 
     @staticmethod
-    def _indentation(depth: int, size: int = 4) -> str:
-        conf_str = ""
-        for _ in range(0, depth * size):
-            conf_str += " "
-        return conf_str
-
-    @staticmethod
     def write_block_body(block: RawBlock, depth: int = 0) -> str:
         def format_val(key: str, val: str) -> str:
             if isinstance(val, list):
@@ -159,7 +159,7 @@ class GaneshaConfParser:
 
         for key, val in block.values.items():
             if val is not None:
-                conf_str += GaneshaConfParser._indentation(depth)
+                conf_str += _indentation(depth)
                 conf_str += '{} = {};\n'.format(key, format_val(key, val))
         return conf_str
 
@@ -169,11 +169,11 @@ class GaneshaConfParser:
             return '%url "{}"\n\n'.format(block.values['value'])
 
         conf_str = ""
-        conf_str += GaneshaConfParser._indentation(depth)
+        conf_str += _indentation(depth)
         conf_str += format(block.block_name)
         conf_str += " {\n"
         conf_str += GaneshaConfParser.write_block_body(block, depth + 1)
-        conf_str += GaneshaConfParser._indentation(depth)
+        conf_str += _indentation(depth)
         conf_str += "}\n"
         return conf_str
 
