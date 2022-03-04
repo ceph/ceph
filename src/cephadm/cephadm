@@ -1948,6 +1948,7 @@ def get_last_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optio
                             [container_path, 'images',
                              '--filter', 'label=ceph=True',
                              '--filter', 'dangling=false',
+                             '--sort', 'created',
                              '--format', '{{.Repository}}@{{.Digest}}'])
     return _filter_last_local_ceph_image(out)
 
