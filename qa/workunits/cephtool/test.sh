@@ -2191,13 +2191,14 @@ function test_mon_pg()
 function test_mon_osd_pool_set()
 {
   TEST_POOL_GETSET=pool_getset
-  ceph osd pool create $TEST_POOL_GETSET 1
+  expect_false ceph osd pool create $TEST_POOL_GETSET 1 --target_size_ratio -0.3
+  expect_true ceph osd pool create $TEST_POOL_GETSET 1 --target_size_ratio 1
   ceph osd pool application enable $TEST_POOL_GETSET rados
   ceph osd pool set $TEST_POOL_GETSET pg_autoscale_mode off
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
-  for s in pg_num pgp_num size min_size crush_rule; do
+  for s in pg_num pgp_num size min_size crush_rule target_size_ratio; do
     ceph osd pool get $TEST_POOL_GETSET $s
   done
 
@@ -2269,6 +2270,12 @@ function test_mon_osd_pool_set()
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | grep 'scrub_priority: 5'
   ceph osd pool set $TEST_POOL_GETSET scrub_priority 0
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | expect_false grep '.'
+
+  expect_false ceph osd pool set $TEST_POOL_GETSET target_size_ratio -3
+  expect_false ceph osd pool set $TEST_POOL_GETSET target_size_ratio abc
+  expect_true ceph osd pool set $TEST_POOL_GETSET target_size_ratio 0.1
+  expect_true ceph osd pool set $TEST_POOL_GETSET target_size_ratio 1
+  ceph osd pool get $TEST_POOL_GETSET target_size_ratio | grep 'target_size_ratio: 1'
 
   ceph osd pool set $TEST_POOL_GETSET nopgchange 1
   expect_false ceph osd pool set $TEST_POOL_GETSET pg_num 10
