@@ -27,6 +27,8 @@ using ceph::decode;
 using ceph::encode;
 using ceph::real_time;
 
+static constexpr int dout_subsys = ceph_subsys_objclass;
+
 
 int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
 	     char *indata, int datalen, char **outdata, int *outdatalen)
@@ -745,4 +747,24 @@ int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, b
     r = gf->osd_op->rval;
   }
   return r;
+}
+
+// although at first glance the implementation looks the same as in
+// crimson-osd, it's different b/c of how the dout macro expands.
+int cls_log(int level, const char *format, ...)
+{
+   int size = 256;
+   va_list ap;
+   while (1) {
+     char buf[size];
+     va_start(ap, format);
+     int n = vsnprintf(buf, size, format, ap);
+     va_end(ap);
+#define MAX_SIZE 8196
+     if ((n > -1 && n < size) || size > MAX_SIZE) {
+       dout(ceph::dout::need_dynamic(level)) << buf << dendl;
+       return n;
+     }
+     size *= 2;
+   }
 }
