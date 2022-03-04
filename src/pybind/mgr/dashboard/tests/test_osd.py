@@ -8,7 +8,8 @@ from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec  # type:
 from ceph.deployment.service_spec import PlacementSpec  # type: ignore
 
 from .. import mgr
-from ..controllers.osd import Osd
+from ..controllers._version import APIVersion
+from ..controllers.osd import Osd, OsdUi
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 from .helper import update_dict  # pylint: disable=import-error
@@ -191,7 +192,7 @@ class OsdHelper(object):
 class OsdTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
-        cls.setup_controllers([Osd])
+        cls.setup_controllers([Osd, OsdUi])
         NotificationQueue.start_queue()
         TaskManager.init()
 
@@ -374,3 +375,48 @@ class OsdTest(ControllerTestCase):
         self._task_post('/api/osd/1/reweight', {'weight': '1'})
         instance.send_command.assert_called_with('mon', 'osd reweight', id=1, weight=1.0)
         self.assertStatus(200)
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_deployment_options(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
+
+        class MockDevice:
+            def __init__(self, human_readable_type, path, available=True):
+                self.human_readable_type = human_readable_type
+                self.available = available
+                self.path = path
+
+        def create_invetory_host(devices_data):
+            inventory_host = mock.Mock()
+            inventory_host.devices.devices = []
+            for data in devices_data:
+                inventory_host.devices.devices.append(MockDevice(data['type'], data['path']))
+            return inventory_host
+
+        devices_data = [
+            {'type': 'hdd', 'path': '/dev/sda'},
+            {'type': 'hdd', 'path': '/dev/sdb'},
+            {'type': 'hdd', 'path': '/dev/sdc'},
+            {'type': 'hdd', 'path': '/dev/sdd'},
+            {'type': 'hdd', 'path': '/dev/sde'},
+        ]
+        inventory_host = create_invetory_host(devices_data)
+        fake_client.inventory.list.return_value = [inventory_host]
+        self._get('/ui-api/osd/deployment_options', version=APIVersion(0, 1))
+        self.assertStatus(200)
+        res = self.json_body()
+        self.assertTrue(res['options']['cost-capacity']['available'])
+        assert res['recommended_option'] == 'cost-capacity'
+
+        for data in devices_data:
+            data['type'] = 'ssd'
+        inventory_host = create_invetory_host(devices_data)
+        fake_client.inventory.list.return_value = [inventory_host]
+
+        self._get('/ui-api/osd/deployment_options', version=APIVersion(0, 1))
+        self.assertStatus(200)
+        res = self.json_body()
+        self.assertFalse(res['options']['cost-capacity']['available'])
+        self.assertIsNone(res['recommended_option'])
