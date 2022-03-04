@@ -100,7 +100,30 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
     }
     return store;
 #endif
+
+#ifdef WITH_RADOSGW_MOTR
+  if (svc.compare("motr") == 0) {
+    rgw::sal::Store* store = newMotrStore(cct);
+    if (store == nullptr) {
+      ldpp_dout(dpp, 0) << "newMotrStore() failed!" << dendl;
+      return store;
+    }
+    ((rgw::sal::MotrStore *)store)->init_metadata_cache(dpp, cct);
+    RGWMotr* motr = static_cast<rgw::sal::MotrStore* >(store)->getMotr();
+    if ((*motr).set_use_cache(use_cache)
+                .set_use_datacache(false)
+                .set_use_gc(use_gc)
+                .set_run_gc_thread(use_gc_thread)
+                .set_run_lc_thread(use_lc_thread)
+                .set_run_quota_threads(quota_threads)
+                .set_run_sync_thread(run_sync_thread)
+                .set_run_reshard_thread(run_reshard_thread)
+                .initialize(cct, dpp) < 0) {
+      delete store; store = nullptr;
+    }
+    return store;
   }
+#endif
 
   return nullptr;
 }
