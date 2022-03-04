@@ -215,8 +215,8 @@ public:
 
   void note_used_pending_key(const EntityName& name, const CryptoKey& key);
   void clear_used_pending_keys();
-  void get_used_pending_keys(std::map<EntityName,CryptoKey> *used);
-  
+  std::map<EntityName,CryptoKey> get_used_pending_keys();
+
   int start_server();
   void rotate_timeout(double timeout);
 

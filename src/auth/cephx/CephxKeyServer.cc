@@ -249,10 +249,12 @@ void KeyServer::clear_used_pending_keys()
   used_pending_keys.clear();
 }
 
-void KeyServer::get_used_pending_keys(std::map<EntityName,CryptoKey> *used)
+std::map<EntityName,CryptoKey> KeyServer::get_used_pending_keys()
 {
+  std::map<EntityName,CryptoKey> ret;
   std::scoped_lock l(lock);
-  used->swap(used_pending_keys);
+  ret.swap(used_pending_keys);
+  return ret;
 }
 
 bool KeyServer::generate_secret(CryptoKey& secret)

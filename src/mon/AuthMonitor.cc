@@ -154,8 +154,7 @@ void AuthMonitor::tick()
   }
 
   if (mon.monmap->min_mon_release >= ceph_release_t::quincy) {
-    std::map<EntityName,CryptoKey> used_pending_keys;
-    mon.key_server.get_used_pending_keys(&used_pending_keys);
+    auto used_pending_keys = mon.key_server.get_used_pending_keys();
     if (!used_pending_keys.empty()) {
       dout(10) << __func__ << " " << used_pending_keys.size() << " used pending_keys"
 	       << dendl;
