@@ -24,7 +24,8 @@ from .ganesha_conf import (
     Export,
     GaneshaConfParser,
     RGWFSAL,
-    RawBlock)
+    RawBlock,
+    format_block)
 from .exception import NFSException, NFSInvalidOperation, FSNotFound
 from .utils import (
     CONF_PREFIX,
@@ -119,7 +120,7 @@ class NFSRados:
                       self.pool, self.namespace, obj)
 
             # Add created obj url to common config obj
-            ioctx.append(config_obj, GaneshaConfParser.write_block(
+            ioctx.append(config_obj, format_block(
                          self._create_url_block(obj)).encode('utf-8'))
             _check_rados_notify(ioctx, config_obj)
             log.debug("Added %s url to %s", obj, config_obj)
@@ -310,7 +311,7 @@ class ExportMgr:
     def _save_export(self, cluster_id: str, export: Export) -> None:
         self.exports[cluster_id].append(export)
         self._rados(cluster_id).write_obj(
-            GaneshaConfParser.write_block(export.to_export_block()),
+            format_block(export.to_export_block()),
             export_obj_name(export.export_id),
             conf_obj_name(export.cluster_id)
         )
@@ -361,7 +362,7 @@ class ExportMgr:
                        need_nfs_service_restart: bool) -> None:
         self.exports[cluster_id].append(export)
         self._rados(cluster_id).update_obj(
-            GaneshaConfParser.write_block(export.to_export_block()),
+            format_block(export.to_export_block()),
             export_obj_name(export.export_id), conf_obj_name(export.cluster_id),
             should_notify=not need_nfs_service_restart)
         if need_nfs_service_restart:
