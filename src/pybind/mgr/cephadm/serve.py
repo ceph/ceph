@@ -518,7 +518,7 @@ class CephadmServe:
                                             f"Failed to apply {len(self.mgr.apply_spec_fails)} service(s): {','.join(x[0] for x in self.mgr.apply_spec_fails)}",
                                             len(self.mgr.apply_spec_fails),
                                             warnings)
-
+        self.mgr.update_watched_hosts()
         return r
 
     def _apply_service_config(self, spec: ServiceSpec) -> None:
