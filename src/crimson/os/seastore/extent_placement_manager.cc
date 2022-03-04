@@ -80,7 +80,11 @@ SegmentedAllocator::Writer::do_write(
   }
   assert(segment_allocator.can_write());
 
-  ool_record_t record(segment_allocator.get_block_size());
+  ool_record_t record(
+    segment_allocator.get_block_size(),
+    (t.get_src() == Transaction::src_t::MUTATE)
+      ? record_commit_type_t::MODIFY
+      : record_commit_type_t::REWRITE);
   for (auto it = extents.begin(); it != extents.end();) {
     auto& extent = *it;
     auto wouldbe_length = record.get_wouldbe_encoded_record_length(extent);

@@ -224,7 +224,11 @@ SegmentAllocator::close_segment(bool is_rolling)
     cur_segment_seq,
     close_segment_id,
     cur_journal_tail,
-    current_segment_nonce};
+    current_segment_nonce,
+    segment_provider.get_last_modified(
+      close_segment_id).time_since_epoch().count(),
+    segment_provider.get_last_rewritten(
+      close_segment_id).time_since_epoch().count()};
   ceph::bufferlist bl;
   encode(tail, bl);
 
