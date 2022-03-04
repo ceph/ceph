@@ -971,7 +971,7 @@ public:
     }
 
     /// ensure that a range of the map is loaded
-    void fault_range(KeyValueDB *db,
+    bool fault_range(KeyValueDB *db,
 		     uint32_t offset, uint32_t length);
 
     /// ensure a range of the map is marked dirty

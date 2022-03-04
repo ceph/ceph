@@ -3269,18 +3269,19 @@ void BlueStore::ExtentMap::init_shards(bool loaded, bool dirty)
   }
 }
 
-void BlueStore::ExtentMap::fault_range(
+bool BlueStore::ExtentMap::fault_range(
   KeyValueDB *db,
   uint32_t offset,
   uint32_t length)
 {
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
+  bool result = true;
   auto start = seek_shard(offset);
   auto last = seek_shard(offset + length);
 
   if (start < 0)
-    return;
+    return result;
 
   ceph_assert(last >= start);
   string key;
@@ -3299,24 +3300,28 @@ void BlueStore::ExtentMap::fault_range(
 	    derr << __func__ << " missing shard 0x" << std::hex
 		 << p->shard_info->offset << std::dec << " for " << onode->oid
 		 << dendl;
-	    ceph_assert(r >= 0);
+	    result = false;
           }
         }
       );
-      p->extents = decode_some(v);
-      p->loaded = true;
-      dout(20) << __func__ << " open shard 0x" << std::hex
-	       << p->shard_info->offset
-	       << " for range 0x" << offset << "~" << length << std::dec
-	       << " (" << v.length() << " bytes)" << dendl;
-      ceph_assert(p->dirty == false);
-      ceph_assert(v.length() == p->shard_info->bytes);
-      onode->c->store->logger->inc(l_bluestore_onode_shard_misses);
+      if (v.length() != 0) {
+	// only decode if there is something
+	p->extents = decode_some(v);
+	p->loaded = true;
+	dout(20) << __func__ << " open shard 0x" << std::hex
+		 << p->shard_info->offset
+		 << " for range 0x" << offset << "~" << length << std::dec
+		 << " (" << v.length() << " bytes)" << dendl;
+	ceph_assert(p->dirty == false);
+	ceph_assert(v.length() == p->shard_info->bytes);
+	onode->c->store->logger->inc(l_bluestore_onode_shard_misses);
+      }
     } else {
       onode->c->store->logger->inc(l_bluestore_onode_shard_hits);
     }
     ++start;
   }
+  return result;
 }
 
 void BlueStore::ExtentMap::dirty_range(
@@ -8095,7 +8100,28 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
 
   num_spanning_blobs += o->extent_map.spanning_blob_map.size();
 
-  o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  bool fully_loaded = o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  if (!fully_loaded) {
+    // object is corrupted
+    derr << "fsck error: " << oid << " failed to load some shards" << dendl;
+    ++errors;
+    if (repairer) {
+      dout(5) << "repairer: deleting " << oid << " key=" << pretty_binary_string(key) << dendl;
+      repairer->remove_key(db, PREFIX_OBJ, key);
+      string key_tmp;
+      for (auto& s: o->extent_map.shards) {
+      generate_extent_shard_key_and_apply(
+       key, s.shard_info->offset, &key_tmp,
+        [&](const string& final_key) {
+         dout(5) << "repairer: deleting shard " << std::hex << s.shard_info->offset << std::dec
+		 << " key=" << pretty_binary_string(final_key) << dendl;
+          repairer->remove_key(db, PREFIX_OBJ, final_key);
+        }
+      );
+      }
+    }
+  }
+
   _dump_onode<30>(cct, *o);
   // shards
   if (!o->extent_map.shards.empty()) {
@@ -8801,6 +8827,10 @@ void BlueStore::_fsck_check_objects(
         get_key_extent_shard(it->key(), &okey, &offset);
         derr << "fsck error: stray shard 0x" << std::hex << offset
           << std::dec << dendl;
+	if (repairer) {
+	  dout(5) << "repairer: delete shard:" << pretty_binary_string(it->key()) << dendl;
+	  repairer->remove_key(db, PREFIX_OBJ, it->key());
+	}
         if (expecting_shards.empty()) {
           derr << "fsck error: " << pretty_binary_string(it->key())
             << " is unexpected" << dendl;
