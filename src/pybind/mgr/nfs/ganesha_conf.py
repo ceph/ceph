@@ -14,6 +14,17 @@ def _indentation(depth: int, size: int = 4) -> str:
     return " " * (depth * size)
 
 
+def _format_val(block_name: str, key: str, val: str) -> str:
+    if isinstance(val, list):
+        return ', '.join([_format_val(block_name, key, v) for v in val])
+    if isinstance(val, bool):
+        return str(val).lower()
+    if isinstance(val, int) or (block_name == 'CLIENT'
+                                and key == 'clients'):
+        return '{}'.format(val)
+    return '"{}"'.format(val)
+
+
 class RawBlock():
     def __init__(self, block_name: str, blocks: List['RawBlock'] = [], values: Dict[str, Any] = {}):
         if not values:  # workaround mutable default argument
@@ -140,16 +151,6 @@ class GaneshaConfParser:
 
     @staticmethod
     def write_block_body(block: RawBlock, depth: int = 0) -> str:
-        def format_val(key: str, val: str) -> str:
-            if isinstance(val, list):
-                return ', '.join([format_val(key, v) for v in val])
-            if isinstance(val, bool):
-                return str(val).lower()
-            if isinstance(val, int) or (block.block_name == 'CLIENT'
-                                        and key == 'clients'):
-                return '{}'.format(val)
-            return '"{}"'.format(val)
-
         conf_str = ""
         for blo in block.blocks:
             conf_str += GaneshaConfParser.write_block(blo, depth)
@@ -157,7 +158,8 @@ class GaneshaConfParser:
         for key, val in block.values.items():
             if val is not None:
                 conf_str += _indentation(depth)
-                conf_str += '{} = {};\n'.format(key, format_val(key, val))
+                fval = _format_val(block.block_name, key, val)
+                conf_str += '{} = {};\n'.format(key, fval)
         return conf_str
 
     @staticmethod
