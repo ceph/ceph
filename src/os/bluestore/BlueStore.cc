@@ -7672,7 +7672,7 @@ int BlueStore::_mount()
 int BlueStore::umount()
 {
   // move bluefs compaction to synchronous mode and force a compaction
-  cct->_conf->bluefs_compact_log_sync = true;
+  //cct->_conf->bluefs_compact_log_sync = true;
   //bluefs->compact_log();
 
   ceph_assert(_kv_only || mounted);
