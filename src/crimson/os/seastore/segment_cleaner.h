@@ -58,6 +58,9 @@ class segment_info_set_t {
     // Will be non-null for any segments in the current journal
     segment_seq_t journal_segment_seq = NULL_SEG_SEQ;
 
+    seastar::lowres_system_clock::time_point last_modified;
+    seastar::lowres_system_clock::time_point last_rewritten;
+
     segment_type_t get_type() const {
       return segment_seq_to_type(journal_segment_seq);
     }
@@ -293,6 +296,12 @@ public:
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
 
   virtual segment_seq_t get_seq(segment_id_t id) { return 0; }
+
+  virtual seastar::lowres_system_clock::time_point get_last_modified(
+    segment_id_t id) const = 0;
+
+  virtual seastar::lowres_system_clock::time_point get_last_rewritten(
+    segment_id_t id) const = 0;
 
   virtual void update_segment_avail_bytes(paddr_t offset) = 0;
 
@@ -763,6 +772,10 @@ public:
   void mark_space_used(
     paddr_t addr,
     extent_len_t len,
+    seastar::lowres_system_clock::time_point last_modified
+      = seastar::lowres_system_clock::time_point(),
+    seastar::lowres_system_clock::time_point last_rewritten
+      = seastar::lowres_system_clock::time_point(),
     bool init_scan = false) {
     auto& seg_addr = addr.as_seg_paddr();
     assert(seg_addr.get_segment_id().device_id() ==
@@ -782,8 +795,28 @@ public:
     auto new_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
     adjust_segment_util(old_usage, new_usage);
 
+    // use the last extent's last modified time for the calculation of the projected
+    // time the segments' live extents are to stay unmodified; this is an approximation
+    // of the sprite lfs' segment "age".
+
+    if (last_modified > segments[seg_addr.get_segment_id()].last_modified)
+      segments[seg_addr.get_segment_id()].last_modified = last_modified;
+
+    if (last_rewritten > segments[seg_addr.get_segment_id()].last_rewritten)
+      segments[seg_addr.get_segment_id()].last_rewritten = last_rewritten;
+
     gc_process.maybe_wake_on_space_used();
     assert(ret > 0);
+  }
+
+  seastar::lowres_system_clock::time_point get_last_modified(
+    segment_id_t id) const final {
+    return segments[id].last_modified;
+  }
+
+  seastar::lowres_system_clock::time_point get_last_rewritten(
+    segment_id_t id) const final {
+    return segments[id].last_rewritten;
   }
 
   void mark_space_free(
@@ -1223,6 +1256,15 @@ private:
       blocked_io_wake = std::nullopt;
     }
   }
+
+  using scan_extents_ret_bare =
+    std::vector<std::pair<segment_id_t, segment_header_t>>;
+  using scan_extents_ertr = ExtentReader::scan_extents_ertr;
+  using scan_extents_ret = scan_extents_ertr::future<>;
+  scan_extents_ret scan_nonfull_segment(
+    const segment_header_t& header,
+    scan_extents_ret_bare& segment_set,
+    segment_id_t segment_id);
 
   /**
    * gc_should_reclaim_space

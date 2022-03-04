@@ -596,7 +596,8 @@ public:
   replay_delta_ret replay_delta(
     journal_seq_t seq,
     paddr_t record_block_base,
-    const delta_info_t &delta);
+    const delta_info_t &delta,
+    seastar::lowres_system_clock::time_point& last_modified);
 
   /**
    * init_cached_extents

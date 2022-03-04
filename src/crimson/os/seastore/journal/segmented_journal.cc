@@ -191,8 +191,10 @@ SegmentedJournal::replay_segment(
             [locator,
              this,
              FNAME,
-             &handler](delta_info_t& delta)
+             &handler](auto &p)
           {
+	    auto& commit_time = p.first;
+	    auto& delta = p.second;
             /* The journal may validly contain deltas for extents in
              * since released segments.  We can detect those cases by
              * checking whether the segment in question currently has a
@@ -216,7 +218,11 @@ SegmentedJournal::replay_segment(
                 return replay_ertr::now();
               }
             }
-            return handler(locator, delta);
+	    return handler(
+	      locator,
+	      delta,
+	      seastar::lowres_system_clock::time_point(
+		seastar::lowres_system_clock::duration(commit_time)));
           });
         });
       });

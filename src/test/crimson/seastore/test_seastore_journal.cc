@@ -82,6 +82,16 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   journal_test_t() = default;
 
+  seastar::lowres_system_clock::time_point get_last_modified(
+    segment_id_t id) const final {
+    return seastar::lowres_system_clock::time_point();
+  }
+
+  seastar::lowres_system_clock::time_point get_last_rewritten(
+    segment_id_t id) const final {
+    return seastar::lowres_system_clock::time_point();
+  }
+
   void update_segment_avail_bytes(paddr_t offset) final {}
 
   segment_id_t get_segment(device_id_t id, segment_seq_t seq) final {
@@ -157,7 +167,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     replay(
       [&advance,
        &delta_checker]
-      (const auto &offsets, const auto &di) mutable {
+      (const auto &offsets, const auto &di, auto t) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");
 	}
@@ -193,7 +203,10 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     char contents = distribution(generator);
     bufferlist bl;
     bl.append(buffer::ptr(buffer::create(blocks * block_size, contents)));
-    return extent_t{extent_types_t::TEST_BLOCK, L_ADDR_NULL, bl};
+    return extent_t{
+      extent_types_t::TEST_BLOCK,
+      L_ADDR_NULL,
+      bl};
   }
 
   delta_info_t generate_delta(size_t bytes) {
