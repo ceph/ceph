@@ -372,10 +372,19 @@ int RocksDBStore::ParseOptionsFromStringStatic(
     return -EINVAL;
   }
 
+  int i = 0;
   for (auto it = str_map.begin(); it != str_map.end(); ++it) {
     string this_opt = it->first + "=" + it->second;
-    rocksdb::Status status =
-      rocksdb::GetOptionsFromString(opt, this_opt, &opt);
+
+    try {
+      rocksdb::Status status =
+	rocksdb::GetOptionsFromString(opt, this_opt, &opt);
+      i++;
+    }
+    catch (...) {
+      throw std::invalid_argument( std::to_string(i) + " " + this_opt );
+    }
+
     int r = 0;
     if (!status.ok()) {
       if (interp != nullptr) {
