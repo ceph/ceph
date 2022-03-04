@@ -21,6 +21,10 @@
 using std::map;
 using std::string;
 
+#define dout_context ClassHandler::get_instance().cct
+
+static constexpr int dout_subsys = ceph_subsys_objclass;
+
 static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
 {
   // we can expect the memory under `ret` will be still fine after
@@ -526,4 +530,24 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
 int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
 {
   return 0;
+}
+
+// although at first glance the implementation looks the same as in
+// the classical OSD, it's different b/c of how the dout macro expands.
+int cls_log(int level, const char *format, ...)
+{
+   int size = 256;
+   va_list ap;
+   while (1) {
+     char buf[size];
+     va_start(ap, format);
+     int n = vsnprintf(buf, size, format, ap);
+     va_end(ap);
+#define MAX_SIZE 8196
+     if ((n > -1 && n < size) || size > MAX_SIZE) {
+       dout(ceph::dout::need_dynamic(level)) << buf << dendl;
+       return n;
+     }
+     size *= 2;
+   }
 }
