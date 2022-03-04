@@ -1201,7 +1201,6 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSCon
 
       if (lock->is_dirty() && !lock->is_flushed()) {
 	scatter_writebehind(static_cast<ScatterLock *>(lock));
-	mds->mdlog->flush();
 	return;
       }
       lock->clear_flushed();
@@ -4691,7 +4690,6 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     if (!gather && lock->is_dirty()) {
       lock->get_parent()->auth_pin(lock);
       scatter_writebehind(static_cast<ScatterLock*>(lock));
-      mds->mdlog->flush();
       return false;
     }
 
@@ -4850,7 +4848,6 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   if (!gather && lock->is_dirty()) {
     lock->get_parent()->auth_pin(lock);
     scatter_writebehind(static_cast<ScatterLock*>(lock));
-    mds->mdlog->flush();
     return;
   }
 
@@ -4992,6 +4989,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   in->finish_scatter_gather_update_accounted(lock->get_type(), &le->metablob);
 
   mds->mdlog->submit_entry(le, new C_Locker_ScatterWB(this, lock, mut));
+  mds->mdlog->flush();
 }
 
 void Locker::scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut)
