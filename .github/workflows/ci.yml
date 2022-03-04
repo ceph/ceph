@@ -26,3 +26,5 @@ jobs:
         run: tox -e flake8
       - name: Run unit tests
         run: tox -e py3
+      - name: Run docs build
+        run: tox -e docs
