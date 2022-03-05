@@ -77,6 +77,7 @@ function main() {
         if type -t clang-$i > /dev/null; then
             cxx_compiler="clang++-$i"
             c_compiler="clang-$i"
+            cxx_flags="-stdlib=libc++"
             break
         fi
     done
@@ -91,6 +92,9 @@ function main() {
     cmake_opts+=" -DWITH_GRAFANA=ON"
     cmake_opts+=" -DWITH_SPDK=ON"
     cmake_opts+=" -DWITH_RADOSGW_MOTR=ON"
+    if [ -n "${cxx_flags}" ]; then
+        cmake_opts+=" -DCMAKE_CXX_FLAGS=${cxx_flags}"
+    fi
     if [ $WITH_SEASTAR ]; then
         cmake_opts+=" -DWITH_SEASTAR=ON"
     fi
