@@ -392,7 +392,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_host_label(self, host: str, label: str) -> OrchResult[str]:
+    def remove_host_label(self, host: str, label: str, force: bool = False) -> OrchResult[str]:
         """
         Remove a host label
         """

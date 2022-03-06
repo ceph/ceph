@@ -633,7 +633,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_host_label(self, host: str, label: str) -> OrchResult[str]:
         return self.rook_cluster.add_host_label(host, label)
     
-    def remove_host_label(self, host: str, label: str) -> OrchResult[str]:
+    def remove_host_label(self, host: str, label: str, force: bool = False) -> OrchResult[str]:
         return self.rook_cluster.remove_host_label(host, label)
     """
     @handle_orch_error
