@@ -418,9 +418,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host label rm')
-    def _host_label_rm(self, hostname: str, label: str) -> HandleCommandResult:
+    def _host_label_rm(self, hostname: str, label: str, force: bool = False) -> HandleCommandResult:
         """Remove a host label"""
-        completion = self.remove_host_label(hostname, label)
+        completion = self.remove_host_label(hostname, label, force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 

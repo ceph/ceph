@@ -1651,7 +1651,19 @@ Then run the following:
         return 'Added label %s to host %s' % (label, host)
 
     @handle_orch_error
-    def remove_host_label(self, host: str, label: str) -> str:
+    def remove_host_label(self, host: str, label: str, force: bool = False) -> str:
+        # if we remove the _admin label from the only host that has it we could end up
+        # removing the only instance of the config and keyring and cause issues
+        if not force and label == '_admin':
+            p = PlacementSpec(label='_admin')
+            admin_hosts = p.filter_matching_hostspecs(self.inventory.all_specs())
+            if len(admin_hosts) == 1 and admin_hosts[0] == host:
+                raise OrchestratorValidationError(f"Host {host} is the last host with the '_admin'"
+                                                  " label.\nRemoving the _admin label from this host could cause the removal"
+                                                  " of the last cluster config/keyring managed by cephadm.\n"
+                                                  "It is recommended to add the _admin label to another host"
+                                                  " before completing this operation.\nIf you're certain this is"
+                                                  " what you want rerun this command with --force.")
         self.inventory.rm_label(host, label)
         self.log.info('Removed label %s to host %s' % (label, host))
         self._kick_serve_loop()
