@@ -979,6 +979,7 @@ class Orchestrator(object):
         :param osd_ids: list of OSD IDs
         :param replace: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
         :param force: Forces the OSD removal process without waiting for the data to be drained first.
+
         Note that this can only remove OSDs that were successfully
         created (i.e. got an OSD ID).
         """
