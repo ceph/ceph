@@ -567,7 +567,6 @@ class Orchestrator(object):
         :param force: Forces the OSD removal process without waiting for the data to be drained first.
         :param zap: Zap/Erase all devices associated with the OSDs (DESTROYS DATA)
 
-
         .. note:: this can only remove OSDs that were successfully
             created (i.e. got an OSD ID).
         """
