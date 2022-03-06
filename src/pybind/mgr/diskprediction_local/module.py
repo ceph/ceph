@@ -275,7 +275,7 @@ class Module(MgrModule):
                 life_expectancy_day_min = (TIME_WEEK * 2)
                 life_expectancy_day_max = (TIME_WEEK * 6)
             elif result.lower() == 'bad':
-                life_expectancy_day_min = 0
+                life_expectancy_day_min = TIME_DAYS
                 life_expectancy_day_max = (TIME_WEEK * 2) - TIME_DAYS
             else:
                 predicted = 0
