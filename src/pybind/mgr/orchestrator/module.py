@@ -360,9 +360,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host drain')
-    def _drain_host(self, hostname: str) -> HandleCommandResult:
+    def _drain_host(self, hostname: str, force: bool = False) -> HandleCommandResult:
         """drain all daemons from a host"""
-        completion = self.drain_host(hostname)
+        completion = self.drain_host(hostname, force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
