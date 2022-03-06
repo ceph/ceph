@@ -1556,4 +1556,10 @@ struct continuation_base_from_future<
   using type = typename seastar::continuation_base_from_future<FutureType>::type;
 };
 
+template <typename InterruptCond, typename FutureType>
+struct is_future<
+  ::crimson::interruptible::interruptible_future_detail<
+    InterruptCond,
+    FutureType>>
+ : std::true_type {};
 } // namespace seastar
