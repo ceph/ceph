@@ -102,7 +102,8 @@ breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp
 breathe_doxygen_config_options = {
     'EXPAND_ONLY_PREDEF': 'YES',
     'MACRO_EXPANSION': 'YES',
-    'PREDEFINED': 'CEPH_RADOS_API= '
+    'PREDEFINED': 'CEPH_RADOS_API= ',
+    'WARN_IF_UNDOCUMENTED': 'NO',
 }
 
 # the docs are rendered with github links pointing to master. the javascript
