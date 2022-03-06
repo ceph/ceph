@@ -6,7 +6,6 @@ set(crimson_seastore_srcs
   segment_manager/block.cc
   transaction_manager.cc
   transaction.cc
-  journal.cc
   cache.cc
   extent_reader.cc
   lba_manager.cc
@@ -39,6 +38,9 @@ set(crimson_seastore_srcs
   seastore.cc
   random_block_manager/nvme_manager.cc
   random_block_manager/nvmedevice.cc
+  journal/segmented_journal.cc
+  journal/segment_allocator.cc
+  journal.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)

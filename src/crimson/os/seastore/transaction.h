@@ -458,7 +458,7 @@ inline TransactionRef make_test_transaction() {
     get_dummy_ordering_handle(),
     false,
     Transaction::src_t::MUTATE,
-    journal_seq_t{},
+    JOURNAL_SEQ_NULL,
     [](Transaction&) {}
   );
 }

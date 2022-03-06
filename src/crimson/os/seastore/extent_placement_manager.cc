@@ -3,14 +3,6 @@
 
 #include "crimson/os/seastore/extent_placement_manager.h"
 
-#include "crimson/os/seastore/segment_cleaner.h"
-
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_tm);
-  }
-}
-
 SET_SUBSYS(seastore_tm);
 
 namespace crimson::os::seastore {
@@ -18,18 +10,15 @@ namespace crimson::os::seastore {
 SegmentedAllocator::SegmentedAllocator(
   SegmentProvider& sp,
   SegmentManager& sm)
-  : segment_provider(sp),
-    segment_manager(sm)
 {
   std::generate_n(
     std::back_inserter(writers),
     crimson::common::get_conf<uint64_t>(
       "seastore_init_rewrite_segments_num_per_device"),
     [&] {
-      return Writer{
-	segment_provider,
-	segment_manager};
-      });
+      return Writer{sp, sm};
+    }
+  );
 }
 
 SegmentedAllocator::Writer::write_iertr::future<>
@@ -37,25 +26,20 @@ SegmentedAllocator::Writer::_write(
   Transaction& t,
   ool_record_t& record)
 {
-  auto record_size = record.get_encoded_record_length();
-  allocated_to += record_size.get_encoded_length();
-  segment_provider.update_segment_avail_bytes(
-    paddr_t::make_seg_paddr(
-      current_segment->segment->get_segment_id(),
-      allocated_to));
-  bufferlist bl = record.encode(
-      current_segment->segment->get_segment_id(),
-      0);
-  seastar::promise<> pr;
-  current_segment->inflight_writes.emplace_back(pr.get_future());
   LOG_PREFIX(SegmentedAllocator::Writer::_write);
+  record.set_base(segment_allocator.get_written_to());
+  auto record_size = record.get_encoded_record_length();
+  bufferlist bl = record.encode(
+      segment_allocator.get_segment_id(),
+      segment_allocator.get_nonce());
+  assert(bl.length() == record_size.get_encoded_length());
 
   DEBUGT(
     "written {} extents, {} bytes to segment {} at {}",
     t,
     record.get_num_extents(),
     bl.length(),
-    current_segment->segment->get_segment_id(),
+    segment_allocator.get_segment_id(),
     record.get_base());
 
   // account transactional ool writes before write()
@@ -67,41 +51,68 @@ SegmentedAllocator::Writer::_write(
   stats.data_bytes += record_size.dlength;
   stats.num_records += 1;
 
+  for (auto& ool_extent : record.get_extents()) {
+    auto& lextent = ool_extent.get_lextent();
+    auto paddr = ool_extent.get_ool_paddr();
+    TRACET("ool extent written at {} -- {}", t, *lextent, paddr);
+    lextent->hint = placement_hint_t::NUM_HINTS; // invalidate hint
+    t.mark_delayed_extent_ool(lextent, paddr);
+  }
+
   return trans_intr::make_interruptible(
-    current_segment->segment->write(record.get_base(), bl).safe_then(
-      [this, FNAME, pr=std::move(pr), &t,
-       it=(--current_segment->inflight_writes.end()),
-       cs=current_segment]() mutable {
-        if (cs->outdated) {
-          DEBUGT("segment rolled", t);
-          pr.set_value();
-        } else{
-          DEBUGT("segment not rolled", t);
-          current_segment->inflight_writes.erase(it);
-        }
-        return seastar::now();
-    })
-  ).si_then([FNAME, &record, &t] {
-    for (auto& ool_extent : record.get_extents()) {
-      auto& lextent = ool_extent.get_lextent();
-      auto paddr = ool_extent.get_ool_paddr();
-      TRACET("ool extent written at {} -- {}", t, *lextent, paddr);
-      lextent->hint = {};
-      t.mark_delayed_extent_ool(lextent, paddr);
-    }
-    record.clear();
-  });
+    segment_allocator.write(bl).discard_result()
+  );
 }
 
-void SegmentedAllocator::Writer::add_extent_to_write(
-  ool_record_t& record,
-  LogicalCachedExtentRef& extent) {
-  logger().debug(
-    "SegmentedAllocator::Writer::add_extent_to_write: "
-    "add extent {} to record",
-    extent);
-  extent->prepare_write();
-  record.add_extent(extent);
+SegmentedAllocator::Writer::write_iertr::future<>
+SegmentedAllocator::Writer::do_write(
+  Transaction& t,
+  std::list<LogicalCachedExtentRef>& extents)
+{
+  LOG_PREFIX(SegmentedAllocator::Writer::do_write);
+  assert(!extents.empty());
+  if (roll_promise.has_value()) {
+    return trans_intr::make_interruptible(
+      roll_promise->get_shared_future()
+    ).then_interruptible([this, &t, &extents] {
+      return do_write(t, extents);
+    });
+  }
+  assert(segment_allocator.can_write());
+
+  ool_record_t record(segment_allocator.get_block_size());
+  for (auto it = extents.begin(); it != extents.end();) {
+    auto& extent = *it;
+    auto wouldbe_length = record.get_wouldbe_encoded_record_length(extent);
+    if (segment_allocator.needs_roll(wouldbe_length)) {
+      // reached the segment end, write and roll
+      assert(!roll_promise.has_value());
+      roll_promise = seastar::shared_promise<>();
+      auto num_extents = record.get_num_extents();
+      DEBUGT("end of segment, writing {} extents", t, num_extents);
+      return (num_extents ?
+              _write(t, record) :
+              write_iertr::now()
+      ).si_then([this] {
+        return segment_allocator.roll();
+      }).finally([this] {
+        roll_promise->set_value();
+        roll_promise.reset();
+      }).si_then([this, &t, &extents] {
+        if (!extents.empty()) {
+          return do_write(t, extents);
+        }
+        return write_iertr::now();
+      });
+    }
+    DEBUGT("add extent to record -- {}", t, *extent);
+    extent->prepare_write();
+    record.add_extent(extent);
+    it = extents.erase(it);
+  }
+
+  DEBUGT("writing {} extents", t, record.get_num_extents());
+  return _write(t, record);
 }
 
 SegmentedAllocator::Writer::write_iertr::future<>
@@ -109,169 +120,24 @@ SegmentedAllocator::Writer::write(
   Transaction& t,
   std::list<LogicalCachedExtentRef>& extents)
 {
-  auto write_func = [this, &extents, &t] {
-    return seastar::do_with(ool_record_t(segment_manager.get_block_size()),
-      [this, &extents, &t](auto& record) {
-      return trans_intr::repeat([this, &record, &t, &extents]()
-        -> write_iertr::future<seastar::stop_iteration> {
-        if (extents.empty()) {
-          return seastar::make_ready_future<
-            seastar::stop_iteration>(seastar::stop_iteration::yes);
-        }
-
-        return segment_rotation_guard.wait(
-          [this] {
-            return !rolling_segment;
-          },
-          [this, &record, &extents, &t]() -> write_iertr::future<> {
-            LOG_PREFIX(SegmentedAllocator::Writer::write);
-            record.set_base(allocated_to);
-            for (auto it = extents.begin();
-                 it != extents.end();) {
-              auto& extent = *it;
-              auto wouldbe_length =
-                record.get_wouldbe_encoded_record_length(extent);
-              if (_needs_roll(wouldbe_length)) {
-                // reached the segment end, write and roll
-                assert(!rolling_segment);
-                rolling_segment = true;
-                auto num_extents = record.get_num_extents();
-                DEBUGT(
-                  "end of segment, writing {} extents to segment {} at {}",
-                  t,
-                  num_extents,
-                  current_segment->segment->get_segment_id(),
-                  allocated_to);
-                return (num_extents ?
-                        _write(t, record) :
-                        write_iertr::now()
-                ).si_then([this]() mutable {
-                  return roll_segment(false);
-                }).finally([this] {
-                  rolling_segment = false;
-                  segment_rotation_guard.broadcast();
-                });
-              }
-              add_extent_to_write(record, extent);
-              it = extents.erase(it);
-            }
-
-            DEBUGT(
-              "writing {} extents to segment {} at {}",
-              t,
-              record.get_num_extents(),
-              current_segment->segment->get_segment_id(),
-              allocated_to);
-            return _write(t, record);
-          }
-        ).si_then([]()
-          -> write_iertr::future<seastar::stop_iteration> {
-          return seastar::make_ready_future<
-            seastar::stop_iteration>(seastar::stop_iteration::no);
-        });
+  if (extents.empty()) {
+    return write_iertr::now();
+  }
+  return seastar::with_gate(write_guard, [this, &t, &extents] {
+    if (!roll_promise.has_value() &&
+        !segment_allocator.can_write()) {
+      roll_promise = seastar::shared_promise<>();
+      return trans_intr::make_interruptible(
+        segment_allocator.open().discard_result()
+      ).finally([this] {
+        roll_promise->set_value();
+        roll_promise.reset();
+      }).si_then([this, &t, &extents] {
+        return do_write(t, extents);
       });
-    });
-  };
-
-  if (rolling_segment) {
-    return segment_rotation_guard.wait([this] {
-        return !rolling_segment;
-      }, std::move(write_func));
-
-  } else if (!current_segment) {
-    return trans_intr::make_interruptible(roll_segment(true)).si_then(
-      [write_func=std::move(write_func)] {
-      return write_func();
-    });
-  }
-  return write_func();
-}
-
-bool SegmentedAllocator::Writer::_needs_roll(seastore_off_t length) const {
-  return allocated_to + length > current_segment->segment->get_write_capacity();
-}
-
-SegmentedAllocator::Writer::init_segment_ertr::future<>
-SegmentedAllocator::Writer::init_segment(Segment& segment) {
-  bufferptr bp(
-    ceph::buffer::create_page_aligned(
-      segment_manager.get_block_size()));
-  bp.zero();
-  auto header =segment_header_t{
-    OOL_SEG_SEQ,
-    segment.get_segment_id(),
-    NO_DELTAS, 0};
-  logger().debug("SegmentedAllocator::Writer::init_segment: initting {}, {}",
-    segment.get_segment_id(),
-    header);
-  ceph::bufferlist bl;
-  encode(header, bl);
-  bl.cbegin().copy(bl.length(), bp.c_str());
-  bl.clear();
-  bl.append(bp);
-  allocated_to = segment_manager.get_block_size();
-  return segment.write(0, bl).handle_error(
-    crimson::ct_error::input_output_error::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error when initing segment"}
-  );
-}
-
-SegmentedAllocator::Writer::roll_segment_ertr::future<>
-SegmentedAllocator::Writer::roll_segment(bool set_rolling) {
-  LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
-  DEBUG("set_rolling {}", set_rolling);
-  if (set_rolling) {
-    rolling_segment = true;
-  }
-  assert(rolling_segment);
-  if (current_segment) {
-    (void) seastar::with_gate(writer_guard, [this] {
-      auto fut = seastar::now();
-      if (!current_segment->inflight_writes.empty()) {
-        fut = seastar::when_all_succeed(
-          current_segment->inflight_writes.begin(),
-          current_segment->inflight_writes.end());
-      }
-      current_segment->outdated = true;
-      return fut.then(
-        [cs=std::move(current_segment), this, it=(--open_segments.end())] {
-        return cs->segment->close().safe_then([this, cs, it] {
-          LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
-          assert((*it).get() == cs.get());
-          segment_provider.close_segment(cs->segment->get_segment_id());
-          open_segments.erase(it);
-          DEBUG("closed segment: {}", cs->segment->get_segment_id());
-        });
-      });
-    }).handle_exception_type([](seastar::gate_closed_exception e) {
-      LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
-      DEBUG(" writer_guard closed, should be stopping");
-      return seastar::now();
-    });
-  }
-
-  return segment_provider.get_segment(
-    segment_manager.get_device_id(), OOL_SEG_SEQ
-  ).safe_then([this](auto segment) {
-    return segment_manager.open(segment);
-  }).safe_then([this](auto segref) {
-    LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
-    DEBUG("opened new segment: {}", segref->get_segment_id());
-    return init_segment(*segref).safe_then([segref=std::move(segref), this] {
-      LOG_PREFIX(SegmentedAllocator::Writer::roll_segment);
-      assert(!current_segment.get());
-      current_segment.reset(new open_segment_wrapper_t());
-      current_segment->segment = segref;
-      open_segments.emplace_back(current_segment);
-      rolling_segment = false;
-      segment_rotation_guard.broadcast();
-      DEBUG("inited new segment: {}", segref->get_segment_id());
-    });
-  }).handle_error(
-    roll_segment_ertr::pass_further{},
-    crimson::ct_error::all_same_way([] { ceph_assert(0 == "TODO"); })
-  );
+    }
+    return do_write(t, extents);
+  });
 }
 
 }

@@ -947,7 +947,7 @@ TEST_F(transaction_manager_test_t, random_writes_concurrent)
   constexpr size_t BSIZE = 4<<10;
   constexpr size_t BLOCKS = TOTAL / BSIZE;
   run_async([this] {
-    seastar::parallel_for_each(
+    std::for_each(
       boost::make_counting_iterator(0u),
       boost::make_counting_iterator(WRITE_STREAMS),
       [&](auto idx) {
@@ -963,7 +963,7 @@ TEST_F(transaction_manager_test_t, random_writes_concurrent)
 	      break;
 	  }
 	}
-      }).get0();
+      });
 
     int writes = 0;
     unsigned failures = 0;

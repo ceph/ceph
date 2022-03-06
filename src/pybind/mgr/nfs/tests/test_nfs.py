@@ -12,7 +12,7 @@ from rados import ObjectNotFound
 
 from ceph.deployment.service_spec import NFSServiceSpec
 from nfs import Module
-from nfs.export import ExportMgr
+from nfs.export import ExportMgr, normalize_path
 from nfs.export_utils import GaneshaConfParser, Export, RawBlock
 from nfs.cluster import NFSCluster
 from orchestrator import ServiceDescription, DaemonDescription, OrchResult
@@ -1018,3 +1018,19 @@ NFS_CORE_PARAM {
 
     def test_cluster_config(self):
         self._do_mock_test(self._do_test_cluster_config)
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("/foo/bar/baz", "/foo/bar/baz"),
+        ("/foo/bar/baz/", "/foo/bar/baz"),
+        ("/foo/bar/baz ", "/foo/bar/baz"),
+        ("/foo/./bar/baz", "/foo/bar/baz"),
+        ("/foo/bar/baz/..", "/foo/bar"),
+        ("//foo/bar/baz", "/foo/bar/baz"),
+        ("", ""),
+    ]
+)
+def test_normalize_path(path, expected):
+    assert normalize_path(path) == expected

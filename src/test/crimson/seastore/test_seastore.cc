@@ -112,7 +112,7 @@ struct seastore_test_t :
       SeaStore &seastore,
       uint64_t off,
       uint64_t len) {
-      return seastore.fiemap(coll, oid, off, len).get0();
+      return seastore.fiemap(coll, oid, off, len).unsafe_get0();
     }
 
     bufferlist readv(

@@ -64,6 +64,18 @@ namespace seastar::internal {
   {};
 }
 
+SEASTAR_CONCEPT(
+namespace crimson::interruptible {
+  template<typename InterruptCond, typename FutureType>
+  class interruptible_future_detail;
+}
+namespace seastar::impl {
+  template <typename InterruptCond, typename FutureType, typename... Rest>
+  struct is_tuple_of_futures<std::tuple<crimson::interruptible::interruptible_future_detail<InterruptCond, FutureType>, Rest...>>
+    : is_tuple_of_futures<std::tuple<Rest...>> {};
+}
+)
+
 namespace crimson::interruptible {
 
 struct ready_future_marker {};
@@ -1544,4 +1556,10 @@ struct continuation_base_from_future<
   using type = typename seastar::continuation_base_from_future<FutureType>::type;
 };
 
+template <typename InterruptCond, typename FutureType>
+struct is_future<
+  ::crimson::interruptible::interruptible_future_detail<
+    InterruptCond,
+    FutureType>>
+ : std::true_type {};
 } // namespace seastar

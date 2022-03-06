@@ -2098,6 +2098,13 @@ def move_files(ctx, src, dst, uid=None, gid=None):
             os.chown(dst_file, uid, gid)
 
 
+def recursive_chown(path: str, uid: int, gid: int) -> None:
+    for dirpath, dirnames, filenames in os.walk(path):
+        os.chown(dirpath, uid, gid)
+        for filename in filenames:
+            os.chown(os.path.join(dirpath, filename), uid, gid)
+
+
 # copied from distutils
 def find_executable(executable: str, path: Optional[str] = None) -> Optional[str]:
     """Tries to find 'executable' in the directories listed in 'path'.
@@ -2403,6 +2410,8 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'alerting'), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
+            recursive_chown(os.path.join(data_dir_root, 'data'), uid, gid)
         elif daemon_type == 'grafana':
             data_dir_root = get_data_dir(fsid, ctx.data_dir,
                                          daemon_type, daemon_id)
@@ -4863,6 +4872,9 @@ def finish_bootstrap_config(
             'restart',
             get_unit_name(fsid, 'mon', mon_id)
         ])
+    elif 'image' in ctx and ctx.image:
+        # we still want to assimilate the given container image if provided
+        cli(['config', 'set', 'global', 'container_image', f'{ctx.image}'])
 
     if mon_network:
         logger.info(f'Setting mon public_network to {mon_network}')
@@ -6462,6 +6474,10 @@ def command_zap_osds(ctx: CephadmContext) -> None:
 ##################################
 
 
+def get_ceph_cluster_count(ctx: CephadmContext) -> int:
+    return len([c for c in os.listdir(ctx.data_dir) if is_fsid(c)])
+
+
 def command_rm_cluster(ctx):
     # type: (CephadmContext) -> None
     if not ctx.force:
@@ -6471,13 +6487,7 @@ def command_rm_cluster(ctx):
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
 
-    # stop + disable individual daemon units
-    for d in list_daemons(ctx, detail=False):
-        if d['fsid'] != ctx.fsid:
-            continue
-        if d['style'] != 'cephadm:v1':
-            continue
-        unit_name = get_unit_name(ctx.fsid, d['name'])
+    def disable_systemd_service(unit_name: str) -> None:
         call(ctx, ['systemctl', 'stop', unit_name],
              verbosity=CallVerbosity.DEBUG)
         call(ctx, ['systemctl', 'reset-failed', unit_name],
@@ -6485,14 +6495,17 @@ def command_rm_cluster(ctx):
         call(ctx, ['systemctl', 'disable', unit_name],
              verbosity=CallVerbosity.DEBUG)
 
+    # stop + disable individual daemon units
+    for d in list_daemons(ctx, detail=False):
+        if d['fsid'] != ctx.fsid:
+            continue
+        if d['style'] != 'cephadm:v1':
+            continue
+        disable_systemd_service(get_unit_name(ctx.fsid, d['name']))
+
     # cluster units
     for unit_name in ['ceph-%s.target' % ctx.fsid]:
-        call(ctx, ['systemctl', 'stop', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(ctx, ['systemctl', 'reset-failed', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(ctx, ['systemctl', 'disable', unit_name],
-             verbosity=CallVerbosity.DEBUG)
+        disable_systemd_service(unit_name)
 
     slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
     call(ctx, ['systemctl', 'stop', slice_name],
@@ -6522,7 +6535,8 @@ def command_rm_cluster(ctx):
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
 
     # if last cluster on host remove shared files
-    if not os.listdir(ctx.data_dir):
+    if get_ceph_cluster_count(ctx) == 0:
+        disable_systemd_service('ceph.target')
 
         # rm shared ceph target files
         call_throws(ctx, ['rm', '-f', ctx.unit_dir + '/multi-user.target.wants/ceph.target'])

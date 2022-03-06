@@ -11,7 +11,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/extent_reader.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
@@ -272,10 +272,7 @@ private:
  */
 class SegmentProvider {
 public:
-  using get_segment_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using get_segment_ret = get_segment_ertr::future<segment_id_t>;
-  virtual get_segment_ret get_segment(
+  virtual segment_id_t get_segment(
       device_id_t id, segment_seq_t seq) = 0;
 
   virtual void close_segment(segment_id_t) {}
@@ -676,46 +673,12 @@ public:
     ExtentReaderRef&& scanner,
     bool detailed = false);
 
-  void mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms) {
-    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
-      "SegmentCleaner::mount: {} segment managers", sms.size());
-    init_complete = false;
-    stats = {};
-    journal_tail_target = journal_seq_t{};
-    journal_tail_committed = journal_seq_t{};
-    journal_head = journal_seq_t{};
-    journal_device_id = pdevice_id;
-
-    space_tracker.reset(
-      detailed ?
-      (SpaceTrackerI*)new SpaceTrackerDetailed(
-	sms) :
-      (SpaceTrackerI*)new SpaceTrackerSimple(
-	sms));
-
-    segments.clear();
-    for (auto sm : sms) {
-      // sms is a vector that is indexed by device id and
-      // always has "max_device" elements, some of which
-      // may be null.
-      if (!sm) {
-	continue;
-      }
-      segments.add_segment_manager(*sm);
-      stats.empty_segments += sm->get_num_segments();
-    }
-    metrics.clear();
-    register_metrics();
-  }
-
-  using init_segments_ertr = crimson::errorator<
+  using mount_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using init_segments_ret_bare =
-    std::vector<std::pair<segment_id_t, segment_header_t>>;
-  using init_segments_ret = init_segments_ertr::future<init_segments_ret_bare>;
-  init_segments_ret init_segments();
+  using mount_ret = mount_ertr::future<>;
+  mount_ret mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms);
 
-  get_segment_ret get_segment(
+  segment_id_t get_segment(
       device_id_t id, segment_seq_t seq) final;
 
   void close_segment(segment_id_t segment) final;
@@ -735,7 +698,7 @@ public:
   }
 
   void set_journal_head(journal_seq_t head) {
-    assert(journal_head == journal_seq_t() || head >= journal_head);
+    assert(journal_head == JOURNAL_SEQ_NULL || head >= journal_head);
     journal_head = head;
     segments.update_segment_avail_bytes(head.offset);
     gc_process.maybe_wake_on_space_used();
@@ -870,7 +833,7 @@ private:
 	seq);
       return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
     } else {
-      return journal_seq_t();
+      return JOURNAL_SEQ_NULL;
     }
   }
 
@@ -1053,7 +1016,7 @@ private:
 
   /// Return bytes contained in segments in journal
   size_t get_journal_segment_bytes() const {
-    if (journal_head == journal_seq_t()) {
+    if (journal_head == JOURNAL_SEQ_NULL) {
       // this for calculating journal bytes in the journal
       // replay phase in which journal_head is not set
       return segments.get_journal_segments() * segments[journal_device_id]->segment_size;

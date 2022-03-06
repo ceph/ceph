@@ -550,6 +550,36 @@ ff792c06d8544b983.scope not found.: OCI runtime error"""
         with pytest.raises(cd.Error, match='OCI'):
             cd.extract_uid_gid(ctx)
 
+    @pytest.mark.parametrize('test_input, expected', [
+        ([cd.make_fsid(), cd.make_fsid(), cd.make_fsid()], 3),
+        ([cd.make_fsid(), 'invalid-fsid', cd.make_fsid(), '0b87e50c-8e77-11ec-b890-'], 2),
+        (['f6860ec2-8e76-11ec-', '0b87e50c-8e77-11ec-b890-', ''], 0),
+        ([], 0),
+    ])
+    def test_get_ceph_cluster_count(self, test_input, expected):
+        ctx = cd.CephadmContext()
+        with mock.patch('os.listdir', return_value=test_input):
+            assert cd.get_ceph_cluster_count(ctx) == expected
+
+    def test_set_image_minimize_config(self):
+        def throw_cmd(cmd):
+            raise cd.Error(' '.join(cmd))
+        ctx = cd.CephadmContext()
+        ctx.image = 'test_image'
+        ctx.no_minimize_config = True
+        fake_cli = lambda cmd, __=None, ___=None: throw_cmd(cmd)
+        with pytest.raises(cd.Error, match='config set global container_image test_image'):
+            cd.finish_bootstrap_config(
+                ctx=ctx,
+                fsid=cd.make_fsid(),
+                config='',
+                mon_id='a', mon_dir='mon_dir',
+                mon_network=None, ipv6=False,
+                cli=fake_cli,
+                cluster_network=None,
+                ipv6_cluster_network=False
+            )
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
@@ -801,6 +831,22 @@ class TestMonitoring(object):
             assert os.path.exists(file)
             with open(file) as f:
                 assert f.read() == content
+
+        # assert uid/gid after redeploy
+        new_uid = uid+1
+        new_gid = gid+1
+        cd.create_daemon_dirs(ctx,
+                              fsid,
+                              daemon_type,
+                              daemon_id,
+                              new_uid,
+                              new_gid,
+                              config=None,
+                              keyring=None)
+        for file,content in expected.items():
+            file = os.path.join(prefix, file)
+            assert os.stat(file).st_uid == new_uid
+            assert os.stat(file).st_gid == new_gid
 
 
 class TestBootstrap(object):

@@ -388,7 +388,7 @@ private:
   ceph::bufferptr ptr;
 
   /// number of deltas since initial write
-  extent_version_t version = EXTENT_VERSION_NULL;
+  extent_version_t version = 0;
 
   /// address of original block -- relative iff is_pending() and is_clean()
   paddr_t poffset;

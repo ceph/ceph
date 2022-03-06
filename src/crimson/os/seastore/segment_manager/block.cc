@@ -4,6 +4,10 @@
 #include <sys/mman.h>
 #include <string.h>
 
+#include <fmt/format.h>
+
+#include <seastar/core/metrics.hh>
+
 #include "include/buffer.h"
 
 #include "crimson/common/config_proxy.h"
@@ -23,6 +27,28 @@ SET_SUBSYS(seastore_device);
  * - DEBUG: INFO details, major read and write operations
  * - TRACE: DEBUG details
  */
+
+using segment_state_t = crimson::os::seastore::Segment::segment_state_t;
+
+template <> struct fmt::formatter<segment_state_t>: fmt::formatter<std::string_view> {
+  // parse is inherited from formatter<string_view>.
+  template <typename FormatContext>
+  auto format(segment_state_t s, FormatContext& ctx) {
+    std::string_view name = "unknown";
+    switch (s) {
+    case segment_state_t::EMPTY:
+      name = "empty";
+      break;
+    case segment_state_t::OPEN:
+      name = "open";
+      break;
+    case segment_state_t::CLOSED:
+      name = "closed";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
 
 namespace crimson::os::seastore::segment_manager::block {
 
@@ -663,9 +689,8 @@ void BlockSegmentManager::register_metrics()
   LOG_PREFIX(BlockSegmentManager::register_metrics);
   DEBUG("D{}", get_device_id());
   namespace sm = seastar::metrics;
-  sm::label label("device_id");
   std::vector<sm::label_instance> label_instances;
-  label_instances.push_back(label(get_device_id()));
+  label_instances.push_back(sm::label_instance("device_id", get_device_id()));
   stats.reset();
   metrics.add_group(
     "segment_manager",

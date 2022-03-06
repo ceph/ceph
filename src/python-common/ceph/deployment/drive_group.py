@@ -174,6 +174,7 @@ class DriveGroupSpec(ServiceSpec):
                  unmanaged=False,  # type: bool
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
+                 extra_container_args=None,  # type: Optional[List[str]]
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
                  ):
@@ -181,7 +182,8 @@ class DriveGroupSpec(ServiceSpec):
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
                                              placement=placement,
                                              unmanaged=unmanaged,
-                                             preview_only=preview_only)
+                                             preview_only=preview_only,
+                                             extra_container_args=extra_container_args)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices

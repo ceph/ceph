@@ -11,6 +11,7 @@
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
+#include <seastar/core/metrics.hh>
 #include <seastar/core/shared_mutex.hh>
 
 #include "common/safe_io.h"
@@ -34,6 +35,46 @@
 
 using std::string;
 using crimson::common::local_conf;
+
+template <> struct fmt::formatter<crimson::os::seastore::SeaStore::op_type_t>
+  : fmt::formatter<std::string_view> {
+  using op_type_t =  crimson::os::seastore::SeaStore::op_type_t;
+  // parse is inherited from formatter<string_view>.
+  template <typename FormatContext>
+  auto format(op_type_t op, FormatContext& ctx) {
+    std::string_view name = "unknown";
+    switch (op) {
+      case op_type_t::TRANSACTION:
+      name = "transaction";
+      break;
+    case op_type_t::READ:
+      name = "read";
+      break;
+    case op_type_t::WRITE:
+      name = "write";
+      break;
+    case op_type_t::GET_ATTR:
+      name = "get_attr";
+      break;
+    case op_type_t::GET_ATTRS:
+      name = "get_attrs";
+      break;
+    case op_type_t::STAT:
+      name = "stat";
+      break;
+    case op_type_t::OMAP_GET_VALUES:
+      name = "omap_get_values";
+      break;
+    case op_type_t::OMAP_LIST:
+      name = "omap_list";
+      break;
+    case op_type_t::MAX:
+      name = "unknown";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
 
 SET_SUBSYS(seastore);
 
@@ -110,16 +151,15 @@ void SeaStore::register_metrics()
 {
   namespace sm = seastar::metrics;
   using op_type_t = SeaStore::op_type_t;
-  auto lat_label = sm::label("latency");
   std::pair<op_type_t, sm::label_instance> labels_by_op_type[] = {
-    {op_type_t::TRANSACTION,     lat_label("TRANSACTION")},
-    {op_type_t::READ,            lat_label("READ")},
-    {op_type_t::WRITE,           lat_label("WRITE")},
-    {op_type_t::GET_ATTR,        lat_label("GET_ATTR")},
-    {op_type_t::GET_ATTRS,       lat_label("GET_ATTRS")},
-    {op_type_t::STAT,            lat_label("STAT")},
-    {op_type_t::OMAP_GET_VALUES, lat_label("OMAP_GET_VALUES")},
-    {op_type_t::OMAP_LIST,       lat_label("OMAP_LIST")},
+    {op_type_t::TRANSACTION,     sm::label_instance("latency", "TRANSACTION")},
+    {op_type_t::READ,            sm::label_instance("latency", "READ")},
+    {op_type_t::WRITE,           sm::label_instance("latency", "WRITE")},
+    {op_type_t::GET_ATTR,        sm::label_instance("latency", "GET_ATTR")},
+    {op_type_t::GET_ATTRS,       sm::label_instance("latency", "GET_ATTRS")},
+    {op_type_t::STAT,            sm::label_instance("latency", "STAT")},
+    {op_type_t::OMAP_GET_VALUES, sm::label_instance("latency",  "OMAP_GET_VALUES")},
+    {op_type_t::OMAP_LIST,       sm::label_instance("latency", "OMAP_LIST")},
   };
 
   for (auto& [op_type, label] : labels_by_op_type) {
@@ -482,13 +522,14 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
 
 SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::readv(
   CollectionRef ch,
-  const ghobject_t& oid,
+  const ghobject_t& _oid,
   interval_set<uint64_t>& m,
   uint32_t op_flags)
 {
   return seastar::do_with(
+    _oid,
     ceph::bufferlist{},
-    [=, &oid, &m](auto &ret) {
+    [=, &m](auto &oid, auto &ret) {
     return crimson::do_for_each(
       m,
       [=, &oid, &ret](auto &p) {
@@ -890,7 +931,8 @@ SeaStore::_fiemap_ret SeaStore::_fiemap(
       len);
   });
 }
-seastar::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
+
+SeaStore::read_errorator::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
   CollectionRef ch,
   const ghobject_t& oid,
   uint64_t off,
@@ -914,9 +956,6 @@ seastar::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
       size - off:
       std::min(size - off, len);
     return _fiemap(t, onode, off, adjust_len);
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStore::fiemap"
   });
 }
 
@@ -1477,12 +1516,10 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
       std::move(scanner),
       false /* detailed */);
 
-    auto journal = std::make_unique<Journal>(*sm, scanner_ref);
+    auto journal = journal::make_segmented(*sm, scanner_ref, *segment_cleaner);
     auto epm = std::make_unique<ExtentPlacementManager>();
     auto cache = std::make_unique<Cache>(scanner_ref, *epm);
     auto lba_manager = lba_manager::create_lba_manager(*sm, *cache);
-
-    journal->set_segment_provider(&*segment_cleaner);
 
     auto tm = std::make_unique<TransactionManager>(
       *sm,

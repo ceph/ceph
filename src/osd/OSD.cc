@@ -3226,7 +3226,7 @@ int OSD::run_osd_bench_test(
   if (osize && onum) {
     bufferlist bl;
     bufferptr bp(osize);
-    bp.zero();
+    memset(bp.c_str(), 'a', bp.length());
     bl.push_back(std::move(bp));
     bl.rebuild_page_aligned();
     for (int i=0; i<onum; ++i) {
@@ -3243,7 +3243,7 @@ int OSD::run_osd_bench_test(
 
   bufferlist bl;
   bufferptr bp(bsize);
-  bp.zero();
+  memset(bp.c_str(), 'a', bp.length());
   bl.push_back(std::move(bp));
   bl.rebuild_page_aligned();
 

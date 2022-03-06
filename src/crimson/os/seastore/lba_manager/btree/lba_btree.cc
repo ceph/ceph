@@ -621,7 +621,7 @@ LBABtree::handle_split_ret LBABtree::handle_split(
     nroot->set_meta(meta);
     nroot->pin.set_range(meta);
     nroot->journal_insert(
-      nroot->begin(),
+      std::cbegin(*nroot),
       L_ADDR_MIN,
       root.get_location(),
       nullptr);

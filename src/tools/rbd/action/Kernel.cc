@@ -549,14 +549,33 @@ int execute_map(const po::variables_map &vm,
 
   utils::normalize_pool_name(&pool_name);
 
-  MapOptions default_map_options;
-  r = parse_map_options(
-      g_conf().get_val<std::string>("rbd_default_map_options"),
-      &default_map_options);
+  librados::IoCtx ioctx;
+  librbd::Image image;
+  r = utils::init_io_ctx(rados, pool_name, nspace_name, &ioctx);
   if (r < 0) {
-    std::cerr << "rbd: couldn't parse default map options" << std::endl;
     return r;
   }
+
+  r = utils::open_image(ioctx, image_name, true, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  MapOptions default_map_options;
+  std::vector<librbd::config_option_t> options;
+  image.config_list(&options);
+  for (const auto &option : options) {
+    if (option.name == "rbd_default_map_options") {
+      r = parse_map_options(option.value, &default_map_options);
+      if (r < 0) {
+        std::cerr << "rbd: couldn't parse default map options" << std::endl;
+        return r;
+      }
+
+      break;
+    }
+  }
+
   for (auto& [key, value] : default_map_options) {
     if (map_options.count(key) == 0) {
       map_options[key] = value;

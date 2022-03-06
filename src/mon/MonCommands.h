@@ -1061,7 +1061,8 @@ COMMAND("osd pool create "
 	"name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
-	"name=target_size_ratio,type=CephFloat,range=0|1,req=false",\
+	"name=target_size_ratio,type=CephFloat,range=0|1,req=false "\
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
 	"name=pool,type=CephPoolname "
@@ -1080,7 +1081,8 @@ COMMAND("osd pool rm "
 	"osd", "rw")
 COMMAND("osd pool rename "
 	"name=srcpool,type=CephPoolname "
-	"name=destpool,type=CephPoolname",
+	"name=destpool,type=CephPoolname "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"rename <srcpool> to <destpool>", "osd", "rw")
 COMMAND("osd pool get "
 	"name=pool,type=CephPoolname "
