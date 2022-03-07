@@ -161,7 +161,7 @@ OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
   tracking_enabled(tracking),
   cct(cct_) {
     for (uint32_t i = 0; i < num_optracker_shards; i++) {
-      char lock_name[32] = {0};
+      char lock_name[34] = {0};
       snprintf(lock_name, sizeof(lock_name), "%s:%" PRIu32, "OpTracker::ShardedLock", i);
       ShardedTrackingData* one_shard = new ShardedTrackingData(lock_name);
       sharded_in_flight_list.push_back(one_shard);
