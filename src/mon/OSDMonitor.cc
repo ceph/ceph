@@ -899,13 +899,13 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       t = MonitorDBStore::TransactionRef();
       tx_size = 0;
     }
-    for (const auto [osd, state] : inc.new_state) {
+    for (auto [osd, state] : inc.new_state) {
       if (state & CEPH_OSD_UP) {
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd);
       }
     }
-    for (const auto [osd, weight] : inc.new_weight) {
+    for (auto [osd, weight] : inc.new_weight) {
       if (weight == CEPH_OSD_OUT) {
         // manually marked out, so drop it
         osd_epochs.erase(osd);
