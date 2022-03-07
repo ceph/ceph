@@ -212,7 +212,7 @@ protected:
 
   void scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut);
 
-  bool _need_flush_mdlog(CInode *in, int wanted_caps);
+  bool _need_flush_mdlog(CInode *in, int wanted_caps, bool lock_state_any=false);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(const cref_t<MClientCaps> &m);
   void _update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps> &m, CInode::mempool_inode *pi);
