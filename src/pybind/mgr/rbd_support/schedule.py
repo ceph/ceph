@@ -125,7 +125,8 @@ class LevelSpec:
                     raise ValueError("pool {} does not exist".format(pool_name))
                 if pool_id not in get_rbd_pools(module):
                     raise ValueError("{} is not an RBD pool".format(pool_name))
-                id += str(pool_id)
+                pool_id = str(pool_id)
+                id += pool_id
                 if match.group(2) is not None or match.group(3):
                     id += "/"
                     with module.rados.open_ioctx(pool_name) as ioctx:
