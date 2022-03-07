@@ -188,10 +188,16 @@ public:
   iterator begin() { return iterator(_front); }
   iterator end() { return iterator(NULL); }
 
-  class const_iterator: std::iterator<std::forward_iterator_tag, T> {
+  class const_iterator {
   private:
     item *cur;
   public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const T*;
+    using reference = const T&;
+
     const_iterator(item *i = 0) : cur(i) {}
     const T operator*() { return static_cast<const T>(cur->_item); }
     const_iterator& operator++() {
