@@ -164,6 +164,8 @@ public:
   // -- file i/o --
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, MDRequestRef& mdr, SnapRealm *conrealm);
+  int get_allowed_caps(CInode *in, Capability *cap, int &all_allowed,
+                       int &loner_allowed, int &xlocker_allowed);
   int issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
