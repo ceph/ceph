@@ -115,7 +115,7 @@ class TestRun(object):
         m_fetch_qa_suite.return_value = "/some/other/suite/path"
         result = run.fetch_tasks_if_needed(config)
         m_fetch_qa_suite.assert_called_with("feature_branch", commit="commit")
-        assert result == "/some/other/suite/path"
+        assert result == "/some/other/suite/path/qa"
 
     @patch("teuthology.run.get_status")
     @patch("teuthology.run.nuke")
