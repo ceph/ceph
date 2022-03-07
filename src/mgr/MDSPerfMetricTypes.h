@@ -329,6 +329,7 @@ std::ostream &operator<<(std::ostream &os, const MDSPerfMetricQuery &query);
 struct MDSPerfCollector : PerfCollector {
   std::map<MDSPerfMetricKey, PerformanceCounters> counters;
   std::set<mds_rank_t> delayed_ranks;
+  utime_t last_updated_mono;
 
   MDSPerfCollector(MetricQueryID query_id)
     : PerfCollector(query_id) {
