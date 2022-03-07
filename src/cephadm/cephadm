@@ -2567,6 +2567,9 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         if daemon_type == 'rgw':
             cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (daemon_id)
+            ssl_ca_dir = '/etc/pki/ca-trust/extracted'
+            if os.path.exists(ssl_ca_dir):
+                mounts[ssl_ca_dir] = ssl_ca_dir
         else:
             cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
         if daemon_type != 'crash':
@@ -5253,6 +5256,8 @@ def get_container_with_extra_args(ctx: CephadmContext,
     c = get_container(ctx, fsid, daemon_type, daemon_id, privileged, ptrace, container_args)
     if 'extra_container_args' in ctx and ctx.extra_container_args:
         c.container_args.extend(ctx.extra_container_args)
+    if daemon_type == 'rgw':
+        c.container_args.extend(['--security-opt', 'label=disable'])
     return c
 
 
