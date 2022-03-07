@@ -123,7 +123,7 @@ int RGWMotr::init_svc(bool raw, const DoutPrefixProvider *dpp)
     return svc.init_raw(cct, false, null_yield, dpp);
   }
 
-  return svc.init(cct, false, run_sync_thread, null_yield, dpp);
+  return svc.init(cct, false, false, null_yield, dpp);
 }
 
 int RGWMotr::init_ctl(const DoutPrefixProvider *dpp)

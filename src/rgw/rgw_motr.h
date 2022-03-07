@@ -36,21 +36,13 @@
 
 class RGWMotr
 {
-  bool use_gc_thread;
-  bool use_lc_thread;
-  bool quota_threads;
-  bool run_sync_thread;
-  bool run_reshard_thread;
 protected:
   CephContext *cct;
-    bool use_cache{false};
-  bool use_gc{true};
-  bool use_datacache{false};
  public:
   RGWMotr():cct(NULL),
                pctl(&ctl)
                 {} 
-   std::string host_id ="";
+  std::string host_id ="";
   int initialize(CephContext *_cct, const DoutPrefixProvider *dpp) {
     set_context(_cct);
     return initialize(dpp);
@@ -59,56 +51,12 @@ protected:
     cct = _cct;
   }
   int initialize(const DoutPrefixProvider *dpp);
-    RGWServices svc;
+  RGWServices svc;
   RGWCtl ctl;
 
   RGWCtl *pctl{nullptr};
-    int init_svc(bool raw, const DoutPrefixProvider *dpp);
+  int init_svc(bool raw, const DoutPrefixProvider *dpp);
   int init_ctl(const DoutPrefixProvider *dpp);
-
-    RGWMotr& set_use_cache(bool status) {
-    use_cache = status;
-    return *this;
-  }
-
-  RGWMotr& set_use_gc(bool status) {
-    use_gc = status;
-    return *this;
-  }
-
-  RGWMotr& set_use_datacache(bool status) {
-    use_datacache = status;
-    return *this;
-  }
-
-  bool get_use_datacache() {
-    return use_datacache;
-  }
-
-  RGWMotr& set_run_gc_thread(bool _use_gc_thread) {
-    use_gc_thread = _use_gc_thread;
-    return *this;
-  }
-
-  RGWMotr& set_run_lc_thread(bool _use_lc_thread) {
-    use_lc_thread = _use_lc_thread;
-    return *this;
-  }
-
-  RGWMotr& set_run_quota_threads(bool _run_quota_threads) {
-    quota_threads = _run_quota_threads;
-    return *this;
-  }
-
-  RGWMotr& set_run_sync_thread(bool _run_sync_thread) {
-    run_sync_thread = _run_sync_thread;
-    return *this;
-  }
-
-  RGWMotr& set_run_reshard_thread(bool _run_reshard_thread) {
-    run_reshard_thread = _run_reshard_thread;
-    return *this;
-  }
 
   uint64_t get_new_req_id() {
     return ceph::util::generate_random_number<uint64_t>();
