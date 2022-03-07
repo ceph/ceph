@@ -1321,6 +1321,7 @@ class MDSSpec(ServiceSpec):
                  service_type: str = 'mds',
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
+                 config: Optional[Dict[str, str]] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  extra_container_args: Optional[List[str]] = None,
@@ -1328,6 +1329,7 @@ class MDSSpec(ServiceSpec):
         assert service_type == 'mds'
         super(MDSSpec, self).__init__('mds', service_id=service_id,
                                       placement=placement,
+                                      config=config,
                                       unmanaged=unmanaged,
                                       preview_only=preview_only,
                                       extra_container_args=extra_container_args)
