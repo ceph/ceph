@@ -18360,11 +18360,10 @@ int BlueStore::store_allocator(Allocator* src_allocator)
       return -1;
     }
   }
-
+  bluefs->compact_log();
   // reuse previous file-allocation if exists
   ret = bluefs->stat(allocator_dir, allocator_file, nullptr, nullptr);
   bool overwrite_file = (ret == 0);
-  //derr <<  __func__ << "bluefs->open_for_write(" << overwrite_file << ")" << dendl;
   BlueFS::FileWriter *p_handle = nullptr;
   ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
   if (ret != 0) {
@@ -18374,8 +18373,9 @@ int BlueStore::store_allocator(Allocator* src_allocator)
 
   uint64_t file_size = p_handle->file->fnode.size;
   uint64_t allocated = p_handle->file->fnode.get_allocated();
-  dout(5) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
+  dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
 
+  bluefs->sync_metadata(false);
   unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
   if (!allocator) {
     bluefs->close_writer(p_handle);
@@ -18447,12 +18447,11 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
-  dout(5) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << dendl;
+  dout(5) <<"WRITE-extent_count=" << extent_count << ", allocation_size=" << allocation_size << ", serial=" << s_serial << dendl;
   dout(5) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
   need_to_destage_allocation_file = false;
-  dout(10) << "need_to_destage_allocation_file was clear" << dendl;
   return 0;
 }
 
@@ -18644,7 +18643,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
   utime_t duration = ceph_clock_now() - start_time;
   dout(5) << "READ--extent_count=" << extent_count << ", read_alloc_size=  "
 	    << read_alloc_size << ", file_size=" << file_size << dendl;
-  dout(5) << "READ duration=" << duration << " seconds, s_serial=" << s_serial << dendl;
+  dout(5) << "READ duration=" << duration << " seconds, s_serial=" << header.serial << dendl;
   *num   = extent_count;
   *bytes = read_alloc_size;
   return 0;
@@ -18939,7 +18938,7 @@ int BlueStore::read_allocation_from_drive_on_startup()
 
   utime_t            start = ceph_clock_now();
   read_alloc_stats_t stats = {};
-  SimpleBitmap       sbmap(cct, div_round_up(bdev->get_size(), min_alloc_size));
+  SimpleBitmap sbmap(cct, (bdev->get_size()/ min_alloc_size));
   ret = reconstruct_allocations(&sbmap, stats);
   if (ret != 0) {
     return ret;
@@ -19099,7 +19098,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
     auto allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
     //reconstruct allocations into a temp simple-bitmap and copy into allocator
     {
-      SimpleBitmap sbmap(cct, div_round_up(bdev->get_size(), min_alloc_size));
+      SimpleBitmap sbmap(cct, (bdev->get_size()/ min_alloc_size));
       ret = reconstruct_allocations(&sbmap, stats);
       if (ret != 0) {
 	return ret;
