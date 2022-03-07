@@ -526,7 +526,14 @@ add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
 add_dependencies(common legacy-option-headers ${jaeger_base})
 
-add_library(ceph-common ${CEPH_SHARED} ${ceph_common_objs})
+if (WIN32)
+  # Statically building ceph-common on Windows fails. We're temporarily
+  # reverting this: 22fefb2338cfc4fcb03ece3cbf77aa964a7f17f2
+  add_library(ceph-common SHARED ${ceph_common_objs})
+else()
+  add_library(ceph-common ${CEPH_SHARED} ${ceph_common_objs})
+endif()
+
 target_link_libraries(ceph-common ${ceph_common_deps})
 if(ENABLE_COVERAGE)
   target_link_libraries(ceph-common gcov)
