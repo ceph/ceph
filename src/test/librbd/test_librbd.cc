@@ -4232,6 +4232,61 @@ interval_set<uint64_t> round_diff_interval(const interval_set<uint64_t>& diff,
   return rounded_diff;
 }
 
+TEST_F(TestLibRBD, SnapDiff)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string image_name = get_temp_image_name();
+  uint64_t size = 100 << 20;
+  ASSERT_EQ(0, create_image(ioctx, image_name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, image_name.c_str(), &image, nullptr));
+
+  char test_data[TEST_IO_SIZE + 1];
+  for (size_t i = 0; i < TEST_IO_SIZE; ++i) {
+    test_data[i] = (char) (rand() % (126 - 33) + 33);
+  }
+  test_data[TEST_IO_SIZE] = '\0';
+
+  ASSERT_PASSED(write_test_data, image, test_data, 0,
+                TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
+
+  interval_set<uint64_t> diff;
+  ASSERT_EQ(0, rbd_diff_iterate2(image, nullptr, 0, size, true, true,
+                                 iterate_cb, &diff));
+  EXPECT_EQ(1 << order, diff.size());
+
+  ASSERT_EQ(0, rbd_snap_create(image, "snap1"));
+  ASSERT_EQ(0, rbd_snap_create(image, "snap2"));
+
+  diff.clear();
+  ASSERT_EQ(0, rbd_diff_iterate2(image, nullptr, 0, size, true, true,
+                                 iterate_cb, &diff));
+  EXPECT_EQ(1 << order, diff.size());
+
+  diff.clear();
+  ASSERT_EQ(0, rbd_diff_iterate2(image, "snap1", 0, size, true, true,
+                                 iterate_cb, &diff));
+  EXPECT_EQ(0, diff.size());
+
+  diff.clear();
+  ASSERT_EQ(0, rbd_diff_iterate2(image, "snap2", 0, size, true, true,
+                                 iterate_cb, &diff));
+  EXPECT_EQ(0, diff.size());
+
+  ASSERT_EQ(0, rbd_snap_remove(image, "snap1"));
+  ASSERT_EQ(0, rbd_snap_remove(image, "snap2"));
+
+  ASSERT_EQ(0, rbd_close(image));
+  ASSERT_EQ(0, rbd_remove(ioctx, image_name.c_str()));
+
+  rados_ioctx_destroy(ioctx);
+}
+
 template <typename T>
 class DiffIterateTest : public TestLibRBD {
 public:
