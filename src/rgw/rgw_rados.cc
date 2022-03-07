@@ -811,11 +811,10 @@ class RGWIndexCompletionManager {
   std::vector<set<complete_op_data*>> completions;
   std::vector<complete_op_data*> retry_completions;
 
-  std::thread retry_thread;
   std::condition_variable cond;
   std::mutex retry_completions_lock;
-
   bool _stop{false};
+  std::thread retry_thread;
 
   std::atomic<int> cur_shard {0};
 
