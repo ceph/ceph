@@ -1222,7 +1222,7 @@ PGBackend::omap_get_vals_by_keys(
     throw crimson::common::system_shutdown_exception();
   }
   if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    logger().debug("{}: object does not exist: {}", __func__, os.oi.soid);
     return crimson::ct_error::enoent::make();
   }
 
