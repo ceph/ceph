@@ -663,12 +663,7 @@ typedef boost::variant<UserSnapshotNamespace,
                        UnknownSnapshotNamespace> SnapshotNamespaceVariant;
 
 struct SnapshotNamespace : public SnapshotNamespaceVariant {
-  SnapshotNamespace() {
-  }
-
-  template <typename T>
-  SnapshotNamespace(T&& t) : SnapshotNamespaceVariant(std::forward<T>(t)) {
-  }
+  using SnapshotNamespaceVariant::SnapshotNamespaceVariant;
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& it);
