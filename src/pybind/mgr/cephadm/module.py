@@ -1492,7 +1492,7 @@ Then run the following:
 
         :param host: host name
         """
-        spec.validate()
+        HostSpec.validate(spec)
         ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
