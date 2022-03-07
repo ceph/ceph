@@ -168,6 +168,42 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
         c->second = metrics.write_io_sizes_metric.total_size;
       }
       break;
+    case MDSPerformanceCounterType::AVG_READ_LATENCY_METRIC:
+      if (metrics.read_latency_metric.updated) {
+        c->first = metrics.read_latency_metric.mean.tv.tv_sec;
+        c->second = metrics.read_latency_metric.mean.tv.tv_nsec;
+      }
+      break;
+    case MDSPerformanceCounterType::STDEV_READ_LATENCY_METRIC:
+      if (metrics.read_latency_metric.updated) {
+        c->first = metrics.read_latency_metric.sq_sum;
+        c->second = metrics.read_latency_metric.count;
+      }
+      break;
+    case MDSPerformanceCounterType::AVG_WRITE_LATENCY_METRIC:
+      if (metrics.write_latency_metric.updated) {
+        c->first = metrics.write_latency_metric.mean.tv.tv_sec;
+        c->second = metrics.write_latency_metric.mean.tv.tv_nsec;
+      }
+      break;
+    case MDSPerformanceCounterType::STDEV_WRITE_LATENCY_METRIC:
+      if (metrics.write_latency_metric.updated) {
+        c->first = metrics.write_latency_metric.sq_sum;
+        c->second = metrics.write_latency_metric.count;
+      }
+      break;
+    case MDSPerformanceCounterType::AVG_METADATA_LATENCY_METRIC:
+      if (metrics.metadata_latency_metric.updated) {
+        c->first = metrics.metadata_latency_metric.mean.tv.tv_sec;
+        c->second = metrics.metadata_latency_metric.mean.tv.tv_nsec;
+      }
+      break;
+    case MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC:
+      if (metrics.metadata_latency_metric.updated) {
+        c->first = metrics.metadata_latency_metric.sq_sum;
+        c->second = metrics.metadata_latency_metric.count;
+      }
+      break;
     default:
       ceph_abort_msg("unknown counter type");
     }
