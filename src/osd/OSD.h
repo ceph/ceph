@@ -1592,7 +1592,7 @@ protected:
     : public ShardedThreadPool::ShardedWQ<OpSchedulerItem>
   {
     OSD *osd;
-
+    bool m_fast_shutdown = false;
   public:
     ShardedOpWQ(OSD *o,
 		ceph::timespan ti,
@@ -1609,6 +1609,8 @@ protected:
 
     /// try to do some work
     void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb) override;
+
+    void stop_for_fast_shutdown();
 
     /// enqueue a new item
     void _enqueue(OpSchedulerItem&& item) override;
