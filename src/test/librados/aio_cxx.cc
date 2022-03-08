@@ -2242,7 +2242,7 @@ struct io_info {
   AioCompletion *c;
 };
 
-void pool_io_callback(completion_t cb, void *arg)
+void pool_io_callback(completion_t cb, void *arg /* Actually AioCompletion* */)
 {
   io_info *info = (io_info *)arg;
   unsigned long i = info->i;
