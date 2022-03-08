@@ -250,6 +250,11 @@ class SubvolumeBase(object):
         if uid is not None and gid is not None:
             self.fs.chown(path, uid, gid)
 
+        # set mode
+        mode = attrs.get("mode", None)
+        if mode is not None:
+            self.fs.lchmod(path, mode)
+
     def _resize(self, path, newsize, noshrink):
         try:
             newsize = int(newsize)
