@@ -5988,6 +5988,10 @@ def command_zap_osds(ctx: CephadmContext) -> None:
 ##################################
 
 
+def get_ceph_cluster_count(ctx: CephadmContext) -> int:
+    return len([c for c in os.listdir(ctx.data_dir) if is_fsid(c)])
+
+
 def command_rm_cluster(ctx):
     # type: (CephadmContext) -> None
     if not ctx.force:
@@ -5997,13 +6001,7 @@ def command_rm_cluster(ctx):
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
 
-    # stop + disable individual daemon units
-    for d in list_daemons(ctx, detail=False):
-        if d['fsid'] != ctx.fsid:
-            continue
-        if d['style'] != 'cephadm:v1':
-            continue
-        unit_name = get_unit_name(ctx.fsid, d['name'])
+    def disable_systemd_service(unit_name: str) -> None:
         call(ctx, ['systemctl', 'stop', unit_name],
              verbosity=CallVerbosity.DEBUG)
         call(ctx, ['systemctl', 'reset-failed', unit_name],
@@ -6011,14 +6009,17 @@ def command_rm_cluster(ctx):
         call(ctx, ['systemctl', 'disable', unit_name],
              verbosity=CallVerbosity.DEBUG)
 
+    # stop + disable individual daemon units
+    for d in list_daemons(ctx, detail=False):
+        if d['fsid'] != ctx.fsid:
+            continue
+        if d['style'] != 'cephadm:v1':
+            continue
+        disable_systemd_service(get_unit_name(ctx.fsid, d['name']))
+
     # cluster units
     for unit_name in ['ceph-%s.target' % ctx.fsid]:
-        call(ctx, ['systemctl', 'stop', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(ctx, ['systemctl', 'reset-failed', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(ctx, ['systemctl', 'disable', unit_name],
-             verbosity=CallVerbosity.DEBUG)
+        disable_systemd_service(unit_name)
 
     slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
     call(ctx, ['systemctl', 'stop', slice_name],
@@ -6047,28 +6048,44 @@ def command_rm_cluster(ctx):
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
 
-    # rm cephadm logrotate config if last cluster on host
-    if not os.listdir(ctx.data_dir):
+    # if last cluster on host remove shared files
+    if get_ceph_cluster_count(ctx) == 0:
+        disable_systemd_service('ceph.target')
+
+        # rm shared ceph target files
+        call_throws(ctx, ['rm', '-f', ctx.unit_dir + '/multi-user.target.wants/ceph.target'])
+        call_throws(ctx, ['rm', '-f', ctx.unit_dir + '/ceph.target'])
+
+        # rm cephadm logrotate config
         call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/cephadm'])
+
+        if not ctx.keep_logs:
+            # remove all cephadm logs
+            for fname in glob(f'{ctx.log_dir}/cephadm.log*'):
+                os.remove(fname)
 
     # rm sysctl settings
     sysctl_dir = Path(ctx.sysctl_dir)
     for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
         p.unlink()
 
+    # cleanup remaining ceph directories
+    ceph_dirs = [f'/run/ceph/{ctx.fsid}', f'/tmp/var/lib/ceph/{ctx.fsid}', f'/var/run/ceph/{ctx.fsid}']
+    for dd in ceph_dirs:
+        shutil.rmtree(dd, ignore_errors=True)
+
     # clean up config, keyring, and pub key files
     files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
-
     if os.path.exists(files[0]):
         valid_fsid = False
         with open(files[0]) as f:
             if ctx.fsid in f.read():
                 valid_fsid = True
         if valid_fsid:
+            # rm configuration files on /etc/ceph
             for n in range(0, len(files)):
                 if os.path.exists(files[n]):
                     os.remove(files[n])
-
 
 ##################################
 

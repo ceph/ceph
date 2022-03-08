@@ -534,6 +534,16 @@ ff792c06d8544b983.scope not found.: OCI runtime error"""
         with pytest.raises(cd.Error, match='OCI'):
             cd.extract_uid_gid(ctx)
 
+    @pytest.mark.parametrize('test_input, expected', [
+        ([cd.make_fsid(), cd.make_fsid(), cd.make_fsid()], 3),
+        ([cd.make_fsid(), 'invalid-fsid', cd.make_fsid(), '0b87e50c-8e77-11ec-b890-'], 2),
+        (['f6860ec2-8e76-11ec-', '0b87e50c-8e77-11ec-b890-', ''], 0),
+        ([], 0),
+    ])
+    def test_get_ceph_cluster_count(self, test_input, expected):
+        ctx = cd.CephadmContext()
+        with mock.patch('os.listdir', return_value=test_input):
+            assert cd.get_ceph_cluster_count(ctx) == expected
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
