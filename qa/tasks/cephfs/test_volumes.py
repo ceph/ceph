@@ -849,6 +849,58 @@ class TestSubvolumes(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_create_idempotence_mode(self):
+        # default mode
+        default_mode = "755"
+
+        # create subvolume
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        subvol_path = self._get_subvolume_path(self.volname, subvolume)
+
+        actual_mode_1 = self.mount_a.run_shell(['stat', '-c' '%a', subvol_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode_1, default_mode)
+
+        # try creating w/ same subvolume name with --mode 777
+        new_mode = "777"
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode", new_mode)
+
+        actual_mode_2 = self.mount_a.run_shell(['stat', '-c' '%a', subvol_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode_2, new_mode)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_create_idempotence_without_passing_mode(self):
+        # create subvolume
+        desired_mode = "777"
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode", desired_mode)
+
+        subvol_path = self._get_subvolume_path(self.volname, subvolume)
+
+        actual_mode_1 = self.mount_a.run_shell(['stat', '-c' '%a', subvol_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode_1, desired_mode)
+
+        # default mode
+        default_mode = "755"
+
+        # try creating w/ same subvolume name without passing --mode argument
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        actual_mode_2 = self.mount_a.run_shell(['stat', '-c' '%a', subvol_path]).stdout.getvalue().strip()
+        self.assertEqual(actual_mode_2, default_mode)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_create_isolated_namespace(self):
         """
         Create subvolume in separate rados namespace
