@@ -28,7 +28,6 @@ Premier
 -------
 
 * `Bloomberg <https://bloomberg.com>`_
-* `China Mobile <https://www.chinamobileltd.com/>`_
 * `DigitalOcean <https://www.digitalocean.com/>`_
 * `Intel <http://www.intel.com/>`_
 * `OVH <https://www.ovh.com/>`_
