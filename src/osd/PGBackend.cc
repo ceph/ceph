@@ -154,7 +154,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
   ConnectionRef conn = m->get_connection();
 
   gather.set_finisher(new LambdaContext(
-    [=](int r) {
+    [=, this](int r) {
       if (r != -EAGAIN) {
 	get_parent()->send_message_osd_cluster(reply, conn.get());
       } else {
