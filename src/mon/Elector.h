@@ -327,6 +327,10 @@ class Elector : public ElectionOwner, RankProvider {
    *
    * @param m A received message
    */
+  
+  void print_live_pinging();
+  void print_dead_pinging();
+
   void dispatch(MonOpRequestRef op);
 
   /**

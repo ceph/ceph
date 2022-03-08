@@ -145,6 +145,7 @@ void Elector::notify_bump_epoch()
   mon->join_election();
 }
 
+
 void Elector::propose_to_peers(epoch_t e, bufferlist& logic_bl)
 {
   // bcast to everyone else
@@ -449,23 +450,52 @@ void Elector::handle_nak(MonOpRequestRef op)
   // the end!
 }
 
+void Elector::print_live_pinging(){
+  string output = "live_pinging: ";
+  for(auto it = live_pinging.begin(); it != live_pinging.end(); ++it){
+      output += " "; 
+      output += to_string(*it); 
+  }
+  dout(20) << output << dendl;
+  return;
+}
+
+void Elector::print_dead_pinging(){
+  string output = "dead_pinging: ";
+  for(auto it = dead_pinging.begin(); it != dead_pinging.end(); ++it){
+    output += " ";
+    output += to_string(*it);
+  }
+  dout(20) << output << dendl;
+  return;
+}
+
 void Elector::begin_peer_ping(int peer)
 {
+  dout(10) << __func__ << " against " << peer << dendl;
   if (live_pinging.count(peer)) {
+    dout(10) << peer << " already exists in " << "live_pinging" << dendl;
     return;
   }
 
   if (!mon->get_quorum_mon_features().contains_all(
 				      ceph::features::mon::FEATURE_PINGING)) {
+    dout(10) << "Not all monitors support changing election strategies" << dendl;
     return;
   }
 
-  dout(5) << __func__ << " against " << peer << dendl;
-
   peer_tracker.report_live_connection(peer, 0); // init this peer as existing
+
   live_pinging.insert(peer);
+  dout(10) << "insert " << peer << " in live_pinging" << dendl;
+  print_live_pinging();
+
   dead_pinging.erase(peer);
+  dout(10) << "erased " << peer << " in dead_pinging" << dendl;
+  print_dead_pinging();
+
   peer_acked_ping[peer] = ceph_clock_now();
+  dout(10) << "peer_acked_ping[" << peer << "] = " << ceph_clock_now() << dendl;
   send_peer_ping(peer);
   mon->timer.add_event_after(ping_timeout / PING_DIVISOR,
 			     new C_MonContext{mon, [this, peer](int) {
@@ -485,6 +515,7 @@ void Elector::send_peer_ping(int peer, const utime_t *n)
   }
   MMonPing *ping = new MMonPing(MMonPing::PING, now, peer_tracker.get_encoded_bl());
   mon->messenger->send_to_mon(ping, mon->monmap->get_addrs(peer));
+  dout(10) << "peer_sent_ping[" << peer << "] = " << now << dendl;
   peer_sent_ping[peer] = now;
 }
 
@@ -496,10 +527,18 @@ void Elector::ping_check(int peer)
     dout(20) << __func__ << peer << " is no longer marked for pinging" << dendl;
     return;
   }
-  utime_t now = ceph_clock_now();
-  utime_t& acked_ping = peer_acked_ping[peer];
-  utime_t& newest_ping = peer_sent_ping[peer];
+  print_live_pinging();
+  print_dead_pinging();
+  utime_t now = ceph_clock_now(); // the current time
+  dout(20) << "now: " << now << dendl;
+  utime_t& acked_ping = peer_acked_ping[peer]; //last ping stamp they acked
+  dout(20) << "acked_ping: " << acked_ping << dendl;
+  utime_t& newest_ping = peer_sent_ping[peer]; //last ping stamp we sent
+  dout(20) << "newest_ping: " << newest_ping << dendl;
+  dout(20) << "ping_timeout: " << ping_timeout << dendl;
+  dout(20) << "now - ping_timeout: " << now - ping_timeout << dendl;
   if (!acked_ping.is_zero() && acked_ping < now - ping_timeout) {
+    dout(20) << "acked_ping < now - ping_timeout" << dendl;
     peer_tracker.report_dead_connection(peer, now - acked_ping);
     acked_ping = now;
     begin_dead_ping(peer);
@@ -507,6 +546,7 @@ void Elector::ping_check(int peer)
   }
 
   if (acked_ping == newest_ping) {
+    dout(20) << "acked_ping == newest_ping" << dendl;
     send_peer_ping(peer, &now);
   }
 
@@ -518,12 +558,18 @@ void Elector::ping_check(int peer)
 
 void Elector::begin_dead_ping(int peer)
 {
+  dout(10) << __func__ << " " << peer << dendl;
   if (dead_pinging.count(peer)) {
+    dout(10) << peer << " already in dead_pinging " << dendl;
     return;
   }
   
   live_pinging.erase(peer);
+  dout(10) << "erased " << peer << " in live_pinging" << dendl;
+  print_live_pinging();
   dead_pinging.insert(peer);
+  dout(10) << "insert " << peer << " in dead_pinging" << dendl;
+  print_dead_pinging();
   mon->timer.add_event_after(ping_timeout,
 			     new C_MonContext{mon, [this, peer](int) {
 				 dead_ping(peer);
@@ -540,8 +586,9 @@ void Elector::dead_ping(int peer)
   ceph_assert(!live_pinging.count(peer));
 
   utime_t now = ceph_clock_now();
+  dout(10) << "now: " << ceph_clock_now() << dendl;
   utime_t& acked_ping = peer_acked_ping[peer];
-
+  dout(10) << "acked_ping: " << peer_acked_ping[peer] << dendl;
   peer_tracker.report_dead_connection(peer, now - acked_ping);
   acked_ping = now;
   mon->timer.add_event_after(ping_timeout,
@@ -556,30 +603,45 @@ void Elector::handle_ping(MonOpRequestRef op)
   dout(10) << __func__ << " " << *m << dendl;
 
   int prank = mon->monmap->get_rank(m->get_source_addr());
+  dout(10) << "prank: " << prank << dendl; 
   begin_peer_ping(prank);
   assimilate_connection_reports(m->tracker_bl);
   switch(m->op) {
   case MMonPing::PING:
     {
+      dout(10) << "MMonPing::PING" << dendl;
       MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, peer_tracker.get_encoded_bl());
       m->get_connection()->send_message(reply);
     }
     break;
 
   case MMonPing::PING_REPLY:
+    dout(10) << "MMonPing::PING_REPLY" << dendl;
     const utime_t& previous_acked = peer_acked_ping[prank];
+    dout(10) << "previous_acked: " << previous_acked << dendl;
     const utime_t& newest = peer_sent_ping[prank];
+    dout(10) << "newest: " << newest << dendl;
+    dout(10) << "m->stamp: " << m->stamp << dendl;
     if (m->stamp > newest && !newest.is_zero()) {
+      dout(10) << "m->stamp > newest" << dendl;
       derr << "dropping PING_REPLY stamp " << m->stamp
 	   << " as it is newer than newest sent " << newest << dendl;
       return;
     }
     if (m->stamp > previous_acked) {
+      dout(10) << "m->stamp > previous_acked" << dendl;
       peer_tracker.report_live_connection(prank, m->stamp - previous_acked);
+      dout(10) << "peer_acked_ping[" << prank << "] = " << m->stamp << dendl;
       peer_acked_ping[prank] = m->stamp;
     }
     utime_t now = ceph_clock_now();
+    dout(10) << "now: " << now << dendl;
+    dout(10) << "ping_timeout: " << ping_timeout << dendl;
+    dout(10) << "PING_DIVISOR: " << PING_DIVISOR << dendl;
+    dout(10) << "ping_timeout / PING_DIVISOR = " << ping_timeout / PING_DIVISOR << dendl;
+    dout(10) << "now - m->stamp = " << now - m->stamp << dendl;
     if (now - m->stamp > ping_timeout / PING_DIVISOR) {
+      dout(10) << "now - m->stamp > ping_timeout / PING_DIVISOR" << dendl;
       send_peer_ping(prank, &now);
     }
     break;
@@ -703,13 +765,19 @@ void Elector::notify_clear_peer_state()
 
 void Elector::notify_rank_changed(int new_rank)
 {
+  dout(20) << __func__ << " " << new_rank << dendl;
   peer_tracker.notify_rank_changed(new_rank);
   live_pinging.erase(new_rank);
+  dout(10) << "erased " << new_rank << " in live_pinging" << dendl;
+  print_live_pinging();
   dead_pinging.erase(new_rank);
+  dout(10) << "erased " << new_rank << " in dead_pinging" << dendl;
+  print_dead_pinging();
 }
 
 void Elector::notify_rank_removed(int rank_removed)
 {
+  dout(20) << __func__ << " " << rank_removed << dendl;
   peer_tracker.notify_rank_removed(rank_removed);
   /* we have to clean up the pinging state, which is annoying
      because it's not indexed anywhere (and adding indexing
@@ -726,23 +794,34 @@ void Elector::notify_rank_removed(int rank_removed)
      * check if the next rank is in the same pinging set, and delete
      * ourselves if not.
    */
+  dout(10) << "rank_removed: " << rank_removed << dendl;
+  print_live_pinging();
+  print_dead_pinging();
   for (unsigned i = rank_removed + 1; i <= paxos_size() ; ++i) {
     if (live_pinging.count(i)) {
       dead_pinging.erase(i-1);
+      dout(10) << "erased " << i-1 << " in dead_pinging" << dendl;
+      print_dead_pinging();
       if (!live_pinging.count(i-1)) {
 	begin_peer_ping(i-1);
       }
       if (!live_pinging.count(i+1)) {
 	live_pinging.erase(i);
+  dout(10) << "erased " << i<< " in live_pinging" << dendl;
+  print_live_pinging();
       }
     }
     else if (dead_pinging.count(i)) {
       live_pinging.erase(i-1);
+      dout(10) << "erased " << i-1 << " in live_pinging" << dendl;
+      print_live_pinging();
       if (!dead_pinging.count(i-1)) {
 	begin_dead_ping(i-1);
       }
       if (!dead_pinging.count(i+1)) {
 	dead_pinging.erase(i);
+  dout(10) << "erased " << i << " in dead_pinging" << dendl;
+  print_dead_pinging();
       }
     } else {
       // we aren't pinging rank i at all
@@ -750,7 +829,11 @@ void Elector::notify_rank_removed(int rank_removed)
 	// so we special case to make sure we
 	// actually nuke the removed rank
 	dead_pinging.erase(rank_removed);
+  dout(10) << "erased " << rank_removed << " in dead_pinging" << dendl;
+  print_dead_pinging();
 	live_pinging.erase(rank_removed);
+  dout(10) << "erased " << rank_removed << " in live_pinging" << dendl;
+  print_live_pinging();
       }
     }
   }
