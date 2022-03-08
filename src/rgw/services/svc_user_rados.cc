@@ -973,7 +973,6 @@ int RGWSI_User_RADOS::read_stats_async(const DoutPrefixProvider *dpp, RGWSI_Meta
   RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(_cb);
   int r = cls_user_get_header_async(dpp, user_str, cb);
   if (r < 0) {
-    _cb->put();
     delete cb;
     return r;
   }
