@@ -628,6 +628,13 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	rgw_bucket_category_stats stats;
 	bool account = entry.get_info(&cls_key, &category, &stats);
 	rgw_obj_key key(cls_key);
+        if (entry.type == BIIndexType::OLH && key.empty()) {
+	  // bogus entry created by https://tracker.ceph.com/issues/46456
+	  // to fix, skip so it doesn't get include in the new bucket instance
+	  total_entries--;
+	  ldpp_dout(dpp, 10) << "Dropping entry with empty name, idx=" << marker << dendl;
+	  continue;
+	}
 	rgw_obj obj(new_bucket_info.bucket, key);
 	RGWMPObj mp;
 	if (key.ns == RGW_OBJ_NS_MULTIPART && mp.from_meta(key.name)) {
