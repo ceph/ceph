@@ -27,7 +27,7 @@ TEST_F(LibRadosIo, SimpleWrite) {
 }
 
 TEST_F(LibRadosIo, TooBig) {
-  char buf[1];
+  char buf[1] = { 0 };
   ASSERT_EQ(-E2BIG, rados_write(ioctx, "A", buf, UINT_MAX, 0));
   ASSERT_EQ(-E2BIG, rados_append(ioctx, "A", buf, UINT_MAX));
   ASSERT_EQ(-E2BIG, rados_write_full(ioctx, "A", buf, UINT_MAX));
