@@ -1042,7 +1042,7 @@ int AsioFrontend::run()
   work.emplace(boost::asio::make_work_guard(context));
 
   for (int i = 0; i < thread_count; i++) {
-    threads.emplace_back([=]() noexcept {
+    threads.emplace_back([this]() noexcept {
       // request warnings on synchronous librados calls in this thread
       is_asio_thread = true;
       // Have uncaught exceptions kill the process and give a

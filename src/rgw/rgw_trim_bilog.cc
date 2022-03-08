@@ -920,7 +920,7 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 20) << "starting metadata listing at " << start_marker << dendl;
 
     // release the handle when scope exits
-    auto g = make_scope_guard([=] { mgr->list_keys_complete(handle); });
+    auto g = make_scope_guard([=, this] { mgr->list_keys_complete(handle); });
 
     do {
       // get the next key and marker
@@ -959,7 +959,7 @@ int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 20) << "restarting metadata listing" << dendl;
 
   // release the handle when scope exits
-  auto g = make_scope_guard([=] { mgr->list_keys_complete(handle); });
+  auto g = make_scope_guard([=, this] { mgr->list_keys_complete(handle); });
   do {
     // get the next key and marker
     r = mgr->list_keys_next(dpp, handle, 1, keys, &truncated);
