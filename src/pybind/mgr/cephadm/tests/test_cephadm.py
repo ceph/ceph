@@ -472,7 +472,7 @@ class TestCephadm(object):
                         '--extra-container-args=--cpus=2',
                         '--extra-container-args=--quiet'
                     ],
-                    stdin='{"config": "", "keyring": ""}',
+                    stdin='{"config": "", "keyring": "[client.crash.test]\\nkey = None\\n"}',
                     image='',
                 )
 
