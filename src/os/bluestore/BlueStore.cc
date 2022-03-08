@@ -14527,7 +14527,9 @@ void BlueStore::_do_write_small(
 	    bl.claim_append(tail_bl);
 	    logger->inc(l_bluestore_write_penalty_read_ops);
 	  }
-          logger->inc(l_bluestore_write_small_pre_read);
+	  if (head_read || tail_read) {
+	    logger->inc(l_bluestore_write_small_pre_read);
+	  }
 
 	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
