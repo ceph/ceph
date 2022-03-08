@@ -1527,6 +1527,18 @@ struct rgw_obj_key {
     snprintf(buf, sizeof(buf), "%s[%s]", name.c_str(), instance.c_str());
     return buf;
   }
+
+  // Helper function to find the key of an object.
+  // This function is for handling the null version if specified in the request.
+  // in case of unversioned bucket object key is returned as is.
+  // in case of versioned bucket object key is key[version_id].
+  std::string get_key_name_string() const{
+    if (have_null_instance()) {
+      return name;
+    }
+
+    return to_str();
+  }
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
