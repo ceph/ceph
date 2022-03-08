@@ -66,14 +66,6 @@ void init_ssl(){
 namespace rgw {
 namespace curl {
 
-static void check_curl()
-{
-#ifndef HAVE_CURL_MULTI_WAIT
-  derr << "WARNING: libcurl doesn't support curl_multi_wait()" << dendl;
-  derr << "WARNING: cross zone / region transfer performance may be affected" << dendl;
-#endif
-}
-
 #if defined(WITH_CURL_OPENSSL) && OPENSSL_API_COMPAT < 0x10100000L
 void init_ssl() {
   ::openssl::init_ssl();
@@ -100,8 +92,6 @@ bool fe_inits_ssl(boost::optional <const fe_map_t&> m, long& curl_global_flags){
 std::once_flag curl_init_flag;
 
 void setup_curl(boost::optional<const fe_map_t&> m) {
-  check_curl();
-
   long curl_global_flags = CURL_GLOBAL_ALL;
 
   #if defined(WITH_CURL_OPENSSL) && OPENSSL_API_COMPAT < 0x10100000L
