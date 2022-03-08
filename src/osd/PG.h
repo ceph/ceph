@@ -265,7 +265,7 @@ public:
 
   void set_last_scrub_stamp(utime_t t) {
     recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
+      [t](auto &history, auto &stats) {
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
@@ -279,7 +279,7 @@ public:
 
   void set_last_deep_scrub_stamp(utime_t t) {
     recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
+      [t](auto &history, auto &stats) {
 	set_last_deep_scrub_stamp(t, history, stats);
 	return true;
       });
@@ -292,7 +292,7 @@ public:
 
   void add_objects_scrubbed_count(int64_t count) {
     recovery_state.update_stats(
-      [=](auto &history, auto &stats) {
+      [count](auto &history, auto &stats) {
 	add_objects_scrubbed_count(count, stats);
 	return true;
       });
@@ -304,7 +304,7 @@ public:
 
   void reset_objects_scrubbed()
   {
-    recovery_state.update_stats([=](auto& history, auto& stats) {
+    recovery_state.update_stats([](auto& history, auto& stats) {
       reset_objects_scrubbed(stats);
       return true;
     });
