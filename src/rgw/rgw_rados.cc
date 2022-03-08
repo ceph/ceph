@@ -9134,7 +9134,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     // encode a suggested removal of that key
     list_state.ver.epoch = io_ctx.get_last_version();
     list_state.ver.pool = io_ctx.get_id();
-    cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, list_state, suggested_updates);
+    cls_rgw_encode_suggestion(CEPH_RGW_REMOVE | suggest_flag, list_state, suggested_updates);
     return -ENOENT;
   }
 
