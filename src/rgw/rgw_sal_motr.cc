@@ -938,23 +938,49 @@ std::unique_ptr<Object> MotrBucket::get_object(const rgw_obj_key& k)
 int MotrBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max, ListResults& results, optional_yield y)
 {
   int rc;
+  if (max == 0)  // Return an emtpy response.
+    return 0;
+  max++;  // Fetch an extra key if available to ensure presence of next obj.
   vector<string> keys(max);
   vector<bufferlist> vals(max);
 
   ldpp_dout(dpp, 20) << "bucket=" << info.bucket.name
                     << " prefix=" << params.prefix
                     << " marker=" << params.marker
-                    << " max=" << max << dendl;
+                    << " max=" << max - 1 << dendl;
 
   // Retrieve all `max` number of pairs.
   string bucket_index_iname = "motr.rgw.bucket.index." + info.bucket.name;
-  keys[0] = params.marker.empty() ? params.prefix :
-                                    params.marker.to_str();
+
+  // Modify the marker based on its type
+  keys[0] = params.prefix;
+  if (!params.marker.empty()) {
+    keys[0] = params.marker.to_str();
+    // Get the position of delimiter string
+    int delim_pos = keys[0].find(params.delim, params.prefix.length());
+    // If delimiter is present at the very end, append "\xff" to skip all
+    // the dir entries, else append " " to skip the maker key.
+    if (delim_pos == (int)(keys[0].length() - params.delim.length()))
+      keys[0].append("\xff");
+    else
+      keys[0].append(" ");
+  }
+
   rc = store->next_query_by_name(bucket_index_iname, keys, vals, params.prefix,
                                                                  params.delim);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << "ERROR: NEXT query failed. " << rc << dendl;
     return rc;
+  }
+
+  // Check if an extra key was fetched or not
+  if (rc == max) {
+    // One extra key is successfully fetched.
+    results.is_truncated = true;
+    results.next_marker = keys[max - 2];
+    rc--;
+  } else {
+    results.is_truncated = false;
   }
 
   // Process the returned pairs to add into ListResults.
@@ -969,13 +995,6 @@ int MotrBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max,
       if (params.list_versions || ent.is_visible())
         results.objs.emplace_back(std::move(ent));
     }
-  }
-
-  if (i == max) {
-    results.is_truncated = true;
-    results.next_marker = keys[max - 1] + " ";
-  } else {
-    results.is_truncated = false;
   }
 
   return 0;
@@ -3641,6 +3660,13 @@ int MotrStore::next_query_by_name(string idx_name,
       next_key = key_out[i + k - 1] + " ";
     ldout(cctx, 0) << "do_idx_next_op(): next_key=" << next_key << dendl;
     keys[0].assign(next_key.begin(), next_key.end());
+
+    int keys_left = val_out.size() - (i + k);  // i + k gives next index.
+    // Resizing keys & vals vector when `keys_left < batch size`.
+    if (keys_left < (int)nr_kvp) {
+      keys.resize(keys_left);
+      vals.resize(keys_left);
+    }
   }
 
 out:
