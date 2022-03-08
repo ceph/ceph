@@ -352,7 +352,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, s->bucket.get(), bucket_quota,
+  dump_container_metadata(s, s->bucket.get(), s->bucket->get_info().quota,
                           s->bucket->get_info().website_conf);
 
   s->formatter->open_array_section_with_attrs("container",
@@ -575,7 +575,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket.get(), bucket_quota,
+    dump_container_metadata(s, bucket.get(), s->bucket->get_info().quota,
                             s->bucket->get_info().website_conf);
   }
 
@@ -2497,7 +2497,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
       /* Generate the header now. */
       set_req_state_err(s, op_ret);
       dump_errno(s);
-      dump_container_metadata(s, s->bucket.get(), bucket_quota,
+      dump_container_metadata(s, s->bucket.get(), s->bucket->get_info().quota,
                               s->bucket->get_info().website_conf);
       end_header(s, this, "text/html");
       if (op_ret < 0) {
