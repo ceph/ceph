@@ -4,7 +4,7 @@ A simple cluster health alerting module.
 """
 
 from mgr_module import MgrModule, HandleCommandResult
-from email.utils import make_msgid
+from email.utils import formatdate, make_msgid
 from threading import Event
 import errno
 import json
@@ -212,13 +212,15 @@ class Alerts(MgrModule):
                    'Subject: {status}\n'
                    'To: {target}\n'
                    'Message-Id: {message_id}\n'
+                   'Date: {date}\n'
                    '\n'
                    '{status}\n'.format(
                        sender=self.smtp_sender,
                        from_name=self.smtp_from_name,
                        status=status['status'],
                        target=self.smtp_destination,
-                       message_id=make_msgid()))
+                       message_id=make_msgid(),
+                       date=formatdate()))
 
         if 'new' in diff:
             message += ('\n--- New ---\n')
