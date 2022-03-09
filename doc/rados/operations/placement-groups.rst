@@ -145,7 +145,7 @@ the number of those respective device types.
 
 The autoscaler uses the `bulk` flag to determine which pool
 should start out with a full complement of PGs and only
-scales down when the the usage ratio across the pool is not even.
+scales down when the usage ratio across the pool is not even.
 However, if the pool doesn't have the `bulk` flag, the pool will
 start out with minimal PGs and only when there is more usage in the pool.
 
