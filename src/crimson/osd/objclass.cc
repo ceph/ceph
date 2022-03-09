@@ -3,6 +3,7 @@
 
 #include <cstdarg>
 #include <cstring>
+#include <boost/container/small_vector.hpp>
 #include "common/ceph_context.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
@@ -20,6 +21,10 @@
 
 using std::map;
 using std::string;
+
+#define dout_context ClassHandler::get_instance().cct
+
+static constexpr int dout_subsys = ceph_subsys_objclass;
 
 static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
 {
@@ -526,4 +531,24 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
 int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
 {
   return 0;
+}
+
+// although at first glance the implementation looks the same as in
+// the classical OSD, it's different b/c of how the dout macro expands.
+int cls_log(int level, const char *format, ...)
+{
+   size_t size = 256;
+   va_list ap;
+   while (1) {
+     boost::container::small_vector<char, 256> buf(size);
+     va_start(ap, format);
+     int n = vsnprintf(buf.data(), size, format, ap);
+     va_end(ap);
+#define MAX_SIZE 8196UL
+     if ((n > -1 && static_cast<size_t>(n) < size) || size > MAX_SIZE) {
+       dout(ceph::dout::need_dynamic(level)) << buf.data() << dendl;
+       return n;
+     }
+     size *= 2;
+   }
 }
