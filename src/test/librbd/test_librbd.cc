@@ -2588,6 +2588,7 @@ TEST_F(TestLibRBD, TestScatterGatherIO)
 
   std::string write_buffer("This is a test");
   struct iovec bad_iovs[] = {
+    {.iov_base = &write_buffer[0],  .iov_len = 5},
     {.iov_base = NULL, .iov_len = static_cast<size_t>(-1)}
   };
   struct iovec write_iovs[] = {
@@ -2600,7 +2601,7 @@ TEST_F(TestLibRBD, TestScatterGatherIO)
   rbd_completion_t comp;
   rbd_aio_create_completion(NULL, NULL, &comp);
   ASSERT_EQ(-EINVAL, rbd_aio_writev(image, write_iovs, 0, 0, comp));
-  ASSERT_EQ(-EINVAL, rbd_aio_writev(image, bad_iovs, 1, 0, comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_writev(image, bad_iovs, 2, 0, comp));
   ASSERT_EQ(0, rbd_aio_writev(image, write_iovs,
                               sizeof(write_iovs) / sizeof(struct iovec),
                               1<<order, comp));
@@ -2617,7 +2618,7 @@ TEST_F(TestLibRBD, TestScatterGatherIO)
 
   rbd_aio_create_completion(NULL, NULL, &comp);
   ASSERT_EQ(-EINVAL, rbd_aio_readv(image, read_iovs, 0, 0, comp));
-  ASSERT_EQ(-EINVAL, rbd_aio_readv(image, bad_iovs, 1, 0, comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_readv(image, bad_iovs, 2, 0, comp));
   ASSERT_EQ(0, rbd_aio_readv(image, read_iovs,
                              sizeof(read_iovs) / sizeof(struct iovec),
                              1<<order, comp));
