@@ -42,22 +42,22 @@ public:
 
   submit_record_ret submit_record(
     record_t &&record,
-    OrderingHandle &handle
-  ) final {
-    return record_submitter.submit(std::move(record), handle);
-  }
+    OrderingHandle &handle) final;
 
-  seastar::future<> flush(OrderingHandle &handle) final {
-    return record_submitter.flush(handle);
-  }
+  seastar::future<> flush(OrderingHandle &handle) final;
 
   replay_ret replay(delta_handler_t &&delta_handler) final;
 
-  void set_write_pipeline(WritePipeline* write_pipeline) final {
-    record_submitter.set_write_pipeline(write_pipeline);
+  void set_write_pipeline(WritePipeline *_write_pipeline) final {
+    write_pipeline = _write_pipeline;
   }
 
 private:
+  submit_record_ret do_submit_record(
+    record_t &&record,
+    OrderingHandle &handle
+  );
+
   class RecordBatch {
     enum class state_t {
       EMPTY = 0,
@@ -92,19 +92,39 @@ private:
       return pending.get_size();
     }
 
-    // return the expected write sizes if allows to batch,
-    // otherwise, return nullopt
-    std::optional<record_group_size_t> can_batch(
-        const record_t& record,
-        extent_len_t block_size) const {
+    std::size_t get_batch_capacity() const {
+      return batch_capacity;
+    }
+
+    const record_group_size_t& get_submit_size() const {
+      assert(state != state_t::EMPTY);
+      return pending.size;
+    }
+
+    bool needs_flush() const {
       assert(state != state_t::SUBMITTING);
-      if (pending.get_size() >= batch_capacity ||
-          (pending.get_size() > 0 &&
-           pending.size.get_encoded_length() > batch_flush_size)) {
+      assert(pending.get_size() <= batch_capacity);
+      if (state == state_t::EMPTY) {
+        return false;
+      } else {
         assert(state == state_t::PENDING);
-        return std::nullopt;
+        return (pending.get_size() >= batch_capacity ||
+                pending.size.get_encoded_length() > batch_flush_size);
       }
-      return get_encoded_length_after(record, block_size);
+    }
+
+    struct evaluation_t {
+      record_group_size_t submit_size;
+      bool is_full;
+    };
+    evaluation_t evaluate_submit(
+        const record_size_t& rsize,
+        extent_len_t block_size) const {
+      assert(!needs_flush());
+      auto submit_size = pending.size.get_encoded_length_after(
+          rsize, block_size);
+      bool is_full = submit_size.get_encoded_length() > batch_flush_size;
+      return {submit_size, is_full};
     }
 
     void initialize(std::size_t i,
@@ -125,8 +145,8 @@ private:
     using add_pending_ertr = SegmentAllocator::write_ertr;
     using add_pending_ret = add_pending_ertr::future<record_locator_t>;
     add_pending_ret add_pending(
+        const std::string& name,
         record_t&&,
-        OrderingHandle&,
         extent_len_t block_size);
 
     // Encode the batched records for write.
@@ -195,12 +215,19 @@ private:
       }
     };
 
+    using base_ertr = crimson::errorator<
+        crimson::ct_error::input_output_error>;
+
   public:
     RecordSubmitter(std::size_t io_depth,
                     std::size_t batch_capacity,
                     std::size_t batch_flush_size,
                     double preferred_fullness,
                     SegmentAllocator&);
+
+    const std::string& get_name() const {
+      return segment_allocator.get_name();
+    }
 
     grouped_io_stats get_record_batch_stats() const {
       return stats.record_batch_stats;
@@ -223,20 +250,45 @@ private:
     }
 
     journal_seq_t get_committed_to() const {
-      return journal_committed_to;
+      return committed_to;
     }
 
     void reset_stats() {
       stats = {};
     }
 
-    void set_write_pipeline(WritePipeline *_write_pipeline) {
-      write_pipeline = _write_pipeline;
-    }
+    // whether is available to submit a record
+    bool is_available() const;
 
-    using submit_ret = Journal::submit_record_ret;
-    submit_ret submit(record_t&&, OrderingHandle&);
-    seastar::future<> flush(OrderingHandle &handle);
+    // wait for available if cannot submit, should check is_available() again
+    // when the future is resolved.
+    using wa_ertr = base_ertr;
+    wa_ertr::future<> wait_available();
+
+    // when available, check for the submit action
+    // according to the pending record size
+    enum class action_t {
+      ROLL,
+      SUBMIT_FULL,
+      SUBMIT_NOT_FULL
+    };
+    action_t check_action(const record_size_t&) const;
+
+    // when available, roll the segment if needed
+    using roll_segment_ertr = base_ertr;
+    roll_segment_ertr::future<> roll_segment();
+
+    // when available, submit the record if possible
+    using submit_ertr = base_ertr;
+    using submit_ret = submit_ertr::future<record_locator_t>;
+    submit_ret submit(record_t&&);
+
+    void update_committed_to(const journal_seq_t& new_committed_to) {
+      assert(new_committed_to != JOURNAL_SEQ_NULL);
+      assert(committed_to == JOURNAL_SEQ_NULL ||
+             committed_to <= new_committed_to);
+      committed_to = new_committed_to;
+    }
 
   private:
     void update_state();
@@ -265,32 +317,26 @@ private:
 
     void flush_current_batch();
 
-    using submit_pending_ertr = SegmentAllocator::write_ertr;
-    using submit_pending_ret = submit_pending_ertr::future<
-      record_locator_t>;
-    submit_pending_ret submit_pending(
-        record_t&&, OrderingHandle &handle, bool flush);
-
-    using do_submit_ret = submit_pending_ret;
-    do_submit_ret do_submit(
-        record_t&&, OrderingHandle&);
-
     state_t state = state_t::IDLE;
     std::size_t num_outstanding_io = 0;
     std::size_t io_depth_limit;
     double preferred_fullness;
 
-    WritePipeline* write_pipeline = nullptr;
-    SegmentAllocator& journal_segment_allocator;
+    SegmentAllocator& segment_allocator;
     // committed_to may be in a previous journal segment
-    journal_seq_t journal_committed_to = JOURNAL_SEQ_NULL;
+    journal_seq_t committed_to = JOURNAL_SEQ_NULL;
 
     std::unique_ptr<RecordBatch[]> batches;
-    std::size_t current_batch_index;
     // should not be nullptr after constructed
     RecordBatch* p_current_batch = nullptr;
     seastar::circular_buffer<RecordBatch*> free_batch_ptrs;
-    std::optional<seastar::promise<> > wait_submit_promise;
+
+    // blocked for rolling or lack of resource
+    std::optional<seastar::shared_promise<> > wait_available_promise;
+    bool has_io_error = false;
+    // when needs flush but io depth is full,
+    // wait for decrement_io_with_flush()
+    std::optional<seastar::promise<> > wait_unfull_flush_promise;
 
     struct {
       grouped_io_stats record_batch_stats;
@@ -306,6 +352,7 @@ private:
   RecordSubmitter record_submitter;
   ExtentReader& scanner;
   seastar::metrics::metric_group metrics;
+  WritePipeline* write_pipeline = nullptr;
 
   /// read journal segment headers from scanner
   using find_journal_segments_ertr = crimson::errorator<
