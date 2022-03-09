@@ -187,7 +187,7 @@ class SegmentedAllocator : public ExtentAllocator {
   class Writer : public ExtentOolWriter {
   public:
     Writer(SegmentProvider& sp, SegmentManager& sm)
-      : segment_allocator(segment_type_t::OOL, sp, sm) {}
+      : segment_allocator("OOL", segment_type_t::OOL, sp, sm) {}
 
     Writer(Writer &&) = default;
 
