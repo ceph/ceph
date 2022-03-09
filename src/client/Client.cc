@@ -2314,6 +2314,18 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
     {
+      if (session->state == MetaSession::STATE_OPEN) {
+        ldout(cct, 10) << "mds." << from << " already opened, ignore it"
+                       << dendl;
+        return;
+      }
+      /*
+       * The connection maybe broken and the session in client side
+       * has been reinitialized, need to update the seq anyway.
+       */
+      if (!session->seq && m->get_seq())
+        session->seq = m->get_seq();
+
       feature_bitset_t missing_features(CEPHFS_FEATURES_CLIENT_REQUIRED);
       missing_features -= m->supported_features;
       if (!missing_features.empty()) {
