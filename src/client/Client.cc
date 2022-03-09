@@ -1729,6 +1729,12 @@ void Client::connect_mds_targets(mds_rank_t mds)
 	mdsmap->is_clientreplay_or_active_or_stopping(rank)) {
       ldout(cct, 10) << "check_mds_sessions opening mds." << mds
 		     << " export target mds." << rank << dendl;
+
+      auto session = _get_or_open_mds_session(rank);
+      if (session->state == MetaSession::STATE_OPENING ||
+          session->state == MetaSession::STATE_OPEN)
+        continue;
+
       _open_mds_session(rank);
     }
   }
