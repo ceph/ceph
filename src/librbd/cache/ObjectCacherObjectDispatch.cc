@@ -224,7 +224,7 @@ bool ObjectCacherObjectDispatch<I>::read(
 
   m_image_ctx->image_lock.lock_shared();
   auto rd = m_object_cacher->prepare_read(
-    io_context->read_snap().value_or(CEPH_NOSNAP), bl, op_flags);
+    io_context->read_snap(), bl, op_flags);
   m_image_ctx->image_lock.unlock_shared();
 
   uint64_t off = 0;
@@ -324,11 +324,9 @@ bool ObjectCacherObjectDispatch<I>::write(
   }
 
   SnapContext snapc;
-  if (io_context->write_snap_context()) {
-    auto write_snap_context = *io_context->write_snap_context();
-    snapc = SnapContext(write_snap_context.first,
-                        {write_snap_context.second.begin(),
-                         write_snap_context.second.end()});
+  if (io_context->write_snap_context().first != 0) {
+    auto [seq, snaps] = io_context->write_snap_context();
+    snapc = SnapContext(seq, { snaps.begin(), snaps.end() });
   }
 
   m_image_ctx->image_lock.lock_shared();
