@@ -693,6 +693,7 @@ prepare_conf() {
         debug asok assert abort = true
         $(format_conf "${msgr_conf}")
         $(format_conf "${extra_conf}")
+        $AUTOSCALER_OPTS
 EOF
     if [ "$lockdep" -eq 1 ] ; then
         wconf <<EOF
@@ -1312,6 +1313,12 @@ else
         debug auth = 20
         debug mgrc = 20
         debug ms = 1'
+fi
+
+# Crimson doesn't support PG merge/split yet.
+if [ "$ceph_osd" == "crimson-osd" ]; then
+    AUTOSCALER_OPTS='
+        osd_pool_default_pg_autoscale_mode = off'
 fi
 
 if [ -n "$MON_ADDR" ]; then
