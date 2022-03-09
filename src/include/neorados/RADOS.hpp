@@ -32,6 +32,12 @@
 
 #include <boost/system/error_code.hpp>
 
+#include <fmt/format.h>
+#if FMT_VERSION < 90000
+#include <fmt/ostream.h>
+#endif // FMT_VERSION < 90000
+
+
 // Will be in C++20!
 
 #include "include/expected.hpp"
@@ -128,8 +134,7 @@ public:
 
   IOContext();
   explicit IOContext(std::int64_t pool);
-  IOContext(std::int64_t _pool, std::string_view _ns);
-  IOContext(std::int64_t _pool, std::string&& _ns);
+  IOContext(std::int64_t pool, std::string_view ns, std::string_view key = {});
   ~IOContext();
 
   IOContext(const IOContext& rhs);
@@ -138,36 +143,42 @@ public:
   IOContext(IOContext&& rhs);
   IOContext& operator =(IOContext&& rhs);
 
-  std::int64_t pool() const;
-  void pool(std::int64_t _pool);
+  std::int64_t get_pool() const;
+  explicit operator std::int64_t() const;
+  IOContext& set_pool(std::int64_t pool) &;
+  IOContext&& set_pool(std::int64_t pool) &&;
 
-  std::string_view ns() const;
-  void ns(std::string_view _ns);
-  void ns(std::string&& _ns);
+  std::string_view get_ns() const;
+  IOContext& set_ns(std::string_view ns) &;
+  IOContext&& set_ns(std::string_view ns) &&;
 
-  std::optional<std::string_view> key() const;
-  void key(std::string_view _key);
-  void key(std::string&& _key);
-  void clear_key();
+  std::string_view get_key() const;
+  IOContext& set_key(std::string_view key) &;
+  IOContext&& set_key(std::string_view key) &&;
 
-  std::optional<std::int64_t> hash() const;
-  void hash(std::int64_t _hash);
-  void clear_hash();
+  std::int64_t get_hash() const;
+  IOContext& set_hash(std::int64_t _hash) &;
+  IOContext&& set_hash(std::int64_t _hash) &&;
 
-  std::optional<std::uint64_t> read_snap() const;
-  void read_snap(std::optional<std::uint64_t> _snapid);
+  std::uint64_t get_read_snap() const;
+  IOContext& set_read_snap(std::uint64_t _snapid) &;
+  IOContext&& set_read_snap(std::uint64_t _snapid) &&;
 
-  // I can't actually move-construct here since snapid_t is its own
-  // separate class type, not an alias.
+  // Keep this optional since it provides the easiest way of testing
+  // whether it's set or not.
   std::optional<
     std::pair<std::uint64_t,
-	      std::vector<std::uint64_t>>> write_snap_context() const;
-  void write_snap_context(std::optional<
-			  std::pair<std::uint64_t,
-			              std::vector<std::uint64_t>>> snapc);
+	      std::vector<std::uint64_t>>> get_write_snap_context() const;
+  IOContext& set_write_snap_context(std::optional<
+				      std::pair<std::uint64_t,
+				      std::vector<std::uint64_t>>> snapc) &;
+  IOContext&& set_write_snap_context(std::optional<
+				       std::pair<std::uint64_t,
+				       std::vector<std::uint64_t>>> snapc) &&;
 
-  bool full_try() const;
-  void full_try(bool _full_try);
+  bool get_full_try() const;
+  IOContext& set_full_try(bool _full_try) &;
+  IOContext&& set_full_try(bool _full_try) &&;
 
   friend std::ostream& operator <<(std::ostream& m, const IOContext& o);
   friend bool operator <(const IOContext& lhs, const IOContext& rhs);
@@ -574,36 +585,6 @@ public:
     return init.result.get();
   }
 
-  template<typename CompletionToken>
-  auto execute(const Object& o, std::int64_t pool,
-	       ReadOp&& op,
-	       ceph::buffer::list* bl,
-	       CompletionToken&& token,
-	       std::optional<std::string_view> ns = {},
-	       std::optional<std::string_view> key = {},
-	       uint64_t* objver = nullptr) {
-    boost::asio::async_completion<CompletionToken, Op::Signature> init(token);
-    execute(o, pool, std::move(op), bl,
-	    ReadOp::Completion::create(get_executor(),
-				       std::move(init.completion_handler)),
-	    ns, key, objver);
-    return init.result.get();
-  }
-
-  template<typename CompletionToken>
-  auto execute(const Object& o, std::int64_t pool, WriteOp&& op,
-	       CompletionToken&& token,
-	       std::optional<std::string_view> ns = {},
-	       std::optional<std::string_view> key = {},
-	       uint64_t* objver = nullptr) {
-    boost::asio::async_completion<CompletionToken, Op::Signature> init(token);
-    execute(o, pool, std::move(op),
-	    Op::Completion::create(get_executor(),
-				   std::move(init.completion_handler)),
-	    ns, key, objver);
-    return init.result.get();
-  }
-
   boost::uuids::uuid get_fsid() const noexcept;
 
   using LookupPoolSig = void(boost::system::error_code,
@@ -756,20 +737,6 @@ public:
   }
 
   template<typename CompletionToken>
-  auto watch(const Object& o, std::int64_t pool,
-	     std::optional<std::chrono::seconds> timeout,
-	     WatchCB&& cb, CompletionToken&& token,
-	     std::optional<std::string_view> ns = {},
-	     std::optional<std::string_view> key = {}) {
-    boost::asio::async_completion<CompletionToken, WatchSig> init(token);
-    watch(o, pool, timeout, std::move(cb),
-	  WatchComp::create(get_executor(),
-			    std::move(init.completion_handler)),
-	  ns, key);
-    return init.result.get();
-  }
-
-  template<typename CompletionToken>
   auto notify_ack(const Object& o,
 		  const IOContext& ioc,
 		  uint64_t notify_id,
@@ -784,42 +751,12 @@ public:
   }
 
   template<typename CompletionToken>
-  auto notify_ack(const Object& o,
-		  std::int64_t pool,
-		  uint64_t notify_id,
-		  uint64_t cookie,
-		  ceph::buffer::list&& bl,
-		  CompletionToken&& token,
-		  std::optional<std::string_view> ns = {},
-		  std::optional<std::string_view> key = {}) {
-    boost::asio::async_completion<CompletionToken, WatchSig> init(token);
-    notify_ack(o, pool, notify_id, cookie, std::move(bl),
-	       SimpleOpComp::create(get_executor(),
-				    std::move(init.completion_handler)),
-	       ns, key);
-    return init.result.get();
-  }
-
-  template<typename CompletionToken>
-  auto unwatch(uint64_t cookie, const IOContext& ioc,
+  auto unwatch(std::uint64_t cookie, const IOContext& ioc,
 	       CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, SimpleOpSig> init(token);
     unwatch(cookie, ioc,
 	    SimpleOpComp::create(get_executor(),
 				 std::move(init.completion_handler)));
-    return init.result.get();
-  }
-
-  template<typename CompletionToken>
-  auto unwatch(uint64_t cookie, std::int64_t pool,
-	       CompletionToken&& token,
-	       std::optional<std::string_view> ns = {},
-	       std::optional<std::string_view> key = {}) {
-    boost::asio::async_completion<CompletionToken, SimpleOpSig> init(token);
-    unwatch(cookie, pool,
-	    SimpleOpComp::create(get_executor(),
-				 std::move(init.completion_handler)),
-	    ns, key);
     return init.result.get();
   }
 
@@ -851,21 +788,6 @@ public:
     return init.result.get();
   }
 
-  template<typename CompletionToken>
-  auto notify(const Object& oid, std::int64_t pool, ceph::buffer::list&& bl,
-	      std::optional<std::chrono::milliseconds> timeout,
-	      CompletionToken&& token,
-	      std::optional<std::string_view> ns = {},
-	      std::optional<std::string_view> key = {}) {
-    boost::asio::async_completion<CompletionToken, NotifySig> init(token);
-    notify(oid, pool, bl, timeout,
-	   NotifyComp::create(get_executor(),
-			      std::move(init.completion_handler)),
-	   ns, key);
-
-    return init.result.get();
-  }
-
   // The versions with pointers are fine for coroutines, but
   // extraordinarily unappealing for callback-oriented programming.
   using EnumerateSig = void(boost::system::error_code,
@@ -881,21 +803,6 @@ public:
     enumerate_objects(ioc, begin, end, max, filter,
 		      EnumerateComp::create(get_executor(),
 					    std::move(init.completion_handler)));
-    return init.result.get();
-  }
-
-  template<typename CompletionToken>
-  auto enumerate_objects(std::int64_t pool, const Cursor& begin,
-			 const Cursor& end, const std::uint32_t max,
-			 const ceph::buffer::list& filter,
-			 CompletionToken&& token,
-			 std::optional<std::string_view> ns = {},
-			 std::optional<std::string_view> key = {}) {
-    boost::asio::async_completion<CompletionToken, EnumerateSig> init(token);
-    enumerate_objects(pool, begin, end, max, filter,
-		      EnumerateComp::create(get_executor(),
-					    std::move(init.completion_handler)),
-		      ns, key);
     return init.result.get();
   }
 
@@ -983,17 +890,6 @@ private:
 	       std::unique_ptr<Op::Completion> c, uint64_t* objver,
 	       const blkin_trace_info* trace_info);
 
-  void execute(const Object& o, std::int64_t pool, ReadOp&& op,
-	       ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,
-	       std::optional<std::string_view> ns,
-	       std::optional<std::string_view> key,
-	       uint64_t* objver);
-
-  void execute(const Object& o, std::int64_t pool, WriteOp&& op,
-	       std::unique_ptr<Op::Completion> c,
-	       std::optional<std::string_view> ns,
-	       std::optional<std::string_view> key,
-	       uint64_t* objver);
 
   void lookup_pool(std::string_view name, std::unique_ptr<LookupPoolComp> c);
   void list_pools(std::unique_ptr<LSPoolsComp> c);
@@ -1018,11 +914,6 @@ private:
   void watch(const Object& o, const IOContext& ioc,
 	     std::optional<std::chrono::seconds> timeout,
 	     WatchCB&& cb, std::unique_ptr<WatchComp> c);
-  void watch(const Object& o, std::int64_t pool,
-	     std::optional<std::chrono::seconds> timeout,
-	     WatchCB&& cb, std::unique_ptr<WatchComp> c,
-	     std::optional<std::string_view> ns,
-	     std::optional<std::string_view> key);
   tl::expected<ceph::timespan, boost::system::error_code>
   watch_check(uint64_t cookie);
   void notify_ack(const Object& o,
@@ -1031,30 +922,12 @@ private:
 		  uint64_t cookie,
 		  ceph::buffer::list&& bl,
 		  std::unique_ptr<SimpleOpComp>);
-  void notify_ack(const Object& o,
-		  std::int64_t pool,
-		  uint64_t notify_id,
-		  uint64_t cookie,
-		  ceph::buffer::list&& bl,
-		  std::unique_ptr<SimpleOpComp>,
-		  std::optional<std::string_view> ns,
-		  std::optional<std::string_view> key);
   void unwatch(uint64_t cookie, const IOContext& ioc,
 	       std::unique_ptr<SimpleOpComp>);
-  void unwatch(uint64_t cookie, std::int64_t pool,
-	       std::unique_ptr<SimpleOpComp>,
-	       std::optional<std::string_view> ns,
-	       std::optional<std::string_view> key);
   void notify(const Object& oid, const IOContext& ioctx,
 	      ceph::buffer::list&& bl,
 	      std::optional<std::chrono::milliseconds> timeout,
 	      std::unique_ptr<NotifyComp> c);
-  void notify(const Object& oid, std::int64_t pool,
-	      ceph::buffer::list&& bl,
-	      std::optional<std::chrono::milliseconds> timeout,
-	      std::unique_ptr<NotifyComp> c,
-	      std::optional<std::string_view> ns,
-	      std::optional<std::string_view> key);
   void flush_watch(std::unique_ptr<VoidOpComp>);
 
   void enumerate_objects(const IOContext& ioc, const Cursor& begin,
@@ -1063,24 +936,10 @@ private:
 			 std::vector<Entry>* ls,
 			 Cursor* cursor,
 			 std::unique_ptr<SimpleOpComp> c);
-  void enumerate_objects(std::int64_t pool, const Cursor& begin,
-			 const Cursor& end, const std::uint32_t max,
-			 const ceph::buffer::list& filter,
-			 std::vector<Entry>* ls,
-			 Cursor* cursor,
-			 std::unique_ptr<SimpleOpComp> c,
-			 std::optional<std::string_view> ns,
-			 std::optional<std::string_view> key);
   void enumerate_objects(const IOContext& ioc, const Cursor& begin,
 			 const Cursor& end, const std::uint32_t max,
 			 const ceph::buffer::list& filter,
 			 std::unique_ptr<EnumerateComp> c);
-  void enumerate_objects(std::int64_t pool, const Cursor& begin,
-			 const Cursor& end, const std::uint32_t max,
-			 const ceph::buffer::list& filter,
-			 std::unique_ptr<EnumerateComp> c,
-			 std::optional<std::string_view> ns,
-			 std::optional<std::string_view> key);
   void osd_command(int osd, std::vector<std::string>&& cmd,
 		   ceph::buffer::list&& in, std::unique_ptr<CommandComp> c);
   void pg_command(PG pg, std::vector<std::string>&& cmd,
@@ -1147,4 +1006,16 @@ struct hash<neorados::IOContext> {
 };
 } // namespace std
 
+#if FMT_VERSION >= 90000
+namespace fmt {
+template <>
+struct formatter<neorados::Object> : ostream_formatter {};
+
+template <>
+struct formatter<neorados::IOContext> : ostream_formatter {};
+
+template <>
+struct formatter<neorados::Op> : ostream_formatter {};
+} // namespace fmt
+#endif // FMT_VERSION >= 90000
 #endif // NEORADOS_RADOS_HPP

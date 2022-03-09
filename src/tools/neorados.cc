@@ -68,7 +68,7 @@ void printseq(const V& v, std::ostream& m, F&& f)
 		});
 }
 
-std::int64_t lookup_pool(R::RADOS& r, const std::string& pname,
+R::IOContext lookup_pool(R::RADOS& r, const std::string& pname,
 			 s::yield_context y)
 {
   bs::error_code ec;
@@ -76,7 +76,7 @@ std::int64_t lookup_pool(R::RADOS& r, const std::string& pname,
   if (ec)
     throw bs::system_error(
       ec, fmt::format("when looking up '{}'", pname));
-  return p;
+  return R::IOContext(p);
 }
 
 
@@ -93,14 +93,14 @@ void lspools(R::RADOS& r, const std::vector<std::string>&,
 void ls(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
 {
   const auto& pname = p[0];
-  const auto pool = lookup_pool(r, pname, y);
+  const auto pool = lookup_pool(r, pname, y).set_ns(R::all_nspaces);
 
   std::vector<R::Entry> ls;
   R::Cursor next = R::Cursor::begin();
   bs::error_code ec;
   do {
     std::tie(ls, next) = r.enumerate_objects(pool, next, R::Cursor::end(),
-					     1000, {}, y[ec], R::all_nspaces);
+					     1000, {}, y[ec]);
     if (ec)
       throw bs::system_error(ec, fmt::format("when listing {}", pname));
     printseq(ls, std::cout);

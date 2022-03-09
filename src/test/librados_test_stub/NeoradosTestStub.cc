@@ -49,8 +49,8 @@ public:
   }
 
   librados::TestIoCtxImpl* get_io_ctx(const IOContext& ioc) {
-    int64_t pool_id = ioc.pool();
-    std::string ns = std::string{ioc.ns()};
+    int64_t pool_id = ioc.get_pool();
+    std::string ns = std::string{ioc.get_ns()};
 
     auto lock = std::scoped_lock{mutex};
     auto key = make_pair(pool_id, ns);
@@ -157,47 +157,78 @@ IOContext::IOContext(const IOContext& rhs) {
   new (&impl) IOContextImpl(*reinterpret_cast<const IOContextImpl*>(&rhs.impl));
 }
 
-IOContext::IOContext(int64_t _pool, std::string&& _ns)
+IOContext::IOContext(int64_t _pool, std::string_view _ns, std::string_view _key)
   : IOContext() {
-  pool(_pool);
-  ns(std::move(_ns));
+  set_pool(_pool);
+  set_ns(_ns);
+  set_key(_key);
 }
 
 IOContext::~IOContext() {
   reinterpret_cast<IOContextImpl*>(&impl)->~IOContextImpl();
 }
 
-std::int64_t IOContext::pool() const {
+std::int64_t IOContext::get_pool() const {
   return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.pool;
 }
 
-void IOContext::pool(std::int64_t _pool) {
+IOContext& IOContext::set_pool(std::int64_t _pool) & {
   reinterpret_cast<IOContextImpl*>(&impl)->oloc.pool = _pool;
+  return *this;
 }
 
-std::string_view IOContext::ns() const {
+IOContext&& IOContext::set_pool(std::int64_t _pool) && {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.pool = _pool;
+  return std::move(*this);
+}
+
+std::string_view IOContext::get_ns() const {
   return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.nspace;
 }
 
-void IOContext::ns(std::string&& _ns) {
-  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace = std::move(_ns);
+IOContext& IOContext::set_ns(std::string_view _ns) & {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace.assign(_ns);
+  return *this;
 }
 
-std::optional<std::uint64_t> IOContext::read_snap() const {
+IOContext&& IOContext::set_ns(std::string_view _ns) && {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace.assign(_ns);
+  return std::move(*this);
+}
+
+std::string_view IOContext::get_key() const {
+  return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.key;
+}
+
+IOContext& IOContext::set_key(std::string_view _key) & {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.key.assign(_key);
+  return *this;
+}
+
+IOContext&& IOContext::set_key(std::string_view _key) && {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.key.assign(_key);
+  return std::move(*this);
+}
+
+std::uint64_t IOContext::get_read_snap() const {
   auto& snap_seq = reinterpret_cast<const IOContextImpl*>(&impl)->snap_seq;
-  if (snap_seq == CEPH_NOSNAP)
-    return std::nullopt;
-  else
     return snap_seq;
 }
-void IOContext::read_snap(std::optional<std::uint64_t> _snapid) {
+
+IOContext& IOContext::set_read_snap(std::uint64_t _snapid) & {
   auto& snap_seq = reinterpret_cast<IOContextImpl*>(&impl)->snap_seq;
-  snap_seq = _snapid.value_or(CEPH_NOSNAP);
+  snap_seq = _snapid;
+  return *this;
 }
 
-std::optional<
-  std::pair<std::uint64_t,
-            std::vector<std::uint64_t>>> IOContext::write_snap_context() const {
+IOContext&& IOContext::set_read_snap(std::uint64_t _snapid) && {
+  auto& snap_seq = reinterpret_cast<IOContextImpl*>(&impl)->snap_seq;
+  snap_seq = _snapid;
+  return std::move(*this);
+}
+
+std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>>
+IOContext::get_write_snap_context() const {
   auto& snapc = reinterpret_cast<const IOContextImpl*>(&impl)->snapc;
   if (snapc.empty()) {
     return std::nullopt;
@@ -207,8 +238,8 @@ std::optional<
   }
 }
 
-void IOContext::write_snap_context(
-  std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>> _snapc) {
+IOContext& IOContext::set_write_snap_context(
+  std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>> _snapc) & {
   auto& snapc = reinterpret_cast<IOContextImpl*>(&impl)->snapc;
   if (!_snapc) {
     snapc.clear();
@@ -222,10 +253,35 @@ void IOContext::write_snap_context(
 
     snapc = n;
   }
+  return *this;
 }
 
-void IOContext::full_try(bool _full_try) {
+IOContext&& IOContext::set_write_snap_context(
+  std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>> _snapc) && {
+  auto& snapc = reinterpret_cast<IOContextImpl*>(&impl)->snapc;
+  if (!_snapc) {
+    snapc.clear();
+  } else {
+    SnapContext n(_snapc->first, { _snapc->second.begin(), _snapc->second.end()});
+    if (!n.is_valid()) {
+      throw bs::system_error(EINVAL,
+                             bs::system_category(),
+                             "Invalid snap context.");
+    }
+
+    snapc = n;
+  }
+  return std::move(*this);
+}
+
+IOContext& IOContext::set_full_try(bool _full_try) & {
   // no-op
+  return *this;
+}
+
+IOContext&& IOContext::set_full_try(bool _full_try) && {
+  // no-op
+  return std::move(*this);
 }
 
 bool operator ==(const IOContext& lhs, const IOContext& rhs) {
@@ -519,11 +575,7 @@ void RADOS::execute(const Object& o, const IOContext& ioc, ReadOp&& op,
 
   auto ops = *reinterpret_cast<librados::TestObjectOperationImpl**>(&op.impl);
 
-  auto snap_id = CEPH_NOSNAP;
-  auto opt_snap_id = ioc.read_snap();
-  if (opt_snap_id) {
-    snap_id = *opt_snap_id;
-  }
+  auto snap_id = ioc.get_read_snap();
 
   auto completion = create_aio_completion(std::move(c));
   auto r = io_ctx->aio_operate_read(std::string{o}, *ops, completion, 0U, bl,
@@ -543,10 +595,9 @@ void RADOS::execute(const Object& o, const IOContext& ioc, WriteOp&& op,
   auto ops = *reinterpret_cast<librados::TestObjectOperationImpl**>(&op.impl);
 
   SnapContext snapc;
-  auto opt_snapc = ioc.write_snap_context();
-  if (opt_snapc) {
-    snapc.seq = opt_snapc->first;
-    snapc.snaps.assign(opt_snapc->second.begin(), opt_snapc->second.end());
+  if (auto sc = ioc.get_write_snap_context(); sc) {
+    snapc.seq = sc->first;
+    snapc.snaps.assign(sc->second.begin(), sc->second.end());
   }
 
   auto completion = create_aio_completion(std::move(c));

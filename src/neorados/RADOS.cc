@@ -143,20 +143,15 @@ IOContext::IOContext() {
   new (&impl) IOContextImpl();
 }
 
-IOContext::IOContext(std::int64_t _pool) : IOContext() {
-  pool(_pool);
+IOContext::IOContext(std::int64_t _pool) { 
+  set_pool(_pool);
 }
 
-IOContext::IOContext(std::int64_t _pool, std::string_view _ns)
+IOContext::IOContext(std::int64_t _pool, std::string_view _ns, std::string_view _key)
   : IOContext() {
-  pool(_pool);
-  ns(_ns);
-}
-
-IOContext::IOContext(std::int64_t _pool, std::string&& _ns)
-  : IOContext() {
-  pool(_pool);
-  ns(std::move(_ns));
+  set_pool(_pool);
+  set_ns(_ns);
+  set_key(_key);
 }
 
 IOContext::~IOContext() {
@@ -186,88 +181,96 @@ IOContext& IOContext::operator =(IOContext&& rhs) {
   return *this;
 }
 
-std::int64_t IOContext::pool() const {
+std::int64_t IOContext::get_pool() const {
   return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.pool;
 }
 
-void IOContext::pool(std::int64_t _pool) {
-  reinterpret_cast<IOContextImpl*>(&impl)->oloc.pool = _pool;
+IOContext::operator std::int64_t() const {
+  return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.pool;
 }
 
-std::string_view IOContext::ns() const {
+IOContext& IOContext::set_pool(std::int64_t _pool) & {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.pool = _pool;
+  return *this;
+}
+
+IOContext&& IOContext::set_pool(std::int64_t _pool) && {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.pool = _pool;
+  return std::move(*this);
+}
+
+std::string_view IOContext::get_ns() const {
   return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.nspace;
 }
 
-void IOContext::ns(std::string_view _ns) {
-  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace = _ns;
+IOContext& IOContext::set_ns(std::string_view _ns) & {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace.assign(_ns);
+  return *this;
 }
 
-void IOContext::ns(std::string&& _ns) {
-  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace = std::move(_ns);
+IOContext&& IOContext::set_ns(std::string_view _ns) && {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace.assign(_ns);
+  return std::move(*this);
 }
 
-std::optional<std::string_view> IOContext::key() const {
+std::string_view IOContext::get_key() const {
   auto& oloc = reinterpret_cast<const IOContextImpl*>(&impl)->oloc;
-  if (oloc.key.empty())
-    return std::nullopt;
-  else
-    return std::string_view(oloc.key);
+  return std::string_view(oloc.key);
 }
 
-void IOContext::key(std::string_view _key) {
+
+IOContext& IOContext::set_key(std::string_view _key) & {
   auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
   oloc.hash = -1;
-  oloc.key = _key;
+  oloc.key.assign(_key);
+  return *this;
 }
 
-void IOContext::key(std::string&&_key) {
+IOContext&& IOContext::set_key(std::string_view _key) && {
   auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
   oloc.hash = -1;
-  oloc.key = std::move(_key);
+  oloc.key.assign(_key);
+  return std::move(*this);
 }
 
-void IOContext::clear_key() {
-  auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
-  oloc.hash = -1;
-  oloc.key.clear();
-}
-
-std::optional<std::int64_t> IOContext::hash() const {
+std::int64_t IOContext::get_hash() const {
   auto& oloc = reinterpret_cast<const IOContextImpl*>(&impl)->oloc;
-  if (oloc.hash < 0)
-    return std::nullopt;
-  else
-    return oloc.hash;
+  return oloc.hash;
 }
 
-void IOContext::hash(std::int64_t _hash) {
+IOContext& IOContext::set_hash(std::int64_t _hash) & {
   auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
   oloc.hash = _hash;
   oloc.key.clear();
+  return *this;
 }
 
-void IOContext::clear_hash() {
+IOContext&& IOContext::set_hash(std::int64_t _hash) && {
   auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
-  oloc.hash = -1;
+  oloc.hash = _hash;
   oloc.key.clear();
+  return std::move(*this);
 }
 
-
-std::optional<std::uint64_t> IOContext::read_snap() const {
+std::uint64_t IOContext::get_read_snap() const {
   auto& snap_seq = reinterpret_cast<const IOContextImpl*>(&impl)->snap_seq;
-  if (snap_seq == CEPH_NOSNAP)
-    return std::nullopt;
-  else
-    return snap_seq;
-}
-void IOContext::read_snap(std::optional<std::uint64_t> _snapid) {
-  auto& snap_seq = reinterpret_cast<IOContextImpl*>(&impl)->snap_seq;
-  snap_seq = _snapid.value_or(CEPH_NOSNAP);
+  return snap_seq;
 }
 
-std::optional<
-  std::pair<std::uint64_t,
-	    std::vector<std::uint64_t>>> IOContext::write_snap_context() const {
+IOContext& IOContext::set_read_snap(std::uint64_t _snapid) & {
+  auto& snap_seq = reinterpret_cast<IOContextImpl*>(&impl)->snap_seq;
+  snap_seq = _snapid;
+  return *this;
+}
+
+IOContext&& IOContext::set_read_snap(std::uint64_t _snapid) && {
+  auto& snap_seq = reinterpret_cast<IOContextImpl*>(&impl)->snap_seq;
+  snap_seq = _snapid;
+  return std::move(*this);
+}
+
+std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>>
+IOContext::get_write_snap_context() const {
   auto& snapc = reinterpret_cast<const IOContextImpl*>(&impl)->snapc;
   if (snapc.empty()) {
     return std::nullopt;
@@ -277,8 +280,8 @@ std::optional<
   }
 }
 
-void IOContext::write_snap_context(
-  std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>> _snapc) {
+IOContext& IOContext::set_write_snap_context(
+  std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>> _snapc) & {
   auto& snapc = reinterpret_cast<IOContextImpl*>(&impl)->snapc;
   if (!_snapc) {
     snapc.clear();
@@ -293,20 +296,53 @@ void IOContext::write_snap_context(
       snapc = n;
     }
   }
+  return *this;
 }
 
-bool IOContext::full_try() const {
+IOContext&& IOContext::set_write_snap_context(
+  std::optional<std::pair<std::uint64_t,
+  std::vector<std::uint64_t>>> _snapc) && {
+
+  auto& snapc = reinterpret_cast<IOContextImpl*>(&impl)->snapc;
+  if (!_snapc) {
+    snapc.clear();
+  } else {
+    SnapContext n(_snapc->first, { _snapc->second.begin(), _snapc->second.end()});
+    if (!n.is_valid()) {
+      throw bs::system_error(EINVAL,
+			     bs::system_category(),
+			     "Invalid snap context.");
+
+    } else {
+      snapc = n;
+    }
+  }
+  return std::move(*this);
+}
+
+bool IOContext::get_full_try() const {
   const auto ioc = reinterpret_cast<const IOContextImpl*>(&impl);
   return (ioc->extra_op_flags & CEPH_OSD_FLAG_FULL_TRY) != 0;
 }
 
-void IOContext::full_try(bool _full_try) {
+IOContext& IOContext::set_full_try(bool _full_try) & {
   auto ioc = reinterpret_cast<IOContextImpl*>(&impl);
   if (_full_try) {
     ioc->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
   } else {
     ioc->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
   }
+  return *this;
+}
+
+IOContext&& IOContext::set_full_try(bool _full_try) && {
+  auto ioc = reinterpret_cast<IOContextImpl*>(&impl);
+  if (_full_try) {
+    ioc->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
+  } else {
+    ioc->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
+  }
+  return std::move(*this);
 }
 
 bool operator <(const IOContext& lhs, const IOContext& rhs) {
@@ -849,59 +885,6 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
   trace.event("submitted");
 }
 
-void RADOS::execute(const Object& o, std::int64_t pool, ReadOp&& _op,
-		    cb::list* bl,
-		    std::unique_ptr<ReadOp::Completion> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key,
-		    version_t* objver) {
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = op->op.flags;
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  impl->objecter->read(
-    *oid, oloc, std::move(op->op), CEPH_NOSNAP, bl, flags,
-    std::move(c), objver);
-}
-
-void RADOS::execute(const Object& o, std::int64_t pool, WriteOp&& _op,
-		    std::unique_ptr<WriteOp::Completion> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key,
-		    version_t* objver) {
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = op->op.flags;
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  ceph::real_time mtime;
-  if (op->mtime)
-    mtime = *op->mtime;
-  else
-    mtime = ceph::real_clock::now();
-
-  impl->objecter->mutate(
-    *oid, oloc, std::move(op->op), {},
-    mtime, flags,
-    std::move(c), objver);
-}
-
-boost::uuids::uuid RADOS::get_fsid() const noexcept {
-  return impl->monclient.get_fsid().uuid;
-}
-
-
 void RADOS::lookup_pool(std::string_view name,
 			std::unique_ptr<LookupPoolComp> c)
 {
@@ -1130,35 +1113,6 @@ void RADOS::watch(const Object& o, const IOContext& _ioc,
       }), nullptr);
 }
 
-void RADOS::watch(const Object& o, std::int64_t pool,
-		  std::optional<std::chrono::seconds> timeout, WatchCB&& cb,
-		  std::unique_ptr<WatchComp> c,
-		  std::optional<std::string_view> ns,
-		  std::optional<std::string_view> key) {
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  ObjectOperation op;
-
-  Objecter::LingerOp *linger_op = impl->objecter->linger_register(*oid, oloc, 0);
-  uint64_t cookie = linger_op->get_cookie();
-  linger_op->handle = std::move(cb);
-  op.watch(cookie, CEPH_OSD_WATCH_OP_WATCH, timeout.value_or(0s).count());
-  bufferlist bl;
-  impl->objecter->linger_watch(
-    linger_op, op, {}, ceph::real_clock::now(), bl,
-    Objecter::LingerOp::OpComp::create(
-      get_executor(),
-      [c = std::move(c), cookie](bs::error_code e, bufferlist) mutable {
-	ca::dispatch(std::move(c), e, cookie);
-      }), nullptr);
-}
-
 void RADOS::notify_ack(const Object& o,
 		       const IOContext& _ioc,
 		       uint64_t notify_id,
@@ -1174,28 +1128,6 @@ void RADOS::notify_ack(const Object& o,
 
   impl->objecter->read(*oid, ioc->oloc, std::move(op), ioc->snap_seq,
 		       nullptr, ioc->extra_op_flags, std::move(c));
-}
-
-void RADOS::notify_ack(const Object& o,
-		       std::int64_t pool,
-		       uint64_t notify_id,
-		       uint64_t cookie,
-		       bufferlist&& bl,
-		       std::unique_ptr<SimpleOpComp> c,
-		       std::optional<std::string_view> ns,
-		       std::optional<std::string_view> key) {
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  ObjectOperation op;
-  op.notify_ack(notify_id, cookie, bl);
-  impl->objecter->read(*oid, oloc, std::move(op), CEPH_NOSNAP, nullptr, 0,
-		       std::move(c));
 }
 
 tl::expected<ceph::timespan, bs::error_code> RADOS::watch_check(uint64_t cookie)
@@ -1215,34 +1147,6 @@ void RADOS::unwatch(uint64_t cookie, const IOContext& _ioc,
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   impl->objecter->mutate(linger_op->target.base_oid, ioc->oloc, std::move(op),
 			 ioc->snapc, ceph::real_clock::now(), ioc->extra_op_flags,
-			 Objecter::Op::OpComp::create(
-			   get_executor(),
-			   [objecter = impl->objecter,
-			    linger_op, c = std::move(c)]
-			   (bs::error_code ec) mutable {
-			     objecter->linger_cancel(linger_op);
-			     ca::dispatch(std::move(c), ec);
-			   }));
-}
-
-void RADOS::unwatch(uint64_t cookie, std::int64_t pool,
-		    std::unique_ptr<SimpleOpComp> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key)
-{
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-
-  ObjectOperation op;
-  op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
-  impl->objecter->mutate(linger_op->target.base_oid, oloc, std::move(op),
-			 {}, ceph::real_clock::now(), 0,
 			 Objecter::Op::OpComp::create(
 			   get_executor(),
 			   [objecter = impl->objecter,
@@ -1342,45 +1246,6 @@ void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
     Objecter::LingerOp::OpComp::create(
       get_executor(),
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
-	cb->handle_ack(ec, std::move(bl));
-      }), nullptr);
-}
-
-void RADOS::notify(const Object& o, std::int64_t pool, bufferlist&& bl,
-		   std::optional<std::chrono::milliseconds> timeout,
-		   std::unique_ptr<NotifyComp> c,
-		   std::optional<std::string_view> ns,
-		   std::optional<std::string_view> key)
-{
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-  auto linger_op = impl->objecter->linger_register(*oid, oloc, 0);
-
-  auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter,
-                                            linger_op, std::move(c));
-  linger_op->on_notify_finish =
-    Objecter::LingerOp::OpComp::create(
-      get_executor(),
-      [cb](bs::error_code ec, ceph::bufferlist&& bl) mutable {
-	(*cb)(ec, std::move(bl));
-      });
-  ObjectOperation rd;
-  bufferlist inbl;
-  rd.notify(
-    linger_op->get_cookie(), 1,
-    timeout ? timeout->count() : impl->cct->_conf->client_notify_timeout,
-    bl, &inbl);
-
-  impl->objecter->linger_notify(
-    linger_op, rd, CEPH_NOSNAP, inbl,
-    Objecter::LingerOp::OpComp::create(
-      get_executor(),
-      [cb](bs::error_code ec, bufferlist&& bl) mutable {
 	cb->handle_ack(ec, std::move(bl));
       }), nullptr);
 }
@@ -1497,29 +1362,6 @@ void RADOS::enumerate_objects(const IOContext& _ioc,
   impl->objecter->enumerate_objects<Entry>(
     ioc->oloc.pool,
     ioc->oloc.nspace,
-    *reinterpret_cast<const hobject_t*>(&begin.impl),
-    *reinterpret_cast<const hobject_t*>(&end.impl),
-    max,
-    filter,
-    [c = std::move(c)]
-    (bs::error_code ec, std::vector<Entry>&& v,
-     hobject_t&& n) mutable {
-      ca::dispatch(std::move(c), ec, std::move(v),
-		   Cursor(static_cast<void*>(&n)));
-    });
-}
-
-void RADOS::enumerate_objects(std::int64_t pool,
-			      const Cursor& begin,
-			      const Cursor& end,
-			      const std::uint32_t max,
-			      const bufferlist& filter,
-			      std::unique_ptr<EnumerateComp> c,
-			      std::optional<std::string_view> ns,
-			      std::optional<std::string_view> key) {
-  impl->objecter->enumerate_objects<Entry>(
-    pool,
-    ns ? *ns : std::string_view{},
     *reinterpret_cast<const hobject_t*>(&begin.impl),
     *reinterpret_cast<const hobject_t*>(&end.impl),
     max,

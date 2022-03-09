@@ -44,7 +44,7 @@ template <typename I>
 inline bool is_copy_on_read(I *ictx, const IOContext& io_context) {
   std::shared_lock image_locker{ictx->image_lock};
   return (ictx->clone_copy_on_read && !ictx->read_only &&
-          io_context->read_snap().value_or(CEPH_NOSNAP) == CEPH_NOSNAP &&
+          io_context->get_read_snap() == CEPH_NOSNAP &&
           (ictx->exclusive_lock == nullptr ||
            ictx->exclusive_lock->is_lock_owner()));
 }
@@ -155,7 +155,7 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
 
   uint64_t raw_overlap;
   int r = m_ictx->get_parent_overlap(
-      m_io_context->read_snap().value_or(CEPH_NOSNAP), &raw_overlap);
+      m_io_context->get_read_snap(), &raw_overlap);
   if (r < 0) {
     // NOTE: it's possible for a snapshot to be deleted while we are
     // still reading from it
@@ -222,7 +222,7 @@ void ObjectReadRequest<I>::read_object() {
   I *image_ctx = this->m_ictx;
 
   std::shared_lock image_locker{image_ctx->image_lock};
-  auto read_snap_id = this->m_io_context->read_snap().value_or(CEPH_NOSNAP);
+  auto read_snap_id = this->m_io_context->get_read_snap();
   if (read_snap_id == image_ctx->snap_id &&
       image_ctx->object_map != nullptr &&
       !image_ctx->object_map->object_may_exist(this->m_object_no)) {
@@ -289,7 +289,7 @@ void ObjectReadRequest<I>::read_parent() {
 
   io::util::read_parent<I>(
     image_ctx, this->m_object_no, this->m_extents,
-    this->m_io_context->read_snap().value_or(CEPH_NOSNAP), this->m_trace,
+    this->m_io_context->get_read_snap(), this->m_trace,
     ctx);
 }
 
@@ -389,7 +389,7 @@ void AbstractObjectWriteRequest<I>::compute_parent_info() {
 
   if (!this->has_parent() ||
       (m_full_object &&
-       !this->m_io_context->write_snap_context() &&
+       !this->m_io_context->get_write_snap_context() &&
        !is_post_copyup_write_required())) {
     m_copyup_enabled = false;
   }
@@ -491,8 +491,8 @@ void AbstractObjectWriteRequest<I>::write_object() {
   neorados::WriteOp write_op;
   if (m_copyup_enabled) {
     if (m_guarding_migration_write) {
-      auto snap_seq = (this->m_io_context->write_snap_context() ?
-          this->m_io_context->write_snap_context()->first : 0);
+      auto snap_seq = (this->m_io_context->get_write_snap_context() ?
+          this->m_io_context->get_write_snap_context()->first : 0);
       ldout(image_ctx->cct, 20) << "guarding write: snap_seq=" << snap_seq
                                 << dendl;
 
@@ -738,7 +738,7 @@ ObjectListSnapsRequest<I>::ObjectListSnapsRequest(
     m_object_extents(std::move(object_extents)),
     m_snap_ids(std::move(snap_ids)), m_list_snaps_flags(list_snaps_flags),
     m_snapshot_delta(snapshot_delta) {
-  this->m_io_context->read_snap(CEPH_SNAPDIR);
+  this->m_io_context->set_read_snap(CEPH_SNAPDIR);
 }
 
 template <typename I>

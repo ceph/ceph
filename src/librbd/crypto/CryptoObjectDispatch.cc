@@ -102,7 +102,7 @@ struct C_AlignedObjectReadRequest : public Context {
       if (r == -ENOENT && !disable_read_from_parent) {
         io::util::read_parent<I>(
                 image_ctx, object_no, extents,
-                io_context->read_snap().value_or(CEPH_NOSNAP),
+                io_context->get_read_snap(),
                 parent_trace, this);
       } else {
         complete(r);

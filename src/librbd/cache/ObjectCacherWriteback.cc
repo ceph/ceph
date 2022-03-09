@@ -142,7 +142,7 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
 
   auto io_context = m_ictx->duplicate_data_io_context();
   if (snapid != CEPH_NOSNAP) {
-    io_context->read_snap(snapid);
+    io_context->set_read_snap(snapid);
   }
 
   // extract the embedded RBD read flags from the op_flags
@@ -208,7 +208,7 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
 
   auto io_context = m_ictx->duplicate_data_io_context();
   if (!snapc.empty()) {
-    io_context->write_snap_context(
+    io_context->set_write_snap_context(
       {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
   }
 

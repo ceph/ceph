@@ -148,7 +148,7 @@ void ObjectCopyRequest<I>::send_read() {
   }
 
   auto io_context = m_src_image_ctx->duplicate_data_io_context();
-  io_context->read_snap(index.second);
+  io_context->set_read_snap(index.second);
 
   io::Extents image_extents{read_op.image_interval.begin(),
                             read_op.image_interval.end()};
