@@ -27,9 +27,9 @@ TEST_F(TestNeoRADOS, MakeWithLibRADOS) {
   bufferlist bl;
   op.read(0, 0, &bl);
 
-  // provide pool that doesn't exists -- just testing round-trip
+  // provide pool that doesn't exist -- just testing round-trip
   ASSERT_THROW(
-    rados.execute({"dummy-obj"}, std::numeric_limits<int64_t>::max(),
+    rados.execute({"dummy-obj"}, IOContext(std::numeric_limits<int64_t>::max()),
                   std::move(op), nullptr, ceph::async::use_blocked),
     boost::system::system_error);
 }
