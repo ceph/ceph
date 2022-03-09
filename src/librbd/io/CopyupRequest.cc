@@ -470,7 +470,7 @@ void CopyupRequest<I>::copyup() {
     ldout(cct, 20) << "copyup with empty snapshot context" << dendl;
 
     auto copyup_io_context = *io_context;
-    copyup_io_context.write_snap_context({});
+    copyup_io_context.write_snap_context(0, {});
 
     m_image_ctx->rados_api.execute(
       object, copyup_io_context, std::move(copyup_op),
