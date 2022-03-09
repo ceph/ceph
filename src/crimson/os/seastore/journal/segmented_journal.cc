@@ -31,7 +31,8 @@ SegmentedJournal::SegmentedJournal(
   ExtentReader &scanner,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
-    journal_segment_allocator(segment_type_t::JOURNAL,
+    journal_segment_allocator("JOURNAL",
+                              segment_type_t::JOURNAL,
                               segment_provider,
                               segment_manager),
     record_submitter(crimson::common::get_conf<uint64_t>(

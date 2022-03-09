@@ -21,10 +21,12 @@ static segment_nonce_t generate_nonce(
 }
 
 SegmentAllocator::SegmentAllocator(
+  std::string name,
   segment_type_t type,
   SegmentProvider &sp,
   SegmentManager &sm)
-  : type{type},
+  : name{name},
+    type{type},
     segment_provider{sp},
     segment_manager{sm}
 {
@@ -36,7 +38,7 @@ void SegmentAllocator::set_next_segment_seq(segment_seq_t seq)
 {
   LOG_PREFIX(SegmentAllocator::set_next_segment_seq);
   INFO("{} {} next_segment_seq={}",
-       type, get_device_id(), segment_seq_printer_t{seq});
+       name, get_device_id(), segment_seq_printer_t{seq});
   assert(type == segment_seq_to_type(seq));
   next_segment_seq = seq;
 }
@@ -80,7 +82,7 @@ SegmentAllocator::open()
       new_journal_tail,
       current_segment_nonce};
     INFO("{} {} writing header to new segment ... -- {}",
-         type, get_device_id(), header);
+         name, get_device_id(), header);
 
     auto header_length = segment_manager.get_block_size();
     bufferlist bl;
@@ -120,7 +122,7 @@ SegmentAllocator::open()
         segment_provider.update_journal_tail_committed(new_journal_tail);
       }
       DEBUG("{} {} rolled new segment id={}",
-            type, get_device_id(), current_segment->get_segment_id());
+            name, get_device_id(), current_segment->get_segment_id());
       ceph_assert(new_journal_seq.segment_seq == get_current_segment_seq());
       return new_journal_seq;
     });
@@ -148,7 +150,7 @@ SegmentAllocator::write(ceph::bufferlist to_write)
     paddr_t::make_seg_paddr(
       current_segment->get_segment_id(), write_start_offset)
   };
-  TRACE("{} {} {}~{}", type, get_device_id(), write_start_seq, write_length);
+  TRACE("{} {} {}~{}", name, get_device_id(), write_start_seq, write_length);
   assert(write_length > 0);
   assert((write_length % segment_manager.get_block_size()) == 0);
   assert(!needs_roll(write_length));
@@ -185,7 +187,7 @@ SegmentAllocator::close()
     if (current_segment) {
       return close_segment(false);
     } else {
-      INFO("{} {} no current segment", type, get_device_id());
+      INFO("{} {} no current segment", name, get_device_id());
       return close_segment_ertr::now();
     }
   }().finally([this] {
@@ -200,7 +202,7 @@ SegmentAllocator::close_segment(bool is_rolling)
   assert(can_write());
   auto close_segment_id = current_segment->get_segment_id();
   INFO("{} {} close segment id={}, seq={}, written_to={}, nonce={}",
-       type, get_device_id(),
+       name, get_device_id(),
        close_segment_id,
        segment_seq_printer_t{get_current_segment_seq()},
        written_to,

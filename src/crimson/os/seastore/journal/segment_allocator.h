@@ -24,9 +24,14 @@ class SegmentAllocator {
       crimson::ct_error::input_output_error>;
 
  public:
-  SegmentAllocator(segment_type_t type,
+  SegmentAllocator(std::string name,
+                   segment_type_t type,
                    SegmentProvider &sp,
                    SegmentManager &sm);
+
+  const std::string& get_name() const {
+    return name;
+  }
 
   device_id_t get_device_id() const {
     return segment_manager.get_device_id();
@@ -123,6 +128,7 @@ class SegmentAllocator {
     return ret;
   }
 
+  const std::string name;
   const segment_type_t type; // JOURNAL or OOL
   SegmentProvider &segment_provider;
   SegmentManager &segment_manager;
