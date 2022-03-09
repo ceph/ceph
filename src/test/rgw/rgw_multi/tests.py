@@ -6,6 +6,9 @@ import time
 import logging
 import errno
 import dateutil.parser
+import subprocess
+import boto3
+import datetime
 
 from itertools import combinations
 from io import StringIO
@@ -1316,3 +1319,161 @@ def test_bucket_creation_time():
         for a, b in zip(z1, z2):
             eq(a.name, b.name)
             eq(a.creation_date, b.creation_date)
+
+
+#################
+# Workload tests
+#################
+
+@attr('workload_test')
+def test_basic_workload_beginner():
+    zonegroup = realm.master_zonegroup()
+    system_port = 8000
+    if len(zonegroup.zones) < 2:
+        raise SkipTest("test_basic_workload_beginner skipped. This test requires two or more zones in primary zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    (zc1, zc2) = zonegroup_conns.rw_zones[0:2]
+
+    z1, z2 = (zc1.zone, zc2.zone)
+
+    system_access_key = z1.data['system_key']['access_key']
+
+    system_secret_key = z1.data['system_key']['secret_key']
+
+    system_host = "localhost:"+str(system_port)
+
+    subprocess.call(['warp', 'put', '--host', system_host, '--access-key', system_access_key, '--secret-key', system_secret_key, '--insecure', '--duration=1m', '--obj.size=10KiB', '--concurrent=6', '--noprefix', '--noclear', '--bucket', buckets[0]])
+
+    zone_data_checkpoint(z2, z1)
+
+    for source_conn, bucket in zone_bucket:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+
+            #zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
+
+    for source_conn, bucket in zone_bucket:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn == target_conn:
+                for obj in bucket.list():
+                    print('content of bucket:',obj)
+
+    # assert zc2.get_bucket(bucket_name)
+
+
+@attr('workload_test')
+def test_basic_workload_beginner_2():
+    zonegroup = realm.master_zonegroup()
+    system_port = 8000
+    system_port_2 = 8002
+    if len(zonegroup.zones) < 2:
+        raise SkipTest("test_basic_workload_beginner_2 skipped. This test requires two or more zones in primary zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)                                                                                                                                                                                        
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    (zc1, zc2) = zonegroup_conns.rw_zones[0:2]
+
+    z1, z2 = (zc1.zone, zc2.zone)
+
+    system_access_key = z1.data['system_key']['access_key']
+
+    system_secret_key = z1.data['system_key']['secret_key']
+
+    system_host = "localhost:"+str(system_port)
+    system_host_2 = "localhost:"+str(system_port_2)
+
+    subprocess.call(['warp', 'put', '--host=localhost:8000,localhost:8002', '--host-select=roundrobin', '--access-key', system_access_key, '--secret-key', system_secret_key, '--insecure', '--duration=1m', '--obj.size=10KiB', '--concurrent=6', '--noprefix', '--noclear', '--bucket', buckets[0]])
+
+    #subprocess.Popen(['warp', 'put', '--host', system_host_2, '--access-key', system_access_key, '--secret-key', system_secret_key, '--insecure', '--duration=1m', '--obj.size=10KiB', '--concurrent=6', '--noprefix', '--noclear', '--bucket', bucket_name])
+
+    zone_data_checkpoint(z2, z1)
+
+    for source_conn, bucket in zone_bucket:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+
+            zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
+
+    for source_conn, bucket in zone_bucket:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn == target_conn:
+                print('Its printing time...')
+                for obj in bucket.list():
+                    print('content of bucket:',obj)
+
+    #assert zc2.get_bucket(bucket_name)
+
+
+@attr('workload_test')
+def test_basic_workload_with_lifecycle():
+    "THIS TEST IS STILL IN PROGRESS"
+    zonegroup = realm.master_zonegroup()
+    system_port = 8000
+    if len(zonegroup.zones) < 2:
+        raise SkipTest("test_basic_workload_with_lifecycle skipped. This test requires two or more zones in primary zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    (zc1, zc2) = zonegroup_conns.rw_zones[0:2]
+
+    z1, z2 = (zc1.zone, zc2.zone)
+
+    system_access_key = z1.data['system_key']['access_key']
+
+    system_secret_key = z1.data['system_key']['secret_key']
+
+    system_host = "localhost:"+str(system_port)
+
+    subprocess.call(['warp', 'put', '--host', system_host, '--access-key', system_access_key, '--secret-key', system_secret_key, '--insecure', '--duration=1m', '--obj.size=10KiB', '--concurrent=6', '--noprefix', '--noclear', '--bucket', buckets[0]])
+
+    zone_data_checkpoint(z2, z1)
+   
+    for source_conn, bucket in zone_bucket:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+
+            zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
+
+    obj_prefix = 'oooo'
+
+    # create lifecycle policy
+    client = boto3.client('s3',
+            endpoint_url='http://localhost:'+str(system_port),
+            aws_access_key_id=system_access_key,
+            aws_secret_access_key=system_secret_key)
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    response = client.put_bucket_lifecycle_configuration(Bucket=buckets[0],
+            LifecycleConfiguration={'Rules': [
+                {
+                    'ID': 'rule1',
+                    'Expiration': {'Date': yesterday.isoformat()},
+                    'Filter': {'Prefix': obj_prefix},
+                    'Status': 'Enabled',
+                }
+            ]
+        }
+    )
+
+    # start lifecycle processing
+    for source_conn, bucket in zone_bucket:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn == target_conn:
+                print('The main part...')
+                for obj in bucket.list():
+                    print('content of bucket:',obj)
+
+    z1.cluster.admin(['lc', 'process'])
+
+    for source_conn, bucket in zone_bucket:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn == target_conn:
+                for obj in bucket.list():
+                    print('content of bucket:',obj)
