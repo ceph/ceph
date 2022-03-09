@@ -763,10 +763,13 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn)
   return seastar::now();
 }
 
-PGBackend::interruptible_future<>
+PGBackend::remove_iertr::future<>
 PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
   object_stat_sum_t& delta_stats)
 {
+  if (!os.exists) {
+    return crimson::ct_error::enoent::make();
+  }
   // todo: snapset
   txn.remove(coll->get_cid(),
 	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});

@@ -128,7 +128,13 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     object_stat_sum_t& delta_stats);
-  interruptible_future<> remove(
+  using remove_ertr = crimson::errorator<
+    crimson::ct_error::enoent>;
+  using remove_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      remove_ertr>;
+  remove_iertr::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn,
     object_stat_sum_t& delta_stats);
