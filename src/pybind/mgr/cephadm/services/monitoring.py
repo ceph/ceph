@@ -159,7 +159,7 @@ class AlertmanagerService(CephadmService):
             if dd.daemon_id == self.mgr.get_mgr_id():
                 continue
             assert dd.hostname is not None
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = self._inventory_get_addr(dd.hostname)
             dashboard_urls.append(build_url(scheme=proto, host=addr, port=port))
 
         for dd in self.mgr.cache.get_daemons_by_service('snmp-gateway'):
@@ -183,7 +183,7 @@ class AlertmanagerService(CephadmService):
         for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
             assert dd.hostname is not None
             deps.append(dd.name())
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = self._inventory_get_addr(dd.hostname)
             peers.append(build_url(host=addr, port=port).lstrip('/'))
 
         return {
@@ -274,7 +274,7 @@ class PrometheusService(CephadmService):
             if dd.daemon_id == self.mgr.get_mgr_id():
                 continue
             assert dd.hostname is not None
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = self._inventory_get_addr(dd.hostname)
             mgr_scrape_list.append(build_url(host=addr, port=port).lstrip('/'))
 
         # scrape node exporters
@@ -282,7 +282,7 @@ class PrometheusService(CephadmService):
         for dd in self.mgr.cache.get_daemons_by_service('node-exporter'):
             assert dd.hostname is not None
             deps.append(dd.name())
-            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
             port = dd.ports[0] if dd.ports else 9100
             nodes.append({
                 'hostname': dd.hostname,
@@ -294,7 +294,7 @@ class PrometheusService(CephadmService):
         for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
             assert dd.hostname is not None
             deps.append(dd.name())
-            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            addr = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
             port = dd.ports[0] if dd.ports else 9093
             alertmgr_targets.append("'{}'".format(build_url(host=addr, port=port).lstrip('/')))
 
@@ -306,7 +306,7 @@ class PrometheusService(CephadmService):
                 assert dd.hostname is not None
                 deps.append(dd.name())
                 if dd.daemon_type == 'haproxy':
-                    addr = self.mgr.inventory.get_addr(dd.hostname)
+                    addr = self._inventory_get_addr(dd.hostname)
                     haproxy_targets.append({
                         "url": f"'{build_url(host=addr, port=spec.monitor_port).lstrip('/')}'",
                         "service": dd.service_name(),
