@@ -999,7 +999,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     }
     if (!snapc.snaps.empty()) {
       ctx->write_snap_context(
-        {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+        snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()});
     }
     if (data_ctx.get_pool_full_try()) {
       ctx->full_try(true);
