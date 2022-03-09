@@ -314,28 +314,34 @@ class PlacementSpec(object):
         # type: (Optional[str]) -> PlacementSpec
         """
         A single integer is parsed as a count:
+
         >>> PlacementSpec.from_string('3')
         PlacementSpec(count=3)
 
         A list of names is parsed as host specifications:
+
         >>> PlacementSpec.from_string('host1 host2')
         PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacemen\
 tSpec(hostname='host2', network='', name='')])
 
         You can also prefix the hosts with a count as follows:
+
         >>> PlacementSpec.from_string('2 host1 host2')
         PlacementSpec(count=2, hosts=[HostPlacementSpec(hostname='host1', network='', name=''), Hos\
 tPlacementSpec(hostname='host2', network='', name='')])
 
-        You can spefify labels using `label:<label>`
+        You can specify labels using `label:<label>`
+
         >>> PlacementSpec.from_string('label:mon')
         PlacementSpec(label='mon')
 
-        Labels als support a count:
+        Labels also support a count:
+
         >>> PlacementSpec.from_string('3 label:mon')
         PlacementSpec(count=3, label='mon')
 
         fnmatch is also supported:
+
         >>> PlacementSpec.from_string('data[1-3]')
         PlacementSpec(host_pattern='data[1-3]')
 
