@@ -102,6 +102,40 @@ static auto create_write_raw(librbd::ImageCtx *ictx, const char *buf,
       deleter(new UserBufferDeleter(ictx->cct, aio_completion))));
 }
 
+static int get_iovec_length(const struct iovec *iov, int iovcnt, size_t &len)
+{
+  len = 0;
+
+  if (iovcnt <= 0) {
+    return -EINVAL;
+  }
+
+  for (int i = 0; i < iovcnt; ++i) {
+    const struct iovec &io = iov[i];
+    // check for overflow
+    if (len + io.iov_len < len) {
+      return -EINVAL;
+    }
+    len += io.iov_len;
+  }
+
+  return 0;
+}
+
+static bufferlist iovec_to_bufferlist(librbd::ImageCtx *ictx,
+                                      const struct iovec *iov,
+                                      int iovcnt,
+                                      librbd::io::AioCompletion* aio_completion)
+{
+  bufferlist bl;
+  for (int i = 0; i < iovcnt; ++i) {
+    const struct iovec &io = iov[i];
+    bl.push_back(create_write_raw(ictx, static_cast<char*>(io.iov_base),
+                                  io.iov_len, aio_completion));
+  }
+  return bl;
+}
+
 CephContext* get_cct(IoCtx &io_ctx) {
   return reinterpret_cast<CephContext*>(io_ctx.cct());
 }
@@ -5980,30 +6014,16 @@ extern "C" int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
 
-  // convert the scatter list into a bufferlist
-  auto aio_completion = get_aio_completion(comp);
-  ssize_t len = 0;
-  bufferlist bl;
-  for (int i = 0; i < iovcnt; ++i) {
-    const struct iovec &io = iov[i];
-    len += io.iov_len;
-    if (len < 0) {
-      break;
-    }
-
-    bl.push_back(create_write_raw(ictx, static_cast<char*>(io.iov_base),
-                                  io.iov_len, aio_completion));
-  }
-
-  int r = 0;
-  if (iovcnt <= 0 || len < 0) {
-    r = -EINVAL;
-  }
+  size_t len;
+  int r = get_iovec_length(iov, iovcnt, len);
 
   tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, off, len, NULL,
              comp->pc);
+
   if (r == 0) {
+    auto aio_completion = get_aio_completion(comp);
+    auto bl = iovec_to_bufferlist(ictx, iov, iovcnt, aio_completion);
     ictx->io_work_queue->aio_write(aio_completion, off, len, std::move(bl), 0);
   }
   tracepoint(librbd, aio_write_exit, r);
@@ -6053,18 +6073,8 @@ extern "C" int rbd_aio_readv(rbd_image_t image, const struct iovec *iov,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
 
-  ssize_t len = 0;
-  for (int i = 0; i < iovcnt; ++i) {
-    len += iov[i].iov_len;
-    if (len < 0) {
-      break;
-    }
-  }
-
-  int r = 0;
-  if (iovcnt == 0 || len < 0) {
-    r = -EINVAL;
-  }
+  size_t len;
+  int r = get_iovec_length(iov, iovcnt, len);
 
   tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, off, len, NULL,
