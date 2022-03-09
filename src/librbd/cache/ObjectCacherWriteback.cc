@@ -208,8 +208,8 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
 
   auto io_context = m_ictx->duplicate_data_io_context();
   if (!snapc.empty()) {
-    io_context->write_snap_context(
-      {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+    io_context->write_snap_context(snapc.seq,
+				   { snapc.snaps.begin(), snapc.snaps.end()});
   }
 
   auto req = io::ObjectDispatchSpec::create_write(

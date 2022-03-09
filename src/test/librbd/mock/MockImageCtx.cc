@@ -137,7 +137,7 @@ IOContext MockImageCtx::get_data_io_context() {
   }
   if (!snapc.snaps.empty()) {
     ctx->write_snap_context(
-      {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+      snapc.seq, { snapc.snaps.begin(), snapc.snaps.end()});
   }
   return ctx;
 }
