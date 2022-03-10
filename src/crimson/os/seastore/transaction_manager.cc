@@ -176,7 +176,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  });
       });
   }).safe_then([this] {
-    cache->force_roll_backref_buffer();
     return epm->open();
   }).safe_then([FNAME, this] {
     segment_cleaner->complete_init();

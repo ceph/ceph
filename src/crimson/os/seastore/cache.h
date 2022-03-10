@@ -527,7 +527,6 @@ private:
   }
 
   backref_buffer_ref backref_buffer;
-  std::list<backref_buffer_ref> backref_bufs_to_flush;
   // backrefs that needs to be inserted into the backref tree
   backref_buf_entry_t::set_t backref_inserted_set;
   backref_buf_entry_t::set_t backref_remove_set; // backrefs needs to be removed
@@ -629,38 +628,14 @@ public:
     return backref_remove_set;
   }
 
-  backref_buffer_ref& get_newest_backref_buffer() {
+  backref_buffer_ref& get_backref_buffer() {
     return backref_buffer;
-  }
-
-  std::list<backref_buffer_ref>& get_backref_bufs_to_flush() {
-    return backref_bufs_to_flush;
   }
 
   void trim_backref_bufs(const journal_seq_t &trim_to) {
     LOG_PREFIX(Cache::trim_backref_bufs);
     SUBDEBUG(seastore_cache, "trimming to {}", trim_to);
-    auto &backref_bufs = get_backref_bufs_to_flush();
-    for (auto iter = backref_bufs.begin();
-	 iter != backref_bufs.end();) {
-      auto &backref_buf = *iter;
-      assert(backref_buf);
-      if (!backref_buf->backrefs.empty()
-	  && backref_buf->backrefs.rbegin()->first > trim_to) {
-	auto iter2 = backref_buf->backrefs.upper_bound(trim_to);
-	SUBDEBUG(seastore_cache, "trim backref up to {}", iter2->first);
-	backref_buf->backrefs.erase(
-	  backref_buf->backrefs.begin(), iter2);
-	break;
-      } else {
-	if (!backref_buf->backrefs.empty()) {
-	  SUBDEBUG(seastore_cache, "trim backref buf {}",
-	    backref_buf->backrefs.rbegin()->first);
-	}
-	iter = backref_bufs.erase(iter);
-      }
-    }
-    if (backref_bufs.empty() && backref_buffer) {
+    if (backref_buffer) {
       assert(backref_buffer->backrefs.rbegin()->first >= trim_to);
       auto iter = backref_buffer->backrefs.upper_bound(trim_to);
       SUBDEBUG(seastore_cache, "trim backref buffer up to {}", iter->first);
@@ -911,13 +886,8 @@ public:
   std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {
     LOG_PREFIX(Cache::get_oldest_backref_dirty_from);
     journal_seq_t backref_oldest = JOURNAL_SEQ_NULL;
-    if (backref_bufs_to_flush.empty()) {
-      if (backref_buffer && !backref_buffer->backrefs.empty()) {
-	backref_oldest = backref_buffer->backrefs.begin()->first;
-      }
-    } else {
-      auto &oldest_buf = backref_bufs_to_flush.front();
-      backref_oldest = oldest_buf->backrefs.begin()->first;
+    if (backref_buffer && !backref_buffer->backrefs.empty()) {
+      backref_oldest = backref_buffer->backrefs.begin()->first;
     }
     if (backref_oldest == JOURNAL_SEQ_NULL) {
       SUBDEBUG(seastore_cache, "backref_oldest: null");
@@ -949,31 +919,6 @@ public:
 
   /// Dump live extents
   void dump_contents();
-
-  void force_roll_backref_buffer() {
-    may_roll_backref_buffer(P_ADDR_NULL, true);
-  }
-  void may_roll_backref_buffer(
-    const paddr_t &final_block_start,
-    bool force_roll = false) {
-    if (force_roll) {
-      if (backref_buffer) {
-	backref_bufs_to_flush.emplace_back(std::move(backref_buffer));
-      }
-      return;
-    }
-    if (backref_buffer && !backref_buffer->backrefs.empty()) {
-      auto &[seq, backref_list] = *backref_buffer->backrefs.rbegin();
-      if (backref_list.empty())
-	return;
-      auto &last_seg_paddr = seq.offset.as_seg_paddr();
-      if (last_seg_paddr.get_segment_id() !=
-	  final_block_start.as_seg_paddr().get_segment_id()) {
-	// journal segment rolled
-	backref_bufs_to_flush.emplace_back(std::move(backref_buffer));
-      }
-    }
-  }
 
   struct backref_extent_buf_entry_t {
     backref_extent_buf_entry_t(
