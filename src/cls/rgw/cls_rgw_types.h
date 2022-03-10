@@ -567,7 +567,7 @@ struct rgw_cls_bi_entry {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
-
+  static void generate_test_instances(std::list<rgw_bucket_olh_log_entry*>& o);
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
 		rgw_bucket_category_stats *accounted_stats);
 };
@@ -651,6 +651,7 @@ struct rgw_bucket_olh_entry {
   }
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<rgw_bucket_olh_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
 
@@ -957,6 +958,8 @@ struct rgw_usage_data {
     ops += usage.ops;
     successful_ops += usage.successful_ops;
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_usage_data*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_usage_data)
 
@@ -1063,6 +1066,8 @@ struct rgw_usage_log_info {
     decode(entries, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<rgw_usage_log_info*>& o);
 
   rgw_usage_log_info() {}
 };
@@ -1098,6 +1103,8 @@ struct rgw_user_bucket {
 
     return false;
   }
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<rgw_user_bucket*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_user_bucket)
 
