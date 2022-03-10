@@ -1324,13 +1324,15 @@ class MDSSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
+                 extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'mds'
         super(MDSSpec, self).__init__('mds', service_id=service_id,
                                       placement=placement,
                                       config=config,
                                       unmanaged=unmanaged,
-                                      preview_only=preview_only)
+                                      preview_only=preview_only,
+                                      extra_container_args=extra_container_args)
 
     def validate(self) -> None:
         super(MDSSpec, self).validate()
