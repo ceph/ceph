@@ -21,6 +21,7 @@ function(check_cxx_atomics var)
 // We specifically test access via an otherwise unknown pointer here
 // to ensure we get the most complex case.  If this access can be
 // done without libatomic, then all accesses can be done.
+bool atomic16(std::atomic<unsigned __int128> *ptr) __attribute__ ((used));
 bool atomic16(std::atomic<unsigned __int128> *ptr)
 {
   return *ptr != 0;
