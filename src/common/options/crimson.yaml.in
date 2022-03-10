@@ -40,10 +40,10 @@ options:
   default: true
   see_also:
   - seastore_device_size
-- name: seastore_init_rewrite_segments_num_per_device
+- name: seastore_init_write_segments_num_per_device
   type: uint
   level: dev
-  desc: Initial number of segments for rewriting extents per device
+  desc: Initial number of segments for writing new extents per device
   default: 6
 - name: seastore_journal_batch_capacity
   type: uint

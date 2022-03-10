@@ -9,6 +9,48 @@ SET_SUBSYS(seastore_journal);
 
 namespace crimson::os::seastore {
 
+ExtentReader::read_segment_tail_ret
+ExtentReader::read_segment_tail(segment_id_t segment)
+{
+  auto& segment_manager = *segment_managers[segment.device_id()];
+  return segment_manager.read(
+    paddr_t::make_seg_paddr(
+      segment,
+      segment_manager.get_segment_size() -
+        segment_manager.get_rounded_tail_length()),
+    segment_manager.get_rounded_tail_length()
+  ).handle_error(
+    read_segment_header_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in ExtentReader::read_segment_tail"
+    }
+  ).safe_then([=, &segment_manager](bufferptr bptr) -> read_segment_tail_ret {
+    LOG_PREFIX(ExtentReader::read_segment_tail);
+    DEBUG("segment {} bptr size {}", segment, bptr.length());
+
+    segment_tail_t tail;
+    bufferlist bl;
+    bl.push_back(bptr);
+
+    DEBUG("segment {} block crc {}",
+          segment,
+          bl.begin().crc32c(segment_manager.get_block_size(), 0));
+
+    auto bp = bl.cbegin();
+    try {
+      decode(tail, bp);
+    } catch (ceph::buffer::error &e) {
+      DEBUG("segment {} unable to decode tail, skipping -- {}",
+            segment, e);
+      return crimson::ct_error::enodata::make();
+    }
+    DEBUG("segment {} tail {}", segment, tail);
+    return read_segment_tail_ret(
+      read_segment_tail_ertr::ready_future_marker{},
+      tail);
+  });
+}
+
 ExtentReader::read_segment_header_ret
 ExtentReader::read_segment_header(segment_id_t segment)
 {
@@ -82,7 +124,12 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
         for (auto& r: *maybe_record_extent_infos) {
           DEBUG("decoded {} extents", r.extent_infos.size());
           for (const auto &i : r.extent_infos) {
-            extents->emplace_back(extent_offset, i);
+            extents->emplace_back(
+              extent_offset,
+              std::pair<commit_info_t, extent_info_t>(
+                {r.header.commit_time,
+                r.header.commit_type},
+                i));
             auto& seg_addr = extent_offset.as_seg_paddr();
             seg_addr.set_segment_off(
               seg_addr.get_segment_off() + i.len);

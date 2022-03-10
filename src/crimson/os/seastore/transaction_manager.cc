@@ -90,14 +90,15 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     scanner.get_segment_managers()
   ).safe_then([this] {
     return journal->replay(
-      [this](const auto &offsets, const auto &e) {
+      [this](const auto &offsets, const auto &e, auto last_modified) {
 	auto start_seq = offsets.write_result.start_seq;
 	segment_cleaner->update_journal_tail_target(
 	  cache->get_oldest_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
 	  start_seq,
 	  offsets.record_block_base,
-	  e);
+	  e,
+	  last_modified);
       });
   }).safe_then([this] {
     return journal->open_for_write();
@@ -127,6 +128,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    segment_cleaner->mark_space_used(
 		      addr,
 		      len ,
+		      seastar::lowres_system_clock::time_point(),
+		      seastar::lowres_system_clock::time_point(),
 		      /* init_scan = */ true);
 		  }
 		});
@@ -409,6 +412,7 @@ TransactionManager::rewrite_logical_extent(
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
   nlextent->set_pin(lextent->get_pin().duplicate());
+  nlextent->last_modified = lextent->last_modified;
 
   DEBUGT("rewriting extent -- {} to {}", t, *lextent, *nlextent);
 

@@ -49,14 +49,14 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
   bool all_match = true;
   for (auto i = live_bytes_by_segment.begin(), j = other.live_bytes_by_segment.begin();
        i != live_bytes_by_segment.end(); ++i, ++j) {
-    if (i->second != j->second) {
+    if (i->second.live_bytes != j->second.live_bytes) {
       all_match = false;
       logger().debug(
 	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
 	__func__,
 	i->first,
-	i->second,
-	j->second);
+	i->second.live_bytes,
+	j->second.live_bytes);
     }
   }
   return all_match;
@@ -168,6 +168,14 @@ void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
     block_size_by_segment_manager[id.device_id()]);
 }
 
+void SpaceTrackerSimple::dump_usage(segment_id_t id) const
+{
+  logger().info(
+    "SpaceTrackerSimple::dump_usage id: {}, live_bytes: {}",
+    id,
+    live_bytes_by_segment[id].live_bytes);
+}
+
 SegmentCleaner::SegmentCleaner(
   config_t config,
   ExtentReaderRef&& scr,
@@ -176,18 +184,31 @@ SegmentCleaner::SegmentCleaner(
     config(config),
     scanner(std::move(scr)),
     gc_process(*this)
-{
-  register_metrics();
-}
+{}
 
 void SegmentCleaner::register_metrics()
 {
   namespace sm = seastar::metrics;
+  stats.segment_util.buckets.resize(11);
+  for (int i = 0; i < 11; i++) {
+    stats.segment_util.buckets[i].upper_bound = ((double)(i + 1)) / 10;
+    if (!i) {
+      stats.segment_util.buckets[i].count = segments.num_segments();
+    } else {
+      stats.segment_util.buckets[i].count = 0;
+    }
+  }
   metrics.add_group("segment_cleaner", {
     sm::make_counter("segments_released", stats.segments_released,
 		     sm::description("total number of extents released by SegmentCleaner")),
     sm::make_counter("accumulated_blocked_ios", stats.accumulated_blocked_ios,
 		     sm::description("accumulated total number of ios that were blocked by gc")),
+    sm::make_counter("reclaimed_segments", stats.reclaimed_segments,
+		     sm::description("reclaimed segments")),
+    sm::make_counter("reclaim_rewrite_bytes", stats.reclaim_rewrite_bytes,
+		     sm::description("rewritten bytes due to reclaim")),
+    sm::make_counter("reclaiming_bytes", stats.reclaiming_bytes,
+		     sm::description("bytes being reclaimed")),
     sm::make_derive("empty_segments", stats.empty_segments,
 		    sm::description("current empty segments")),
     sm::make_derive("ios_blocking", stats.ios_blocking,
@@ -205,7 +226,12 @@ void SegmentCleaner::register_metrics()
 		    [this] {
 		      return segments.get_opened_segments();
 		    },
-		    sm::description("the number of segments whose state is open"))
+		    sm::description("the number of segments whose state is open")),
+    sm::make_histogram("segment_utilization_distribution",
+		       [this]() -> seastar::metrics::histogram& {
+		         return stats.segment_util;
+		       },
+		       sm::description("utilization distribution of all segments"))
   });
 }
 
@@ -377,20 +403,25 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
   ).safe_then([this](auto &&_extents) {
     return seastar::do_with(
         std::move(_extents),
-        [this](auto &extents) {
-      return repeat_eagain([this, &extents]() mutable {
+	(size_t)0,
+        [this](auto &extents, auto &reclaimed) {
+      return repeat_eagain([this, &extents, &reclaimed]() mutable {
+	reclaimed = 0;
         logger().debug(
           "SegmentCleaner::gc_reclaim_space: processing {} extents",
           extents.size());
         return ecb->with_transaction_intr(
           Transaction::src_t::CLEANER_RECLAIM,
           "reclaim_space",
-          [this, &extents](auto& t)
+          [this, &extents, &reclaimed](auto& t)
         {
           return trans_intr::do_for_each(
               extents,
-              [this, &t](auto &extent) {
-            auto &[addr, info] = extent;
+              [this, &t, &reclaimed](auto &extent) {
+	    auto &addr = extent.first;
+	    auto commit_time = extent.second.first.commit_time;
+	    auto commit_type = extent.second.first.commit_type;
+	    auto &info = extent.second.second;
             logger().debug(
               "SegmentCleaner::gc_reclaim_space: checking extent {}",
               info);
@@ -400,7 +431,8 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
               addr,
               info.addr,
               info.len
-            ).si_then([addr=addr, &t, this](CachedExtentRef ext) {
+            ).si_then([&info, commit_type, commit_time, addr=addr, &t, this, &reclaimed]
+	      (CachedExtentRef ext) {
               if (!ext) {
                 logger().debug(
                   "SegmentCleaner::gc_reclaim_space: addr {} dead, skipping",
@@ -411,6 +443,35 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
                   "SegmentCleaner::gc_reclaim_space: addr {} alive, gc'ing {}",
                   addr,
                   *ext);
+		assert(commit_time);
+		assert(info.last_modified);
+		assert(commit_type == record_commit_type_t::MODIFY
+		  || commit_type == record_commit_type_t::REWRITE);
+		if (ext->get_last_modified() ==
+		    seastar::lowres_system_clock::time_point()) {
+		  assert(ext->get_last_rewritten() ==
+		    seastar::lowres_system_clock::time_point());
+		  ext->set_last_modified(
+		    seastar::lowres_system_clock::duration(
+		      info.last_modified));
+		}
+		if (commit_type == record_commit_type_t::REWRITE
+		    && ext->get_last_rewritten() ==
+		      seastar::lowres_system_clock::time_point()) {
+		  ext->set_last_rewritten(
+		    seastar::lowres_system_clock::duration(
+		      commit_time));
+		}
+
+		assert(
+		  (commit_type == record_commit_type_t::MODIFY
+		    && commit_time <=
+		      ext->get_last_modified().time_since_epoch().count())
+		  || (commit_type == record_commit_type_t::REWRITE
+		      && commit_time ==
+			ext->get_last_rewritten().time_since_epoch().count()));
+
+		reclaimed += ext->get_length();
                 return ecb->rewrite_extent(
                   t,
                   ext);
@@ -423,10 +484,16 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
             return ecb->submit_transaction_direct(t);
           });
         });
+      }).safe_then([&reclaimed] {
+	return seastar::make_ready_future<size_t>(reclaimed);
       });
     });
-  }).safe_then([this] {
+  }).safe_then([this](size_t reclaimed) {
+    stats.reclaiming_bytes += reclaimed;
     if (scan_cursor->is_complete()) {
+      stats.reclaim_rewrite_bytes += stats.reclaiming_bytes;
+      stats.reclaiming_bytes = 0;
+      stats.reclaimed_segments++;
       scan_cursor.reset();
     }
   });
@@ -467,37 +534,147 @@ SegmentCleaner::mount_ret SegmentCleaner::mount(
   register_metrics();
 
   logger().debug("SegmentCleaner::mount: {} segments", segments.size());
-  return crimson::do_for_each(
-    segments.begin(),
-    segments.end(),
-    [this](auto& it) {
-      auto segment_id = it.first;
-      return scanner->read_segment_header(
-	segment_id
-      ).safe_then([segment_id, this](auto header) {
-	logger().debug(
-	  "ExtentReader::mount: segment_id={} -- {}",
-	  segment_id, header);
-	auto s_type = header.get_type();
-	if (s_type == segment_type_t::NULL_SEG) {
-	  logger().error(
-	    "ExtentReader::mount: got null segment, segment_id={} -- {}",
+  return seastar::do_with(
+    std::vector<std::pair<segment_id_t, segment_header_t>>(),
+    [this](auto& segment_set) {
+    return crimson::do_for_each(
+      segments.begin(),
+      segments.end(),
+      [this, &segment_set](auto& it) {
+	auto segment_id = it.first;
+	return scanner->read_segment_header(
+	  segment_id
+	).safe_then([segment_id, this, &segment_set](auto header) {
+	  logger().debug(
+	    "ExtentReader::mount: segment_id={} -- {}",
 	    segment_id, header);
-	  ceph_abort();
+	  auto s_type = header.get_type();
+	  if (s_type == segment_type_t::NULL_SEG) {
+	    logger().error(
+	      "ExtentReader::mount: got null segment, segment_id={} -- {}",
+	      segment_id, header);
+	    ceph_abort();
+	  }
+	  return scanner->read_segment_tail(
+	    segment_id
+	  ).safe_then([this, segment_id, &segment_set, header](auto tail)
+	    -> scan_extents_ertr::future<> {
+	    if (tail.segment_nonce != header.segment_nonce) {
+	      return scan_nonfull_segment(header, segment_set, segment_id);
+	    }
+	    seastar::lowres_system_clock::time_point last_modified(
+	      seastar::lowres_system_clock::duration(tail.last_modified));
+	    seastar::lowres_system_clock::time_point last_rewritten(
+	      seastar::lowres_system_clock::duration(tail.last_rewritten));
+	    if (segments[segment_id].last_modified < last_modified) {
+	      segments[segment_id].last_modified = last_modified;
+	    }
+	    if (segments[segment_id].last_rewritten < last_rewritten) {
+	      segments[segment_id].last_rewritten = last_rewritten;
+	    }
+	    init_mark_segment_closed(
+	      segment_id,
+	      header.journal_segment_seq);
+	    return seastar::now();
+	  }).handle_error(
+	    crimson::ct_error::enodata::handle(
+	      [this, header, segment_id, &segment_set](auto) {
+	      return scan_nonfull_segment(header, segment_set, segment_id);
+	    }),
+	    crimson::ct_error::pass_further_all{}
+	  );
+	}).handle_error(
+	  crimson::ct_error::enoent::handle([](auto) {
+	    return mount_ertr::now();
+	  }),
+	  crimson::ct_error::enodata::handle([](auto) {
+	    return mount_ertr::now();
+	  }),
+	  crimson::ct_error::input_output_error::pass_further{},
+	  crimson::ct_error::assert_all{"unexpected error"}
+	);
+      });
+  });
+}
+
+SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
+  const segment_header_t& header,
+  scan_extents_ret_bare& segment_set,
+  segment_id_t segment_id)
+{
+  if (header.get_type() == segment_type_t::OOL) {
+    logger().info(
+      "ExtentReader::init_segments: out-of-line segment {}",
+      segment_id);
+    return seastar::do_with(
+      scan_valid_records_cursor({
+	segments[segment_id].journal_segment_seq,
+	paddr_t::make_seg_paddr(segment_id, 0)}),
+      [this, segment_id, header](auto& cursor) {
+      return seastar::do_with(
+	ExtentReader::found_record_handler_t([this, segment_id](
+	    record_locator_t locator,
+	    const record_group_header_t& header,
+	    const bufferlist& mdbuf
+	  ) mutable -> ExtentReader::scan_valid_records_ertr::future<> {
+	  LOG_PREFIX(SegmentCleaner::scan_nonfull_segment);
+	  DEBUG("decodeing {} records", header.records);
+	  auto maybe_headers = try_decode_record_headers(header, mdbuf);
+	  if (!maybe_headers) {
+	    ERROR("unable to decode record headers for record group {}",
+	      locator.record_block_base);
+	    return crimson::ct_error::input_output_error::make();
+	  }
+
+	  for (auto& header : *maybe_headers) {
+	    mod_time_point_t ctime = header.commit_time;
+	    auto commit_type = header.commit_type;
+	    if (!ctime) {
+	      ERROR("Scanner::init_segments: extent {} 0 commit_time",
+		ctime);
+	      ceph_abort("0 commit_time");
+	    }
+	    seastar::lowres_system_clock::time_point commit_time{
+	      seastar::lowres_system_clock::duration(ctime)};
+	    assert(commit_type == record_commit_type_t::MODIFY
+	      || commit_type == record_commit_type_t::REWRITE);
+	    if (commit_type == record_commit_type_t::MODIFY
+		&& this->segments[segment_id].last_modified < commit_time) {
+	      this->segments[segment_id].last_modified = commit_time;
+	    }
+	    if (commit_type == record_commit_type_t::REWRITE
+		&& this->segments[segment_id].last_rewritten < commit_time) {
+	      this->segments[segment_id].last_rewritten = commit_time;
+	    }
+	  }
+	  return seastar::now();
+	}),
+	[&cursor, header, segment_id, this](auto& handler) {
+	  return scanner->scan_valid_records(
+	    cursor,
+	    header.segment_nonce,
+	    segments[segment_id.device_id()]->segment_size,
+	    handler);
 	}
-	init_mark_segment_closed(
-	  segment_id,
-	  header.journal_segment_seq);
-      }).handle_error(
-	crimson::ct_error::enoent::handle([](auto) {
-	  return mount_ertr::now();
-	}),
-	crimson::ct_error::enodata::handle([](auto) {
-	  return mount_ertr::now();
-	}),
-	crimson::ct_error::input_output_error::pass_further{}
       );
+    }).safe_then([this, segment_id, header](auto) {
+      init_mark_segment_closed(
+	segment_id,
+	header.journal_segment_seq);
+      return seastar::now();
     });
+  } else if (header.get_type() == segment_type_t::JOURNAL) {
+    logger().info(
+      "ExtentReader::init_segments: journal segment {}",
+      segment_id);
+    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
+  } else {
+    ceph_abort("unexpected segment type");
+  }
+  init_mark_segment_closed(
+    segment_id,
+    header.journal_segment_seq);
+  return seastar::now();
 }
 
 }
