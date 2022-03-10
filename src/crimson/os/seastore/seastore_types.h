@@ -862,13 +862,14 @@ enum class extent_types_t : uint8_t {
   // the following two types are not extent types,
   // they are just used to indicates paddr allocation deltas
   ALLOC_INFO = 9,
+  ALLOC_TAIL = 10,
   // Test Block Types
-  TEST_BLOCK = 10,
-  TEST_BLOCK_PHYSICAL = 11,
-  BACKREF_INTERNAL = 12,
-  BACKREF_LEAF = 13,
+  TEST_BLOCK = 11,
+  TEST_BLOCK_PHYSICAL = 12,
+  BACKREF_INTERNAL = 13,
+  BACKREF_LEAF = 14,
   // None and the number of valid extent_types_t
-  NONE = 14,
+  NONE = 15,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1348,6 +1349,7 @@ struct segment_header_t {
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
+  journal_seq_t alloc_replay_from;
   segment_nonce_t segment_nonce;
 
   segment_type_t type;
@@ -1361,6 +1363,7 @@ struct segment_header_t {
     denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
+    denc(v.alloc_replay_from, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
     DENC_FINISH(p);
@@ -1373,6 +1376,7 @@ struct segment_tail_t {
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
+  journal_seq_t alloc_replay_from;
   segment_nonce_t segment_nonce;
 
   segment_type_t type;
@@ -1389,6 +1393,7 @@ struct segment_tail_t {
     denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
+    denc(v.alloc_replay_from, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
     denc(v.last_modified, p);

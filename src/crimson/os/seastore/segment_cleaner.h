@@ -193,6 +193,10 @@ public:
   virtual segment_id_t allocate_segment(
       segment_seq_t seq, segment_type_t type) = 0;
 
+  virtual journal_seq_t get_dirty_extents_replay_from() const = 0;
+
+  virtual journal_seq_t get_alloc_info_replay_from() const = 0;
+
   virtual void close_segment(segment_id_t) = 0;
 
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
@@ -583,6 +587,12 @@ private:
   /// target journal_tail for next fresh segment
   journal_seq_t journal_tail_target;
 
+  /// target replay_from for dirty extents
+  journal_seq_t dirty_extents_replay_from;
+
+  /// target replay_from for alloc infos
+  journal_seq_t alloc_info_replay_from;
+
   /// most recently committed journal_tail
   journal_seq_t journal_tail_committed;
 
@@ -639,7 +649,20 @@ public:
     return sm_group.get();
   }
 
-  void update_journal_tail_target(journal_seq_t target);
+  journal_seq_t get_dirty_extents_replay_from() const final {
+    return dirty_extents_replay_from;
+  }
+
+  journal_seq_t get_alloc_info_replay_from() const final {
+    return alloc_info_replay_from;
+  }
+
+  void update_journal_tail_target(
+    journal_seq_t dirty_replay_from,
+    journal_seq_t alloc_replay_from);
+
+  void update_alloc_info_replay_from(
+    journal_seq_t alloc_replay_from);
 
   void init_mkfs(journal_seq_t head) {
     journal_tail_target = head;

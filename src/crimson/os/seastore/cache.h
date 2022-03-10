@@ -784,6 +784,8 @@ public:
     journal_seq_t seq,
     paddr_t record_block_base,
     const delta_info_t &delta,
+    const journal_seq_t &, // journal seq from which alloc
+			   // delta should be replayed
     seastar::lowres_system_clock::time_point& last_modified);
 
   /**
@@ -906,15 +908,40 @@ public:
     journal_seq_t seq,
     size_t max_bytes);
 
+  std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {
+    LOG_PREFIX(Cache::get_oldest_backref_dirty_from);
+    journal_seq_t backref_oldest = JOURNAL_SEQ_NULL;
+    if (backref_bufs_to_flush.empty()) {
+      if (backref_buffer && !backref_buffer->backrefs.empty()) {
+	backref_oldest = backref_buffer->backrefs.begin()->first;
+      }
+    } else {
+      auto &oldest_buf = backref_bufs_to_flush.front();
+      backref_oldest = oldest_buf->backrefs.begin()->first;
+    }
+    if (backref_oldest == JOURNAL_SEQ_NULL) {
+      SUBDEBUG(seastore_cache, "backref_oldest: null");
+      return std::nullopt;
+    } else {
+      SUBDEBUG(seastore_cache, "backref_oldest: {}",
+	backref_oldest);
+      return backref_oldest;
+    }
+  }
+
   /// returns std::nullopt if no dirty extents or get_dirty_from() for oldest
   std::optional<journal_seq_t> get_oldest_dirty_from() const {
+    LOG_PREFIX(Cache::get_oldest_dirty_from);
     if (dirty.empty()) {
+      SUBDEBUG(seastore_cache, "oldest: null");
       return std::nullopt;
     } else {
       auto oldest = dirty.begin()->get_dirty_from();
       if (oldest == JOURNAL_SEQ_NULL) {
+	SUBDEBUG(seastore_cache, "oldest: null");
 	return std::nullopt;
       } else {
+	SUBDEBUG(seastore_cache, "oldest: {}", oldest);
 	return oldest;
       }
     }

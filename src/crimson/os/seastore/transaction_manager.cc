@@ -89,14 +89,21 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   return segment_cleaner->mount(
   ).safe_then([this] {
     return journal->replay(
-      [this](const auto &offsets, const auto &e, auto last_modified) {
+      [this](
+	const auto &offsets,
+	const auto &e,
+	const journal_seq_t alloc_replay_from,
+	auto last_modified)
+      {
 	auto start_seq = offsets.write_result.start_seq;
 	segment_cleaner->update_journal_tail_target(
-	  cache->get_oldest_dirty_from().value_or(start_seq));
+	  cache->get_oldest_dirty_from().value_or(start_seq),
+	  cache->get_oldest_backref_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
 	  start_seq,
 	  offsets.record_block_base,
 	  e,
+	  alloc_replay_from,
 	  last_modified);
       });
   }).safe_then([this] {
@@ -405,7 +412,8 @@ TransactionManager::submit_transaction_direct(
       backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
 
       segment_cleaner->update_journal_tail_target(
-	cache->get_oldest_dirty_from().value_or(start_seq));
+	cache->get_oldest_dirty_from().value_or(start_seq),
+	cache->get_oldest_backref_dirty_from().value_or(start_seq));
       return segment_cleaner->maybe_release_segment(tref);
     }).safe_then([FNAME, &tref] {
       SUBTRACET(seastore_t, "completed", tref);

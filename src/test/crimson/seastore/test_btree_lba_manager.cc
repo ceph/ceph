@@ -79,6 +79,14 @@ struct btree_test_base :
 
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
 
+  journal_seq_t get_dirty_extents_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  journal_seq_t get_alloc_info_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
   virtual void complete_commit(Transaction &t) {}
   seastar::future<> submit_transaction(TransactionRef t)
   {
