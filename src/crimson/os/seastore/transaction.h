@@ -260,6 +260,10 @@ public:
     return src;
   }
 
+  bool is_cleaner_transaction() const {
+    return src >= Transaction::src_t::CLEANER_TRIM;
+  }
+
   bool is_weak() const {
     return weak;
   }

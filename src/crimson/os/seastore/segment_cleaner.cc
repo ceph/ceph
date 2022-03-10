@@ -482,19 +482,47 @@ segment_id_t SegmentCleaner::allocate_segment(
   return NULL_SEG_ID;
 }
 
-void SegmentCleaner::update_journal_tail_target(journal_seq_t target)
+void SegmentCleaner::update_journal_tail_target(
+  journal_seq_t dirty_replay_from,
+  journal_seq_t alloc_replay_from)
 {
+  logger().debug(
+    "{}: {}, current dirty_extents_replay_from {}",
+    __func__,
+    dirty_replay_from,
+    dirty_extents_replay_from);
+  if (dirty_extents_replay_from == JOURNAL_SEQ_NULL
+      || dirty_replay_from > dirty_extents_replay_from) {
+    dirty_extents_replay_from = dirty_replay_from;
+  }
+
+  update_alloc_info_replay_from(alloc_replay_from);
+
+  journal_seq_t target = std::min(dirty_replay_from, alloc_replay_from);
   logger().debug(
     "{}: {}, current tail target {}",
     __func__,
     target,
     journal_tail_target);
-  assert(journal_tail_target == JOURNAL_SEQ_NULL || target >= journal_tail_target);
   if (journal_tail_target == JOURNAL_SEQ_NULL || target > journal_tail_target) {
     journal_tail_target = target;
   }
   gc_process.maybe_wake_on_space_used();
   maybe_wake_gc_blocked_io();
+}
+
+void SegmentCleaner::update_alloc_info_replay_from(
+  journal_seq_t alloc_replay_from)
+{
+  logger().debug(
+    "{}: {}, current alloc_info_replay_from {}",
+    __func__,
+    alloc_replay_from,
+    alloc_info_replay_from);
+  if (alloc_info_replay_from == JOURNAL_SEQ_NULL
+      || alloc_replay_from > alloc_info_replay_from) {
+    alloc_info_replay_from = alloc_replay_from;
+  }
 }
 
 void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
@@ -876,6 +904,8 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   journal_tail_target = JOURNAL_SEQ_NULL;
   journal_tail_committed = JOURNAL_SEQ_NULL;
   journal_head = JOURNAL_SEQ_NULL;
+  dirty_extents_replay_from = JOURNAL_SEQ_NULL;
+  alloc_info_replay_from = JOURNAL_SEQ_NULL;
   
   space_tracker.reset(
     detailed ?
@@ -924,6 +954,12 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
 	    time_point last_rewritten(duration(tail.last_rewritten));
 	    segments.update_last_modified_rewritten(
                 segment_id, last_modified, last_rewritten);
+	    if (tail.get_type() == segment_type_t::JOURNAL) {
+	      update_journal_tail_committed(tail.journal_tail);
+	      update_journal_tail_target(
+		tail.journal_tail,
+		tail.alloc_replay_from);
+	    }
 	    init_mark_segment_closed(
 	      segment_id,
 	      header.segment_seq,
@@ -955,23 +991,23 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
   scan_extents_ret_bare& segment_set,
   segment_id_t segment_id)
 {
-  if (header.get_type() == segment_type_t::OOL) {
-    logger().info(
-      "SegmentCleaner::scan_nonfull_segment: out-of-line segment {}",
-      segment_id);
+  return seastar::do_with(
+    scan_valid_records_cursor({
+      segments[segment_id].seq,
+      paddr_t::make_seg_paddr(segment_id, 0)}),
+    [this, segment_id, segment_header=header](auto& cursor) {
     return seastar::do_with(
-      scan_valid_records_cursor({
-	segments[segment_id].seq,
-	paddr_t::make_seg_paddr(segment_id, 0)}),
-      [this, segment_id, header](auto& cursor) {
-      return seastar::do_with(
-	SegmentManagerGroup::found_record_handler_t([this, segment_id](
-	    record_locator_t locator,
-	    const record_group_header_t& header,
-	    const bufferlist& mdbuf
-	  ) mutable -> SegmentManagerGroup::scan_valid_records_ertr::future<> {
-	  LOG_PREFIX(SegmentCleaner::scan_nonfull_segment);
-	  DEBUG("decodeing {} records", header.records);
+	SegmentManagerGroup::found_record_handler_t(
+	[this, segment_id, segment_header](
+	  record_locator_t locator,
+	  const record_group_header_t& header,
+	  const bufferlist& mdbuf
+	) mutable -> SegmentManagerGroup::scan_valid_records_ertr::future<> {
+	LOG_PREFIX(SegmentCleaner::scan_nonfull_segment);
+	if (segment_header.get_type() == segment_type_t::OOL) {
+	  DEBUG("out-of-line segment {}, decodeing {} records",
+	    segment_id,
+	    header.records);
 	  auto maybe_headers = try_decode_record_headers(header, mdbuf);
 	  if (!maybe_headers) {
 	    ERROR("unable to decode record headers for record group {}",
@@ -997,36 +1033,44 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
               segments.update_last_modified_rewritten(segment_id, {}, commit_time);
 	    }
 	  }
-	  return seastar::now();
-	}),
-	[&cursor, header, this](auto& handler) {
-	  return sm_group->scan_valid_records(
-	    cursor,
-	    header.segment_nonce,
-	    segments.get_segment_size(),
-	    handler);
+	} else {
+	  DEBUG("inline segment {}, decodeing {} records",
+	    segment_id,
+	    header.records);
+	  auto maybe_record_deltas_list = try_decode_deltas(
+	    header, mdbuf, locator.record_block_base);
+	  if (!maybe_record_deltas_list) {
+	    ERROR("unable to decode deltas for record {} at {}",
+		  header, locator);
+	    return crimson::ct_error::input_output_error::make();
+	  }
+	  for (auto &record_deltas : *maybe_record_deltas_list) {
+	    for (auto &[ctime, delta] : record_deltas.deltas) {
+	      if (delta.type == extent_types_t::ALLOC_TAIL) {
+		journal_seq_t seq;
+		decode(seq, delta.bl);
+		update_alloc_info_replay_from(seq);
+	      }
+	    }
+	  }
 	}
-      );
-    }).safe_then([this, segment_id, header](auto) {
-      init_mark_segment_closed(
-	segment_id,
-	header.segment_seq,
-	header.type);
-      return seastar::now();
-    });
-  } else if (header.get_type() == segment_type_t::JOURNAL) {
-    logger().info(
-      "SegmentCleaner::scan_nonfull_segment: journal segment {}",
-      segment_id);
-    segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
-  } else {
-    ceph_abort("unexpected segment type");
-  }
-  init_mark_segment_closed(
-    segment_id,
-    header.segment_seq,
-    header.type);
-  return seastar::now();
+	return seastar::now();
+      }),
+      [&cursor, segment_header, this](auto& handler) {
+	return sm_group->scan_valid_records(
+	  cursor,
+	  segment_header.segment_nonce,
+	  segments.get_segment_size(),
+	  handler);
+      }
+    );
+  }).safe_then([this, segment_id, header](auto) {
+    init_mark_segment_closed(
+      segment_id,
+      header.segment_seq,
+      header.type);
+    return seastar::now();
+  });
 }
 
 SegmentCleaner::release_ertr::future<>
