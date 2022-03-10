@@ -2894,12 +2894,12 @@ int MotrStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* us
 
 std::string MotrStore::zone_unique_id(uint64_t unique_num)
 {
-  return "";
+  return motr->zone_unique_id(unique_num);
 }
 
 std::string MotrStore::zone_unique_trans_id(const uint64_t unique_num)
 {
-  return "";
+  return motr->zone_unique_trans_id(unique_num);
 }
 
 int MotrStore::cluster_stat(RGWClusterStat& stats)
@@ -3483,6 +3483,10 @@ void *newMotrStore(CephContext *cct)
     if (rc != 0) {
       ldout(cct, 0) << "ERROR: m0_ufid_init() failed: " << rc << dendl;
       goto out;
+    }
+    RGWMotr* motr = new RGWMotr();
+    if (motr) {
+      store->setMotr(motr);
     }
 
     // Create global indices if not yet.
