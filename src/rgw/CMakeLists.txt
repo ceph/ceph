@@ -119,6 +119,7 @@ set(librgw_common_srcs
   rgw_putobj_processor.cc
   rgw_quota.cc
   rgw_rados.cc
+  rgw_motr.cc
   rgw_resolve.cc
   rgw_rest.cc
   rgw_rest_client.cc

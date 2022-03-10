@@ -27,6 +27,7 @@ extern "C" {
 
 #include "rgw_sal.h"
 #include "rgw_rados.h"
+#include "rgw_motr.h"
 #include "rgw_notify.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
@@ -878,6 +879,7 @@ class MotrStore : public Store {
     MotrMetaCache* obj_meta_cache;
     MotrMetaCache* user_cache;
     MotrMetaCache* bucket_inst_cache;
+    RGWMotr *motr =nullptr;
 
   public:
     CephContext *cctx;
@@ -932,7 +934,9 @@ class MotrStore : public Store {
     virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, std::vector<rgw_bucket>& buckets, bool enabled) override;
-    virtual uint64_t get_new_req_id() override { return 0; }
+    virtual uint64_t get_new_req_id() override { return motr->get_new_req_id();}
+    RGWServices* svc() { return &motr->svc; }
+    RGWCtl* ctl(){return &motr->ctl;}
     virtual int get_sync_policy_handler(const DoutPrefixProvider *dpp,
         std::optional<rgw_zone_id> zone,
         std::optional<rgw_bucket> bucket,
@@ -955,7 +959,7 @@ class MotrStore : public Store {
     virtual int meta_remove(const DoutPrefixProvider *dpp, std::string& metadata_key, optional_yield y) override;
 
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
-    virtual std::string get_host_id() { return ""; }
+    virtual std::string get_host_id() { return motr->get_host_id();}
 
     virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
@@ -1031,6 +1035,8 @@ class MotrStore : public Store {
     MotrMetaCache* get_obj_meta_cache() {return obj_meta_cache;}
     MotrMetaCache* get_user_cache() {return user_cache;}
     MotrMetaCache* get_bucket_inst_cache() {return bucket_inst_cache;}
+    void setMotr(RGWMotr * st) { motr = st; }
+    RGWMotr* getMotr(void) { return motr; }
 };
 
 struct obj_time_weight {

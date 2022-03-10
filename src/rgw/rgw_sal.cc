@@ -118,7 +118,10 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       return store;
     }
     ((rgw::sal::MotrStore *)store)->init_metadata_cache(dpp, cct);
-
+    RGWMotr* motr = static_cast<rgw::sal::MotrStore* >(store)->getMotr();
+    if ((*motr).initialize(cct, dpp) < 0) {
+	    delete store; store = nullptr;
+    }
     return store;
   }
 #endif
