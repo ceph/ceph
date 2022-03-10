@@ -567,7 +567,7 @@ struct rgw_cls_bi_entry {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
-  static void generate_test_instances(std::list<rgw_bucket_olh_log_entry*>& o);
+  static void generate_test_instances(std::list<rgw_cls_bi_entry*>& o);
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
 		rgw_bucket_category_stats *accounted_stats);
 };

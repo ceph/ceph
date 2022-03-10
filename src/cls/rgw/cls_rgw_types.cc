@@ -408,7 +408,7 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
 void rgw_cls_bi_entry::generate_test_instances(list<rgw_cls_bi_entry*>& o)
 {
   rgw_cls_bi_entry *m = new rgw_cls_bi_entry;
-  m->type = Plain;
+  m->type = BIIndexType::Plain;
   m->idx = "idx";
   o.push_back(m);
   o.push_back(new rgw_cls_bi_entry);
@@ -700,7 +700,11 @@ void rgw_usage_data::dump(Formatter *f) const
 void rgw_usage_log_info::generate_test_instances(list<rgw_usage_log_info*>& o)
 {
   rgw_usage_log_info *s = new rgw_usage_log_info;
-  rgw_usage_log_entry r("owner", "payer", "bucket");
+  std::string owner = "owner";
+  std::string payer = "payer";
+  std::string bucket = "bucket";
+  
+  rgw_usage_log_entry r(owner, payer, bucket);
   s->entries.push_back(r);
   o.push_back(s);
   o.push_back(new rgw_usage_log_info);
