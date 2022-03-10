@@ -886,6 +886,11 @@ constexpr bool is_logical_type(extent_types_t type) {
   }
 }
 
+constexpr bool is_retired_placeholder(extent_types_t type)
+{
+  return type == extent_types_t::RETIRED_PLACEHOLDER;
+}
+
 constexpr bool is_lba_node(extent_types_t type)
 {
   return type == extent_types_t::LADDR_INTERNAL ||

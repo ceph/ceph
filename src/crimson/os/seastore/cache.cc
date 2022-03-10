@@ -1166,6 +1166,50 @@ record_t Cache::prepare_record(
   return record;
 }
 
+void Cache::backref_batch_update(
+  std::vector<backref_buf_entry_ref> &&list,
+  const journal_seq_t &seq)
+{
+  LOG_PREFIX(Cache::backref_batch_update);
+  DEBUG("inserting {} entries", list.size());
+  if (!backref_buffer) {
+    backref_buffer = std::make_unique<backref_buffer_t>();
+  }
+  // backref_buf_entry_t::laddr == L_ADDR_NULL means erase
+  for (auto &ent : list) {
+    if (ent->laddr == L_ADDR_NULL) {
+      auto [it, insert] = backref_remove_set.insert(*ent);
+#ifndef NDEBUG
+      if (!insert) {
+	ERROR("backref_remove_set already contains {}", ent->paddr);
+      }
+#endif
+      assert(insert);
+    } else {
+#ifndef NDEBUG
+      auto r = backref_remove_set.erase(ent->paddr, backref_buf_entry_t::cmp_t());
+      if (r) {
+	ERROR("backref_remove_set contains: {}", ent->paddr);
+      }
+      assert(!r);
+#endif
+      auto [it, insert] = backref_inserted_set.insert(*ent);
+      assert(insert);
+    }
+  }
+
+  auto iter = backref_buffer->backrefs.find(seq);
+  if (iter == backref_buffer->backrefs.end()) {
+    backref_buffer->backrefs.emplace(
+      seq, std::move(list));
+  } else {
+    iter->second.insert(
+      iter->second.end(),
+      std::make_move_iterator(list.begin()),
+      std::make_move_iterator(list.end()));
+  }
+}
+
 void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start,
@@ -1176,7 +1220,10 @@ void Cache::complete_commit(
   SUBTRACET(seastore_t, "final_block_start={}, seq={}",
             t, final_block_start, seq);
 
-  t.for_each_fresh_block([&](auto &i) {
+  may_roll_backref_buffer(final_block_start);
+
+  std::vector<backref_buf_entry_ref> backref_list;
+  t.for_each_fresh_block([&](const CachedExtentRef &i) {
     bool is_inline = false;
     if (i->is_inline()) {
       is_inline = true;
@@ -1200,6 +1247,19 @@ void Cache::complete_commit(
 	  (t.get_src() >= Transaction::src_t::CLEANER_TRIM)
 	    ? i->last_rewritten
 	    : seastar::lowres_system_clock::time_point());
+      }
+      if (is_backref_mapped_extent_node(i)) {
+	backref_list.emplace_back(
+	  std::make_unique<backref_buf_entry_t>(
+	    i->get_paddr(),
+	    i->is_logical()
+	    ? i->cast<LogicalCachedExtent>()->get_laddr()
+	    : (is_lba_node(i->get_type())
+	      ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
+	      : L_ADDR_NULL),
+	    i->get_length(),
+	    i->get_type(),
+	    seq));
       }
     }
   });
@@ -1240,7 +1300,19 @@ void Cache::complete_commit(
   last_commit = seq;
   for (auto &i: t.retired_set) {
     i->dirty_from_or_retired_at = last_commit;
+    if (is_backref_mapped_extent_node(i)
+	  || is_retired_placeholder(i->get_type())) {
+      backref_list.emplace_back(
+	std::make_unique<backref_buf_entry_t>(
+	  i->get_paddr(),
+	  L_ADDR_NULL,
+	  i->get_length(),
+	  i->get_type(),
+	  seq));
+    }
   }
+  if (!backref_list.empty())
+    backref_batch_update(std::move(backref_list), seq);
 }
 
 void Cache::init()
@@ -1291,6 +1363,8 @@ Cache::close_ertr::future<> Cache::close()
     dirty.erase(i++);
     intrusive_ptr_release(ptr);
   }
+  backref_bufs_to_flush.clear();
+  backref_buffer.reset();
   assert(stats.dirty_bytes == 0);
   lru.clear();
   return close_ertr::now();

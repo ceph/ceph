@@ -7,6 +7,7 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 
 /*
  * TransactionManager logs
@@ -26,12 +27,14 @@ TransactionManager::TransactionManager(
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
-  ExtentPlacementManagerRef &&epm)
+  ExtentPlacementManagerRef &&epm,
+  BackrefManagerRef&& backref_manager)
   : segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
+    backref_manager(std::move(backref_manager)),
     sm_group(*segment_cleaner->get_segment_manager_group())
 {
   segment_cleaner->set_extent_callback(this);
@@ -58,6 +61,8 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
       return cache->mkfs(t
       ).si_then([this, &t] {
         return lba_manager->mkfs(t);
+      }).si_then([this, &t] {
+        return backref_manager->mkfs(t);
       }).si_then([this, FNAME, &t] {
         INFOT("submitting mkfs transaction", t);
         return submit_transaction_direct(t);
@@ -540,25 +545,28 @@ TransactionManager::~TransactionManager() {}
 
 TransactionManagerRef make_transaction_manager(bool detailed)
 {
+  auto epm = std::make_unique<ExtentPlacementManager>();
+  auto cache = std::make_unique<Cache>(*epm);
+  auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
+  auto backref_manager = create_backref_manager(*sms, *cache);
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
     std::move(sms),
+    *backref_manager,
     detailed);
   auto journal = journal::make_segmented(*segment_cleaner);
-  auto epm = std::make_unique<ExtentPlacementManager>();
   epm->init_ool_writers(
       *segment_cleaner,
       segment_cleaner->get_ool_segment_seq_allocator());
-  auto cache = std::make_unique<Cache>(*epm);
-  auto lba_manager = lba_manager::create_lba_manager(*cache);
 
   return std::make_unique<TransactionManager>(
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
     std::move(lba_manager),
-    std::move(epm));
+    std::move(epm),
+    std::move(backref_manager));
 }
 
 }
