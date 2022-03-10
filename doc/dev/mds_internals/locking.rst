@@ -39,9 +39,9 @@ Lock classes define locking behaviour for the associated lock type necessary for
 
   SimpleLock  - Used for data that requires shared read and mutually exclusive write. This lock class is also the base class for other lock classes and specifies most of the locking behaviour for implementing distributed locks.
 
-  ScatterLock - Used for data that requires shared read and shared write. Typical use is where an MDS can delegate some authority to other MDS replicas, e.g., replica MDSs can satisfy read capablities for clients.
+  ScatterLock - Used for data that requires shared read and shared write. Typical use is where an MDS can delegate some authority to other MDS replicas, e.g., replica MDSs can satisfy read capabilities for clients.
 
-.. note::  In addition, MDS defines FileLock which is a special case of ScatterLock used for data that requires shared read and shared write, but also for protecting other peices of metadata that require shared read and mutually exclusive write.
+.. note::  In addition, MDS defines FileLock which is a special case of ScatterLock used for data that requires shared read and shared write, but also for protecting other pieces of metadata that require shared read and mutually exclusive write.
 
 Classification of lock types are as follows::
 
@@ -78,7 +78,7 @@ There are 3 modes in which a lock can be acquired::
 
 `wrlock` is special since it allows concurrent writers and is valid for `ScatterLock` and `FileLock` class. From the earlier section it can be seen that `INEST` and `IDFT` are of `ScatterLock` class. `wrlock` allows multiple writers at the same time, .e.g., when a (large) directory is split into multiple shards (after fragmentation) and each shard is "assigned" to an active MDS. When new files are created under these directories, the recursive stats are independently updated on the active MDSs. Later, to fetch the updated stats, the "scattered" data is aggregated ("gathered") on the auth MDS (of the inode); which typically happens when a `rdlock` is requested on this lock type.
 
-.. note:: MDS also defines `remote_wrlock` which is primarly used during rename operation when the destination dentry is on another (active) MDS than the source MDS.
+.. note:: MDS also defines `remote_wrlock` which is primarily used during rename operations when the destination dentry is on another (active) MDS than the source MDS.
 
 Lock States and Lock State Machine
 ----------------------------------
