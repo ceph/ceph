@@ -4083,6 +4083,14 @@ bool BlueFS::wal_is_rotational()
   return bdev[BDEV_SLOW]->is_rotational();
 }
 
+bool BlueFS::db_is_rotational()
+{
+  if (bdev[BDEV_DB]) {
+    return bdev[BDEV_DB]->is_rotational();
+  }
+  return bdev[BDEV_SLOW]->is_rotational();
+}
+
 /*
   Algorithm.
   do_replay_recovery_read is used when bluefs log abruptly ends, but it seems that more data should be there.

@@ -6057,6 +6057,17 @@ bool BlueStore::is_journal_rotational()
   return bluefs->wal_is_rotational();
 }
 
+bool BlueStore::is_db_rotational()
+{
+  if (!bluefs) {
+    dout(5) << __func__ << " bluefs disabled, default to store media type"
+            << dendl;
+    return is_rotational();
+  }
+  dout(10) << __func__ << " " << (int)bluefs->db_is_rotational() << dendl;
+  return bluefs->db_is_rotational();
+}
+
 bool BlueStore::_use_rotational_settings()
 {
   if (cct->_conf->bluestore_debug_enforce_settings == "hdd") {
@@ -6384,7 +6395,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  if (!read_only && !to_repair && cct->_conf->bluestore_allocation_from_file
+  if (!is_db_rotational() && !read_only && !to_repair && cct->_conf->bluestore_allocation_from_file
 #ifdef HAVE_LIBZBD
       && !bdev->is_smr()
 #endif
