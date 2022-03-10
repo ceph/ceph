@@ -10,11 +10,12 @@ namespace crimson::os::seastore {
 SegmentedAllocator::SegmentedAllocator(
   SegmentProvider& sp,
   SegmentManager& sm)
+  : rewriter(sp, sm)
 {
   std::generate_n(
     std::back_inserter(writers),
     crimson::common::get_conf<uint64_t>(
-      "seastore_init_rewrite_segments_num_per_device"),
+      "seastore_init_write_segments_num_per_device"),
     [&] {
       return Writer{sp, sm};
     }
@@ -80,7 +81,11 @@ SegmentedAllocator::Writer::do_write(
   }
   assert(segment_allocator.can_write());
 
-  ool_record_t record(segment_allocator.get_block_size());
+  ool_record_t record(
+    segment_allocator.get_block_size(),
+    (t.get_src() == Transaction::src_t::MUTATE)
+      ? record_commit_type_t::MODIFY
+      : record_commit_type_t::REWRITE);
   for (auto it = extents.begin(); it != extents.end();) {
     auto& extent = *it;
     auto wouldbe_length = record.get_wouldbe_encoded_record_length(extent);

@@ -41,6 +41,15 @@ struct btree_test_base :
 
   btree_test_base() = default;
 
+  seastar::lowres_system_clock::time_point get_last_modified(
+    segment_id_t id) const final {
+    return seastar::lowres_system_clock::time_point();
+  }
+
+  seastar::lowres_system_clock::time_point get_last_rewritten(
+    segment_id_t id) const final {
+    return seastar::lowres_system_clock::time_point();
+  }
   void update_segment_avail_bytes(paddr_t offset) final {}
 
   segment_id_t get_segment(device_id_t id, segment_seq_t seq) final {

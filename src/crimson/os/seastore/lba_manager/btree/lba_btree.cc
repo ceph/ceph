@@ -421,6 +421,7 @@ LBABtree::rewrite_lba_extent_ret LBABtree::rewrite_lba_extent(
       lba_extent.get_length(),
       nlba_extent->get_bptr().c_str());
     nlba_extent->pin.set_range(nlba_extent->get_node_meta());
+    nlba_extent->set_last_modified(lba_extent.get_last_modified());
 
     /* This is a bit underhanded.  Any relative addrs here must necessarily
      * be record relative as we are rewriting a dirty extent.  Thus, we

@@ -70,7 +70,8 @@ class SegmentAllocator {
   // returns true iff the current segment has insufficient space
   bool needs_roll(std::size_t length) const {
     assert(can_write());
-    auto write_capacity = current_segment->get_write_capacity();
+    auto write_capacity = current_segment->get_write_capacity()
+      - segment_manager.get_rounded_tail_length();
     return length + written_to > std::size_t(write_capacity);
   }
 

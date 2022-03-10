@@ -100,7 +100,36 @@ class CachedExtent : public boost::intrusive_ref_counter<
   // Points at current version while in state MUTATION_PENDING
   CachedExtentRef prior_instance;
 
+  // time of the last modification
+  seastar::lowres_system_clock::time_point last_modified;
+
+  // time of the last rewrite
+  seastar::lowres_system_clock::time_point last_rewritten;
 public:
+
+  void set_last_modified(seastar::lowres_system_clock::duration d) {
+    last_modified = seastar::lowres_system_clock::time_point(d);
+  }
+
+  void set_last_modified(seastar::lowres_system_clock::time_point t) {
+    last_modified = t;
+  }
+
+  seastar::lowres_system_clock::time_point get_last_modified() const {
+    return last_modified;
+  }
+
+  void set_last_rewritten(seastar::lowres_system_clock::duration d) {
+    last_rewritten = seastar::lowres_system_clock::time_point(d);
+  }
+
+  void set_last_rewritten(seastar::lowres_system_clock::time_point t) {
+    last_rewritten = t;
+  }
+
+  seastar::lowres_system_clock::time_point get_last_rewritten() const {
+    return last_rewritten;
+  }
   /**
    *  duplicate_for_write
    *
@@ -170,6 +199,8 @@ public:
 	<< ", type=" << get_type()
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
+	<< ", last_modified=" << last_modified.time_since_epoch()
+	<< ", last_rewritten=" << last_rewritten.time_since_epoch()
 	<< ", paddr=" << get_paddr()
 	<< ", length=" << get_length()
 	<< ", state=" << state
