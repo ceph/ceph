@@ -126,7 +126,7 @@ public:
  *
  * Data within RGW is stored as an Object.  Each Object is a single chunk of data, owned
  * by a single User, contained within a single Bucket.  It has metadata associated with
- * it, such as size, owner, and so in, and a set of key-value attributes that can
+ * it, such as size, owner, and so on, and a set of key-value attributes that can
  * contain anything needed by the top half.
  *
  * Data with RGW is organized into Buckets.  Each Bucket is owned by a User, and
@@ -244,7 +244,7 @@ class Store {
     Store() {}
     virtual ~Store() = default;
 
-    /** Name of this store provider (e.g., RADOS") */
+    /** Name of this store provider (e.g., "rados") */
     virtual const char* get_name() const = 0;
     /** Get cluster unique identifier */
     virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) = 0;
@@ -288,7 +288,7 @@ class Store {
      /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
       * management/tracking software */
     /** RGWOp variant */
-    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s, 
+    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
         rgw::notify::EventType event_type, const std::string* object_name=nullptr) = 0;
     /** No-req_state variant (e.g., rgwlc) */
     virtual std::unique_ptr<Notification> get_notification(
@@ -400,7 +400,7 @@ class Store {
 
     /** Get the Ceph context associated with this store.  May be removed. */
     virtual CephContext* ctx(void) = 0;
-    
+
     /** Get the location of where lua packages are installed */
     virtual const std::string& get_luarocks_path() const = 0;
     /** Set the location of where lua packages are installed */
@@ -489,6 +489,7 @@ class User {
     /** Set the attributes in attrs, leaving any other existing attrs set, and
      * write them to the backing store; a merge operation */
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) = 0;
+    /** Read the User stats from the backing Store, synchronous */
     virtual int read_stats(const DoutPrefixProvider *dpp,
                            optional_yield y, RGWStorageStats* stats,
 			   ceph::real_time* last_stats_sync = nullptr,
@@ -1368,7 +1369,11 @@ public:
   /** prepare to start processing object data */
   virtual int prepare(optional_yield y) = 0;
 
-  /** Process a buffer.  Called multiple times to write different buffers. */
+  /**
+   * Process a buffer. Called multiple times to write different buffers.
+   * data.length() == 0 indicates the last call and may be used to flush
+   * the data buffers.
+   */
   virtual int process(bufferlist&& data, uint64_t offset) = 0;
 
   /** complete the operation and make its result visible to clients */
