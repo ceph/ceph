@@ -19,8 +19,6 @@ local u = import 'utils.libsonnet';
                            '$datasource')
         .addTargets(
           [u.addTargetSchema('sum by (source_zone) (rate(%s[30s]))' % rgwMetric,
-                             1,
-                             'time_series',
                              '{{source_zone}}')]
         ) + { gridPos: { x: x, y: y, w: w, h: h } };
 
@@ -144,7 +142,7 @@ local u = import 'utils.libsonnet';
           legend_values
         )
         .addTargets(
-          [u.addTargetSchema(expr1, 1, 'time_series', legendFormat1)]
+          [u.addTargetSchema(expr1, legendFormat1)]
         ) + { gridPos: { x: x, y: y, w: w, h: h } };
 
       u.dashboardSchema(
@@ -242,8 +240,6 @@ local u = import 'utils.libsonnet';
           [
             u.addTargetSchema(
               'rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata',
-              1,
-              'time_series',
               'PUT AVG'
             ),
           ]
@@ -285,8 +281,6 @@ local u = import 'utils.libsonnet';
           6
         ).addTargets(
           [u.addTargetSchema('sum(rate(ceph_rgw_put_b[30s]))',
-                             1,
-                             'time_series',
                              'PUTs')]
         ),
         RgwOverviewPanel(
@@ -336,7 +330,7 @@ local u = import 'utils.libsonnet';
           true
         )
         .addTargets(
-          [u.addTargetSchema('sum(irate(haproxy_backend_http_responses_total{code=~"$code",instance=~"$ingress_service",proxy=~"backend"}[5m])) by (code)', 1, 'time_series', 'Backend {{ code }}')]
+          [u.addTargetSchema('sum(irate(haproxy_backend_http_responses_total{code=~"$code",instance=~"$ingress_service",proxy=~"backend"}[5m])) by (code)', 'Backend {{ code }}')]
         )
         .addSeriesOverride([
           {
@@ -371,12 +365,12 @@ local u = import 'utils.libsonnet';
         )
         .addTargets(
           [
-            u.addTargetSchema('sum(irate(haproxy_backend_response_errors_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 2, 'time_series', 'Response errors'),
-            u.addTargetSchema('sum(irate(haproxy_frontend_request_errors_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])) by (instance)', 1, 'time_series', 'Requests errors'),
-            u.addTargetSchema('sum(irate(haproxy_backend_redispatch_warnings_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 2, 'time_series', 'Backend redispatch'),
-            u.addTargetSchema('sum(irate(haproxy_backend_retry_warnings_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 2, 'time_series', 'Backend retry'),
-            u.addTargetSchema('sum(irate(haproxy_frontend_requests_denied_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])) by (instance)', 2, 'time_series', 'Request denied'),
-            u.addTargetSchema('sum(haproxy_backend_current_queue{proxy=~"backend",instance=~"$ingress_service"}) by (instance)', 2, 'time_series', 'Backend Queued'),
+            u.addTargetSchema('sum(irate(haproxy_backend_response_errors_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 'Response errors', 'time_series', 2),
+            u.addTargetSchema('sum(irate(haproxy_frontend_request_errors_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])) by (instance)', 'Requests errors'),
+            u.addTargetSchema('sum(irate(haproxy_backend_redispatch_warnings_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 'Backend redispatch', 'time_series', 2),
+            u.addTargetSchema('sum(irate(haproxy_backend_retry_warnings_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 'Backend retry', 'time_series', 2),
+            u.addTargetSchema('sum(irate(haproxy_frontend_requests_denied_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])) by (instance)', 'Request denied', 'time_series', 2),
+            u.addTargetSchema('sum(haproxy_backend_current_queue{proxy=~"backend",instance=~"$ingress_service"}) by (instance)', 'Backend Queued', 'time_series', 2),
           ]
         )
         .addSeriesOverride([
@@ -410,8 +404,8 @@ local u = import 'utils.libsonnet';
         )
         .addTargets(
           [
-            u.addTargetSchema('sum(irate(haproxy_backend_connection_attempts_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 1, 'time_series', 'Back'),
-            u.addTargetSchema('sum(irate(haproxy_backend_connection_errors_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 1, 'time_series', 'Back errors'),
+            u.addTargetSchema('sum(irate(haproxy_backend_connection_attempts_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 'Back'),
+            u.addTargetSchema('sum(irate(haproxy_backend_connection_errors_total{proxy=~"backend",instance=~"$ingress_service"}[5m])) by (instance)', 'Back errors'),
           ]
         )
         .addSeriesOverride([
@@ -441,9 +435,9 @@ local u = import 'utils.libsonnet';
         )
         .addTargets(
           [
-            u.addTargetSchema('sum(irate(haproxy_frontend_bytes_out_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])*8) by (instance)', 2, 'time_series', 'OUT Front'),
-            u.addTargetSchema('sum(irate(haproxy_backend_bytes_in_total{proxy=~"backend",instance=~"$ingress_service"}[5m])*8) by (instance)', 2, 'time_series', 'IN Back'),
-            u.addTargetSchema('sum(irate(haproxy_backend_bytes_out_total{proxy=~"backend",instance=~"$ingress_service"}[5m])*8) by (instance)', 2, 'time_series', 'OUT Back'),
+            u.addTargetSchema('sum(irate(haproxy_frontend_bytes_out_total{proxy=~"frontend",instance=~"$ingress_service"}[5m])*8) by (instance)', 'OUT Front', 'time_series', 2),
+            u.addTargetSchema('sum(irate(haproxy_backend_bytes_in_total{proxy=~"backend",instance=~"$ingress_service"}[5m])*8) by (instance)', 'IN Back', 'time_series', 2),
+            u.addTargetSchema('sum(irate(haproxy_backend_bytes_out_total{proxy=~"backend",instance=~"$ingress_service"}[5m])*8) by (instance)', 'OUT Back', 'time_series', 2),
           ]
         )
         .addSeriesOverride([
@@ -480,7 +474,7 @@ local u = import 'utils.libsonnet';
                            1,
                            '$datasource')
         .addTargets(
-          [u.addTargetSchema(expr1, 1, 'time_series', legendFormat1), u.addTargetSchema(expr2, 1, 'time_series', legendFormat2)]
+          [u.addTargetSchema(expr1, legendFormat1), u.addTargetSchema(expr2, legendFormat2)]
         ) + { gridPos: { x: x, y: y, w: w, h: h } };
 
       u.dashboardSchema(
@@ -593,14 +587,10 @@ local u = import 'utils.libsonnet';
           [
             u.addTargetSchema(
               'rate(ceph_rgw_put[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
-              1,
-              'time_series',
               'PUTs {{ceph_daemon}}'
             ),
             u.addTargetSchema(
               '(\n    rate(ceph_rgw_req[30s]) -\n    (rate(ceph_rgw_get[30s]) + rate(ceph_rgw_put[30s]))\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
-              1,
-              'time_series',
               'Other {{ceph_daemon}}'
             ),
           ]
@@ -616,26 +606,18 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(u.addTargetSchema(
           'rate(ceph_rgw_failed_req[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
-          1,
-          'time_series',
           'Failures {{ceph_daemon}}'
         ))
         .addTarget(u.addTargetSchema(
           'rate(ceph_rgw_get[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
-          1,
-          'time_series',
           'GETs {{ceph_daemon}}'
         ))
         .addTarget(u.addTargetSchema(
           'rate(ceph_rgw_put[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
-          1,
-          'time_series',
           'PUTs {{ceph_daemon}}'
         ))
         .addTarget(u.addTargetSchema(
           '(\n    rate(ceph_rgw_req[30s]) -\n    (rate(ceph_rgw_get[30s]) + rate(ceph_rgw_put[30s]))\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}',
-          1,
-          'time_series',
           'Other (DELETE,LIST) {{ceph_daemon}}'
         )) + { gridPos: { x: 20, y: 1, w: 4, h: 8 } },
       ]),

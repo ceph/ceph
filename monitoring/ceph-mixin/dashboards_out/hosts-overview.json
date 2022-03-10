@@ -106,6 +106,7 @@
             {
                "expr": "count(sum by (hostname) (ceph_osd_metadata))",
                "format": "time_series",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
@@ -188,6 +189,7 @@
             {
                "expr": "avg(\n  1 - (\n    avg by(instance) \n      (irate(node_cpu_seconds_total{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]) or\n       irate(node_cpu{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]))\n    )\n  )",
                "format": "time_series",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
@@ -270,6 +272,7 @@
             {
                "expr": "avg (((node_memory_MemTotal{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or node_memory_MemTotal_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"})- (\n  (node_memory_MemFree{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or node_memory_MemFree_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"})  + \n  (node_memory_Cached{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or node_memory_Cached_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}) + \n  (node_memory_Buffers{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or node_memory_Buffers_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}) +\n  (node_memory_Slab{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or node_memory_Slab_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"})\n  )) /\n (node_memory_MemTotal{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or node_memory_MemTotal_bytes{instance=~\"($osd_hosts|$rgw_hosts|$mon_hosts|$mds_hosts).*\"} ))",
                "format": "time_series",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
@@ -352,6 +355,7 @@
             {
                "expr": "sum ((irate(node_disk_reads_completed{instance=~\"($osd_hosts).*\"}[5m]) or irate(node_disk_reads_completed_total{instance=~\"($osd_hosts).*\"}[5m]) )  + \n(irate(node_disk_writes_completed{instance=~\"($osd_hosts).*\"}[5m]) or irate(node_disk_writes_completed_total{instance=~\"($osd_hosts).*\"}[5m])))",
                "format": "time_series",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
@@ -434,6 +438,7 @@
             {
                "expr": "avg (\n  label_replace((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  ) *\n  on(instance, device) group_left(ceph_daemon) label_replace(label_replace(ceph_disk_occupation_human{instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\")\n)",
                "format": "time_series",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
@@ -516,6 +521,7 @@
             {
                "expr": "sum (\n        (\n                irate(node_network_receive_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m]) or\n                irate(node_network_receive_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m])\n        ) unless on (device, instance)\n        label_replace((bonding_slaves > 0), \"device\", \"$1\", \"master\", \"(.+)\")\n) +\nsum (\n        (\n                irate(node_network_transmit_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m]) or\n                irate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m])\n        ) unless on (device, instance)\n        label_replace((bonding_slaves > 0), \"device\", \"$1\", \"master\", \"(.+)\")\n        )\n",
                "format": "time_series",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
