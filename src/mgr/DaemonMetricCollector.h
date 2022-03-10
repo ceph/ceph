@@ -1,4 +1,5 @@
 #pragma once
+
 #include "common/admin_socket_client.h"
 #include <string>
 #include <map>
@@ -19,5 +20,6 @@ private:
   //       list dir of sockets
   std::map<std::string, AdminSocketClient> clients;
   void update_sockets();
+  void send_requests();
   void start_mgr_connection();
 };
