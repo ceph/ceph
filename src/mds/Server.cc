@@ -5598,16 +5598,23 @@ int Server::parse_layout_vxattr_string(
     } else if (name == "layout.stripe_count") {
       layout->stripe_count = boost::lexical_cast<unsigned>(value);
     } else if (name == "layout.pool") {
+      int64_t pool = -1;
       try {
-	layout->pool_id = boost::lexical_cast<unsigned>(value);
+        pool = boost::lexical_cast<unsigned>(value);
+        if (!osdmap->have_pg_pool(pool)) {
+            pool = -1;
+        }
       } catch (boost::bad_lexical_cast const&) {
-	int64_t pool = osdmap.lookup_pg_pool_name(value);
-	if (pool < 0) {
-	  dout(10) << __func__ << ": unknown pool " << value << dendl;
-	  return -CEPHFS_ENOENT;
-	}
-	layout->pool_id = pool;
+          // ignore
       }
+      if (pool == -1) {
+        pool = osdmap.lookup_pg_pool_name(value);
+        if (pool < 0) {
+            dout(10) << __func__ << ": unknown pool " << value << dendl;
+            return -CEPHFS_ENOENT;
+        }
+      }
+      layout->pool_id = pool;
     } else if (name == "layout.pool_id") {
       layout->pool_id = boost::lexical_cast<int64_t>(value);
     } else if (name == "layout.pool_name") {

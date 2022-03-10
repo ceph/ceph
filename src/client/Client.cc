@@ -12806,13 +12806,16 @@ int Client::_setxattr_check_data_pool(string& name, string& value, const OSDMap 
     int64_t pool;
     try {
       pool = boost::lexical_cast<unsigned>(tmp);
-      if (!osdmap->have_pg_pool(pool))
-	return -CEPHFS_ENOENT;
-    } catch (boost::bad_lexical_cast const&) {
-      pool = osdmap->lookup_pg_pool_name(tmp);
-      if (pool < 0) {
-	return -CEPHFS_ENOENT;
+      if (osdmap->have_pg_pool(pool)) {
+          return 0;
       }
+    } catch (boost::bad_lexical_cast const&) {
+        // ignore
+    }
+    ldout(cct, 15) << __func__ << ": pool in layout is not a pool id: " << tmp << dendl;
+    pool = osdmap->lookup_pg_pool_name(tmp);
+    if (pool < 0) {
+        return -CEPHFS_ENOENT;
     }
   }
 
