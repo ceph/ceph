@@ -2388,6 +2388,14 @@ options:
   default: true
   flags:
   - runtime
+- name: osd_calc_pg_upmaps_aggressively_fast
+  type: bool
+  level: advanced
+  desc: Prevent very long (>10 minutes) calculations in some extreme cases (applicable
+    only to aggressive mode)
+  default: true
+  flags:
+  - runtime
 - name: osd_calc_pg_upmaps_local_fallback_retries
   type: uint
   level: advanced
