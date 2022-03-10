@@ -4683,6 +4683,8 @@ int OSDMap::calc_pg_upmaps(
   bool skip_overfull = false;
   auto aggressive =
     cct->_conf.get_val<bool>("osd_calc_pg_upmaps_aggressively");
+  auto fast_aggressive = aggressive &&
+    cct->_conf.get_val<bool>("osd_calc_pg_upmaps_aggressively_fast");
   auto local_fallback_retries =
     cct->_conf.get_val<uint64_t>("osd_calc_pg_upmaps_local_fallback_retries");
     
@@ -4714,6 +4716,11 @@ int OSDMap::calc_pg_upmaps(
     set<pg_t> to_skip;
     uint64_t local_fallback_retried = 0;
 
+    // Used to prevent some of the unsuccessful loop iterations (save runtime)
+    // If we can't find a change per OSD we skip further iterations for this OSD
+    uint n_changes = 0, prev_n_changes = 0;
+    set<int> osd_to_skip;
+
   retry:
 
     set<pg_t> to_unmap;
@@ -4727,6 +4734,12 @@ int OSDMap::calc_pg_upmaps(
       }
       int osd = p->second;
       float deviation = p->first;
+      if (fast_aggressive && osd_to_skip.count(osd)) {
+	ldout(cct, 20) << " Fast aggressive mode: skipping osd " << osd 
+	               << " osd_to_skip size = " << osd_to_skip.size() << dendl;
+	continue;
+      }
+
       if (deviation < 0) {
         ldout(cct, 10) << " hitting underfull osds now"
                        << " when trying to remap overfull osds"
@@ -4824,6 +4837,15 @@ int OSDMap::calc_pg_upmaps(
           goto test_change;
 	}
       }
+      if (fast_aggressive) {
+	if (prev_n_changes == n_changes) {  // no changes for prev OSD
+		osd_to_skip.insert(osd);
+	}
+	else {
+		prev_n_changes = n_changes;
+	}
+      }
+
     }
 
     ceph_assert(!(to_unmap.size() || to_upmap.size()));
@@ -4917,6 +4939,8 @@ int OSDMap::calc_pg_upmaps(
     pgs_by_osd = temp_pgs_by_osd;
     osd_deviation = temp_osd_deviation;
     deviation_osd = temp_deviation_osd;
+    n_changes++;
+
 
     num_changed += pack_upmap_results(cct, to_unmap, to_upmap, tmp_osd_map, pending_inc);
 
