@@ -1,5 +1,16 @@
 @import 'defaults';
 
+/* --------------------------------------------------
+   MAIN NAVBAR STYLE
+--------------------------------------------------- */
+
+.cd-navbar-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+}
+
 /* ---------------------------------------------------
     NAVBAR STYLE
 --------------------------------------------------- */
@@ -146,18 +157,19 @@ $sidebar-width: 200px;
 
 .wrapper {
   display: flex;
+  height: 100%;
   width: 100%;
 
   #sidebar {
     width: $sidebar-width;
-    top: $navbar-height;
     background: $color-navbar-bg;
     overflow-y: auto;
-    position: fixed;
+    position: relative;
     bottom: 0;
     left: 0;
     z-index: 999;
     color: #fff;
+    height: auto;
     transition: all 0.3s;
 
     &.active {
@@ -240,36 +252,11 @@ $sidebar-width: 200px;
 #content {
   width: calc(100% - #{$sidebar-width});
   transition: all 0.3s;
-  position: absolute;
-  top: $navbar-height;
+  position: relative;
   bottom: 0;
   right: 0;
 
   &.active {
     width: 100vw;
-  }
-}
-
-/* ---------------------------------------------------
-    topNotification settings
---------------------------------------------------- */
-
-@for $i from 1 through 2 {
-  :host.top-notification-#{$i} {
-    .cd-navbar-top .cd-navbar-brand {
-      top: $top-notification-height * $i;
-    }
-
-    #sidebar {
-      top: $navbar-height + $top-notification-height * $i;
-    }
-
-    #content {
-      top: $navbar-height + $top-notification-height * $i;
-    }
-
-    cd-notifications-sidebar {
-      top: $navbar-height + $top-notification-height * $i + 10px;
-    }
   }
 }

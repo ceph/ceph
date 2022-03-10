@@ -14,6 +14,7 @@ import { PipesModule } from '../../pipes/pipes.module';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { NotificationService } from '../../services/notification.service';
 import { TelemetryNotificationService } from '../../services/telemetry-notification.service';
+import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { TelemetryNotificationComponent } from './telemetry-notification.component';
 
 describe('TelemetryActivationNotificationComponent', () => {
@@ -40,7 +41,7 @@ describe('TelemetryActivationNotificationComponent', () => {
   };
 
   configureTestBed({
-    declarations: [TelemetryNotificationComponent],
+    declarations: [TelemetryNotificationComponent, AlertPanelComponent],
     imports: [AlertModule.forRoot(), HttpClientTestingModule, ToastrModule.forRoot(), PipesModule],
     providers: [MgrModuleService, UserService, i18nProviders]
   });
@@ -92,7 +93,7 @@ describe('TelemetryActivationNotificationComponent', () => {
   it('should hide the notification if the user closes it', () => {
     spyOn(notificationService, 'show');
     fixture.detectChanges();
-    component.close();
+    component.onDismissed();
     expect(notificationService.show).toHaveBeenCalled();
     expect(localStorage.getItem('telemetry_notification_hidden')).toBe('true');
   });

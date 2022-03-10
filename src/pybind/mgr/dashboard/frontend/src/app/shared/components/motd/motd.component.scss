@@ -1,0 +1,5 @@
+.no-margin-bottom {
+  ::ng-deep .alert {
+    margin-bottom: 0;
+  }
+}
