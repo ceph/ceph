@@ -29,7 +29,11 @@
 %else
 %bcond_without tcmalloc
 %endif
+%if 0%{?rhel} >= 9
+%bcond_without system_pmdk
+%else
 %bcond_with system_pmdk
+%endif
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
 %ifarch x86_64 ppc64le
