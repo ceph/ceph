@@ -1,5 +1,6 @@
 import pytest
 from ceph_volume.devices import lvm
+from mock import patch
 
 
 class TestCreate(object):
@@ -17,7 +18,8 @@ class TestCreate(object):
         assert 'Use the bluestore objectstore' in stdout
         assert 'A physical device or logical' in stdout
 
-    def test_excludes_filestore_bluestore_flags(self, capsys, device_info):
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    def test_excludes_filestore_bluestore_flags(self, m_has_bs_label, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=['--data', '/dev/sdfoo', '--filestore', '--bluestore']).main()
@@ -25,7 +27,8 @@ class TestCreate(object):
         expected = 'Cannot use --filestore (filestore) with --bluestore (bluestore)'
         assert expected in stderr
 
-    def test_excludes_other_filestore_bluestore_flags(self, capsys, device_info):
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    def test_excludes_other_filestore_bluestore_flags(self, m_has_bs_label, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=[
@@ -36,7 +39,8 @@ class TestCreate(object):
         expected = 'Cannot use --bluestore (bluestore) with --journal (filestore)'
         assert expected in stderr
 
-    def test_excludes_block_and_journal_flags(self, capsys, device_info):
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    def test_excludes_block_and_journal_flags(self, m_has_bs_label, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=[

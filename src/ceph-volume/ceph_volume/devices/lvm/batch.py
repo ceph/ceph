@@ -196,7 +196,7 @@ class Batch(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidBatchDevice(),
+            type=arg_validators.ValidBatchDataDevice(),
             default=[],
             help='Devices to provision OSDs',
         )
