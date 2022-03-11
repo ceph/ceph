@@ -66,7 +66,9 @@ class TestPrepare(object):
         assert 'Use the bluestore objectstore' in stdout
         assert 'A physical device or logical' in stdout
 
-    def test_excludes_filestore_bluestore_flags(self, capsys, device_info):
+
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    def test_excludes_filestore_bluestore_flags(self, m_has_bs_label, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=['--data', '/dev/sdfoo', '--filestore', '--bluestore']).main()
@@ -74,7 +76,9 @@ class TestPrepare(object):
         expected = 'Cannot use --filestore (filestore) with --bluestore (bluestore)'
         assert expected in stderr
 
-    def test_excludes_other_filestore_bluestore_flags(self, capsys, device_info):
+
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    def test_excludes_other_filestore_bluestore_flags(self, m_has_bs_label, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=[
@@ -85,7 +89,8 @@ class TestPrepare(object):
         expected = 'Cannot use --bluestore (bluestore) with --journal (filestore)'
         assert expected in stderr
 
-    def test_excludes_block_and_journal_flags(self, capsys, device_info):
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    def test_excludes_block_and_journal_flags(self, m_has_bs_label, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=[
@@ -96,7 +101,8 @@ class TestPrepare(object):
         expected = 'Cannot use --block.db (bluestore) with --journal (filestore)'
         assert expected in stderr
 
-    def test_journal_is_required_with_filestore(self, is_root, monkeypatch, device_info):
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    def test_journal_is_required_with_filestore(self, m_has_bs_label, is_root, monkeypatch, device_info):
         monkeypatch.setattr("os.path.exists", lambda path: True)
         device_info()
         with pytest.raises(SystemExit) as error:

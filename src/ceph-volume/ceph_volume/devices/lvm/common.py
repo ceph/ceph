@@ -40,7 +40,7 @@ common_args = {
     '--data': {
         'help': 'OSD data path. A physical device or logical volume',
         'required': True,
-        'type': arg_validators.ValidDevice(as_string=True),
+        'type': arg_validators.ValidDataDevice(as_string=True),
         #'default':,
         #'type':,
     },
