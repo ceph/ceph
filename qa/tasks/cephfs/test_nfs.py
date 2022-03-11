@@ -300,8 +300,11 @@ class TestNFS(MgrTestCase):
             self._test_mnt(pseudo_path, port, ip)
         except CommandFailedError as e:
             # Write to cephfs export should fail for test to pass
-            if e.exitstatus != errno.EPERM:
-                raise
+            self.assertEqual(
+                e.exitstatus, errno.EPERM,
+                'invalid error code on trying to write to read-only export')
+        else:
+            self.fail('expected write to a read-only export to fail')
 
     def test_create_and_delete_cluster(self):
         '''
