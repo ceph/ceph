@@ -70,12 +70,34 @@ class TestNFS(MgrTestCase):
         log.info("Disabling NFS")
         self._sys_cmd(['sudo', 'systemctl', 'disable', 'nfs-server', '--now'])
 
-    def _fetch_nfs_status(self):
-        return self._orch_cmd('ps', f'--service_name={self.expected_name}')
+    def _fetch_nfs_daemons_details(self, enable_json=False):
+        args = ('ps', f'--service_name={self.expected_name}')
+        if enable_json:
+            args = (*args, '--format=json')
+        return self._orch_cmd(*args)
+
+    def _check_nfs_cluster_event(self, expected_event):
+        '''
+        Check whether an event occured during the lifetime of the NFS service
+        :param expected_event: event that was expected to occur
+        '''
+        event_occurred = False
+        # Wait few seconds for NFS daemons' status to be updated
+        with contextutil.safe_while(sleep=10, tries=12, _raise=False) as proceed:
+            while not event_occurred and proceed():
+                daemons_details = json.loads(
+                    self._fetch_nfs_daemons_details(enable_json=True))
+                log.info('daemons details %s', daemons_details)
+                for event in daemons_details[0]['events']:
+                    log.info('daemon event %s', event)
+                    if expected_event in event:
+                        event_occurred = True
+                        break
+        return event_occurred
 
     def _check_nfs_cluster_status(self, expected_status, fail_msg):
         '''
-        Tests if nfs cluster created or deleted successfully
+        Check the current status of the NFS service
         :param expected_status: Status to be verified
         :param fail_msg: Message to be printed if test failed
         '''
@@ -83,7 +105,7 @@ class TestNFS(MgrTestCase):
         wait_time = 10
         while wait_time <= 120:
             time.sleep(wait_time)
-            if expected_status in self._fetch_nfs_status():
+            if expected_status in self._fetch_nfs_daemons_details():
                 return
             wait_time += 10
         self.fail(fail_msg)
@@ -599,12 +621,13 @@ class TestNFS(MgrTestCase):
                              }))
         port, ip = self._get_port_ip_info()
         self._test_mnt(self.pseudo_path, port, ip)
-        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
+        self._check_nfs_cluster_status(
+            'running', 'NFS Ganesha cluster not running after new export was applied')
         self._test_delete_cluster()
 
     def test_update_export(self):
         '''
-        Test update of exports
+        Test update of export's pseudo path and access type from rw to ro
         '''
         self._create_default_export()
         port, ip = self._get_port_ip_info()
@@ -616,8 +639,30 @@ class TestNFS(MgrTestCase):
         self.ctx.cluster.run(args=['ceph', 'nfs', 'export', 'apply',
                                    self.cluster_id, '-i', '-'],
                              stdin=json.dumps(export_block))
-        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
+        if not self._check_nfs_cluster_event('restart'):
+            self.fail("updating export's pseudo path should trigger restart of NFS service")
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster not running after restart')
         self._write_to_read_only_export(new_pseudo_path, port, ip)
+        self._test_delete_cluster()
+
+    def test_update_export_ro_to_rw(self):
+        '''
+        Test update of export's access level from ro to rw
+        '''
+        self._test_create_cluster()
+        self._create_export(
+            export_id='1', create_fs=True,
+            extra_cmd=['--pseudo-path', self.pseudo_path, '--readonly'])
+        port, ip = self._get_port_ip_info()
+        self._write_to_read_only_export(self.pseudo_path, port, ip)
+        export_block = self._get_export()
+        export_block['access_type'] = 'RW'
+        self.ctx.cluster.run(
+            args=['ceph', 'nfs', 'export', 'apply', self.cluster_id, '-i', '-'],
+            stdin=json.dumps(export_block))
+        if self._check_nfs_cluster_event('restart'):
+            self.fail("update of export's access type should not trigger NFS service restart")
+        self._test_mnt(self.pseudo_path, port, ip)
         self._test_delete_cluster()
 
     def test_update_export_with_invalid_values(self):
