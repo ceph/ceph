@@ -1,9 +1,9 @@
 import argparse
 import pytest
 import os
-from ceph_volume import exceptions
+from ceph_volume import exceptions, process
 from ceph_volume.util import arg_validators
-from mock.mock import patch, PropertyMock
+from mock.mock import patch, MagicMock
 
 
 class TestOSDPath(object):
@@ -81,20 +81,251 @@ class TestValidDevice(object):
     def setup(self):
         self.validator = arg_validators.ValidDevice()
 
-    def test_path_is_valid(self, fake_call, patch_bluestore_label):
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    def test_path_is_valid(self, m_has_bs_label, fake_call, patch_bluestore_label):
         result = self.validator('/')
         assert result.abspath == '/'
 
-    def test_path_is_invalid(self, fake_call, patch_bluestore_label):
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    def test_path_is_invalid(self, m_has_bs_label, fake_call, patch_bluestore_label):
         with pytest.raises(argparse.ArgumentError):
             self.validator('/device/does/not/exist')
 
-    @patch('ceph_volume.util.arg_validators.Device.has_partitions', new_callable=PropertyMock, return_value=True)
-    @patch('ceph_volume.util.arg_validators.Device.exists', new_callable=PropertyMock, return_value=True)
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
     @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
-    def test_dev_has_partitions(self, m_get_single_lv, m_exists, m_has_partitions, fake_call):
+    def test_dev_has_partitions(self, m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            exists=True,
+            has_partitions=True,
+        )
         with pytest.raises(RuntimeError):
             self.validator('/dev/foo')
+
+class TestValidZapDevice(object):
+    def setup(self):
+        self.validator = arg_validators.ValidZapDevice()
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_has_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=True,
+            has_gpt_headers=False,
+            has_fs=False
+        )
+        self.validator.zap = False
+        with pytest.raises(RuntimeError):
+            assert self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_has_no_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False
+        )
+        self.validator.zap = False
+        assert self.validator('/dev/foo')
+
+class TestValidDataDevice(object):
+    def setup(self):
+        self.validator = arg_validators.ValidDataDevice()
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_used_by_ceph(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=True,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False
+        )
+        with pytest.raises(SystemExit):
+            self.validator.zap = False
+            self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_has_fs(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=True
+        )
+        with pytest.raises(RuntimeError):
+            self.validator.zap = False
+            self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=True)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_has_bs_signature(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False
+        )
+        with pytest.raises(RuntimeError):
+            self.validator.zap = False
+            self.validator('/dev/foo')
+
+class TestValidRawDevice(object):
+    def setup(self):
+        self.validator = arg_validators.ValidRawDevice()
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.util.arg_validators.disk.blkid')
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_dmcrypt_device_already_prepared(self,  m_get_single_lv, m_blkid, m_has_bs_label, mocked_device, fake_call, monkeypatch):
+        def mock_call(cmd, **kw):
+            return ('', '', 1)
+        monkeypatch.setattr(process, 'call', mock_call)
+        m_blkid.return_value = {'UUID': '8fd92779-ad78-437c-a06f-275f7170fa74', 'TYPE': 'crypto_LUKS'}
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False
+        )
+        with pytest.raises(SystemExit):
+            self.validator.zap = False
+            self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_already_prepared(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False
+        )
+        with pytest.raises(SystemExit):
+            self.validator.zap = False
+            self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_not_prepared(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call, monkeypatch):
+        def mock_call(cmd, **kw):
+            return ('', '', 1)
+        monkeypatch.setattr(process, 'call', mock_call)
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False
+        )
+        self.validator.zap = False
+        assert self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_has_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call, monkeypatch):
+        def mock_call(cmd, **kw):
+            return ('', '', 1)
+        monkeypatch.setattr(process, 'call', mock_call)
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=True,
+            has_gpt_headers=False,
+            has_fs=False
+        )
+        self.validator.zap = False
+        with pytest.raises(RuntimeError):
+            assert self.validator('/dev/foo')
+
+class TestValidBatchDevice(object):
+    def setup(self):
+        self.validator = arg_validators.ValidBatchDevice()
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_is_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False,
+            is_partition=True
+        )
+        with pytest.raises(argparse.ArgumentError):
+            self.validator.zap = False
+            self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_is_not_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False,
+            is_partition=False
+        )
+        self.validator.zap = False
+        assert self.validator('/dev/foo')
+
+class TestValidBatchDataDevice(object):
+    def setup(self):
+        self.validator = arg_validators.ValidBatchDataDevice()
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_is_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False,
+            is_partition=True
+        )
+        with pytest.raises(argparse.ArgumentError):
+            self.validator.zap = False
+            assert self.validator('/dev/foo')
+
+    @patch('ceph_volume.util.arg_validators.Device')
+    @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.api.lvm.get_single_lv', return_value=None)
+    def test_device_is_not_partition(self,  m_get_single_lv, m_has_bs_label, mocked_device, fake_call):
+        mocked_device.return_value = MagicMock(
+            used_by_ceph=False,
+            exists=True,
+            has_partitions=False,
+            has_gpt_headers=False,
+            has_fs=False,
+            is_partition=False
+        )
+        self.validator.zap = False
+        assert self.validator('/dev/foo')
 
 
 class TestValidFraction(object):
