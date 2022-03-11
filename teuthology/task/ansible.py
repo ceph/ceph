@@ -114,8 +114,9 @@ class Ansible(Task):
         self.generated_inventory = False
         self.generated_playbook = False
         self.log = logging.Logger(__name__)
-        self.log.addHandler(logging.FileHandler(
-            os.path.join(ctx.archive, "ansible.log")))
+        if ctx.archive:
+            self.log.addHandler(logging.FileHandler(
+                os.path.join(ctx.archive, "ansible.log")))
 
     def setup(self):
         super(Ansible, self).setup()

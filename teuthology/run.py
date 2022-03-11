@@ -88,7 +88,7 @@ def fetch_tasks_if_needed(job_config):
     suite_sha1 = job_config.get('suite_sha1')
     suite_path = os.path.normpath(os.path.join(
         fetch_qa_suite(suite_branch, commit=suite_sha1),
-        job_config.get('suite_relpath', ''),
+        job_config.get('suite_relpath', 'qa'),
     ))
     sys.path.insert(1, suite_path)
     return suite_path
