@@ -9,6 +9,7 @@ CEPHADM Developer Documentation
 
 
    developing-cephadm
+   cephadm-developer-guide
    host-maintenance
    compliance-check
    Storage devices and OSDs management <./design/storage_devices_and_osds>
