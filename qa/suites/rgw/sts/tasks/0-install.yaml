@@ -1,13 +1,9 @@
-# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
-os_type: centos
-
 tasks:
 - install:
 - ceph:
 - openssl_keys:
 - rgw:
     client.0:
-#      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
 
 overrides:
   ceph:
