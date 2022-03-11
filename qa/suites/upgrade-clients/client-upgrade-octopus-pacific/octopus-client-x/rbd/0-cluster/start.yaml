@@ -16,6 +16,4 @@ roles:
 - - client.1
 overrides:
   ceph:
-    #log-ignorelist:
-      #- failed to encode map
     fs: xfs
