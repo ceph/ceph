@@ -92,8 +92,7 @@ Similarly, two options control whether IPv4 and IPv6 addresses are used:
 
 .. note:: The ability to bind to multiple ports has paved the way for
    dual-stack IPv4 and IPv6 support.  That said, dual-stack support is
-   not yet tested as of Nautilus v14.2.0 and likely needs some
-   additional code changes to work correctly.
+   not yet supported as of Quincy v17.2.0.
 
 Connection modes
 ----------------
