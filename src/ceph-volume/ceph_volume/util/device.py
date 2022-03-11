@@ -302,6 +302,10 @@ class Device(object):
         return os.path.exists(self.abspath)
 
     @property
+    def has_fs(self):
+        return 'TYPE' in self.blkid_api
+
+    @property
     def has_gpt_headers(self):
         return self.blkid_api.get("PTTYPE") == "gpt"
 

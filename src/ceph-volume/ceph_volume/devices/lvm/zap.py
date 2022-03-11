@@ -362,7 +362,7 @@ class Zap(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidDevice(gpt_ok=True),
+            type=arg_validators.ValidZapDevice(gpt_ok=True),
             default=[],
             help='Path to one or many lv (as vg/lv), partition (as /dev/sda1) or device (as /dev/sda)'
         )
