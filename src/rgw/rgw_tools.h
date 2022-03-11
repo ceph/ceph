@@ -111,7 +111,12 @@ class RGWEtag
   H hash;
 
 public:
-  RGWEtag() {}
+  RGWEtag() {
+    if constexpr (std::is_same_v<H, MD5>) {
+      // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+      hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+    }
+  }
 
   void update(const char *buf, size_t len) {
     hash.Update((const unsigned char *)buf, len);
