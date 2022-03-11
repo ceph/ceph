@@ -1,7 +1,10 @@
+import os
 import ceph_module  # noqa
 
 from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
     Mapping, NamedTuple, Sequence, Union, TYPE_CHECKING
+
+from ceph_daemon import admin_socket
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -16,7 +19,7 @@ import functools
 import json
 import subprocess
 import threading
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from enum import IntEnum, Enum
 import rados
 import re
@@ -1971,6 +1974,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     continue
 
                 schemas = self.get_perf_schema(service['type'], service['id'])
+                logger = logging.getLogger('tr')
+                logger.info("iski maa ki %s", schemas)
                 if not schemas:
                     self.log.warning("No perf counter schema for {0}.{1}".format(
                         service['type'], service['id']
@@ -2017,6 +2022,38 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.log.debug("returning {0} counter".format(len(result)))
 
         return result
+    
+    @API.expose
+    @profile_method()
+    def gather_socket_output(self, daemon_name: str, prio_limit: int = PRIO_USEFUL):
+        logger = logging.getLogger('logggg')
+        result = ''
+        for root, _, files in os.walk("/ceph/build.ceph/out"):  # this is just an example for dev env it'll be /var/run/ceph actually.
+            for _file in files:
+                if _file.endswith('.{}'.format('asok')) and daemon_name in _file:
+                    # f_name = os.path.splitext(_file)[0]
+                    result = os.path.join(root, _file)
+        if os.path.exists("/ceph/build.ceph/out"):
+            logger.info("bccc %s", result)
+
+        perf_schema = json.loads(
+            admin_socket(result, ["perf", "schema"]).decode('utf-8'),
+            object_pairs_hook=OrderedDict)
+        
+        stats = {}
+        stats[daemon_name] = {}
+        assert perf_schema is not None
+        for section_name, section_stats in perf_schema.items():
+            for name, schema_data in section_stats.items():
+                logger.info("stats: %s", dict(schema_data))
+                prio = schema_data.get('priority', 0)
+                if prio >= prio_limit:
+                    stats[daemon_name]['{}.{}'.format(section_name,name)] = dict(schema_data)
+                    del stats[daemon_name]['{}.{}'.format(section_name,name)]['metric_type']
+                    del stats[daemon_name]['{}.{}'.format(section_name,name)]['value_type']
+        
+        logger.info("wohoo %s %s", daemon_name, stats)
+
 
     @API.expose
     def set_uri(self, uri: str) -> None:
@@ -2206,13 +2243,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_remove_mds_perf_query(query_id)
 
     @API.expose
-
-    def reregister_mds_perf_queries(self) -> None:
-        """
-        Re-register MDS perf queries.
-        """
-        return self._ceph_reregister_mds_perf_queries()
-
     def get_mds_perf_counters(self, query_id: int) -> Optional[Dict[str, List[PerfCounterT]]]:
         """
         Get stats collected for an MDS perf query.
