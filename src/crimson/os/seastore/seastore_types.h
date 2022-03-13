@@ -1264,6 +1264,31 @@ struct __attribute__((packed)) root_t {
   }
 };
 
+struct alloc_blk_t {
+  alloc_blk_t(
+    paddr_t paddr,
+    laddr_t laddr,
+    extent_len_t len,
+    extent_types_t type)
+    : paddr(paddr), laddr(laddr), len(len), type(type)
+  {}
+
+  explicit alloc_blk_t() = default;
+
+  paddr_t paddr = P_ADDR_NULL;
+  laddr_t laddr = L_ADDR_NULL;
+  extent_len_t len = 0;
+  extent_types_t type = extent_types_t::ROOT;
+  DENC(alloc_blk_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.paddr, p);
+    denc(v.laddr, p);
+    denc(v.len, p);
+    denc(v.type, p);
+    DENC_FINISH(p);
+  }
+};
+
 // use absolute address
 struct alloc_delta_t {
   enum class op_types_t : uint8_t {
@@ -1271,7 +1296,7 @@ struct alloc_delta_t {
     SET = 1,
     CLEAR = 2
   };
-  std::vector<std::pair<paddr_t, size_t>> alloc_blk_ranges;
+  std::vector<alloc_blk_t> alloc_blk_ranges;
   op_types_t op = op_types_t::NONE;
 
   alloc_delta_t() = default;
@@ -1749,6 +1774,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_group_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_blk_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
 

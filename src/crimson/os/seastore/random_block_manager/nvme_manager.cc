@@ -262,21 +262,10 @@ NVMeManager::allocate_ret NVMeManager::alloc_extent(
    *
    */
   return find_free_block(t, size
-      ).safe_then([this, &t] (auto alloc_extent) mutable
+      ).safe_then([this] (auto alloc_extent) mutable
 	-> allocate_ertr::future<paddr_t> {
 	logger().debug("after find_free_block: allocated {}", alloc_extent);
-	if (!alloc_extent.empty()) {
-	  alloc_delta_t alloc_info;
-	  for (auto p : alloc_extent) {
-	    paddr_t paddr = convert_abs_addr_to_paddr(
-	      p.first * super.block_size,
-	      super.device_id);
-	    size_t len = p.second * super.block_size;
-	    alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
-	    alloc_info.op = alloc_delta_t::op_types_t::SET;
-	  }
-	  t.add_alloc_info_blocks(std::move(alloc_info));
-	} else {
+	if (alloc_extent.empty()) {
 	  return crimson::ct_error::enospc::make();
 	}
 	paddr_t paddr = convert_abs_addr_to_paddr(
@@ -302,7 +291,8 @@ void NVMeManager::add_free_extent(
     from,
     super.device_id);
   alloc_delta_t alloc_info;
-  alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
+  alloc_info.alloc_blk_ranges.emplace_back(
+    paddr, L_ADDR_NULL, len, extent_types_t::ROOT);
   alloc_info.op = alloc_delta_t::op_types_t::CLEAR;
   v.push_back(alloc_info);
 }
@@ -437,16 +427,16 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
       [this](auto &alloc) {
       return crimson::do_for_each(alloc.alloc_blk_ranges,
         [this, &alloc] (auto &range) -> write_ertr::future<> {
-        logger().debug("range {} ~ {}", range.first, range.second);
+        logger().debug("range {} ~ {}", range.paddr, range.len);
 	bitmap_op_types_t op =
 	  (alloc.op == alloc_delta_t::op_types_t::SET) ?
 	  bitmap_op_types_t::ALL_SET :
 	  bitmap_op_types_t::ALL_CLEAR;
 	rbm_abs_addr addr = convert_paddr_to_abs_addr(
-	  range.first);
+	  range.paddr);
 	blk_no_t start = addr / super.block_size;
 	blk_no_t end = start +
-	  (round_up_to(range.second, super.block_size)) / super.block_size
+	  (round_up_to(range.len, super.block_size)) / super.block_size
 	   - 1;
 	return rbm_sync_block_bitmap_by_range(
 	  start,
@@ -459,14 +449,14 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
 	for (auto r : b.alloc_blk_ranges) {
 	  if (b.op == alloc_delta_t::op_types_t::SET) {
 	    alloc_block_count +=
-	      round_up_to(r.second, super.block_size) / super.block_size;
+	      round_up_to(r.len, super.block_size) / super.block_size;
 	    logger().debug(" complete alloc block: start {} len {} ",
-			   r.first, r.second);
+			   r.paddr, r.len);
 	  } else {
 	    alloc_block_count -=
-	      round_up_to(r.second, super.block_size) / super.block_size;
+	      round_up_to(r.len, super.block_size) / super.block_size;
 	    logger().debug(" complete alloc block: start {} len {} ",
-			   r.first, r.second);
+			   r.paddr, r.len);
 	  }
 	}
       }
