@@ -12,14 +12,15 @@
 class DaemonMetricCollector {
  public:
   int i;
-  void main();
+  std::string main();
 
 private:
   // TODO: add clients
   //       check removed sockets
   //       list dir of sockets
   std::map<std::string, AdminSocketClient> clients;
+  std::string result;
   void update_sockets();
-  void send_requests();
+  std::string send_requests();
   void start_mgr_connection();
 };

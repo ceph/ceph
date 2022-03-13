@@ -46,9 +46,9 @@ public:
     }
 
     // Initiate the asynchronous operations associated with the connection.
-    void start()
+    void start(std::string& response)
     {
-        read_request();
+        read_request(response);
         check_deadline();
     }
 
@@ -62,25 +62,25 @@ private:
         socket_.get_executor(), std::chrono::seconds(60)};
 
     // Asynchronously receive a complete request message.
-    void read_request()
+    void read_request(std::string& response)
     {
-        auto self = shared_from_this();
+        // auto self = shared_from_this();
 
         http::async_read(
             socket_,
             buffer_,
             request_,
-            [self](beast::error_code ec,
+            [&](beast::error_code ec,
                 std::size_t bytes_transferred)
             {
                 boost::ignore_unused(bytes_transferred);
                 if(!ec)
-                    self->process_request();
+                    process_request(response);
             });
     }
 
     // Determine what needs to be done with the request message.
-    void process_request()
+    void process_request(std::string& response)
     {
         response_.version(request_.version());
         response_.keep_alive(false);
@@ -90,7 +90,7 @@ private:
         case http::verb::get:
             response_.result(http::status::ok);
             response_.set(http::field::server, "Beast");
-            create_response();
+            create_response(response);
             break;
 
         default:
@@ -109,12 +109,12 @@ private:
     }
 
     // Construct a response message based on the program state.
-    void create_response()
+    void create_response(std::string& response)
     {
         if(request_.target() == "/perf_counters")
         {
             response_.set(http::field::content_type, "text/plain");
-            beast::ostream(response_.body()) << "Perf Counters\n";
+            beast::ostream(response_.body()) << "Perf Counters\n" << response << std::endl;
         }
         else
         {
@@ -159,40 +159,51 @@ private:
 };
 
 // "Loop" forever accepting new connections.
-void http_server(tcp::acceptor& acceptor, tcp::socket& socket)
+void http_server(tcp::acceptor& acceptor, tcp::socket& socket, std::string& response)
 {
   acceptor.async_accept(socket,
       [&](beast::error_code ec)
       {
           if(!ec)
-              std::make_shared<http_connection>(std::move(socket))->start();
-          http_server(acceptor, socket);
+              std::make_shared<http_connection>(std::move(socket))->start(response);
+          http_server(acceptor, socket, response);
       });
+}
+
+std::string dns_lookup(std::string hostname) {
+    boost::asio::io_service io_service;
+    boost::asio::ip::tcp::resolver resolver(io_service);
+    boost::asio::ip::tcp::resolver::query query(hostname, "9085");
+    boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
+    boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
+    std::string ip_address = endpoint.address().to_string();
+
+    return ip_address;
 }
 
 int main(int argc, char** argv) {
   // TODO: daemonize
   std::cout << "inside exporter" << std::endl;
-  // std::map<std::string,std::string> defaults = {
-  //   { "keyring", "$mgr_data/keyring" }
-  // };
-  // auto args = argv_to_vec(argc, argv);
-  // auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_EXPORTER,
-	// 		 CODE_ENVIRONMENT_DAEMON, 0);
+
   DaemonMetricCollector collector;
-  collector.main();
+  int stats_period = 5;
+  std::string response;
+  response = collector.main();
+  std::cout << "response: " << std::endl;
 
   try
     {
-        std::cout << "hostname: " << ceph_get_short_hostname() << std::endl;
-        auto const address = net::ip::make_address("127.0.0.1");
-        unsigned short port = static_cast<unsigned short>(std::atoi("8080"));
+        std::string hostname = ceph_get_short_hostname();
+        
+        std::string ip_address = dns_lookup(hostname);
+        auto const address = net::ip::make_address(ip_address);
+        unsigned short port = static_cast<unsigned short>(std::atoi("9085"));
 
         net::io_context ioc{1};
 
         tcp::acceptor acceptor{ioc, {address, port}};
         tcp::socket socket{ioc};
-        http_server(acceptor, socket);
+        http_server(acceptor, socket, response);
 
         ioc.run();
     }
