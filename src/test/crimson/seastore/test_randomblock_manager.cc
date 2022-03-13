@@ -29,7 +29,7 @@ struct rbm_test_t :
   std::unique_ptr<nvme_device::NVMeBlockDevice> device;
 
   struct rbm_transaction {
-    void add_rbm_allocated_blocks(rbm_alloc_delta_t &d) {
+    void add_rbm_allocated_blocks(alloc_delta_t &d) {
       allocated_blocks.push_back(d);
     }
     void clear_rbm_allocated_blocks() {
@@ -40,7 +40,7 @@ struct rbm_test_t :
     const auto &get_rbm_allocated_blocks() {
       return allocated_blocks;
     }
-    std::vector<rbm_alloc_delta_t> allocated_blocks;
+    std::vector<alloc_delta_t> allocated_blocks;
   };
 
   std::default_random_engine generator;
@@ -105,7 +105,7 @@ struct rbm_test_t :
     auto tt = create_mutate_transaction(); // dummy transaction
     auto extent = rbm_manager->find_free_block(*tt, size).unsafe_get0();
     if (!extent.empty()) {
-      rbm_alloc_delta_t alloc_info;
+      alloc_delta_t alloc_info;
       for (auto p : extent) {
 	paddr_t paddr = convert_abs_addr_to_paddr(
 	    p.first * block_size,

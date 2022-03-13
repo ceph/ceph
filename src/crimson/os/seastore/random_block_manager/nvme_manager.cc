@@ -266,16 +266,16 @@ NVMeManager::allocate_ret NVMeManager::alloc_extent(
 	-> allocate_ertr::future<paddr_t> {
 	logger().debug("after find_free_block: allocated {}", alloc_extent);
 	if (!alloc_extent.empty()) {
-	  rbm_alloc_delta_t alloc_info;
+	  alloc_delta_t alloc_info;
 	  for (auto p : alloc_extent) {
 	    paddr_t paddr = convert_abs_addr_to_paddr(
 	      p.first * super.block_size,
 	      super.device_id);
 	    size_t len = p.second * super.block_size;
 	    alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
-	    alloc_info.op = rbm_alloc_delta_t::op_types_t::SET;
+	    alloc_info.op = alloc_delta_t::op_types_t::SET;
 	  }
-	  t.add_rbm_alloc_info_blocks(alloc_info);
+	  t.add_alloc_info_blocks(std::move(alloc_info));
 	} else {
 	  return crimson::ct_error::enospc::make();
 	}
@@ -295,15 +295,15 @@ NVMeManager::allocate_ret NVMeManager::alloc_extent(
 }
 
 void NVMeManager::add_free_extent(
-    std::vector<rbm_alloc_delta_t>& v, rbm_abs_addr from, size_t len)
+    std::vector<alloc_delta_t>& v, rbm_abs_addr from, size_t len)
 {
   ceph_assert(!(len % super.block_size));
   paddr_t paddr = convert_abs_addr_to_paddr(
     from,
     super.device_id);
-  rbm_alloc_delta_t alloc_info;
+  alloc_delta_t alloc_info;
   alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
-  alloc_info.op = rbm_alloc_delta_t::op_types_t::CLEAR;
+  alloc_info.op = alloc_delta_t::op_types_t::CLEAR;
   v.push_back(alloc_info);
 }
 
@@ -426,7 +426,7 @@ NVMeManager::write_ertr::future<> NVMeManager::complete_allocation(
 }
 
 NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
-    std::vector<rbm_alloc_delta_t> &alloc_blocks)
+    std::vector<alloc_delta_t> &alloc_blocks)
 {
   if (alloc_blocks.empty()) {
     return write_ertr::now();
@@ -439,7 +439,7 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
         [this, &alloc] (auto &range) -> write_ertr::future<> {
         logger().debug("range {} ~ {}", range.first, range.second);
 	bitmap_op_types_t op =
-	  (alloc.op == rbm_alloc_delta_t::op_types_t::SET) ?
+	  (alloc.op == alloc_delta_t::op_types_t::SET) ?
 	  bitmap_op_types_t::ALL_SET :
 	  bitmap_op_types_t::ALL_CLEAR;
 	rbm_abs_addr addr = convert_paddr_to_abs_addr(
@@ -457,7 +457,7 @@ NVMeManager::write_ertr::future<> NVMeManager::sync_allocation(
       int alloc_block_count = 0;
       for (const auto& b : alloc_blocks) {
 	for (auto r : b.alloc_blk_ranges) {
-	  if (b.op == rbm_alloc_delta_t::op_types_t::SET) {
+	  if (b.op == alloc_delta_t::op_types_t::SET) {
 	    alloc_block_count +=
 	      round_up_to(r.second, super.block_size) / super.block_size;
 	    logger().debug(" complete alloc block: start {} len {} ",
