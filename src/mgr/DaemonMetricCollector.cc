@@ -13,14 +13,12 @@ using json_object = boost::json::object;
 using json_value = boost::json::value;
 using json_array = boost::json::array;
 
-void DaemonMetricCollector::main() {
-  std::cout << "metric" << std::endl;
-  // start server
-  int times = 1;
-  while (times--) {
-    update_sockets();
-    send_requests();
-   }
+std::string DaemonMetricCollector::main() {
+  update_sockets();
+  send_requests();
+  // result.push_back(reqs);
+
+  return result;
 }
 
 template <class T>
@@ -48,21 +46,18 @@ std::string boost_string_to_std(boost::json::string js) {
   return res;
 }
 
-void DaemonMetricCollector::send_requests() {
+std::string DaemonMetricCollector::send_requests() {
   for(auto client : clients) {
     AdminSocketClient &sock_client = client.second;
     std::string daemon_name = client.first;
     std::string request("{\"prefix\":\"perf dump\"}");
     std::string response;
     sock_client.do_request(request, &response);
-    std::cout << client.first << std::endl;
-    std::cout << response << std::endl;
     if (response.size() > 0) {
       json_object dump = boost::json::parse(response).as_object();
       request = "{\"prefix\":\"perf schema\"}";
       response = "";
       sock_client.do_request(request, &response);
-      std::cout << response << std::endl;
       json_object schema = boost::json::parse(response).as_object();
       for (auto perf : schema) {
         std::string perf_group = perf.key().to_string();
@@ -117,15 +112,16 @@ void DaemonMetricCollector::send_requests() {
           } else {
             add_double_or_int_metric(ss, perf_values, name, description, mtype, labels);
           }
-          std::cout << ss.str() << std::endl;
+          result += ss.str() + "\n";
         }
       }
     }
   }
+  return result;
 }
 
 void DaemonMetricCollector::update_sockets() {
-  std::string path = "/tmp/ceph-asok.YY0Vnr/";
+  std::string path = "/tmp/ceph-asok.Qcdpny/";
   for (const auto & entry : std::filesystem::directory_iterator(path)) {
     std::string daemon_socket_name = entry.path().filename().string();
     // remove .asok
