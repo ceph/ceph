@@ -97,31 +97,6 @@ ENDOFKEY
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 
-    case "$codename" in
-        trusty)
-            old=4.8;;
-        xenial)
-            old=5;;
-        bionic)
-            old=7;;
-    esac
-    $SUDO update-alternatives --remove-all gcc || true
-    $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
-
-    if [ -f /usr/bin/g++-${old} ]; then
-      $SUDO update-alternatives \
-  	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
-  	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
-    fi
-
-    $SUDO update-alternatives --auto gcc
-
-    # cmake uses the latter by default
-    $SUDO ln -nsf /usr/bin/gcc /usr/bin/${ARCH}-linux-gnu-gcc
-    $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
-
     in_jenkins && echo "CI_DEBUG: End ensure_decent_gcc_on_ubuntu() in install-deps.sh"
 }
 
