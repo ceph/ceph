@@ -111,8 +111,9 @@ struct rbm_test_t :
 	    p.first * block_size,
 	    rbm_manager->get_device_id());
 	size_t len = p.second * block_size;
-	alloc_info.alloc_blk_ranges.push_back(std::make_pair(paddr, len));
-	alloc_info.op = rbm_alloc_delta_t::op_types_t::SET;
+	alloc_info.alloc_blk_ranges.emplace_back(
+	  paddr, L_ADDR_NULL, len, extent_types_t::ROOT);
+	alloc_info.op = alloc_delta_t::op_types_t::SET;
       }
       t.add_rbm_allocated_blocks(alloc_info);
     }
@@ -133,8 +134,8 @@ struct rbm_test_t :
     for (auto p : allocated_blocks) {
       for (auto b : p.alloc_blk_ranges) {
 	rbm_abs_addr addr =
-	  convert_paddr_to_abs_addr(b.first);
-	alloc_ids.insert(addr / block_size, b.second / block_size);
+	  convert_paddr_to_abs_addr(b.paddr);
+	alloc_ids.insert(addr / block_size, b.len / block_size);
       }
     }
     logger().debug(" get allocated blockid {}", alloc_ids);

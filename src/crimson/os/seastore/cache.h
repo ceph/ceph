@@ -35,6 +35,12 @@ struct backref_buf_entry_t {
       type(type),
       seq(seq)
   {}
+  backref_buf_entry_t(alloc_blk_t alloc_blk)
+    : paddr(alloc_blk.paddr),
+      laddr(alloc_blk.laddr),
+      len(alloc_blk.len),
+      type(alloc_blk.type)
+  {}
   const paddr_t paddr = P_ADDR_NULL;
   const laddr_t laddr = L_ADDR_NULL;
   const extent_len_t len = 0;
