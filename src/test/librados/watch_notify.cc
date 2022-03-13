@@ -162,7 +162,10 @@ TEST_F(LibRadosWatchNotify, Watch2Delete) {
   }
   ASSERT_TRUE(left > 0);
   ASSERT_EQ(-ENOTCONN, notify_err);
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  int rados_watch_check_err = rados_watch_check(ioctx, handle);
+  // We may hit ENOENT due to socket failure and a forced reconnect
+  EXPECT_TRUE(rados_watch_check_err == -ENOTCONN || rados_watch_check_err == -ENOENT)
+    << "Where rados_watch_check_err = " << rados_watch_check_err;
   rados_unwatch2(ioctx, handle);
   rados_watch_flush(cluster);
 }
