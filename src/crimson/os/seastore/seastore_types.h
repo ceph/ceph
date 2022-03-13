@@ -859,7 +859,9 @@ enum class extent_types_t : uint8_t {
   COLL_BLOCK = 6,
   OBJECT_DATA_BLOCK = 7,
   RETIRED_PLACEHOLDER = 8,
-  RBM_ALLOC_INFO = 9,
+  // the following two types are not extent types,
+  // they are just used to indicates paddr allocation deltas
+  ALLOC_INFO = 9,
   // Test Block Types
   TEST_BLOCK = 10,
   TEST_BLOCK_PHYSICAL = 11,
@@ -1263,7 +1265,7 @@ struct __attribute__((packed)) root_t {
 };
 
 // use absolute address
-struct rbm_alloc_delta_t {
+struct alloc_delta_t {
   enum class op_types_t : uint8_t {
     NONE = 0,
     SET = 1,
@@ -1272,9 +1274,9 @@ struct rbm_alloc_delta_t {
   std::vector<std::pair<paddr_t, size_t>> alloc_blk_ranges;
   op_types_t op = op_types_t::NONE;
 
-  rbm_alloc_delta_t() = default;
+  alloc_delta_t() = default;
 
-  DENC(rbm_alloc_delta_t, v, p) {
+  DENC(alloc_delta_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.alloc_blk_ranges, p);
     denc(v.op, p);
@@ -1747,7 +1749,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_group_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
-WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::rbm_alloc_delta_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
 
 template<>

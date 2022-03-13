@@ -137,7 +137,7 @@ void Cache::register_metrics()
     {extent_types_t::COLL_BLOCK,          sm::label_instance("ext", "COLL_BLOCK")},
     {extent_types_t::OBJECT_DATA_BLOCK,   sm::label_instance("ext", "OBJECT_DATA_BLOCK")},
     {extent_types_t::RETIRED_PLACEHOLDER, sm::label_instance("ext", "RETIRED_PLACEHOLDER")},
-    {extent_types_t::RBM_ALLOC_INFO,      sm::label_instance("ext", "RBM_ALLOC_INFO")},
+    {extent_types_t::ALLOC_INFO,      	  sm::label_instance("ext", "ALLOC_INFO")},
     {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
     {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")}
   };
@@ -1037,8 +1037,8 @@ record_t Cache::prepare_record(
     /*
     if (i belongs to RBM) {
       paddr_t paddr = i->get_paddr();
-      rbm_alloc_delta_t delta;
-      delta.op = rbm_alloc_delta_t::op_types_t::CLEAR;
+      alloc_delta_t delta;
+      delta.op = alloc_delta_t::op_types_t::CLEAR;
       delta.alloc_blk_ranges.push_back(std::make_pair(paddr, i->get_length()));
       t.add_rbm_alloc_info_blocks(delta);
     }
