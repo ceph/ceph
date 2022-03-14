@@ -4,7 +4,6 @@
 #pragma once
 
 #include "seastar/core/gate.hh"
-#include "seastar/core/shared_future.hh"
 
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal/segment_allocator.h"
@@ -27,7 +26,8 @@ public:
   using open_ertr = base_ertr;
   virtual open_ertr::future<> open() = 0;
 
-  using write_iertr = trans_iertr<base_ertr>;
+  using write_ertr = base_ertr;
+  using write_iertr = trans_iertr<write_ertr>;
   virtual write_iertr::future<> write(
     Transaction& t,
     std::list<LogicalCachedExtentRef>& extent) = 0;
@@ -75,9 +75,7 @@ class SegmentProvider;
 class SegmentedAllocator : public ExtentAllocator {
   class Writer : public ExtentOolWriter {
   public:
-    Writer(SegmentProvider& sp, SegmentManager& sm)
-      : segment_allocator("OOL", segment_type_t::OOL, sp, sm) {}
-
+    Writer(SegmentProvider& sp, SegmentManager& sm);
     Writer(Writer &&) = default;
 
     open_ertr::future<> open() final;
@@ -99,13 +97,13 @@ class SegmentedAllocator : public ExtentAllocator {
       Transaction& t,
       std::list<LogicalCachedExtentRef>& extent);
 
-    write_iertr::future<> _write(
+    write_ertr::future<> write_record(
       Transaction& t,
       record_t&& record,
       std::list<LogicalCachedExtentRef>&& extents);
 
     journal::SegmentAllocator segment_allocator;
-    std::optional<seastar::shared_promise<>> roll_promise;
+    journal::RecordSubmitter record_submitter;
     seastar::gate write_guard;
   };
 public:
@@ -131,7 +129,7 @@ public:
     Transaction& t,
     std::list<LogicalCachedExtentRef>& extents) final {
     LOG_PREFIX(SegmentedAllocator::alloc_ool_extents_paddr);
-    SUBDEBUGT(seastore_tm, "start", t);
+    SUBDEBUGT(seastore_journal, "start", t);
     return seastar::do_with(
       std::map<Writer*, std::list<LogicalCachedExtentRef>>(),
       [this, extents=std::move(extents), &t](auto& alloc_map) {
@@ -164,7 +162,7 @@ public:
   void add_allocator(device_type_t type, ExtentAllocatorRef&& allocator) {
     allocators[type].emplace_back(std::move(allocator));
     LOG_PREFIX(ExtentPlacementManager::add_allocator);
-    SUBDEBUG(seastore_tm, "allocators for {}: {}",
+    SUBDEBUG(seastore_journal, "allocators for {}: {}",
       type,
       allocators[type].size());
   }
@@ -172,7 +170,7 @@ public:
   using open_ertr = ExtentOolWriter::open_ertr;
   open_ertr::future<> open() {
     LOG_PREFIX(ExtentPlacementManager::open);
-    SUBINFO(seastore_tm, "started");
+    SUBINFO(seastore_journal, "started");
     return crimson::do_for_each(allocators, [](auto& allocators_item) {
       return crimson::do_for_each(allocators_item.second, [](auto& allocator) {
         return allocator->open();
@@ -228,7 +226,7 @@ public:
     Transaction& t,
     const std::list<LogicalCachedExtentRef>& delayed_extents) {
     LOG_PREFIX(ExtentPlacementManager::delayed_alloc_or_ool_write);
-    SUBDEBUGT(seastore_tm, "start with {} delayed extents",
+    SUBDEBUGT(seastore_journal, "start with {} delayed extents",
               t, delayed_extents.size());
     return seastar::do_with(
         std::map<ExtentAllocator*, std::list<LogicalCachedExtentRef>>(),
@@ -251,7 +249,7 @@ public:
   using close_ertr = ExtentOolWriter::stop_ertr;
   close_ertr::future<> close() {
     LOG_PREFIX(ExtentPlacementManager::close);
-    SUBINFO(seastore_tm, "started");
+    SUBINFO(seastore_journal, "started");
     return crimson::do_for_each(allocators, [](auto& allocators_item) {
       return crimson::do_for_each(allocators_item.second, [](auto& allocator) {
         return allocator->stop();
