@@ -154,7 +154,7 @@ libboost
     packages `boost`_. The packages' names are changed from ``libboost-*`` to
     ``ceph-libboost-*``, and they are instead installed into ``/opt/ceph``, so
     they don't interfere with the official ``libboost`` packages shipped by
-    distro. Its build scripts are hosted at https://github.com/tchaikov/ceph-boost.
+    distro. Its build scripts are hosted at https://github.com/ceph/ceph-boost.
 
     .. prompt:: bash $
 
