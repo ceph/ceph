@@ -1,6 +1,7 @@
 from textwrap import dedent
 import json
 import yaml
+from mgr_util import build_url
 
 import pytest
 
@@ -16,7 +17,7 @@ from cephadm.services.monitoring import GrafanaService, AlertmanagerService, Pro
     NodeExporterService, LokiService, PromtailService
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import IscsiServiceSpec, MonitoringSpec, AlertManagerSpec, \
-    ServiceSpec, RGWSpec, GrafanaSpec, SNMPGatewaySpec, IngressSpec, PlacementSpec
+    ServiceSpec, RGWSpec, GrafanaSpec, SNMPGatewaySpec, IngressSpec, PlacementSpec, TracingSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 
 from orchestrator import OrchestratorError
@@ -1016,3 +1017,120 @@ class TestCephFsMirror:
                     'prefix': 'mgr module enable',
                     'module': 'mirroring'
                 })
+
+
+class TestJaeger:
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_jaeger_query(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        spec = TracingSpec(es_nodes="192.168.0.1:9200",
+                           service_type="jaeger-query")
+
+        config = {"elasticsearch_nodes": "http://192.168.0.1:9200"}
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, spec):
+                _run_cephadm.assert_called_with(
+                    'test',
+                    'jaeger-query.test',
+                    'deploy',
+                    [
+                        '--name', 'jaeger-query.test',
+                        '--meta-json',
+                        '{"service_name": "jaeger-query", "ports": [16686], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        '--config-json', '-',
+                        '--tcp-ports', '16686'
+
+                    ],
+                    stdin=json.dumps(config),
+                    image=''
+                )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_jaeger_collector_es_deploy(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        collector_spec = TracingSpec(service_type="jaeger-collector")
+        es_spec = TracingSpec(service_type="elasticsearch")
+        es_config = {}
+
+        with with_host(cephadm_module, 'test'):
+            collector_config = {
+                "elasticsearch_nodes": f'http://{build_url(host=cephadm_module.inventory.get_addr("test"), port=9200).lstrip("/")}'}
+            with with_service(cephadm_module, es_spec):
+                _run_cephadm.assert_called_with(
+                    'test',
+                    'elasticsearch.test',
+                    'deploy',
+                    [
+                        '--name', 'elasticsearch.test',
+                        '--meta-json',
+                        '{"service_name": "elasticsearch", "ports": [9200], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        '--config-json', '-',
+                        '--tcp-ports', '9200'
+
+                    ],
+                    stdin=json.dumps(es_config),
+                    image=''
+                )
+                with with_service(cephadm_module, collector_spec):
+                    _run_cephadm.assert_called_with(
+                        'test',
+                        'jaeger-collector.test',
+                        'deploy',
+                        [
+                            '--name', 'jaeger-collector.test',
+                            '--meta-json',
+                            '{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            '--config-json', '-',
+                            '--tcp-ports', '14250'
+
+                        ],
+                        stdin=json.dumps(collector_config),
+                        image=''
+                    )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_jaeger_agent(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        collector_spec = TracingSpec(service_type="jaeger-collector", es_nodes="192.168.0.1:9200")
+        collector_config = {"elasticsearch_nodes": "http://192.168.0.1:9200"}
+
+        agent_spec = TracingSpec(service_type="jaeger-agent")
+        agent_config = {"collector_nodes": "test:14250"}
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, collector_spec):
+                _run_cephadm.assert_called_with(
+                    'test',
+                    'jaeger-collector.test',
+                    'deploy',
+                    [
+                        '--name', 'jaeger-collector.test',
+                        '--meta-json',
+                        '{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        '--config-json', '-',
+                        '--tcp-ports', '14250'
+
+                    ],
+                    stdin=json.dumps(collector_config),
+                    image=''
+                )
+                with with_service(cephadm_module, agent_spec):
+                    _run_cephadm.assert_called_with(
+                        'test',
+                        'jaeger-agent.test',
+                        'deploy',
+                        [
+                            '--name', 'jaeger-agent.test',
+                            '--meta-json',
+                            '{"service_name": "jaeger-agent", "ports": [6831], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            '--config-json', '-',
+                            '--tcp-ports', '6831'
+
+                        ],
+                        stdin=json.dumps(agent_config),
+                        image=''
+                    )

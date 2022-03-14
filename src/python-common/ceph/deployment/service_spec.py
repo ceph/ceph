@@ -1362,6 +1362,7 @@ class MDSSpec(ServiceSpec):
 
 yaml.add_representer(MDSSpec, ServiceSpec.yaml_representer)
 
+
 class TracingSpec(ServiceSpec):
     SERVICE_TYPES = ['elasticsearch', 'jaeger-collector', 'jaeger-query', 'jaeger-agent']
 
