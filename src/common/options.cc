@@ -9211,6 +9211,14 @@ std::vector<Option> get_mds_client_options() {
     .set_min(0)
     .set_description("timeout for shutting down CephFS")
     .set_long_description("Timeout for shutting down CephFS via unmount or shutdown.")
+    .add_tag("client"),
+
+    Option("client_collect_and_send_global_metrics", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_default(false)
+    .set_description("to enable and force collecting and sending the global metrics to MDS")
+    .set_long_description("To be careful for this, when connecting to some old ceph "
+	"clusters it may crash the MDS daemons while upgrading")
     .add_tag("client")
     });
 }
