@@ -22,6 +22,12 @@ SegmentedAllocator::SegmentedAllocator(
   );
 }
 
+SegmentedAllocator::Writer::open_ertr::future<>
+SegmentedAllocator::Writer::open()
+{
+  return segment_allocator.open().discard_result();
+}
+
 SegmentedAllocator::Writer::write_iertr::future<>
 SegmentedAllocator::Writer::_write(
   Transaction& t,
@@ -165,18 +171,6 @@ SegmentedAllocator::Writer::write(
     return write_iertr::now();
   }
   return seastar::with_gate(write_guard, [this, &t, &extents] {
-    if (!roll_promise.has_value() &&
-        !segment_allocator.can_write()) {
-      roll_promise = seastar::shared_promise<>();
-      return trans_intr::make_interruptible(
-        segment_allocator.open().discard_result()
-      ).finally([this] {
-        roll_promise->set_value();
-        roll_promise.reset();
-      }).si_then([this, &t, &extents] {
-        return do_write(t, extents);
-      });
-    }
     return do_write(t, extents);
   });
 }

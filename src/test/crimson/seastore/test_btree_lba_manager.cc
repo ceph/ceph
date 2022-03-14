@@ -94,8 +94,10 @@ struct btree_test_base :
 
     return segment_manager->init(
     ).safe_then([this] {
-      return journal->open_for_write();
-    }).safe_then([this](auto addr) {
+      return journal->open_for_write().discard_result();
+    }).safe_then([this] {
+      return epm->open();
+    }).safe_then([this] {
       return seastar::do_with(
 	cache->create_transaction(
             Transaction::src_t::MUTATE, "test_set_up_fut", false),
@@ -122,6 +124,8 @@ struct btree_test_base :
     return cache->close(
     ).safe_then([this] {
       return journal->close();
+    }).safe_then([this] {
+      return epm->close();
     }).safe_then([this] {
       test_structure_reset();
       segment_manager.reset();

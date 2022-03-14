@@ -51,8 +51,10 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
     scanner.get_segment_managers()
   ).safe_then([this] {
     return journal->open_for_write();
-  }).safe_then([this, FNAME](auto addr) {
+  }).safe_then([this](auto addr) {
     segment_cleaner->init_mkfs(addr);
+    return epm->open();
+  }).safe_then([this, FNAME]() {
     return with_transaction_intr(
       Transaction::src_t::MUTATE,
       "mkfs_tm",
@@ -136,7 +138,9 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	    });
 	  });
       });
-  }).safe_then([this, FNAME] {
+  }).safe_then([this] {
+    return epm->open();
+  }).safe_then([FNAME, this] {
     segment_cleaner->complete_init();
     INFO("completed");
   }).handle_error(
@@ -156,6 +160,8 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
   }).safe_then([this] {
     cache->dump_contents();
     return journal->close();
+  }).safe_then([this] {
+    return epm->close();
   }).safe_then([FNAME] {
     INFO("completed");
     return seastar::now();
