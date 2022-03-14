@@ -238,7 +238,7 @@ void ApplyImageStateRequest<I>::unprotect_snapshot() {
     auto snap_id = snap_it->first;
     const auto& snap_info = snap_it->second;
 
-    auto user_ns = boost::get<cls::rbd::UserSnapshotNamespace>(
+    auto user_ns = std::get_if<cls::rbd::UserSnapshotNamespace>(
       &snap_info.snap_namespace);
     if (user_ns == nullptr) {
       dout(20) << "snapshot " << snap_id << " is not a user snapshot" << dendl;
@@ -324,7 +324,7 @@ void ApplyImageStateRequest<I>::remove_snapshot() {
     auto snap_id = snap_it->first;
     const auto& snap_info = snap_it->second;
 
-    auto user_ns = boost::get<cls::rbd::UserSnapshotNamespace>(
+    auto user_ns = std::get_if<cls::rbd::UserSnapshotNamespace>(
       &snap_info.snap_namespace);
     if (user_ns == nullptr) {
       dout(20) << "snapshot " << snap_id << " is not a user snapshot" << dendl;
@@ -398,7 +398,7 @@ void ApplyImageStateRequest<I>::protect_snapshot() {
     auto snap_id = snap_it->first;
     const auto& snap_info = snap_it->second;
 
-    auto user_ns = boost::get<cls::rbd::UserSnapshotNamespace>(
+    auto user_ns = std::get_if<cls::rbd::UserSnapshotNamespace>(
       &snap_info.snap_namespace);
     if (user_ns == nullptr) {
       dout(20) << "snapshot " << snap_id << " is not a user snapshot" << dendl;
@@ -484,7 +484,7 @@ void ApplyImageStateRequest<I>::rename_snapshot() {
     auto snap_id = snap_it->first;
     const auto& snap_info = snap_it->second;
 
-    auto user_ns = boost::get<cls::rbd::UserSnapshotNamespace>(
+    auto user_ns = std::get_if<cls::rbd::UserSnapshotNamespace>(
       &snap_info.snap_namespace);
     if (user_ns == nullptr) {
       dout(20) << "snapshot " << snap_id << " is not a user snapshot" << dendl;
@@ -608,7 +608,7 @@ uint64_t ApplyImageStateRequest<I>::compute_remote_snap_id(
   for (auto snap_it = m_remote_image_ctx->snap_info.begin();
        snap_it != m_remote_image_ctx->snap_info.end(); ++snap_it) {
     auto snap_id = snap_it->first;
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
       &snap_it->second.snap_namespace);
     if (mirror_ns == nullptr || !mirror_ns->is_non_primary()) {
       continue;

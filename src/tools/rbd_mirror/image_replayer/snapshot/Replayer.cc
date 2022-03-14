@@ -58,7 +58,7 @@ std::pair<uint64_t, librbd::SnapInfo*> get_newest_mirror_snapshot(
   for (auto snap_info_it = image_ctx->snap_info.rbegin();
        snap_info_it != image_ctx->snap_info.rend(); ++snap_info_it) {
     const auto& snap_ns = snap_info_it->second.snap_namespace;
-    auto mirror_ns = boost::get<
+    auto mirror_ns = std::get_if<
       cls::rbd::MirrorSnapshotNamespace>(&snap_ns);
     if (mirror_ns == nullptr || !mirror_ns->complete) {
       continue;
@@ -446,7 +446,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
   for (auto snap_info_it = local_image_ctx->snap_info.begin();
        snap_info_it != local_image_ctx->snap_info.end(); ++snap_info_it) {
     const auto& snap_ns = snap_info_it->second.snap_namespace;
-    auto mirror_ns = boost::get<
+    auto mirror_ns = std::get_if<
       cls::rbd::MirrorSnapshotNamespace>(&snap_ns);
     if (mirror_ns == nullptr) {
       continue;
@@ -576,7 +576,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
   for (auto snap_info_it = remote_image_ctx->snap_info.begin();
        snap_info_it != remote_image_ctx->snap_info.end(); ++snap_info_it) {
     const auto& snap_ns = snap_info_it->second.snap_namespace;
-    auto mirror_ns = boost::get<
+    auto mirror_ns = std::get_if<
       cls::rbd::MirrorSnapshotNamespace>(&snap_ns);
     if (mirror_ns == nullptr) {
       continue;
@@ -768,8 +768,8 @@ void Replayer<I>::prune_non_primary_snapshot(uint64_t snap_id) {
       snap_namespace = snap_info->snap_namespace;
       snap_name = snap_info->name;
 
-      ceph_assert(boost::get<cls::rbd::MirrorSnapshotNamespace>(
-        &snap_namespace) != nullptr);
+      ceph_assert(std::holds_alternative<cls::rbd::MirrorSnapshotNamespace>(
+        snap_namespace));
     }
   }
 
@@ -913,7 +913,7 @@ void Replayer<I>::create_non_primary_snapshot() {
       return;
     }
 
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
       &local_snap_info_it->second.snap_namespace);
     ceph_assert(mirror_ns != nullptr);
 
@@ -930,8 +930,8 @@ void Replayer<I>::create_non_primary_snapshot() {
 
       // we can ignore all non-user snapshots since image state only includes
       // user snapshots
-      if (boost::get<cls::rbd::UserSnapshotNamespace>(
-            &remote_snap_info.snap_namespace) == nullptr) {
+      if (!std::holds_alternative<cls::rbd::UserSnapshotNamespace>(
+            remote_snap_info.snap_namespace)) {
         continue;
       }
 

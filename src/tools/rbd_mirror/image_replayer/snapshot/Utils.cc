@@ -29,7 +29,7 @@ uint64_t compute_remote_snap_id(
   // come at or after the snapshot we are searching against
   for (auto snap_it = local_snap_infos.lower_bound(local_snap_id);
        snap_it != local_snap_infos.end(); ++snap_it) {
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
       &snap_it->second.snap_namespace);
     if (mirror_ns == nullptr || !mirror_ns->is_non_primary()) {
       continue;
