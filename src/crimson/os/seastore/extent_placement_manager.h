@@ -19,20 +19,21 @@ namespace crimson::os::seastore {
  * Interface through which final write to ool segment is performed.
  */
 class ExtentOolWriter {
+  using base_ertr = crimson::errorator<
+      crimson::ct_error::input_output_error>;
 public:
-  using write_iertr = trans_iertr<crimson::errorator<
-    crimson::ct_error::input_output_error, // media error or corruption
-    crimson::ct_error::invarg,             // if offset is < write pointer or misaligned
-    crimson::ct_error::ebadf,              // segment closed
-    crimson::ct_error::enospc              // write exceeds segment size
-    >>;
+  virtual ~ExtentOolWriter() {}
 
-  using stop_ertr = Segment::close_ertr;
-  virtual stop_ertr::future<> stop() = 0;
+  using open_ertr = base_ertr;
+  virtual open_ertr::future<> open() = 0;
+
+  using write_iertr = trans_iertr<base_ertr>;
   virtual write_iertr::future<> write(
     Transaction& t,
     std::list<LogicalCachedExtentRef>& extent) = 0;
-  virtual ~ExtentOolWriter() {}
+
+  using stop_ertr = base_ertr;
+  virtual stop_ertr::future<> stop() = 0;
 };
 
 /**
@@ -42,13 +43,10 @@ public:
  */
 class ExtentAllocator {
 public:
-  using alloc_paddr_iertr = trans_iertr<crimson::errorator<
-    crimson::ct_error::input_output_error, // media error or corruption
-    crimson::ct_error::invarg,             // if offset is < write pointer or misaligned
-    crimson::ct_error::ebadf,              // segment closed
-    crimson::ct_error::enospc              // write exceeds segment size
-    >>;
+  using open_ertr = ExtentOolWriter::open_ertr;
+  virtual open_ertr::future<> open() = 0;
 
+  using alloc_paddr_iertr = ExtentOolWriter::write_iertr;
   virtual alloc_paddr_iertr::future<> alloc_ool_extents_paddr(
     Transaction& t,
     std::list<LogicalCachedExtentRef>&) = 0;
@@ -82,6 +80,8 @@ class SegmentedAllocator : public ExtentAllocator {
 
     Writer(Writer &&) = default;
 
+    open_ertr::future<> open() final;
+
     write_iertr::future<> write(
       Transaction& t,
       std::list<LogicalCachedExtentRef>& extent) final;
@@ -89,6 +89,8 @@ class SegmentedAllocator : public ExtentAllocator {
     stop_ertr::future<> stop() final {
       return write_guard.close().then([this] {
         return segment_allocator.close();
+      }).safe_then([this] {
+        write_guard = seastar::gate();
       });
     }
 
@@ -117,6 +119,12 @@ public:
     } else {
       return writers[std::rand() % writers.size()];
     }
+  }
+
+  open_ertr::future<> open() {
+    return crimson::do_for_each(writers, [](auto& writer) {
+      return writer.open();
+    });
   }
 
   alloc_paddr_iertr::future<> alloc_ool_extents_paddr(
@@ -152,6 +160,25 @@ private:
 class ExtentPlacementManager {
 public:
   ExtentPlacementManager() = default;
+
+  void add_allocator(device_type_t type, ExtentAllocatorRef&& allocator) {
+    allocators[type].emplace_back(std::move(allocator));
+    LOG_PREFIX(ExtentPlacementManager::add_allocator);
+    SUBDEBUG(seastore_tm, "allocators for {}: {}",
+      type,
+      allocators[type].size());
+  }
+
+  using open_ertr = ExtentOolWriter::open_ertr;
+  open_ertr::future<> open() {
+    LOG_PREFIX(ExtentPlacementManager::open);
+    SUBINFO(seastore_tm, "started");
+    return crimson::do_for_each(allocators, [](auto& allocators_item) {
+      return crimson::do_for_each(allocators_item.second, [](auto& allocator) {
+        return allocator->open();
+      });
+    });
+  }
 
   struct alloc_result_t {
     paddr_t paddr;
@@ -221,12 +248,15 @@ public:
     });
   }
 
-  void add_allocator(device_type_t type, ExtentAllocatorRef&& allocator) {
-    allocators[type].emplace_back(std::move(allocator));
-    LOG_PREFIX(ExtentPlacementManager::add_allocator);
-    SUBDEBUG(seastore_tm, "allocators for {}: {}",
-      type,
-      allocators[type].size());
+  using close_ertr = ExtentOolWriter::stop_ertr;
+  close_ertr::future<> close() {
+    LOG_PREFIX(ExtentPlacementManager::close);
+    SUBINFO(seastore_tm, "started");
+    return crimson::do_for_each(allocators, [](auto& allocators_item) {
+      return crimson::do_for_each(allocators_item.second, [](auto& allocator) {
+        return allocator->stop();
+      });
+    });
   }
 
 private:
