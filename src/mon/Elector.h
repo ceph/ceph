@@ -241,6 +241,8 @@ class Elector : public ElectionOwner, RankProvider {
   bool ever_participated() const;
   /* Retrieve monmap->size() */
   unsigned paxos_size() const;
+  /* Retrieve monmap->ranks.size() */
+  unsigned ranks_size() const;
   /* Right now we don't disallow anybody */
   std::set<int> disallowed_leaders;
   const std::set<int>& get_disallowed_leaders() const { return disallowed_leaders; }

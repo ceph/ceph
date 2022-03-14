@@ -135,6 +135,11 @@ unsigned Elector::paxos_size() const
   return (unsigned)mon->monmap->size();
 }
 
+unsigned Elector::ranks_size() const
+{
+  return (unsigned)mon->monmap->ranks.size();
+}
+
 void Elector::shutdown()
 {
   cancel_timer();
@@ -527,6 +532,8 @@ void Elector::ping_check(int peer)
     dout(20) << __func__ << peer << " is no longer marked for pinging" << dendl;
     return;
   }
+  dout(10) << "paxos_size(): " << paxos_size() << dendl;
+  dout(10) << "ranks_size(): " << ranks_size() << dendl;
   print_live_pinging();
   print_dead_pinging();
   utime_t now = ceph_clock_now(); // the current time
@@ -797,6 +804,8 @@ void Elector::notify_rank_removed(int rank_removed)
   dout(10) << "rank_removed: " << rank_removed << dendl;
   print_live_pinging();
   print_dead_pinging();
+  dout(10) << "ranks_size(): " << ranks_size() << dendl;
+  dout(10) << "paxos_size(): " << paxos_size() << dendl;
   for (unsigned i = rank_removed + 1; i <= paxos_size() ; ++i) {
     if (live_pinging.count(i)) {
       dead_pinging.erase(i-1);
