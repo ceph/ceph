@@ -4,7 +4,7 @@ tasks:
 - tox: [ client.0 ]
 - keystone:
     client.0:
-      sha1: 17.0.0.0rc2
+      sha1: 20.0.0
       force-branch: master
       services:
         - name: swift
@@ -16,7 +16,7 @@ tasks:
       use-keystone-role: client.0
 - tempest:
     client.0:
-      sha1: train-last
+      sha1: 30.0.0
       force-branch: master
       use-keystone-role: client.0
       auth:
