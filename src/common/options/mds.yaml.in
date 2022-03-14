@@ -1450,3 +1450,12 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_disable_metrics_update_rank0
+  type: bool
+  level: advanced
+  desc: Disable updating metrics to rank0 periodically.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime

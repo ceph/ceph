@@ -548,6 +548,7 @@ MDSRank::MDSRank(
                                          cct->_conf->mds_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
                                            cct->_conf->mds_op_history_duration);
+  disable_metrics_update_rank0 = g_conf().get_val<bool>("mds_disable_metrics_update_rank0");
 
   schedule_update_timer_task();
 }
@@ -3771,6 +3772,9 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
 
   if (changed.count("mds_heartbeat_grace")) {
     heartbeat_grace = conf.get_val<double>("mds_heartbeat_grace");
+  }
+  if (changed.count("mds_disable_metrics_update_rank0")) {
+    disable_metrics_update_rank0 = conf.get_val<bool>("mds_disable_metrics_update_rank0");
   }
   if (changed.count("mds_op_complaint_time") || changed.count("mds_op_log_threshold")) {
     op_tracker.set_complaint_and_threshold(conf->mds_op_complaint_time, conf->mds_op_log_threshold);

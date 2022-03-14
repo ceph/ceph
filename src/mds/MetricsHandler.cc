@@ -386,8 +386,8 @@ void MetricsHandler::notify_mdsmap(const MDSMap &mdsmap) {
 void MetricsHandler::update_rank0() {
   dout(20) << dendl;
 
-  if (!addr_rank0) {
-    dout(20) << ": not yet notified with rank0 address, ignoring" << dendl;
+  if (!addr_rank0 || mds->disable_metrics_update_rank0) {
+    dout(20) << ": not yet notified with rank0 address or the update is disabled, ignoring" << dendl;
     return;
   }
 

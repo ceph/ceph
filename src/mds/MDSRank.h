@@ -386,6 +386,8 @@ class MDSRank {
 
     std::unique_ptr<MDSMap> &mdsmap; /* MDSDaemon::mdsmap */
 
+    bool disable_metrics_update_rank0;
+
     Objecter *objecter;
 
     // sub systems
