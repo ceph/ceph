@@ -11,6 +11,7 @@
 #include "osd/osd_types.h"
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -549,6 +550,7 @@ private:
   const config_t config;
 
   SegmentManagerGroupRef sm_group;
+  BackrefManager &backref_manager;
 
   SpaceTrackerIRef space_tracker;
   segments_info_t segments;
@@ -593,6 +595,7 @@ public:
   SegmentCleaner(
     config_t config,
     SegmentManagerGroupRef&& sm_group,
+    BackrefManager &backref_manager,
     bool detailed = false);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {

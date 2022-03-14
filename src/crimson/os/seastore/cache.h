@@ -16,11 +16,12 @@
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
+
+class SegmentCleaner;
 
 struct backref_buf_entry_t {
   backref_buf_entry_t(
