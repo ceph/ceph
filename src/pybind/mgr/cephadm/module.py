@@ -2672,22 +2672,6 @@ Then run the following:
         return self._apply(spec)
 
     @handle_orch_error
-    def apply_elasticsearch(self, spec: ServiceSpec) -> str:
-        return self._apply(spec)
-
-    @handle_orch_error
-    def apply_jaeger_agent(self, spec: ServiceSpec) -> str:
-        return self._apply(spec)
-
-    @handle_orch_error
-    def apply_jaeger_collector(self, spec: ServiceSpec) -> str:
-        return self._apply(spec)
-
-    @handle_orch_error
-    def apply_jaeger_query(self, spec: ServiceSpec) -> str:
-        return self._apply(spec)
-
-    @handle_orch_error
     def apply_container(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 

@@ -68,7 +68,6 @@ class ServiceType(enum.Enum):
     jaeger_query = 'jaeger-query'
 
 
-
 class ServiceAction(enum.Enum):
     start = 'start'
     stop = 'stop'

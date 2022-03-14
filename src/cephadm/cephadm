@@ -1100,16 +1100,18 @@ class Keepalived(object):
 
 ##################################
 
+
 class Tracing(object):
     """Define the configs for the jaeger tracing containers"""
 
-    components = {
+    components: Dict[str, Dict[str, Any]] = {
         'elasticsearch': {
             'image': DEFAULT_ELASTICSEARCH_IMAGE,
             'envs': ['discovery.type=single-node']
         },
         'jaeger-agent': {
             'image': DEFAULT_JAEGER_AGENT_IMAGE,
+            'envs': ''
         },
         'jaeger-collector': {
             'image': DEFAULT_JAEGER_COLLECTOR_IMAGE,
@@ -1120,8 +1122,8 @@ class Tracing(object):
     }  # type: ignore
 
     @staticmethod
-    def set_configuration(config, daemon_type: str):
-        if daemon_type in ['jaeger-collector','jaeger-query']:
+    def set_configuration(config: Dict[str, str], daemon_type: str) -> None:
+        if daemon_type in ['jaeger-collector', 'jaeger-query']:
             assert 'elasticsearch_nodes' in config
             Tracing.components[daemon_type]['envs'] = [
                 'SPAN_STORAGE_TYPE=elasticsearch',
@@ -1132,6 +1134,7 @@ class Tracing(object):
                 f'--reporter.grpc.host-port={config["collector_nodes"]}']
 
 ##################################
+
 
 class CustomContainer(object):
     """Defines a custom container"""
