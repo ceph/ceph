@@ -70,9 +70,6 @@ The metadata daemon memory utilization depends on how much memory its cache is
 configured to consume.  We recommend 1 GB as a minimum for most systems.  See
 `mds_cache_memory_limit`.
 
-OSDs (ceph-osd)
----------------
-
 Memory
 ======
 
