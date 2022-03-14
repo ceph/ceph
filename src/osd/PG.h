@@ -577,6 +577,21 @@ public:
       });
   }
 
+  utime_t snaptrim_begin_stamp;
+
+  void set_snaptrim_begin_stamp() {
+    snaptrim_begin_stamp = ceph_clock_now();
+  }
+
+  void set_snaptrim_duration() {
+    utime_t cur_stamp = ceph_clock_now();
+    utime_t duration = cur_stamp - snaptrim_begin_stamp;
+    recovery_state.update_stats_wo_resched(
+      [=](auto &history, auto &stats) {
+        stats.snaptrim_duration = double(duration);
+    });
+  }
+
   unsigned get_target_pg_log_entries() const override;
 
   void clear_publish_stats() override;

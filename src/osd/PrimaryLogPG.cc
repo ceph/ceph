@@ -4904,6 +4904,7 @@ void PrimaryLogPG::kick_snap_trim()
     } else {
       dout(10) << __func__ << ": clean and snaps to trim, kicking" << dendl;
       reset_objects_trimmed();
+      set_snaptrim_begin_stamp();
       snap_trimmer_machine.process_event(KickTrim());
     }
   }
@@ -15649,6 +15650,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
       pg->recovery_state.share_pg_info();
     }
     post_event(KickTrim());
+    pg->set_snaptrim_duration();
     return transit< NotTrimming >();
   }
   ceph_assert(!to_trim.empty());

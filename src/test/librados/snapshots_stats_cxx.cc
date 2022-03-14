@@ -119,9 +119,9 @@ protected:
   }
 };
 
-int get_objects_trimmed(json_spirit::Object& pg_dump) {
-  int objs_trimmed = 0;
-
+void get_snaptrim_stats(json_spirit::Object& pg_dump,
+                        int *objs_trimmed,
+                        double *trim_duration) {
   // pg_map
   json_spirit::Object pgmap;
   for (json_spirit::Object::size_type i = 0; i < pg_dump.size(); ++i) {
@@ -148,13 +148,13 @@ int get_objects_trimmed(json_spirit::Object& pg_dump) {
     for(json_spirit::Object::size_type k = 0; k < pg_stat.size(); ++k) {
       json_spirit::Pair& stats = pg_stat[k];
       if (stats.name_ == "objects_trimmed") {
-        objs_trimmed += stats.value_.get_int();
-        break;
+        *objs_trimmed += stats.value_.get_int();
+      }
+      if (stats.name_ == "snaptrim_duration") {
+        *trim_duration += stats.value_.get_real();
       }
     }
   }
-
-  return objs_trimmed;
 }
 const int bufsize = 128;
 
@@ -203,6 +203,7 @@ TEST_F(LibRadosSnapshotStatsSelfManagedPP, SnaptrimStatsPP) {
 
   // Dump pg stats and determine if snaptrim stats are getting set
   int objects_trimmed = 0;
+  double snaptrim_duration = 0.0;
   int tries = 0;
   do {
     string cmd = string("{\"prefix\": \"pg dump\",\"format\":\"json\"}");
@@ -215,7 +216,7 @@ TEST_F(LibRadosSnapshotStatsSelfManagedPP, SnaptrimStatsPP) {
 
     // pg_map
     json_spirit::Object& obj = v.get_obj();
-    objects_trimmed = get_objects_trimmed(obj);
+    get_snaptrim_stats(obj, &objects_trimmed, &snaptrim_duration);
     if (objects_trimmed < num_objs) {
       tries++;
       objects_trimmed = 0;
@@ -226,6 +227,8 @@ TEST_F(LibRadosSnapshotStatsSelfManagedPP, SnaptrimStatsPP) {
 
   // final check for objects trimmed
   ASSERT_EQ(objects_trimmed, num_objs);
+  std::cout << "Snaptrim duration: " << snaptrim_duration << std::endl;
+  ASSERT_GT(snaptrim_duration, 0.0);
 
   // clean-up remaining objects
   ioctx.snap_set_read(librados::SNAP_HEAD);
@@ -282,6 +285,7 @@ TEST_F(LibRadosSnapshotStatsSelfManagedECPP, SnaptrimStatsECPP) {
 
   // Dump pg stats and determine if snaptrim stats are getting set
   int objects_trimmed = 0;
+  double snaptrim_duration = 0.0;
   int tries = 0;
   do {
     string cmd = string("{\"prefix\": \"pg dump\",\"format\":\"json\"}");
@@ -294,7 +298,7 @@ TEST_F(LibRadosSnapshotStatsSelfManagedECPP, SnaptrimStatsECPP) {
 
     // pg_map
     json_spirit::Object& obj = v.get_obj();
-    objects_trimmed = get_objects_trimmed(obj);
+    get_snaptrim_stats(obj, &objects_trimmed, &snaptrim_duration);
     if (objects_trimmed < num_objs) {
       tries++;
       objects_trimmed = 0;
@@ -305,6 +309,8 @@ TEST_F(LibRadosSnapshotStatsSelfManagedECPP, SnaptrimStatsECPP) {
 
   // final check for objects trimmed
   ASSERT_EQ(objects_trimmed, num_objs);
+  std::cout << "Snaptrim duration: " << snaptrim_duration << std::endl;
+  ASSERT_GT(snaptrim_duration, 0.0);
 
   // clean-up remaining objects
   ioctx.snap_set_read(LIBRADOS_SNAP_HEAD);
