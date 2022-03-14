@@ -10,6 +10,7 @@
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/common/config_proxy.h"
+#include "crimson/os/seastore/segment_cleaner.h"
 
 // included for get_extent_by_type
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
