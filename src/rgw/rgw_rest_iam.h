@@ -9,7 +9,7 @@
 
 class RGWHandler_REST_IAM : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
-  const std::string& post_body;
+  const std::string post_body;
   RGWOp *op_post() override;
   void rgw_iam_parse_input();
 public:
