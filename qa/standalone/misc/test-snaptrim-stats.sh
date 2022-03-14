@@ -88,18 +88,98 @@ function TEST_snaptrim_stats() {
     wait_for_clean || return 1
     sleep $WAIT_FOR_UPDATE
     local objects_trimmed=0
+    local snaptrim_duration_total=0.0
     for i in $(seq 0 $(expr $PGNUM - 1))
     do
         local pgid="${poolid}.${i}"
         objects_trimmed=$(expr $objects_trimmed + $(ceph pg $pgid query | \
             jq '.info.stats.objects_trimmed'))
+        snaptrim_duration_total=`echo $snaptrim_duration_total + $(ceph pg \
+            $pgid query | jq '.info.stats.snaptrim_duration') | bc`
     done
-
     test $objects_trimmed -eq $objects || return 1
+    echo "$snaptrim_duration_total > 0.0" | bc || return 1
 
     teardown $dir || return 1
 }
 
+function TEST_snaptrim_stats_multiple_snaps() {
+    local dir=$1
+    local poolname=test
+    local OSDS=3
+    local PGNUM=8
+    local PGPNUM=8
+    local objects=10
+    local WAIT_FOR_UPDATE=10
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd_pool_default_pg_autoscale_mode=off || return 1
+    done
+
+    # disable scrubs
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
+    # Create a pool
+    create_pool $poolname $PGNUM $PGPNUM
+    wait_for_clean || return 1
+    poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+
+    # write a few objects
+    local TESTDATA="testdata.0"
+    dd if=/dev/urandom of=$TESTDATA bs=4096 count=1
+    for i in `seq 1 $objects`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+    rm -f $TESTDATA
+
+    # create snapshots, clones
+    NUMSNAPS=2
+    for i in `seq 1 $NUMSNAPS`
+    do
+        rados -p $poolname mksnap snap${i}
+        TESTDATA="testdata".${i}
+        dd if=/dev/urandom of=$TESTDATA  bs=4096 count=1
+        for i in `seq 1 $objects`
+        do
+            rados -p $poolname put obj${i} $TESTDATA
+        done
+        rm -f $TESTDATA
+    done
+
+    # remove the snapshots, should trigger snaptrim
+    local total_objects_trimmed=0
+    for i in `seq 1 $NUMSNAPS`
+    do
+        rados -p $poolname rmsnap snap${i}
+
+        # check for snaptrim stats
+        wait_for_clean || return 1
+        sleep $WAIT_FOR_UPDATE
+        local objects_trimmed=0
+        local snaptrim_duration_total=0.0
+        for i in $(seq 0 $(expr $PGNUM - 1))
+        do
+            local pgid="${poolid}.${i}"
+            objects_trimmed=$(expr $objects_trimmed + $(ceph pg $pgid query | \
+                jq '.info.stats.objects_trimmed'))
+            snaptrim_duration_total=`echo $snaptrim_duration_total + $(ceph pg \
+                $pgid query | jq '.info.stats.snaptrim_duration') | bc`
+        done
+        test $objects_trimmed -eq $objects || return 1
+        echo "$snaptrim_duration_total > 0.0" | bc || return 1
+        total_objects_trimmed=$(expr $total_objects_trimmed + $objects_trimmed)
+    done
+
+    test $total_objects_trimmed -eq $((objects * NUMSNAPS)) || return 1
+
+    teardown $dir || return 1
+}
 main test-snaptrim-stats "$@"
 
 # Local Variables:
