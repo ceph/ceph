@@ -3853,16 +3853,16 @@ std::string MotrStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_y
 }
 
 int MotrStore::init_metadata_cache(const DoutPrefixProvider *dpp,
-                                   CephContext *cct)
+                                   CephContext *cct, bool use_cache)
 {
   this->obj_meta_cache = new MotrMetaCache(dpp, cct);
-  this->get_obj_meta_cache()->set_enabled(true);
+  this->get_obj_meta_cache()->set_enabled(use_cache);
 
   this->user_cache = new MotrMetaCache(dpp, cct);
-  this->get_user_cache()->set_enabled(true);
+  this->get_user_cache()->set_enabled(use_cache);
 
   this->bucket_inst_cache = new MotrMetaCache(dpp, cct);
-  this->get_bucket_inst_cache()->set_enabled(true);
+  this->get_bucket_inst_cache()->set_enabled(use_cache);
 
   return 0;
 }

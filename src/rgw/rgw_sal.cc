@@ -117,7 +117,7 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
       ldpp_dout(dpp, 0) << "newMotrStore() failed!" << dendl;
       return store;
     }
-    ((rgw::sal::MotrStore *)store)->init_metadata_cache(dpp, cct);
+    ((rgw::sal::MotrStore *)store)->init_metadata_cache(dpp, cct, use_cache);
 
     return store;
   }

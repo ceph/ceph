@@ -1027,7 +1027,7 @@ class MotrStore : public Store {
     int delete_access_key(const DoutPrefixProvider *dpp, optional_yield y, std::string access_key);
     int store_email_info(const DoutPrefixProvider *dpp, optional_yield y, MotrEmailInfo& email_info);
 
-    int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct);
+    int init_metadata_cache(const DoutPrefixProvider *dpp, CephContext *cct, bool use_cache);
     MotrMetaCache* get_obj_meta_cache() {return obj_meta_cache;}
     MotrMetaCache* get_user_cache() {return user_cache;}
     MotrMetaCache* get_bucket_inst_cache() {return bucket_inst_cache;}
