@@ -382,7 +382,8 @@ public:
   /// SegmentCleaner::ExtentCallbackInterface
   using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
   submit_transaction_direct_ret submit_transaction_direct(
-    Transaction &t) final;
+    Transaction &t,
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
 
   /**
    * flush

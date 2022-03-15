@@ -614,6 +614,13 @@ public:
     return res;
   }
 
+  backref_buf_entry_t get_del_backref(
+    paddr_t addr) {
+    auto it = backref_remove_set.find(addr, backref_buf_entry_t::cmp_t());
+    assert(it != backref_remove_set.end());
+    return *it;
+  }
+
   const backref_buf_entry_t::set_t& get_backrefs() {
     return backref_inserted_set;
   }

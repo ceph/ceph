@@ -433,7 +433,9 @@ public:
     size_t reclaim_bytes_stride = 0;
 
     /// Number of bytes of journal entries to rewrite per cycle
-    size_t journal_rewrite_per_cycle = 0;
+    size_t journal_rewrite_dirty_per_cycle = 0;
+
+    size_t journal_rewrite_backref_per_cycle = 0;
 
     static config_t get_default() {
       return config_t{
@@ -444,7 +446,8 @@ public:
 	  .6,   // reclaim_ratio_gc_threshhold
 	  .2,   // available_ratio_hard_limit
 	  1<<25,// reclaim 64MB per gc cycle
-	  1<<25 // rewrite 64MB of journal entries per gc cycle
+	  1<<25,// rewrite 64MB of journal entries per gc cycle
+	  1<<24 // create 16MB of backref extents per gc cycle
 	};
     }
   };
@@ -542,7 +545,8 @@ public:
     using submit_transaction_direct_ret =
       submit_transaction_direct_iertr::future<>;
     virtual submit_transaction_direct_ret submit_transaction_direct(
-      Transaction &t) = 0;
+      Transaction &t,
+      std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
   };
 
 private:
@@ -551,6 +555,7 @@ private:
 
   SegmentManagerGroupRef sm_group;
   BackrefManager &backref_manager;
+  Cache &cache;
 
   SpaceTrackerIRef space_tracker;
   segments_info_t segments;
@@ -596,6 +601,7 @@ public:
     config_t config,
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
+    Cache &cache,
     bool detailed = false);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {
@@ -810,6 +816,12 @@ private:
     Transaction &t,
     journal_seq_t limit);
 
+  using trim_backrefs_iertr = work_iertr;
+  using trim_backrefs_ret = trim_backrefs_iertr::future<journal_seq_t>;
+  trim_backrefs_ret trim_backrefs(
+    Transaction &t,
+    journal_seq_t limit);
+
   journal_seq_t get_dirty_tail() const {
     auto ret = journal_head;
     ret.segment_seq -= std::min(
@@ -827,9 +839,12 @@ private:
   }
 
   // GC status helpers
-  std::unique_ptr<
-    SegmentManagerGroup::scan_extents_cursor
-    > scan_cursor;
+  std::optional<paddr_t> next_reclaim_pos;
+
+  bool final_reclaim() {
+    return next_reclaim_pos->as_seg_paddr().get_segment_off()
+      + config.reclaim_bytes_stride >= (size_t)segments.get_segment_size();
+  }
 
   /**
    * GCProcess
@@ -919,6 +934,26 @@ private:
   using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
   gc_reclaim_space_ret gc_reclaim_space();
 
+  using retrieve_backref_extents_iertr = work_iertr;
+  using retrieve_backref_extents_ret =
+    retrieve_backref_extents_iertr::future<>;
+  retrieve_backref_extents_ret _retrieve_backref_extents(
+    Transaction &t,
+    std::set<
+      Cache::backref_extent_buf_entry_t,
+      Cache::backref_extent_buf_entry_t::cmp_t> &&backref_extents,
+    std::vector<CachedExtentRef> &extents);
+
+  using retrieve_live_extents_iertr = work_iertr;
+  using retrieve_live_extents_ret =
+    retrieve_live_extents_iertr::future<journal_seq_t>;
+  retrieve_live_extents_ret _retrieve_live_extents(
+    Transaction &t,
+    std::set<
+      backref_buf_entry_t,
+      backref_buf_entry_t::cmp_t> &&backrefs,
+    std::vector<CachedExtentRef> &extents);
+
   size_t get_bytes_used_current_segment() const {
     auto& seg_addr = journal_head.offset.as_seg_paddr();
     return seg_addr.get_segment_off();
@@ -927,18 +962,6 @@ private:
   size_t get_bytes_available_current_segment() const {
     auto segment_size = segments.get_segment_size();
     return segment_size - get_bytes_used_current_segment();
-  }
-
-  /**
-   * get_bytes_scanned_current_segment
-   *
-   * Returns the number of bytes from the current gc segment that
-   * have been scanned.
-   */
-  size_t get_bytes_scanned_current_segment() const {
-    if (!scan_cursor)
-      return 0;
-    return scan_cursor->get_segment_offset();
   }
 
   /// Returns free space available for writes

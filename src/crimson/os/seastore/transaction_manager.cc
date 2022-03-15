@@ -319,7 +319,8 @@ TransactionManager::submit_transaction(
 
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::submit_transaction_direct(
-  Transaction &tref)
+  Transaction &tref,
+  std::optional<journal_seq_t> seq_to_trim)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   SUBTRACET(seastore_t, "start", tref);
@@ -352,7 +353,7 @@ TransactionManager::submit_transaction_direct(
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
-  }).si_then([this, FNAME, &tref]() mutable
+  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]() mutable
 	      -> submit_transaction_iertr::future<> {
     auto record = cache->prepare_record(tref, segment_cleaner.get());
 
@@ -360,11 +361,15 @@ TransactionManager::submit_transaction_direct(
 
     SUBTRACET(seastore_t, "about to submit to journal", tref);
     return journal->submit_record(std::move(record), tref.get_handle()
-    ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
+    ).safe_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]
+      (auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
       auto end_seq = submit_result.write_result.get_end_seq();
       segment_cleaner->set_journal_head(end_seq);
+      if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
+	cache->trim_backref_bufs(*seq_to_trim);
+      }
       cache->complete_commit(
           tref,
           submit_result.record_block_base,
@@ -461,6 +466,11 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   CachedExtentRef extent)
 {
   LOG_PREFIX(TransactionManager::rewrite_extent);
+
+  if (is_backref_node(extent->get_type())) {
+    return backref_manager->rewrite_extent(t, extent);
+  }
+
   {
     auto updated = cache->update_extent_from_transaction(t, extent);
     if (!updated) {
@@ -476,12 +486,24 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     return rewrite_extent_iertr::now();
   }
 
+  auto fut = rewrite_extent_iertr::now();
   if (extent->is_logical()) {
-    return rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
+    fut = rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
   } else {
     DEBUGT("rewriting physical extent -- {}", t, *extent);
-    return lba_manager->rewrite_extent(t, extent);
+    fut = lba_manager->rewrite_extent(t, extent);
   }
+
+  return fut.si_then([this, extent, &t] {
+    t.dont_record_release(extent);
+    return backref_manager->remove_mapping(
+      t, extent->get_paddr()).si_then([](auto) {
+      return seastar::now();
+    }).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further(),
+      crimson::ct_error::assert_all()
+    );
+  });
 }
 
 TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_live(
@@ -588,6 +610,7 @@ TransactionManagerRef make_transaction_manager(bool detailed)
     SegmentCleaner::config_t::get_default(),
     std::move(sms),
     *backref_manager,
+    *cache,
     detailed);
   auto journal = journal::make_segmented(*segment_cleaner);
   epm->init_ool_writers(
