@@ -69,10 +69,10 @@ ObjectDataHandler::write_ret do_removals(
       LOG_PREFIX(object_data_handler.cc::do_removals);
       DEBUGT("decreasing ref: {}",
 	     ctx.t,
-	     pin->get_laddr());
+	     pin->get_key());
       return ctx.tm.dec_ref(
 	ctx.t,
-	pin->get_laddr()
+	pin->get_key()
       ).si_then(
 	[](auto){},
 	ObjectDataHandler::write_iertr::pass_further{},
@@ -129,14 +129,14 @@ ObjectDataHandler::write_ret do_insertions(
 	  region.len
 	).si_then([FNAME, ctx, &region](auto pin) {
 	  ceph_assert(pin->get_length() == region.len);
-	  if (pin->get_laddr() != region.addr) {
+	  if (pin->get_key() != region.addr) {
 	    ERRORT(
 	      "inconsistent laddr: pin: {} region {}",
 	      ctx.t,
-	      pin->get_laddr(),
+	      pin->get_key(),
 	      region.addr);
 	  }
-	  ceph_assert(pin->get_laddr() == region.addr);
+	  ceph_assert(pin->get_key() == region.addr);
 	  return ObjectDataHandler::write_iertr::now();
 	});
       }
@@ -156,7 +156,7 @@ using split_ret_bare = std::pair<
 using split_ret = get_iertr::future<split_ret_bare>;
 split_ret split_pin_left(context_t ctx, LBAPinRef &pin, laddr_t offset)
 {
-  const auto pin_offset = pin->get_laddr();
+  const auto pin_offset = pin->get_key();
   assert_aligned(pin_offset);
   ceph_assert(offset >= pin_offset);
   if (offset == pin_offset) {
@@ -181,7 +181,7 @@ split_ret split_pin_left(context_t ctx, LBAPinRef &pin, laddr_t offset)
     );
   } else {
     // Data, return up to offset to prepend
-    auto to_prepend = offset - pin->get_laddr();
+    auto to_prepend = offset - pin->get_key();
     return read_pin(ctx, pin->duplicate()
     ).si_then([to_prepend](auto extent) {
       return get_iertr::make_ready_future<split_ret_bare>(
@@ -194,8 +194,8 @@ split_ret split_pin_left(context_t ctx, LBAPinRef &pin, laddr_t offset)
 /// Reverse of split_pin_left
 split_ret split_pin_right(context_t ctx, LBAPinRef &pin, laddr_t end)
 {
-  const auto pin_begin = pin->get_laddr();
-  const auto pin_end = pin->get_laddr() + pin->get_length();
+  const auto pin_begin = pin->get_key();
+  const auto pin_end = pin->get_key() + pin->get_length();
   assert_aligned(pin_end);
   ceph_assert(pin_end >= end);
   if (end == pin_end) {
@@ -273,7 +273,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
     ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
       ceph_assert(pin->get_length() == max_object_size);
       object_data.update_reserved(
-	pin->get_laddr(),
+	pin->get_key(),
 	pin->get_length());
       return write_iertr::now();
     });
@@ -302,17 +302,17 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	_pins.swap(pins);
 	ceph_assert(pins.size());
 	auto &pin = *pins.front();
-	ceph_assert(pin.get_laddr() >= object_data.get_reserved_data_base());
+	ceph_assert(pin.get_key() >= object_data.get_reserved_data_base());
 	ceph_assert(
-	  pin.get_laddr() <= object_data.get_reserved_data_base() + size);
-	auto pin_offset = pin.get_laddr() -
+	  pin.get_key() <= object_data.get_reserved_data_base() + size);
+	auto pin_offset = pin.get_key() -
 	  object_data.get_reserved_data_base();
-	if ((pin.get_laddr() == (object_data.get_reserved_data_base() + size)) ||
+	if ((pin.get_key() == (object_data.get_reserved_data_base() + size)) ||
 	  (pin.get_paddr().is_zero())) {
 	  /* First pin is exactly at the boundary or is a zero pin.  Either way,
 	   * remove all pins and add a single zero pin to the end. */
 	  to_write.emplace_back(
-	    pin.get_laddr(),
+	    pin.get_key(),
 	    object_data.get_reserved_data_len() - pin_offset);
 	  return clear_iertr::now();
 	} else {
@@ -332,7 +332,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	      ));
 	    bl.append_zero(p2roundup(size, ctx.tm.get_block_size()) - size);
 	    to_write.emplace_back(
-	      pin.get_laddr(),
+	      pin.get_key(),
 	      bl);
 	    to_write.emplace_back(
 	      object_data.get_reserved_data_base() +
@@ -387,9 +387,9 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
 	     offset,
 	     bl.length());
       ceph_assert(pins.size() >= 1);
-      auto pin_begin = pins.front()->get_laddr();
+      auto pin_begin = pins.front()->get_key();
       ceph_assert(pin_begin <= offset);
-      auto pin_end = pins.back()->get_laddr() + pins.back()->get_length();
+      auto pin_end = pins.back()->get_key() + pins.back()->get_length();
       ceph_assert(pin_end >= (offset + bl.length()));
 
       return split_pin_left(
@@ -500,7 +500,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 	  ).si_then([ctx, loffset, len, &ret](auto _pins) {
 	    // offset~len falls within reserved region and len > 0
 	    ceph_assert(_pins.size() >= 1);
-	    ceph_assert((*_pins.begin())->get_laddr() <= loffset);
+	    ceph_assert((*_pins.begin())->get_key() <= loffset);
 	    return seastar::do_with(
 	      std::move(_pins),
 	      loffset,
@@ -511,9 +511,9 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		  -> read_iertr::future<> {
 		    ceph_assert(current <= (loffset + len));
 		    ceph_assert(
-		      (loffset + len) > pin->get_laddr());
+		      (loffset + len) > pin->get_key());
 		    laddr_t end = std::min(
-		      pin->get_laddr() + pin->get_length(),
+		      pin->get_key() + pin->get_length(),
 		      loffset + len);
 		    if (pin->get_paddr().is_zero()) {
 		      ceph_assert(end > current); // See LBAManager::get_mappings
@@ -583,12 +583,12 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
         len
       ).si_then([loffset, len, &object_data, &ret](auto &&pins) {
 	ceph_assert(pins.size() >= 1);
-        ceph_assert((*pins.begin())->get_laddr() <= loffset);
+        ceph_assert((*pins.begin())->get_key() <= loffset);
 	for (auto &&i: pins) {
 	  if (!(i->get_paddr().is_zero())) {
-	    auto ret_left = std::max(i->get_laddr(), loffset);
+	    auto ret_left = std::max(i->get_key(), loffset);
 	    auto ret_right = std::min(
-	      i->get_laddr() + i->get_length(),
+	      i->get_key() + i->get_length(),
 	      loffset + len);
 	    assert(ret_right > ret_left);
 	    ret.emplace(

@@ -666,20 +666,30 @@ private:
 };
 
 class LogicalCachedExtent;
-class LBAPin;
-using LBAPinRef = std::unique_ptr<LBAPin>;
-class LBAPin {
+
+template <typename key_t>
+class PhysicalNodePin;
+
+template <typename key_t>
+using PhysicalNodePinRef = std::unique_ptr<PhysicalNodePin<key_t>>;
+
+template <typename key_t>
+class PhysicalNodePin {
 public:
   virtual void link_extent(LogicalCachedExtent *ref) = 0;
-  virtual void take_pin(LBAPin &pin) = 0;
+  virtual void take_pin(PhysicalNodePin<key_t> &pin) = 0;
   virtual extent_len_t get_length() const = 0;
   virtual paddr_t get_paddr() const = 0;
-  virtual laddr_t get_laddr() const = 0;
-  virtual LBAPinRef duplicate() const = 0;
+  virtual key_t get_key() const = 0;
+  virtual PhysicalNodePinRef<key_t> duplicate() const = 0;
   virtual bool has_been_invalidated() const = 0;
 
-  virtual ~LBAPin() {}
+  virtual ~PhysicalNodePin() {}
 };
+
+using LBAPin = PhysicalNodePin<laddr_t>;
+using LBAPinRef = PhysicalNodePinRef<laddr_t>;
+
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
 
 using lba_pin_list_t = std::list<LBAPinRef>;
@@ -756,7 +766,7 @@ public:
   void set_pin(LBAPinRef &&npin) {
     assert(!pin);
     pin = std::move(npin);
-    laddr = pin->get_laddr();
+    laddr = pin->get_key();
     pin->link_extent(this);
   }
 

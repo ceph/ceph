@@ -712,6 +712,8 @@ struct __attribute((packed)) paddr_le_t {
   ceph_le64 dev_addr =
     ceph_le64(P_ADDR_NULL.dev_addr);
 
+  using orig_type = paddr_t;
+
   paddr_le_t() = default;
   paddr_le_t(const paddr_t &addr) : dev_addr(ceph_le64(addr.dev_addr)) {}
 
@@ -799,6 +801,8 @@ constexpr laddr_t L_ADDR_LBAT = L_ADDR_MAX - 2;
 
 struct __attribute((packed)) laddr_le_t {
   ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
+
+  using orig_type = laddr_t;
 
   laddr_le_t() = default;
   laddr_le_t(const laddr_le_t &) = default;
@@ -1081,22 +1085,22 @@ public:
 };
 
 /**
- * lba_root_t 
+ * phy_tree_root_t
  */
-class __attribute__((packed)) lba_root_t {
+class __attribute__((packed)) phy_tree_root_t {
   paddr_le_t root_addr;
   depth_le_t depth = init_extent_len_le(0);
   
 public:
-  lba_root_t() = default;
+  phy_tree_root_t() = default;
   
-  lba_root_t(paddr_t addr, depth_t depth)
+  phy_tree_root_t(paddr_t addr, depth_t depth)
     : root_addr(addr), depth(init_depth_le(depth)) {}
 
-  lba_root_t(const lba_root_t &o) = default;
-  lba_root_t(lba_root_t &&o) = default;
-  lba_root_t &operator=(const lba_root_t &o) = default;
-  lba_root_t &operator=(lba_root_t &&o) = default;
+  phy_tree_root_t(const phy_tree_root_t &o) = default;
+  phy_tree_root_t(phy_tree_root_t &&o) = default;
+  phy_tree_root_t &operator=(const phy_tree_root_t &o) = default;
+  phy_tree_root_t &operator=(phy_tree_root_t &&o) = default;
   
   paddr_t get_location() const {
     return root_addr;
@@ -1188,6 +1192,7 @@ public:
   }
 };
 
+using lba_root_t = phy_tree_root_t;
 
 /**
  * root_t
