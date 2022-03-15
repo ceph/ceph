@@ -6860,6 +6860,10 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 	  log_tag << ": " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
+      const auto gen = bucket_info.layout.logs.empty() ? -1 : bucket_info.layout.logs.back().gen;
+      ldpp_dout(dpp, 20) << __func__ << 
+        " INFO: refreshed bucket info after reshard at " <<
+	log_tag << ". new shard_id=" << bs->shard_id << ". gen=" << gen << dendl;
       return 0;
     };
 
@@ -6880,7 +6884,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
       return fetch_new_bucket_info("get_bucket_resharding_succeeded");
     }
 
-    ldpp_dout(dpp, 20) << "NOTICE: reshard still in progress; " <<
+    ldpp_dout(dpp, 20) << __func__ << " NOTICE: reshard still in progress; " <<
       (i < num_retries ? "retrying" : "too many retries") << dendl;
 
     if (i == num_retries) {
@@ -6901,12 +6905,12 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
       RGWBucketReshardLock reshard_lock(this->store, bucket_info, true);
       ret = reshard_lock.lock(dpp);
       if (ret < 0) {
-	ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ <<
-	  ": failed to take reshard lock for bucket " <<
+	ldpp_dout(dpp, 20) << __func__ <<
+	  " ERROR: failed to take reshard lock for bucket " <<
 	  bucket_id << "; expected if resharding underway" << dendl;
       } else {
-	ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ <<
-	  ": was able to take reshard lock for bucket " <<
+	ldpp_dout(dpp, 10) << __func__ <<
+	  " INFO: was able to take reshard lock for bucket " <<
 	  bucket_id << dendl;
         // the reshard may have finished, so call clear_resharding()
         // with its current bucket info; ALSO this will load
@@ -6922,13 +6926,13 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 	ret = RGWBucketReshard::clear_resharding(this->store, bucket_info, bucket_attrs, dpp);
 	if (ret < 0) {
 	  reshard_lock.unlock();
-	  ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ <<
+	  ldpp_dout(dpp, 0) << __func__ <<
 	    " ERROR: failed to clear resharding flags for bucket " <<
 	    bucket_id << dendl;
 	} else {
 	  reshard_lock.unlock();
-	  ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ <<
-	    ": apparently successfully cleared resharding flags for "
+	  ldpp_dout(dpp, 5) << __func__ <<
+	    " INFO: apparently successfully cleared resharding flags for "
 	    "bucket " << bucket_id << dendl;
 	  continue; // if we apparently succeed immediately test again
 	} // if clear resharding succeeded
@@ -6937,13 +6941,13 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 
     ret = reshard_wait->wait(y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ <<
+      ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR: bucket is still resharding, please retry" << dendl;
       return ret;
     }
   } // for loop
 
-  ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ <<
+  ldpp_dout(dpp, 0) << __func__ <<
     " ERROR: bucket is still resharding, please retry" << dendl;
   return -ERR_BUSY_RESHARDING;
 }
