@@ -919,7 +919,7 @@ public:
 
       int init_bs(const DoutPrefixProvider *dpp) {
         int r =
-	  bs.init(target->get_bucket(), obj, nullptr /* no RGWBucketInfo */, dpp);
+	  bs.init(target->get_bucket(), obj, &target->bucket_info, dpp);
         if (r < 0) {
           return r;
         }
