@@ -132,6 +132,12 @@ public:
     }
     fresh_block_stats.increment(ref->get_length());
     write_set.insert(*ref);
+    if (is_backref_node(ref->get_type()))
+      fresh_backref_extents++;
+  }
+
+  uint64_t get_num_fresh_backref() const {
+    return fresh_backref_extents;
   }
 
   void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
@@ -212,6 +218,19 @@ public:
     return retired_set;
   }
 
+  bool should_record_release(paddr_t addr) {
+    auto count = no_release_delta_retired_set.count(addr);
+#ifndef NDEBUG
+    if (count)
+      assert(retired_set.count(addr));
+#endif
+    return count == 0;
+  }
+
+  void dont_record_release(CachedExtentRef ref) {
+    no_release_delta_retired_set.insert(ref);
+  }
+
   template <typename F>
   auto for_each_fresh_block(F &&f) const {
     std::for_each(ool_block_list.begin(), ool_block_list.end(), f);
@@ -232,6 +251,7 @@ public:
     MUTATE = 0,
     READ, // including weak and non-weak read transactions
     CLEANER_TRIM,
+    TRIM_BACKREF,
     CLEANER_RECLAIM,
     MAX
   };
@@ -288,6 +308,7 @@ public:
     offset = 0;
     delayed_temp_offset = 0;
     read_set.clear();
+    fresh_backref_extents = 0;
     invalidate_clear_write_set();
     mutated_block_list.clear();
     fresh_block_stats = {};
@@ -296,6 +317,7 @@ public:
     inline_block_list.clear();
     ool_block_list.clear();
     retired_set.clear();
+    no_release_delta_retired_set.clear();
     onode_tree_stats = {};
     lba_tree_stats = {};
     backref_tree_stats = {};
@@ -375,6 +397,8 @@ private:
    */
   read_set_t<Transaction> read_set; ///< set of extents read by paddr
 
+  uint64_t fresh_backref_extents = 0; // counter of new backref extents
+
   /**
    * write_set
    *
@@ -407,6 +431,8 @@ private:
    */
   pextent_set_t retired_set;
 
+  pextent_set_t no_release_delta_retired_set;
+
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t lba_tree_stats;
@@ -437,6 +463,8 @@ inline std::ostream& operator<<(std::ostream& os,
     return os << "READ";
   case Transaction::src_t::CLEANER_TRIM:
     return os << "CLEANER_TRIM";
+  case Transaction::src_t::TRIM_BACKREF:
+    return os << "TRIM_BACKREF";
   case Transaction::src_t::CLEANER_RECLAIM:
     return os << "CLEANER_RECLAIM";
   default:

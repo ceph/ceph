@@ -49,6 +49,17 @@ public:
     paddr_t offset) = 0;
 
   /**
+   * rewrite_extent
+   *
+   * rewrite extent into passed transaction
+   */
+  using rewrite_extent_iertr = base_iertr;
+  using rewrite_extent_ret = rewrite_extent_iertr::future<>;
+  virtual rewrite_extent_ret rewrite_extent(
+    Transaction &t,
+    CachedExtentRef extent) = 0;
+
+  /**
    * Insert new paddr_t -> laddr_t mapping
    */
   using new_mapping_iertr = base_iertr;

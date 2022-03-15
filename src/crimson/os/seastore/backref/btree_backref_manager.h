@@ -92,6 +92,10 @@ public:
     std::vector<CachedExtentRef> &,
     std::vector<CachedExtentRef> &) final;
 
+  rewrite_extent_ret rewrite_extent(
+    Transaction &t,
+    CachedExtentRef extent) final;
+
   void add_pin(BackrefPin &pin) final {
     auto *bpin = reinterpret_cast<BtreeBackrefPin*>(&pin);
     pin_set.add_pin(bpin->get_range_pin());
