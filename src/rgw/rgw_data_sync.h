@@ -690,7 +690,7 @@ public:
 
   RGWCoroutine *read_sync_status_cr(int num, rgw_bucket_shard_sync_info *sync_status);
   RGWCoroutine *init_sync_status_cr(RGWObjVersionTracker& objv_tracker, rgw_bucket_index_marker_info& info);
-  RGWCoroutine *run_sync_cr(int num);
+  RGWCoroutine *run_sync_cr(int num, uint64_t gen);
 
   int num_pipes() {
     return sync_pairs.size();
@@ -765,7 +765,7 @@ public:
   std::ostream& gen_prefix(std::ostream& out) const override;
 
   int read_sync_status(const DoutPrefixProvider *dpp);
-  int run(const DoutPrefixProvider *dpp);
+  int run(const DoutPrefixProvider *dpp, uint64_t gen);
 };
 
 /// read the full sync status with respect to a source bucket
