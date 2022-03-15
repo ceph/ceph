@@ -208,6 +208,11 @@ class DefaultStrategy : public rgw::auth::Strategy,
     return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
   }
 
+  /* The method implements TokenExtractor for X-Service-Token present in req_state. */
+  std::string get_service_token(const req_state* const s) const override {
+    return s->info.env->get("HTTP_X_SERVICE_TOKEN", "");
+  }
+
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              acl_strategy_t&& extra_acl_strategy,

@@ -308,6 +308,7 @@ class TokenExtractor {
 public:
   virtual ~TokenExtractor() = default;
   virtual std::string get_token(const req_state* s) const = 0;
+  virtual std::string get_service_token(const req_state* s) const = 0;
 };
 
 
