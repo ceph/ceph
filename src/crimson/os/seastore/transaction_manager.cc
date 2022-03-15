@@ -481,14 +481,14 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
       return lba_manager->get_mapping(
 	t,
 	laddr).si_then([=, &t] (LBAPinRef pin) -> inner_ret {
-	  ceph_assert(pin->get_laddr() == laddr);
+	  ceph_assert(pin->get_key() == laddr);
 	  if (pin->get_paddr() == addr) {
 	    if (pin->get_length() != (extent_len_t)len) {
 	      ERRORT(
 		"Invalid pin {}~{} {} found for "
 		"extent {} {}~{} {}",
 		t,
-		pin->get_laddr(),
+		pin->get_key(),
 		pin->get_length(),
 		pin->get_paddr(),
 		type,
