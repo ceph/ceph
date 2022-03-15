@@ -369,6 +369,7 @@ if(WITH_SEASTAR)
     endif()
   endif()
   list(APPEND Seastar_CXX_FLAGS
+    "-DSEASTAR_NO_EXCEPTION_HACK"
     "-Wno-error"
     "-Wno-sign-compare"
     "-Wno-attributes"
