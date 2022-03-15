@@ -31,6 +31,14 @@ def _daemon_path():
     return os.getcwd()
 
 
+def mock_bad_firewalld():
+    def raise_bad_firewalld():
+        raise Exception('Called bad firewalld')
+    f = mock.Mock(cd.Firewalld)
+    f.enable_service_for = lambda _ : raise_bad_firewalld()
+    f.apply_rules = lambda : raise_bad_firewalld()
+    f.open_ports = lambda _ : raise_bad_firewalld()
+
 def _mock_scrape_host(obj, interval):
     try:
         raise ValueError("wah")
