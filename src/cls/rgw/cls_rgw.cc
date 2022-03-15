@@ -363,7 +363,7 @@ static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_ke
     return 0;
   }
   if (ret < 0) {
-    CLS_LOG(1, "ERROR: encode_list_index_key(): cls_cxx_map_get_val returned %d", ret);
+    CLS_LOG(1, "ERROR: encode_list_index_key(): read_index_entry returned %d", ret);
     return ret;
   }
 
