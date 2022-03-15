@@ -2033,6 +2033,7 @@ void PgScrubber::set_scrub_duration()
   utime_t duration = stamp - scrub_begin_stamp;
   m_pg->recovery_state.update_stats([=](auto& history, auto& stats) {
     stats.last_scrub_duration = ceill(duration.to_msec()/1000.0);
+    stats.scrub_duration = double(duration);
     return true;
   });
 }
