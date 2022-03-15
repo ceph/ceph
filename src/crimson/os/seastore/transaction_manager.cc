@@ -117,7 +117,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		       *segment_cleaner->get_empty_space_tracker()));
 	      return lba_manager->scan_mapped_space(
 		t,
-		[this, FNAME, &t](paddr_t addr, extent_len_t len) {
+		[this, FNAME, &t](paddr_t addr, extent_len_t len, depth_t depth) {
 		  TRACET(
 		    "marking {}~{} used",
 		    t,
