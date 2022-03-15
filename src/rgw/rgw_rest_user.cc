@@ -68,9 +68,11 @@ void RGWOp_User_Info::execute(optional_yield y)
   std::string uid_str, access_key_str;
   bool fetch_stats;
   bool sync_stats;
+  std::string tenant_name;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "access-key", access_key_str, &access_key_str);
+  RESTArgs::get_string(s, "tenant", tenant_name, &tenant_name);
 
   // if uid was not supplied in rest argument, error out now, otherwise we'll
   // end up initializing anonymous user, for which keys.init will eventually
@@ -85,6 +87,10 @@ void RGWOp_User_Info::execute(optional_yield y)
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
 
   RESTArgs::get_bool(s, "sync", false, &sync_stats);
+
+  if (!tenant_name.empty()) {
+    uid.tenant = tenant_name;
+  }
 
   op_state.set_user_id(uid);
   op_state.set_access_key(access_key_str);
