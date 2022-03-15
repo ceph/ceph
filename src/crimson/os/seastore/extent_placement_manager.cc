@@ -12,22 +12,16 @@ namespace crimson::os::seastore {
 SegmentedAllocator::SegmentedAllocator(
   SegmentProvider& sp,
   SegmentManager& sm)
-  : rewriter(sp, sm)
+  : cold_writer{"COLD", sp, sm},
+    rewrite_writer{"REWRITE", sp, sm}
 {
-  std::generate_n(
-    std::back_inserter(writers),
-    crimson::common::get_conf<uint64_t>(
-      "seastore_init_write_segments_num_per_device"),
-    [&] {
-      return Writer{sp, sm};
-    }
-  );
 }
 
 SegmentedAllocator::Writer::Writer(
+  std::string name,
   SegmentProvider& sp,
   SegmentManager& sm)
-  : segment_allocator("OOL", segment_type_t::OOL, sp, sm),
+  : segment_allocator(name, segment_type_t::OOL, sp, sm),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
