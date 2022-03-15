@@ -916,6 +916,9 @@ public:
   /// Dump live extents
   void dump_contents();
 
+  void force_roll_backref_buffer() {
+    may_roll_backref_buffer(P_ADDR_NULL, true);
+  }
   void may_roll_backref_buffer(
     const paddr_t &final_block_start,
     bool force_roll = false) {

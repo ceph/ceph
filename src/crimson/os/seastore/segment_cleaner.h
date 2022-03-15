@@ -690,8 +690,9 @@ public:
 
   void mark_space_free(
     paddr_t addr,
-    extent_len_t len) {
-    if (!init_complete)
+    extent_len_t len,
+    const bool force = false) {
+    if (!init_complete && !force)
       return;
 
     ceph_assert(stats.used_bytes >= len);

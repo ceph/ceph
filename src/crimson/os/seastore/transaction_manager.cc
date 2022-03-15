@@ -111,11 +111,14 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  *tref,
 	  [this, FNAME](auto &t) {
 	    return cache->init_cached_extents(t, [this](auto &t, auto &e) {
-	      return lba_manager->init_cached_extent(t, e);
+	      if (is_backref_node(e->get_type()))
+		return backref_manager->init_cached_extent(t, e);
+	      else
+		return lba_manager->init_cached_extent(t, e);
 	    }).si_then([this, FNAME, &t] {
 	      assert(segment_cleaner->debug_check_space(
 		       *segment_cleaner->get_empty_space_tracker()));
-	      return lba_manager->scan_mapped_space(
+	      return backref_manager->scan_mapped_space(
 		t,
 		[this, FNAME, &t](paddr_t addr, extent_len_t len, depth_t depth) {
 		  TRACET(
@@ -131,11 +134,42 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		      seastar::lowres_system_clock::time_point(),
 		      /* init_scan = */ true);
 		  }
+		  if (depth) {
+		    if (depth > 1) {
+		      cache->add_backref_extent(
+			addr, extent_types_t::BACKREF_INTERNAL);
+		    } else {
+		      cache->add_backref_extent(
+			addr, extent_types_t::BACKREF_LEAF);
+		    }
+		  }
+		}).si_then([this] {
+		  LOG_PREFIX(TransactionManager::mount);
+		  auto &backrefs = cache->get_backrefs();
+		  DEBUG("marking {} backrefs used", backrefs.size());
+		  for (auto &backref : backrefs) {
+		    segment_cleaner->mark_space_used(
+		      backref.paddr,
+		      backref.len,
+		      seastar::lowres_system_clock::time_point(),
+		      seastar::lowres_system_clock::time_point(),
+		      true);
+		  }
+		  auto &del_backrefs = cache->get_del_backrefs();
+		  DEBUG("marking {} backrefs free", del_backrefs.size());
+		  for (auto &del_backref : del_backrefs) {
+		    segment_cleaner->mark_space_free(
+		      del_backref.paddr,
+		      del_backref.len,
+		      true);
+		  }
+		  return seastar::now();
 		});
 	    });
 	  });
       });
   }).safe_then([this] {
+    cache->force_roll_backref_buffer();
     return epm->open();
   }).safe_then([FNAME, this] {
     segment_cleaner->complete_init();

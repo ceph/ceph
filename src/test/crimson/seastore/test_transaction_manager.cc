@@ -388,13 +388,35 @@ struct transaction_manager_test_t :
     with_trans_intr(
       *t.t,
       [this, &tracker](auto &t) {
-	return lba_manager->scan_mapped_space(
+	return backref_manager->scan_mapped_space(
 	  t,
 	  [&tracker](auto offset, auto len, depth_t) {
+	    logger().debug("check_usage: tracker alloc {}~{}",
+	      offset, len);
 	    tracker->allocate(
 	      offset.as_seg_paddr().get_segment_id(),
 	      offset.as_seg_paddr().get_segment_off(),
 	      len);
+	  }).si_then([&tracker, this] {
+	    auto &backrefs = cache->get_backrefs();
+	    for (auto &backref : backrefs) {
+	      logger().debug("check_usage: by backref, tracker alloc {}~{}",
+		backref.paddr, backref.len);
+	      tracker->allocate(
+		backref.paddr.as_seg_paddr().get_segment_id(),
+		backref.paddr.as_seg_paddr().get_segment_off(),
+		backref.len);
+	    }
+	    auto &del_backrefs = cache->get_del_backrefs();
+	    for (auto &del_backref : del_backrefs) {
+	      logger().debug("check_usage: by backref, tracker release {}~{}",
+		del_backref.paddr, del_backref.len);
+	      tracker->release(
+		del_backref.paddr.as_seg_paddr().get_segment_id(),
+		del_backref.paddr.as_seg_paddr().get_segment_off(),
+		del_backref.len);
+	    }
+	    return seastar::now();
 	  });
       }).unsafe_get0();
     return segment_cleaner->debug_check_space(*tracker);
