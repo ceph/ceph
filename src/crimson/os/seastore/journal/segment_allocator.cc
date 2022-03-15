@@ -3,22 +3,14 @@
 
 #include "segment_allocator.h"
 
+#include <sstream>
+
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 
 SET_SUBSYS(seastore_journal);
 
 namespace crimson::os::seastore::journal {
-
-static segment_nonce_t generate_nonce(
-  segment_seq_t seq,
-  const seastore_meta_t &meta)
-{
-  return ceph_crc32c(
-    seq,
-    reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
-    sizeof(meta.seastore_id.uuid));
-}
 
 SegmentAllocator::SegmentAllocator(
   std::string name,
@@ -31,14 +23,17 @@ SegmentAllocator::SegmentAllocator(
     segment_manager{sm}
 {
   ceph_assert(type != segment_type_t::NULL_SEG);
+  std::ostringstream oss;
+  oss << "D?_" << name;
+  print_name = oss.str();
   reset();
 }
 
 void SegmentAllocator::set_next_segment_seq(segment_seq_t seq)
 {
   LOG_PREFIX(SegmentAllocator::set_next_segment_seq);
-  INFO("{} {} next_segment_seq={}",
-       name, get_device_id(), segment_seq_printer_t{seq});
+  INFO("{} next_segment_seq={}",
+       print_name, segment_seq_printer_t{seq});
   assert(type == segment_seq_to_type(seq));
   next_segment_seq = seq;
 }
@@ -48,14 +43,10 @@ SegmentAllocator::open()
 {
   LOG_PREFIX(SegmentAllocator::open);
   ceph_assert(!current_segment);
-  segment_seq_t new_segment_seq;
-  if (type == segment_type_t::JOURNAL) {
-    new_segment_seq = next_segment_seq++;
-  } else { // OOL
-    new_segment_seq = next_segment_seq;
-  }
-  assert(new_segment_seq == get_current_segment_seq());
-  ceph_assert(segment_seq_to_type(new_segment_seq) == type);
+  std::ostringstream oss;
+  oss << "D" << device_id_printer_t{get_device_id()} << "_" << name;
+  print_name = oss.str();
+  segment_seq_t new_segment_seq = get_new_segment_seq_and_increment();
   auto new_segment_id = segment_provider.get_segment(
       get_device_id(), new_segment_seq);
   return segment_manager.open(new_segment_id
@@ -69,11 +60,8 @@ SegmentAllocator::open()
     journal_seq_t new_journal_tail;
     if (type == segment_type_t::JOURNAL) {
       new_journal_tail = segment_provider.get_journal_tail_target();
-      current_segment_nonce = generate_nonce(
-          new_segment_seq, segment_manager.get_meta());
     } else { // OOL
       new_journal_tail = NO_DELTAS;
-      assert(current_segment_nonce == 0);
     }
     segment_id_t segment_id = sref->get_segment_id();
     auto header = segment_header_t{
@@ -81,8 +69,8 @@ SegmentAllocator::open()
       segment_id,
       new_journal_tail,
       current_segment_nonce};
-    INFO("{} {} writing header to new segment ... -- {}",
-         name, get_device_id(), header);
+    INFO("{} writing header to new segment ... -- {}",
+         print_name, header);
 
     auto header_length = segment_manager.get_block_size();
     bufferlist bl;
@@ -121,8 +109,8 @@ SegmentAllocator::open()
       if (type == segment_type_t::JOURNAL) {
         segment_provider.update_journal_tail_committed(new_journal_tail);
       }
-      DEBUG("{} {} rolled new segment id={}",
-            name, get_device_id(), current_segment->get_segment_id());
+      DEBUG("{} rolled new segment id={}",
+            print_name, current_segment->get_segment_id());
       ceph_assert(new_journal_seq.segment_seq == get_current_segment_seq());
       return new_journal_seq;
     });
@@ -150,7 +138,7 @@ SegmentAllocator::write(ceph::bufferlist to_write)
     paddr_t::make_seg_paddr(
       current_segment->get_segment_id(), write_start_offset)
   };
-  TRACE("{} {} {}~{}", name, get_device_id(), write_start_seq, write_length);
+  TRACE("{} {}~{}", print_name, write_start_seq, write_length);
   assert(write_length > 0);
   assert((write_length % segment_manager.get_block_size()) == 0);
   assert(!needs_roll(write_length));
@@ -187,7 +175,7 @@ SegmentAllocator::close()
     if (current_segment) {
       return close_segment(false);
     } else {
-      INFO("{} {} no current segment", name, get_device_id());
+      INFO("{} no current segment", print_name);
       return close_segment_ertr::now();
     }
   }().finally([this] {
@@ -200,21 +188,17 @@ SegmentAllocator::close_segment(bool is_rolling)
 {
   LOG_PREFIX(SegmentAllocator::close_segment);
   assert(can_write());
-  auto close_segment_id = current_segment->get_segment_id();
-  INFO("{} {} close segment id={}, seq={}, written_to={}, nonce={}",
-       name, get_device_id(),
+  // Note: make sure no one can access the current segment once closing
+  auto seg_to_close = std::move(current_segment);
+  auto close_segment_id = seg_to_close->get_segment_id();
+  INFO("{} close segment id={}, seq={}, written_to={}, nonce={}",
+       print_name,
        close_segment_id,
        segment_seq_printer_t{get_current_segment_seq()},
        written_to,
        current_segment_nonce);
   if (is_rolling) {
     segment_provider.close_segment(close_segment_id);
-  }
-  segment_seq_t cur_segment_seq;
-  if (type == segment_type_t::JOURNAL) {
-    cur_segment_seq = next_segment_seq - 1;
-  } else { // OOL
-    cur_segment_seq = next_segment_seq;
   }
   journal_seq_t cur_journal_tail;
   if (type == segment_type_t::JOURNAL) {
@@ -223,7 +207,7 @@ SegmentAllocator::close_segment(bool is_rolling)
     cur_journal_tail = NO_DELTAS;
   }
   auto tail = segment_tail_t{
-    cur_segment_seq,
+    get_current_segment_seq(),
     close_segment_id,
     cur_journal_tail,
     current_segment_nonce,
@@ -245,13 +229,12 @@ SegmentAllocator::close_segment(bool is_rolling)
 
   assert(bl.length() ==
     (size_t)segment_manager.get_rounded_tail_length());
-  return current_segment->write(
+  return seg_to_close->write(
     segment_manager.get_segment_size()
       - segment_manager.get_rounded_tail_length(),
-    bl).safe_then([this] {
-    return current_segment->close();
-  }).safe_then([this] {
-    current_segment.reset();
+    bl
+  ).safe_then([seg_to_close=std::move(seg_to_close)] {
+    return seg_to_close->close();
   }).handle_error(
     close_segment_ertr::pass_further{},
     crimson::ct_error::assert_all{
