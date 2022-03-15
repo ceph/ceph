@@ -390,7 +390,7 @@ struct transaction_manager_test_t :
       [this, &tracker](auto &t) {
 	return lba_manager->scan_mapped_space(
 	  t,
-	  [&tracker](auto offset, auto len) {
+	  [&tracker](auto offset, auto len, depth_t) {
 	    tracker->allocate(
 	      offset.as_seg_paddr().get_segment_id(),
 	      offset.as_seg_paddr().get_segment_off(),

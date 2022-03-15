@@ -406,7 +406,7 @@ BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
 		  interruptible::ready_future_marker{},
 		  seastar::stop_iteration::yes);
 	      }
-	      visitor(pos.get_val().paddr, pos.get_val().len);
+	      visitor(pos.get_val().paddr, pos.get_val().len, 0);
 	      return LBABtree::iterate_repeat_ret_inner(
 		interruptible::ready_future_marker{},
 		seastar::stop_iteration::no);
