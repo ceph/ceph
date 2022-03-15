@@ -648,7 +648,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
   std::unique_lock sl(status->lock);
 
   ldpp_dout(dpp, 20) << "RGWDataChangesLog::add_entry() bucket.name=" << bucket.name
-		     << " shard_id=" << shard_id << " now=" << now
+		     << " shard_id=" << shard_id << " gen=" << gen.gen << " now=" << now
 		     << " cur_expiration=" << status->cur_expiration << dendl;
 
   if (now < status->cur_expiration) {
@@ -699,7 +699,9 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
     change.gen = gen.gen;
     encode(change, bl);
 
-    ldpp_dout(dpp, 20) << "RGWDataChangesLog::add_entry() sending update with now=" << now << " cur_expiration=" << expiration << dendl;
+    ldpp_dout(dpp, 20) << "RGWDataChangesLog::add_entry() sending update with bucket.name=" << bucket.name
+		     << " shard_id=" << shard_id << " gen=" << gen.gen << " now=" << now
+		     << " cur_expiration=" << expiration << dendl;
 
     auto be = bes->head();
     ret = be->push(dpp, index, now, change.key, std::move(bl));

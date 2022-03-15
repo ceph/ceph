@@ -498,8 +498,9 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
   for (int i = 0; i < shards_num; ++i) {
     ret = svc.datalog_rados->add_entry(dpp, info, bilog, i);
     if (ret < 0) {
-      ldpp_dout(dpp, -1) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << i << ")" << dendl;
+      ldpp_dout(dpp, -1) << __func__ << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << i << ")" << dendl;
     } // datalog error is not fatal
+    ldpp_dout(dpp, 20) << __func__ << "INFO: writing data log (info.bucket=" << info.bucket << ", shard_id=" << i << ")" << dendl;
   }
 
   return 0;

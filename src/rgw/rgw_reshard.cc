@@ -654,10 +654,13 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     for (uint32_t shard_id = 0; shard_id < prev.current_index.layout.normal.num_shards; ++shard_id) {
       ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id);
       if (ret < 0) {
-        ldpp_dout(dpp, 1) << "WARNING: failed writing data log (bucket_info.bucket="
-        << bucket_info.bucket << ", shard_id=" << shard_id << "of generation="
-        << prev.logs.back().gen << ")" << dendl;
+        ldpp_dout(dpp, 1) << __func__ << " WARNING: failed writing data log (bucket_info.bucket="
+        << bucket_info.bucket << ", shard_id=" << shard_id << ", gen="
+        << prev.logs.back().gen << "). error=" << ret << dendl;
       } // datalog error is not fatal
+      ldpp_dout(dpp, 20) << __func__ << " INFO: writing data log (bucket_info.bucket="
+        << bucket_info.bucket << ", shard_id=" << shard_id << ", gen="
+        << prev.logs.back().gen << ")" << dendl;
     }
   }
 
