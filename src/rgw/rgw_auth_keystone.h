@@ -39,7 +39,7 @@ class TokenEngine : public rgw::auth::Engine {
   bool is_applicable(const std::string& token) const noexcept;
 
   boost::optional<token_envelope_t>
-  get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token) const;
+  get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token, const bool& allow_expired) const;
 
   acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
   auth_info_t get_creds_info(const token_envelope_t& token,
@@ -47,6 +47,7 @@ class TokenEngine : public rgw::auth::Engine {
                             ) const noexcept;
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
+                        const std::string& service_token,
                         const req_state* s) const;
 
 public:
@@ -68,7 +69,7 @@ public:
 
   result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s,
 			optional_yield y) const override {
-    return authenticate(dpp, extractor->get_token(s), s);
+    return authenticate(dpp, extractor->get_token(s), extractor->get_service_token(s), s);
   }
 }; /* class TokenEngine */
 
