@@ -8815,6 +8815,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
            << "later before setting target_size_bytes";
         return -EINVAL;
       }
+    } else if (var == "target_size_ratio") {
+      if (f < 0.0) {
+	ss << "target_size_ratio cannot be negative";
+	return -EINVAL;
+      }
     } else if (var == "pg_num_min") {
       if (interr.length()) {
         ss << "error parsing int value '" << val << "': " << interr;
