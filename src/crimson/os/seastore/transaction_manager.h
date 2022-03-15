@@ -574,6 +574,14 @@ public:
   auto get_lba_manager() {
     return lba_manager.get();
   }
+
+  auto get_backref_manager() {
+    return backref_manager.get();
+  }
+
+  auto get_cache() {
+    return cache.get();
+  }
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
