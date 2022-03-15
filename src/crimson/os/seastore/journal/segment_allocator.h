@@ -34,7 +34,7 @@ class SegmentAllocator {
                    SegmentManager &sm);
 
   const std::string& get_name() const {
-    return name;
+    return print_name;
   }
 
   device_id_t get_device_id() const {
@@ -107,18 +107,28 @@ class SegmentAllocator {
  private:
   void reset() {
     current_segment.reset();
-    if (type == segment_type_t::JOURNAL) {
-      next_segment_seq = 0;
-    } else { // OOL
-      next_segment_seq = OOL_SEG_SEQ;
-    }
-    current_segment_nonce = 0;
     written_to = 0;
+
+    // segment type related special handling
+    reset_segment_seq();
+    current_segment_nonce = 0;
   }
 
   // FIXME: remove the unnecessary is_rolling
   using close_segment_ertr = base_ertr;
   close_segment_ertr::future<> close_segment(bool is_rolling);
+
+  /*
+   * segment type related special handling
+   */
+
+  void reset_segment_seq() {
+    if (type == segment_type_t::JOURNAL) {
+      next_segment_seq = 0;
+    } else { // OOL
+      next_segment_seq = OOL_SEG_SEQ;
+    }
+  }
 
   segment_seq_t get_current_segment_seq() const {
     segment_seq_t ret;
@@ -132,14 +142,38 @@ class SegmentAllocator {
     return ret;
   }
 
+  segment_seq_t get_new_segment_seq_and_increment() {
+    segment_seq_t new_segment_seq;
+    if (type == segment_type_t::JOURNAL) {
+      new_segment_seq = next_segment_seq++;
+      auto meta = segment_manager.get_meta();
+      current_segment_nonce = ceph_crc32c(
+        new_segment_seq,
+        reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
+        sizeof(meta.seastore_id.uuid));
+    } else { // OOL
+      new_segment_seq = next_segment_seq;
+      assert(current_segment_nonce == 0);
+    }
+    assert(new_segment_seq == get_current_segment_seq());
+    ceph_assert(segment_seq_to_type(new_segment_seq) == type);
+    return new_segment_seq;
+  }
+
   const std::string name;
+  // device id is not available during construction,
+  // so generate the print_name later.
+  std::string print_name;
   const segment_type_t type; // JOURNAL or OOL
   SegmentProvider &segment_provider;
   SegmentManager &segment_manager;
   SegmentRef current_segment;
+  seastore_off_t written_to;
+
+  // segment type related special handling
   segment_seq_t next_segment_seq;
   segment_nonce_t current_segment_nonce;
-  seastore_off_t written_to;
+  //3. journal tail written to both segment_header_t and segment_tail_t
 };
 
 /**
