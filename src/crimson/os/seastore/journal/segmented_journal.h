@@ -18,10 +18,10 @@
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_reader.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/osd/exceptions.h"
+#include "segment_allocator.h"
 
 namespace crimson::os::seastore::journal {
 
@@ -58,106 +58,6 @@ public:
   }
 
 private:
-  class JournalSegmentManager {
-  public:
-    JournalSegmentManager(SegmentManager&, SegmentProvider&);
-
-    using base_ertr = crimson::errorator<
-        crimson::ct_error::input_output_error>;
-    extent_len_t get_max_write_length() const {
-      return segment_manager.get_segment_size() -
-             p2align(ceph::encoded_sizeof_bounded<segment_header_t>(),
-                     size_t(segment_manager.get_block_size()));
-    }
-
-    device_id_t get_device_id() const {
-      return segment_manager.get_device_id();
-    }
-
-    device_segment_id_t get_num_segments() const {
-      return segment_manager.get_num_segments();
-    }
-
-    seastore_off_t get_block_size() const {
-      return segment_manager.get_block_size();
-    }
-
-    segment_nonce_t get_nonce() const {
-      return current_segment_nonce;
-    }
-
-    journal_seq_t get_committed_to() const {
-      return committed_to;
-    }
-
-    segment_seq_t get_segment_seq() const {
-      return next_journal_segment_seq - 1;
-    }
-
-    void set_segment_seq(segment_seq_t current_seq) {
-      next_journal_segment_seq = (current_seq + 1);
-    }
-
-    using open_ertr = base_ertr;
-    using open_ret = open_ertr::future<journal_seq_t>;
-    open_ret open();
-
-    using close_ertr = base_ertr;
-    close_ertr::future<> close();
-
-    // returns true iff the current segment has insufficient space
-    bool needs_roll(std::size_t length) const {
-      auto write_capacity = current_journal_segment->get_write_capacity();
-      return length + written_to > std::size_t(write_capacity);
-    }
-
-    // close the current segment and initialize next one
-    using roll_ertr = base_ertr;
-    roll_ertr::future<> roll();
-
-    // write the buffer, return the write result
-    // May be called concurrently, writes may complete in any order.
-    using write_ertr = base_ertr;
-    using write_ret = write_ertr::future<write_result_t>;
-    write_ret write(ceph::bufferlist to_write);
-
-    // mark write committed in order
-    void mark_committed(const journal_seq_t& new_committed_to);
-    
-  private:
-    journal_seq_t get_current_write_seq() const {
-      assert(current_journal_segment);
-      return journal_seq_t{
-        get_segment_seq(),
-        paddr_t::make_seg_paddr(current_journal_segment->get_segment_id(),
-	  written_to)
-      };
-    }
-
-    void reset() {
-      next_journal_segment_seq = 0;
-      current_segment_nonce = 0;
-      current_journal_segment.reset();
-      written_to = 0;
-      committed_to = {};
-    }
-
-    // prepare segment for writes, writes out segment header
-    using initialize_segment_ertr = base_ertr;
-    initialize_segment_ertr::future<> initialize_segment(Segment&);
-
-    SegmentProvider& segment_provider;
-    SegmentManager& segment_manager;
-
-    segment_seq_t next_journal_segment_seq;
-    segment_nonce_t current_segment_nonce;
-
-    SegmentRef current_journal_segment;
-    seastore_off_t written_to;
-    // committed_to may be in a previous journal segment
-    journal_seq_t committed_to;
-  };
-
   class RecordBatch {
     enum class state_t {
       EMPTY = 0,
@@ -222,7 +122,7 @@ private:
     //
     // Set write_result_t::write_length to 0 if the record is not the first one
     // in the batch.
-    using add_pending_ertr = JournalSegmentManager::write_ertr;
+    using add_pending_ertr = SegmentAllocator::write_ertr;
     using add_pending_ret = add_pending_ertr::future<record_locator_t>;
     add_pending_ret add_pending(
         record_t&&,
@@ -300,7 +200,7 @@ private:
                     std::size_t batch_capacity,
                     std::size_t batch_flush_size,
                     double preferred_fullness,
-                    JournalSegmentManager&);
+                    SegmentAllocator&);
 
     grouped_io_stats get_record_batch_stats() const {
       return stats.record_batch_stats;
@@ -320,6 +220,10 @@ private:
 
     uint64_t get_record_group_data_bytes() const {
       return stats.record_group_data_bytes;
+    }
+
+    journal_seq_t get_committed_to() const {
+      return journal_committed_to;
     }
 
     void reset_stats() {
@@ -361,7 +265,7 @@ private:
 
     void flush_current_batch();
 
-    using submit_pending_ertr = JournalSegmentManager::write_ertr;
+    using submit_pending_ertr = SegmentAllocator::write_ertr;
     using submit_pending_ret = submit_pending_ertr::future<
       record_locator_t>;
     submit_pending_ret submit_pending(
@@ -377,7 +281,10 @@ private:
     double preferred_fullness;
 
     WritePipeline* write_pipeline = nullptr;
-    JournalSegmentManager& journal_segment_manager;
+    SegmentAllocator& journal_segment_allocator;
+    // committed_to may be in a previous journal segment
+    journal_seq_t journal_committed_to = JOURNAL_SEQ_NULL;
+
     std::unique_ptr<RecordBatch[]> batches;
     std::size_t current_batch_index;
     // should not be nullptr after constructed
@@ -395,7 +302,7 @@ private:
   };
 
   SegmentProvider& segment_provider;
-  JournalSegmentManager journal_segment_manager;
+  SegmentAllocator journal_segment_allocator;
   RecordSubmitter record_submitter;
   ExtentReader& scanner;
   seastar::metrics::metric_group metrics;

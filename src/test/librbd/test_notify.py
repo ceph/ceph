@@ -140,11 +140,6 @@ def slave(ioctx):
         assert(not image.is_exclusive_lock_owner())
         assert(list(image.list_snaps()) == [])
 
-        print("rebuild object map")
-        image.rebuild_object_map()
-        assert(not image.is_exclusive_lock_owner())
-        assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) == 0)
-
         if 'RBD_DISABLE_UPDATE_FEATURES' not in os.environ:
             print("update_features")
             assert((image.features() & RBD_FEATURE_OBJECT_MAP) != 0)
@@ -155,6 +150,13 @@ def slave(ioctx):
             assert(not image.is_exclusive_lock_owner())
             assert((image.features() & RBD_FEATURE_OBJECT_MAP) != 0)
             assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) != 0)
+        else:
+            print("skipping update_features")
+
+        print("rebuild object map")
+        image.rebuild_object_map()
+        assert(not image.is_exclusive_lock_owner())
+        assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) == 0)
 
         print("write")
         data = os.urandom(512)

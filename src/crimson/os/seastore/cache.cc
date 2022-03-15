@@ -6,6 +6,8 @@
 #include <sstream>
 #include <string_view>
 
+#include <seastar/core/metrics.hh>
+
 #include "crimson/os/seastore/logging.h"
 #include "crimson/common/config_proxy.h"
 
@@ -120,28 +122,26 @@ void Cache::register_metrics()
   namespace sm = seastar::metrics;
   using src_t = Transaction::src_t;
 
-  auto src_label = sm::label("src");
   std::map<src_t, sm::label_instance> labels_by_src {
-    {src_t::MUTATE,  src_label("MUTATE")},
-    {src_t::READ,    src_label("READ")},
-    {src_t::CLEANER_TRIM, src_label("CLEANER_TRIM")},
-    {src_t::CLEANER_RECLAIM, src_label("CLEANER_RECLAIM")},
+    {src_t::MUTATE, sm::label_instance("src", "MUTATE")},
+    {src_t::READ, sm::label_instance("src", "READ")},
+    {src_t::CLEANER_TRIM, sm::label_instance("src", "CLEANER_TRIM")},
+    {src_t::CLEANER_RECLAIM, sm::label_instance("src", "CLEANER_RECLAIM")},
   };
 
-  auto ext_label = sm::label("ext");
   std::map<extent_types_t, sm::label_instance> labels_by_ext {
-    {extent_types_t::ROOT,                ext_label("ROOT")},
-    {extent_types_t::LADDR_INTERNAL,      ext_label("LADDR_INTERNAL")},
-    {extent_types_t::LADDR_LEAF,          ext_label("LADDR_LEAF")},
-    {extent_types_t::OMAP_INNER,          ext_label("OMAP_INNER")},
-    {extent_types_t::OMAP_LEAF,           ext_label("OMAP_LEAF")},
-    {extent_types_t::ONODE_BLOCK_STAGED,  ext_label("ONODE_BLOCK_STAGED")},
-    {extent_types_t::COLL_BLOCK,          ext_label("COLL_BLOCK")},
-    {extent_types_t::OBJECT_DATA_BLOCK,   ext_label("OBJECT_DATA_BLOCK")},
-    {extent_types_t::RETIRED_PLACEHOLDER, ext_label("RETIRED_PLACEHOLDER")},
-    {extent_types_t::RBM_ALLOC_INFO,      ext_label("RBM_ALLOC_INFO")},
-    {extent_types_t::TEST_BLOCK,          ext_label("TEST_BLOCK")},
-    {extent_types_t::TEST_BLOCK_PHYSICAL, ext_label("TEST_BLOCK_PHYSICAL")}
+    {extent_types_t::ROOT,                sm::label_instance("ext", "ROOT")},
+    {extent_types_t::LADDR_INTERNAL,      sm::label_instance("ext", "LADDR_INTERNAL")},
+    {extent_types_t::LADDR_LEAF,          sm::label_instance("ext", "LADDR_LEAF")},
+    {extent_types_t::OMAP_INNER,          sm::label_instance("ext", "OMAP_INNER")},
+    {extent_types_t::OMAP_LEAF,           sm::label_instance("ext", "OMAP_LEAF")},
+    {extent_types_t::ONODE_BLOCK_STAGED,  sm::label_instance("ext", "ONODE_BLOCK_STAGED")},
+    {extent_types_t::COLL_BLOCK,          sm::label_instance("ext", "COLL_BLOCK")},
+    {extent_types_t::OBJECT_DATA_BLOCK,   sm::label_instance("ext", "OBJECT_DATA_BLOCK")},
+    {extent_types_t::RETIRED_PLACEHOLDER, sm::label_instance("ext", "RETIRED_PLACEHOLDER")},
+    {extent_types_t::RBM_ALLOC_INFO,      sm::label_instance("ext", "RBM_ALLOC_INFO")},
+    {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
+    {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")}
   };
 
   /*
@@ -945,6 +945,11 @@ record_t Cache::prepare_record(Transaction &t)
   t.write_set.clear();
 
   record_t record;
+  auto commit_time = seastar::lowres_system_clock::now();
+  record.commit_time = commit_time.time_since_epoch().count();
+  record.commit_type = (t.get_src() == Transaction::src_t::MUTATE)
+			? record_commit_type_t::MODIFY
+			: record_commit_type_t::REWRITE;
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   record.deltas.reserve(t.mutated_block_list.size());
@@ -967,6 +972,7 @@ record_t Cache::prepare_record(Transaction &t)
     i->prepare_write();
     i->set_io_wait();
 
+    i->set_last_modified(commit_time);
     assert(i->get_version() > 0);
     auto final_crc = i->get_crc32c();
     if (i->get_type() == extent_types_t::ROOT) {
@@ -977,7 +983,7 @@ record_t Cache::prepare_record(Transaction &t)
       record.push_back(
 	delta_info_t{
 	  extent_types_t::ROOT,
-	  paddr_t{},
+	  P_ADDR_NULL,
 	  L_ADDR_NULL,
 	  0,
 	  0,
@@ -1053,6 +1059,13 @@ record_t Cache::prepare_record(Transaction &t)
       ceph_assert(0 == "ROOT never gets written as a fresh block");
     }
 
+    if (t.get_src() == Transaction::src_t::MUTATE) {
+      i->set_last_modified(commit_time);
+    } else {
+      assert(t.get_src() >= Transaction::src_t::CLEANER_TRIM);
+      i->set_last_rewritten(commit_time);
+    }
+
     assert(bl.length() == i->get_length());
     record.push_back(extent_t{
 	i->get_type(),
@@ -1061,7 +1074,8 @@ record_t Cache::prepare_record(Transaction &t)
 	: (is_lba_node(i->get_type())
 	  ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
 	  : L_ADDR_NULL),
-	std::move(bl)
+	std::move(bl),
+	i->get_last_modified().time_since_epoch().count()
       });
   }
 
@@ -1103,7 +1117,7 @@ record_t Cache::prepare_record(Transaction &t)
       "{} delta, {} retire, {}(md={}B, data={}B, fill={}) ool-records, "
       "{}B md, {}B data",
       t, (void*)&t.get_handle(),
-      get_oldest_dirty_from().value_or(journal_seq_t{}),
+      get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
       read_stat,
       fresh_stat,
       fresh_invalid_stat,
@@ -1173,7 +1187,13 @@ void Cache::complete_commit(
       if (cleaner) {
 	cleaner->mark_space_used(
 	  i->get_paddr(),
-	  i->get_length());
+	  i->get_length(),
+	  (t.get_src() == Transaction::src_t::MUTATE)
+	    ? i->last_modified
+	    : seastar::lowres_system_clock::time_point(),
+	  (t.get_src() >= Transaction::src_t::CLEANER_TRIM)
+	    ? i->last_rewritten
+	    : seastar::lowres_system_clock::time_point());
       }
     }
   });
@@ -1253,7 +1273,7 @@ Cache::close_ertr::future<> Cache::close()
   INFO("close with {}({}B) dirty from {}, {}({}B) lru, totally {}({}B) indexed extents",
        dirty.size(),
        stats.dirty_bytes,
-       get_oldest_dirty_from().value_or(journal_seq_t{}),
+       get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
        lru.get_current_contents_extents(),
        lru.get_current_contents_bytes(),
        extents.size(),
@@ -1274,7 +1294,8 @@ Cache::replay_delta_ret
 Cache::replay_delta(
   journal_seq_t journal_seq,
   paddr_t record_base,
-  const delta_info_t &delta)
+  const delta_info_t &delta,
+  seastar::lowres_system_clock::time_point& last_modified)
 {
   LOG_PREFIX(Cache::replay_delta);
   if (delta.type == extent_types_t::ROOT) {
@@ -1286,6 +1307,7 @@ Cache::replay_delta(
     root->state = CachedExtent::extent_state_t::DIRTY;
     DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
           journal_seq, record_base, delta, *root);
+    root->set_last_modified(last_modified);
     add_extent(root);
     return replay_delta_ertr::now();
   } else {
@@ -1336,6 +1358,7 @@ Cache::replay_delta(
 
       assert(extent->last_committed_crc == delta.prev_crc);
       extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+      extent->set_last_modified(last_modified);
       assert(extent->last_committed_crc == delta.final_crc);
 
       extent->version++;
@@ -1371,7 +1394,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
-    ceph_assert(dirty_from != journal_seq_t() &&
+    ceph_assert(dirty_from != JOURNAL_SEQ_NULL &&
                 dirty_from != JOURNAL_SEQ_MAX &&
                 dirty_from != NO_DELTAS);
     if (dirty_from < seq) {

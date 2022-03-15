@@ -11,6 +11,7 @@
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
+#include <seastar/core/metrics.hh>
 #include <seastar/core/shared_mutex.hh>
 
 #include "common/safe_io.h"
@@ -150,16 +151,15 @@ void SeaStore::register_metrics()
 {
   namespace sm = seastar::metrics;
   using op_type_t = SeaStore::op_type_t;
-  auto lat_label = sm::label("latency");
   std::pair<op_type_t, sm::label_instance> labels_by_op_type[] = {
-    {op_type_t::TRANSACTION,     lat_label("TRANSACTION")},
-    {op_type_t::READ,            lat_label("READ")},
-    {op_type_t::WRITE,           lat_label("WRITE")},
-    {op_type_t::GET_ATTR,        lat_label("GET_ATTR")},
-    {op_type_t::GET_ATTRS,       lat_label("GET_ATTRS")},
-    {op_type_t::STAT,            lat_label("STAT")},
-    {op_type_t::OMAP_GET_VALUES, lat_label("OMAP_GET_VALUES")},
-    {op_type_t::OMAP_LIST,       lat_label("OMAP_LIST")},
+    {op_type_t::TRANSACTION,     sm::label_instance("latency", "TRANSACTION")},
+    {op_type_t::READ,            sm::label_instance("latency", "READ")},
+    {op_type_t::WRITE,           sm::label_instance("latency", "WRITE")},
+    {op_type_t::GET_ATTR,        sm::label_instance("latency", "GET_ATTR")},
+    {op_type_t::GET_ATTRS,       sm::label_instance("latency", "GET_ATTRS")},
+    {op_type_t::STAT,            sm::label_instance("latency", "STAT")},
+    {op_type_t::OMAP_GET_VALUES, sm::label_instance("latency",  "OMAP_GET_VALUES")},
+    {op_type_t::OMAP_LIST,       sm::label_instance("latency", "OMAP_LIST")},
   };
 
   for (auto& [op_type, label] : labels_by_op_type) {
@@ -522,13 +522,14 @@ SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
 
 SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::readv(
   CollectionRef ch,
-  const ghobject_t& oid,
+  const ghobject_t& _oid,
   interval_set<uint64_t>& m,
   uint32_t op_flags)
 {
   return seastar::do_with(
+    _oid,
     ceph::bufferlist{},
-    [=, &oid, &m](auto &ret) {
+    [=, &m](auto &oid, auto &ret) {
     return crimson::do_for_each(
       m,
       [=, &oid, &ret](auto &p) {
@@ -930,7 +931,8 @@ SeaStore::_fiemap_ret SeaStore::_fiemap(
       len);
   });
 }
-seastar::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
+
+SeaStore::read_errorator::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
   CollectionRef ch,
   const ghobject_t& oid,
   uint64_t off,
@@ -954,9 +956,6 @@ seastar::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
       size - off:
       std::min(size - off, len);
     return _fiemap(t, onode, off, adjust_len);
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStore::fiemap"
   });
 }
 

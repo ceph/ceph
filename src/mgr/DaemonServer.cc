@@ -3084,6 +3084,11 @@ int DaemonServer::remove_mds_perf_query(MetricQueryID query_id)
   return mds_perf_metric_collector.remove_query(query_id);
 }
 
+void DaemonServer::reregister_mds_perf_queries()
+{
+  mds_perf_metric_collector.reregister_queries();
+}
+
 int DaemonServer::get_mds_perf_counters(MDSPerfCollector *collector)
 {
   return mds_perf_metric_collector.get_counters(collector);

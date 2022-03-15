@@ -4926,6 +4926,8 @@ void OSDMonitor::do_set_pool_opt(int64_t pool_id,
 				 pool_opts_t::key_t opt,
 				 pool_opts_t::value_t val)
 {
+  dout(10) << __func__ << " pool: " << pool_id << " option: " << opt
+	   << " val: " << val << dendl;
   auto p = pending_inc.new_pools.try_emplace(
     pool_id, *osdmap.get_pg_pool(pool_id));
   p.first->second.opts.set(opt, val);
@@ -12829,6 +12831,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
+    bool confirm = false;
+    //confirmation may be set to true only by internal operations.
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (poolstr[0] == '.' && !confirm) {
+      ss << "pool names beginning with . are not allowed";
+      err = 0;
+      goto reply;
+    }
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id >= 0) {
       const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
@@ -13056,7 +13066,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "destpool", destpoolstr);
     int64_t pool_src = osdmap.lookup_pg_pool_name(srcpoolstr.c_str());
     int64_t pool_dst = osdmap.lookup_pg_pool_name(destpoolstr.c_str());
-
+    bool confirm = false;
+    //confirmation may be set to true only by internal operations.
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (destpoolstr[0] == '.' && !confirm) {
+      ss << "pool names beginning with . are not allowed";
+      err = 0;
+      goto reply;
+    }
     if (pool_src < 0) {
       if (pool_dst >= 0) {
         // src pool doesn't exist, dst pool does exist: to ensure idempotency

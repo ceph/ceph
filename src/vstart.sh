@@ -693,6 +693,7 @@ prepare_conf() {
         debug asok assert abort = true
         $(format_conf "${msgr_conf}")
         $(format_conf "${extra_conf}")
+        $AUTOSCALER_OPTS
 EOF
     if [ "$lockdep" -eq 1 ] ; then
         wconf <<EOF
@@ -1314,6 +1315,12 @@ else
         debug ms = 1'
 fi
 
+# Crimson doesn't support PG merge/split yet.
+if [ "$ceph_osd" == "crimson-osd" ]; then
+    AUTOSCALER_OPTS='
+        osd_pool_default_pg_autoscale_mode = off'
+fi
+
 if [ -n "$MON_ADDR" ]; then
     CMON_ARGS=" -m "$MON_ADDR
     COSD_ARGS=" -m "$MON_ADDR
@@ -1758,8 +1765,11 @@ echo ""
     echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
     echo "export PATH=$CEPH_DIR/bin:\$PATH"
-    echo "export CEPH_CONF=$conf_fn"
-    echo "export CEPH_KEYRING=$keyring_fn"
+
+    if [ "$CEPH_DIR" != "$PWD" ]; then
+        echo "export CEPH_CONF=$conf_fn"
+        echo "export CEPH_KEYRING=$keyring_fn"
+    fi
 
     if [ -n "$CEPHFS_SHELL" ]; then
         echo "alias cephfs-shell=$CEPHFS_SHELL"

@@ -1104,6 +1104,12 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
     {"opened_inodes", MDSPerformanceCounterType::OPENED_INODES_METRIC},
     {"read_io_sizes", MDSPerformanceCounterType::READ_IO_SIZES_METRIC},
     {"write_io_sizes", MDSPerformanceCounterType::WRITE_IO_SIZES_METRIC},
+    {"avg_read_latency", MDSPerformanceCounterType::AVG_READ_LATENCY_METRIC},
+    {"stdev_read_latency", MDSPerformanceCounterType::STDEV_READ_LATENCY_METRIC},
+    {"avg_write_latency", MDSPerformanceCounterType::AVG_WRITE_LATENCY_METRIC},
+    {"stdev_write_latency", MDSPerformanceCounterType::STDEV_WRITE_LATENCY_METRIC},
+    {"avg_metadata_latency", MDSPerformanceCounterType::AVG_METADATA_LATENCY_METRIC},
+    {"stdev_metadata_latency", MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC},
   };
 
   PyObject *py_query = nullptr;
@@ -1322,6 +1328,13 @@ ceph_remove_mds_perf_query(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_reregister_mds_perf_queries(BaseMgrModule *self, PyObject *args)
+{
+  self->py_modules->reregister_mds_perf_queries();
+  Py_RETURN_NONE;
+}
+
+static PyObject*
 ceph_get_mds_perf_counters(BaseMgrModule *self, PyObject *args)
 {
   MetricQueryID query_id;
@@ -1511,6 +1524,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_remove_mds_perf_query", (PyCFunction)ceph_remove_mds_perf_query,
     METH_VARARGS, "Remove an mds perf query"},
+
+  {"_ceph_reregister_mds_perf_queries", (PyCFunction)ceph_reregister_mds_perf_queries,
+    METH_NOARGS, "Re-register mds perf queries"},
 
   {"_ceph_get_mds_perf_counters", (PyCFunction)ceph_get_mds_perf_counters,
     METH_VARARGS, "Get mds perf counters"},

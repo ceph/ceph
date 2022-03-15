@@ -3589,7 +3589,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
     refs);
   bool need_inc_ref = false;
   if (!refs.is_empty()) {
-    ManifestOpRef mop(std::make_shared<ManifestOp>());
+    ManifestOpRef mop(std::make_shared<ManifestOp>(ctx->obc, nullptr));
     for (auto c : set_chunk.chunk_map) {
       auto p = refs.find(c.second.oid);
       if (p == refs.end()) {
@@ -7113,7 +7113,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // start
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
-	  ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
+	  ManifestOpRef mop = std::make_shared<ManifestOp>(ctx->obc, new RefCountCallback(ctx, osd_op));
 	  auto* fin = new C_SetManifestRefCountDone(this, soid, 0);
 	  ceph_tid_t tid = refcount_manifest(soid, target, 
 					      refcount_t::INCREMENT_REF, fin, std::nullopt);
@@ -10457,13 +10457,17 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
   if (pool.info.get_fingerprint_type() == pg_pool_t::TYPE_FINGERPRINT_NONE) {
     dout(0) << " fingerprint algorithm is not set " << dendl;
     return -EINVAL;
-  } 
+  }
+  if (pool.info.get_dedup_tier() <= 0) {
+    dout(10) << " dedup tier is not set " << dendl;
+    return -EINVAL;
+  }
 
   /*
    * The operations to make dedup chunks are tracked by a ManifestOp.
    * This op will be finished if all the operations are completed.
    */
-  ManifestOpRef mop(std::make_shared<ManifestOp>());
+  ManifestOpRef mop(std::make_shared<ManifestOp>(obc, nullptr));
 
   // cdc
   std::map<uint64_t, bufferlist> chunks; 
@@ -10593,6 +10597,8 @@ hobject_t PrimaryLogPG::get_fpoid_from_chunk(const hobject_t soid, bufferlist& c
   pg_t raw_pg;
   object_locator_t oloc(soid);
   oloc.pool = pool.info.get_dedup_tier();
+  // check if dedup_tier isn't set
+  ceph_assert(oloc.pool > 0);
   get_osdmap()->object_locator_to_pg(fp_oid, oloc, raw_pg);
   hobject_t target(fp_oid, oloc.key, snapid_t(),
 		    raw_pg.ps(), raw_pg.pool(),
@@ -10619,12 +10625,8 @@ int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_
     // there are on-going works
     return -EINPROGRESS;
   }
-  ObjectContextRef obc = get_object_context(oid, false);
-  if (!obc) {
-    if (mop->op)
-      osd->reply_op_error(mop->op, -EINVAL);
-    return -EINVAL;
-  }
+  ObjectContextRef obc = mop->obc;
+  ceph_assert(obc);
   ceph_assert(obc->is_blocked());
   obc->stop_block();
   kick_object_context_blocked(obc);
@@ -15595,6 +15597,9 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 
   vector<hobject_t> to_trim;
   unsigned max = pg->cct->_conf->osd_pg_max_concurrent_snap_trims;
+  // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
+  // the ENOENT below and erase snap_to_trim.
+  ceph_assert(max > 0);
   to_trim.reserve(max);
   int r = pg->snap_mapper.get_next_objects_to_trim(
     snap_to_trim,

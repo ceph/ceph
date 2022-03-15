@@ -1044,6 +1044,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             'format': 'json',
             'srcpool': srcpool,
             'destpool': destpool,
+            'yes_i_really_mean_it': True
         }
         self.check_mon_command(c)
 
@@ -1057,6 +1058,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             'pg_num': 1,
             'pg_num_min': 1,
             'pg_num_max': 32,
+            'yes_i_really_mean_it': True
         }
         self.check_mon_command(c)
 
@@ -2204,6 +2206,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_remove_mds_perf_query(query_id)
 
     @API.expose
+
+    def reregister_mds_perf_queries(self) -> None:
+        """
+        Re-register MDS perf queries.
+        """
+        return self._ceph_reregister_mds_perf_queries()
+
     def get_mds_perf_counters(self, query_id: int) -> Optional[Dict[str, List[PerfCounterT]]]:
         """
         Get stats collected for an MDS perf query.

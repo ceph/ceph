@@ -1610,7 +1610,7 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
       {
         std::shared_lock image_locker{img_ctx->image_lock};
         for (auto &it : img_ctx->snap_info) {
-          auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+          auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
             &it.second.snap_namespace);
           if (info && info->mirror_peer_uuids.count(uuid)) {
             snap_ids.push_back(it.first);

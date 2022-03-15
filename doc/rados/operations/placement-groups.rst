@@ -144,22 +144,22 @@ to OSDs of class `hdd` will each have optimal PG counts that depend on
 the number of those respective device types.
 
 The autoscaler uses the `bulk` flag to determine which pool
-should start out with a full complements of PGs and only
-scales down when the the usage ratio across the pool is not even. 
+should start out with a full complement of PGs and only
+scales down when the usage ratio across the pool is not even.
 However, if the pool doesn't have the `bulk` flag, the pool will
 start out with minimal PGs and only when there is more usage in the pool.
 
-The autoscaler identifies any overlapping roots and prevents the pools 
+The autoscaler identifies any overlapping roots and prevents the pools
 with such roots from scaling because overlapping roots can cause problems
 with the scaling process.
 
 To create pool with `bulk` flag::
 
-  ceph osd create <pool-name> --bulk
+  ceph osd pool create <pool-name> --bulk
 
 To set/unset `bulk` flag of existing pool::
 
-  ceph osd pool set <pool-name> bulk=true/false/1/0
+  ceph osd pool set <pool-name> bulk <true/false/1/0>
 
 To get `bulk` flag of existing pool::
 

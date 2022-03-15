@@ -26,22 +26,14 @@ SET_SUBSYS(seastore_journal);
 
 namespace crimson::os::seastore::journal {
 
-segment_nonce_t generate_nonce(
-  segment_seq_t seq,
-  const seastore_meta_t &meta)
-{
-  return ceph_crc32c(
-    seq,
-    reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
-    sizeof(meta.seastore_id.uuid));
-}
-
 SegmentedJournal::SegmentedJournal(
   SegmentManager &segment_manager,
   ExtentReader &scanner,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
-    journal_segment_manager(segment_manager, segment_provider),
+    journal_segment_allocator(segment_type_t::JOURNAL,
+                              segment_provider,
+                              segment_manager),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
@@ -50,7 +42,7 @@ SegmentedJournal::SegmentedJournal(
                        "seastore_journal_batch_flush_size"),
                      crimson::common::get_conf<double>(
                        "seastore_journal_batch_preferred_fullness"),
-                     journal_segment_manager),
+                     journal_segment_allocator),
     scanner(scanner)
 {
   register_metrics();
@@ -59,16 +51,17 @@ SegmentedJournal::SegmentedJournal(
 SegmentedJournal::open_for_write_ret SegmentedJournal::open_for_write()
 {
   LOG_PREFIX(Journal::open_for_write);
-  INFO("device_id={}", journal_segment_manager.get_device_id());
-  return journal_segment_manager.open();
+  INFO("device_id={}", journal_segment_allocator.get_device_id());
+  return journal_segment_allocator.open();
 }
 
 SegmentedJournal::close_ertr::future<> SegmentedJournal::close()
 {
   LOG_PREFIX(Journal::close);
-  INFO("closing");
+  INFO("closing, committed_to={}",
+       record_submitter.get_committed_to());
   metrics.clear();
-  return journal_segment_manager.close();
+  return journal_segment_allocator.close();
 }
 
 SegmentedJournal::prep_replay_segments_fut
@@ -88,15 +81,15 @@ SegmentedJournal::prep_replay_segments(
 	rt.second.journal_segment_seq;
     });
 
-  journal_segment_manager.set_segment_seq(
-    segments.rbegin()->second.journal_segment_seq);
+  journal_segment_allocator.set_next_segment_seq(
+    segments.rbegin()->second.journal_segment_seq + 1);
   std::for_each(
     segments.begin(),
     segments.end(),
     [this, FNAME](auto &seg)
   {
     if (seg.first != seg.second.physical_segment_id ||
-        seg.first.device_id() != journal_segment_manager.get_device_id() ||
+        seg.first.device_id() != journal_segment_allocator.get_device_id() ||
         seg.second.get_type() != segment_type_t::JOURNAL) {
       ERROR("illegal journal segment for replay -- {}", seg.second);
       ceph_abort();
@@ -123,7 +116,7 @@ SegmentedJournal::prep_replay_segments(
   } else {
     replay_from = paddr_t::make_seg_paddr(
       from->first,
-      journal_segment_manager.get_block_size());
+      journal_segment_allocator.get_block_size());
   }
 
   auto num_segments = segments.end() - from;
@@ -137,7 +130,7 @@ SegmentedJournal::prep_replay_segments(
 	p.second.journal_segment_seq,
 	paddr_t::make_seg_paddr(
 	  p.first,
-	  journal_segment_manager.get_block_size())
+	  journal_segment_allocator.get_block_size())
       };
       return std::make_pair(ret, p.second);
     });
@@ -198,8 +191,10 @@ SegmentedJournal::replay_segment(
             [locator,
              this,
              FNAME,
-             &handler](delta_info_t& delta)
+             &handler](auto &p)
           {
+	    auto& commit_time = p.first;
+	    auto& delta = p.second;
             /* The journal may validly contain deltas for extents in
              * since released segments.  We can detect those cases by
              * checking whether the segment in question currently has a
@@ -223,7 +218,11 @@ SegmentedJournal::replay_segment(
                 return replay_ertr::now();
               }
             }
-            return handler(locator, delta);
+	    return handler(
+	      locator,
+	      delta,
+	      seastar::lowres_system_clock::time_point(
+		seastar::lowres_system_clock::duration(commit_time)));
           });
         });
       });
@@ -253,10 +252,10 @@ SegmentedJournal::find_journal_segments()
       return crimson::do_for_each(
 	boost::counting_iterator<device_segment_id_t>(0),
 	boost::counting_iterator<device_segment_id_t>(
-	  journal_segment_manager.get_num_segments()),
+	  journal_segment_allocator.get_num_segments()),
 	[this, &ret](device_segment_id_t d_segment_id) {
 	  segment_id_t segment_id{
-	    journal_segment_manager.get_device_id(),
+	    journal_segment_allocator.get_device_id(),
 	    d_segment_id};
 	  return scanner.read_segment_header(
 	    segment_id
@@ -364,169 +363,6 @@ void SegmentedJournal::register_metrics()
       ),
     }
   );
-}
-
-SegmentedJournal::JournalSegmentManager::JournalSegmentManager(
-  SegmentManager& segment_manager,
-  SegmentProvider& segment_provider)
-  : segment_provider{segment_provider}, segment_manager{segment_manager}
-{
-  reset();
-}
-
-SegmentedJournal::JournalSegmentManager::open_ret
-SegmentedJournal::JournalSegmentManager::open()
-{
-  return roll().safe_then([this] {
-    return get_current_write_seq();
-  });
-}
-
-SegmentedJournal::JournalSegmentManager::close_ertr::future<>
-SegmentedJournal::JournalSegmentManager::close()
-{
-  LOG_PREFIX(JournalSegmentManager::close);
-  if (current_journal_segment) {
-    INFO("segment_id={}, seq={}, "
-         "written_to={}, committed_to={}, nonce={}",
-         current_journal_segment->get_segment_id(),
-         get_segment_seq(),
-         written_to,
-         committed_to,
-         current_segment_nonce);
-  } else {
-    INFO("no current journal segment");
-  }
-
-  return (
-    current_journal_segment ?
-    current_journal_segment->close() :
-    Segment::close_ertr::now()
-  ).handle_error(
-    close_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in JournalSegmentManager::close()"
-    }
-  ).finally([this] {
-    reset();
-  });
-}
-
-SegmentedJournal::JournalSegmentManager::roll_ertr::future<>
-SegmentedJournal::JournalSegmentManager::roll()
-{
-  LOG_PREFIX(JournalSegmentManager::roll);
-  auto old_segment_id = current_journal_segment ?
-    current_journal_segment->get_segment_id() :
-    NULL_SEG_ID;
-  if (current_journal_segment) {
-    INFO("closing segment {}, seq={}, "
-         "written_to={}, committed_to={}, nonce={}",
-         old_segment_id,
-         get_segment_seq(),
-         written_to,
-         committed_to,
-         current_segment_nonce);
-  }
-
-  return (
-    current_journal_segment ?
-    current_journal_segment->close() :
-    Segment::close_ertr::now()
-  ).safe_then([this] {
-    return segment_provider.get_segment(
-        get_device_id(), next_journal_segment_seq);
-  }).safe_then([this](auto segment) {
-    return segment_manager.open(segment);
-  }).safe_then([this](auto sref) {
-    current_journal_segment = sref;
-    return initialize_segment(*current_journal_segment);
-  }).safe_then([this, old_segment_id] {
-    if (old_segment_id != NULL_SEG_ID) {
-      segment_provider.close_segment(old_segment_id);
-    }
-  }).handle_error(
-    roll_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in JournalSegmentManager::roll"
-    }
-  );
-}
-
-SegmentedJournal::JournalSegmentManager::write_ret
-SegmentedJournal::JournalSegmentManager::write(ceph::bufferlist to_write)
-{
-  LOG_PREFIX(JournalSegmentManager::write);
-  auto write_length = to_write.length();
-  auto write_start_seq = get_current_write_seq();
-  TRACE("{}~{}", write_start_seq, write_length);
-  assert(write_length > 0);
-  assert((write_length % segment_manager.get_block_size()) == 0);
-  assert(!needs_roll(write_length));
-
-  auto write_start_offset = written_to;
-  written_to += write_length;
-  auto write_result = write_result_t{
-    write_start_seq,
-    static_cast<seastore_off_t>(write_length)
-  };
-  return current_journal_segment->write(
-    write_start_offset, to_write
-  ).handle_error(
-    write_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in JournalSegmentManager::write"
-    }
-  ).safe_then([write_result] {
-    return write_result;
-  });
-}
-
-void SegmentedJournal::JournalSegmentManager::mark_committed(
-  const journal_seq_t& new_committed_to)
-{
-  LOG_PREFIX(JournalSegmentManager::mark_committed);
-  TRACE("{} => {}", committed_to, new_committed_to);
-  assert(committed_to == journal_seq_t() ||
-         committed_to <= new_committed_to);
-  committed_to = new_committed_to;
-}
-
-SegmentedJournal::JournalSegmentManager::initialize_segment_ertr::future<>
-SegmentedJournal::JournalSegmentManager::initialize_segment(Segment& segment)
-{
-  LOG_PREFIX(JournalSegmentManager::initialize_segment);
-  auto new_tail = segment_provider.get_journal_tail_target();
-  // write out header
-  ceph_assert(segment.get_write_ptr() == 0);
-  bufferlist bl;
-
-  segment_seq_t seq = next_journal_segment_seq++;
-  current_segment_nonce = generate_nonce(
-    seq, segment_manager.get_meta());
-  auto header = segment_header_t{
-    seq,
-    segment.get_segment_id(),
-    new_tail,
-    current_segment_nonce};
-  INFO("writing {} ...", header);
-  ceph_assert(header.get_type() == segment_type_t::JOURNAL);
-  encode(header, bl);
-
-  bufferptr bp(
-    ceph::buffer::create_page_aligned(
-      segment_manager.get_block_size()));
-  bp.zero();
-  auto iter = bl.cbegin();
-  iter.copy(bl.length(), bp.c_str());
-  bl.clear();
-  bl.append(bp);
-
-  written_to = 0;
-  return write(bl
-  ).safe_then([this, new_tail](auto) {
-    segment_provider.update_journal_tail_committed(new_tail);
-  });
 }
 
 SegmentedJournal::RecordBatch::add_pending_ret
@@ -644,10 +480,10 @@ SegmentedJournal::RecordSubmitter::RecordSubmitter(
   std::size_t batch_capacity,
   std::size_t batch_flush_size,
   double preferred_fullness,
-  JournalSegmentManager& jsm)
+  SegmentAllocator& jsa)
   : io_depth_limit{io_depth},
     preferred_fullness{preferred_fullness},
-    journal_segment_manager{jsm},
+    journal_segment_allocator{jsa},
     batches(new RecordBatch[io_depth + 1])
 {
   LOG_PREFIX(RecordSubmitter);
@@ -678,9 +514,9 @@ SegmentedJournal::RecordSubmitter::submit(
   assert(write_pipeline);
   auto expected_size = record_group_size_t(
       record.size,
-      journal_segment_manager.get_block_size()
+      journal_segment_allocator.get_block_size()
   ).get_encoded_length();
-  auto max_record_length = journal_segment_manager.get_max_write_length();
+  auto max_record_length = journal_segment_allocator.get_max_write_length();
   if (expected_size > max_record_length) {
     ERROR("H{} {} exceeds max record size {}",
           (void*)&handle, record, max_record_length);
@@ -768,13 +604,12 @@ void SegmentedJournal::RecordSubmitter::flush_current_batch()
 
   increment_io();
   auto num = p_batch->get_num_records();
-  auto committed_to = journal_segment_manager.get_committed_to();
   auto [to_write, sizes] = p_batch->encode_batch(
-    committed_to, journal_segment_manager.get_nonce());
+    journal_committed_to, journal_segment_allocator.get_nonce());
   DEBUG("{} records, {}, committed_to={}, outstanding_io={} ...",
-        num, sizes, committed_to, num_outstanding_io);
+        num, sizes, journal_committed_to, num_outstanding_io);
   account_submission(num, sizes);
-  std::ignore = journal_segment_manager.write(to_write
+  std::ignore = journal_segment_allocator.write(to_write
   ).safe_then([this, p_batch, FNAME, num, sizes=sizes](auto write_result) {
     TRACE("{} records, {}, write done with {}", num, sizes, write_result);
     finish_submit_batch(p_batch, write_result);
@@ -804,16 +639,15 @@ SegmentedJournal::RecordSubmitter::submit_pending(
     if (do_flush && p_current_batch->is_empty()) {
       // fast path with direct write
       increment_io();
-      auto committed_to = journal_segment_manager.get_committed_to();
       auto [to_write, sizes] = p_current_batch->submit_pending_fast(
         std::move(record),
-        journal_segment_manager.get_block_size(),
-        committed_to,
-        journal_segment_manager.get_nonce());
+        journal_segment_allocator.get_block_size(),
+        journal_committed_to,
+        journal_segment_allocator.get_nonce());
       DEBUG("H{} fast submit {}, committed_to={}, outstanding_io={} ...",
-            (void*)&handle, sizes, committed_to, num_outstanding_io);
+            (void*)&handle, sizes, journal_committed_to, num_outstanding_io);
       account_submission(1, sizes);
-      return journal_segment_manager.write(to_write
+      return journal_segment_allocator.write(to_write
       ).safe_then([mdlength = sizes.get_mdlength()](auto write_result) {
         return record_locator_t{
           write_result.start_seq.offset.add_offset(mdlength),
@@ -827,7 +661,7 @@ SegmentedJournal::RecordSubmitter::submit_pending(
       auto write_fut = p_current_batch->add_pending(
         std::move(record),
         handle,
-        journal_segment_manager.get_block_size());
+        journal_segment_allocator.get_block_size());
       if (do_flush) {
         DEBUG("H{} added pending and flush", (void*)&handle);
         flush_current_batch();
@@ -845,8 +679,10 @@ SegmentedJournal::RecordSubmitter::submit_pending(
     return handle.enter(write_pipeline->finalize
     ).then([this, FNAME, submit_result, &handle] {
       DEBUG("H{} finish with {}", (void*)&handle, submit_result);
-      journal_segment_manager.mark_committed(
-          submit_result.write_result.get_end_seq());
+      auto new_committed_to = submit_result.write_result.get_end_seq();
+      assert(journal_committed_to == JOURNAL_SEQ_NULL ||
+             journal_committed_to <= new_committed_to);
+      journal_committed_to = new_committed_to;
       return submit_result;
     });
   });
@@ -865,15 +701,15 @@ SegmentedJournal::RecordSubmitter::do_submit(
     // can increment io depth
     assert(!wait_submit_promise.has_value());
     auto maybe_new_size = p_current_batch->can_batch(
-        record, journal_segment_manager.get_block_size());
+        record, journal_segment_allocator.get_block_size());
     if (!maybe_new_size.has_value() ||
         (maybe_new_size->get_encoded_length() >
-         journal_segment_manager.get_max_write_length())) {
+         journal_segment_allocator.get_max_write_length())) {
       TRACE("H{} flush", (void*)&handle);
       assert(p_current_batch->is_pending());
       flush_current_batch();
       return do_submit(std::move(record), handle);
-    } else if (journal_segment_manager.needs_roll(
+    } else if (journal_segment_allocator.needs_roll(
           maybe_new_size->get_encoded_length())) {
       if (p_current_batch->is_pending()) {
         TRACE("H{} flush and roll", (void*)&handle);
@@ -881,7 +717,7 @@ SegmentedJournal::RecordSubmitter::do_submit(
       } else {
         TRACE("H{} roll", (void*)&handle);
       }
-      return journal_segment_manager.roll(
+      return journal_segment_allocator.roll(
       ).safe_then([this, record=std::move(record), &handle]() mutable {
         return do_submit(std::move(record), handle);
       });
@@ -895,11 +731,11 @@ SegmentedJournal::RecordSubmitter::do_submit(
   assert(state == state_t::FULL);
   // cannot increment io depth
   auto maybe_new_size = p_current_batch->can_batch(
-      record, journal_segment_manager.get_block_size());
+      record, journal_segment_allocator.get_block_size());
   if (!maybe_new_size.has_value() ||
       (maybe_new_size->get_encoded_length() >
-       journal_segment_manager.get_max_write_length()) ||
-      journal_segment_manager.needs_roll(
+       journal_segment_allocator.get_max_write_length()) ||
+      journal_segment_allocator.needs_roll(
         maybe_new_size->get_encoded_length())) {
     if (!wait_submit_promise.has_value()) {
       wait_submit_promise = seastar::promise<>();

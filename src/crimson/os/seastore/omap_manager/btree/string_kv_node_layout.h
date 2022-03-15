@@ -294,7 +294,7 @@ class StringKVInnerNodeLayout {
   friend class delta_inner_t;
 public:
   template <bool is_const>
-  class iter_t : public std::iterator<std::input_iterator_tag, StringKVInnerNodeLayout> {
+  class iter_t {
     friend class StringKVInnerNodeLayout;
 
     template <typename iterator, typename const_iterator>
@@ -312,6 +312,12 @@ public:
       uint16_t index) : node(parent), index(index) {}
 
   public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = StringKVInnerNodeLayout;
+    using difference_type = std::ptrdiff_t;
+    using pointer = StringKVInnerNodeLayout*;
+    using reference = iter_t&;
+
     iter_t(const iter_t &) = default;
     iter_t(iter_t &&) = default;
     iter_t &operator=(const iter_t &) = default;
@@ -322,7 +328,6 @@ public:
       return iter_t<!is_const>(node, index);
     }
 
-    using reference = iter_t&;
     iter_t &operator*() { return *this; }
     iter_t *operator->() { return this; }
 

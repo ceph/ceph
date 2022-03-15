@@ -176,6 +176,30 @@ bool Client::is_reserved_vino(vinodeno_t &vino) {
   return false;
 }
 
+// running average and standard deviation -- presented in
+// Donald Knuth's TAoCP, Volume II.
+double calc_average(double old_avg, double value, uint64_t count) {
+  double new_avg;
+  if (count == 1) {
+    new_avg = value;
+  } else {
+    new_avg = old_avg + ((value - old_avg) / count);
+  }
+
+  return new_avg;
+}
+
+double calc_sq_sum(double old_sq_sum, double old_mean, double new_mean,
+                   double value, uint64_t count) {
+  double new_sq_sum;
+  if (count == 1) {
+    new_sq_sum = 0.0;
+  } else {
+    new_sq_sum = old_sq_sum + (value - old_mean)*(value - new_mean);
+  }
+
+  return new_sq_sum;
+}
 
 // -------------
 
@@ -583,6 +607,16 @@ void Client::_finish_init()
     plb.add_time_avg(l_c_wrlat, "wrlat", "Latency of a file data write operation");
     plb.add_time_avg(l_c_read, "rdlat", "Latency of a file data read operation");
     plb.add_time_avg(l_c_fsync, "fsync", "Latency of a file sync operation");
+    // average, standard deviation mds/r/w/ latencies
+    plb.add_time(l_c_md_avg, "mdavg", "Average latency for processing metadata requests");
+    plb.add_u64(l_c_md_sqsum, "mdsqsum", "Sum of squares (to calculate variability/stdev) for metadata requests");
+    plb.add_u64(l_c_md_ops, "mdops", "Total metadata IO operations");
+    plb.add_time(l_c_rd_avg, "readavg", "Average latency for processing read requests");
+    plb.add_u64(l_c_rd_sqsum, "readsqsum", "Sum of squares ((to calculate variability/stdev) for read requests");
+    plb.add_u64(l_c_rd_ops, "rdops", "Total read IO operations");
+    plb.add_time(l_c_wr_avg, "writeavg", "Average latency for processing write requests");
+    plb.add_u64(l_c_wr_sqsum, "writesqsum", "Sum of squares ((to calculate variability/stdev) for write requests");
+    plb.add_u64(l_c_wr_ops, "rdops", "Total write IO operations");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
@@ -708,6 +742,63 @@ void Client::shutdown()
   }
 }
 
+void Client::update_io_stat_metadata(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new ones
+  auto o_avg = logger->tget(l_c_md_avg).to_nsec();
+  auto o_sqsum = logger->get(l_c_md_sqsum);
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_metadata_request);
+  auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, lat_nsec,
+                              nr_metadata_request);
+
+  logger->tinc(l_c_lat, latency);
+  logger->tinc(l_c_reply, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_md_avg, avg);
+  logger->set(l_c_md_sqsum, n_sqsum);
+  logger->set(l_c_md_ops, nr_metadata_request);
+}
+
+void Client::update_io_stat_read(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new ones
+  auto o_avg = logger->tget(l_c_rd_avg).to_nsec();
+  auto o_sqsum = logger->get(l_c_rd_sqsum);
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_read_request);
+  auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, lat_nsec,
+                              nr_read_request);
+
+  logger->tinc(l_c_read, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_rd_avg, avg);
+  logger->set(l_c_rd_sqsum, n_sqsum);
+  logger->set(l_c_rd_ops, nr_read_request);
+}
+
+void Client::update_io_stat_write(utime_t latency) {
+  auto lat_nsec = latency.to_nsec();
+  // old values are used to compute new ones
+  auto o_avg = logger->tget(l_c_wr_avg).to_nsec();
+  auto o_sqsum = logger->get(l_c_wr_sqsum);
+
+  auto n_avg = calc_average(o_avg, lat_nsec, nr_write_request);
+  auto n_sqsum = calc_sq_sum(o_sqsum, o_avg, n_avg, lat_nsec,
+                              nr_write_request);
+
+  logger->tinc(l_c_wrlat, latency);
+
+  utime_t avg;
+  avg.set_from_double(n_avg / 1000000000);
+  logger->tset(l_c_wr_avg, avg);
+  logger->set(l_c_wr_sqsum, n_sqsum);
+  logger->set(l_c_wr_ops, nr_write_request);
+}
 
 // ===================
 // metadata cache stuff
@@ -1915,8 +2006,9 @@ int Client::make_request(MetaRequest *request,
   utime_t lat = ceph_clock_now();
   lat -= request->sent_stamp;
   ldout(cct, 20) << "lat " << lat << dendl;
-  logger->tinc(l_c_lat, lat);
-  logger->tinc(l_c_reply, lat);
+
+  ++nr_metadata_request;
+  update_io_stat_metadata(lat);
 
   put_request(request);
   return r;
@@ -4406,9 +4498,10 @@ void Client::remove_session_caps(MetaSession *s, int err)
   sync_cond.notify_all();
 }
 
-int Client::_do_remount(bool retry_on_error)
+std::pair<int, bool> Client::_do_remount(bool retry_on_error)
 {
   uint64_t max_retries = cct->_conf.get_val<uint64_t>("mds_max_retries_on_remount_failure");
+  bool abort_on_failure = false;
 
   errno = 0;
   int r = remount_cb(callback_handle);
@@ -4432,10 +4525,10 @@ int Client::_do_remount(bool retry_on_error)
       !(retry_on_error && (++retries_on_invalidate < max_retries));
     if (should_abort && !is_unmounting()) {
       lderr(cct) << "failed to remount for kernel dentry trimming; quitting!" << dendl;
-      ceph_abort();
+      abort_on_failure = true;
     }
   }
-  return r;
+  return std::make_pair(r, abort_on_failure);
 }
 
 class C_Client_Remount : public Context  {
@@ -6674,15 +6767,24 @@ void Client::collect_and_send_global_metrics() {
   std::vector<ClientMetricMessage> message;
 
   // read latency
-  metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read)));
+  metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read),
+                                                  logger->tget(l_c_rd_avg),
+                                                  logger->get(l_c_rd_sqsum),
+                                                  nr_read_request));
   message.push_back(metric);
 
   // write latency
-  metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat)));
+  metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat),
+                                                   logger->tget(l_c_wr_avg),
+                                                   logger->get(l_c_wr_sqsum),
+                                                   nr_write_request));
   message.push_back(metric);
 
   // metadata latency
-  metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
+  metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat),
+                                                      logger->tget(l_c_md_avg),
+                                                      logger->get(l_c_md_sqsum),
+                                                      nr_metadata_request));
   message.push_back(metric);
 
   // cap hit ratio -- nr_caps is unused right now
@@ -7450,6 +7552,54 @@ int Client::_getattr(Inode *in, int mask, const UserPerm& perms, bool force)
   
   int res = make_request(req, perms);
   ldout(cct, 10) << __func__ << " result=" << res << dendl;
+  return res;
+}
+
+int Client::_getvxattr(
+  Inode *in,
+  const UserPerm& perms,
+  const char *xattr_name,
+  ssize_t size,
+  void *value,
+  mds_rank_t rank)
+{
+  if (!xattr_name || strlen(xattr_name) <= 0 || strlen(xattr_name) > 255) {
+    return -CEPHFS_ENODATA;
+  }
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETVXATTR);
+  filepath path;
+  in->make_nosnap_relative_path(path);
+  req->set_filepath(path);
+  req->set_inode(in);
+  req->set_string2(xattr_name);
+
+  bufferlist bl;
+  int res = make_request(req, perms, nullptr, nullptr, rank, &bl);
+  ldout(cct, 10) << __func__ << " result=" << res << dendl;
+
+  if (res < 0) {
+    return res;
+  }
+
+  std::string buf;
+  auto p = bl.cbegin();
+
+  DECODE_START(1, p);
+  decode(buf, p);
+  DECODE_FINISH(p);
+
+  ssize_t len = buf.length();
+
+  res = len; // refer to man getxattr(2) for output buffer size == 0
+
+  if (size > 0) {
+    if (len > size) {
+      res = -CEPHFS_ERANGE; // insufficient output buffer space
+    } else {
+      memcpy(value, buf.c_str(), len);
+    }
+  }
   return res;
 }
 
@@ -10083,7 +10233,9 @@ success:
   
   lat = ceph_clock_now();
   lat -= start;
-  logger->tinc(l_c_read, lat);
+
+  ++nr_read_request;
+  update_io_stat_read(lat);
 
 done:
   // done!
@@ -10543,7 +10695,9 @@ success:
   // time
   lat = ceph_clock_now();
   lat -= start;
-  logger->tinc(l_c_wrlat, lat);
+
+  ++nr_write_request;
+  update_io_stat_write(lat);
 
   if (fpos) {
     lock_fh_pos(f);
@@ -11425,20 +11579,19 @@ int Client::ll_register_callbacks2(struct ceph_client_callback_args *args)
   return 0;
 }
 
-int Client::test_dentry_handling(bool can_invalidate)
+std::pair<int, bool> Client::test_dentry_handling(bool can_invalidate)
 {
-  int r = 0;
+  std::pair <int, bool> r(0, false);
 
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   if (!iref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
+    return std::make_pair(-CEPHFS_ENOTCONN, false);
 
   can_invalidate_dentries = can_invalidate;
 
   if (can_invalidate_dentries) {
     ceph_assert(dentry_invalidate_cb);
     ldout(cct, 1) << "using dentry_invalidate_cb" << dendl;
-    r = 0;
   } else {
     ceph_assert(remount_cb);
     ldout(cct, 1) << "using remount_cb" << dendl;
@@ -12344,8 +12497,9 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
   int r;
+  const VXattr *vxattr = nullptr;
 
-  const VXattr *vxattr = _match_vxattr(in, name);
+  vxattr = _match_vxattr(in, name);
   if (vxattr) {
     r = -CEPHFS_ENODATA;
 
@@ -12382,6 +12536,11 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     goto out;
   }
 
+  if (!strncmp(name, "ceph.", 5)) {
+    r = _getvxattr(in, perms, name, size, value, MDS_RANK_NONE);
+    goto out;
+  }
+
   if (acl_type == NO_ACL && !strncmp(name, "system.", 7)) {
     r = -CEPHFS_EOPNOTSUPP;
     goto out;
@@ -12391,7 +12550,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
   if (r == 0) {
     string n(name);
     r = -CEPHFS_ENODATA;
-   if (in->xattrs.count(n)) {
+    if (in->xattrs.count(n)) {
       r = in->xattrs[n].length();
       if (r > 0 && size != 0) {
 	if (size >= (unsigned)r)
@@ -13030,6 +13189,8 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     exists_cb: &Client::_vxattrcb_layout_exists,
     flags: 0,
   },
+  // FIXME
+  // Delete the following dir layout field definitions for release "S"
   XATTR_LAYOUT_FIELD(dir, layout, stripe_unit),
   XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
   XATTR_LAYOUT_FIELD(dir, layout, object_size),
@@ -13053,6 +13214,8 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   },
   XATTR_QUOTA_FIELD(quota, max_bytes),
   XATTR_QUOTA_FIELD(quota, max_files),
+  // FIXME
+  // Delete the following dir pin field definitions for release "S"
   {
     name: "ceph.dir.pin",
     getxattr_cb: &Client::_vxattrcb_dir_pin,

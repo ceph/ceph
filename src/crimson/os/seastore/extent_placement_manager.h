@@ -4,11 +4,11 @@
 #pragma once
 
 #include "seastar/core/gate.hh"
+#include "seastar/core/shared_future.hh"
 
-#include "crimson/common/condition_variable.h"
 #include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
@@ -28,6 +28,7 @@ class ool_record_t {
   public:
     OolExtent(LogicalCachedExtentRef& lextent)
       : lextent(lextent) {}
+
     void set_ool_paddr(paddr_t addr) {
       ool_offset = addr;
     }
@@ -46,7 +47,11 @@ class ool_record_t {
   };
 
 public:
-  ool_record_t(size_t block_size) : block_size(block_size) {}
+  ool_record_t(
+    size_t block_size,
+    record_commit_type_t commit_type)
+    : block_size(block_size),
+      commit_type(commit_type) {}
   record_group_size_t get_encoded_record_length() {
     assert(extents.size() == record.extents.size());
     return record_group_size_t(record.size, block_size);
@@ -60,16 +65,25 @@ public:
                           segment_nonce_t nonce) {
     assert(extents.size() == record.extents.size());
     assert(!record.deltas.size());
+    auto commit_time = seastar::lowres_system_clock::now();
+    record.commit_time = commit_time.time_since_epoch().count();
+    record.commit_type = commit_type;
     auto record_group = record_group_t(std::move(record), block_size);
     seastore_off_t extent_offset = base + record_group.size.get_mdlength();
     for (auto& extent : extents) {
       extent.set_ool_paddr(
         paddr_t::make_seg_paddr(segment, extent_offset));
+      if (commit_type == record_commit_type_t::MODIFY) {
+        extent.get_lextent()->set_last_modified(commit_time);
+      } else {
+        assert(commit_type == record_commit_type_t::REWRITE);
+        extent.get_lextent()->set_last_rewritten(commit_time);
+      }
       extent_offset += extent.get_bptr().length();
     }
     assert(extent_offset ==
            (seastore_off_t)(base + record_group.size.get_encoded_length()));
-    return encode_records(record_group, journal_seq_t(), nonce);
+    return encode_records(record_group, JOURNAL_SEQ_NULL, nonce);
   }
   void add_extent(LogicalCachedExtentRef& extent) {
     extents.emplace_back(extent);
@@ -78,7 +92,8 @@ public:
     record.push_back(extent_t{
       extent->get_type(),
       extent->get_laddr(),
-      std::move(bl)});
+      std::move(bl),
+      extent->get_last_modified().time_since_epoch().count()});
   }
   std::vector<OolExtent>& get_extents() {
     return extents;
@@ -103,6 +118,8 @@ private:
   record_t record;
   size_t block_size;
   seastore_off_t base = MAX_SEG_OFF;
+  record_commit_type_t commit_type =
+    record_commit_type_t::NONE;
 };
 
 /**
@@ -151,17 +168,6 @@ public:
 };
 using ExtentAllocatorRef = std::unique_ptr<ExtentAllocator>;
 
-struct open_segment_wrapper_t : public boost::intrusive_ref_counter<
-  open_segment_wrapper_t,
-  boost::thread_unsafe_counter> {
-  SegmentRef segment;
-  std::list<seastar::future<>> inflight_writes;
-  bool outdated = false;
-};
-
-using open_segment_wrapper_ref =
-  boost::intrusive_ptr<open_segment_wrapper_t>;
-
 class SegmentProvider;
 
 /**
@@ -180,51 +186,33 @@ class SegmentProvider;
 class SegmentedAllocator : public ExtentAllocator {
   class Writer : public ExtentOolWriter {
   public:
-    Writer(
-      SegmentProvider& sp,
-      SegmentManager& sm)
-      : segment_provider(sp),
-        segment_manager(sm)
-    {}
+    Writer(SegmentProvider& sp, SegmentManager& sm)
+      : segment_allocator(segment_type_t::OOL, sp, sm) {}
+
     Writer(Writer &&) = default;
 
     write_iertr::future<> write(
       Transaction& t,
       std::list<LogicalCachedExtentRef>& extent) final;
+
     stop_ertr::future<> stop() final {
-      return writer_guard.close().then([this] {
-        return crimson::do_for_each(open_segments, [](auto& seg_wrapper) {
-          return seg_wrapper->segment->close();
-        });
+      return write_guard.close().then([this] {
+        return segment_allocator.close();
       });
     }
+
   private:
-    bool _needs_roll(seastore_off_t length) const;
+    write_iertr::future<> do_write(
+      Transaction& t,
+      std::list<LogicalCachedExtentRef>& extent);
 
     write_iertr::future<> _write(
       Transaction& t,
       ool_record_t& record);
 
-    using roll_segment_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    roll_segment_ertr::future<> roll_segment(bool);
-
-    using init_segment_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
-    init_segment_ertr::future<> init_segment(Segment& segment);
-
-    void add_extent_to_write(
-      ool_record_t&,
-      LogicalCachedExtentRef& extent);
-
-    SegmentProvider& segment_provider;
-    SegmentManager& segment_manager;
-    open_segment_wrapper_ref current_segment;
-    std::list<open_segment_wrapper_ref> open_segments;
-    seastore_off_t allocated_to = 0;
-    crimson::condition_variable segment_rotation_guard;
-    seastar::gate writer_guard;
-    bool rolling_segment = false;
+    journal::SegmentAllocator segment_allocator;
+    std::optional<seastar::shared_promise<>> roll_promise;
+    seastar::gate write_guard;
   };
 public:
   SegmentedAllocator(
@@ -232,7 +220,11 @@ public:
     SegmentManager& sm);
 
   Writer &get_writer(placement_hint_t hint) {
-    return writers[std::rand() % writers.size()];
+    if (hint == placement_hint_t::REWRITE) {
+      return rewriter;
+    } else {
+      return writers[std::rand() % writers.size()];
+    }
   }
 
   alloc_paddr_iertr::future<> alloc_ool_extents_paddr(
@@ -261,8 +253,7 @@ public:
     });
   }
 private:
-  SegmentProvider& segment_provider;
-  SegmentManager& segment_manager;
+  Writer rewriter;
   std::vector<Writer> writers;
 };
 

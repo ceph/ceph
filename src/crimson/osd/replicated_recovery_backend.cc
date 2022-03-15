@@ -486,12 +486,12 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
     return seastar::make_ready_future<uint64_t>(offset);
   }
   // 1. get the extents in the interested range
-  return backend->fiemap(coll, ghobject_t{oid},
-                         0, copy_subset.range_end()).then_wrapped_interruptible(
+  return interruptor::make_interruptible(backend->fiemap(coll, ghobject_t{oid},
+    0, copy_subset.range_end())).safe_then_interruptible(
     [=](auto&& fiemap_included) mutable {
     interval_set<uint64_t> extents;
     try {
-      extents.intersection_of(copy_subset, fiemap_included.get0());
+      extents.intersection_of(copy_subset, std::move(fiemap_included));
     } catch (std::exception &) {
       // if fiemap() fails, we will read nothing, as the intersection of
       // copy_subset and an empty interval_set would be empty anyway
@@ -503,7 +503,8 @@ ReplicatedRecoveryBackend::read_object_for_push_op(
     push_op->data_included.span_of(extents, offset, max_len);
     // 3. read the truncated extents
     // TODO: check if the returned extents are pruned
-    return store->readv(coll, ghobject_t{oid}, push_op->data_included, 0);
+    return interruptor::make_interruptible(store->readv(coll, ghobject_t{oid},
+      push_op->data_included, 0));
   }).safe_then_interruptible([push_op, range_end=copy_subset.range_end()](auto &&bl) {
     push_op->data.claim_append(std::move(bl));
     uint64_t recovered_to = 0;
@@ -1095,7 +1096,7 @@ void ReplicatedRecoveryBackend::submit_push_complete(
   ObjectStore::Transaction *t)
 {
   for (const auto& [oid, extents] : recovery_info.clone_subset) {
-    for (const auto [off, len] : extents) {
+    for (const auto& [off, len] : extents) {
       logger().debug(" clone_range {} {}~{}", oid, off, len);
       t->clone_range(coll->get_cid(), ghobject_t(oid), ghobject_t(recovery_info.soid),
                      off, len, off);

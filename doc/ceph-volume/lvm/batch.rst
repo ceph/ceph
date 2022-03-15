@@ -60,7 +60,9 @@ Consider the following invocation::
 This will deploy three OSDs with external ``db`` and ``wal`` volumes on
 an NVME device.
 
-**pretty reporting**
+Pretty reporting
+----------------
+
 The ``pretty`` report format (the default) would
 look like this::
 
@@ -83,10 +85,9 @@ look like this::
       block_db        /dev/nvme0n1                                           66.67 GB         33.33%
 
 
+JSON reporting
+--------------
 
-
-
-**JSON reporting**
 Reporting can produce a structured output with ``--format json`` or
 ``--format json-pretty``::
 

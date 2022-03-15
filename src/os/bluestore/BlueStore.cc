@@ -7565,9 +7565,16 @@ void BlueStore::set_cache_shards(unsigned num)
   }
 }
 
+//---------------------------------------------
+bool BlueStore::has_null_manager()
+{
+  return (fm && fm->is_null_manager());
+}
+
 int BlueStore::_mount()
 {
   dout(5) << __func__ << "NCB:: path " << path << dendl;
+
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     dout(5) << __func__ << "::NCB::calling fsck()" << dendl;
@@ -7681,12 +7688,15 @@ int BlueStore::umount()
 #endif
     dout(20) << __func__ << " stopping kv thread" << dendl;
     _kv_stop();
-    _shutdown_cache();
+    // skip cache cleanup step on fast shutdown
+    if (likely(!m_fast_shutdown)) {
+      _shutdown_cache();
+    }
     dout(20) << __func__ << " closing" << dendl;
   }
-
   _close_db_and_around();
-  if (cct->_conf->bluestore_fsck_on_umount) {
+  // disable fsck on fast-shutdown
+  if (cct->_conf->bluestore_fsck_on_umount && !m_fast_shutdown) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_umount_deep);
     if (rc < 0)
       return rc;
@@ -10305,6 +10315,11 @@ int BlueStore::get_numa_node(
   return 0;
 }
 
+void BlueStore::prepare_for_fast_shutdown()
+{
+  m_fast_shutdown = true;
+}
+
 int BlueStore::get_devices(set<string> *ls)
 {
   if (bdev) {
@@ -10432,7 +10447,8 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
   string key_prefix;
   _key_encode_u64(pool_id, &key_prefix);
   *out_per_pool_omap = per_pool_omap != OMAP_BULK;
-  if (*out_per_pool_omap) {
+  // stop calls after db was closed
+  if (*out_per_pool_omap && db) {
     auto prefix = per_pool_omap == OMAP_PER_POOL ?
       PREFIX_PERPOOL_OMAP :
       PREFIX_PERPG_OMAP;
@@ -18344,11 +18360,10 @@ int BlueStore::store_allocator(Allocator* src_allocator)
       return -1;
     }
   }
-
+  bluefs->compact_log();
   // reuse previous file-allocation if exists
   ret = bluefs->stat(allocator_dir, allocator_file, nullptr, nullptr);
   bool overwrite_file = (ret == 0);
-  //derr <<  __func__ << "bluefs->open_for_write(" << overwrite_file << ")" << dendl;
   BlueFS::FileWriter *p_handle = nullptr;
   ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, overwrite_file);
   if (ret != 0) {
@@ -18358,8 +18373,9 @@ int BlueStore::store_allocator(Allocator* src_allocator)
 
   uint64_t file_size = p_handle->file->fnode.size;
   uint64_t allocated = p_handle->file->fnode.get_allocated();
-  dout(5) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
+  dout(10) << "file_size=" << file_size << ", allocated=" << allocated << dendl;
 
+  bluefs->sync_metadata(false);
   unique_ptr<Allocator> allocator(clone_allocator_without_bluefs(src_allocator));
   if (!allocator) {
     bluefs->close_writer(p_handle);
@@ -18431,12 +18447,11 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
-  dout(5) <<"WRITE-extent_count=" << extent_count << ", file_size=" << p_handle->file->fnode.size << dendl;
+  dout(5) <<"WRITE-extent_count=" << extent_count << ", allocation_size=" << allocation_size << ", serial=" << s_serial << dendl;
   dout(5) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
   need_to_destage_allocation_file = false;
-  dout(10) << "need_to_destage_allocation_file was clear" << dendl;
   return 0;
 }
 
@@ -18628,7 +18643,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
   utime_t duration = ceph_clock_now() - start_time;
   dout(5) << "READ--extent_count=" << extent_count << ", read_alloc_size=  "
 	    << read_alloc_size << ", file_size=" << file_size << dendl;
-  dout(5) << "READ duration=" << duration << " seconds, s_serial=" << s_serial << dendl;
+  dout(5) << "READ duration=" << duration << " seconds, s_serial=" << header.serial << dendl;
   *num   = extent_count;
   *bytes = read_alloc_size;
   return 0;
@@ -18923,7 +18938,7 @@ int BlueStore::read_allocation_from_drive_on_startup()
 
   utime_t            start = ceph_clock_now();
   read_alloc_stats_t stats = {};
-  SimpleBitmap       sbmap(cct, div_round_up(bdev->get_size(), min_alloc_size));
+  SimpleBitmap sbmap(cct, (bdev->get_size()/ min_alloc_size));
   ret = reconstruct_allocations(&sbmap, stats);
   if (ret != 0) {
     return ret;
@@ -19025,15 +19040,6 @@ int BlueStore::compare_allocators(Allocator* alloc1, Allocator* alloc2, uint64_t
     return 0;
   } else {
     derr << "mismatch:: idx1=" << idx1 << " idx2=" << idx2 << dendl;
-    std::cout << "==================================================================="  << std::endl;
-    for (uint64_t i = 0; i < idx1; i++) {
-      std::cout << "arr1[" << i << "]<" << arr1[i].offset << "," << arr1[i].length << "> " << std::endl;
-    }
-
-    std::cout << "==================================================================="  << std::endl;
-    for (uint64_t i = 0; i < idx2; i++) {
-      std::cout << "arr2[" << i << "]<" << arr2[i].offset << "," << arr2[i].length << "> " << std::endl;
-    }
     return -1;
   }
 }
@@ -19081,9 +19087,9 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
   utime_t            start = ceph_clock_now();
 
   auto shutdown_cache = make_scope_guard([&] {
-    std::cout << "Allocation Recovery was completed in " << duration
-	      << " seconds; insert_count=" << stats.insert_count
-	      << "; extent_count=" << stats.extent_count << std::endl;
+    dout(1) << "Allocation Recovery was completed in " << duration
+	    << " seconds; insert_count=" << stats.insert_count
+	    << "; extent_count=" << stats.extent_count << dendl;
     _shutdown_cache();
     _close_db_and_around();
   });
@@ -19092,7 +19098,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
     auto allocator = unique_ptr<Allocator>(create_bitmap_allocator(bdev->get_size()));
     //reconstruct allocations into a temp simple-bitmap and copy into allocator
     {
-      SimpleBitmap sbmap(cct, div_round_up(bdev->get_size(), min_alloc_size));
+      SimpleBitmap sbmap(cct, (bdev->get_size()/ min_alloc_size));
       ret = reconstruct_allocations(&sbmap, stats);
       if (ret != 0) {
 	return ret;
@@ -19113,14 +19119,14 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
     };
     allocator->dump(count_entries);
     ret = compare_allocators(allocator.get(), alloc, stats.insert_count, memory_target);
-    if (ret != 0) {
+    if (ret == 0) {
       dout(5) << "Allocator drive - file integrity check OK" << dendl;
     } else {
       derr << "FAILURE. Allocator from file and allocator from metadata differ::ret=" << ret << dendl;
     }
   }
 
-  std::cout << stats << std::endl;
+  dout(1) << stats << dendl;
   return ret;
 }
 

@@ -4,13 +4,14 @@ import time
 import uuid
 import errno
 import traceback
+import logging
 from collections import OrderedDict
 from typing import List, Dict, Set
 
 from mgr_module import CommandResult
 
 from datetime import datetime, timedelta
-from threading import Lock, Condition, Thread
+from threading import Lock, Condition, Thread, Timer
 from ipaddress import ip_address
 
 PERF_STATS_VERSION = 1
@@ -36,17 +37,26 @@ MDS_PERF_QUERY_COUNTERS_MAP = OrderedDict({'cap_hit': 0,
                                            'pinned_icaps': 6,
                                            'opened_inodes': 7,
                                            'read_io_sizes': 8,
-                                           'write_io_sizes': 9})
+                                           'write_io_sizes': 9,
+                                           'avg_read_latency': 10,
+                                           'stdev_read_latency': 11,
+                                           'avg_write_latency': 12,
+                                           'stdev_write_latency': 13,
+                                           'avg_metadata_latency': 14,
+                                           'stdev_metadata_latency': 15})
 MDS_PERF_QUERY_COUNTERS = [] # type: List[str]
-MDS_GLOBAL_PERF_QUERY_COUNTERS = ['cap_hit', 'read_latency', 'write_latency', 'metadata_latency', 'dentry_lease', 'opened_files', 'pinned_icaps', 'opened_inodes', 'read_io_sizes', 'write_io_sizes'] # type: List[str]
+MDS_GLOBAL_PERF_QUERY_COUNTERS = list(MDS_PERF_QUERY_COUNTERS_MAP.keys())
 
 QUERY_EXPIRE_INTERVAL = timedelta(minutes=1)
+REREGISTER_TIMER_INTERVAL = 1
 
 CLIENT_METADATA_KEY = "client_metadata"
 CLIENT_METADATA_SUBKEYS = ["hostname", "root"]
 CLIENT_METADATA_SUBKEYS_OPTIONAL = ["mount_point"]
 
 NON_EXISTENT_KEY_STR = "N/A"
+
+logger = logging.getLogger(__name__)
 
 class FilterSpec(object):
     """
@@ -118,6 +128,7 @@ class FSPerfStats(object):
     user_queries = {} # type: Dict[str, Dict]
 
     meta_lock = Lock()
+    rqtimer = None
     client_metadata = {
         'metadata' : {},
         'to_purge' : set(),
@@ -127,6 +138,7 @@ class FSPerfStats(object):
     def __init__(self, module):
         self.module = module
         self.log = module.log
+        self.prev_rank0_gid = None
         # report processor thread
         self.report_processor = Thread(target=self.run)
         self.report_processor.start()
@@ -136,7 +148,7 @@ class FSPerfStats(object):
         if not key in result or not result[key] == meta:
             result[key] = meta
 
-    def notify(self, cmdtag):
+    def notify_cmd(self, cmdtag):
         self.log.debug("cmdtag={0}".format(cmdtag))
         with self.meta_lock:
             try:
@@ -176,6 +188,46 @@ class FSPerfStats(object):
                 self.client_metadata['to_purge'].clear()
             self.log.debug("client_metadata={0}, to_purge={1}".format(
                 self.client_metadata['metadata'], self.client_metadata['to_purge']))
+
+    def notify_fsmap(self):
+        #Reregister the user queries when there is a new rank0 mds
+        with self.lock:
+            gid_state = FSPerfStats.get_rank0_mds_gid_state(self.module.get('fs_map'))
+            if not gid_state:
+                return
+            rank0_gid, state = gid_state
+            if (rank0_gid and rank0_gid != self.prev_rank0_gid and state == 'up:active'):
+                #the new rank0 MDS is up:active
+                ua_last_updated = time.monotonic()
+                if (self.rqtimer and self.rqtimer.is_alive()):
+                    self.rqtimer.cancel()
+                self.rqtimer = Timer(REREGISTER_TIMER_INTERVAL,
+                                     self.re_register_queries, args=(rank0_gid, ua_last_updated,))
+                self.rqtimer.start()
+
+    def re_register_queries(self, rank0_gid, ua_last_updated):
+        #reregister queries if the metrics are the latest. Otherwise reschedule the timer and
+        #wait for the empty metrics
+        with self.lock:
+            if self.mx_last_updated >= ua_last_updated:
+                self.log.debug("reregistering queries...")
+                self.module.reregister_mds_perf_queries()
+                self.prev_rank0_gid = rank0_gid
+            else:
+                #reschedule the timer
+                self.rqtimer = Timer(REREGISTER_TIMER_INTERVAL,
+                                     self.re_register_queries, args=(rank0_gid, ua_last_updated,))
+                self.rqtimer.start()
+
+    @staticmethod
+    def get_rank0_mds_gid_state(fsmap):
+        for fs in fsmap['filesystems']:
+            mds_map = fs['mdsmap']
+            if mds_map is not None:
+                for mds_id, mds_status in mds_map['info'].items():
+                    if mds_status['rank'] == 0:
+                        return mds_status['gid'], mds_status['state']
+        logger.warn("No rank0 mds in the fsmap")
 
     def update_client_meta(self, rank_set):
         new_updates = {}
@@ -276,6 +328,9 @@ class FSPerfStats(object):
 
             # what's received from MDS
             incoming_metrics = result['metrics'][1]
+
+            # metrics updated (monotonic) time
+            self.mx_last_updated = result['metrics'][2][0]
 
             # cull missing MDSs and clients
             self.cull_missing_entries(raw_perf_counters, incoming_metrics)

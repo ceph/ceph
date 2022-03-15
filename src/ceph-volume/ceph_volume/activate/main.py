@@ -50,8 +50,6 @@ class Activate(object):
                 start_osd_uuid=self.args.osd_uuid,
                 tmpfs=not self.args.no_tmpfs,
                 systemd=not self.args.no_systemd,
-                block_wal=None,
-                block_db=None,
             )
             return
         except Exception as e:
