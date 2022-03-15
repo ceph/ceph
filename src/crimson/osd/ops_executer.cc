@@ -459,6 +459,19 @@ auto OpsExecuter::do_write_op(Func&& f, bool um) {
   user_modify = um;
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
 }
+OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
+  OSDOp& osd_op,
+  const ObjectState& os)
+{
+  if (!osd_op.op.assert_ver.ver) {
+    return crimson::ct_error::invarg::make();
+  } else if (osd_op.op.assert_ver.ver < os.oi.user_version) {
+    return crimson::ct_error::erange::make();
+  } else if (osd_op.op.assert_ver.ver > os.oi.user_version) {
+    return crimson::ct_error::value_too_large::make();
+  }
+  return seastar::now();
+}
 
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
@@ -633,6 +646,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_NOTIFY_ACK:
     return do_read_op([this, &osd_op] (auto&, const auto& os) {
       return do_op_notify_ack(osd_op, os);
+    });
+  case CEPH_OSD_OP_ASSERT_VER:
+    return do_read_op([this, &osd_op] (auto&, const auto& os) {
+      return do_assert_ver(osd_op, os);
     });
 
   default:
