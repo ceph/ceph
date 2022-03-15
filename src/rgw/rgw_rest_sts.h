@@ -97,6 +97,12 @@ class DefaultStrategy : public rgw::auth::Strategy,
     return s->info.args.get("WebIdentityToken");
   }
 
+  /* The method implements TokenExtractor. This method is not used by STS. */
+  std::string get_service_token(const req_state* const s) const override {
+    static std::string empty_val;
+    return empty_val;
+  }
+
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
                                     const std::string& role_session,
