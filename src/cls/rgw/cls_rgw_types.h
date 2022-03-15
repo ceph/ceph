@@ -1300,7 +1300,7 @@ struct cls_rgw_lc_entry {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
+  static void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_entry);
 
