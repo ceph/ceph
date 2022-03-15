@@ -22,17 +22,14 @@
 // represents an obligation to sync an entry up a given time
 struct rgw_data_sync_obligation {
   rgw_bucket_shard bs;
-  std::optional<uint64_t> gen;
+  uint64_t gen;
   std::string marker;
   ceph::real_time timestamp;
   bool retry = false;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const rgw_data_sync_obligation& o) {
-  out << "key=" << o.bs;
-  if (o.gen) {
-    out << '[' << *o.gen << ']';
-  }
+  out << "key=" << o.bs << '[' << o.gen << ']';
   if (!o.marker.empty()) {
     out << " marker=" << o.marker;
   }

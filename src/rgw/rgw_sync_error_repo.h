@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <optional>
 #include "include/rados/librados_fwd.hpp"
 #include "include/buffer_fwd.h"
 #include "common/ceph_time.h"
@@ -27,13 +26,10 @@ struct rgw_bucket_shard;
 namespace rgw::error_repo {
 
 // binary-encode a bucket/shard/gen and return it as a string
-std::string encode_key(const rgw_bucket_shard& bs,
-                       std::optional<uint64_t> gen);
+std::string encode_key(const rgw_bucket_shard& bs, uint64_t gen);
 
 // try to decode a key. returns -EINVAL if not in binary format
-int decode_key(std::string encoded,
-               rgw_bucket_shard& bs,
-               std::optional<uint64_t>& gen);
+int decode_key(std::string encoded, rgw_bucket_shard& bs, uint64_t& gen);
 
 // decode a timestamp as a uint64_t for CMPXATTR_MODE_U64
 ceph::real_time decode_value(const ceph::bufferlist& bl);
