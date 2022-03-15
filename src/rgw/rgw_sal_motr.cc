@@ -335,7 +335,7 @@ int MotrUser::load_user_from_idx(const DoutPrefixProvider *dpp,
   struct MotrUserInfo muinfo;
   bufferlist bl;
   ldpp_dout(dpp, 20) << "info.user_id.id = "  << info.user_id.id << dendl;
-  if (store->get_user_cache()->get(dpp, info.user_id.id, bl)) {
+  if (store->get_user_cache()->get(dpp, info.user_id.to_str(), bl)) {
     // Cache misses
     int rc = store->do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
                                       M0_IC_GET, info.user_id.to_str(), bl);
@@ -344,7 +344,7 @@ int MotrUser::load_user_from_idx(const DoutPrefixProvider *dpp,
         return rc;
 
     // Put into cache.
-    store->get_user_cache()->put(dpp, info.user_id.id, bl);
+    store->get_user_cache()->put(dpp, info.user_id.to_str(), bl);
   }
 
   bufferlist& blr = bl;
@@ -484,7 +484,7 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   }
 
   // Put the user info into cache.
-  rc = store->get_user_cache()->put(dpp, info.user_id.id, bl);
+  rc = store->get_user_cache()->put(dpp, info.user_id.to_str(), bl);
 
 out:
   return rc;
@@ -500,7 +500,7 @@ int MotrUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
   bufferlist bl;
   int rc;
   // Remove the user info from cache.
-  store->get_user_cache()->remove(dpp, info.user_id.id);
+  store->get_user_cache()->remove(dpp, info.user_id.to_str());
 
   // Delete all access key of user
   if (!info.access_keys.empty()) {
