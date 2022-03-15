@@ -473,14 +473,21 @@ docker.io/ceph/daemon-base:octopus
                 '00000000-0000-0000-0000-0000deadbeef',
                 None,
                 None,
-                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef'}],
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'cephadm:v1'}],
                 '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
                 None,
                 None,
-                [{'name': 'mon.a', 'fsid': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'}],
+                [{'name': 'mon.a', 'fsid': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'style': 'cephadm:v1'}],
+                cd.SHELL_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'legacy'}],
                 cd.SHELL_DEFAULT_CONF,
             ),
             (
@@ -494,7 +501,7 @@ docker.io/ceph/daemon-base:octopus
                 '00000000-0000-0000-0000-0000deadbeef',
                 '/foo/bar.conf',
                 'mon.a',
-                [{'name': 'mon.a'}],
+                [{'name': 'mon.a', 'style': 'cephadm:v1'}],
                 '/foo/bar.conf',
             ),
             (
@@ -520,7 +527,8 @@ docker.io/ceph/daemon-base:octopus
             ),
         ])
     @mock.patch('cephadm.call')
-    def test_infer_config(self, _call, fsid, config, name, list_daemons, result, cephadm_fs):
+    @mock.patch('cephadm.logger')
+    def test_infer_config(self, logger, _call, fsid, config, name, list_daemons, result, cephadm_fs):
         # build the context
         ctx = cd.CephadmContext()
         ctx.fsid = fsid
@@ -532,8 +540,8 @@ docker.io/ceph/daemon-base:octopus
         mock_fn.return_value = 0
         infer_config = cd.infer_config(mock_fn)
 
-        # mock the shell config
-        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+        # mock the config file
+        cephadm_fs.create_file(result)
 
         # test
         with mock.patch('cephadm.list_daemons', return_value=list_daemons):
