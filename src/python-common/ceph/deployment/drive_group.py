@@ -208,6 +208,7 @@ class DriveGroupSpec(ServiceSpec):
 
         #: Number of osd daemons per "DATA" device.
         #: To fully utilize nvme devices multiple osds are required.
+        #: Can be used to split dual-actuator devices across 2 OSDs, by setting the option to 2.
         self.osds_per_device = osds_per_device
 
         #: A list of strings, containing paths which should back OSDs
