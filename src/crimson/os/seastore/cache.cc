@@ -1417,6 +1417,29 @@ Cache::replay_delta(
     root->set_last_modified(last_modified);
     add_extent(root);
     return replay_delta_ertr::now();
+  } else if (delta.type == extent_types_t::ALLOC_INFO) {
+    may_roll_backref_buffer(journal_seq.offset);
+    alloc_delta_t alloc_delta;
+    decode(alloc_delta, delta.bl);
+    std::vector<backref_buf_entry_ref> backref_list;
+    for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
+      if (alloc_blk.paddr.is_relative()) {
+	assert(alloc_blk.paddr.is_record_relative());
+	alloc_blk.paddr = record_base.add_relative(alloc_blk.paddr);
+      }
+      DEBUG("replay alloc_blk {}~{} {}, journal_seq: {}",
+	alloc_blk.paddr, alloc_blk.len, alloc_blk.laddr, journal_seq);
+      backref_list.emplace_back(
+	std::make_unique<backref_buf_entry_t>(
+	  alloc_blk.paddr,
+	  alloc_blk.laddr,
+	  alloc_blk.len,
+	  alloc_blk.type,
+	  journal_seq));
+    }
+    if (!backref_list.empty())
+      backref_batch_update(std::move(backref_list), journal_seq);
+    return replay_delta_ertr::now();
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
