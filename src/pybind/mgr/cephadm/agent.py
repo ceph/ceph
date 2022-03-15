@@ -8,13 +8,15 @@ import tempfile
 import threading
 import time
 
-from mgr_util import verify_tls_files
+from mgr_module import ServiceInfoT
+from mgr_util import verify_tls_files, build_url
 from orchestrator import DaemonDescriptionStatus, OrchestratorError
 from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.ingress import IngressSpec
 
 from datetime import datetime, timedelta
 from cryptography import x509
@@ -24,7 +26,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 
 from typing import Any, Dict, List, Set, Tuple, \
-    TYPE_CHECKING, Optional
+    TYPE_CHECKING, Optional, cast, Collection
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -50,6 +52,30 @@ class CherryPyThread(threading.Thread):
         self.server_port = 7150
         self.server_addr = self.mgr.get_mgr_ip()
         super(CherryPyThread, self).__init__(target=self.run)
+
+    def configure_cherrypy(self) -> None:
+        cherrypy.config.update({
+            'environment': 'production',
+            'server.socket_host': self.server_addr,
+            'server.socket_port': self.server_port,
+            'engine.autoreload.on': False,
+            'server.ssl_module': 'builtin',
+            'server.ssl_certificate': self.cert_tmp.name,
+            'server.ssl_private_key': self.key_tmp.name,
+        })
+
+        # configure routes
+        root = Root(self.mgr)
+        host_data = HostData(self.mgr)
+        d = cherrypy.dispatch.RoutesDispatcher()
+        d.connect(name='index', route='/', controller=root.index)
+        d.connect(name='sd-config', route='/prometheus/sd-config', controller=root.get_sd_config)
+        d.connect(name='rules', route='/prometheus/rules', controller=root.get_prometheus_rules)
+        d.connect(name='host-data', route='/data', controller=host_data.POST,
+                  conditions=dict(method=['POST']))
+
+        conf = {'/': {'request.dispatch': d}}
+        cherrypy.tree.mount(None, "/", config=conf)
 
     def run(self) -> None:
         try:
@@ -77,18 +103,8 @@ class CherryPyThread(threading.Thread):
             cert_fname = self.cert_tmp.name
 
             verify_tls_files(cert_fname, key_fname)
+            self.configure_cherrypy()
 
-            cherrypy.config.update({
-                'server.socket_host': self.server_addr,
-                'server.socket_port': self.server_port,
-                'engine.autoreload.on': False,
-                'server.ssl_module': 'builtin',
-                'server.ssl_certificate': cert_fname,
-                'server.ssl_private_key': key_fname,
-            })
-            root_conf = {'/': {'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
-                               'tools.response_headers.on': True}}
-            cherrypy.tree.mount(Root(self.mgr), '/', root_conf)
             self.mgr.log.debug('Starting cherrypy engine...')
             self.start_engine()
             self.mgr.log.debug('Cherrypy engine started.')
@@ -130,21 +146,103 @@ class CherryPyThread(threading.Thread):
         self.cherrypy_shutdown_event.set()
 
 
-class Root:
-    exposed = True
+class Root(object):
+
+    # collapse everything to '/'
+    def _cp_dispatch(self, vpath: str) -> 'Root':
+        cherrypy.request.path = ''
+        return self
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
-        self.data = HostData(self.mgr)
 
-    def GET(self) -> str:
+    @cherrypy.expose
+    def index(self) -> str:
         return '''<!DOCTYPE html>
 <html>
 <head><title>Cephadm HTTP Endpoint</title></head>
 <body>
-<p>Cephadm HTTP Endpoint is up and running</p>
+<h2>Cephadm Service Discovery Endpoints</h2>
+<p><a href='prometheus/sd-config?service=mgr-prometheus'>mgr/Prometheus http sd-config</a></p>
+<p><a href='prometheus/sd-config?service=alertmanager'>Alertmanager http sd-config</a></p>
+<p><a href='prometheus/sd-config?service=node-exporter'>Node exporter http sd-config</a></p>
+<p><a href='prometheus/sd-config?service=haproxy'>HAProxy http sd-config</a></p>
+<p><a href='prometheus/rules'>Prometheus rules</a></p>
 </body>
 </html>'''
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out()
+    def get_sd_config(self, service: str) -> List[Dict[str, Collection[str]]]:
+        """Return <http_sd_config> compatible prometheus config for the specified service."""
+        if service == 'mgr-prometheus':
+            return self.prometheus_sd_config()
+        elif service == 'alertmanager':
+            return self.alertmgr_sd_config()
+        elif service == 'node-exporter':
+            return self.node_exporter_sd_config()
+        elif service == 'haproxy':
+            return self.haproxy_sd_config()
+        else:
+            return []
+
+    def prometheus_sd_config(self) -> List[Dict[str, Collection[str]]]:
+        """Return <http_sd_config> compatible prometheus config for prometheus service."""
+        servers = self.mgr.list_servers()
+        targets = []
+        for server in servers:
+            hostname = server.get('hostname', '')
+            for service in cast(List[ServiceInfoT], server.get('services', [])):
+                if service['type'] != 'mgr':
+                    continue
+                port = self.mgr.get_module_option_ex('prometheus', 'server_port', 9283)
+                targets.append(f'{hostname}:{port}')
+        return [{"targets": targets, "labels": {}}]
+
+    def alertmgr_sd_config(self) -> List[Dict[str, Collection[str]]]:
+        """Return <http_sd_config> compatible prometheus config for mgr alertmanager service."""
+        srv_entries = []
+        for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
+            assert dd.hostname is not None
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            port = dd.ports[0] if dd.ports else 9093
+            srv_entries.append('{}'.format(build_url(host=addr, port=port).lstrip('/')))
+        return [{"targets": srv_entries, "labels": {}}]
+
+    def node_exporter_sd_config(self) -> List[Dict[str, Collection[str]]]:
+        """Return <http_sd_config> compatible prometheus config for node-exporter service."""
+        srv_entries = []
+        for dd in self.mgr.cache.get_daemons_by_service('node-exporter'):
+            assert dd.hostname is not None
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            port = dd.ports[0] if dd.ports else 9100
+            srv_entries.append({
+                'targets': [build_url(host=addr, port=port).lstrip('/')],
+                'labels': {'instance': dd.hostname}
+            })
+        return srv_entries
+
+    def haproxy_sd_config(self) -> List[Dict[str, Collection[str]]]:
+        """Return <http_sd_config> compatible prometheus config for haproxy service."""
+        srv_entries = []
+        for dd in self.mgr.cache.get_daemons_by_type('ingress'):
+            if dd.service_name() in self.mgr.spec_store:
+                spec = cast(IngressSpec, self.mgr.spec_store[dd.service_name()].spec)
+                assert dd.hostname is not None
+                if dd.daemon_type == 'haproxy':
+                    addr = self.mgr.inventory.get_addr(dd.hostname)
+                    srv_entries.append({
+                        'targets': [f"{build_url(host=addr, port=spec.monitor_port).lstrip('/')}"],
+                        'labels': {'instance': dd.service_name()}
+                    })
+        return srv_entries
+
+    @cherrypy.expose(alias='prometheus/rules')
+    def get_prometheus_rules(self) -> str:
+        """Return currently configured prometheus rules as Yaml."""
+        cherrypy.response.headers['Content-Type'] = 'text/plain'
+        with open(self.mgr.prometheus_alerts_path, 'r', encoding='utf-8') as f:
+            return f.read()
 
 
 class HostData:
