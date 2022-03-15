@@ -1500,6 +1500,12 @@ MotrObject::MotrDeleteOp::MotrDeleteOp(MotrObject *_source, RGWObjectCtx *_rctx)
 // 2. Delete an object when its versioning is turned on.
 int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  if (source->have_instance()) {
+    rgw_obj_key& key = source->get_key();
+    if (key.have_null_instance())
+      key.instance.clear();
+  }
+
   ldpp_dout(dpp, 20) << "delete " << source->get_key().to_str() << " from " << source->get_bucket()->get_name() << dendl;
 
   rgw_bucket_dir_entry ent;
