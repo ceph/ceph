@@ -75,7 +75,7 @@ class SegmentProvider;
 class SegmentedAllocator : public ExtentAllocator {
   class Writer : public ExtentOolWriter {
   public:
-    Writer(SegmentProvider& sp, SegmentManager& sm);
+    Writer(std::string name, SegmentProvider& sp, SegmentManager& sm);
     Writer(Writer &&) = default;
 
     open_ertr::future<> open() final;
@@ -112,16 +112,20 @@ public:
     SegmentManager& sm);
 
   Writer &get_writer(placement_hint_t hint) {
-    if (hint == placement_hint_t::REWRITE) {
-      return rewriter;
+    assert(hint >= placement_hint_t::COLD);
+    assert(hint < placement_hint_t::NUM_HINTS);
+    if (hint == placement_hint_t::COLD) {
+      return cold_writer;
     } else {
-      return writers[std::rand() % writers.size()];
+      assert(hint == placement_hint_t::REWRITE);
+      return rewrite_writer;
     }
   }
 
   open_ertr::future<> open() {
-    return crimson::do_for_each(writers, [](auto& writer) {
-      return writer.open();
+    return cold_writer.open(
+    ).safe_then([this] {
+      return rewrite_writer.open();
     });
   }
 
@@ -146,13 +150,17 @@ public:
   }
 
   stop_ertr::future<> stop() {
-    return crimson::do_for_each(writers, [](auto& writer) {
-      return writer.stop();
+    return cold_writer.stop(
+    ).safe_then([this] {
+      return rewrite_writer.stop();
     });
   }
 private:
-  Writer rewriter;
-  std::vector<Writer> writers;
+  // TODO:
+  // - hot_writer
+  // - a map of hint -> writer
+  Writer cold_writer;
+  Writer rewrite_writer;
 };
 
 class ExtentPlacementManager {
@@ -202,7 +210,7 @@ public:
               std::move(bp)};
     }
 
-    // FIXME: set delay for COLD extent when the record overhead is low
+    // FIXME: set delay for COLD extent and improve GC
     // NOTE: delay means to delay the decision about whether to write the
     // extent as inline or out-of-line extents.
     bool delay = (hint > placement_hint_t::COLD &&
