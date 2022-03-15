@@ -13,12 +13,27 @@ using json_object = boost::json::object;
 using json_value = boost::json::value;
 using json_array = boost::json::array;
 
-std::string DaemonMetricCollector::main() {
-  update_sockets();
-  send_requests();
-  // result.push_back(reqs);
+void DaemonMetricCollector::request_loop(boost::asio::deadline_timer &timer) {
+  timer.async_wait([&](const boost::system::error_code& e) {
+    std::cerr << e << std::endl;
+    update_sockets();
+    std::cout << "updating metrics" << std::endl;
+    send_requests();
+    timer.expires_from_now(boost::posix_time::seconds(stats_period));
+    request_loop(timer);
+  });
+}
+void DaemonMetricCollector::main() {
+  stats_period = 5; // TODO: let's do 5 for now and expose this to change in the future
+  boost::asio::io_service io;
+  boost::asio::deadline_timer timer(io, boost::posix_time::seconds(stats_period));
+  std::cout << "before request" << std::endl;
+  request_loop(timer);
+  io.run();
+}
 
-  return result;
+std::string DaemonMetricCollector::get_metrics() {
+  return metrics;
 }
 
 template <class T>
@@ -46,7 +61,8 @@ std::string boost_string_to_std(boost::json::string js) {
   return res;
 }
 
-std::string DaemonMetricCollector::send_requests() {
+void DaemonMetricCollector::send_requests() {
+  std::string result;
   for(auto client : clients) {
     AdminSocketClient &sock_client = client.second;
     std::string daemon_name = client.first;
@@ -117,11 +133,11 @@ std::string DaemonMetricCollector::send_requests() {
       }
     }
   }
-  return result;
+  metrics = result;
 }
 
 void DaemonMetricCollector::update_sockets() {
-  std::string path = "/tmp/ceph-asok.Qcdpny/";
+  std::string path = "/tmp/ceph-asok.7MK7oH/";
   for (const auto & entry : std::filesystem::directory_iterator(path)) {
     std::string daemon_socket_name = entry.path().filename().string();
     // remove .asok

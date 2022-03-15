@@ -14,12 +14,17 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <boost/thread/thread.hpp>
+
 
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace http = beast::http;           // from <boost/beast/http.hpp>
 namespace net = boost::asio;            // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
+
+// FIXME: lets save collector instance here for now.
+DaemonMetricCollector collector;
 
 namespace my_program_state
 {
@@ -46,9 +51,9 @@ public:
     }
 
     // Initiate the asynchronous operations associated with the connection.
-    void start(std::string& response)
+    void start()
     {
-        read_request(response);
+        read_request();
         check_deadline();
     }
 
@@ -62,7 +67,7 @@ private:
         socket_.get_executor(), std::chrono::seconds(60)};
 
     // Asynchronously receive a complete request message.
-    void read_request(std::string& response)
+    void read_request()
     {
         // auto self = shared_from_this();
 
@@ -75,12 +80,12 @@ private:
             {
                 boost::ignore_unused(bytes_transferred);
                 if(!ec)
-                    process_request(response);
+                    process_request();
             });
     }
 
     // Determine what needs to be done with the request message.
-    void process_request(std::string& response)
+    void process_request()
     {
         response_.version(request_.version());
         response_.keep_alive(false);
@@ -90,7 +95,7 @@ private:
         case http::verb::get:
             response_.result(http::status::ok);
             response_.set(http::field::server, "Beast");
-            create_response(response);
+            create_response();
             break;
 
         default:
@@ -109,12 +114,14 @@ private:
     }
 
     // Construct a response message based on the program state.
-    void create_response(std::string& response)
+    void create_response()
     {
+        std::cout << "Got request on " << request_.target() << std::endl;
         if(request_.target() == "/perf_counters")
         {
             response_.set(http::field::content_type, "text/plain");
-            beast::ostream(response_.body()) << "Perf Counters\n" << response << std::endl;
+            std::string metrics = collector.get_metrics();
+            beast::ostream(response_.body()) << "Perf Counters\n" << metrics << std::endl;
         }
         else
         {
@@ -159,14 +166,15 @@ private:
 };
 
 // "Loop" forever accepting new connections.
-void http_server(tcp::acceptor& acceptor, tcp::socket& socket, std::string& response)
+void http_server(tcp::acceptor& acceptor, tcp::socket& socket)
 {
   acceptor.async_accept(socket,
       [&](beast::error_code ec)
       {
+          std::cout << "async accept" << std::endl;
           if(!ec)
-              std::make_shared<http_connection>(std::move(socket))->start(response);
-          http_server(acceptor, socket, response);
+              std::make_shared<http_connection>(std::move(socket))->start();
+          http_server(acceptor, socket);
       });
 }
 
@@ -181,20 +189,11 @@ std::string dns_lookup(std::string hostname) {
     return ip_address;
 }
 
-int main(int argc, char** argv) {
-  // TODO: daemonize
-  std::cout << "inside exporter" << std::endl;
-
-  DaemonMetricCollector collector;
-  int stats_period = 5;
-  std::string response;
-  response = collector.main();
-  std::cout << "response: " << std::endl;
-
+void http_server_thread_entrypoint() {
   try
     {
         std::string hostname = ceph_get_short_hostname();
-        
+
         std::string ip_address = dns_lookup(hostname);
         auto const address = net::ip::make_address(ip_address);
         unsigned short port = static_cast<unsigned short>(std::atoi("9085"));
@@ -203,13 +202,24 @@ int main(int argc, char** argv) {
 
         tcp::acceptor acceptor{ioc, {address, port}};
         tcp::socket socket{ioc};
-        http_server(acceptor, socket, response);
-
+        http_server(acceptor, socket);
+        std::cout << "Http server started" << std::endl;
         ioc.run();
     }
     catch(std::exception const& e)
     {
         std::cerr << "Error: " << e.what() << std::endl;
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
+}
+
+int main(int argc, char** argv) {
+  // TODO: daemonize
+  std::cout << "inside exporter" << std::endl;
+
+  std::cout << "Starting http server thread..." << std::endl;
+  boost::thread server_thread(http_server_thread_entrypoint);
+  std::cout << "Starting collector..." << std::endl;
+  collector.main();
+  server_thread.join();
 }

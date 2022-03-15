@@ -8,19 +8,23 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <boost/asio.hpp>
 
 class DaemonMetricCollector {
  public:
   int i;
-  std::string main();
+  void main();
+  std::string get_metrics();
 
 private:
   // TODO: add clients
   //       check removed sockets
   //       list dir of sockets
   std::map<std::string, AdminSocketClient> clients;
-  std::string result;
+  std::string metrics;
+  int stats_period; // time to wait before sending requests again
   void update_sockets();
-  std::string send_requests();
+  void request_loop(boost::asio::deadline_timer &timer);
+  void send_requests();
   void start_mgr_connection();
 };
