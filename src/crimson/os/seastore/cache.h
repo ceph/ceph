@@ -501,6 +501,7 @@ public:
     auto result = epm.alloc_new_extent(t, T::TYPE, length, hint);
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->set_paddr(result.paddr);
+    ret->hint = hint;
     t.add_fresh_extent(ret);
     ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
     SUBDEBUGT(seastore_cache, "allocated {} {}B extent at {}, hint={} -- {}",
