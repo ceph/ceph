@@ -20,6 +20,7 @@ from .fixtures import (
     mock_docker,
     mock_podman,
     with_cephadm_ctx,
+    mock_bad_firewalld,
 )
 
 with mock.patch('builtins.open', create=True):
@@ -214,10 +215,43 @@ class TestCephAdm(object):
         for address, expected in tests:
             wrap_test(address, expected)
 
+    @mock.patch('cephadm.Firewalld', mock_bad_firewalld)
+    @mock.patch('cephadm.logger')
+    def test_skip_firewalld(self, logger, cephadm_fs):
+        """
+        test --skip-firewalld actually skips changing firewall
+        """
+
+        ctx = cd.CephadmContext()
+        with pytest.raises(Exception):
+            cd.update_firewalld(ctx, 'mon')
+
+        ctx.skip_firewalld = True
+        cd.update_firewalld(ctx, 'mon')
+
+        ctx.skip_firewalld = False
+        with pytest.raises(Exception):
+            cd.update_firewalld(ctx, 'mon')
+
+        ctx = cd.CephadmContext()
+        ctx.ssl_dashboard_port = 8888
+        ctx.dashboard_key = None
+        ctx.dashboard_password_noupdate = True
+        ctx.initial_dashboard_password = 'password'
+        ctx.initial_dashboard_user = 'User'
+        with pytest.raises(Exception):
+            cd.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
+
+        ctx.skip_firewalld = True
+        cd.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
+
+        ctx.skip_firewalld = False
+        with pytest.raises(Exception):
+            cd.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
+
     @mock.patch('cephadm.call_throws')
     @mock.patch('cephadm.get_parm')
     def test_registry_login(self, get_parm, call_throws):
-
         # test normal valid login with url, username and password specified
         call_throws.return_value = '', '', 0
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
