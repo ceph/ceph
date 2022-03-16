@@ -52,7 +52,7 @@ from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
-    NodeExporterService, SNMPGatewayService
+    NodeExporterService, SNMPGatewayService, LokiService, PromtailService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
     ClientKeyringStore, ClientKeyringSpec
@@ -93,6 +93,8 @@ os._exit = os_exit_noop   # type: ignore
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
+DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
+DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
 DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
@@ -196,6 +198,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_node_exporter',
             default=DEFAULT_NODE_EXPORTER_IMAGE,
             desc='Prometheus container image',
+        ),
+        Option(
+            'container_image_loki',
+            default=DEFAULT_LOKI_IMAGE,
+            desc='Loki container image',
+        ),
+        Option(
+            'container_image_promtail',
+            default=DEFAULT_PROMTAIL_IMAGE,
+            desc='Promtail container image',
         ),
         Option(
             'container_image_haproxy',
@@ -410,6 +422,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_grafana = ''
             self.container_image_alertmanager = ''
             self.container_image_node_exporter = ''
+            self.container_image_loki = ''
+            self.container_image_promtail = ''
             self.container_image_haproxy = ''
             self.container_image_keepalived = ''
             self.container_image_snmp_gateway = ''
@@ -505,7 +519,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         _service_clses: Sequence[Type[CephadmService]] = [
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
-            PrometheusService, NodeExporterService, CrashService, IscsiService,
+            PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
             IngressService, CustomContainerService, CephfsMirrorService,
             CephadmAgent, SNMPGatewayService
         ]
@@ -657,7 +671,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'agent', 'snmp-gateway'
+            'container', 'agent', 'snmp-gateway', 'loki', 'promtail'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1293,6 +1307,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_alertmanager
         elif daemon_type == 'node-exporter':
             image = self.container_image_node_exporter
+        elif daemon_type == 'loki':
+            image = self.container_image_loki
+        elif daemon_type == 'promtail':
+            image = self.container_image_promtail
         elif daemon_type == 'haproxy':
             image = self.container_image_haproxy
         elif daemon_type == 'keepalived':
@@ -2457,6 +2475,8 @@ Then run the following:
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
+                'loki': PlacementSpec(count=1),
+                'promtail': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
@@ -2550,6 +2570,14 @@ Then run the following:
 
     @handle_orch_error
     def apply_prometheus(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_loki(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_promtail(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

@@ -36,8 +36,17 @@ class GrafanaService(CephadmService):
             prom_services.append(build_url(scheme='http', host=addr, port=port))
 
             deps.append(dd.name())
+
+        daemons = self.mgr.cache.get_daemons_by_service('mgr')
+        loki_host = ''
+        assert daemons is not None
+        if daemons != []:
+            assert daemons[0].hostname is not None
+            addr = daemons[0].ip if daemons[0].ip else self._inventory_get_addr(daemons[0].hostname)
+            loki_host = build_url(scheme='http', host=addr, port=3100)
+
         grafana_data_sources = self.mgr.template.render(
-            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services})
+            'services/grafana/ceph-dashboard.yml.j2', {'hosts': prom_services, 'loki_host': loki_host})
 
         cert = self.mgr.get_store('grafana_crt')
         pkey = self.mgr.get_store('grafana_key')
@@ -376,6 +385,57 @@ class NodeExporterService(CephadmService):
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {names}'
         return HandleCommandResult(0, out, '')
+
+
+class LokiService(CephadmService):
+    TYPE = 'loki'
+    DEFAULT_SERVICE_PORT = 3100
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        deps: List[str] = []
+
+        yml = self.mgr.template.render('services/loki.yml.j2')
+        return {
+            "files": {
+                "loki.yml": yml
+            }
+        }, sorted(deps)
+
+
+class PromtailService(CephadmService):
+    TYPE = 'promtail'
+    DEFAULT_SERVICE_PORT = 9080
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        deps: List[str] = []
+        hostnames: List[str] = []
+        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+            assert dd.hostname is not None
+            addr = self.mgr.inventory.get_addr(dd.hostname)
+            hostnames.append(addr)
+        context = {
+            'hostnames': hostnames,
+            'client_hostname': hostnames[0],
+        }
+
+        yml = self.mgr.template.render('services/promtail.yml.j2', context)
+        return {
+            "files": {
+                "promtail.yml": yml
+            }
+        }, sorted(deps)
 
 
 class SNMPGatewayService(CephadmService):
