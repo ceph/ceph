@@ -2221,6 +2221,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
 	break;
       }
       session->mds_features = std::move(m->supported_features);
+      session->mds_metric_flags = std::move(m->metric_spec.metric_flags);
 
       renew_caps(session);
       session->state = MetaSession::STATE_OPEN;
@@ -6711,57 +6712,79 @@ void Client::collect_and_send_global_metrics() {
   std::vector<ClientMetricMessage> message;
 
   // read latency
-  metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read)));
-  message.push_back(metric);
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_READ_LATENCY)) {
+    metric = ClientMetricMessage(ReadLatencyPayload(logger->tget(l_c_read)));
+    message.push_back(metric);
+  }
 
   // write latency
-  metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat)));
-  message.push_back(metric);
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_WRITE_LATENCY)) {
+    metric = ClientMetricMessage(WriteLatencyPayload(logger->tget(l_c_wrlat)));
+    message.push_back(metric);
+  }
 
   // metadata latency
-  metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
-  message.push_back(metric);
+  if (session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
+    metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
+    message.push_back(metric);
+  }
 
   // cap hit ratio -- nr_caps is unused right now
-  auto [cap_hits, cap_misses] = get_cap_hit_rates();
-  metric = ClientMetricMessage(CapInfoPayload(cap_hits, cap_misses, 0));
-  message.push_back(metric);
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_CAP_INFO)) {
+    auto [cap_hits, cap_misses] = get_cap_hit_rates();
+    metric = ClientMetricMessage(CapInfoPayload(cap_hits, cap_misses, 0));
+    message.push_back(metric);
+  }
 
   // dentry lease hit ratio
-  auto [dlease_hits, dlease_misses, nr] = get_dlease_hit_rates();
-  metric = ClientMetricMessage(DentryLeasePayload(dlease_hits, dlease_misses, nr));
-  message.push_back(metric);
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_DENTRY_LEASE)) {
+    auto [dlease_hits, dlease_misses, nr] = get_dlease_hit_rates();
+    metric = ClientMetricMessage(DentryLeasePayload(dlease_hits, dlease_misses, nr));
+    message.push_back(metric);
+  }
 
   // opened files
-  {
+  if (session->mds_metric_flags.test(CLIENT_METRIC_TYPE_OPENED_FILES)) {
     auto [opened_files, total_inodes] = get_opened_files_rates();
     metric = ClientMetricMessage(OpenedFilesPayload(opened_files, total_inodes));
+    message.push_back(metric);
   }
-  message.push_back(metric);
 
   // pinned i_caps
-  {
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_PINNED_ICAPS)) {
     auto [pinned_icaps, total_inodes] = get_pinned_icaps_rates();
     metric = ClientMetricMessage(PinnedIcapsPayload(pinned_icaps, total_inodes));
+    message.push_back(metric);
   }
-  message.push_back(metric);
 
   // opened inodes
-  {
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_OPENED_INODES)) {
     auto [opened_inodes, total_inodes] = get_opened_inodes_rates();
     metric = ClientMetricMessage(OpenedInodesPayload(opened_inodes, total_inodes));
+    message.push_back(metric);
   }
-  message.push_back(metric);
 
   // read io sizes
-  metric = ClientMetricMessage(ReadIoSizesPayload(total_read_ops,
-                                                  total_read_size));
-  message.push_back(metric);
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_READ_IO_SIZES)) {
+    metric = ClientMetricMessage(ReadIoSizesPayload(total_read_ops,
+                                                    total_read_size));
+    message.push_back(metric);
+  }
 
   // write io sizes
-  metric = ClientMetricMessage(WriteIoSizesPayload(total_write_ops,
-                                                   total_write_size));
-  message.push_back(metric);
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_WRITE_IO_SIZES)) {
+    metric = ClientMetricMessage(WriteIoSizesPayload(total_write_ops,
+                                                     total_write_size));
+    message.push_back(metric);
+  }
 
   session->con->send_message2(make_message<MClientMetrics>(std::move(message)));
 }
