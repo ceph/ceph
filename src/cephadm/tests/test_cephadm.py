@@ -1680,6 +1680,29 @@ class TestPull:
             cd.command_pull(ctx)
         assert err in str(e.value)
 
+    @mock.patch('cephadm.logger')
+    @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
+    @mock.patch('cephadm.get_last_local_ceph_image', return_value='last_local_ceph_image')
+    def test_image(self, get_last_local_ceph_image, get_image_info_from_inspect, logger):
+        cmd = ['pull']
+        with with_cephadm_ctx(cmd) as ctx:
+            retval = cd.command_pull(ctx)
+            assert retval == 0
+            assert ctx.image == cd.DEFAULT_IMAGE
+
+        with mock.patch.dict(os.environ, {"CEPHADM_IMAGE": 'cephadm_image_environ'}):
+            cmd = ['pull']
+            with with_cephadm_ctx(cmd) as ctx:
+                retval = cd.command_pull(ctx)
+                assert retval == 0
+                assert ctx.image == 'cephadm_image_environ'
+
+            cmd = ['--image',  'cephadm_image_param', 'pull']
+            with with_cephadm_ctx(cmd) as ctx:
+                retval = cd.command_pull(ctx)
+                assert retval == 0
+                assert ctx.image == 'cephadm_image_param'
+
 
 class TestApplySpec:
 
