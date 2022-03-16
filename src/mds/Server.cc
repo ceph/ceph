@@ -2702,7 +2702,7 @@ void Server::handle_peer_request(const cref_t<MMDSPeerRequest> &m)
 
   CDentry *straydn = NULL;
   if (m->straybl.length() > 0) {
-    mdcache->decode_replica_stray(straydn, m->straybl, from);
+    mdcache->decode_replica_stray(straydn, nullptr, m->straybl, from);
     ceph_assert(straydn);
     m->straybl.clear();
   }
