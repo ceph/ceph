@@ -152,10 +152,6 @@
         <source>Hostname</source>
         <target>Nama hos</target>
       </trans-unit>
-      <trans-unit id="5b80867da298e9f23c476057d236e949507d5b1c" datatype="html">
-        <source>Nework address</source>
-        <target>Nework address</target>
-      </trans-unit>
       <trans-unit id="2af7efecfae8d7fed3b07f718a623eca1ad8163f" datatype="html">
         <source>Labels</source>
         <target>Labels</target>
@@ -626,12 +622,12 @@
           <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> if you proceed.
         </source>
         <target>
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ markActionDescription }}"/>OSD(s) 
-          <x id="INTERPOLATION" equiv-text="{{ osdIds | join }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> will be marked 
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ markActionDescription }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> if you proceed.
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD(s) 
+          <x id="INTERPOLATION" equiv-text="{{ osdIds | join }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be marked 
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
         </target>
       </trans-unit>
       <trans-unit id="e0e217fd717c5b1f5c17f00c5b174de855acbef0" datatype="html">
@@ -644,12 +640,12 @@
           <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> if you proceed.
         </source>
         <target>
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ actionDescription }}"/>OSD 
-          <x id="INTERPOLATION" equiv-text="{{ osdIds | join }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> will be 
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ actionDescription }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> if you proceed.
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
+          <x id="INTERPOLATION" equiv-text="{{ osdIds | join }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be 
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
         </target>
       </trans-unit>
       <trans-unit id="74bd20d5f558d14cb2fa41ae863cf09c47d02018" datatype="html">
@@ -663,9 +659,9 @@
           <x id="INTERPOLATION_1" equiv-text=" }}! {{ messa"/>
         </source>
         <target>The 
-          <x id="ICU" equiv-text="{selection.hasSingleSelection, select, true {OSD is} other {OSDs are}} "/> not safe to be 
-          <x id="INTERPOLATION" equiv-text="     {{ actionDescripti"/>! 
-          <x id="INTERPOLATION_1" equiv-text=" }}! {{ messa"/>
+          <x id="ICU" equiv-text="{selection.hasSingleSelection, select, true {OSD is} other {OSDs are}}"/> not safe to be 
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription }}"/>! 
+          <x id="INTERPOLATION_1" equiv-text="{{ message }}"/>
         </target>
       </trans-unit>
       <trans-unit id="8cf121660bed7098516a1efe85831d6f415a9411" datatype="html">
@@ -702,8 +698,8 @@
           <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>.
         </source>
         <target>To see all active Prometheus alerts, please provide the URL to the API of Prometheus' Alertmanager as described in the 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;prometheus&quot;></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>.
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;prometheus&quot;>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/>.
         </target>
       </trans-unit>
       <trans-unit id="8623978917681527907" datatype="html">
@@ -724,8 +720,8 @@
           <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>.
         </source>
         <target>To see all configured Prometheus alerts, please provide the URL to the API of Prometheus as described in the 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;prometheus&quot;></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>.
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;prometheus&quot;>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/>.
         </target>
       </trans-unit>
       <trans-unit id="4754178820914251524" datatype="html">
@@ -822,8 +818,8 @@
           <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>.
         </source>
         <target>To enable Silences, please provide the URL to the API of the Prometheus' Alertmanager as described in the 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;prometheus&quot;></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>.
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;prometheus&quot;>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/>.
         </target>
       </trans-unit>
       <trans-unit id="3356018487523380058" datatype="html">
@@ -870,16 +866,6 @@
         <source>-- Select an existing RGW service --</source>
         <target>-- Select an existing RGW service --</target>
       </trans-unit>
-      <trans-unit id="e4ab7c51475b19b27b73ab3047d4a7e094230854" datatype="html">
-        <source>The value does not match the pattern 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>&lt;realm_name&gt;.&lt;zone_name&gt;[.&lt;subcluster&gt;]
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>.
-        </source>
-        <target>The value does not match the pattern 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>&lt;realm_name&gt;.&lt;zone_name&gt;[.&lt;subcluster&gt;]
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>.
-        </target>
-      </trans-unit>
       <trans-unit id="c15fa461935e0f600bc5d1660af1da67f024fc2a" datatype="html">
         <source>Placement</source>
         <target>Placement</target>
@@ -907,10 +893,6 @@
       <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
         <source>Pool</source>
         <target>Pool</target>
-      </trans-unit>
-      <trans-unit id="130fd872c78271a8f86b1ab16a76e823969c47d9" datatype="html">
-        <source>Namespace</source>
-        <target>Namespace</target>
       </trans-unit>
       <trans-unit id="2d8ebdc326e6b9ff35feee3f762b7ab39c02d78f" datatype="html">
         <source>-- No pools available --</source>
@@ -942,8 +924,8 @@
           <x id="CLOSE_BOLD_TEXT" equiv-text="</b> "/> IP addresses here, otherwise the iSCSI gateways can't be reached.
         </source>
         <target>Please add the 
-          <x id="START_BOLD_TEXT" equiv-text="<b>"/>Ceph Manager
-          <x id="CLOSE_BOLD_TEXT" equiv-text="</b> "/> IP addresses here, otherwise the iSCSI gateways can't be reached.
+          <x id="START_BOLD_TEXT" ctype="x-b" equiv-text="<b>"/>Ceph Manager
+          <x id="CLOSE_BOLD_TEXT" ctype="x-b" equiv-text="</b>"/> IP addresses here, otherwise the iSCSI gateways can't be reached.
         </target>
       </trans-unit>
       <trans-unit id="e08a77594f3d89311cdf6da5090044270909c194" datatype="html">
@@ -1026,10 +1008,6 @@
         <source>Last Refreshed</source>
         <target>Last Refreshed</target>
       </trans-unit>
-      <trans-unit id="4739887277393389324" datatype="html">
-        <source>Your settings have been applied successfully.  Due to privacy/legal reasons the Telemetry module is now disabled until you  complete the next step and accept the license.</source>
-        <target>Your settings have been applied successfully.  Due to privacy/legal reasons the Telemetry module is now disabled until you  complete the next step and accept the license.</target>
-      </trans-unit>
       <trans-unit id="8293060085588842566" datatype="html">
         <source>The Telemetry module has been configured and activated successfully.</source>
         <target>The Telemetry module has been configured and activated successfully.</target>
@@ -1055,19 +1033,15 @@
           <x id="INTERPOLATION_1" equiv-text="a is sent secured to "/> (device report).
         </source>
         <target>The telemetry module sends anonymous data about this Ceph cluster back to the Ceph developers to help understand how Ceph is used and what problems users may be experiencing.
-          <x id="LINE_BREAK" equiv-text="<br/>
-              "/> This data is visualized on 
-          <x id="START_LINK" equiv-text="<a href=&quot;https://telemetry-public.ceph.com/&quot;>"/>public dashboards
-          <x id="CLOSE_LINK" equiv-text="</a>
-              "/> that allow the community to quickly see summary statistics on how many clusters are reporting, their total capacity and OSD count, and version distribution trends.
-          <x id="LINE_BREAK" equiv-text="<br/>
-              "/>
-          <x id="LINE_BREAK" equiv-text="<br/>
-              "/> The data being reported does 
-          <x id="START_BOLD_TEXT" equiv-text="<b>"/>not
-          <x id="CLOSE_BOLD_TEXT" equiv-text="</b> "/> contain any sensitive data like pool names, object names, object contents, hostnames, or device serial numbers. It contains counters and statistics on how the cluster has been deployed, the version of Ceph, the distribution of the hosts and other parameters which help the project to gain a better understanding of the way Ceph is used. The data is sent secured to 
-          <x id="INTERPOLATION" equiv-text="eph is used. Th"/> and 
-          <x id="INTERPOLATION_1" equiv-text="a is sent secured to "/> (device report).
+          <x id="LINE_BREAK" ctype="lb" equiv-text="<br/>"/> This data is visualized on 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a href=&quot;https://telemetry-public.ceph.com/&quot;>"/>public dashboards
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> that allow the community to quickly see summary statistics on how many clusters are reporting, their total capacity and OSD count, and version distribution trends.
+          <x id="LINE_BREAK" ctype="lb" equiv-text="<br/>"/>
+          <x id="LINE_BREAK" ctype="lb" equiv-text="<br/>"/> The data being reported does 
+          <x id="START_BOLD_TEXT" ctype="x-b" equiv-text="<b>"/>not
+          <x id="CLOSE_BOLD_TEXT" ctype="x-b" equiv-text="</b>"/> contain any sensitive data like pool names, object names, object contents, hostnames, or device serial numbers. It contains counters and statistics on how the cluster has been deployed, the version of Ceph, the distribution of the hosts and other parameters which help the project to gain a better understanding of the way Ceph is used. The data is sent secured to 
+          <x id="INTERPOLATION" equiv-text="{{ sendToUrl }}"/> and 
+          <x id="INTERPOLATION_1" equiv-text="{{ sendToDeviceUrl }}"/> (device report).
         </target>
       </trans-unit>
       <trans-unit id="807cf11e6ac1cde912496f764c176bdfdd6b7e19" datatype="html">
@@ -1192,8 +1166,8 @@
           <x id="CLOSE_BOLD_TEXT" equiv-text="</b> "/> By clicking 'Next' you will first see a preview of the report content before you can activate the automatic submission of your data.
         </source>
         <target>
-          <x id="START_BOLD_TEXT" equiv-text="<b>"/>Note:
-          <x id="CLOSE_BOLD_TEXT" equiv-text="</b> "/> By clicking 'Next' you will first see a preview of the report content before you can activate the automatic submission of your data.
+          <x id="START_BOLD_TEXT" ctype="x-b" equiv-text="<b>"/>Note:
+          <x id="CLOSE_BOLD_TEXT" ctype="x-b" equiv-text="</b>"/> By clicking 'Next' you will first see a preview of the report content before you can activate the automatic submission of your data.
         </target>
       </trans-unit>
       <trans-unit id="c95505b5a74151a0c235b19b9c41db7983205ba7" datatype="html">
@@ -1222,10 +1196,9 @@
           <x id="CLOSE_TAG_CD_HELPER" equiv-text="</cd-helper>"/>
         </source>
         <target>Report ID 
-          <x id="START_TAG_CD_HELPER" equiv-text="<cd-helper i18n-html
-                         html=&quot;A randomized UUID to identify a particular cluster over the course of several telemetry reports.&quot;>
-              </cd-helper>"/>
-          <x id="CLOSE_TAG_CD_HELPER" equiv-text="</cd-helper>"/>
+          <x id="START_TAG_CD_HELPER" ctype="x-cd_helper" equiv-text="<cd-helper i18n-html
+                         html=&quot;A randomized UUID to identify a particular cluster over the course of several telemetry reports.&quot;>"/>
+          <x id="CLOSE_TAG_CD_HELPER" ctype="x-cd_helper" equiv-text="</cd-helper>"/>
         </target>
       </trans-unit>
       <trans-unit id="3de417f739c336284c42904552e81e8d852daecc" datatype="html">
@@ -1238,10 +1211,9 @@
           <x id="CLOSE_TAG_CD_HELPER" equiv-text="</cd-helper>"/>
         </source>
         <target>Report preview 
-          <x id="START_TAG_CD_HELPER" equiv-text="<cd-helper i18n-html
-                           html=&quot;The actual telemetry data that will be submitted.&quot;>
-                </cd-helper>"/>
-          <x id="CLOSE_TAG_CD_HELPER" equiv-text="</cd-helper>"/>
+          <x id="START_TAG_CD_HELPER" ctype="x-cd_helper" equiv-text="<cd-helper i18n-html
+                           html=&quot;The actual telemetry data that will be submitted.&quot;>"/>
+          <x id="CLOSE_TAG_CD_HELPER" ctype="x-cd_helper" equiv-text="</cd-helper>"/>
         </target>
       </trans-unit>
       <trans-unit id="933a2b6f087670ff42c95876e6ecfb2faa3e3867" datatype="html">
@@ -1250,8 +1222,8 @@
           <x id="CLOSE_LINK" equiv-text="</a>"/>
         </source>
         <target>I agree to my telemetry data being submitted under the 
-          <x id="START_LINK" equiv-text="<a href=&quot;https://cdla.io/sharing-1-0/&quot;>"/>Community Data License Agreement - Sharing - Version 1.0
-          <x id="CLOSE_LINK" equiv-text="</a>"/>
+          <x id="START_LINK" ctype="x-a" equiv-text="<a href=&quot;https://cdla.io/sharing-1-0/&quot;>"/>Community Data License Agreement - Sharing - Version 1.0
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
         </target>
       </trans-unit>
       <trans-unit id="d2bcd3296d2850de762fb943060b7e086a893181" datatype="html">
@@ -1261,10 +1233,6 @@
       <trans-unit id="61e0f26d843eec0b33ff475e111b0c2f7a80b835" datatype="html">
         <source>Statistics</source>
         <target>Statistik </target>
-      </trans-unit>
-      <trans-unit id="1343735409646758166" datatype="html">
-        <source>There are no daemons available.</source>
-        <target>Tidak ada daemon tersedia.</target>
       </trans-unit>
       <trans-unit id="2691935247101074756" datatype="html">
         <source>NFS export</source>
@@ -1277,10 +1245,6 @@
       <trans-unit id="bee6900143996c0e908a10564532eba3da0b30fb" datatype="html">
         <source>NFS Protocol</source>
         <target>Protokol NFS</target>
-      </trans-unit>
-      <trans-unit id="2f534178c01ebf1307da2eaeef04bc6801ebc729" datatype="html">
-        <source>NFSv3</source>
-        <target>NFSv3</target>
       </trans-unit>
       <trans-unit id="f5043c0921e709935ab026bb3253ffe1f159fca1" datatype="html">
         <source>NFSv4</source>
@@ -1322,18 +1286,6 @@
         <source>Daemons</source>
         <target>Daemon</target>
       </trans-unit>
-      <trans-unit id="cf85b1ee58326aa9da63da41b2629c9db7c9a5b9" datatype="html">
-        <source>Add daemon</source>
-        <target>Tambah daemon</target>
-      </trans-unit>
-      <trans-unit id="72963c74cb9aa346f4ec34fd976d6f6550438041" datatype="html">
-        <source>Add all daemons</source>
-        <target>Add all daemons</target>
-      </trans-unit>
-      <trans-unit id="c1ea7d32a20b071a42d7107bf78d96028bcfc38f" datatype="html">
-        <source>Remove all daemons</source>
-        <target>Remove all daemons</target>
-      </trans-unit>
       <trans-unit id="151c80ea931037cd92e854442927f8a0f6ae7795" datatype="html">
         <source>-- No data pools available --</source>
         <target>-- Tidak ada pool data tersedia --</target>
@@ -1341,34 +1293,6 @@
       <trans-unit id="b6fee356d1db954255a56d8169405a89595246b9" datatype="html">
         <source>-- Select the storage backend --</source>
         <target>-- Pilih backend penyimpanan --</target>
-      </trans-unit>
-      <trans-unit id="76d67035c3ab3d8e56f725859f820f03fda41cfc" datatype="html">
-        <source>Object Gateway User</source>
-        <target>Pengguna Gerbang Objek</target>
-      </trans-unit>
-      <trans-unit id="fade7788bace74337f306ae209f10fc187ef4671" datatype="html">
-        <source>-- No users available --</source>
-        <target>-- Pengguna tidak tersedia --</target>
-      </trans-unit>
-      <trans-unit id="6d30b7b36cf8f6364167321bdb4ba35d4cefce7b" datatype="html">
-        <source>-- Select the object gateway user --</source>
-        <target>-- Pilih pengguna gerbang objek --</target>
-      </trans-unit>
-      <trans-unit id="589ce20d3ba3e3ac44f75decfaadc4ea8f0aec2d" datatype="html">
-        <source>CephFS User ID</source>
-        <target>ID Pengguna CephFS</target>
-      </trans-unit>
-      <trans-unit id="c4b88a53ac3b0ece46ba9b3ad72355a3c190cce7" datatype="html">
-        <source>-- No clients available --</source>
-        <target>-- Klien tidak tersedia --</target>
-      </trans-unit>
-      <trans-unit id="da52835b80497a0002d24414b057dc46ae44ce38" datatype="html">
-        <source>-- Select the cephx client --</source>
-        <target>-- Pilih klien cephx --</target>
-      </trans-unit>
-      <trans-unit id="fd3419e8957d928d7f7ba19c93356a0dbff02871" datatype="html">
-        <source>CephFS Name</source>
-        <target>Nama CephFS</target>
       </trans-unit>
       <trans-unit id="ee3ba0ab5f0ccd597b3e44021c71e9aaad14df0a" datatype="html">
         <source>-- No CephFS filesystem available --</source>
@@ -1394,44 +1318,6 @@
         <source>Path need to start with a '/' and can be followed by a word</source>
         <target>Lintasan atau path harus dimulai dengan '/' dan diikuti dengan kata</target>
       </trans-unit>
-      <trans-unit id="2d02916f44fc63e13ab16d1cbe72aa6cb51feab3" datatype="html">
-        <source>New directory will be created</source>
-        <target>Direktori baru akan dibuat</target>
-      </trans-unit>
-      <trans-unit id="766c66ad5cc981c531aaf3fe3a2a7a346ddc8d83" datatype="html">
-        <source>Path</source>
-        <target>Path</target>
-      </trans-unit>
-      <trans-unit id="7ec35c722a50b976620f22612f7be619c12ceb90" datatype="html">
-        <source>Path can only be a single '/' or a word</source>
-        <target>Path hanya boleh berupa '/' atau kata</target>
-      </trans-unit>
-      <trans-unit id="aebb6a5090c24511de4530195694bb3f3dcf0342" datatype="html">
-        <source>New bucket will be created</source>
-        <target>Buket baru akan dibuat</target>
-      </trans-unit>
-      <trans-unit id="92488963d23095985a47c0d6e62304e11d333f19" datatype="html">
-        <source>NFS Tag</source>
-        <target>Tag NFS</target>
-      </trans-unit>
-      <trans-unit id="aae93362720aea94623682996dd3fcd0f906f056" datatype="html">
-        <source>Alternative access for 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>NFS v3
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> mounts (it must not have a leading /).
-        </source>
-        <target>Alternative access for 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>NFS v3
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> mounts (it must not have a leading /).
-        </target>
-      </trans-unit>
-      <trans-unit id="45d6db77dcf1a3eeb921033abc7882e517a541cc" datatype="html">
-        <source>Clients may not mount subdirectories (i.e. if Tag = foo, the client may not mount foo/baz).</source>
-        <target>Klien mungkin tidak dapat mount subdirektori (cth. jika Tag = foo, klien mungkin tidak bisa mount foo/baz).</target>
-      </trans-unit>
-      <trans-unit id="a1c7a8676b55e882a97c6a6fb205204f9c761afa" datatype="html">
-        <source>By using different Tag options, the same Path may be exported multiple times.</source>
-        <target>Dengan menggunakan opsi Tag yang berbeda, Path yang sama akan diekspor beberapa kali.</target>
-      </trans-unit>
       <trans-unit id="6d2c39708a32910f89701dd7e1cfb9ec1c195768" datatype="html">
         <source>Pseudo</source>
         <target>Pseudo</target>
@@ -1444,10 +1330,10 @@
           <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> (it must be unique).
         </source>
         <target>The position that this 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>NFS v4
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> export occupies in the 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>Pseudo FS
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> (it must be unique).
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>NFS v4
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> export occupies in the 
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>Pseudo FS
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> (it must be unique).
         </target>
       </trans-unit>
       <trans-unit id="f3af55f7fd5b1d9e5a53e030c80116dc635bfb9f" datatype="html">
@@ -1472,9 +1358,8 @@
           <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>               "/> for details before enabling write access.
         </source>
         <target>The Object Gateway NFS backend has a number of limitations which will seriously affect applications writing to the share. Please consult the 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;rgw-nfs&quot;></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>
-              "/> for details before enabling write access.
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;rgw-nfs&quot;>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/> for details before enabling write access.
         </target>
       </trans-unit>
       <trans-unit id="4deda03573eaaff77e63f6a238a1f0ca7816950a" datatype="html">
@@ -1579,8 +1464,8 @@
           <x id="CLOSE_BOLD_TEXT" equiv-text="</b>"/>
         </source>
         <target>
-          <x id="START_BOLD_TEXT" equiv-text="<b>"/>Page not Found
-          <x id="CLOSE_BOLD_TEXT" equiv-text="</b>"/>
+          <x id="START_BOLD_TEXT" ctype="x-b" equiv-text="<b>"/>Page not Found
+          <x id="CLOSE_BOLD_TEXT" ctype="x-b" equiv-text="</b>"/>
         </target>
       </trans-unit>
       <trans-unit id="4aee9d027170f84774f2980537556f5099369b82" datatype="html">
@@ -1594,9 +1479,9 @@
           <x id="INTERPOLATION" equiv-text="   the {{ section_"/> management functionality.
         </source>
         <target>Please consult the 
-          <x id="START_LINK" equiv-text="<a href=&quot;{{ docUrl }}&quot;>"/>documentation
-          <x id="CLOSE_LINK" equiv-text="</a> "/> on how to configure and enable the 
-          <x id="INTERPOLATION" equiv-text="   the {{ section_"/> management functionality.
+          <x id="START_LINK" ctype="x-a" equiv-text="<a href=&quot;{{ docUrl }}&quot;>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> on how to configure and enable the 
+          <x id="INTERPOLATION" equiv-text="{{ section_info }}"/> management functionality.
         </target>
       </trans-unit>
       <trans-unit id="7911416166208830577" datatype="html">
@@ -2363,8 +2248,7 @@
         </source>
         <target>NFS '
           <x id="PH" equiv-text="metadata.cluster_id"/>:
-          <x id="PH_1" equiv-text="metadata.export_id ? metadata.export_id : metadata.path
-    "/>'
+          <x id="PH_1" equiv-text="metadata.export_id ? metadata.export_id : metadata.path"/>'
         </target>
       </trans-unit>
       <trans-unit id="2235495382025026939" datatype="html">
@@ -2391,11 +2275,11 @@
           <x id="CLOSE_LINK" equiv-text="</a> "/> module.
         </source>
         <target>The Ceph community needs your help to continue improving: please 
-          <x id="START_LINK" equiv-text="<a routerLink=&quot;/telemetry&quot;
+          <x id="START_LINK" ctype="x-a" equiv-text="<a routerLink=&quot;/telemetry&quot;
        class=&quot;btn activate-button alert-link activate-text&quot;>"/>Activate
-          <x id="CLOSE_LINK" equiv-text="</a> "/> the 
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> the 
           <x id="START_LINK_1" equiv-text="<a href=&quot;https://docs.ceph.com/en/latest/mgr/telemetry/&quot;>"/>Telemetry
-          <x id="CLOSE_LINK" equiv-text="</a> "/> module.
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> module.
         </target>
       </trans-unit>
       <trans-unit id="c8d1785038d461ec66b5799db21864182b35900a" datatype="html">
@@ -2410,11 +2294,11 @@
           <x id="CLOSE_LINK" equiv-text="</a> "/> to change it now.
         </source>
         <target>Your password will expire in 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>less than 1
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> day. Click 
-          <x id="START_LINK" equiv-text="<a routerLink=&quot;/user-profile/edit&quot;
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>less than 1
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> day. Click 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a routerLink=&quot;/user-profile/edit&quot;
        class=&quot;alert-link&quot;>"/>here
-          <x id="CLOSE_LINK" equiv-text="</a> "/> to change it now.
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> to change it now.
         </target>
       </trans-unit>
       <trans-unit id="c2f34088c155e40ffb23770a465a65868ce772b2" datatype="html">
@@ -2426,12 +2310,12 @@
           <x id="CLOSE_LINK" equiv-text="</a> "/> to change it now.
         </source>
         <target>Your password will expire in 
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ expirationDays }}"/>
-          <x id="INTERPOLATION" equiv-text="{{ expirationDays }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> day(s). Click 
-          <x id="START_LINK" equiv-text="<a routerLink=&quot;/user-profile/edit&quot;
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION" equiv-text="{{ expirationDays }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> day(s). Click 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a routerLink=&quot;/user-profile/edit&quot;
      class=&quot;alert-link&quot;>"/>here
-          <x id="CLOSE_LINK" equiv-text="</a> "/> to change it now.
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> to change it now.
         </target>
       </trans-unit>
       <trans-unit id="b20e42ac4354d449f2718428b5390933eef0c1b9" datatype="html">
@@ -2444,8 +2328,8 @@
           <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc> "/> on how to configure and enable the functionality.
         </source>
         <target>Orchestrator is not available. Please consult the 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;orch&quot;></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc> "/> on how to configure and enable the functionality.
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;orch&quot;>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/> on how to configure and enable the functionality.
         </target>
       </trans-unit>
       <trans-unit id="0a23e992f6c6e169a38b2b7338b4e5e803b52e0d" datatype="html">
@@ -2586,8 +2470,8 @@
           <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc> "/> on how to configure and enable the monitoring functionality.
         </source>
         <target>Please consult the 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;grafana&quot;></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc> "/> on how to configure and enable the monitoring functionality.
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;grafana&quot;>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/> on how to configure and enable the monitoring functionality.
         </target>
       </trans-unit>
       <trans-unit id="6a0ed4bd7b7add2a6febf7adf58d8cde5e421418" datatype="html">
@@ -2596,8 +2480,8 @@
           <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc> "/> on how to add dashboards to Grafana.
         </source>
         <target>Grafana Dashboard doesn't exist. Please refer to 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;grafana&quot;></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc> "/> on how to add dashboards to Grafana.
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;grafana&quot;>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/> on how to add dashboards to Grafana.
         </target>
       </trans-unit>
       <trans-unit id="4e11830040bd64804a0555de76f291d5832772d4" datatype="html">
@@ -2633,9 +2517,9 @@
         </source>
         <target>Are you sure that you want to 
           <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/>
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ itemNames[0] }}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{ itemNames[0] }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>?
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ itemNames[0] }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>?
         </target>
       </trans-unit>
       <trans-unit id="549859e511ba5af0ea03fcaa620c472f08038969" datatype="html">
@@ -2744,10 +2628,6 @@
         <source>Dashboard</source>
         <target>Dasbor</target>
       </trans-unit>
-      <trans-unit id="2cc3ecb16e348fcf2f2fbfd2f997d4d22f37475b" datatype="html">
-        <source>Inventory</source>
-        <target>Inventory</target>
-      </trans-unit>
       <trans-unit id="624f596cc3320f5e0a0d7c7346c364e5af9bdd8c" datatype="html">
         <source>Monitors</source>
         <target>Monitor</target>
@@ -2819,9 +2699,9 @@
           <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>
         </source>
         <target>Signed in as 
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ username }}"/>
-          <x id="INTERPOLATION" equiv-text="{{ username }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION" equiv-text="{{ username }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
         </target>
       </trans-unit>
       <trans-unit id="5d22c795daf43877a5f708dca2bccd549eb0471d" datatype="html">
@@ -3010,10 +2890,10 @@
         </source>
         <target>For an overview of 
           <x id="INTERPOLATION" equiv-text="{{ groupTitle|lowercase }}"/> widgets click 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;dashboard-landing-page-{{ groupTitle|lowercase }}&quot;
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;dashboard-landing-page-{{ groupTitle|lowercase }}&quot;
             docText=&quot;here&quot;
-            i18n-docText></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc>"/>
+            i18n-docText>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/>
         </target>
       </trans-unit>
       <trans-unit id="7520247697658334435" datatype="html">
@@ -3140,10 +3020,10 @@
           <x id="CLOSE_LINK" equiv-text="</a> "/> for more details.
         </source>
         <target>
-          <x id="START_ITALIC_TEXT" equiv-text="<i [ngClass]=&quot;[icons.infoCircle]&quot;></i>"/>
-          <x id="CLOSE_ITALIC_TEXT" equiv-text="</i> "/> See 
-          <x id="START_LINK" equiv-text="<a routerLink=&quot;/logs&quot;>"/>Logs
-          <x id="CLOSE_LINK" equiv-text="</a> "/> for more details.
+          <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i [ngClass]=&quot;[icons.infoCircle]&quot;>"/>
+          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a routerLink=&quot;/logs&quot;>"/>Logs
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
         </target>
       </trans-unit>
       <trans-unit id="3474944817987674409" datatype="html">
@@ -3219,7 +3099,7 @@
           <x id="ICU" equiv-text="{editMode, select, true {Edit} other {Add}} "/> Matcher
         </source>
         <target>
-          <x id="ICU" equiv-text="{editMode, select, true {Edit} other {Add}} "/> Matcher
+          <x id="ICU" equiv-text="{editMode, select, true {Edit} other {Add}}"/> Matcher
         </target>
       </trans-unit>
       <trans-unit id="9c25e04f554875dc2625a78ba0fc56c6010cd0d3" datatype="html">
@@ -3283,9 +3163,9 @@
         </source>
         <target>You are about to apply a 
           <x id="ICU" equiv-text="{deep, select, true {deep } other {}}"/>scrub to the OSD(s): 
-          <x id="START_TAG_STRONG" equiv-text="<strong>{{ selected | join }}"/>
-          <x id="INTERPOLATION" equiv-text="{{ selected | join }}</strong>"/>
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong>"/>.
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
+          <x id="INTERPOLATION" equiv-text="{{ selected | join }}"/>
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>.
         </target>
       </trans-unit>
       <trans-unit id="5251a4355cece3075db43f15d69a24a0f8485707" datatype="html">
@@ -3533,7 +3413,7 @@
         </source>
         <target>Number of devices: 
           <x id="INTERPOLATION" equiv-text="{{ filteredDevices.length }}"/>. Raw capacity: 
-          <x id="INTERPOLATION_1" equiv-text="              {{ capacity | di"/>.
+          <x id="INTERPOLATION_1" equiv-text="{{ capacity | dimlessBinary }}"/>.
         </target>
       </trans-unit>
       <trans-unit id="1961811273151129466" datatype="html">
@@ -3619,14 +3499,6 @@
       <trans-unit id="4265406815683383218" datatype="html">
         <source>Allows only operations that do not modify the server</source>
         <target>Izinkan hanya untuk operasi yang tidak mengubah server</target>
-      </trans-unit>
-      <trans-unit id="8698816728892760483" datatype="html">
-        <source>Does not allow read or write operations, but allows any other operation</source>
-        <target>Tidak diizinkan untuk operasi baca dan tulis, namun izinkan operasi lainnya</target>
-      </trans-unit>
-      <trans-unit id="1921203953053799929" datatype="html">
-        <source>Does not allow read, write, or any operation that modifies file attributes or directory content</source>
-        <target>Does not allow read, write, or any operation that modifies file attributes or directory content</target>
       </trans-unit>
       <trans-unit id="990071930378308183" datatype="html">
         <source>Allows no access at all</source>
@@ -4640,7 +4512,7 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
         </source>
         <target>
           <x id="INTERPOLATION" equiv-text="{{ actionLabels.CREATE | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="                      {{ subuse"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ subuserLabel | upperFirst }}"/>
         </target>
       </trans-unit>
       <trans-unit id="128d6efb51d9ddc7c0cc695a2deeca5b9523f6e4" datatype="html">
@@ -4662,7 +4534,7 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
         </source>
         <target>
           <x id="INTERPOLATION" equiv-text="{{ actionLabels.CREATE | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="                      {{ s3ke"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ s3keyLabel | upperFirst }}"/>
         </target>
       </trans-unit>
       <trans-unit id="6ddb5e991a3ecd2659fb520bc5acc81b67e08ddd" datatype="html">
@@ -4692,7 +4564,7 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
         </source>
         <target>
           <x id="INTERPOLATION" equiv-text="{{ actionLabels.ADD | titlecase }}"/>
-          <x id="INTERPOLATION_1" equiv-text="                      {{ capabilit"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ capabilityLabel | upperFirst }}"/>
         </target>
       </trans-unit>
       <trans-unit id="1d01eccdda47fc907c5be35bcb16d2dcd02b0270" datatype="html">
@@ -4771,10 +4643,6 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
         <source>Objects</source>
         <target>Objek</target>
       </trans-unit>
-      <trans-unit id="7683612458321319524" datatype="html">
-        <source>The bucket list data might be stale. If needed, you can manually reload it.</source>
-        <target>The bucket list data might be stale. If needed, you can manually reload it.</target>
-      </trans-unit>
       <trans-unit id="4349284625269221231" datatype="html">
         <source>bucket</source>
         <target>buket</target>
@@ -4830,10 +4698,6 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
       <trans-unit id="85a7f52e6813e0535026f61a2d6e8adc8a1d006a" datatype="html">
         <source>Bucket names cannot be formatted as IP address.</source>
         <target>Bucket names cannot be formatted as IP address.</target>
-      </trans-unit>
-      <trans-unit id="05279898e09b27734db683a132f3dbaf177f1268" datatype="html">
-        <source>Bucket names can only contain lowercase letters, numbers, and hyphens.</source>
-        <target>Bucket names can only contain lowercase letters, numbers, and hyphens.</target>
       </trans-unit>
       <trans-unit id="cf5c849977e0be2dbfc862d044edd323bfd9fb77" datatype="html">
         <source>Bucket names must be 3 to 63 characters long.</source>
@@ -4957,12 +4821,12 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
           <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
         </source>
         <target>To restore  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
           <x id="INTERPOLATION" equiv-text="{{ imageSpec }}"/>@
-          <x id="INTERPOLATION_1" equiv-text="{{ imageId }}</kbd>"/>
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>,  type the image's new name and click  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Restore
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
+          <x id="INTERPOLATION_1" equiv-text="{{ imageId }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>,  type the image's new name and click  
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Restore
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
       </trans-unit>
       <trans-unit id="41307dd56fea669eed72e12a6c23af275f6bfd82" datatype="html">
@@ -4981,10 +4845,10 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
           <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>. 
         </source>
         <target>To purge, select  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>All
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>  or one pool and click  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Purge
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>. 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>All
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>  or one pool and click  
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Purge
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>. 
         </target>
       </trans-unit>
       <trans-unit id="55a4f598a4894b7fd5cb88f0ffd3c37ad009dd70" datatype="html">
@@ -5012,11 +4876,11 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
           <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
         </source>
         <target>To move 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ imageSpecStr }}</kbd>"/>
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/> to trash, click 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Move
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ imageSpecStr }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> to trash, click 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Move
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
         </target>
       </trans-unit>
       <trans-unit id="88f27d390844aad53b4240360e928156c5f0d326" datatype="html">
@@ -5297,8 +5161,8 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
           <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> enabled
         </source>
         <target>Only available for RBD images with 
-          <x id="START_TAG_STRONG" equiv-text="<strong>"/>fast-diff
-          <x id="CLOSE_TAG_STRONG" equiv-text="</strong> "/> enabled
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>fast-diff
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> enabled
         </target>
       </trans-unit>
       <trans-unit id="03cc5b14b0a20d075e9009ff021f4f1660ba348a" datatype="html">
@@ -5471,8 +5335,8 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
           <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc> "/> on how to configure and enable the iSCSI Targets management functionality.
         </source>
         <target>Please consult the 
-          <x id="START_TAG_CD_DOC" equiv-text="<cd-doc section=&quot;iscsi&quot;></cd-doc>"/>
-          <x id="CLOSE_TAG_CD_DOC" equiv-text="</cd-doc> "/> on how to configure and enable the iSCSI Targets management functionality.
+          <x id="START_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="<cd-doc section=&quot;iscsi&quot;>"/>
+          <x id="CLOSE_TAG_CD_DOC" ctype="x-cd_doc" equiv-text="</cd-doc>"/> on how to configure and enable the iSCSI Targets management functionality.
         </target>
       </trans-unit>
       <trans-unit id="3b301d0044f62c92af0da53d7aaca52a436a547d" datatype="html">
@@ -5833,8 +5697,8 @@ set ...'. Pilihan ini harus dikonfigurasi melalui ceph.conf atau CLI.</target>
           <x id="INTERPOLATION_1" equiv-text="MinSize() }} to {{"/> is usable.
         </source>
         <target>The size specified is out of range. A value from 
-          <x id="INTERPOLATION" equiv-text="                {{"/> to 
-          <x id="INTERPOLATION_1" equiv-text="MinSize() }} to {{"/> is usable.
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/> to 
+          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/> is usable.
         </target>
       </trans-unit>
       <trans-unit id="dda6196ffab88c1825f44a565c7b34e246e7e12f" datatype="html">
@@ -6616,7 +6480,7 @@ pada hos yang sama. Aturan CRUSH seperti step chooseleaf hos akan digunakan untu
           <x id="ICU" equiv-text="{mode, select, edit {Edit} other {Add}} "/> pool mirror peer
         </source>
         <target>
-          <x id="ICU" equiv-text="{mode, select, edit {Edit} other {Add}} "/> pool mirror peer
+          <x id="ICU" equiv-text="{mode, select, edit {Edit} other {Add}}"/> pool mirror peer
         </target>
       </trans-unit>
       <trans-unit id="59ca65ece457429d90104ede4674965f62edbabe" datatype="html">
@@ -6629,12 +6493,12 @@ pada hos yang sama. Aturan CRUSH seperti step chooseleaf hos akan digunakan untu
           <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
         </source>
         <target>
-          <x id="ICU" equiv-text="{mode, select, edit {Edit} other {Add}} "/> the pool mirror peer attributes for pool 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ poolName }}</kbd>"/>
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/> and click 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Submit
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
+          <x id="ICU" equiv-text="{mode, select, edit {Edit} other {Add}}"/> the pool mirror peer attributes for pool 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> and click 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Submit
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
       </trans-unit>
       <trans-unit id="d3cc964811f852a168f4a2d5daa59068abc5cf53" datatype="html">
@@ -6694,11 +6558,11 @@ pada hos yang sama. Aturan CRUSH seperti step chooseleaf hos akan digunakan untu
           <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
         </source>
         <target>To edit the mirror mode for pool  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>
-          <x id="INTERPOLATION" equiv-text="{{ poolName }}</kbd>"/>
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>, select a new mode from the list and click  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Update
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
+          <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>, select a new mode from the list and click  
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Update
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
       </trans-unit>
       <trans-unit id="32ca348ef926b0a6a7a780b8b64c3a8239895cec" datatype="html">
@@ -6715,8 +6579,8 @@ pada hos yang sama. Aturan CRUSH seperti step chooseleaf hos akan digunakan untu
           <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
         </source>
         <target>Edit the site name and click  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Update
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Update
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
       </trans-unit>
       <trans-unit id="660f97cd3188f8a04bd03b79e703fec72c6df04c" datatype="html">
@@ -6737,8 +6601,8 @@ pada hos yang sama. Aturan CRUSH seperti step chooseleaf hos akan digunakan untu
           <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
         </source>
         <target>To import a bootstrap token which was created by a peer site cluster, provide the local site's name, select which pools will have mirroring enabled, provide the generated token, and click 
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Import
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Import
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
       </trans-unit>
       <trans-unit id="9200e09686136a1d42adfb89c12fbfef2deea125" datatype="html">
@@ -6771,8 +6635,8 @@ pada hos yang sama. Aturan CRUSH seperti step chooseleaf hos akan digunakan untu
           <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
         </source>
         <target>To create a bootstrap token which can be imported by a peer site cluster, provide the local site's name, select which pools will have mirroring enabled, and click  
-          <x id="START_TAG_KBD" equiv-text="<kbd>"/>Generate
-          <x id="CLOSE_TAG_KBD" equiv-text="</kbd>"/>.
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Generate
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
       </trans-unit>
       <trans-unit id="1b258b258b4cc475ceb2871305b61756b0134f4a" datatype="html">
