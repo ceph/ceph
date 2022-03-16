@@ -28,9 +28,9 @@ beanstalkc3==0.4.0
     # via teuthology
 boto==2.49.0
     # via teuthology
-boto3==1.18.15
+boto3==1.21.20
     # via teuthology
-botocore==1.21.15
+botocore==1.24.20
     # via
     #   boto3
     #   s3transfer
