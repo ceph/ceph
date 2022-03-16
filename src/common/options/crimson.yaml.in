@@ -32,7 +32,7 @@ options:
   type: size
   desc: Total size to use for SegmentManager block file if created
   level: dev
-  default: 100_G
+  default: 50_G
 - name: seastore_block_create
   type: bool
   level: dev
