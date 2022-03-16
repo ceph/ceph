@@ -179,12 +179,18 @@ def kill_processes(run_name, pids=None):
         log.info("No teuthology processes running")
     else:
         log.info("Killing Pids: " + str(to_kill))
+        may_need_sudo = \
+            psutil.Process(int(pid)).username() != getpass.getuser()
+        if may_need_sudo:
+            sudo_works = subprocess.Popen(['sudo', '-n', 'true']).wait() == 0
+            if not sudo_works:
+                log.debug("Passwordless sudo not configured; not using sudo")
+        use_sudo = may_need_sudo and sudo_works
         for pid in to_kill:
             args = ['kill', str(pid)]
             # Don't attempt to use sudo if it's not necessary
-            proc_user = psutil.Process(int(pid)).username()
-            if proc_user != getpass.getuser():
-                args.insert(0, 'sudo')
+            if use_sudo:
+                args = ['sudo', '-n'] + args
             subprocess.call(args)
 
 
