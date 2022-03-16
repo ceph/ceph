@@ -277,7 +277,7 @@ pyyaml==5.4.1
     #   cliff
     #   openstacksdk
     #   oslo.config
-requests==2.26.0
+requests==2.27.1
     # via
     #   teuthology
     #   apache-libcloud
