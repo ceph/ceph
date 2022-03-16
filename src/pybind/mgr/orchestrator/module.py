@@ -57,6 +57,8 @@ class ServiceType(enum.Enum):
     grafana = 'grafana'
     node_exporter = 'node-exporter'
     prometheus = 'prometheus'
+    loki = 'loki'
+    promtail = 'promtail'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'

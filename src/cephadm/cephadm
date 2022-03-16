@@ -49,6 +49,8 @@ DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
 DEFAULT_IMAGE_IS_MASTER = True
 DEFAULT_IMAGE_RELEASE = 'quincy'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
+DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
+DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
@@ -426,6 +428,8 @@ class Monitoring(object):
         'node-exporter': [9100],
         'grafana': [3000],
         'alertmanager': [9093, 9094],
+        'loki': [3100],
+        'promtail': [9080]
     }
 
     components = {
@@ -439,6 +443,28 @@ class Monitoring(object):
             ],
             'config-json-files': [
                 'prometheus.yml',
+            ],
+        },
+        'loki': {
+            'image': DEFAULT_LOKI_IMAGE,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': [
+                '--config.file=/etc/loki/loki.yml',
+            ],
+            'config-json-files': [
+                'loki.yml'
+            ],
+        },
+        'promtail': {
+            'image': DEFAULT_PROMTAIL_IMAGE,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': [
+                '--config.file=/etc/promtail/promtail.yml',
+            ],
+            'config-json-files': [
+                'promtail.yml',
             ],
         },
         'node-exporter': {
@@ -481,9 +507,9 @@ class Monitoring(object):
     def get_version(ctx, container_id, daemon_type):
         # type: (CephadmContext, str, str) -> str
         """
-        :param: daemon_type Either "prometheus", "alertmanager" or "node-exporter"
+        :param: daemon_type Either "prometheus", "alertmanager", "loki", "promtail" or "node-exporter"
         """
-        assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter')
+        assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter', 'loki', 'promtail')
         cmd = daemon_type.replace('-', '_')
         code = -1
         err = ''
@@ -2340,7 +2366,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
         # set ip and port to bind to for nodeexporter,alertmanager,prometheus
-        if daemon_type != 'grafana':
+        if daemon_type not in ['grafana', 'loki', 'promtail']:
             ip = ''
             port = Monitoring.port_map[daemon_type][0]
             if 'meta_json' in ctx and ctx.meta_json:
@@ -2357,6 +2383,10 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                 r += ['--cluster.peer={}'.format(peer)]
             # some alertmanager, by default, look elsewhere for a config
             r += ['--config.file=/etc/alertmanager/alertmanager.yml']
+        if daemon_type == 'loki':
+            r += ['--config.file=/etc/loki/loki.yml']
+        if daemon_type == 'promtail':
+            r += ['--config.file=/etc/promtail/promtail.yml']
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
         r += nfs_ganesha.get_daemon_args()
@@ -2427,6 +2457,18 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             config_dir = 'etc/alertmanager'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'promtail':
+            data_dir_root = get_data_dir(fsid, ctx.data_dir,
+                                         daemon_type, daemon_id)
+            config_dir = 'etc/promtail'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'loki':
+            data_dir_root = get_data_dir(fsid, ctx.data_dir,
+                                         daemon_type, daemon_id)
+            config_dir = 'etc/loki'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
 
         # populate the config directory for the component from the config-json
         if 'files' in config_json:
@@ -2612,9 +2654,17 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
 
     if daemon_type in Monitoring.components and daemon_id:
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
+        log_dir = get_log_dir(fsid, ctx.log_dir)
         if daemon_type == 'prometheus':
             mounts[os.path.join(data_dir, 'etc/prometheus')] = '/etc/prometheus:Z'
             mounts[os.path.join(data_dir, 'data')] = '/prometheus:Z'
+        elif daemon_type == 'loki':
+            mounts[os.path.join(data_dir, 'etc/loki')] = '/etc/loki:Z'
+            mounts[os.path.join(data_dir, 'data')] = '/loki:Z'
+        elif daemon_type == 'promtail':
+            mounts[os.path.join(data_dir, 'etc/promtail')] = '/etc/promtail:Z'
+            mounts[log_dir] = '/var/log/ceph:z'
+            mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
         elif daemon_type == 'node-exporter':
             mounts['/proc'] = '/host/proc:ro'
             mounts['/sys'] = '/host/sys:ro'
@@ -5236,6 +5286,10 @@ def extract_uid_gid_monitoring(ctx, daemon_type):
         uid, gid = 65534, 65534
     elif daemon_type == 'grafana':
         uid, gid = extract_uid_gid(ctx, file_path='/var/lib/grafana')
+    elif daemon_type == 'loki':
+        uid, gid = extract_uid_gid(ctx, file_path='/etc/loki')
+    elif daemon_type == 'promtail':
+        uid, gid = extract_uid_gid(ctx, file_path='/etc/promtail')
     elif daemon_type == 'alertmanager':
         uid, gid = extract_uid_gid(ctx, file_path=['/etc/alertmanager', '/etc/prometheus'])
     else:
@@ -5881,7 +5935,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                         seen_versions[image_id] = version
                                 elif daemon_type in ['prometheus',
                                                      'alertmanager',
-                                                     'node-exporter']:
+                                                     'node-exporter',
+                                                     'loki',
+                                                     'promtail']:
                                     version = Monitoring.get_version(ctx, container_id, daemon_type)
                                     seen_versions[image_id] = version
                                 elif daemon_type == 'haproxy':
