@@ -8,9 +8,9 @@ set(mgr_module_install_excludes
 
 add_subdirectory(dashboard)
 
-# if(WITH_MGR_ROOK_CLIENT)
-#   add_subdirectory(rook)
-# endif()
+if(WITH_MGR_ROOK_CLIENT)
+  add_subdirectory(rook)
+endif()
 if(WITH_TESTS)
   include(AddCephTest)
   add_tox_test(mgr ${CMAKE_CURRENT_SOURCE_DIR} TOX_ENVS py3 py37 mypy flake8 jinjalint nooptional)

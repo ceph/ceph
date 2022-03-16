@@ -779,6 +779,7 @@ $DAEMONOPTS
         mds root ino gid = `id -g`
         $(format_conf "${extra_conf}")
 [mgr]
+        mgr disabled modules = rook
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         cephadm path = $CEPH_ROOT/src/cephadm/cephadm
@@ -813,7 +814,6 @@ $COSDSHORT
         $(format_conf "${extra_conf}")
 [mon]
         mon_data_avail_crit = 1
-        mgr disabled modules = rook
         mgr initial modules = $mgr_modules
 $DAEMONOPTS
 $CMONDEBUG

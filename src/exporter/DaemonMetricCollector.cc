@@ -23,11 +23,11 @@ void DaemonMetricCollector::request_loop(boost::asio::deadline_timer &timer) {
     request_loop(timer);
   });
 }
+
 void DaemonMetricCollector::main() {
   stats_period = 5; // TODO: let's do 5 for now and expose this to change in the future
   boost::asio::io_service io;
   boost::asio::deadline_timer timer(io, boost::posix_time::seconds(stats_period));
-  std::cout << "before request" << std::endl;
   request_loop(timer);
   io.run();
 }
@@ -137,9 +137,10 @@ void DaemonMetricCollector::send_requests() {
 }
 
 void DaemonMetricCollector::update_sockets() {
-  std::string path = "/tmp/ceph-asok.7MK7oH/";
+  std::string path = "/tmp/ceph-asok.Qq4nS2";
   for (const auto & entry : std::filesystem::directory_iterator(path)) {
     std::string daemon_socket_name = entry.path().filename().string();
+    std::cout << "Got socket: " << daemon_socket_name << std::endl;
     // remove .asok
     std::string daemon_name = daemon_socket_name.substr(0, daemon_socket_name.size() - 5);
     if (clients.find(daemon_name) == clients.end()) {
@@ -147,4 +148,13 @@ void DaemonMetricCollector::update_sockets() {
       clients.insert({daemon_name, std::move(sock)});
     }
   }
+}
+
+DaemonMetricCollector *_collector_instance = nullptr;
+
+DaemonMetricCollector& collector_instance() {
+  if (_collector_instance == nullptr) {
+    _collector_instance = new DaemonMetricCollector();
+  }
+  return *_collector_instance;
 }

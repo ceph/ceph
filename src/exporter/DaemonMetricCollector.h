@@ -28,3 +28,5 @@ private:
   void send_requests();
   void start_mgr_connection();
 };
+
+DaemonMetricCollector& collector_instance();
