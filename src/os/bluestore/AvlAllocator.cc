@@ -445,27 +445,27 @@ void AvlAllocator::_foreach(
 
 void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
-  if (!length)
-    return;
-  std::lock_guard l(lock);
-  ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
                  << std::dec << dendl;
+  if (!length)
+    return;
+  std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(device_size));
   _add_to_tree(offset, length);
 }
 
 void AvlAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
-  if (!length)
-    return;
-  std::lock_guard l(lock);
-  ceph_assert(offset + length <= uint64_t(device_size));
   ldout(cct, 10) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
                  << std::dec << dendl;
+  if (!length)
+    return;
+  std::lock_guard l(lock);
+  ceph_assert(offset + length <= uint64_t(device_size));
   _remove_from_tree(offset, length);
 }
 
