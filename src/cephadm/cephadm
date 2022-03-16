@@ -6873,6 +6873,10 @@ def command_rm_daemon(ctx):
 
     call(ctx, ['systemctl', 'stop', unit_name],
          verbosity=CallVerbosity.DEBUG)
+
+    if daemon_type == 'mon':
+        call(ctx, ['ceph', 'mon', 'rm', daemon_id],
+            verbosity=CallVerbosity.DEBUG)
     call(ctx, ['systemctl', 'reset-failed', unit_name],
          verbosity=CallVerbosity.DEBUG)
     call(ctx, ['systemctl', 'disable', unit_name],
