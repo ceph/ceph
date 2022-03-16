@@ -873,7 +873,7 @@ class MDCache {
   void decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, MDSContext::vec& finished);
 
   void encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl);
-  void decode_replica_stray(CDentry *&straydn, const bufferlist &bl, mds_rank_t from);
+  void decode_replica_stray(CDentry *&straydn, CInode **in, const bufferlist &bl, mds_rank_t from);
 
   // -- namespace --
   void encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl);
