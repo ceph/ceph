@@ -28,7 +28,7 @@ constexpr uint8_t binary_key_prefix = 0x80;
 
 struct key_type {
   rgw_bucket_shard bs;
-  std::optional<uint64_t> gen;
+  uint64_t gen;
 };
 
 void encode(const key_type& k, bufferlist& bl, uint64_t f=0)
@@ -47,8 +47,7 @@ void decode(key_type& k, bufferlist::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-std::string encode_key(const rgw_bucket_shard& bs,
-                       std::optional<uint64_t> gen)
+std::string encode_key(const rgw_bucket_shard& bs, uint64_t gen)
 {
   using ceph::encode;
   const auto key = key_type{bs, gen};
@@ -58,9 +57,7 @@ std::string encode_key(const rgw_bucket_shard& bs,
   return bl.to_str();
 }
 
-int decode_key(std::string encoded,
-               rgw_bucket_shard& bs,
-               std::optional<uint64_t>& gen)
+int decode_key(std::string encoded, rgw_bucket_shard& bs, uint64_t& gen)
 {
   using ceph::decode;
   key_type key;
