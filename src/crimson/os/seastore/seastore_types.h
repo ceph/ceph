@@ -735,7 +735,7 @@ enum class placement_hint_t {
 
 std::ostream& operator<<(std::ostream& out, placement_hint_t h);
 
-enum class device_type_t {
+enum alignas(4) device_type_t : uint_fast8_t {
   NONE = 0,
   SEGMENTED, // i.e. Hard_Disk, SATA_SSD, NAND_NVME
   RANDOM_BLOCK, // i.e. RANDOM_BD
