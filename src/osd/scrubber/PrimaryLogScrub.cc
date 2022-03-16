@@ -548,7 +548,6 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
 
     ++num_digest_updates_pending;
     ctx->register_on_success([this]() {
-      dout(20) << "updating scrub digest " << num_digest_updates_pending << dendl;
       if ((num_digest_updates_pending >= 1) && (--num_digest_updates_pending == 0)) {
 	m_osds->queue_scrub_digest_update(m_pl_pg, m_pl_pg->is_scrub_blocking_ops());
       }
