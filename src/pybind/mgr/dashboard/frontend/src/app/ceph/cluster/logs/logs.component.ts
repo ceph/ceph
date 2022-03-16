@@ -70,8 +70,7 @@ export class LogsComponent implements OnInit, OnDestroy {
 
   abstractFilters(): any {
     const priority = this.priority;
-    const key = this.search.toLowerCase().replace(/,/g, '');
-
+    const key = this.search.toLowerCase();
     let yearMonthDay: string;
     if (this.selectedDate) {
       const m = this.selectedDate.month;
