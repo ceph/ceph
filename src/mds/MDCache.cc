@@ -10940,7 +10940,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
 void MDCache::encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl)
 {
   ceph_assert(straydn->get_num_auth_pins());
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   uint64_t features = mds->mdsmap->get_up_features();
   encode_replica_inode(get_myin(), who, bl, features);
   encode_replica_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), who, bl);
@@ -10948,15 +10948,18 @@ void MDCache::encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist&
   encode_replica_inode(straydn->get_dir()->inode, who, bl, features);
   encode_replica_dir(straydn->get_dir(), who, bl);
   encode_replica_dentry(straydn, who, bl);
+  if (!straydn->get_projected_linkage()->is_null()) {
+    encode_replica_inode(straydn->get_projected_linkage()->get_inode(), who, bl, features);
+  }
   ENCODE_FINISH(bl);
 }
    
-void MDCache::decode_replica_stray(CDentry *&straydn, const bufferlist &bl, mds_rank_t from)
+void MDCache::decode_replica_stray(CDentry *&straydn, CInode **in, const bufferlist &bl, mds_rank_t from)
 {
   MDSContext::vec finished;
   auto p = bl.cbegin();
 
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   CInode *mdsin = nullptr;
   decode_replica_inode(mdsin, p, NULL, finished);
   CDir *mdsdir = nullptr;
@@ -10969,6 +10972,9 @@ void MDCache::decode_replica_stray(CDentry *&straydn, const bufferlist &bl, mds_
   decode_replica_dir(straydir, p, strayin, from, finished);
 
   decode_replica_dentry(straydn, p, straydir, finished);
+  if (struct_v >= 2 && in) {
+    decode_replica_inode(*in, p, straydn, finished);
+  }
   if (!finished.empty())
     mds->queue_waiters(finished);
   DECODE_FINISH(p);
@@ -11200,8 +11206,9 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 {
   // straydn
   CDentry *straydn = nullptr;
+  CInode *strayin = nullptr;
   if (m->straybl.length())
-    decode_replica_stray(straydn, m->straybl, mds_rank_t(m->get_source().num()));
+    decode_replica_stray(straydn, &strayin, m->straybl, mds_rank_t(m->get_source().num()));
 
   CDir *dir = get_dirfrag(m->get_dirfrag());
   if (!dir) {
