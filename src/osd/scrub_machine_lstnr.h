@@ -49,6 +49,8 @@ struct ScrubMachineListener {
 
   virtual ~ScrubMachineListener(){};
 
+  [[nodiscard]] virtual bool is_primary() const = 0;
+
   virtual bool select_range() = 0;
 
   /// walk the log to find the latest update that affects our chunk
