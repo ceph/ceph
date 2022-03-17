@@ -936,12 +936,12 @@ options:
 - name: mon_osd_down_out_subtree_limit
   type: str
   level: advanced
-  desc: do not automatically mark OSDs 'out' if an entire subtree of this size is
+  desc: do not automatically mark OSDs 'out' if an entire subtree of this type is
     down
-  fmt_desc: The smallest :term:`CRUSH` unit type that Ceph will **not**
+  fmt_desc: The smallest :term:`CRUSH` bucket type that Ceph will **not**
               automatically mark out. For instance, if set to ``host`` and if
               all OSDs of a host are down, Ceph will not automatically mark out
-              these OSDs.
+              these OSDs. Disable this limit check by setting to empty string.
   default: rack
   services:
   - mon
