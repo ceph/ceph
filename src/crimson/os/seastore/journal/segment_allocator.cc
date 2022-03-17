@@ -582,7 +582,63 @@ RecordSubmitter::submit(record_t&& record)
 RecordSubmitter::open_ret
 RecordSubmitter::open()
 {
-  return segment_allocator.open();
+  return segment_allocator.open(
+  ).safe_then([this](journal_seq_t ret) {
+    LOG_PREFIX(RecordSubmitter::open);
+    DEBUG("{} register metrics", get_name());
+    stats = {};
+    namespace sm = seastar::metrics;
+    std::vector<sm::label_instance> label_instances;
+    label_instances.push_back(sm::label_instance("submitter", get_name()));
+    metrics.add_group(
+      "journal",
+      {
+        sm::make_counter(
+          "record_num",
+          stats.record_batch_stats.num_io,
+          sm::description("total number of records submitted"),
+          label_instances
+        ),
+        sm::make_counter(
+          "record_batch_num",
+          stats.record_batch_stats.num_io_grouped,
+          sm::description("total number of records batched"),
+          label_instances
+        ),
+        sm::make_counter(
+          "io_num",
+          stats.io_depth_stats.num_io,
+          sm::description("total number of io submitted"),
+          label_instances
+        ),
+        sm::make_counter(
+          "io_depth_num",
+          stats.io_depth_stats.num_io_grouped,
+          sm::description("total number of io depth"),
+          label_instances
+        ),
+        sm::make_counter(
+          "record_group_padding_bytes",
+          stats.record_group_padding_bytes,
+          sm::description("bytes of metadata padding when write record groups"),
+          label_instances
+        ),
+        sm::make_counter(
+          "record_group_metadata_bytes",
+          stats.record_group_metadata_bytes,
+          sm::description("bytes of raw metadata when write record groups"),
+          label_instances
+        ),
+        sm::make_counter(
+          "record_group_data_bytes",
+          stats.record_group_data_bytes,
+          sm::description("bytes of data when write record groups"),
+          label_instances
+        ),
+      }
+    );
+    return ret;
+  });
 }
 
 RecordSubmitter::close_ertr::future<>
@@ -596,6 +652,7 @@ RecordSubmitter::close()
   assert(!wait_available_promise.has_value());
   has_io_error = false;
   assert(!wait_unfull_flush_promise.has_value());
+  metrics.clear();
   return segment_allocator.close();
 }
 
@@ -654,6 +711,7 @@ void RecordSubmitter::account_submission(
     (size.get_mdlength() - size.get_raw_mdlength());
   stats.record_group_metadata_bytes += size.get_raw_mdlength();
   stats.record_group_data_bytes += size.dlength;
+  stats.record_batch_stats.increment(num);
 }
 
 void RecordSubmitter::finish_submit_batch(

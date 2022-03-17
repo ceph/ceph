@@ -46,15 +46,10 @@ SegmentedAllocator::Writer::write_record(
   assert(!record.deltas.size());
 
   // account transactional ool writes before write()
-  // TODO: drop the incorrect size and fix the metrics
-  auto record_size = record_group_size_t(
-      record.size, segment_allocator.get_block_size());
   auto& stats = t.get_ool_write_stats();
   stats.extents.num += extents.size();
-  stats.extents.bytes += record_size.dlength;
-  stats.header_raw_bytes += record_size.get_raw_mdlength();
-  stats.header_bytes += record_size.get_mdlength();
-  stats.data_bytes += record_size.dlength;
+  stats.extents.bytes += record.size.dlength;
+  stats.md_bytes += record.size.get_raw_mdlength();
   stats.num_records += 1;
 
   return record_submitter.submit(std::move(record)
