@@ -934,13 +934,15 @@ std::optional<uint64_t> RADOS::get_pool_alignment(int64_t pool_id)
 }
 
 void RADOS::list_pools(std::unique_ptr<LSPoolsComp> c) {
-  impl->objecter->with_osdmap(
-    [&](OSDMap& o) {
-      std::vector<std::pair<std::int64_t, std::string>> v;
-      for (auto p : o.get_pools())
-	v.push_back(std::make_pair(p.first, o.get_pool_name(p.first)));
-      ca::dispatch(std::move(c), std::move(v));
-    });
+  ca::dispatch(std::move(c),
+	       impl->objecter->with_osdmap(
+		 [&](OSDMap& o) {
+		   std::vector<std::pair<std::int64_t, std::string>> v;
+		   for (auto p : o.get_pools())
+		     v.push_back(std::make_pair(p.first,
+						o.get_pool_name(p.first)));
+		   return v;
+		 }));
 }
 
 void RADOS::create_pool_snap(std::int64_t pool,
