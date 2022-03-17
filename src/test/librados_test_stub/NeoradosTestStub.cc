@@ -128,6 +128,16 @@ Object::Object() {
   new (&impl) object_t();
 }
 
+Object::Object(const Object& rhs) {
+  static_assert(impl_size >= sizeof(object_t));
+  new (&impl) object_t(*reinterpret_cast<const object_t*>(&rhs.impl));
+}
+
+Object::Object(Object&& rhs) {
+  static_assert(impl_size >= sizeof(object_t));
+  new (&impl) object_t(std::move(*reinterpret_cast<object_t*>(&rhs.impl)));
+}
+
 Object::Object(std::string&& s) {
   static_assert(impl_size >= sizeof(object_t));
   new (&impl) object_t(std::move(s));
@@ -155,6 +165,11 @@ IOContext::IOContext() {
 IOContext::IOContext(const IOContext& rhs) {
   static_assert(impl_size >= sizeof(IOContextImpl));
   new (&impl) IOContextImpl(*reinterpret_cast<const IOContextImpl*>(&rhs.impl));
+}
+
+IOContext::IOContext(IOContext&& rhs) {
+  static_assert(impl_size >= sizeof(IOContextImpl));
+  new (&impl) IOContextImpl(std::move(*reinterpret_cast<const IOContextImpl*>(&rhs.impl)));
 }
 
 IOContext::IOContext(int64_t _pool, std::string_view _ns, std::string_view _key)
@@ -302,6 +317,15 @@ Op::Op() {
   auto& o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o = new librados::TestObjectOperationImpl();
   o->get();
+}
+
+Op::Op(Op&& rhs) {
+  static_assert(Op::impl_size >= sizeof(librados::TestObjectOperationImpl*));
+  auto& o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  auto& p = *reinterpret_cast<librados::TestObjectOperationImpl**>(&rhs.impl);
+  o = p;
+  p = new librados::TestObjectOperationImpl();
+  p->get();
 }
 
 Op::~Op() {
@@ -564,7 +588,7 @@ boost::asio::io_context::executor_type neorados::RADOS::get_executor() const {
   return impl->io_context.get_executor();
 }
 
-void RADOS::execute(const Object& o, const IOContext& ioc, ReadOp&& op,
+void RADOS::execute(Object o, IOContext ioc, ReadOp op,
                     ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,
                     uint64_t* objver, const blkin_trace_info* trace_info) {
   auto io_ctx = impl->get_io_ctx(ioc);
@@ -583,7 +607,7 @@ void RADOS::execute(const Object& o, const IOContext& ioc, ReadOp&& op,
   ceph_assert(r == 0);
 }
 
-void RADOS::execute(const Object& o, const IOContext& ioc, WriteOp&& op,
+void RADOS::execute(Object o, IOContext ioc, WriteOp op,
                     std::unique_ptr<Op::Completion> c, uint64_t* objver,
                     const blkin_trace_info* trace_info) {
   auto io_ctx = impl->get_io_ctx(ioc);
@@ -606,7 +630,7 @@ void RADOS::execute(const Object& o, const IOContext& ioc, WriteOp&& op,
 }
 
 void RADOS::mon_command(std::vector<std::string> command,
-                        const bufferlist& bl,
+                        bufferlist bl,
                         std::string* outs, bufferlist* outbl,
                         std::unique_ptr<Op::Completion> c) {
   auto r = impl->test_rados_client->mon_command(command, bl, outbl, outs);
@@ -614,7 +638,7 @@ void RADOS::mon_command(std::vector<std::string> command,
           (r < 0 ? bs::error_code(-r, osd_category()) : bs::error_code()));
 }
 
-void RADOS::blocklist_add(std::string_view client_address,
+void RADOS::blocklist_add(std::string client_address,
                           std::optional<std::chrono::seconds> expire,
                           std::unique_ptr<SimpleOpComp> c) {
   auto r = impl->test_rados_client->blocklist_add(
