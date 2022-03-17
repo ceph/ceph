@@ -49,6 +49,7 @@
 #include "buffer.h"
 #include "byteorder.h"
 
+#include "common/ceph_time.h"
 #include "common/convenience.h"
 #include "common/error_code.h"
 #include "common/likely.h"
@@ -371,6 +372,19 @@ struct ExtType<T> {
   using type = ceph_le64;
 };
 
+template<typename T>
+requires _denc::is_any_of<T,
+			  float>
+struct ExtType<T> {
+  using type = float;
+};
+
+template<typename T>
+requires _denc::is_any_of<T,
+			  double>
+struct ExtType<T> {
+  using type = double;
+};
 template<>
 struct ExtType<bool> {
   using type = uint8_t;
@@ -630,6 +644,7 @@ inline void denc_lba(uint64_t& v, It& p) {
     shift += 7;
   }
 }
+
 
 
 // ---------------------------------------------------------------------
@@ -1465,6 +1480,46 @@ struct denc_traits<
   }
 };
 
+//
+// std::chrono::duration<Rep, Period>
+//
+#include <chrono>
+template<std::integral T, typename P>
+struct denc_traits<
+  std::chrono::duration<T, P>> {
+private:
+  using signedspan = std::chrono::duration<T, P>;
+
+public:
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = true;
+
+  static void bound_encode(const signedspan& d, size_t& p, uint64_t f = 0) {
+    p += sizeof(int32_t) + sizeof(int32_t);
+  }
+
+  static void encode(const signedspan& d, ceph::buffer::list::contiguous_appender& p,
+        uint64_t f = 0) {
+    using namespace std::chrono;
+    int32_t s = duration_cast<seconds>(d).count();
+    int32_t ns = (duration_cast<nanoseconds>(d) % seconds(1)).count();
+    denc(s, p);
+    denc(ns, p);
+  }
+
+  static void decode(signedspan& d, ceph::buffer::ptr::const_iterator& p, uint64_t f = 0) {
+    using namespace std::chrono;
+    int32_t s;
+    int32_t ns;
+    denc(s, p);
+    denc(ns, p);
+    d = std::chrono::seconds(s) + std::chrono::nanoseconds(ns);
+  }
+};
+
+
 template<>
 struct denc_traits<boost::none_t> {
   static constexpr bool supported = true;
@@ -1885,6 +1940,15 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
   char *_denc_pchar;							\
   uint32_t _denc_u32;							\
   static_assert(compat == 2, "osd_reqid_t cannot be upgraded");		\
+  _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
+  do {
+
+// For converted old Encoding into new DENC. with compat check.
+#define DENC_START_COMPAT_CHECK(v, compat, p)				\
+  __u8 struct_v = v;							\
+  __u8 struct_compat = compat;						\
+  char *_denc_pchar;							\
+  uint32_t _denc_u32;							\
   _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
   do {
 

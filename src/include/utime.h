@@ -179,9 +179,26 @@ public:
 #endif
   }
 
-  DENC(utime_t, v, p) {
-    denc(v.tv.tv_sec, p);
-    denc(v.tv.tv_nsec, p);
+  void bound_encode(size_t& p) const {
+    denc(tv.tv_sec, p);
+    denc(tv.tv_nsec, p);
+  }
+
+  void encode(ceph::buffer::list::contiguous_appender& p) const {
+#if defined(CEPH_LITTLE_ENDIAN)
+    p.append((char *)this, sizeof(__u32) + sizeof(__u32));
+#else
+    denc(tv.tv_sec, p);
+    denc(tv.tv_nsec, p);
+#endif
+  }
+  void decode(ceph::buffer::ptr::const_iterator& p) {
+#if defined(CEPH_LITTLE_ENDIAN)
+    p.get_ptr(sizeof(__u32) + sizeof(__u32)).copy_out(0, sizeof(__u32) + sizeof(__u32), (char *)this);
+#else
+    denc(tv.tv_sec, p);
+    denc(tv.tv_nsec, p);
+#endif
   }
 
   void dump(ceph::Formatter *f) const;

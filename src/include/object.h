@@ -54,6 +54,10 @@ struct object_t {
     name.clear();
   }
 
+  DENC(object_t, v, p) {
+    denc(v.name, p);
+  }
+
   void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
     encode(name, bl);
@@ -73,6 +77,7 @@ struct object_t {
   }
 };
 WRITE_CLASS_ENCODER(object_t)
+WRITE_CLASS_DENC_BOUNDED(object_t)
 
 inline std::ostream& operator<<(std::ostream& out, const object_t& o) {
   return out << o.name;
@@ -192,15 +197,9 @@ struct sobject_t {
     o.snap = t;
   }
 
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(oid, bl);
-    encode(snap, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    decode(oid, bl);
-    decode(snap, bl);
+  DENC(sobject_t, v, p) {
+    denc(v.oid, p);
+    denc(v.snap, p);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_stream("oid") << oid;
@@ -211,7 +210,7 @@ struct sobject_t {
     o.push_back(new sobject_t(object_t("myobject"), 123));
   }
 };
-WRITE_CLASS_ENCODER(sobject_t)
+WRITE_CLASS_DENC_BOUNDED(sobject_t)
 
 inline std::ostream& operator<<(std::ostream& out, const sobject_t &o) {
   return out << o.oid << "/" << o.snap;

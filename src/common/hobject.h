@@ -335,9 +335,10 @@ public:
 
   bool parse(const std::string& s);
 
-  void encode(ceph::buffer::list& bl) const;
-  void decode(ceph::bufferlist::const_iterator& bl);
   void decode(json_spirit::Value& v);
+  void bound_encode(size_t& p) const;
+  void encode(ceph::buffer::list::contiguous_appender& p) const;
+  void decode(ceph::buffer::ptr::const_iterator& p);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<hobject_t*>& o);
   friend int cmp(const hobject_t& l, const hobject_t& r);
@@ -364,7 +365,7 @@ public:
   friend struct ghobject_t;
   friend struct test_hobject_fmt_t;
 };
-WRITE_CLASS_ENCODER(hobject_t)
+WRITE_CLASS_DENC(hobject_t)
 
 namespace std {
 template<> struct hash<hobject_t> {
