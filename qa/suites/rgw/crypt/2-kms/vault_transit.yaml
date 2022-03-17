@@ -13,8 +13,6 @@ overrides:
   rgw:
     client.0:
       use-vault-role: client.0
-  s3tests:
-    with-sse-s3: true
 
 tasks:
 - vault:
