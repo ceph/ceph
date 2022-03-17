@@ -181,12 +181,16 @@ class FSPerfStats(object):
         new_updates = {}
         pending_updates = [v[0] for v in self.client_metadata['in_progress'].values()]
         with self.meta_lock:
-            for rank in rank_set:
-                if rank in pending_updates:
-                    continue
-                tag = str(uuid.uuid4())
-                result = CommandResult(tag)
-                new_updates[tag] = (rank, result)
+            fsmap = self.module.get('fs_map')
+            for fs in fsmap['filesystems']:
+                mdsmap = fs['mdsmap']
+                for rank in rank_set:
+                    gid = mdsmap['up']["mds_{0}".format(rank)]
+                    if gid in pending_updates:
+                        continue                
+                    tag = str(uuid.uuid4())
+                    result = CommandResult(tag)
+                    new_updates[tag] = (gid, result)
             self.client_metadata['in_progress'].update(new_updates)
 
         self.log.debug("updating client metadata from {0}".format(new_updates))
