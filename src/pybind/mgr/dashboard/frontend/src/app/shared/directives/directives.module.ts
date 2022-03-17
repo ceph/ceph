@@ -13,6 +13,7 @@ import { CdFormControlDirective } from './ng-bootstrap-form-validation/cd-form-c
 import { CdFormGroupDirective } from './ng-bootstrap-form-validation/cd-form-group.directive';
 import { CdFormValidationDirective } from './ng-bootstrap-form-validation/cd-form-validation.directive';
 import { PasswordButtonDirective } from './password-button.directive';
+import { SearchHighlightDirective } from './search-highlight.directive';
 import { StatefulTabDirective } from './stateful-tab.directive';
 import { TrimDirective } from './trim.directive';
 
@@ -33,7 +34,8 @@ import { TrimDirective } from './trim.directive';
     CdFormControlDirective,
     CdFormGroupDirective,
     CdFormValidationDirective,
-    AuthStorageDirective
+    AuthStorageDirective,
+    SearchHighlightDirective
   ],
   exports: [
     AutofocusDirective,
@@ -50,7 +52,8 @@ import { TrimDirective } from './trim.directive';
     CdFormControlDirective,
     CdFormGroupDirective,
     CdFormValidationDirective,
-    AuthStorageDirective
+    AuthStorageDirective,
+    SearchHighlightDirective
   ]
 })
 export class DirectivesModule {}

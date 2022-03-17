@@ -1,10 +1,13 @@
 import { Pipe, PipeTransform } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 
 @Pipe({
   name: 'searchHighlight'
 })
 export class SearchHighlightPipe implements PipeTransform {
-  transform(value: string, args: string): string {
+  constructor(private sanitizer: DomSanitizer) {}
+
+  transform(value: string, args: string): any {
     if (!args) {
       return value;
     }
@@ -15,8 +18,8 @@ export class SearchHighlightPipe implements PipeTransform {
     if (!match) {
       return value;
     }
-
-    return value.replace(regex, '<mark>$&</mark>');
+    value = value.replace(regex, '<span style="background-color:yellow;">$&</span>');
+    return this.sanitizer.bypassSecurityTrustHtml(value);
   }
 
   private escapeRegExp(str: string) {
