@@ -78,7 +78,9 @@ class SegmentedAllocator : public ExtentAllocator {
     Writer(std::string name, SegmentProvider& sp, SegmentManager& sm);
     Writer(Writer &&) = default;
 
-    open_ertr::future<> open() final;
+    open_ertr::future<> open() final {
+      return record_submitter.open().discard_result();
+    }
 
     write_iertr::future<> write(
       Transaction& t,
@@ -86,7 +88,7 @@ class SegmentedAllocator : public ExtentAllocator {
 
     stop_ertr::future<> stop() final {
       return write_guard.close().then([this] {
-        return segment_allocator.close();
+        return record_submitter.close();
       }).safe_then([this] {
         write_guard = seastar::gate();
       });

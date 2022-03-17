@@ -84,7 +84,7 @@ class SegmentAllocator {
     return length + written_to > std::size_t(write_capacity);
   }
 
-  // open for write
+  // open for write and generate the correct print name
   using open_ertr = base_ertr;
   using open_ret = open_ertr::future<journal_seq_t>;
   open_ret open();
@@ -105,6 +105,8 @@ class SegmentAllocator {
   close_ertr::future<> close();
 
  private:
+  open_ret do_open();
+
   void reset() {
     current_segment.reset();
     written_to = 0;
@@ -424,6 +426,14 @@ public:
            committed_to <= new_committed_to);
     committed_to = new_committed_to;
   }
+
+  // open for write, generate the correct print name, and register metrics
+  using open_ertr = base_ertr;
+  using open_ret = open_ertr::future<journal_seq_t>;
+  open_ret open();
+
+  using close_ertr = base_ertr;
+  close_ertr::future<> close();
 
 private:
   void update_state();

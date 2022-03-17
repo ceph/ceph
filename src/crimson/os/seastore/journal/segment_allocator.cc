@@ -38,14 +38,11 @@ void SegmentAllocator::set_next_segment_seq(segment_seq_t seq)
   next_segment_seq = seq;
 }
 
-SegmentAllocator::open_ertr::future<journal_seq_t>
-SegmentAllocator::open()
+SegmentAllocator::open_ret
+SegmentAllocator::do_open()
 {
-  LOG_PREFIX(SegmentAllocator::open);
+  LOG_PREFIX(SegmentAllocator::do_open);
   ceph_assert(!current_segment);
-  std::ostringstream oss;
-  oss << "D" << device_id_printer_t{get_device_id()} << "_" << name;
-  print_name = oss.str();
   segment_seq_t new_segment_seq = get_new_segment_seq_and_increment();
   auto new_segment_id = segment_provider.get_segment(
       get_device_id(), new_segment_seq);
@@ -53,7 +50,7 @@ SegmentAllocator::open()
   ).handle_error(
     open_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error in SegmentAllocator::open open"
+      "Invalid error in SegmentAllocator::do_open open"
     }
   ).safe_then([this, FNAME, new_segment_seq](auto sref) {
     // initialize new segment
@@ -97,7 +94,7 @@ SegmentAllocator::open()
     ).handle_error(
       open_ertr::pass_further{},
       crimson::ct_error::assert_all{
-        "Invalid error in SegmentAllocator::open write"
+        "Invalid error in SegmentAllocator::do_open write"
       }
     ).safe_then([this,
                  FNAME,
@@ -117,12 +114,23 @@ SegmentAllocator::open()
   });
 }
 
+SegmentAllocator::open_ret
+SegmentAllocator::open()
+{
+  LOG_PREFIX(SegmentAllocator::open);
+  std::ostringstream oss;
+  oss << "D" << device_id_printer_t{get_device_id()} << "_" << name;
+  print_name = oss.str();
+  INFO("{}", print_name);
+  return do_open();
+}
+
 SegmentAllocator::roll_ertr::future<>
 SegmentAllocator::roll()
 {
   ceph_assert(can_write());
   return close_segment(true).safe_then([this] {
-    return open().discard_result();
+    return do_open().discard_result();
   });
 }
 
@@ -173,6 +181,7 @@ SegmentAllocator::close()
   return [this] {
     LOG_PREFIX(SegmentAllocator::close);
     if (current_segment) {
+      INFO("{} close current segment", print_name);
       return close_segment(false);
     } else {
       INFO("{} no current segment", print_name);
@@ -568,6 +577,26 @@ RecordSubmitter::submit(record_t&& record)
     assert(!p_current_batch->needs_flush());
   }
   return write_fut;
+}
+
+RecordSubmitter::open_ret
+RecordSubmitter::open()
+{
+  return segment_allocator.open();
+}
+
+RecordSubmitter::close_ertr::future<>
+RecordSubmitter::close()
+{
+  assert(state == state_t::IDLE);
+  assert(num_outstanding_io == 0);
+  committed_to = JOURNAL_SEQ_NULL;
+  assert(p_current_batch != nullptr);
+  assert(p_current_batch->is_empty());
+  assert(!wait_available_promise.has_value());
+  has_io_error = false;
+  assert(!wait_unfull_flush_promise.has_value());
+  return segment_allocator.close();
 }
 
 void RecordSubmitter::update_state()

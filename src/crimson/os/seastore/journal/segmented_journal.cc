@@ -51,9 +51,7 @@ SegmentedJournal::SegmentedJournal(
 
 SegmentedJournal::open_for_write_ret SegmentedJournal::open_for_write()
 {
-  LOG_PREFIX(Journal::open_for_write);
-  INFO("device_id={}", journal_segment_allocator.get_device_id());
-  return journal_segment_allocator.open();
+  return record_submitter.open();
 }
 
 SegmentedJournal::close_ertr::future<> SegmentedJournal::close()
@@ -62,7 +60,7 @@ SegmentedJournal::close_ertr::future<> SegmentedJournal::close()
   INFO("closing, committed_to={}",
        record_submitter.get_committed_to());
   metrics.clear();
-  return journal_segment_allocator.close();
+  return record_submitter.close();
 }
 
 SegmentedJournal::prep_replay_segments_fut
