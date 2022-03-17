@@ -137,6 +137,9 @@ private:
   void register_client();
   void handle_register_client(int r);
 
+  void reset_journal_state_builder();
+  void reset_snapshot_state_builder();
+
   void finalize_journal_state_builder(cls::journal::ClientState client_state,
                                       const MirrorPeerClientMeta& client_meta);
   void finalize_snapshot_state_builder();

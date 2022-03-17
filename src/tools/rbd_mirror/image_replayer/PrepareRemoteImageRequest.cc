@@ -41,6 +41,9 @@ void PrepareRemoteImageRequest<I>::send() {
     auto state_builder = dynamic_cast<snapshot::StateBuilder<I>*>(*m_state_builder);
     if (state_builder) {
       state_builder->remote_mirror_peer_uuid = m_remote_pool_meta.mirror_peer_uuid;
+      reset_snapshot_state_builder();
+    } else {
+      reset_journal_state_builder();
     }
   }
 
@@ -219,6 +222,26 @@ void PrepareRemoteImageRequest<I>::handle_register_client(int r) {
 }
 
 template <typename I>
+void PrepareRemoteImageRequest<I>::reset_journal_state_builder() {
+  if (*m_state_builder == nullptr) {
+    return;
+  }
+  journal::StateBuilder<I>* state_builder = 
+    dynamic_cast<journal::StateBuilder<I>*>(*m_state_builder);
+  if (state_builder == nullptr) {
+    return;
+  }
+
+  state_builder->remote_image_id = "";
+  state_builder->remote_promotion_state =
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
+  delete state_builder->remote_journaler;
+  state_builder->remote_journaler = nullptr;
+  state_builder->remote_client_state = cls::journal::CLIENT_STATE_CONNECTED;
+  state_builder->remote_client_meta = librbd::journal::MirrorPeerClientMeta();
+}
+
+template <typename I>
 void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
     cls::journal::ClientState client_state,
     const MirrorPeerClientMeta& client_meta) {
@@ -245,6 +268,22 @@ void PrepareRemoteImageRequest<I>::finalize_journal_state_builder(
   state_builder->remote_journaler = m_remote_journaler;
   state_builder->remote_client_state = client_state;
   state_builder->remote_client_meta = client_meta;
+}
+
+template <typename I>
+void PrepareRemoteImageRequest<I>::reset_snapshot_state_builder() {
+  if (*m_state_builder == nullptr) {
+    return;
+  }
+  snapshot::StateBuilder<I>* state_builder = 
+    dynamic_cast<snapshot::StateBuilder<I>*>(*m_state_builder);
+  if (state_builder == nullptr) {
+    return;
+  }
+
+  state_builder->remote_image_id = "";
+  state_builder->remote_promotion_state =
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
 }
 
 template <typename I>
