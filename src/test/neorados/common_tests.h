@@ -20,7 +20,7 @@
 std::string get_temp_pool_name(std::string_view prefix = {});
 
 template<typename CompletionToken>
-auto create_pool(neorados::RADOS& r, std::string_view pname,
+auto create_pool(neorados::RADOS& r, std::string pname,
 		 CompletionToken&& token)
 {
   boost::asio::async_completion<CompletionToken,
