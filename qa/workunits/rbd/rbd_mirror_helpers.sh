@@ -415,6 +415,15 @@ cleanup()
     set +e
 
     if [ "${error_code}" -ne 0 ]; then
+        echo =================================
+        echo FIRST STATUS
+        echo =================================
+        status
+        echo sleeping...
+        sleep 5m
+        echo =================================
+        echo SECOND STATUS
+        echo =================================
         status
     fi
 
