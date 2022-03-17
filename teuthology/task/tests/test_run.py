@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from StringIO import StringIO
+from io import StringIO
 
 from teuthology.exceptions import CommandFailedError
 
@@ -17,7 +17,7 @@ class TestRun(object):
         result = ""
         try:
             ctx.cluster.run(
-                args=["python", "-c", "assert False"],
+                args=["python3", "-c", "assert False"],
                 label="working as expected, nothing to see here"
             )
         except CommandFailedError as e:
@@ -28,13 +28,13 @@ class TestRun(object):
     def test_command_failed_no_label(self, ctx, config):
         with pytest.raises(CommandFailedError):
             ctx.cluster.run(
-                args=["python", "-c", "assert False"],
+                args=["python3", "-c", "assert False"],
             )
 
     def test_command_success(self, ctx, config):
         result = StringIO()
         ctx.cluster.run(
-            args=["python", "-c", "print('hi')"],
+            args=["python3", "-c", "print('hi')"],
             stdout=result
         )
         assert result.getvalue().strip() == "hi"

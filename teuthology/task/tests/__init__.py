@@ -14,6 +14,8 @@ An example::
 import logging
 import pytest
 
+from teuthology.job_status import set_status
+
 
 log = logging.getLogger(__name__)
 
@@ -37,16 +39,9 @@ class TeuthologyContextPlugin(object):
     # this is pytest hook for generating tests with custom parameters
     def pytest_generate_tests(self, metafunc):
         # pass the teuthology ctx and config to each test method
-        metafunc.parametrize(["ctx", "config"], [(self.ctx, self.config),])
-
-    @pytest.mark.trylast
-    def pytest_configure(self, config):
-        # removes the default pytest TerminalReporter
-        # this fixes failures with scheduled jobs; when run by a worker
-        # there is no terminal to report to and pytest dies
-        standard_reporter = config.pluginmanager.getplugin('terminalreporter')
-        config.pluginmanager.unregister(standard_reporter)
-        log.info("removing pytest terminal reporter")
+        if "ctx" in metafunc.fixturenames and \
+                "config" in metafunc.fixturenames:
+            metafunc.parametrize(["ctx", "config"], [(self.ctx, self.config),])
 
     # log the outcome of each test
     def pytest_runtest_makereport(self, __multicall__, item, call):
@@ -94,17 +89,17 @@ def task(ctx, config):
         status = pytest.main(
             args=[
                 '-q',
-                '--pyargs', __name__
+                '--pyargs', __name__, 'teuthology.test'
             ],
             plugins=[TeuthologyContextPlugin(ctx, config)]
         )
     except Exception:
-        log.exception("Saw failure running pytest")
-        ctx.summary["status"] = "dead"
+        log.exception("Saw non-test failure!")
+        set_status(ctx.summary, "dead")
     else:
         if status == 0:
             log.info("OK. All tests passed!")
-            ctx.summary["status"] = "pass"
+            set_status(ctx.summary, "pass")
         else:
             log.error("FAIL. Saw test failures...")
-            ctx.summary["status"] = "fail"
+            set_status(ctx.summary, "fail")
