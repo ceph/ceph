@@ -1239,23 +1239,31 @@ struct cls_rgw_lc_obj_head
 {
   time_t start_date = 0;
   std::string marker;
+  time_t shard_rollover_date = 0;
 
   cls_rgw_lc_obj_head() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     uint64_t t = start_date;
     encode(t, bl);
     encode(marker, bl);
+    encode(shard_rollover_date, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     uint64_t t;
     decode(t, bl);
     start_date = static_cast<time_t>(t);
     decode(marker, bl);
+    if (struct_v < 2) {
+      shard_rollover_date = 0;
+    } else {
+      decode(t, bl);
+      shard_rollover_date = static_cast<time_t>(t);
+    }
     DECODE_FINISH(bl);
   }
 

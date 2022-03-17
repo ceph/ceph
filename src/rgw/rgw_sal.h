@@ -1286,6 +1286,7 @@ public:
   struct LCHead {
     time_t start_date{0};
     std::string marker;
+    time_t shard_rollover_date{0};
 
     LCHead() = default;
     LCHead(time_t _date, std::string& _marker) : start_date(_date), marker(_marker) {}
@@ -1295,11 +1296,13 @@ public:
    * buckets. */
   struct LCEntry {
     std::string bucket;
+    std::string oid;
     uint64_t start_time{0};
     uint32_t status{0};
 
     LCEntry() = default;
     LCEntry(std::string& _bucket, uint64_t _time, uint32_t _status) : bucket(_bucket), start_time(_time), status(_status) {}
+    LCEntry(std::string& _bucket, std::string _oid, uint64_t _time, uint32_t _status) : bucket(_bucket), oid(_oid), start_time(_time), status(_status) {}
   };
 
   Lifecycle() = default;

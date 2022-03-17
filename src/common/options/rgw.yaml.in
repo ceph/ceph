@@ -3288,3 +3288,19 @@ options:
   - rgw
   flags:
   - startup
+- name: rgwlc_auto_session_clear
+  type: bool
+  level: advanced
+  desc: Automatically clear stale lifecycle sessions (i.e., after 2 idle processing cycles)
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgwlc_skip_bucket_step
+  type: bool
+  level: advanced
+  desc: Conditionally skip the processing (but not the scheduling) of bucket lifecycle
+  default: false
+  services:
+  - rgw
+  with_legacy: true
