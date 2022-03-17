@@ -81,6 +81,7 @@ struct KeyServerData {
     ls.push_back(new KeyServerData);
     ls.push_back(new KeyServerData);
     ls.back()->version = 1;
+    ls.back()->rotating_ver = 2;
   }
   bool contains(const EntityName& name) const {
     return (secrets.find(name) != secrets.end());
