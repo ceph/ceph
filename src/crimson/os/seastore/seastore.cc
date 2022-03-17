@@ -345,6 +345,10 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
         transaction_manager->add_segment_manager(segment_manager.get());
         return transaction_manager->mkfs();
       }).safe_then([this] {
+        for (auto& sec_sm : secondaries) {
+          transaction_manager->add_segment_manager(sec_sm.get());
+        }
+        transaction_manager->add_segment_manager(segment_manager.get());
         return transaction_manager->mount();
       }).safe_then([this] {
         return repeat_eagain([this] {
