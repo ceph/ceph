@@ -34,12 +34,6 @@ SegmentedAllocator::Writer::Writer(
 {
 }
 
-SegmentedAllocator::Writer::open_ertr::future<>
-SegmentedAllocator::Writer::open()
-{
-  return segment_allocator.open().discard_result();
-}
-
 SegmentedAllocator::Writer::write_ertr::future<>
 SegmentedAllocator::Writer::write_record(
   Transaction& t,
