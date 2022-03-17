@@ -127,13 +127,15 @@ class NFSRados:
             except ObjectNotFound:
                 return None
 
-    def update_obj(self, conf_block: str, obj: str, config_obj: str) -> None:
+    def update_obj(self, conf_block: str, obj: str, config_obj: str,
+                   should_notify: Optional[bool] = True) -> None:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
             log.debug("write configuration into rados object %s/%s/%s",
                       self.pool, self.namespace, obj)
-            _check_rados_notify(ioctx, config_obj)
+            if should_notify:
+                _check_rados_notify(ioctx, config_obj)
             log.debug("Update export %s in %s", obj, config_obj)
 
     def remove_obj(self, obj: str, config_obj: str) -> None:
@@ -243,17 +245,9 @@ class ExportMgr:
         if isinstance(export.fsal, CephFSFSAL):
             fsal = cast(CephFSFSAL, export.fsal)
             assert fsal.fs_name
-
-            # is top-level or any client rw?
-            rw = export.access_type.lower() == 'rw'
-            for c in export.clients:
-                if c.access_type.lower() == 'rw':
-                    rw = True
-                    break
-
             fsal.user_id = f"nfs.{export.cluster_id}.{export.export_id}"
             fsal.cephx_key = self._create_user_key(
-                export.cluster_id, fsal.user_id, export.path, fsal.fs_name, not rw
+                export.cluster_id, fsal.user_id, export.path, fsal.fs_name
             )
             log.debug("Successfully created user %s for cephfs path %s", fsal.user_id, export.path)
 
@@ -358,11 +352,15 @@ class ExportMgr:
             log.exception("Export ID: %s not found", ex_id)
         return None
 
-    def _update_export(self, cluster_id: str, export: Export) -> None:
+    def _update_export(self, cluster_id: str, export: Export,
+                       need_nfs_service_restart: bool) -> None:
         self.exports[cluster_id].append(export)
         self._rados(cluster_id).update_obj(
             GaneshaConfParser.write_block(export.to_export_block()),
-            export_obj_name(export.export_id), conf_obj_name(export.cluster_id))
+            export_obj_name(export.export_id), conf_obj_name(export.cluster_id),
+            should_notify=not need_nfs_service_restart)
+        if need_nfs_service_restart:
+            restart_nfs_service(self.mgr, export.cluster_id)
 
     @export_cluster_checker
     def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Tuple[int, str, str]:
@@ -523,19 +521,20 @@ class ExportMgr:
             self,
             cluster_id: str,
             path: str,
-            access_type: str,
             fs_name: str,
             user_id: str
     ) -> None:
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
             self.rados_pool, cluster_id, fs_name)
-        access_type = 'r' if access_type == 'RO' else 'rw'
-
+        # NFS-Ganesha can dynamically enforce an export's access type changes, but Ceph server
+        # daemons can't dynamically enforce changes in Ceph user caps of the Ceph clients. To
+        # allow dynamic updates of CephFS NFS exports, always set FSAL Ceph user's MDS caps with
+        # path restricted read-write access. Rely on the ganesha servers to enforce the export
+        # access type requested for the NFS clients.
         self.mgr.check_mon_command({
             'prefix': 'auth caps',
             'entity': f'client.{user_id}',
-            'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow {} path={}'.format(
-                access_type, path)],
+            'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path={}'.format(path)],
         })
 
         log.info("Export user updated %s", user_id)
@@ -546,15 +545,13 @@ class ExportMgr:
             entity: str,
             path: str,
             fs_name: str,
-            fs_ro: bool
     ) -> str:
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
             self.rados_pool, cluster_id, fs_name)
-        access_type = 'r' if fs_ro else 'rw'
         nfs_caps = [
             'mon', 'allow r',
             'osd', osd_cap,
-            'mds', 'allow {} path={}'.format(access_type, path)
+            'mds', 'allow rw path={}'.format(path)
         ]
 
         ret, out, err = self.mgr.mon_command({
@@ -749,6 +746,7 @@ class ExportMgr:
             self._save_export(cluster_id, new_export)
             return 0, f'Added export {new_export.pseudo}', ''
 
+        need_nfs_service_restart = True
         if old_export.fsal.name != new_export.fsal.name:
             raise NFSInvalidOperation('FSAL change not allowed')
         if old_export.pseudo != new_export.pseudo:
@@ -768,13 +766,32 @@ class ExportMgr:
                 self._update_user_id(
                     cluster_id,
                     new_export.path,
-                    new_export.access_type,
                     cast(str, new_fsal.fs_name),
                     cast(str, new_fsal.user_id)
                 )
                 new_fsal.cephx_key = old_fsal.cephx_key
             else:
+                expected_mds_caps = 'allow rw path={}'.format(new_export.path)
+                entity = new_fsal.user_id
+                ret, out, err = self.mgr.mon_command({
+                    'prefix': 'auth get',
+                    'entity': 'client.{}'.format(entity),
+                    'format': 'json',
+                })
+                if ret:
+                    raise NFSException(f'Failed to fetch caps for {entity}: {err}')
+                actual_mds_caps = json.loads(out)[0]['caps'].get('mds')
+                if actual_mds_caps != expected_mds_caps:
+                    self._update_user_id(
+                        cluster_id,
+                        new_export.path,
+                        cast(str, new_fsal.fs_name),
+                        cast(str, new_fsal.user_id)
+                    )
+                elif old_export.pseudo == new_export.pseudo:
+                    need_nfs_service_restart = False
                 new_fsal.cephx_key = old_fsal.cephx_key
+
         if old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
             old_rgw_fsal = cast(RGWFSAL, old_export.fsal)
             new_rgw_fsal = cast(RGWFSAL, new_export.fsal)
@@ -787,10 +804,8 @@ class ExportMgr:
                 raise NFSInvalidOperation('secret_access_key change is not allowed')
 
         self.exports[cluster_id].remove(old_export)
-        self._update_export(cluster_id, new_export)
 
-        # TODO: detect whether the update is such that a reload is sufficient
-        restart_nfs_service(self.mgr, new_export.cluster_id)
+        self._update_export(cluster_id, new_export, need_nfs_service_restart)
 
         return 0, f"Updated export {new_export.pseudo}", ""
 
