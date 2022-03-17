@@ -1092,6 +1092,24 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
       return _setattrs(ctx, get_onode(op->oid), std::move(to_set));
     }
     break;
+    case Transaction::OP_SETATTRS:
+    {
+      std::map<std::string, bufferlist> to_set;
+      i.decode_attrset(to_set);
+      return _setattrs(ctx, get_onode(op->oid), std::move(to_set));
+    }
+    break;
+    case Transaction::OP_RMATTR:
+    {
+      std::string name = i.decode_string();
+      return _rmattr(ctx, get_onode(op->oid), name);
+    }
+    break;
+    case Transaction::OP_RMATTRS:
+    {
+      return _rmattrs(ctx, get_onode(op->oid));
+    }
+    break;
     case Transaction::OP_MKCOLL:
     {
       coll_t cid = i.get_cid(op->cid);
@@ -1365,7 +1383,7 @@ SeaStore::tm_ret SeaStore::_setattrs(
 	val.c_str(),
 	val.length(),
 	onode_layout_t::MAX_SS_LENGTH);
-      it = aset.erase(it);
+      aset.erase(it);
     } else {
       layout.ss_size = 0;
     }
@@ -1381,6 +1399,100 @@ SeaStore::tm_ret SeaStore::_setattrs(
     *ctx.transaction,
     layout.xattr_root,
     std::move(aset));
+}
+
+SeaStore::tm_ret SeaStore::_rmattr(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  std::string name)
+{
+  LOG_PREFIX(SeaStore::_rmattr);
+  DEBUGT("onode={}", *ctx.transaction, *onode);
+  auto& layout = onode->get_mutable_layout(*ctx.transaction);
+  if ((name == OI_ATTR) && (layout.oi_size > 0)) {
+    memset(&layout.oi[0], 0, layout.oi_size);
+    layout.oi_size = 0;
+    return tm_iertr::now();
+  } else if ((name == SS_ATTR) && (layout.ss_size > 0)) {
+    memset(&layout.ss[0], 0, layout.ss_size);
+    layout.ss_size = 0;
+    return tm_iertr::now();
+  } else {
+    return _xattr_rmattr(
+      ctx,
+      onode,
+      std::move(name));
+  }
+}
+
+SeaStore::tm_ret SeaStore::_xattr_rmattr(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  std::string &&name)
+{
+  LOG_PREFIX(SeaStore::_xattr_rmattr);
+  DEBUGT("onode={}", *ctx.transaction, *onode);
+  auto xattr_root = onode->get_layout().xattr_root.get(
+    onode->get_metadata_hint(segment_manager->get_block_size()));
+  if (xattr_root.is_null()) {
+    return seastar::now();
+  } else {
+    return seastar::do_with(
+      BtreeOMapManager(*transaction_manager),
+      onode->get_layout().xattr_root.get(
+        onode->get_metadata_hint(segment_manager->get_block_size())),
+      std::move(name),
+      [&ctx, &onode](auto &omap_manager, auto &xattr_root, auto &name) {
+        return omap_manager.omap_rm_key(xattr_root, *ctx.transaction, name)
+          .si_then([&] {
+          if (xattr_root.must_update()) {
+              onode->get_mutable_layout(*ctx.transaction
+              ).xattr_root.update(xattr_root);
+          }
+        });
+    });
+  }
+}
+
+SeaStore::tm_ret SeaStore::_rmattrs(
+  internal_context_t &ctx,
+  OnodeRef &onode)
+{
+  LOG_PREFIX(SeaStore::_rmattrs);
+  DEBUGT("onode={}", *ctx.transaction, *onode);
+  auto& layout = onode->get_mutable_layout(*ctx.transaction);
+  memset(&layout.oi[0], 0, layout.oi_size);
+  layout.oi_size = 0;
+  memset(&layout.ss[0], 0, layout.ss_size);
+  layout.ss_size = 0;
+  return _xattr_clear(ctx, onode);
+}
+
+SeaStore::tm_ret SeaStore::_xattr_clear(
+  internal_context_t &ctx,
+  OnodeRef &onode)
+{
+  LOG_PREFIX(SeaStore::_xattr_clear);
+  DEBUGT("onode={}", *ctx.transaction, *onode);
+  auto xattr_root = onode->get_layout().xattr_root.get(
+    onode->get_metadata_hint(segment_manager->get_block_size()));
+  if (xattr_root.is_null()) {
+    return seastar::now();
+  } else {
+    return seastar::do_with(
+      BtreeOMapManager(*transaction_manager),
+      onode->get_layout().xattr_root.get(
+	onode->get_metadata_hint(segment_manager->get_block_size())),
+      [&ctx, &onode](auto &omap_manager, auto &xattr_root) {
+        return omap_manager.omap_clear(xattr_root, *ctx.transaction)
+	  .si_then([&] {
+	  if (xattr_root.must_update()) {
+              onode->get_mutable_layout(*ctx.transaction
+              ).xattr_root.update(xattr_root);
+          }
+        });
+    });
+  }
 }
 
 SeaStore::tm_ret SeaStore::_create_collection(
