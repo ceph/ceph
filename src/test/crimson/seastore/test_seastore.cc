@@ -11,6 +11,7 @@
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/seastore/seastore.h"
+#include "crimson/os/seastore/onode.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -252,6 +253,25 @@ struct seastore_test_t :
         std::move(t)).get0();
     }
 
+    void rm_attr(
+      SeaStore &seastore,
+      std::string key) {
+      CTransaction t;
+      t.rmattr(cid, oid, key);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
+    void rm_attrs(
+      SeaStore &seastore) {
+      CTransaction t;
+      t.rmattrs(cid, oid);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
     SeaStore::attrs_t get_attrs(
       SeaStore &seastore) {
       return seastore.get_attrs(coll, oid)
@@ -451,7 +471,7 @@ TEST_F(seastore_test_t, attr)
 {
   run_async([this] {
     auto& test_obj = get_object(make_oid(0));
-
+  {
     std::string oi("asdfasdfasdf");
     bufferlist bl;
     encode(oi, bl);
@@ -488,16 +508,35 @@ TEST_F(seastore_test_t, attr)
     test_val2.clear();
     decode(test_val2, bl2);
     EXPECT_EQ(test_val, test_val2);
+    //test rm_attrs
+    test_obj.rm_attrs(*seastore);
+    attrs = test_obj.get_attrs(*seastore);
+    EXPECT_EQ(attrs.find(OI_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find(SS_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find("test_key"), attrs.end());
 
     std::cout << "test_key passed" << std::endl;
-    char ss_array[256] = {0};
-    std::string ss_str(&ss_array[0], 256);
+    //create OI_ATTR with len > onode_layout_t::MAX_OI_LENGTH, rm OI_ATTR
+    //create SS_ATTR with len > onode_layout_t::MAX_SS_LENGTH, rm SS_ATTR
+    char oi_array[onode_layout_t::MAX_OI_LENGTH + 1] = {'a'};
+    std::string oi_str(&oi_array[0], sizeof(oi_array));
+    bl.clear();
+    encode(oi_str, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    char ss_array[onode_layout_t::MAX_SS_LENGTH + 1] = {'b'};
+    std::string ss_str(&ss_array[0], sizeof(ss_array));
     bl.clear();
     encode(ss_str, bl);
     test_obj.set_attr(*seastore, SS_ATTR, bl);
 
     attrs = test_obj.get_attrs(*seastore);
-    std::cout << "got attr" << std::endl;
+    bl2.clear();
+    bl2 = attrs[OI_ATTR];
+    std::string oi_str2;
+    decode(oi_str2, bl2);
+    EXPECT_EQ(oi_str, oi_str2);
+
     bl2.clear();
     bl2 = attrs[SS_ATTR];
     std::string ss_str2;
@@ -509,6 +548,63 @@ TEST_F(seastore_test_t, attr)
     bl2 = test_obj.get_attr(*seastore, SS_ATTR);
     decode(ss_str2, bl2);
     EXPECT_EQ(ss_str, ss_str2);
+
+    bl2.clear();
+    oi_str2.clear();
+    bl2 = test_obj.get_attr(*seastore, OI_ATTR);
+    decode(oi_str2, bl2);
+    EXPECT_EQ(oi_str, oi_str2);
+
+    test_obj.rm_attr(*seastore, OI_ATTR);
+    test_obj.rm_attr(*seastore, SS_ATTR);
+
+    attrs = test_obj.get_attrs(*seastore);
+    EXPECT_EQ(attrs.find(OI_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find(SS_ATTR), attrs.end());
+  }
+  {
+    //create OI_ATTR with len <= onode_layout_t::MAX_OI_LENGTH, rm OI_ATTR
+    //create SS_ATTR with len <= onode_layout_t::MAX_SS_LENGTH, rm SS_ATTR
+    std::string oi("asdfasdfasdf");
+    bufferlist bl;
+    encode(oi, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    std::string ss("f");
+    bl.clear();
+    encode(ss, bl);
+    test_obj.set_attr(*seastore, SS_ATTR, bl);
+
+    std::string test_val("ssssssssssss");
+    bl.clear();
+    encode(test_val, bl);
+    test_obj.set_attr(*seastore, "test_key", bl);
+
+    auto attrs = test_obj.get_attrs(*seastore);
+    std::string oi2;
+    bufferlist bl2 = attrs[OI_ATTR];
+    decode(oi2, bl2);
+    bl2.clear();
+    bl2 = attrs[SS_ATTR];
+    std::string ss2;
+    decode(ss2, bl2);
+    std::string test_val2;
+    bl2.clear();
+    bl2 = attrs["test_key"];
+    decode(test_val2, bl2);
+    EXPECT_EQ(ss, ss2);
+    EXPECT_EQ(oi, oi2);
+    EXPECT_EQ(test_val, test_val2);
+
+    test_obj.rm_attr(*seastore, OI_ATTR);
+    test_obj.rm_attr(*seastore, SS_ATTR);
+    test_obj.rm_attr(*seastore, "test_key");
+
+    attrs = test_obj.get_attrs(*seastore);
+    EXPECT_EQ(attrs.find(OI_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find(SS_ATTR), attrs.end());
+    EXPECT_EQ(attrs.find("test_key"), attrs.end());
+  }
   });
 }
 
