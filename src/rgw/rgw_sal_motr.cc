@@ -2566,8 +2566,8 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   ent.meta.etag = etag;
   ent.meta.owner = owner.to_str();
   ent.meta.owner_display_name = obj.get_bucket()->get_owner()->get_display_name();
-  bool is_versioned = obj.get_key().have_instance();
-  if (is_versioned)
+  RGWBucketInfo &info = obj.get_bucket()->get_info();
+  if (info.versioning_enabled())
     ent.flags = rgw_bucket_dir_entry::FLAG_VER | rgw_bucket_dir_entry::FLAG_CURRENT;
   ldpp_dout(dpp, 20) <<__func__<< ": key=" << obj.get_key().to_str()
                     << " etag: " << etag << " user_data=" << user_data << dendl;
@@ -2575,7 +2575,6 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     ent.meta.user_data = *user_data;
   ent.encode(bl);
 
-  RGWBucketInfo &info = obj.get_bucket()->get_info();
   if (info.obj_lock_enabled() && info.obj_lock.has_rule()) {
     auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
     if (iter == attrs.end()) {
@@ -2591,7 +2590,7 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   obj.meta.encode(bl);
   ldpp_dout(dpp, 20) <<__func__<< ": lid=0x" << std::hex << obj.meta.layout_id
                                                            << dendl;
-  if (is_versioned) {
+  if (info.versioning_enabled()) {
     // get the list of all versioned objects with the same key and
     // unset their FLAG_CURRENT later, if do_idx_op_by_name() is successful.
     // Note: without distributed lock on the index - it is possible that 2
@@ -2619,10 +2618,12 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (rc == 0)
     store->get_obj_meta_cache()->put(dpp, obj.get_key().to_str(), bl);
 
-  if (old_obj.get_bucket()->get_info().versioning_status() != BUCKET_VERSIONED) {
-    // Delete old object data if exists.
-    old_obj.delete_mobj(dpp);
-  }
+  if (rc == 0 && !info.versioning_enabled())
+      // Delete old object data if exists.
+      old_obj.delete_mobj(dpp);
+
+  if (rc != 0)
+    obj.delete_mobj(dpp);
 
   // TODO: We need to handle the object leak caused by parallel object upload by
   // making use of background gc, which is currently not enabled for motr.
