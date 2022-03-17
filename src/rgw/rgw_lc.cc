@@ -14,6 +14,7 @@
 #include <boost/variant.hpp>
 
 #include "include/scope_guard.h"
+#include "include/function2.hpp"
 #include "common/Formatter.h"
 #include "common/containers.h"
 #include <common/errno.h>
@@ -273,74 +274,15 @@ void RGWLC::finalize()
   delete[] obj_names;
 }
 
-bool RGWLC::if_already_run_today(time_t start_date)
-{
-  struct tm bdt;
-  time_t begin_of_day;
-  utime_t now = ceph_clock_now();
-  localtime_r(&start_date, &bdt);
-
-  if (cct->_conf->rgw_lc_debug_interval > 0) {
-    if (now - start_date < cct->_conf->rgw_lc_debug_interval)
-      return true;
-    else
-      return false;
-  }
-
-  bdt.tm_hour = 0;
-  bdt.tm_min = 0;
-  bdt.tm_sec = 0;
-  begin_of_day = mktime(&bdt);
-  if (now - begin_of_day < 24*60*60)
-    return true;
-  else
-    return false;
-}
-
 static inline std::ostream& operator<<(std::ostream &os, rgw::sal::Lifecycle::LCEntry& ent) {
   os << "<ent: bucket=";
   os << ent.bucket;
   os << "; start_time=";
   os << rgw_to_asctime(utime_t(time_t(ent.start_time), 0));
   os << "; status=";
-    os << ent.status;
-    os << ">";
-    return os;
-}
-
-int RGWLC::bucket_lc_prepare(int index, LCWorker* worker)
-{
-  vector<rgw::sal::Lifecycle::LCEntry> entries;
-  string marker;
-
-  ldpp_dout(this, 5) << "RGWLC::bucket_lc_prepare(): PREPARE "
-	  << "index: " << index << " worker ix: " << worker->ix
-	  << dendl;
-
-#define MAX_LC_LIST_ENTRIES 100
-  do {
-    int ret = sal_lc->list_entries(obj_names[index], marker, MAX_LC_LIST_ENTRIES, entries);
-    if (ret < 0)
-      return ret;
-
-    for (auto& entry : entries) {
-      entry.start_time = ceph_clock_now();
-      entry.status = lc_uninitial; // lc_uninitial? really?
-      ret = sal_lc->set_entry(obj_names[index], entry);
-      if (ret < 0) {
-        ldpp_dout(this, 0)
-	  << "RGWLC::bucket_lc_prepare() failed to set entry on "
-	  << obj_names[index] << dendl;
-        return ret;
-      }
-    }
-
-    if (! entries.empty()) {
-      marker = std::move(entries.back().bucket);
-    }
-  } while (!entries.empty());
-
-  return 0;
+  os << LC_STATUS[ent.status];
+  os << ">";
+  return os;
 }
 
 static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, ceph::real_time mtime, int days,
@@ -1720,6 +1662,12 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   string bucket_tenant = result[0];
   string bucket_name = result[1];
   string bucket_marker = result[2];
+
+  ldpp_dout(this, 5) << "RGWLC::bucket_lc_process ENTER " << bucket_name << dendl;
+  if (unlikely(cct->_conf->rgwlc_skip_bucket_step)) {
+    return 0;
+  }
+
   int ret = store->get_bucket(this, nullptr, bucket_tenant, bucket_name, &bucket, null_yield);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket for " << bucket_name
@@ -1843,6 +1791,41 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   return ret;
 }
 
+class SimpleBackoff
+{
+  const int max_retries;
+  std::chrono::milliseconds sleep_ms;
+  int retries{0};
+public:
+  SimpleBackoff(int max_retries, std::chrono::milliseconds initial_sleep_ms)
+    : max_retries(max_retries), sleep_ms(initial_sleep_ms)
+    {}
+  SimpleBackoff(const SimpleBackoff&) = delete;
+  SimpleBackoff& operator=(const SimpleBackoff&) = delete;
+
+  int get_retries() const {
+    return retries;
+  }
+
+  void reset() {
+    retries = 0;
+  }
+
+  bool wait_backoff(const fu2::unique_function<bool(void) const>& barrier) {
+    reset();
+    while (retries < max_retries) {
+      auto r = barrier();
+      if (r) {
+	return r;
+      }
+      std::this_thread::sleep_for(sleep_ms);
+      sleep_ms = std::chrono::milliseconds(sleep_ms*2*retries);
+      ++retries;
+    }
+    return false;
+  }
+};
+
 int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 			  rgw::sal::Lifecycle::LCEntry& entry, int& result,
 			  LCWorker* worker)
@@ -1871,6 +1854,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
       return 0;
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() lock " << obj_names[index]
 			<< dendl;
+
     if (result ==  -ENOENT) {
       /* XXXX are we SURE the only way result could == ENOENT is when
        * there is no such bucket?  It is currently the value returned
@@ -1899,7 +1883,7 @@ clean:
 			<< obj_names[index] << dendl;
     return 0;
   } while (true);
-}
+} /* RGWLC::bucket_lc_post */
 
 int RGWLC::list_lc_progress(string& marker, uint32_t max_entries,
 			    vector<rgw::sal::Lifecycle::LCEntry>& progress_map,
@@ -2005,6 +1989,10 @@ int RGWLC::process(LCWorker* worker,
 
 bool RGWLC::expired_session(time_t started)
 {
+  if (! cct->_conf->rgwlc_auto_session_clear) {
+    return false;
+  }
+
   time_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
     ? cct->_conf->rgw_lc_debug_interval
     : 24*60*60;
@@ -2109,104 +2097,250 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   return ret;
 } /* RGWLC::process_bucket */
 
+static inline bool allow_shard_rollover(CephContext* cct, time_t now, time_t shard_rollover_date)
+{
+  /* return true iff:
+   *    - non-debug scheduling is in effect, and
+   *    - the current shard has not rolled over in the last 24 hours
+   */
+  if (((shard_rollover_date < now) &&
+       (now - shard_rollover_date > 24*60*60)) ||
+      (! shard_rollover_date /* no rollover date stored */) ||
+      (cct->_conf->rgw_lc_debug_interval > 0 /* defaults to -1 == disabled */)) {
+    return true;
+  }
+  return false;
+} /* allow_shard_rollover */
+
+static inline bool already_run_today(CephContext* cct, time_t start_date)
+{
+  struct tm bdt;
+  time_t begin_of_day;
+  utime_t now = ceph_clock_now();
+  localtime_r(&start_date, &bdt);
+
+  if (cct->_conf->rgw_lc_debug_interval > 0) {
+    if (now - start_date < cct->_conf->rgw_lc_debug_interval)
+      return true;
+    else
+      return false;
+  }
+
+  bdt.tm_hour = 0;
+  bdt.tm_min = 0;
+  bdt.tm_sec = 0;
+  begin_of_day = mktime(&bdt);
+  if (now - begin_of_day < 24*60*60)
+    return true;
+  else
+    return false;
+} /* already_run_today */
+
+inline int RGWLC::advance_head(const std::string& lc_shard,
+			       rgw::sal::Lifecycle::LCHead& head,
+			       rgw::sal::Lifecycle::LCEntry& entry,
+			       time_t start_date)
+{
+  int ret{0};
+  rgw::sal::Lifecycle::LCEntry next_entry;
+
+  ret = sal_lc->get_next_entry(lc_shard, entry.bucket, next_entry);
+  if (ret < 0) {
+    ldpp_dout(this, 0) << "RGWLC::process() failed to get obj entry "
+		       << lc_shard << dendl;
+    goto exit;
+  }
+
+  /* save the next position */
+  head.marker = next_entry.bucket;
+  head.start_date = start_date;
+
+  ret = sal_lc->put_head(lc_shard, head);
+  if (ret < 0) {
+    ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
+		       << lc_shard
+		       << dendl;
+    goto exit;
+  }
+exit:
+  return ret;
+} /* advance head */
+
 int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 		   bool once = false)
 {
+  int ret{0};
+  const auto& lc_shard = obj_names[index];
+
+  rgw::sal::Lifecycle::LCHead head{};
+  rgw::sal::Lifecycle::LCEntry entry; //string = bucket_name:bucket_id, start_time, int = LC_BUCKET_STATUS
+
   ldpp_dout(this, 5) << "RGWLC::process(): ENTER: "
 	  << "index: " << index << " worker ix: " << worker->ix
 	  << dendl;
 
-  int ret = 0;
-  rgw::sal::LCSerializer* lock = sal_lc->get_serializer(lc_index_lock_name,
-							obj_names[index],
-							std::string());
-  do {
-    utime_t now = ceph_clock_now();
-    //string = bucket_name:bucket_id, start_time, int = LC_BUCKET_STATUS
-    rgw::sal::Lifecycle::LCEntry entry;
-    if (max_lock_secs <= 0)
-      return -EAGAIN;
+  rgw::sal::LCSerializer* lock =
+    sal_lc->get_serializer(lc_index_lock_name, lc_shard, std::string());
 
-    utime_t time(max_lock_secs, 0);
-    ret = lock->try_lock(this, time, null_yield);
+  utime_t lock_for_s(max_lock_secs, 0);
+  const auto& lock_lambda = [&]() {
+    ret = lock->try_lock(this, lock_for_s, null_yield);
+    if (ret == 0) {
+      return true;
+    }
     if (ret == -EBUSY || ret == -EEXIST) {
       /* already locked by another lc processor */
-      ldpp_dout(this, 0) << "RGWLC::process() failed to acquire lock on "
-          << obj_names[index] << ", sleep 5, try again" << dendl;
-      sleep(5);
-      continue; // XXXX really retry forever?
-    }
-    if (ret < 0)
-      return 0;
+      return false;
+      }
+    return false;
+  };
 
-    rgw::sal::Lifecycle::LCHead head;
-    ret = sal_lc->get_head(obj_names[index], head);
+  SimpleBackoff shard_lock(5 /* max retries */, 50ms);
+  if (! shard_lock.wait_backoff(lock_lambda)) {
+    ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
+		       << lc_shard << " after " << shard_lock.get_retries()
+		       << dendl;
+    goto notlocked;
+  }
+
+  do {
+    utime_t now = ceph_clock_now();
+
+    /* preamble: find an inital bucket/marker */
+    ret = sal_lc->get_head(lc_shard, head);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to get obj head "
-          << obj_names[index] << ", ret=" << ret << dendl;
+          << lc_shard << ", ret=" << ret << dendl;
       goto exit;
     }
 
-    ret = sal_lc->get_entry(obj_names[index], head.marker, entry);
-    if (ret >= 0) {
+    /* if there is nothing at head, try to reinitialize head.marker with the
+     * first entry in the queue */
+    if (head.marker.empty() &&
+	allow_shard_rollover(cct, now, head.shard_rollover_date) /* prevent multiple passes by diff.
+								  * rgws,in same cycle */) {
+
+      ldpp_dout(this, 5) << "RGWLC::process() process shard rollover lc_shard=" << lc_shard
+			 << " head.marker=" << head.marker
+			 << " head.shard_rollover_date=" << head.shard_rollover_date
+			 << dendl;
+
+      vector<rgw::sal::Lifecycle::LCEntry> entries;
+      int ret = sal_lc->list_entries(lc_shard, head.marker, 1, entries);
+      if (ret < 0) {
+	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->list_entries(lc_shard, head.marker, 1, "
+			   << "entries) returned error ret==" << ret << dendl;
+	goto exit;
+      }
+      if (entries.size() > 0) {
+	entry = entries.front();
+	head.marker = entry.bucket;
+	head.start_date = now;
+	head.shard_rollover_date = 0;
+      }
+    } else {
+      ldpp_dout(this, 0) << "RGWLC::process() head.marker !empty() at START for shard=="
+			 << lc_shard << " head last stored at "
+			 << rgw_to_asctime(utime_t(time_t(head.start_date), 0))
+			 << dendl;
+
+      /* fetches the entry pointed to by head.bucket */
+      ret = sal_lc->get_entry(lc_shard, head.marker, entry);
+      if (ret < 0) {
+	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->get_entry(lc_shard, head.marker, entry) "
+			   << "returned error ret==" << ret << dendl;
+	goto exit;
+      }
+    }
+
+    if (! entry.bucket.empty()) {
       if (entry.status == lc_processing) {
-	if (expired_session(entry.start_time)) {
-	  ldpp_dout(this, 5) << "RGWLC::process(): STALE lc session found for: " << entry
-			     << " index: " << index << " worker ix: " << worker->ix
-			     << " (clearing)"
+        if (expired_session(entry.start_time)) {
+          ldpp_dout(this, 5)
+              << "RGWLC::process(): STALE lc session found for: " << entry
+              << " index: " << index << " worker ix: " << worker->ix
+              << " (clearing)" << dendl;
+        } else {
+          ldpp_dout(this, 5)
+              << "RGWLC::process(): ACTIVE entry: " << entry
+              << " index: " << index << " worker ix: " << worker->ix << dendl;
+	  /* skip to next entry */
+	  if (advance_head(lc_shard, head, entry, now) < 0) {
+	    goto exit;
+	  }
+	      /* done with this shard */
+	  if (head.marker.empty()) {
+	    ldpp_dout(this, 5) <<
+	      "RGWLC::process() cycle finished lc_shard="
+			       << lc_shard
+			       << dendl;
+	    head.shard_rollover_date = ceph_clock_now();
+	    ret = sal_lc->put_head(lc_shard,  head);
+	    if (ret < 0) {
+	      ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
+				 << lc_shard
+				 << dendl;
+	    }
+	    goto exit;
+	  }
+          continue;
+        }
+      } else {
+	if ((entry.status == lc_complete) &&
+	    already_run_today(cct, entry.start_time)) {
+	  /* skip to next entry */
+	  if (advance_head(lc_shard, head, entry, now) < 0) {
+	    goto exit;
+	  }
+	  ldpp_dout(this, 5) << "RGWLC::process() worker ix; " << worker->ix
+			     << " SKIP processing for already-processed bucket " << entry.bucket
 			     << dendl;
-	} else {
-	  ldpp_dout(this, 5) << "RGWLC::process(): ACTIVE entry: " << entry
-			     << " index: " << index << " worker ix: " << worker->ix
-			     << dendl;
-	  goto exit;
+	  /* done with this shard */
+	  if (head.marker.empty()) {
+	    ldpp_dout(this, 5) <<
+	      "RGWLC::process() cycle finished lc_shard="
+			       << lc_shard
+			       << dendl;
+	    head.shard_rollover_date = ceph_clock_now();
+	    ret = sal_lc->put_head(lc_shard,  head);
+	    if (ret < 0) {
+	      ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
+				 << lc_shard
+				 << dendl;
+	    }
+	    goto exit;
+	  }
+	  continue;
 	}
       }
-    }
-
-    if(!if_already_run_today(head.start_date) ||
-       once) {
-      head.start_date = now;
-      head.marker.clear();
-      ret = bucket_lc_prepare(index, worker);
-      if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to update lc object "
-			 << obj_names[index]
-			 << ", ret=" << ret
-			 << dendl;
-      goto exit;
-      }
-    }
-
-    ret = sal_lc->get_next_entry(obj_names[index], head.marker, entry);
-    if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to get obj entry "
-          << obj_names[index] << dendl;
+    } else {
+      ldpp_dout(this, 5) << "RGWLC::process() entry.bucket.empty() == true at START 1"
+			 << " (this is possible mainly before any lc policy has been stored"
+			 << " or after removal of an lc_shard object)"
+                         << dendl;
       goto exit;
     }
 
-    /* termination condition (eof) */
-    if (entry.bucket.empty())
-      goto exit;
-
+    /* When there are no more entries to process, entry will be
+     * equivalent to an empty marker and so the following resets the
+     * processing for the shard automatically when processing is
+     * finished for the shard */
     ldpp_dout(this, 5) << "RGWLC::process(): START entry 1: " << entry
 	    << " index: " << index << " worker ix: " << worker->ix
 	    << dendl;
 
     entry.status = lc_processing;
-    ret = sal_lc->set_entry(obj_names[index], entry);
+    entry.start_time = now;
+
+    ret = sal_lc->set_entry(lc_shard, entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to set obj entry "
-	      << obj_names[index] << entry.bucket << entry.status << dendl;
+	      << lc_shard << entry.bucket << entry.status << dendl;
       goto exit;
     }
 
-    head.marker = entry.bucket;
-    ret = sal_lc->put_head(obj_names[index],  head);
-    if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
-			 << obj_names[index]
-	      << dendl;
+    /* advance head for next waiter, then process */
+    if (advance_head(lc_shard, head, entry, now) < 0) {
       goto exit;
     }
 
@@ -2214,11 +2348,62 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	    << " index: " << index << " worker ix: " << worker->ix
 	    << dendl;
 
+    /* drop lock so other instances can make progress while this
+     * bucket is being processed */
     lock->unlock();
     ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
-    bucket_lc_post(index, max_lock_secs, entry, ret, worker);
-  } while(1 && !once);
 
+    /* postamble */
+    //bucket_lc_post(index, max_lock_secs, entry, ret, worker);
+    if (! shard_lock.wait_backoff(lock_lambda)) {
+      ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
+			 << lc_shard << " after " << shard_lock.get_retries()
+			 << dendl;
+      goto notlocked;
+    }
+
+    if (ret == -ENOENT) {
+      /* XXXX are we SURE the only way result could == ENOENT is when
+       * there is no such bucket?  It is currently the value returned
+       * from bucket_lc_process(...) */
+      ret = sal_lc->rm_entry(lc_shard,  entry);
+      if (ret < 0) {
+        ldpp_dout(this, 0) << "RGWLC::process() failed to remove entry "
+			   << lc_shard << " (nonfatal)"
+			   << dendl;
+	/* not fatal, could result from a race */
+      }
+    } else if (ret < 0) {
+      entry.status = lc_failed;
+    } else {
+      entry.status = lc_complete;
+    }
+    ret = sal_lc->set_entry(lc_shard,  entry);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
+          << lc_shard << dendl;
+      /* fatal, locked */
+      goto exit;
+    }
+
+    /* done with this shard */
+    if (head.marker.empty()) {
+      ldpp_dout(this, 5) <<
+	"RGWLC::process() cycle finished lc_shard="
+			 << lc_shard
+			 << dendl;
+      head.shard_rollover_date = ceph_clock_now();
+      ret = sal_lc->put_head(lc_shard,  head);
+      if (ret < 0) {
+	ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
+			   << lc_shard
+			   << dendl;
+      }
+      goto exit;
+    }
+  } while(1 && !once && !going_down());
+
+notlocked:
   delete lock;
   return 0;
 
