@@ -46,7 +46,6 @@ SegmentedJournal::SegmentedJournal(
                      journal_segment_allocator),
     scanner(scanner)
 {
-  register_metrics();
 }
 
 SegmentedJournal::open_for_write_ret SegmentedJournal::open_for_write()
@@ -59,7 +58,6 @@ SegmentedJournal::close_ertr::future<> SegmentedJournal::close()
   LOG_PREFIX(Journal::close);
   INFO("closing, committed_to={}",
        record_submitter.get_committed_to());
-  metrics.clear();
   return record_submitter.close();
 }
 
@@ -376,68 +374,6 @@ SegmentedJournal::submit_record(
   }
 
   return do_submit_record(std::move(record), handle);
-}
-
-void SegmentedJournal::register_metrics()
-{
-  LOG_PREFIX(Journal::register_metrics);
-  DEBUG("");
-  record_submitter.reset_stats();
-  namespace sm = seastar::metrics;
-  metrics.add_group(
-    "journal",
-    {
-      sm::make_counter(
-        "record_num",
-        [this] {
-          return record_submitter.get_record_batch_stats().num_io;
-        },
-        sm::description("total number of records submitted")
-      ),
-      sm::make_counter(
-        "record_batch_num",
-        [this] {
-          return record_submitter.get_record_batch_stats().num_io_grouped;
-        },
-        sm::description("total number of records batched")
-      ),
-      sm::make_counter(
-        "io_num",
-        [this] {
-          return record_submitter.get_io_depth_stats().num_io;
-        },
-        sm::description("total number of io submitted")
-      ),
-      sm::make_counter(
-        "io_depth_num",
-        [this] {
-          return record_submitter.get_io_depth_stats().num_io_grouped;
-        },
-        sm::description("total number of io depth")
-      ),
-      sm::make_counter(
-        "record_group_padding_bytes",
-        [this] {
-          return record_submitter.get_record_group_padding_bytes();
-        },
-        sm::description("bytes of metadata padding when write record groups")
-      ),
-      sm::make_counter(
-        "record_group_metadata_bytes",
-        [this] {
-          return record_submitter.get_record_group_metadata_bytes();
-        },
-        sm::description("bytes of raw metadata when write record groups")
-      ),
-      sm::make_counter(
-        "record_group_data_bytes",
-        [this] {
-          return record_submitter.get_record_group_data_bytes();
-        },
-        sm::description("bytes of data when write record groups")
-      ),
-    }
-  );
 }
 
 }

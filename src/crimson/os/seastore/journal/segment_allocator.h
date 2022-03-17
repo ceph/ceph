@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <seastar/core/circular_buffer.hh>
+#include <seastar/core/metrics.hh>
 #include <seastar/core/shared_future.hh>
 
 #include "include/buffer.h"
@@ -366,32 +367,8 @@ public:
     return segment_allocator.get_name();
   }
 
-  grouped_io_stats get_record_batch_stats() const {
-    return stats.record_batch_stats;
-  }
-
-  grouped_io_stats get_io_depth_stats() const {
-    return stats.io_depth_stats;
-  }
-
-  uint64_t get_record_group_padding_bytes() const {
-    return stats.record_group_padding_bytes;
-  }
-
-  uint64_t get_record_group_metadata_bytes() const {
-    return stats.record_group_metadata_bytes;
-  }
-
-  uint64_t get_record_group_data_bytes() const {
-    return stats.record_group_data_bytes;
-  }
-
   journal_seq_t get_committed_to() const {
     return committed_to;
-  }
-
-  void reset_stats() {
-    stats = {};
   }
 
   // whether is available to submit a record
@@ -490,6 +467,7 @@ private:
     uint64_t record_group_metadata_bytes = 0;
     uint64_t record_group_data_bytes = 0;
   } stats;
+  seastar::metrics::metric_group metrics;
 };
 
 }

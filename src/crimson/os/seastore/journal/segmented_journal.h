@@ -4,7 +4,6 @@
 #pragma once
 
 #include <seastar/core/future.hh>
-#include <seastar/core/metrics.hh>
 
 #include "include/ceph_assert.h"
 #include "include/buffer.h"
@@ -57,7 +56,6 @@ private:
   SegmentAllocator journal_segment_allocator;
   RecordSubmitter record_submitter;
   ExtentReader& scanner;
-  seastar::metrics::metric_group metrics;
   WritePipeline* write_pipeline = nullptr;
 
   /// read journal segment headers from scanner
@@ -87,8 +85,6 @@ private:
     segment_header_t header,         ///< [in] segment header
     delta_handler_t &delta_handler   ///< [in] processes deltas in order
   );
-
-  void register_metrics();
 };
 
 }
