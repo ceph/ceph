@@ -262,6 +262,8 @@ public:
       return crimson::do_for_each(allocators_item.second, [](auto& allocator) {
         return allocator->stop();
       });
+    }).safe_then([this] {
+      allocators.clear();
     });
   }
 
