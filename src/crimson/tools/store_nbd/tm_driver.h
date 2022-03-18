@@ -6,7 +6,6 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
-#include "crimson/os/seastore/segment_manager/block.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "test/crimson/seastore/test_block.h"
 
@@ -36,8 +35,8 @@ public:
 private:
   const config_t config;
 
-  using BlockSegmentManager = crimson::os::seastore::segment_manager::block::BlockSegmentManager;
-  std::unique_ptr<BlockSegmentManager> segment_manager;
+  using SegmentManagerRef = crimson::os::seastore::SegmentManagerRef;
+  SegmentManagerRef segment_manager;
 
   using TransactionManager = crimson::os::seastore::TransactionManager;
   using TransactionManagerRef = crimson::os::seastore::TransactionManagerRef;

@@ -161,6 +161,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
     cache->dump_contents();
     return journal->close();
   }).safe_then([this] {
+    scanner.reset();
     return epm->close();
   }).safe_then([FNAME] {
     INFO("completed");
@@ -553,5 +554,30 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 }
 
 TransactionManager::~TransactionManager() {}
+
+TransactionManagerRef make_transaction_manager(
+    SegmentManager& sm,
+    bool detailed)
+{
+  auto scanner = std::make_unique<ExtentReader>();
+  auto& scanner_ref = *scanner.get();
+  auto segment_cleaner = std::make_unique<SegmentCleaner>(
+    SegmentCleaner::config_t::get_default(),
+    std::move(scanner),
+    detailed);
+  auto journal = journal::make_segmented(sm, scanner_ref, *segment_cleaner);
+  auto epm = std::make_unique<ExtentPlacementManager>();
+  auto cache = std::make_unique<Cache>(scanner_ref, *epm);
+  auto lba_manager = lba_manager::create_lba_manager(sm, *cache);
+
+  return std::make_unique<TransactionManager>(
+    sm,
+    std::move(segment_cleaner),
+    std::move(journal),
+    std::move(cache),
+    std::move(lba_manager),
+    std::move(epm),
+    scanner_ref);
+}
 
 }
