@@ -8066,7 +8066,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   const ghobject_t& oid,
   const string& key,
   const bufferlist& value,
-  mempool::bluestore_fsck::list<string>* expecting_shards,
+  const map<string, bufferlist>& shards,
   map<BlobRef, bluestore_blob_t::unused_t>* referenced,
   const BlueStore::FSCK_ObjectCtx& ctx)
 {
@@ -8081,6 +8081,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   auto& sb_info = ctx.sb_info;
   auto& sb_ref_counts = ctx.sb_ref_counts;
   auto repairer = ctx.repairer;
+  auto shards_local = shards;
 
   store_statfs_t* res_statfs = (per_pool_stat_collection || repairer) ?
     &ctx.expected_pool_statfs[pool_id] :
@@ -8093,29 +8094,57 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   o.reset(Onode::decode(c, oid, key, value));
   ++num_objects;
 
-  num_spanning_blobs += o->extent_map.spanning_blob_map.size();
-
-  o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-  _dump_onode<30>(cct, *o);
-  // shards
   if (!o->extent_map.shards.empty()) {
     ++num_sharded_objects;
-    if (depth != FSCK_SHALLOW) {
-      ceph_assert(expecting_shards);
-      for (auto& s : o->extent_map.shards) {
-        dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
-        expecting_shards->push_back(string());
-        get_extent_shard_key(o->key, s.shard_info->offset,
-          &expecting_shards->back());
-        if (s.shard_info->offset >= o->onode.size) {
-          derr << "fsck error: " << oid << " shard 0x" << std::hex
-            << s.shard_info->offset << " past EOF at 0x" << o->onode.size
-            << std::dec << dendl;
-          ++errors;
-        }
+    int64_t shard_errors = 0;
+    // we should have all the shards we expect to have, in order
+    uint32_t shard_id = 0;
+    for (auto& s : o->extent_map.shards) {
+      dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
+      if (s.shard_info->offset >= o->onode.size) {
+	derr << "fsck error: " << oid << " shard 0x" << std::hex
+	     << s.shard_info->offset << " past EOF at 0x" << o->onode.size
+	     << std::dec << dendl;
+	++shard_errors;
+      }
+      string shard_key;
+      get_extent_shard_key(o->key, s.shard_info->offset, &shard_key);
+      if (auto it = shards_local.find(shard_key); it != shards_local.end()) {
+	// if we have such shard, decode
+	o->extent_map.provide_shard_info_to_onode(it->second, shard_id);
+	shard_id++;
+	shards_local.erase(it);
+      } else {
+	// if not, its missing
+	derr << "fsck error: " << oid << " shard 0x" << std::hex
+	     << s.shard_info->offset << std::dec << " missing" << dendl;
+	++shard_errors;
       }
     }
+    // any shards still in shard_kvals are extra
+    for (auto& s: shards_local) {
+      derr << "fsck error: " << oid << " stray shard "
+	   << pretty_binary_string(s.first) << dendl;
+      ++shard_errors;
+    }
+
+    errors += shard_errors;
+    if (shard_errors > 0) {
+      // skip all object-related data as if it didn't exist
+      dout(10) << " corrupted onode " << oid << dendl;
+      if (repairer) {
+	// delete corrupted object
+	// TODO this it the place to implement deletion
+      }
+      return OnodeRef();
+    }
   }
+
+  num_spanning_blobs += o->extent_map.spanning_blob_map.size();
+
+  // no longer needed, we already decoded all shards
+  // o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  _dump_onode<30>(cct, *o);
 
   // lextents
   uint64_t pos = 0;
@@ -8370,6 +8399,7 @@ public:
       ghobject_t oid;
       string key;
       bufferlist value;
+      map<string, bufferlist> shards;
     };
     struct Batch {
       std::atomic<size_t> running = { 0 };
@@ -8480,7 +8510,7 @@ public:
           entry.oid,
           entry.key,
           entry.value,
-          nullptr, // expecting_shards - this will need a protection if passed
+          entry.shards,
           nullptr, // referenced
           ctx);
       }
@@ -8500,7 +8530,8 @@ public:
       BlueStore::CollectionRef c,
       const ghobject_t& oid,
       const string& key,
-      const bufferlist& value) {
+      const bufferlist& value,
+      const map<string, bufferlist>& shards) {
       bool res = false;
       size_t pos0 = last_batch_pos;
       if (!batch_acquired) {
@@ -8528,6 +8559,7 @@ public:
         entry.oid = oid;
         entry.key = key;
         entry.value = value;
+	entry.shards = shards;
 
         ++batch.entry_count;
         if (batch.entry_count == BatchLen) {
@@ -8744,7 +8776,139 @@ void BlueStore::_fsck_check_objects(
 
   uint64_t_btree_t used_nids;
 
+  // in multi-thread mode, how many were processed by main thread
   size_t processed_myself = 0;
+
+  auto check_nid = [&](OnodeRef o) -> bool
+  {
+    ceph_assert(o != nullptr);
+    if (o->onode.nid) {
+      if (o->onode.nid > nid_max) {
+	derr << "fsck error: " << o->oid << " nid " << o->onode.nid
+	     << " > nid_max " << nid_max << dendl;
+	++errors;
+      }
+      if (used_nids.count(o->onode.nid)) {
+	derr << "fsck error: " << o->oid << " nid " << o->onode.nid
+	     << " already in use" << dendl;
+	++errors;
+	return false; // go for next object
+      }
+      used_nids.insert(o->onode.nid);
+    }
+    return true;
+  };
+
+  auto check_referenced = [&](OnodeRef o,
+			      map<BlobRef, bluestore_blob_t::unused_t>& referenced)
+  {
+    for (auto& i : referenced) {
+      dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
+	       << std::dec << " for " << *i.first << dendl;
+      const bluestore_blob_t& blob = i.first->get_blob();
+      if (i.second & blob.unused) {
+	derr << "fsck error: " << o->oid << " blob claims unused 0x"
+	     << std::hex << blob.unused
+	     << " but extents reference 0x" << i.second << std::dec
+	     << " on blob " << *i.first << dendl;
+	++errors;
+      }
+      if (blob.has_csum()) {
+	uint64_t blob_len = blob.get_logical_length();
+	uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused) * 8);
+	unsigned csum_count = blob.get_csum_count();
+	unsigned csum_chunk_size = blob.get_csum_chunk_size();
+	for (unsigned p = 0; p < csum_count; ++p) {
+	  unsigned pos = p * csum_chunk_size;
+	  unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
+	  unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
+	  unsigned mask = 1u << firstbit;
+	  for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
+	    mask |= 1u << b;
+	  }
+	  if ((blob.unused & mask) == mask) {
+	    // this csum chunk region is marked unused
+	    if (blob.get_csum_item(p) != 0) {
+	      derr << "fsck error: " << o->oid
+		   << " blob claims csum chunk 0x" << std::hex << pos
+		   << "~" << csum_chunk_size
+		   << " is unused (mask 0x" << mask << " of unused 0x"
+		   << blob.unused << ") but csum is non-zero 0x"
+		   << blob.get_csum_item(p) << std::dec << " on blob "
+		   << *i.first << dendl;
+	      ++errors;
+	    }
+	  }
+	}
+      }
+    }
+  };
+
+  auto check_omap = [&](OnodeRef o)
+  {
+    if (o->onode.has_omap()) {
+      ceph_assert(ctx.used_omap_head);
+      if (ctx.used_omap_head->count(o->onode.nid)) {
+	derr << "fsck error: " << o->oid << " omap_head " << o->onode.nid
+	     << " already in use" << dendl;
+	++errors;
+      } else {
+	ctx.used_omap_head->insert(o->onode.nid);
+      }
+    }
+  };
+
+  auto do_deep_read = [&](CollectionRef c, OnodeRef o)
+  {
+    bufferlist bl;
+    uint64_t max_read_block = cct->_conf->bluestore_fsck_read_bytes_cap;
+    uint64_t offset = 0;
+    do {
+      uint64_t l = std::min(uint64_t(o->onode.size - offset), max_read_block);
+      int r = _do_read(c.get(), o, offset, l, bl,
+		       CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      if (r < 0) {
+	++errors;
+	derr << "fsck error: " << o->oid << std::hex
+	     << " error during read: "
+	     << " " << offset << "~" << l
+	     << " " << cpp_strerror(r) << std::dec
+	     << dendl;
+	break;
+      }
+      offset += l;
+    } while (offset < o->onode.size);
+  };
+
+  // locate_collection sets these:
+  CollectionRef c;
+  int64_t pool_id = -1;
+  spg_t pgid;
+  auto locate_collection = [&](const ghobject_t& oid) -> bool
+  {
+    if (!c ||
+        oid.shard_id != pgid.shard ||
+        oid.hobj.get_logical_pool() != (int64_t)pgid.pool() ||
+        !c->contains(oid)) {
+      c = nullptr;
+      for (auto& p : coll_map) {
+	if (p.second->contains(oid)) {
+	  c = p.second;
+	  break;
+	}
+      }
+      if (!c) {
+	derr << "fsck error: stray object " << oid
+	     << " not owned by any collection" << dendl;
+	++errors;
+	return false;
+      }
+      pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
+      dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
+	       << dendl;
+    }
+    return true;
+  };
 
   auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
   mempool::bluestore_fsck::list<string> expecting_shards;
@@ -8770,212 +8934,98 @@ void BlueStore::_fsck_check_objects(
       thread_pool.start();
     }
 
-    // fill global if not overriden below
-    CollectionRef c;
-    int64_t pool_id = -1;
-    spg_t pgid;
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      dout(30) << __func__ << " key "
-        << pretty_binary_string(it->key()) << dendl;
-      if (is_extent_shard_key(it->key())) {
-        if (depth == FSCK_SHALLOW) {
-          continue;
-        }
-        while (!expecting_shards.empty() &&
-          expecting_shards.front() < it->key()) {
-          derr << "fsck error: missing shard key "
-            << pretty_binary_string(expecting_shards.front())
-            << dendl;
-          ++errors;
-          expecting_shards.pop_front();
-        }
-        if (!expecting_shards.empty() &&
-          expecting_shards.front() == it->key()) {
-          // all good
-          expecting_shards.pop_front();
-          continue;
-        }
-
-        uint32_t offset;
-        string okey;
-        get_key_extent_shard(it->key(), &okey, &offset);
-        derr << "fsck error: stray shard 0x" << std::hex << offset
-          << std::dec << dendl;
-        if (expecting_shards.empty()) {
-          derr << "fsck error: " << pretty_binary_string(it->key())
-            << " is unexpected" << dendl;
-          ++errors;
-          continue;
-        }
-        while (expecting_shards.front() > it->key()) {
-          derr << "fsck error:   saw " << pretty_binary_string(it->key())
-            << dendl;
-          derr << "fsck error:   exp "
-            << pretty_binary_string(expecting_shards.front()) << dendl;
-          ++errors;
-          expecting_shards.pop_front();
-          if (expecting_shards.empty()) {
-            break;
-          }
-        }
-        continue;
-      }
-
+    auto check_object = [&](const string& obj_key,
+			    bufferlist obj_val,
+			    map<string, bufferlist>& shard_kvals) -> bool
+    {
       ghobject_t oid;
-      int r = get_key_object(it->key(), &oid);
+      int r = get_key_object(obj_key, &oid);
       if (r < 0) {
         derr << "fsck error: bad object key "
-          << pretty_binary_string(it->key()) << dendl;
+          << pretty_binary_string(obj_key) << dendl;
         ++errors;
-        continue;
+        return false;
       }
-      if (!c ||
-        oid.shard_id != pgid.shard ||
-        oid.hobj.get_logical_pool() != (int64_t)pgid.pool() ||
-        !c->contains(oid)) {
-        c = nullptr;
-        for (auto& p : coll_map) {
-          if (p.second->contains(oid)) {
-            c = p.second;
-            break;
-          }
-        }
-        if (!c) {
-          derr << "fsck error: stray object " << oid
-            << " not owned by any collection" << dendl;
-          ++errors;
-          continue;
-        }
-        pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
-        dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
-          << dendl;
+      // sets: CollectionRef c, int64_t pool_id, spg_t pgid
+      if (!locate_collection(oid)) {
+	return false;
       }
-
-      if (depth != FSCK_SHALLOW &&
-        !expecting_shards.empty()) {
-        for (auto& k : expecting_shards) {
-          derr << "fsck error: missing shard key "
-            << pretty_binary_string(k) << dendl;
-        }
-        ++errors;
-        expecting_shards.clear();
-      }
-
       bool queued = false;
       if (depth == FSCK_SHALLOW && thread_count > 0) {
         queued = wq->queue(
           pool_id,
           c,
           oid,
-          it->key(),
-          it->value());
+          obj_key,
+          obj_val,
+	  shard_kvals);
       }
       OnodeRef o;
       map<BlobRef, bluestore_blob_t::unused_t> referenced;
 
       if (!queued) {
         ++processed_myself;
-         o = fsck_check_objects_shallow(
+        o = fsck_check_objects_shallow(
           depth,
           pool_id,
           c,
           oid,
-          it->key(),
-          it->value(),
-          &expecting_shards,
+          obj_key,
+          obj_val,
+          shard_kvals,
           &referenced,
           ctx);
+	if (!o) {
+	  // error printing & fixing already done
+	  return false;
+	}
       }
 
-      if (depth != FSCK_SHALLOW) {
-        ceph_assert(o != nullptr);
-        if (o->onode.nid) {
-          if (o->onode.nid > nid_max) {
-            derr << "fsck error: " << oid << " nid " << o->onode.nid
-              << " > nid_max " << nid_max << dendl;
-            ++errors;
-          }
-          if (used_nids.count(o->onode.nid)) {
-            derr << "fsck error: " << oid << " nid " << o->onode.nid
-              << " already in use" << dendl;
-            ++errors;
-            continue; // go for next object
-          }
-          used_nids.insert(o->onode.nid);
-        }
-        for (auto& i : referenced) {
-          dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
-            << std::dec << " for " << *i.first << dendl;
-          const bluestore_blob_t& blob = i.first->get_blob();
-          if (i.second & blob.unused) {
-            derr << "fsck error: " << oid << " blob claims unused 0x"
-              << std::hex << blob.unused
-              << " but extents reference 0x" << i.second << std::dec
-              << " on blob " << *i.first << dendl;
-            ++errors;
-          }
-          if (blob.has_csum()) {
-            uint64_t blob_len = blob.get_logical_length();
-            uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused) * 8);
-            unsigned csum_count = blob.get_csum_count();
-            unsigned csum_chunk_size = blob.get_csum_chunk_size();
-            for (unsigned p = 0; p < csum_count; ++p) {
-              unsigned pos = p * csum_chunk_size;
-              unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
-              unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
-              unsigned mask = 1u << firstbit;
-              for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
-                mask |= 1u << b;
-              }
-              if ((blob.unused & mask) == mask) {
-                // this csum chunk region is marked unused
-                if (blob.get_csum_item(p) != 0) {
-                  derr << "fsck error: " << oid
-                    << " blob claims csum chunk 0x" << std::hex << pos
-                    << "~" << csum_chunk_size
-                    << " is unused (mask 0x" << mask << " of unused 0x"
-                    << blob.unused << ") but csum is non-zero 0x"
-                    << blob.get_csum_item(p) << std::dec << " on blob "
-                    << *i.first << dendl;
-                  ++errors;
-                }
-              }
-            }
-          }
-        }
-        // omap
-        if (o->onode.has_omap()) {
-          ceph_assert(ctx.used_omap_head);
-          if (ctx.used_omap_head->count(o->onode.nid)) {
-            derr << "fsck error: " << o->oid << " omap_head " << o->onode.nid
-                 << " already in use" << dendl;
-            ++errors;
-          } else {
-            ctx.used_omap_head->insert(o->onode.nid);
-          }
-        } // if (o->onode.has_omap())
-        if (depth == FSCK_DEEP) {
-          bufferlist bl;
-          uint64_t max_read_block = cct->_conf->bluestore_fsck_read_bytes_cap;
-          uint64_t offset = 0;
-          do {
-            uint64_t l = std::min(uint64_t(o->onode.size - offset), max_read_block);
-            int r = _do_read(c.get(), o, offset, l, bl,
-              CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
-            if (r < 0) {
-              ++errors;
-              derr << "fsck error: " << oid << std::hex
-                << " error during read: "
-                << " " << offset << "~" << l
-                << " " << cpp_strerror(r) << std::dec
-                << dendl;
-              break;
-            }
-            offset += l;
-          } while (offset < o->onode.size);
-        } // deep
-      } //if (depth != FSCK_SHALLOW)
-    } // for (it->lower_bound(string()); it->valid(); it->next())
+      if (depth == FSCK_REGULAR || depth == FSCK_DEEP) {
+	if (!check_nid(o)) {
+	  return false;
+	}
+	check_referenced(o, referenced);
+        check_omap(o);
+      }
+      if (depth == FSCK_DEEP) {
+	do_deep_read(c, o);
+      }
+      return true;
+    };
+
+    string obj_key;
+    bufferlist obj_val;
+    map<string, bufferlist> shard_kvals;
+
+    for (it->lower_bound(string()); it->valid(); it->next()) {
+      dout(30) << __func__ << " key "
+        << pretty_binary_string(it->key()) << dendl;
+
+      if (is_extent_shard_key(it->key())) {
+	// a shard key must be continuation of an object
+	if (obj_key.empty() || (it->key().find(obj_key) != 0)) {
+	  // this is a stray shard
+	  derr << "fsck error: " << pretty_binary_string(it->key())
+	       << " stray shard " << dendl;
+	  ++errors;
+	} else {
+	  shard_kvals.emplace(it->key(), it->value());
+	}
+      } else {
+	if (!obj_key.empty()) {
+	  check_object(obj_key, obj_val, shard_kvals);
+	}
+	obj_key = it->key();
+	obj_val = it->value();
+	shard_kvals.clear();
+      }
+    }
+    if (!obj_key.empty()) {
+      check_object(obj_key, obj_val, shard_kvals);
+    }
+
+    // if we used multi-thread checking wait
     if (depth == FSCK_SHALLOW && thread_count > 0) {
       wq->finalize(thread_pool, ctx);
       if (processed_myself) {

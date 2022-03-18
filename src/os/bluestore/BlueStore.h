@@ -3647,7 +3647,7 @@ public:
     const ghobject_t& oid,
     const std::string& key,
     const ceph::buffer::list& value,
-    mempool::bluestore_fsck::list<std::string>* expecting_shards,
+    const std::map<std::string, ceph::buffer::list>& shards,
     std::map<BlobRef, bluestore_blob_t::unused_t>* referenced,
     const BlueStore::FSCK_ObjectCtx& ctx);
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
