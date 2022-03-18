@@ -88,14 +88,65 @@ class Group(GroupTemplate):
                 return []
             raise
 
+def set_group_attrs(fs, path, attrs):
+    # set subvolume group attrs
+    # set size
+    quota = attrs.get("quota")
+    if quota is not None:
+        try:
+            fs.setxattr(path, 'ceph.quota.max_bytes', str(quota).encode('utf-8'), 0)
+        except cephfs.InvalidValue:
+            raise VolumeException(-errno.EINVAL, "invalid size specified: '{0}'".format(quota))
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
 
-def create_group(fs, vol_spec, groupname, pool, mode, uid, gid):
+    # set pool layout
+    pool = attrs.get("data_pool")
+    if not pool:
+        pool = get_ancestor_xattr(fs, path, "ceph.dir.layout.pool")
+    try:
+        fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+    except cephfs.InvalidValue:
+        raise VolumeException(-errno.EINVAL,
+                              "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
+
+    # set uid/gid
+    uid = attrs.get("uid")
+    if uid is None:
+        uid = 0
+    else:
+        try:
+            uid = int(uid)
+            if uid < 0:
+                raise ValueError
+        except ValueError:
+            raise VolumeException(-errno.EINVAL, "invalid UID")
+
+    gid = attrs.get("gid")
+    if gid is None:
+        gid = 0
+    else:
+        try:
+            gid = int(gid)
+            if gid < 0:
+                raise ValueError
+        except ValueError:
+            raise VolumeException(-errno.EINVAL, "invalid GID")
+    fs.chown(path, uid, gid)
+
+    # set mode
+    mode = attrs.get("mode", None)
+    if mode is not None:
+        fs.lchmod(path, mode)
+
+def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid):
     """
     create a subvolume group.
 
     :param fs: ceph filesystem handle
     :param vol_spec: volume specification
     :param groupname: subvolume group name
+    :param size: In bytes, or None for no size limit
     :param pool: the RADOS pool where the data objects of the subvolumes will be stored
     :param mode: the user permissions
     :param uid: the user identifier
@@ -110,32 +161,13 @@ def create_group(fs, vol_spec, groupname, pool, mode, uid, gid):
     create_base_dir(fs, vol_spec_base_dir, vol_spec.DEFAULT_MODE)
     fs.mkdir(path, mode)
     try:
-        if not pool:
-            pool = get_ancestor_xattr(fs, path, "ceph.dir.layout.pool")
-        try:
-            fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
-        except cephfs.InvalidValue:
-            raise VolumeException(-errno.EINVAL,
-                                  "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
-        if uid is None:
-            uid = 0
-        else:
-            try:
-                uid = int(uid)
-                if uid < 0:
-                    raise ValueError
-            except ValueError:
-                raise VolumeException(-errno.EINVAL, "invalid UID")
-        if gid is None:
-            gid = 0
-        else:
-            try:
-                gid = int(gid)
-                if gid < 0:
-                    raise ValueError
-            except ValueError:
-                raise VolumeException(-errno.EINVAL, "invalid GID")
-        fs.chown(path, uid, gid)
+        attrs = {
+            'uid': uid,
+            'gid': gid,
+            'data_pool': pool,
+            'quota': size
+        }
+        set_group_attrs(fs, path, attrs)
     except (cephfs.Error, VolumeException) as e:
         try:
             # cleanup group path on best effort basis
