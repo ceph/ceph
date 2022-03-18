@@ -9203,15 +9203,14 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.content_type = content_type;
 
   librados::IoCtx head_obj_ctx; // initialize to data pool so we can get pool id
-  const bool head_pool_found =
-    get_obj_head_ioctx(dpp, bucket_info, obj, &head_obj_ctx);
-  if (head_pool_found) {
-    list_state.ver.pool = head_obj_ctx.get_id();
-    list_state.ver.epoch = astate->epoch;
-  } else {
+  int ret = get_obj_head_ioctx(dpp, bucket_info, obj, &head_obj_ctx);
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ <<
       " WARNING: unable to find head object data pool for \"" <<
       obj << "\", not updating version pool/epoch" << dendl;
+  } else {
+    list_state.ver.pool = head_obj_ctx.get_id();
+    list_state.ver.epoch = astate->epoch;
   }
 
   if (astate->obj_tag.length() > 0) {
