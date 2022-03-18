@@ -37,7 +37,7 @@ def task(ctx, config):
     """
 
     log.info('Syncing clocks and checking initial clock skew...')
-    cluster = filter_out_containers()(ctx.cluster)
+    cluster = filter_out_containers(ctx.cluster)
     run.wait(
         cluster.run(
             args = [
