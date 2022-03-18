@@ -667,11 +667,13 @@ private:
 
   template<typename Handler, typename T>
   static void assoc_delete(const Handler& handler, T* t) {
-    typename std::allocator_traits<typename ba::associated_allocator<Handler>::type>
-      ::template rebind_alloc<T> a(
-	ba::get_associated_allocator(handler));
-    a.destroy(t);
-    a.deallocate(t, 1);
+    using Alloc = ba::associated_allocator_t<Handler>;
+    using Traits = typename std::allocator_traits<Alloc>;
+    using RebindAlloc = typename Traits::template rebind_alloc<T>;
+    using RebindTraits = typename std::allocator_traits<RebindAlloc>;
+    RebindAlloc a(get_associated_allocator(handler));
+    RebindTraits::destroy(a, t);
+    RebindTraits::deallocate(a, t, 1);
   }
 
   FIFO(RADOS& r,

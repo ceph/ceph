@@ -26,9 +26,9 @@ void RadosTestNS::SetUp()
 {
   cluster = RadosTestNS::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
-  int requires;
-  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(ioctx, &requires));
-  ASSERT_FALSE(requires);
+  int req;
+  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(ioctx, &req));
+  ASSERT_FALSE(req);
 }
 
 void RadosTestNS::TearDown()
@@ -78,9 +78,9 @@ void RadosTestECNS::SetUp()
 {
   cluster = RadosTestECNS::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
-  int requires;
-  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(ioctx, &requires));
-  ASSERT_TRUE(requires);
+  int req;
+  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(ioctx, &req));
+  ASSERT_TRUE(req);
   ASSERT_EQ(0, rados_ioctx_pool_required_alignment2(ioctx, &alignment));
   ASSERT_NE(0U, alignment);
 }
@@ -112,9 +112,9 @@ void RadosTest::SetUp()
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
   nspace = get_temp_pool_name();
   rados_ioctx_set_namespace(ioctx, nspace.c_str());
-  int requires;
-  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(ioctx, &requires));
-  ASSERT_FALSE(requires);
+  int req;
+  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(ioctx, &req));
+  ASSERT_FALSE(req);
 }
 
 void RadosTest::TearDown()
@@ -172,9 +172,9 @@ void RadosTestEC::SetUp()
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
   nspace = get_temp_pool_name();
   rados_ioctx_set_namespace(ioctx, nspace.c_str());
-  int requires;
-  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(ioctx, &requires));
-  ASSERT_TRUE(requires);
+  int req;
+  ASSERT_EQ(0, rados_ioctx_pool_requires_alignment2(ioctx, &req));
+  ASSERT_TRUE(req);
   ASSERT_EQ(0, rados_ioctx_pool_required_alignment2(ioctx, &alignment));
   ASSERT_NE(0U, alignment);
 }

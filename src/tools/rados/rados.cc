@@ -2202,15 +2202,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
    // align op_size
    {
-      bool requires;
-      ret = io_ctx.pool_requires_alignment2(&requires);
+      bool req;
+      ret = io_ctx.pool_requires_alignment2(&req);
       if (ret < 0) {
         cerr << "error checking pool alignment requirement"
           << cpp_strerror(ret) << std::endl;
         return 1;
       }
 
-      if (requires) {
+      if (req) {
         uint64_t align = 0;
         ret = io_ctx.pool_required_alignment2(&align);
         if (ret < 0) {
