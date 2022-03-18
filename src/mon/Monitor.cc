@@ -4029,7 +4029,18 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
                                      req,
 				     rr->con_features,
 				     rr->session->caps);
-    forward->set_priority(req->get_priority());
+
+    switch (req->get_type()) {
+    case MSG_OSD_BEACON:
+    case MSG_MGR_BEACON:
+      if (req->get_priority() < CEPH_MSG_PRIO_HIGH) {
+        forward->set_priority(CEPH_MSG_PRIO_HIGH);
+        break;
+      }
+    default:
+      forward->set_priority(req->get_priority());
+    }
+
     if (session->auth_handler) {
       forward->entity_name = session->entity_name;
     } else if (req->get_source().is_mon()) {

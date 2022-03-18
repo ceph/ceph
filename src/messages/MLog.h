@@ -25,10 +25,16 @@ public:
   uuid_d fsid;
   std::deque<LogEntry> entries;
 
-  MLog() : PaxosServiceMessage{MSG_LOG, 0} {}
+  MLog() : PaxosServiceMessage{MSG_LOG, 0} {
+    set_priority(CEPH_MSG_PRIO_DEFAULT);
+  }
   MLog(const uuid_d& f, std::deque<LogEntry>&& e)
-    : PaxosServiceMessage{MSG_LOG, 0}, fsid(f), entries{std::move(e)} { }
-  MLog(const uuid_d& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) { }
+    : PaxosServiceMessage{MSG_LOG, 0}, fsid(f), entries{std::move(e)} {
+    set_priority(CEPH_MSG_PRIO_DEFAULT);
+  }
+  MLog(const uuid_d& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) {
+    set_priority(CEPH_MSG_PRIO_DEFAULT);
+  }
 private:
   ~MLog() final {}
 
