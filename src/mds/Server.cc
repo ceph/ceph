@@ -3380,8 +3380,16 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   const cref_t<MClientRequest> &req = mdr->client_request;
 
-  dout(10) << "copying fscrypt_auth len " << req->fscrypt_auth.size() << dendl;
-  _inode->fscrypt_auth = req->fscrypt_auth;
+  // All the subdirs and links will have the same encryption info
+  // with the parent directory
+  if (S_ISDIR(_inode->mode)) {
+    dout(10) << "dir/link, inheriting fscrypt_auth len " << req->fscrypt_auth.size() << dendl;
+    const auto& pi = diri->get_inode();
+    _inode->fscrypt_auth = pi->fscrypt_auth;
+  } else {
+    dout(10) << "file, copying fscrypt_auth len " << req->fscrypt_auth.size() << dendl;
+    _inode->fscrypt_auth = req->fscrypt_auth;
+  }
   _inode->fscrypt_file = req->fscrypt_file;
 
   if (req->get_data().length()) {
