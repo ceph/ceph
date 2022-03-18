@@ -22,12 +22,17 @@ def syslog(ctx, config):
         yield
         return
 
+    cluster = ctx.cluster.filter(lambda r: not r.is_container)
+    if not len(cluster.remotes.keys()):
+        yield
+        return
+
     log.info('Starting syslog monitoring...')
 
     archive_dir = misc.get_archive_dir(ctx)
     log_dir = '{adir}/syslog'.format(adir=archive_dir)
     run.wait(
-        ctx.cluster.run(
+        cluster.run(
             args=['mkdir', '-p', '-m0755', '--', log_dir],
             wait=False,
         )
@@ -43,7 +48,7 @@ def syslog(ctx, config):
     ]
     conf_fp = BytesIO('\n'.join(conf_lines).encode())
     try:
-        for rem in ctx.cluster.remotes.keys():
+        for rem in cluster.remotes.keys():
             log_context = 'system_u:object_r:var_log_t:s0'
             for log_path in (kern_log, misc_log):
                 rem.run(args=['install', '-m', '666', '/dev/null', log_path])
@@ -55,7 +60,7 @@ def syslog(ctx, config):
             )
             conf_fp.seek(0)
         run.wait(
-            ctx.cluster.run(
+            cluster.run(
                 args=[
                     'sudo',
                     'service',
@@ -70,10 +75,14 @@ def syslog(ctx, config):
 
         yield
     finally:
+        cluster = ctx.cluster.filter(lambda r: not r.is_container)
+        if not len(cluster.remotes.keys()):
+            return
+        
         log.info('Shutting down syslog monitoring...')
 
         run.wait(
-            ctx.cluster.run(
+            cluster.run(
                 args=[
                     'sudo',
                     'rm',
@@ -93,7 +102,7 @@ def syslog(ctx, config):
         # flush the file fully. oh well.
 
         log.info('Checking logs for errors...')
-        for rem in ctx.cluster.remotes.keys():
+        for rem in cluster.remotes.keys():
             log.debug('Checking %s', rem.name)
             stdout = rem.sh(
                 [
@@ -152,7 +161,7 @@ def syslog(ctx, config):
 
         log.info('Compressing syslogs...')
         run.wait(
-            ctx.cluster.run(
+            cluster.run(
                 args=[
                     'find',
                     '{adir}/syslog'.format(adir=archive_dir),
@@ -174,7 +183,7 @@ def syslog(ctx, config):
 
         log.info('Gathering journactl -b0...')
         run.wait(
-            ctx.cluster.run(
+            cluster.run(
                 args=[
                     'sudo', 'journalctl', '-b0',
                     run.Raw('|'),

@@ -252,6 +252,11 @@ def nuke(ctx, should_unlock, sync_clocks=True, noipmi=False, keep_logs=False, sh
                         log.info(
                             "Not nuking %s because description doesn't match",
                             lock['name'])
+                    elif lock.get('up') is False:
+                        del ctx.config['targets'][lock['name']]
+                        log.info(
+                            "Not nuking %s because it is down",
+                            lock['name'])
     with parallel() as p:
         for target, hostkey in ctx.config['targets'].items():
             p.spawn(

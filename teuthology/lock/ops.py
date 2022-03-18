@@ -297,6 +297,10 @@ def push_new_keys(keys_dict, reference):
 
 
 def reimage_machines(ctx, machines, machine_type):
+    reimage_types = teuthology.provision.get_reimage_types()
+    if machine_type not in reimage_types:
+        log.info(f"Skipping reimage of {machines.keys()} because {machine_type} is not in {reimage_types}")
+        return machines
     # Setup log file, reimage machines and update their keys
     reimaged = dict()
     console_log_conf = dict(
