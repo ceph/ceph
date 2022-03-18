@@ -3256,7 +3256,7 @@ int OSD::run_osd_bench_test(
 
   utime_t start = ceph_clock_now();
   for (int64_t pos = 0; pos < count; pos += bsize) {
-    char nm[30];
+    char nm[34];
     unsigned offset = 0;
     if (onum && osize) {
       snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(rand() % onum));

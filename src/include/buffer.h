@@ -440,7 +440,13 @@ struct error_code;
 	buffers_iterator(U* const p)
 	  : cur(p) {
 	}
-	template <class U>
+	// copy constructor
+	buffers_iterator(const buffers_iterator<T>& other)
+	  : cur(other.cur) {
+	}
+	// converting constructor, from iterator -> const_iterator only
+	template <class U, typename std::enable_if<
+	    std::is_const<T>::value && !std::is_const<U>::value, int>::type = 0>
 	buffers_iterator(const buffers_iterator<U>& other)
 	  : cur(other.cur) {
 	}
@@ -474,11 +480,6 @@ struct error_code;
 	}
 	bool operator!=(const buffers_iterator& rhs) const {
 	  return !(*this==rhs);
-	}
-
-	using citer_t = buffers_iterator<typename std::add_const<T>::type>;
-	operator citer_t() const {
-	  return citer_t(cur);
 	}
       };
 

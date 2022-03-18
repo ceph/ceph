@@ -1212,7 +1212,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   if (auth.digest_present && candidate.digest_present &&
       auth.digest != candidate.digest) {
-    format_to(out,
+    format_to(std::back_inserter(out),
               "data_digest {:#x} != data_digest {:#x} from shard {}",
               candidate.digest,
               auth.digest,
@@ -1223,7 +1223,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   if (auth.omap_digest_present && candidate.omap_digest_present &&
       auth.omap_digest != candidate.omap_digest) {
-    format_to(out,
+    format_to(std::back_inserter(out),
               "{}omap_digest {:#x} != omap_digest {:#x} from shard {}",
               sep(error),
               candidate.omap_digest,
@@ -1236,7 +1236,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   if (m_is_replicated) {
     if (auth_oi.is_data_digest() && candidate.digest_present &&
         auth_oi.data_digest != candidate.digest) {
-      format_to(out,
+      format_to(std::back_inserter(out),
                 "{}data_digest {:#x} != data_digest {:#x} from auth oi {}",
                 sep(error),
                 candidate.digest,
@@ -1248,7 +1248,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     // for replicated:
     if (auth_oi.is_omap_digest() && candidate.omap_digest_present &&
         auth_oi.omap_digest != candidate.omap_digest) {
-      format_to(out,
+      format_to(std::back_inserter(out),
                 "{}omap_digest {:#x} != omap_digest {:#x} from auth oi {}",
                 sep(error),
                 candidate.omap_digest,
@@ -1282,7 +1282,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     auth_bl.push_back(auth_attr->second);
 
     if (!can_bl.contents_equal(auth_bl)) {
-      format_to(out, "{}object info inconsistent ", sep(error));
+      format_to(std::back_inserter(out), "{}object info inconsistent ", sep(error));
       obj_result.set_object_info_inconsistency();
     }
   }
@@ -1302,7 +1302,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
       auth_bl.push_back(auth_attr->second);
 
       if (!can_bl.contents_equal(auth_bl)) {
-        format_to(out, "{}snapset inconsistent ", sep(error));
+        format_to(std::back_inserter(out), "{}snapset inconsistent ", sep(error));
         obj_result.set_snapset_inconsistency();
       }
     }
@@ -1325,7 +1325,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
       auth_bl.push_back(auth_hi->second);
 
       if (!can_bl.contents_equal(auth_bl)) {
-        format_to(out, "{}hinfo inconsistent ", sep(error));
+        format_to(std::back_inserter(out), "{}hinfo inconsistent ", sep(error));
         obj_result.set_hinfo_inconsistency();
       }
     }
@@ -1337,7 +1337,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   uint64_t oi_size = logical_to_ondisk_size(auth_oi.size);
   if (oi_size != candidate.size) {
-    format_to(out,
+    format_to(std::back_inserter(out),
               "{}size {} != size {} from auth oi {}",
               sep(error),
               candidate.size,
@@ -1347,7 +1347,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   }
 
   if (auth.size != candidate.size) {
-    format_to(out,
+    format_to(std::back_inserter(out),
               "{}size {} != size {} from shard {}",
               sep(error),
               candidate.size,
@@ -1361,7 +1361,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   if (candidate.size > m_conf->osd_max_object_size &&
       !obj_result.has_size_too_large()) {
 
-    format_to(out,
+    format_to(std::back_inserter(out),
               "{}size {} > {} is too large",
               sep(error),
               candidate.size,
@@ -1381,10 +1381,10 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
     auto cand = candidate.attrs.find(k);
     if (cand == candidate.attrs.end()) {
-      format_to(out, "{}attr name mismatch '{}'", sep(error), k);
+      format_to(std::back_inserter(out), "{}attr name mismatch '{}'", sep(error), k);
       obj_result.set_attr_name_mismatch();
     } else if (cand->second.cmp(v)) {
-      format_to(out, "{}attr value mismatch '{}'", sep(error), k);
+      format_to(std::back_inserter(out), "{}attr value mismatch '{}'", sep(error), k);
       obj_result.set_attr_value_mismatch();
     }
   }
@@ -1397,7 +1397,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
     auto in_auth = auth.attrs.find(k);
     if (in_auth == auth.attrs.end()) {
-      format_to(out, "{}attr name mismatch '{}'", sep(error), k);
+      format_to(std::back_inserter(out), "{}attr name mismatch '{}'", sep(error), k);
       obj_result.set_attr_name_mismatch();
     }
   }

@@ -20,6 +20,7 @@
 extern "C" {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wextern-c-compat"
+#pragma clang diagnostic ignored "-Wdeprecated-anon-enum-enum-conversion"
 #include "motr/config.h"
 #include "motr/client.h"
 #pragma clang diagnostic pop
