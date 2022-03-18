@@ -341,7 +341,8 @@ private:
       _incomplete.pop_back();
     }
     if (!_incomplete.empty()) {
-      seastar::internal::set_callback(_incomplete.back(), static_cast<continuation_base<>*>(this));
+      seastar::internal::set_callback(std::move(_incomplete.back()),
+		                      static_cast<continuation_base<>*>(this));
       _incomplete.pop_back();
       return;
     }
