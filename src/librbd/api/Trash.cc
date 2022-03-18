@@ -180,7 +180,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       lderr(ictx->cct) << "failed to retrieve mirror image: "
                        << cpp_strerror(mirror_r) << dendl;
       return mirror_r;
-    } else if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    } else {
       // a remote rbd-mirror might own the exclusive-lock on this image
       // and therefore we need to disable mirroring so that it closes the image
       r = disable_mirroring<I>(ictx);
@@ -219,8 +219,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     }
     ictx->image_lock.unlock_shared();
 
-    if (mirror_r >= 0 &&
-        mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    if (mirror_r >= 0) {
       r = disable_mirroring<I>(ictx);
       if (r < 0) {
         ictx->state->close();
