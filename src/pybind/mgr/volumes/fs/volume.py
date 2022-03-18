@@ -11,7 +11,8 @@ from .fs_util import listdir
 
 from .operations.volume import create_volume, \
     delete_volume, rename_volume, list_volumes, open_volume, get_pool_names
-from .operations.group import open_group, create_group, remove_group, open_group_unique
+from .operations.group import open_group, create_group, remove_group, \
+    open_group_unique, set_group_attrs
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
 from .operations.trash import Trash
@@ -738,6 +739,7 @@ class VolumeClient(CephfsClient["Module"]):
         ret       = 0, "", ""
         volname    = kwargs['vol_name']
         groupname = kwargs['group_name']
+        size       = kwargs['size']
         pool      = kwargs['pool_layout']
         uid       = kwargs['uid']
         gid       = kwargs['gid']
@@ -746,13 +748,20 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 try:
-                    with open_group(fs_handle, self.volspec, groupname):
+                    with open_group(fs_handle, self.volspec, groupname) as group:
                         # idempotent creation -- valid.
-                        pass
+                        attrs = {
+                            'uid': uid,
+                            'gid': gid,
+                            'mode': octal_str_to_decimal_int(mode),
+                            'data_pool': pool,
+                            'quota': size
+                        }
+                        set_group_attrs(fs_handle, group.path, attrs)
                 except VolumeException as ve:
                     if ve.errno == -errno.ENOENT:
                         oct_mode = octal_str_to_decimal_int(mode)
-                        create_group(fs_handle, self.volspec, groupname, pool, oct_mode, uid, gid)
+                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid)
                     else:
                         raise
         except VolumeException as ve:

@@ -78,6 +78,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolumegroup create '
                    'name=vol_name,type=CephString '
                    f'name=group_name,type=CephString,goodchars={goodchars} '
+                   'name=size,type=CephInt,req=false '
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
@@ -522,7 +523,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
         return self.vc.create_subvolume_group(
-            vol_name=cmd['vol_name'], group_name=cmd['group_name'],
+            vol_name=cmd['vol_name'], group_name=cmd['group_name'], size=cmd.get('size', None),
             pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'),
             uid=cmd.get('uid', None), gid=cmd.get('gid', None))
 
