@@ -1,14 +1,16 @@
+/* tslint:disable*/
 import {
   CreateClusterServicePageHelper,
   CreateClusterWizardHelper
-} from 'cypress/integration/cluster/create-cluster.po';
+} from '../../cluster/create-cluster.po';
+/* tslint:enable*/
 
 describe('Create cluster create services page', () => {
   const createCluster = new CreateClusterWizardHelper();
   const createClusterServicePage = new CreateClusterServicePageHelper();
 
   const createService = (serviceType: string, serviceName: string, count = '1') => {
-    cy.get('button[data-testid=table-action-button]').click();
+    cy.get('[aria-label=Create]').first().click();
     createClusterServicePage.addService(serviceType, false, count);
     createClusterServicePage.checkExist(serviceName, true);
   };

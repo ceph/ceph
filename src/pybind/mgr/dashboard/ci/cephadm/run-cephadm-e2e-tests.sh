@@ -38,4 +38,5 @@ cypress_run () {
 
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
 
+cypress_run "orchestrator/workflow/*.feature"
 cypress_run "orchestrator/workflow/*-spec.ts"
