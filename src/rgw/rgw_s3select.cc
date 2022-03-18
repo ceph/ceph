@@ -293,7 +293,7 @@ int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
   if(m_s3select_query.empty() == false) {
     return 0;
   }
-  if(s->object->get_name().find(".parquet") != std::string::npos) { //aws cli is missing the parquet
+  if((s->object->get_name().find(".parquet") != std::string::npos) || (s->object->get_name().find(".prct") != std::string::npos)) { //aws cli is missing the parquet
 #ifdef _ARROW_EXIST
     m_parquet_type = true;
 #else
