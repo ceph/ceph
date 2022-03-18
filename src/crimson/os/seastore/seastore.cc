@@ -1625,27 +1625,7 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   return SegmentManager::get_segment_manager(
     device
   ).then([&device](auto sm) {
-    auto scanner = std::make_unique<ExtentReader>();
-    auto& scanner_ref = *scanner.get();
-    auto segment_cleaner = std::make_unique<SegmentCleaner>(
-      SegmentCleaner::config_t::get_default(),
-      std::move(scanner),
-      false /* detailed */);
-
-    auto journal = journal::make_segmented(*sm, scanner_ref, *segment_cleaner);
-    auto epm = std::make_unique<ExtentPlacementManager>();
-    auto cache = std::make_unique<Cache>(scanner_ref, *epm);
-    auto lba_manager = lba_manager::create_lba_manager(*sm, *cache);
-
-    auto tm = std::make_unique<TransactionManager>(
-      *sm,
-      std::move(segment_cleaner),
-      std::move(journal),
-      std::move(cache),
-      std::move(lba_manager),
-      std::move(epm),
-      scanner_ref);
-
+    auto tm = make_transaction_manager(*sm, false /* detailed */);
     auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
     return std::make_unique<SeaStore>(
       device,

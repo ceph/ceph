@@ -585,4 +585,8 @@ public:
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
+TransactionManagerRef make_transaction_manager(
+    SegmentManager& sm,
+    bool detailed);
+
 }
