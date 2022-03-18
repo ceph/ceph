@@ -624,13 +624,6 @@ class MonService(CephService):
         daemon_id: str = daemon.daemon_id
         self._check_safe_to_destroy(daemon_id)
 
-        # remove mon from quorum before we destroy the daemon
-        logger.info('Removing monitor %s from monmap...' % daemon_id)
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'mon rm',
-            'name': daemon_id,
-        })
-
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         # Do not remove the mon keyring.
         # super().post_remove(daemon)
