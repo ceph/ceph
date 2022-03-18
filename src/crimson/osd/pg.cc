@@ -753,11 +753,11 @@ PG::do_osd_ops(
       Ref<PG>{this}, obc, op_info, *m),
     m->ops,
     op_info,
-    [this, m, obc, rvec = op_info.allows_returnvec()] {
+    [this, m, obc, may_write = op_info.may_write(), rvec = op_info.allows_returnvec()] {
       // TODO: should stop at the first op which returns a negative retval,
       //       cmpext uses it for returning the index of first unmatched byte
       int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
-      if (result > 0 && !rvec) {
+      if (result > 0 && may_write && !rvec) {
         result = 0;
       }
       auto reply = crimson::make_message<MOSDOpReply>(m.get(),
