@@ -92,6 +92,13 @@ HEALTH_MINIMAL_SCHEMA = ({
             'up': (int, ''),
         }], '')
     }, ''),
+    'perf_stat': ({
+        'osd_perf': ([{
+            'osd': (int, ''),
+            'commit_latency_ms': (int, ''),
+            'apply_latency_ms': (int, ''),
+        }], '')
+    }, ''),
     'pg_info': ({
         'object_stats': ({
             'num_objects': (int, ''),
@@ -137,6 +144,7 @@ class HealthData(object):
             result['osd_map'] = self.osd_map()
             result['scrub_status'] = self.scrub_status()
             result['pg_info'] = self.pg_info()
+            result['perf_stat'] = self.perf_stat()
 
         if self._has_permissions(Permission.READ, Scope.MANAGER):
             result['mgr_map'] = self.mgr_map()
@@ -156,6 +164,19 @@ class HealthData(object):
             result['iscsi_daemons'] = self.iscsi_daemons()
 
         return result
+
+    def perf_stat(self):
+        osd_perf = []
+        osd_stats = mgr.get('osd_stats')
+
+        for osd in osd_stats['osd_stats']:
+            osd_perf += [{ 
+                'osd': osd['osd'],
+                'apply_latency_ms': osd['perf_stat']['apply_latency_ns']  / 1000000.0, # ns -> ms
+                'commit_latency_ms': osd['perf_stat']['commit_latency_ns']  / 1000000.0 # ns -> ms
+            }]
+        return { 'osd_perf': osd_perf }
+        
 
     def basic_health(self):
         health_data = mgr.get("health")
