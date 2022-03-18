@@ -1,4 +1,6 @@
-import { PageHelper } from 'cypress/integration/page-helper.po';
+/* tslint:disable*/
+import { PageHelper } from '../../../page-helper.po';
+/* tslint:enable*/
 
 const pages = {
   index: { url: '#/nfs', id: 'cd-nfs-list' },
