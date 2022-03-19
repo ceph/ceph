@@ -1163,7 +1163,72 @@ PGBackend::omap_get_keys(
       ll_read_errorator::pass_further{}
     );
 }
+static
+PGBackend::omap_cmp_ertr::future<> do_omap_val_cmp(
+  std::map<std::string, bufferlist, std::less<>> out,
+  std::map<std::string, std::pair<bufferlist, int>> assertions)
+{
+  bufferlist empty;
+  for (const auto &[akey, avalue] : assertions) {
+    const auto [abl, aflag] = avalue;
+    auto out_entry = out.find(akey);
+    bufferlist &bl = (out_entry != out.end()) ? out_entry->second : empty;
+    switch (aflag) {
+      case CEPH_OSD_CMPXATTR_OP_EQ:
+        if (!(bl == abl)) {
+          return crimson::ct_error::ecanceled::make();
+        }
+      break;
+      case CEPH_OSD_CMPXATTR_OP_LT:
+        if (!(bl < abl)) {
+          return crimson::ct_error::ecanceled::make();
+        }
+      break;
+      case CEPH_OSD_CMPXATTR_OP_GT:
+        if (!(bl > abl)) {
+          return crimson::ct_error::ecanceled::make();
+        }
+      break;
+      default:
+        return crimson::ct_error::invarg::make();
+    }
+  }
+  return PGBackend::omap_cmp_ertr::now();
+}
+PGBackend::omap_cmp_iertr::future<>
+PGBackend::omap_cmp(
+  const ObjectState& os,
+  OSDOp& osd_op,
+  object_stat_sum_t& delta_stats) const
+{
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
 
+  auto bp = osd_op.indata.cbegin();
+  std::map<std::string, std::pair<bufferlist, int> > assertions;
+  try {
+    decode(assertions, bp);
+  } catch (buffer::error&) {
+    return crimson::ct_error::invarg::make();
+  }
+
+  delta_stats.num_rd++;
+  if (os.oi.is_omap()) {
+    std::set<std::string> to_get;
+    for (auto &i: assertions) {
+      to_get.insert(i.first);
+    }
+    return store->omap_get_values(coll, ghobject_t{os.oi.soid}, to_get)
+      .safe_then([=, &osd_op] (auto&& out) -> omap_cmp_iertr::future<> {
+      osd_op.rval = 0;
+      return  do_omap_val_cmp(out, assertions);
+    });
+  } else {
+    return crimson::ct_error::ecanceled::make();
+  }
+}
 PGBackend::ll_read_ierrorator::future<>
 PGBackend::omap_get_vals(
   const ObjectState& os,
@@ -1174,6 +1239,10 @@ PGBackend::omap_get_vals(
     throw crimson::common::system_shutdown_exception();
   }
 
+  if (!os.exists || os.oi.is_whiteout()) {
+    logger().debug("{}: object does not exist: {}", os.oi.soid);
+    return crimson::ct_error::enoent::make();
+  }
   std::string start_after;
   uint64_t max_return;
   std::string filter_prefix;

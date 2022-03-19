@@ -250,6 +250,18 @@ public:
     const ObjectState& os,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
+  using omap_cmp_ertr =
+    crimson::os::FuturizedStore::read_errorator::extend<
+      crimson::ct_error::ecanceled,
+      crimson::ct_error::invarg>;
+  using omap_cmp_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      omap_cmp_ertr>;
+  omap_cmp_iertr::future<> omap_cmp(
+    const ObjectState& os,
+    OSDOp& osd_op,
+    object_stat_sum_t& delta_stats) const;
   ll_read_ierrorator::future<> omap_get_vals(
     const ObjectState& os,
     OSDOp& osd_op,
