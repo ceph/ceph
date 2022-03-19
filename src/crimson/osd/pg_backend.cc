@@ -216,7 +216,8 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op,
       return crimson::ct_error::object_corrupted::make();
     }
     logger().debug("read: data length: {}", bl.length());
-    osd_op.rval = bl.length();
+    osd_op.op.extent.length = bl.length();
+    osd_op.rval = 0;
     delta_stats.num_rd++;
     delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
     osd_op.outdata = std::move(bl);
