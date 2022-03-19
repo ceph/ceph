@@ -581,6 +581,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_read_op([this, &osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_vals(os, osd_op, delta_stats);
     });
+  case CEPH_OSD_OP_OMAP_CMP:
+    return  do_read_op([this, &osd_op] (auto& backend, const auto& os) {
+      return backend.omap_cmp(os, osd_op, delta_stats);
+    });
   case CEPH_OSD_OP_OMAPGETHEADER:
     return do_read_op([this, &osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_header(os, osd_op, delta_stats);
