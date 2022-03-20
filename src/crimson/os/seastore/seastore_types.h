@@ -208,7 +208,6 @@ using segment_seq_t = uint32_t;
 static constexpr segment_seq_t MAX_SEG_SEQ =
   std::numeric_limits<segment_seq_t>::max();
 static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
-static constexpr segment_seq_t OOL_SEG_SEQ = MAX_SEG_SEQ - 1;
 static constexpr segment_seq_t MAX_VALID_SEG_SEQ = MAX_SEG_SEQ - 2;
 
 enum class segment_type_t {
@@ -218,8 +217,6 @@ enum class segment_type_t {
 };
 
 std::ostream& operator<<(std::ostream& out, segment_type_t t);
-
-segment_type_t segment_seq_to_type(segment_seq_t seq);
 
 struct segment_seq_printer_t {
   segment_seq_t seq;
@@ -760,10 +757,6 @@ struct journal_seq_t {
     return {segment_seq, offset.add_offset(o)};
   }
 
-  segment_type_t get_type() const {
-    return segment_seq_to_type(segment_seq);
-  }
-
   DENC(journal_seq_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.segment_seq, p);
@@ -918,6 +911,7 @@ struct delta_info_t {
   uint32_t final_crc = 0;
   seastore_off_t length = NULL_SEG_OFF;         ///< extent length
   extent_version_t pversion;                   ///< prior version
+  segment_seq_t ext_seq;		       ///< seq of the extent's segment
   ceph::bufferlist bl;                         ///< payload
 
   DENC(delta_info_t, v, p) {
@@ -929,6 +923,7 @@ struct delta_info_t {
     denc(v.final_crc, p);
     denc(v.length, p);
     denc(v.pversion, p);
+    denc(v.ext_seq, p);
     denc(v.bl, p);
     DENC_FINISH(p);
   }
@@ -942,6 +937,7 @@ struct delta_info_t {
       final_crc == rhs.final_crc &&
       length == rhs.length &&
       pversion == rhs.pversion &&
+      ext_seq == rhs.ext_seq &&
       bl == rhs.bl
     );
   }
@@ -1300,8 +1296,10 @@ struct segment_header_t {
   journal_seq_t journal_tail;
   segment_nonce_t segment_nonce;
 
+  segment_type_t type;
+
   segment_type_t get_type() const {
-    return segment_seq_to_type(journal_segment_seq);
+    return type;
   }
 
   DENC(segment_header_t, v, p) {
@@ -1310,6 +1308,7 @@ struct segment_header_t {
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
     denc(v.segment_nonce, p);
+    denc(v.type, p);
     DENC_FINISH(p);
   }
 };
@@ -1321,8 +1320,15 @@ struct segment_tail_t {
 
   journal_seq_t journal_tail;
   segment_nonce_t segment_nonce;
+
+  segment_type_t type;
+
   mod_time_point_t last_modified;
   mod_time_point_t last_rewritten;
+
+  segment_type_t get_type() const {
+    return type;
+  }
 
   DENC(segment_tail_t, v, p) {
     DENC_START(1, 1, p);
@@ -1330,6 +1336,7 @@ struct segment_tail_t {
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
     denc(v.segment_nonce, p);
+    denc(v.type, p);
     denc(v.last_modified, p);
     denc(v.last_rewritten, p);
     DENC_FINISH(p);
@@ -1749,6 +1756,43 @@ struct denc_traits<crimson::os::seastore::device_type_t> {
     crimson::os::seastore::device_type_t& o,
     ceph::buffer::list::const_iterator &p) {
     p.copy(sizeof(crimson::os::seastore::device_type_t),
+           reinterpret_cast<char*>(&o));
+  }
+};
+
+template<>
+struct denc_traits<crimson::os::seastore::segment_type_t> {
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
+
+  static void bound_encode(
+    const crimson::os::seastore::segment_type_t &o,
+    size_t& p,
+    uint64_t f=0) {
+    p += sizeof(crimson::os::seastore::segment_type_t);
+  }
+  template<class It>
+  static std::enable_if_t<!is_const_iterator_v<It>>
+  encode(
+    const crimson::os::seastore::segment_type_t &o,
+    It& p,
+    uint64_t f=0) {
+    get_pos_add<crimson::os::seastore::segment_type_t>(p) = o;
+  }
+  template<class It>
+  static std::enable_if_t<is_const_iterator_v<It>>
+  decode(
+    crimson::os::seastore::segment_type_t& o,
+    It& p,
+    uint64_t f=0) {
+    o = get_pos_add<crimson::os::seastore::segment_type_t>(p);
+  }
+  static void decode(
+    crimson::os::seastore::segment_type_t& o,
+    ceph::buffer::list::const_iterator &p) {
+    p.copy(sizeof(crimson::os::seastore::segment_type_t),
            reinterpret_cast<char*>(&o));
   }
 };

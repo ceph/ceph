@@ -75,7 +75,10 @@ class SegmentProvider;
 class SegmentedAllocator : public ExtentAllocator {
   class Writer : public ExtentOolWriter {
   public:
-    Writer(std::string name, SegmentProvider& sp, SegmentManager& sm);
+    Writer(std::string name,
+           SegmentProvider& sp,
+           SegmentManager& sm,
+           SegmentSeqAllocator &ssa);
     Writer(Writer &&) = default;
 
     open_ertr::future<> open() final {
@@ -111,7 +114,8 @@ class SegmentedAllocator : public ExtentAllocator {
 public:
   SegmentedAllocator(
     SegmentProvider& sp,
-    SegmentManager& sm);
+    SegmentManager& sm,
+    SegmentSeqAllocator &ssa);
 
   Writer &get_writer(placement_hint_t hint) {
     assert(hint >= placement_hint_t::COLD);

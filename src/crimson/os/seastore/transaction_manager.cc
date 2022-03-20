@@ -323,7 +323,7 @@ TransactionManager::submit_transaction_direct(
     return tref.get_handle().enter(write_pipeline.prepare);
   }).si_then([this, FNAME, &tref]() mutable
 	      -> submit_transaction_iertr::future<> {
-    auto record = cache->prepare_record(tref);
+    auto record = cache->prepare_record(tref, segment_cleaner.get());
 
     tref.get_handle().maybe_release_collection_lock();
 
