@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <fmt/ranges.h>
+
 #include "common/scrub_types.h"
 #include "include/types.h"
 #include "os/ObjectStore.h"
@@ -128,7 +130,7 @@ struct requested_scrub_t {
   bool deep_scrub_on_error{false};
 
   /**
-   * If set, we should see must_deep_scrub and must_repair set, too
+   * If set, we should see must_deep_scrub & must_scrub, too
    *
    * - 'must_repair' is checked by the OSD when scheduling the scrubs.
    * - also checked & cleared at pg::queue_scrub()
@@ -149,9 +151,37 @@ struct requested_scrub_t {
    * Otherwise - PG_STATE_FAILED_REPAIR will be asserted.
    */
   bool check_repair{false};
+
+  /**
+   * Used to indicate, both in client-facing listings and internally, that
+   * the planned scrub will be a deep one.
+   */
+  bool calculated_to_deep{false};
 };
 
 std::ostream& operator<<(std::ostream& out, const requested_scrub_t& sf);
+
+template <>
+struct fmt::formatter<requested_scrub_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const requested_scrub_t& rs, FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(),
+                          "(plnd:{}{}{}{}{}{}{}{}{}{})",
+                          rs.must_repair ? " must_repair" : "",
+                          rs.auto_repair ? " auto_repair" : "",
+                          rs.check_repair ? " check_repair" : "",
+                          rs.deep_scrub_on_error ? " deep_scrub_on_error" : "",
+                          rs.must_deep_scrub ? " must_deep_scrub" : "",
+                          rs.must_scrub ? " must_scrub" : "",
+                          rs.time_for_deep ? " time_for_deep" : "",
+                          rs.need_auto ? " need_auto" : "",
+                          rs.req_scrub ? " req_scrub" : "",
+                          rs.calculated_to_deep ? " deep" : "");
+  }
+};
 
 /**
  *  The interface used by the PG when requesting scrub-related info or services
@@ -250,7 +280,7 @@ struct ScrubPgIF {
 
   virtual void replica_scrub_op(OpRequestRef op) = 0;
 
-  virtual void set_op_parameters(requested_scrub_t&) = 0;
+  virtual void set_op_parameters(const requested_scrub_t&) = 0;
 
   virtual void scrub_clear_state() = 0;
 

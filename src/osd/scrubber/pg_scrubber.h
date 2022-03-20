@@ -431,7 +431,7 @@ class PgScrubber : public ScrubPgIF,
    * flag-set; PG_STATE_SCRUBBING, and possibly PG_STATE_DEEP_SCRUB &
    * PG_STATE_REPAIR are set.
    */
-  void set_op_parameters(requested_scrub_t& request) final;
+  void set_op_parameters(const requested_scrub_t& request) final;
 
   void cleanup_store(ObjectStore::Transaction* t) final;
 
