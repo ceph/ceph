@@ -4845,6 +4845,77 @@ TYPED_TEST(DiffIterateTest, DiffIterateUnaligned)
   ioctx.close();
 }
 
+TYPED_TEST(DiffIterateTest, DiffIterateStriping)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_STRIPINGV2);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  ASSERT_FALSE(old_format);
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ssize_t size = 24 << 20;
+
+    ASSERT_EQ(0, rbd.create3(ioctx, name.c_str(), size, features, &order,
+                             1 << 20, 3));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    ceph::bufferlist bl;
+    bl.append(std::string(size, '1'));
+    ASSERT_EQ(size, image.write(0, size, bl));
+
+    std::vector<diff_extent> extents;
+    ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                     vector_iterate_cb, &extents));
+    ASSERT_EQ(2u, extents.size());
+    ASSERT_EQ(diff_extent(0, 12 << 20, true, 0), extents[0]);
+    ASSERT_EQ(diff_extent(12 << 20, 12 << 20, true, 0), extents[1]);
+    extents.clear();
+
+    ASSERT_EQ(0, image.snap_create("one"));
+    ASSERT_EQ(size, image.discard(0, size));
+
+    ASSERT_EQ(0, image.diff_iterate2("one", 0, size, true, this->whole_object,
+                                     vector_iterate_cb, &extents));
+    ASSERT_EQ(2u, extents.size());
+    ASSERT_EQ(diff_extent(0, 12 << 20, false, 0), extents[0]);
+    ASSERT_EQ(diff_extent(12 << 20, 12 << 20, false, 0), extents[1]);
+    extents.clear();
+
+    ASSERT_EQ(1 << 20, image.write(0, 1 << 20, bl));
+    ASSERT_EQ(2 << 20, image.write(2 << 20, 2 << 20, bl));
+    ASSERT_EQ(2 << 20, image.write(5 << 20, 2 << 20, bl));
+    ASSERT_EQ(2 << 20, image.write(8 << 20, 2 << 20, bl));
+    ASSERT_EQ(13 << 20, image.write(11 << 20, 13 << 20, bl));
+
+    ASSERT_EQ(0, image.diff_iterate2("one", 0, size, true, this->whole_object,
+                                     vector_iterate_cb, &extents));
+    ASSERT_EQ(10u, extents.size());
+    ASSERT_EQ(diff_extent(0, 1 << 20, true, 0), extents[0]);
+    ASSERT_EQ(diff_extent(1 << 20, 1 << 20, false, 0), extents[1]);
+    ASSERT_EQ(diff_extent(2 << 20, 2 << 20, true, 0), extents[2]);
+    ASSERT_EQ(diff_extent(4 << 20, 1 << 20, false, 0), extents[3]);
+    ASSERT_EQ(diff_extent(5 << 20, 2 << 20, true, 0), extents[4]);
+    ASSERT_EQ(diff_extent(7 << 20, 1 << 20, false, 0), extents[5]);
+    ASSERT_EQ(diff_extent(8 << 20, 2 << 20, true, 0), extents[6]);
+    ASSERT_EQ(diff_extent(10 << 20, 1 << 20, false, 0), extents[7]);
+    ASSERT_EQ(diff_extent(11 << 20, 1 << 20, true, 0), extents[8]);
+    ASSERT_EQ(diff_extent(12 << 20, 12 << 20, true, 0), extents[9]);
+
+    ASSERT_PASSED(this->validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
 TEST_F(TestLibRBD, ZeroLengthWrite)
 {
   rados_ioctx_t ioctx;
