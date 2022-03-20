@@ -146,6 +146,37 @@ struct UserMetaTable : public EmptyMetaTable {
   }
 };
 
+struct TraceMetaTable : public EmptyMetaTable {
+  static std::string TableName() {return "Trace";}
+  static std::string Name() {return TableName() + "Meta";}
+
+  static int IndexClosure(lua_State* L) {
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+
+    const char* index = luaL_checkstring(L, 2);
+
+    if (strcasecmp(index, "Enable") == 0) {
+      lua_pushboolean(L, s->trace_enabled);
+    } else {
+      return error_unknown_field(L, index, TableName());
+    }
+    return ONE_RETURNVAL;
+  }
+
+  static int NewIndexClosure(lua_State* L) {
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+
+    const char* index = luaL_checkstring(L, 2);
+
+    if (strcasecmp(index, "Enable") == 0) {
+      s->trace_enabled = lua_toboolean(L, 3);
+    } else {
+      return error_unknown_field(L, index, TableName());
+    }
+    return NO_RETURNVAL;
+  }
+};
+
 struct OwnerMetaTable : public EmptyMetaTable {
   static std::string TableName() {return "Owner";}
   static std::string Name() {return TableName() + "Meta";}
@@ -781,6 +812,8 @@ struct RequestMetaTable : public EmptyMetaTable {
       } else {
         create_metatable<UserMetaTable>(L, false, const_cast<rgw_user*>(&(s->user->get_id())));
       }
+    } else if (strcasecmp(index, "Trace") == 0) {
+        create_metatable<TraceMetaTable>(L, false, s);
     } else {
       return error_unknown_field(L, index, TableName());
     }
