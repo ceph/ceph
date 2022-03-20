@@ -910,7 +910,9 @@ CachedExtentRef Cache::duplicate_for_write(
   return ret;
 }
 
-record_t Cache::prepare_record(Transaction &t)
+record_t Cache::prepare_record(
+  Transaction &t,
+  SegmentProvider *cleaner)
 {
   LOG_PREFIX(Cache::prepare_record);
   SUBTRACET(seastore_t, "enter", t);
@@ -982,6 +984,7 @@ record_t Cache::prepare_record(Transaction &t)
 	  0,
 	  0,
 	  t.root->get_version() - 1,
+	  MAX_SEG_SEQ,
 	  std::move(delta_bl)
 	});
     } else {
@@ -996,6 +999,9 @@ record_t Cache::prepare_record(Transaction &t)
 	  final_crc,
 	  (seastore_off_t)i->get_length(),
 	  i->get_version() - 1,
+	  cleaner
+	  ? cleaner->get_seq(i->get_paddr().as_seg_paddr().get_segment_id())
+	  : MAX_SEG_SEQ,
 	  std::move(delta_bl)
 	});
       i->last_committed_crc = final_crc;
@@ -1340,7 +1346,7 @@ Cache::replay_delta(
 	return;
       }
 
-      TRACE("replay extent delta at {} {} ... -- {}, prv_extent={}",
+      DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
             journal_seq, record_base, delta, *extent);
 
       assert(extent->version == delta.pversion);
@@ -1383,6 +1389,10 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
+    if (!(dirty_from != JOURNAL_SEQ_NULL &&
+                dirty_from != JOURNAL_SEQ_MAX &&
+                dirty_from != NO_DELTAS))
+      ERRORT("{}", *i);
     ceph_assert(dirty_from != JOURNAL_SEQ_NULL &&
                 dirty_from != JOURNAL_SEQ_MAX &&
                 dirty_from != NO_DELTAS);

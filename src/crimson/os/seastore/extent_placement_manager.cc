@@ -11,17 +11,18 @@ namespace crimson::os::seastore {
 
 SegmentedAllocator::SegmentedAllocator(
   SegmentProvider& sp,
-  SegmentManager& sm)
-  : cold_writer{"COLD", sp, sm},
-    rewrite_writer{"REWRITE", sp, sm}
-{
-}
+  SegmentManager& sm,
+  SegmentSeqAllocator &ssa)
+  : cold_writer{"COLD", sp, sm, ssa},
+    rewrite_writer{"REWRITE", sp, sm, ssa}
+{}
 
 SegmentedAllocator::Writer::Writer(
   std::string name,
   SegmentProvider& sp,
-  SegmentManager& sm)
-  : segment_allocator(name, segment_type_t::OOL, sp, sm),
+  SegmentManager& sm,
+  SegmentSeqAllocator &ssa)
+  : segment_allocator(name, segment_type_t::OOL, sp, sm, ssa),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
@@ -55,7 +56,6 @@ SegmentedAllocator::Writer::write_record(
   return record_submitter.submit(std::move(record)
   ).safe_then([this, FNAME, &t, extents=std::move(extents)
               ](record_locator_t ret) mutable {
-    assert(ret.write_result.start_seq.segment_seq == OOL_SEG_SEQ);
     DEBUGT("{} finish with {} and {} extents",
            t, segment_allocator.get_name(),
            ret, extents.size());

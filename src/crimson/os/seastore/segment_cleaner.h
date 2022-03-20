@@ -58,11 +58,13 @@ class segment_info_set_t {
     // Will be non-null for any segments in the current journal
     segment_seq_t journal_segment_seq = NULL_SEG_SEQ;
 
+    segment_type_t type = segment_type_t::NULL_SEG;
+
     seastar::lowres_system_clock::time_point last_modified;
     seastar::lowres_system_clock::time_point last_rewritten;
 
     segment_type_t get_type() const {
-      return segment_seq_to_type(journal_segment_seq);
+      return type;
     }
 
     void set_open(segment_seq_t);
@@ -287,7 +289,7 @@ private:
 class SegmentProvider {
 public:
   virtual segment_id_t get_segment(
-      device_id_t id, segment_seq_t seq) = 0;
+      device_id_t id, segment_seq_t seq, segment_type_t type) = 0;
 
   virtual void close_segment(segment_id_t) {}
 
@@ -728,7 +730,7 @@ public:
   mount_ret mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms);
 
   segment_id_t get_segment(
-      device_id_t id, segment_seq_t seq) final;
+      device_id_t id, segment_seq_t seq, segment_type_t type) final;
 
   void close_segment(segment_id_t segment) final;
 
@@ -1316,16 +1318,16 @@ private:
 
   void init_mark_segment_closed(
     segment_id_t segment,
-    segment_seq_t seq) {
+    segment_seq_t seq,
+    segment_type_t s_type) {
     crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
       "SegmentCleaner::init_mark_segment_closed: segment {}, seq {}",
       segment,
       segment_seq_printer_t{seq});
-    ceph_assert(segment_seq_to_type(seq) != segment_type_t::NULL_SEG);
     mark_closed(segment);
     segments[segment].journal_segment_seq = seq;
-    auto s_type = segments[segment].get_type();
     assert(s_type != segment_type_t::NULL_SEG);
+    segments[segment].type = s_type;
     if (s_type == segment_type_t::JOURNAL) {
       assert(journal_device_id == segment.device_id());
       segments.new_journal_segment();
@@ -1390,7 +1392,7 @@ private:
     maybe_wake_gc_blocked_io();
   }
 
-  void mark_open(segment_id_t segment, segment_seq_t seq) {
+  void mark_open(segment_id_t segment, segment_seq_t seq, segment_type_t s_type) {
     assert(segment.device_id() ==
       segments[segment.device_id()]->device_id);
     assert(segment.device_segment_id() <
@@ -1400,8 +1402,8 @@ private:
     segments.segment_opened(segment);
     auto& segment_info = segments[segment];
     segment_info.set_open(seq);
+    segment_info.type = s_type;
 
-    auto s_type = segment_info.get_type();
     ceph_assert(s_type != segment_type_t::NULL_SEG);
     if (s_type == segment_type_t::JOURNAL) {
       segments.new_journal_segment();
