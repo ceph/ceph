@@ -98,6 +98,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     this.healthService.getMinimalHealth().subscribe((data: any) => {
       this.healthData = data;
     });
+    console.log(this.healthData)
   }
 
   prepareReadWriteRatio(chart: Record<string, any>) {
@@ -259,6 +260,34 @@ export class HealthComponent implements OnInit, OnDestroy {
     chart.dataset[0].label = `${this.dimless.transform(
       data.pg_info.object_stats.num_objects
     )}\n${$localize`objects`}`;
+  }
+
+  prepareLatency(chart: Record<string, any>, data: Record<string, any>) {
+    const perf_stats = data.perf_stat.osd_perf;
+    let total_perf_score = 0;
+    let perf_data: Array<number> = [];
+    perf_stats.map((osd_stat: any) => {
+      total_perf_score += ((osd_stat.apply_latency_ms + osd_stat.commit_latency_ms) / 2)
+    })
+
+    perf_stats.map((osd_stat: any) => {
+      const perf_stat = this.calcPercentage((osd_stat.apply_latency_ms + osd_stat.commit_latency_ms) / 2, total_perf_score);
+      if (perf_stat) { perf_data.push(perf_stat); }
+    })
+
+    // chart.chartType = 'bar';
+  
+    chart.labels = [
+      `${$localize`Number of OSDs`}: ${(perf_data).length}`,
+    ];
+    chart.dataset[0].borderWidth = 1;
+
+    // chart.dataset[0].data = [20, 40, 3, 2, 192];
+    chart.dataset[0].data = perf_data || [0];
+
+    chart.dataset[0].label = `${this.dimless.transform(
+      (perf_data).length
+    )}\n${$localize`perf_stat`}`;
   }
 
   isClientReadWriteChartShowable() {
