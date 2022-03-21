@@ -1182,8 +1182,8 @@ test_trash_purge_schedule() {
     rbd trash purge schedule status
     rbd trash purge schedule status --format xml |
         $XMLSTARLET sel -t -v '//scheduled/item/pool' | grep 'rbd2'
-    test "$(echo $(rbd trash purge schedule status --format xml |
-        $XMLSTARLET sel -t -v '//scheduled/item/pool'))" = 'rbd rbd2 rbd2'
+    echo $(rbd trash purge schedule status --format xml |
+        $XMLSTARLET sel -t -v '//scheduled/item/pool') | grep 'rbd rbd2 rbd2'
     test "$(rbd trash purge schedule status -p rbd --format xml |
         $XMLSTARLET sel -t -v '//scheduled/item/pool')" = 'rbd'
     test "$(echo $(rbd trash purge schedule status -p rbd2 --format xml |
