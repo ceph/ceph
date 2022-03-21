@@ -92,19 +92,35 @@ PGBackend::load_metadata(const hobject_t& oid)
 	    oid);
 	  return crimson::ct_error::object_corrupted::make();
 	}
-	
-	if (oid.is_head()) {
-	  if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
-	    bufferlist bl = std::move(ssiter->second);
-	    ret->ss = SnapSet(bl);
-	  } else {
-	    /* TODO: add support for writing out snapsets
-	    logger().error(
-	      "load_metadata: object {} present but missing snapset",
-	      oid);
-	    //return crimson::ct_error::object_corrupted::make();
-	    */
-	    ret->ss = SnapSet();
+
+        if (oid.is_head()) {
+          // Returning object_corrupted when the object exsits and the
+          // Snapset is either not found or empty.
+          bool object_corrupted = true;
+          if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
+            object_corrupted = false;
+            logger().debug(
+              "load_metadata: object {} and snapset {} present",
+              oid, ssiter->second);
+            bufferlist bl = std::move(ssiter->second);
+            if (bl.length()) {
+              ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
+              try {
+                ret->ssc->snapset = SnapSet(bl);
+                ret->ssc->exists = true;
+              } catch (const buffer::error&) {
+                logger().warn("unable to decode SnapSet");
+                throw crimson::osd::invalid_argument();
+              }
+            } else {
+              object_corrupted = true;
+            }
+          }
+          if (object_corrupted) {
+            logger().error(
+              "load_metadata: object {} present but missing snapset",
+              oid);
+            return crimson::ct_error::object_corrupted::make();
 	  }
 	}
 
@@ -119,7 +135,7 @@ PGBackend::load_metadata(const hobject_t& oid)
 	    ObjectState(
 	      object_info_t(oid),
 	      false),
-	    oid.is_head() ? std::optional<SnapSet>(SnapSet()) : std::nullopt
+	    oid.is_head() ? (new crimson::osd::SnapSetContext(oid)) : nullptr
 	  });
       }));
 }
@@ -155,6 +171,18 @@ PGBackend::mutate_object(
       obc->obs.oi.encode_no_oid(osv, CEPH_FEATURES_ALL);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
+    }
+
+    // snapset
+    if (obc->obs.oi.soid.snap == CEPH_NOSNAP) {
+      logger().debug("final snapset {} in {}",
+        obc->ssc->snapset, obc->obs.oi.soid);
+      ceph::bufferlist bss;
+      encode(obc->ssc->snapset, bss);
+      txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, SS_ATTR, bss);
+      obc->ssc->exists = true;
+    } else {
+      logger().debug("no snapset (this is a clone)");
     }
   } else {
     // reset cached ObjectState without enforcing eviction
@@ -1103,6 +1131,26 @@ PGBackend::rm_xattr(
   bp.copy(osd_op.op.xattr.name_len, attr_name);
   txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
   return rm_xattr_iertr::now();
+}
+
+void PGBackend::clone(
+  object_info_t& snap_oi,
+  ObjectState& os,
+  ObjectState& d_os,
+  ceph::os::Transaction& txn)
+{
+  // Prepend the cloning operation to txn
+  ceph::os::Transaction c_txn;
+  c_txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
+  // Operations will be removed from txn while appending
+  c_txn.append(txn);
+  txn = std::move(c_txn);
+
+  ceph::bufferlist bv;
+  snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+
+  txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
+  txn.rmattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, SS_ATTR);
 }
 
 using get_omap_ertr =

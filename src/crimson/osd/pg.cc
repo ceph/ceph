@@ -772,9 +772,26 @@ PG::do_osd_ops(
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
   }
+  SnapContext snapc;
+  if (op_info.may_write() || op_info.may_cache()) {
+    // snap
+    if (get_pgpool().info.is_pool_snaps_mode()) {
+      // use pool's snapc
+      snapc = get_pgpool().snapc;
+      logger().debug("{} using pool's snapc snaps={}",
+                     __func__, snapc.snaps);
+
+    } else {
+      // client specified snapc
+      snapc.seq = m->get_snap_seq();
+      snapc.snaps = m->get_snaps();
+      logger().debug("{} client specified snapc seq={} snaps={}",
+                     __func__, snapc.seq, snapc.snaps);
+    }
+  }
   return do_osd_ops_execute<MURef<MOSDOpReply>>(
     seastar::make_lw_shared<OpsExecuter>(
-      Ref<PG>{this}, obc, op_info, *m),
+      Ref<PG>{this}, obc, op_info, *m, snapc),
     m->ops,
     [this, m, obc, may_write = op_info.may_write(),
      may_read = op_info.may_read(), rvec = op_info.allows_returnvec()] {
@@ -889,11 +906,14 @@ PG::do_osd_ops(
   do_osd_ops_success_func_t success_func,
   do_osd_ops_failure_func_t failure_func)
 {
-  return seastar::do_with(std::move(msg_params), [=, this, &ops, &op_info]
-    (auto &msg_params) {
+  // This overload is generally used for internal client requests,
+  // use an empty SnapContext.
+  return seastar::do_with(
+    std::move(msg_params),
+    [=, this, &ops, &op_info](auto &msg_params) {
     return do_osd_ops_execute<void>(
       seastar::make_lw_shared<OpsExecuter>(
-        Ref<PG>{this}, std::move(obc), op_info, msg_params),
+        Ref<PG>{this}, std::move(obc), op_info, msg_params, SnapContext{}),
       ops,
       std::move(success_func),
       std::move(failure_func));
@@ -950,11 +970,15 @@ std::optional<hobject_t> PG::resolve_oid(
   const SnapSet &ss,
   const hobject_t &oid)
 {
+  logger().debug("{} oid.snap={},head snapset.seq={}",
+                 __func__, oid.snap, ss.seq);
   if (oid.snap > ss.seq) {
+    // Because oid.snap > ss.seq, we are trying to read from a snapshot
+    // taken after the most recent write to this object. Read from head.
     return oid.get_head();
   } else {
     // which clone would it be?
-    auto clone = std::upper_bound(
+    auto clone = std::lower_bound(
       begin(ss.clones), end(ss.clones),
       oid.snap);
     if (clone == end(ss.clones)) {
@@ -1037,7 +1061,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
       return load_obc_iertr::future<>{crimson::ct_error::object_corrupted::make()};
     }
     auto [clone, existed] = shard_services.get_cached_obc(*coid);
-    return clone->template with_lock<State>(
+    return clone->template with_lock<State, IOInterruptCondition>(
       [coid=*coid, existed=existed,
        head=std::move(head), clone=std::move(clone),
        func=std::move(func), this]() -> load_obc_iertr::future<> {
@@ -1046,7 +1070,7 @@ PG::with_clone_obc(hobject_t oid, with_obc_func_t&& func)
         logger().debug("with_clone_obc: found {} in cache", coid);
       } else {
         logger().debug("with_clone_obc: cache miss on {}", coid);
-        loaded = clone->template with_promoted_lock<State>(
+        loaded = clone->template with_promoted_lock<State, IOInterruptCondition>(
           [coid, clone, head, this] {
           return backend->load_metadata(coid).safe_then_interruptible(
             [coid, clone=std::move(clone), head=std::move(head)](auto md) mutable {
@@ -1092,12 +1116,13 @@ PG::load_head_obc(ObjectContextRef obc)
     const hobject_t& oid = md->os.oi.soid;
     logger().debug(
       "load_head_obc: loaded obs {} for {}", md->os.oi, oid);
-    if (!md->ss) {
+    if (!md->ssc) {
       logger().error(
-        "load_head_obc: oid {} missing snapset", oid);
+        "load_head_obc: oid {} missing snapsetcontext", oid);
       return crimson::ct_error::object_corrupted::make();
+
     }
-    obc->set_head_state(std::move(md->os), std::move(*(md->ss)));
+    obc->set_head_state(std::move(md->os), std::move(md->ssc));
     logger().debug(
       "load_head_obc: returning obc {} for {}",
       obc->obs.oi, obc->obs.oi.soid);
@@ -1117,14 +1142,14 @@ PG::reload_obc(crimson::osd::ObjectContext& obc) const
       __func__,
       md->os.oi,
       obc.get_oid());
-    if (!md->ss) {
+    if (!md->ssc) {
       logger().error(
-        "{}: oid {} missing snapset",
+        "{}: oid {} missing snapsetcontext",
         __func__,
         obc.get_oid());
       return crimson::ct_error::object_corrupted::make();
     }
-    obc.set_head_state(std::move(md->os), std::move(*(md->ss)));
+    obc.set_head_state(std::move(md->os), std::move(md->ssc));
     return load_obc_ertr::now();
   });
 }
