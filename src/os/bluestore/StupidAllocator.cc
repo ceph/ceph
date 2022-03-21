@@ -299,7 +299,7 @@ void StupidAllocator::dump()
   }
 }
 
-void StupidAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+void StupidAllocator::foreach(std::function<void(uint64_t offset, uint64_t length)> notify)
 {
   std::lock_guard l(lock);
   for (unsigned bin = 0; bin < free.size(); ++bin) {

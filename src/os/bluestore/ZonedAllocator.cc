@@ -108,8 +108,9 @@ void ZonedAllocator::dump() {
   std::lock_guard l(lock);
 }
 
-void ZonedAllocator::dump(std::function<void(uint64_t offset,
-					     uint64_t length)> notify) {
+void ZonedAllocator::foreach(
+  std::function<void(uint64_t offset, uint64_t length)> notify)
+{
   std::lock_guard l(lock);
 }
 
