@@ -22,5 +22,5 @@ teuthology-suite -v \
     /teuthology/custom_conf.yaml
 teuthology-dispatcher -v \
     --log-dir /teuthology/log \
-    --tube testnode
-tail -f /dev/null
+    --tube testnode \
+    --exit-on-empty-queue

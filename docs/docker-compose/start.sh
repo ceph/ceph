@@ -30,4 +30,9 @@ ssh-keygen -t ed25519 -N '' -f $SSH_PRIVKEY_PATH
 export SSH_PRIVKEY=$(cat $SSH_PRIVKEY_PATH)
 export SSH_PUBKEY=$(cat $SSH_PRIVKEY_PATH.pub)
 
-docker-compose up --build
+trap "docker-compose down" SIGINT
+docker-compose up \
+    --build \
+    --abort-on-container-exit \
+    --exit-code-from teuthology
+docker-compose down
