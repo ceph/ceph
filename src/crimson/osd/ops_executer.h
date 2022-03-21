@@ -167,15 +167,19 @@ private:
 
   Ref<PG> pg; // for the sake of object class
   ObjectContextRef obc;
+  ObjectContextRef clone_obc; // if we create a clone
   const OpInfo& op_info;
   ceph::static_ptr<ExecutableMessage,
                    sizeof(ExecutableMessagePimpl<void>)> msg;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
+  bool head_existed = false;
   ceph::os::Transaction txn;
 
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
+
+  SnapContext snapc; // writer snap context
 
   // this gizmo could be wrapped in std::optional for the sake of lazy
   // initialization. we don't need it for ops that doesn't have effect
@@ -252,11 +256,13 @@ public:
   OpsExecuter(Ref<PG> pg,
               ObjectContextRef obc,
               const OpInfo& op_info,
-              const MsgT& msg)
+              const MsgT& msg,
+              const SnapContext& snapc)
     : pg(std::move(pg)),
       obc(std::move(obc)),
       op_info(op_info),
-      msg(std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{}, &msg) {
+      msg(std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{}, &msg),
+      snapc(snapc) {
   }
 
   template <class Func>
@@ -278,6 +284,10 @@ public:
   std::vector<pg_log_entry_t> prepare_transaction(
     const std::vector<OSDOp>& ops);
   void fill_op_params_bump_pg_version();
+
+  ObjectContextRef get_obc() const {
+    return obc;
+  }
 
   const object_info_t &get_object_info() const {
     return obc->obs.oi;
@@ -305,6 +315,15 @@ public:
   }
 
   version_t get_last_user_version() const;
+
+  const SnapContext& get_snapc() const {
+    return snapc;
+  }
+
+  void make_writeable(std::vector<pg_log_entry_t>& log_entries);
+
+  const object_info_t prepare_clone(
+    const hobject_t& coid);
 };
 
 template <class Context, class MainFunc, class EffectFunc>
@@ -361,6 +380,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
   if (want_mutate) {
     fill_op_params_bump_pg_version();
     auto log_entries = prepare_transaction(ops);
+    make_writeable(log_entries);
     auto [submitted, all_completed] = std::forward<MutFunc>(mut_func)(std::move(txn),
                                                     std::move(obc),
                                                     std::move(*osd_op_params),
