@@ -10,11 +10,13 @@
 #include <boost/iterator/counting_iterator.hpp>
 #include <seastar/core/future.hh>
 
-#include "include/ceph_assert.h"
-#include "crimson/os/seastore/seastore_types.h"
 #include "include/buffer_fwd.h"
+#include "include/ceph_assert.h"
+
 #include "crimson/common/config_proxy.h"
+#include "crimson/os/seastore/seastore_types.h"
 #include "crimson/osd/exceptions.h"
+#include "device.h"
 
 namespace crimson::os::seastore {
 
@@ -178,7 +180,7 @@ class SegmentManager;
 
 using SegmentManagerRef = std::unique_ptr<SegmentManager>;
 
-class SegmentManager {
+class SegmentManager : public Device {
 public:
   using access_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -210,26 +212,6 @@ public:
     crimson::ct_error::enoent>;
   virtual release_ertr::future<> release(segment_id_t id) = 0;
 
-  using read_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
-  virtual read_ertr::future<> read(
-    paddr_t addr,
-    size_t len,
-    ceph::bufferptr &out) = 0;
-  read_ertr::future<ceph::bufferptr> read(
-    paddr_t addr,
-    size_t len) {
-    auto ptrref = std::make_unique<ceph::bufferptr>(
-      buffer::create_page_aligned(len));
-    return read(addr, len, *ptrref).safe_then(
-      [ptrref=std::move(ptrref)]() mutable {
-	return read_ertr::make_ready_future<bufferptr>(std::move(*ptrref));
-      });
-  }
-
   /* Methods for discovering device geometry, segmentid set, etc */
   virtual size_t get_size() const = 0;
   virtual seastore_off_t get_block_size() const = 0;
@@ -244,8 +226,6 @@ public:
       (size_t)get_block_size());
   }
   virtual const seastore_meta_t &get_meta() const = 0;
-
-  virtual device_id_t get_device_id() const = 0;
 
   virtual secondary_device_set_t& get_secondary_devices() = 0;
 

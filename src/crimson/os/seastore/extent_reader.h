@@ -85,14 +85,6 @@ public:
     segment_managers[segment_manager->get_device_id()] = segment_manager;
   }
 
-  read_ertr::future<> read(
-    paddr_t addr,
-    size_t len,
-    ceph::bufferptr &out) {
-    assert(segment_managers[addr.get_device_id()]);
-    return segment_managers[addr.get_device_id()]->read(addr, len, out);
-  }
-
   void reset() {
     segment_managers.clear();
     segment_managers.resize(DEVICE_ID_MAX, nullptr);

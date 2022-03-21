@@ -545,6 +545,7 @@ public:
     LOG_PREFIX(TransactionManager::add_segment_manager);
     SUBDEBUG(seastore_tm, "adding segment manager {}", sm->get_device_id());
     scanner.add_segment_manager(sm);
+    epm->add_device(sm);
     epm->add_allocator(
       device_type_t::SEGMENTED,
       std::make_unique<SegmentedAllocator>(

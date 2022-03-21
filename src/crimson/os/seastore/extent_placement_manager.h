@@ -171,7 +171,15 @@ private:
 
 class ExtentPlacementManager {
 public:
-  ExtentPlacementManager() = default;
+  ExtentPlacementManager() {
+    devices_by_id.resize(DEVICE_ID_MAX, nullptr);
+  }
+
+  void add_device(Device* device) {
+    auto device_id = device->get_device_id();
+    ceph_assert(devices_by_id[device_id] == nullptr);
+    devices_by_id[device_id] = device;
+  }
 
   void add_allocator(device_type_t type, ExtentAllocatorRef&& allocator) {
     allocators[type].emplace_back(std::move(allocator));
@@ -270,7 +278,19 @@ public:
       });
     }).safe_then([this] {
       allocators.clear();
+      devices_by_id.clear();
+      devices_by_id.resize(DEVICE_ID_MAX, nullptr);
     });
+  }
+
+  using read_ertr = Device::read_ertr;
+  read_ertr::future<> read(
+    paddr_t addr,
+    size_t len,
+    ceph::bufferptr &out
+  ) {
+    assert(devices_by_id[addr.get_device_id()] != nullptr);
+    return devices_by_id[addr.get_device_id()]->read(addr, len, out);
   }
 
 private:
@@ -286,6 +306,7 @@ private:
   }
 
   std::map<device_type_t, std::vector<ExtentAllocatorRef>> allocators;
+  std::vector<Device*> devices_by_id;
 };
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
 

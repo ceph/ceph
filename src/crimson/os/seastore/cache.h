@@ -100,7 +100,7 @@ public:
     crimson::ct_error::input_output_error>;
   using base_iertr = trans_iertr<base_ertr>;
 
-  Cache(ExtentReader &reader, ExtentPlacementManager &epm);
+  Cache(ExtentPlacementManager &epm);
   ~Cache();
 
   /// Creates empty transaction by source
@@ -739,7 +739,6 @@ public:
   void dump_contents();
 
 private:
-  ExtentReader &reader;	   	   ///< ref to extent reader
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
@@ -1020,7 +1019,7 @@ private:
   ) {
     assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING);
     extent->set_io_wait();
-    return reader.read(
+    return epm.read(
       extent->get_paddr(),
       extent->get_length(),
       extent->get_bptr()
