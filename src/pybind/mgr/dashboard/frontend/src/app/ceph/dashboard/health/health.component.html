@@ -145,16 +145,6 @@
       </cd-health-pie>
     </cd-info-card>
 
-    <cd-info-card cardTitle="Perf Statistics"
-                  i18n-cardTitle
-                  class="cd-capacity-card cd-chart-card"
-                  contentClass="content-chart"
-                  *ngIf="healthData.pg_info?.object_stats?.num_objects != null">
-      <cd-health-pie [data]="healthData"
-                     (prepareFn)="prepareLatency($event[0], $event[1])">
-      </cd-health-pie>
-    </cd-info-card>
-
     <cd-info-card cardTitle="PG Status"
                   i18n-cardTitle
                   class="cd-capacity-card cd-chart-card"
@@ -198,7 +188,7 @@
 
   <cd-info-group groupTitle="Performance"
                  i18n-groupTitle
-                 *ngIf="healthData.client_perf || healthData.scrub_status">
+                 *ngIf="healthData.client_perf || healthData.scrub_status || healthData.perf_stat">
     <cd-info-card cardTitle="Client Read/Write"
                   i18n-cardTitle
                   class="cd-performance-card cd-chart-card"
@@ -236,6 +226,18 @@
                   *ngIf="healthData.scrub_status">
       {{ healthData.scrub_status }}
     </cd-info-card>
+
+    <cd-info-card cardTitle="Latency"
+                    i18n-cardTitle
+                    class="cd-performance-card cd-chart-card"
+                    contentClass="content-chart"
+                    *ngIf="healthData.perf_stat">
+      <cd-health-pie [data]="healthData"
+                     [config]="latencyChartConfig"
+                     (prepareFn)="prepareLatency($event[0], $event[1])">
+      </cd-health-pie>
+    </cd-info-card>
+
   </cd-info-group>
 
   <ng-template #logsLink>

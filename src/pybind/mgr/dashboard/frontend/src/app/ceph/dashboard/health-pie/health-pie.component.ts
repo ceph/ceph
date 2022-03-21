@@ -105,6 +105,10 @@ export class HealthPieComponent implements OnChanges, OnInit {
     {
       id: 'center_text',
       beforeDraw(chart: Chart) {
+        if (chart.config.type !== 'doughnut') {
+          return; 
+        }
+
         const cssHelper = new CssHelper();
         const defaultFontFamily = 'Helvetica Neue, Helvetica, Arial, sans-serif';
         Chart.defaults.global.defaultFontFamily = defaultFontFamily;

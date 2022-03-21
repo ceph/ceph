@@ -62,6 +62,20 @@ export class HealthComponent implements OnInit, OnDestroy {
     }
   };
 
+  latencyChartConfig = {
+    chartType: 'line',
+    options: {
+      events: [''],
+      scales: {
+        yAxes: [{
+            ticks: {
+                beginAtZero: true
+            }
+        }]
+      },
+    }
+  };
+
   constructor(
     private healthService: HealthService,
     private osdService: OsdService,
@@ -98,7 +112,6 @@ export class HealthComponent implements OnInit, OnDestroy {
     this.healthService.getMinimalHealth().subscribe((data: any) => {
       this.healthData = data;
     });
-    console.log(this.healthData)
   }
 
   prepareReadWriteRatio(chart: Record<string, any>) {
@@ -264,30 +277,36 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   prepareLatency(chart: Record<string, any>, data: Record<string, any>) {
     const perf_stats = data.perf_stat.osd_perf;
-    let total_perf_score = 0;
-    let perf_data: Array<number> = [];
-    perf_stats.map((osd_stat: any) => {
-      total_perf_score += ((osd_stat.apply_latency_ms + osd_stat.commit_latency_ms) / 2)
-    })
+    let commit_latencies: Array<number> = [];
+    let apply_latencies: Array<number> = [];
+    let osds: Array<string> = [];
 
     perf_stats.map((osd_stat: any) => {
-      const perf_stat = this.calcPercentage((osd_stat.apply_latency_ms + osd_stat.commit_latency_ms) / 2, total_perf_score);
-      if (perf_stat) { perf_data.push(perf_stat); }
+      osds.push(`osd.${osd_stat.osd}`)
+      commit_latencies.push(osd_stat.commit_latency_ms)
+      apply_latencies.push(osd_stat.apply_latency_ms)
     })
-
-    // chart.chartType = 'bar';
   
-    chart.labels = [
-      `${$localize`Number of OSDs`}: ${(perf_data).length}`,
-    ];
-    chart.dataset[0].borderWidth = 1;
-
-    // chart.dataset[0].data = [20, 40, 3, 2, 192];
-    chart.dataset[0].data = perf_data || [0];
-
-    chart.dataset[0].label = `${this.dimless.transform(
-      (perf_data).length
-    )}\n${$localize`perf_stat`}`;
+    chart.labels = osds;
+    
+    chart.dataset[0] = {  
+      label: "apply latency (ms)",        
+      data: apply_latencies,       
+      order: 1,
+      tension: 0.1,  
+      fill: true, 
+      borderColor: 'rgb(50,205,50)', 
+      backgroundColor: 'rgba(50,205,50, 0.2)'
+    };
+    chart.dataset[1] = {  
+      label: `commit latency (ms)`,       
+      data: commit_latencies,       
+      order: 2,
+      tension: 0.1,  
+      fill: true, 
+      borderColor: 'rgb(75, 192, 192)', 
+      backgroundColor: 'rgba(75, 192, 192, 0.2)'
+     };
   }
 
   isClientReadWriteChartShowable() {
