@@ -1,6 +1,12 @@
 #!/bin/bash
-# Clone teuthology
-git clone https://github.com/ceph/teuthology.git
+set -e
+if [ -z "$TEUTHOLOGY_BRANCH" -a -n "$GITHUB_HEAD_REF" ]; then
+    TEUTHOLOGY_BRANCH=${GITHUB_HEAD_REF}
+fi
+git clone \
+  --depth 1 \
+  -b ${TEUTHOLOGY_BRANCH:-$(git branch --show-current)} \
+  https://github.com/ceph/teuthology.git
 
 # Check for .teuthology.yaml file and copy it to teuthology
 if [ -f ".teuthology.yaml" ]; 
