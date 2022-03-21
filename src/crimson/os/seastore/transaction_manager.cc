@@ -567,7 +567,7 @@ TransactionManagerRef make_transaction_manager(
     detailed);
   auto journal = journal::make_segmented(sm, scanner_ref, *segment_cleaner);
   auto epm = std::make_unique<ExtentPlacementManager>();
-  auto cache = std::make_unique<Cache>(scanner_ref, *epm);
+  auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(sm, *cache);
 
   return std::make_unique<TransactionManager>(

@@ -103,11 +103,12 @@ struct btree_test_base :
     journal = journal::make_segmented(
       *segment_manager, scanner_ref, *this);
     epm.reset(new ExtentPlacementManager());
-    cache.reset(new Cache(scanner_ref, *epm));
+    cache.reset(new Cache(*epm));
 
     block_size = segment_manager->get_block_size();
     next = segment_id_t{segment_manager->get_device_id(), 0};
     scanner_ref.add_segment_manager(segment_manager.get());
+    epm->add_device(segment_manager.get());
     journal->set_write_pipeline(&pipeline);
 
     return segment_manager->init(
