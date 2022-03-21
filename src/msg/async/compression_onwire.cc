@@ -46,7 +46,7 @@ std::optional<ceph::bufferlist> TxHandler::compress(const ceph::bufferlist &inpu
     return out;
   }
 
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   if (m_compressor->compress(input, out, compressor_message)) {
     return {};
   } else {
@@ -68,7 +68,7 @@ std::optional<ceph::bufferlist> RxHandler::decompress(const ceph::bufferlist &in
     return out;
   }
 
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   if (m_compressor->decompress(input, out, compressor_message)) {
     return {};
   } else {

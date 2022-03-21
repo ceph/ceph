@@ -45,7 +45,7 @@ class RGWPutObj_Compress : public rgw::putobj::Pipe
   CephContext* cct;
   bool compressed{false};
   CompressorRef compressor;
-  boost::optional<int32_t> compressor_message;
+  std::optional<int32_t> compressor_message;
   std::vector<compression_block> blocks;
 public:
   RGWPutObj_Compress(CephContext* cct_, CompressorRef compressor,
@@ -56,7 +56,7 @@ public:
 
   bool is_compressed() { return compressed; }
   std::vector<compression_block>& get_compression_blocks() { return blocks; }
-  boost::optional<int32_t> get_compressor_message() { return compressor_message; }
+  std::optional<int32_t> get_compressor_message() { return compressor_message; }
 
 }; /* RGWPutObj_Compress */
 

@@ -15,10 +15,10 @@
 #ifndef CEPH_QATACCEL_H
 #define CEPH_QATACCEL_H
 
-#include <boost/optional.hpp>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 #include "include/buffer.h"
@@ -37,9 +37,9 @@ class QatAccel {
 
   bool init(const std::string &alg);
 
-  int compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message);
-  int decompress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> compressor_message);
-  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst, boost::optional<int32_t> compressor_message);
+  int compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message);
+  int decompress(const bufferlist &in, bufferlist &out, std::optional<int32_t> compressor_message);
+  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst, std::optional<int32_t> compressor_message);
 
  private:
   // get a session from the pool or create a new one. returns null if session init fails
