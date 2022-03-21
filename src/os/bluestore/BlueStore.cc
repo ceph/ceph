@@ -8910,134 +8910,130 @@ void BlueStore::_fsck_check_objects(
     return true;
   };
 
-  auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
-  mempool::bluestore_fsck::list<string> expecting_shards;
-  if (it) {
-    const size_t thread_count = cct->_conf->bluestore_fsck_quick_fix_threads;
-    typedef ShallowFSCKThreadPool::FSCKWorkQueue<256> WQ;
-    std::unique_ptr<WQ> wq(
-      new WQ(
-        "FSCKWorkQueue",
-        (thread_count ? : 1) * 32,
-        this,
-        sb_info_lock,
-        sb_info,
-	sb_ref_counts,
-        repairer));
+  const size_t thread_count = cct->_conf->bluestore_fsck_quick_fix_threads;
+  typedef ShallowFSCKThreadPool::FSCKWorkQueue<256> WQ;
+  std::unique_ptr<WQ> wq(new WQ(
+    "FSCKWorkQueue",
+    (thread_count ? : 1) * 32,
+    this,
+    sb_info_lock,
+    sb_info,
+    sb_ref_counts,
+    repairer));
+  ShallowFSCKThreadPool thread_pool(cct, "ShallowFSCKThreadPool", "ShallowFSCK", thread_count);
 
-    ShallowFSCKThreadPool thread_pool(cct, "ShallowFSCKThreadPool", "ShallowFSCK", thread_count);
+  thread_pool.add_work_queue(wq.get());
+  if (depth == FSCK_SHALLOW && thread_count > 0) {
+    //not the best place but let's check anyway
+    ceph_assert(sb_info_lock);
+    thread_pool.start();
+  }
 
-    thread_pool.add_work_queue(wq.get());
-    if (depth == FSCK_SHALLOW && thread_count > 0) {
-      //not the best place but let's check anyway
-      ceph_assert(sb_info_lock);
-      thread_pool.start();
+  auto check_object = [&](const string& obj_key,
+			  bufferlist obj_val,
+			  map<string, bufferlist>& shard_kvals) -> bool
+  {
+    ghobject_t oid;
+    int r = get_key_object(obj_key, &oid);
+    if (r < 0) {
+      derr << "fsck error: bad object key "
+	   << pretty_binary_string(obj_key) << dendl;
+      ++errors;
+      return false;
     }
+    // sets: CollectionRef c, int64_t pool_id, spg_t pgid
+    if (!locate_collection(oid)) {
+      return false;
+    }
+    bool queued = false;
+    if (depth == FSCK_SHALLOW && thread_count > 0) {
+      queued = wq->queue(
+			 pool_id,
+			 c,
+			 oid,
+			 obj_key,
+			 obj_val,
+			 shard_kvals);
+    }
+    OnodeRef o;
+    map<BlobRef, bluestore_blob_t::unused_t> referenced;
 
-    auto check_object = [&](const string& obj_key,
-			    bufferlist obj_val,
-			    map<string, bufferlist>& shard_kvals) -> bool
-    {
-      ghobject_t oid;
-      int r = get_key_object(obj_key, &oid);
-      if (r < 0) {
-        derr << "fsck error: bad object key "
-          << pretty_binary_string(obj_key) << dendl;
-        ++errors;
-        return false;
-      }
-      // sets: CollectionRef c, int64_t pool_id, spg_t pgid
-      if (!locate_collection(oid)) {
+    if (!queued) {
+      ++processed_myself;
+      o = fsck_check_objects_shallow(
+				     depth,
+				     pool_id,
+				     c,
+				     oid,
+				     obj_key,
+				     obj_val,
+				     shard_kvals,
+				     &referenced,
+				     ctx);
+      if (!o) {
+	// error printing & fixing already done
 	return false;
       }
-      bool queued = false;
-      if (depth == FSCK_SHALLOW && thread_count > 0) {
-        queued = wq->queue(
-          pool_id,
-          c,
-          oid,
-          obj_key,
-          obj_val,
-	  shard_kvals);
+    }
+
+    if (depth == FSCK_REGULAR || depth == FSCK_DEEP) {
+      if (!check_nid(o)) {
+	return false;
       }
-      OnodeRef o;
-      map<BlobRef, bluestore_blob_t::unused_t> referenced;
+      check_referenced(o, referenced);
+      check_omap(o);
+    }
+    if (depth == FSCK_DEEP) {
+      do_deep_read(c, o);
+    }
+    return true;
+  };
 
-      if (!queued) {
-        ++processed_myself;
-        o = fsck_check_objects_shallow(
-          depth,
-          pool_id,
-          c,
-          oid,
-          obj_key,
-          obj_val,
-          shard_kvals,
-          &referenced,
-          ctx);
-	if (!o) {
-	  // error printing & fixing already done
-	  return false;
-	}
-      }
+  string obj_key;
+  bufferlist obj_val;
+  map<string, bufferlist> shard_kvals;
 
-      if (depth == FSCK_REGULAR || depth == FSCK_DEEP) {
-	if (!check_nid(o)) {
-	  return false;
-	}
-	check_referenced(o, referenced);
-        check_omap(o);
-      }
-      if (depth == FSCK_DEEP) {
-	do_deep_read(c, o);
-      }
-      return true;
-    };
+  auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
+  ceph_assert(it);
+  for (it->lower_bound(string()); it->valid(); it->next()) {
+    dout(30) << __func__ << " key "
+	     << pretty_binary_string(it->key()) << dendl;
 
-    string obj_key;
-    bufferlist obj_val;
-    map<string, bufferlist> shard_kvals;
-
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      dout(30) << __func__ << " key "
-        << pretty_binary_string(it->key()) << dendl;
-
-      if (is_extent_shard_key(it->key())) {
-	// a shard key must be continuation of an object
-	if (obj_key.empty() || (it->key().find(obj_key) != 0)) {
-	  // this is a stray shard
-	  derr << "fsck error: " << pretty_binary_string(it->key())
-	       << " stray shard " << dendl;
-	  ++errors;
-	} else {
-	  shard_kvals.emplace(it->key(), it->value());
-	}
+    if (is_extent_shard_key(it->key())) {
+      // a shard key must be continuation of an object
+      if (obj_key.empty() || (it->key().find(obj_key) != 0)) {
+	// this is a stray shard
+	derr << "fsck error: " << pretty_binary_string(it->key())
+	     << " stray shard " << dendl;
+	++errors;
       } else {
-	if (!obj_key.empty()) {
-	  check_object(obj_key, obj_val, shard_kvals);
-	}
-	obj_key = it->key();
-	obj_val = it->value();
-	shard_kvals.clear();
+	shard_kvals.emplace(it->key(), it->value());
       }
+    } else {
+      if (!obj_key.empty()) {
+	check_object(obj_key, obj_val, shard_kvals);
+      }
+      obj_key = it->key();
+      obj_val = it->value();
+      shard_kvals.clear();
     }
-    if (!obj_key.empty()) {
-      check_object(obj_key, obj_val, shard_kvals);
-    }
+  }
+  if (!obj_key.empty()) {
+    check_object(obj_key, obj_val, shard_kvals);
+  }
 
-    // if we used multi-thread checking wait
-    if (depth == FSCK_SHALLOW && thread_count > 0) {
-      wq->finalize(thread_pool, ctx);
-      if (processed_myself) {
-        // may be needs more threads?
-        dout(0) << __func__ << " partial offload"
-                << ", done myself " << processed_myself
-                << " of " << ctx.num_objects
-                << "objects, threads " << thread_count
-                << dendl;
-      }
+  // if we used multi-thread checking wait
+  if (depth == FSCK_SHALLOW && thread_count > 0) {
+    wq->finalize(thread_pool, ctx);
+    if (processed_myself) {
+      // may be needs more threads?
+      dout(0) << __func__ << " partial offload"
+	      << ", done myself " << processed_myself
+	      << " of " << ctx.num_objects
+	      << "objects, threads " << thread_count
+	      << dendl;
     }
-  } // if (it)
+  }
 }
 /**
 An overview for currently implemented repair logics 
