@@ -1156,7 +1156,7 @@ void Server::find_idle_sessions()
       if (mds->locker->revoke_stale_caps(session)) {
 	mds->locker->remove_stale_leases(session);
 	finish_flush_session(session, session->get_push_seq());
-	auto m = make_message<MClientSession>(CEPH_SESSION_STALE, session->get_push_seq());
+	auto m = make_message<MClientSession>(CEPH_SESSION_STALE);
 	mds->send_message_client(m, session);
       } else {
 	to_evict.push_back(session);
