@@ -9366,13 +9366,15 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
 
   {
     cerr << "fscking/fixing" << std::endl;
+    // we need to check for null-manager before umount()
+    bool has_null_manager = bstore->has_null_manager();
     bstore->umount();
     // depending on the allocation map's source we can
     // either observe or don't observe an additional 
     // extent leak detection. Hence adjusting the expected
     // value
     size_t expected_error_count =
-      g_ceph_context->_conf->bluestore_allocation_from_file ?
+      has_null_manager ?
       5: // 4 sb ref mismatch errors + 1 statfs mismatch
       7; // 4 sb ref mismatch errors + 1 statfs + 1 block leak + 1 non-free
     ASSERT_EQ(bstore->fsck(false), expected_error_count);
