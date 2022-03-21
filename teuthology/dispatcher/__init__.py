@@ -88,6 +88,7 @@ def main(args):
     fetch_qa_suite('master')
 
     keep_running = True
+    job_procs = set()
     while keep_running:
         # Check to see if we have a teuthology-results process hanging around
         # and if so, read its return code so that it can exit.
@@ -106,6 +107,8 @@ def main(args):
         job = connection.reserve(timeout=60)
         if job is None:
             continue
+
+        job_procs = set(filter(lambda p: p.poll() is None, job_procs))
 
         # bury the job so it won't be re-run if it fails
         job.bury()
@@ -154,6 +157,7 @@ def main(args):
 
         try:
             job_proc = subprocess.Popen(run_args)
+            job_procs.add(job_proc)
             log.info('Job supervisor PID: %s', job_proc.pid)
         except Exception:
             error_message = "Saw error while trying to spawn supervisor."
@@ -170,6 +174,12 @@ def main(args):
             job.delete()
         except Exception:
             log.exception("Saw exception while trying to delete job")
+
+    returncodes = set([0])
+    for proc in job_procs:
+        if proc.returncode is not None:
+            returncodes.add(proc.returncode)
+    return max(returncodes)
 
 
 def lock_machines(job_config):

@@ -54,14 +54,14 @@ def main(args):
             yaml.safe_dump(job_config, f, default_flow_style=False)
 
     try:
-        run_job(
+        return run_job(
             job_config,
             teuth_bin_path,
             archive_dir,
             verbose
         )
     except SkipJob:
-        return
+        return 0
 
 
 def run_job(job_config, teuth_bin_path, archive_dir, verbose):
@@ -152,6 +152,7 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
         log.info('Success!')
     if 'targets' in job_config:
         unlock_targets(job_config)
+    return p.returncode
 
 def failure_is_reimage(failure_reason):
     if not failure_reason:

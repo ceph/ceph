@@ -24,10 +24,11 @@ standard arguments:
 """
 
 import docopt
+import sys
 
 import teuthology.dispatcher
 
 
 def main():
     args = docopt.docopt(__doc__)
-    teuthology.dispatcher.main(args)
+    sys.exit(teuthology.dispatcher.main(args))
