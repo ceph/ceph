@@ -2675,7 +2675,10 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 				     int *next_marker, bool *truncated,
 				     bool assume_unsorted)
 {
-  int rc;
+  int rc = 0;
+  if (num_parts <= 0 or marker < 0)
+    return rc;
+
   vector<string> key_vec(num_parts);
   vector<bufferlist> val_vec(num_parts);
 
