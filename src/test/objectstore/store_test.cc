@@ -9266,8 +9266,6 @@ TEST_P(StoreTestSpecificAUSize, BluestoreObjectMissingShardsRepairTest) {
     cerr << "fscking/fixing" << std::endl;
     ASSERT_GE(bstore->fsck(false), 3);
     ASSERT_LE(bstore->repair(false), 0);
-    ASSERT_EQ(bstore->fsck(false), 1); //still statfs wrong
-    ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
 

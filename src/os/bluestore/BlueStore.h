@@ -3933,6 +3933,11 @@ public:
 
   bool preprocess_misreference(KeyValueDB *db);
 
+  bool remove_onode(KeyValueDB *db,
+		    const std::string& object_key,
+		    const std::map<std::string, ceph::buffer::list>& shards,
+		    uint32_t error_cnt_fixed);
+
   unsigned apply(KeyValueDB* db);
 
   void note_misreference(uint64_t offs, uint64_t len, bool inc_error) {
@@ -3992,6 +3997,7 @@ private:
   KeyValueDB::Transaction fix_shared_blob_txn;
 
   KeyValueDB::Transaction fix_misreferences_txn;
+  KeyValueDB::Transaction remove_onode_txn;
   KeyValueDB::Transaction fix_onode_txn;
 
   StoreSpaceTracker space_usage_tracker;

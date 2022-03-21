@@ -8097,7 +8097,18 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   if (!o->extent_map.shards.empty()) {
     ++num_sharded_objects;
     int64_t shard_errors = 0;
-    // we should have all the shards we expect to have, in order
+    // we should have all the shards we expect to have
+    // otherwise we skip decoding
+    bool missing_shard = false;
+    for (auto& s : o->extent_map.shards) {
+      string shard_key;
+      get_extent_shard_key(o->key, s.shard_info->offset, &shard_key);
+      auto it = shards_local.find(shard_key);
+      if (it != shards_local.end()) {
+	missing_shard = true;
+	break;
+      }
+    }
     uint32_t shard_id = 0;
     for (auto& s : o->extent_map.shards) {
       dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
@@ -8111,7 +8122,9 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
       get_extent_shard_key(o->key, s.shard_info->offset, &shard_key);
       if (auto it = shards_local.find(shard_key); it != shards_local.end()) {
 	// if we have such shard, decode
-	o->extent_map.provide_shard_info_to_onode(it->second, shard_id);
+	if (!missing_shard) {
+	  o->extent_map.provide_shard_info_to_onode(it->second, shard_id);
+	}
 	shard_id++;
 	shards_local.erase(it);
       } else {
@@ -8134,7 +8147,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
       dout(10) << " corrupted onode " << oid << dendl;
       if (repairer) {
 	// delete corrupted object
-	// TODO this it the place to implement deletion
+	repairer->remove_onode(db, key, shards, shard_errors);
       }
       return OnodeRef();
     }
@@ -9005,6 +9018,9 @@ void BlueStore::_fsck_check_objects(
 	// this is a stray shard
 	derr << "fsck error: " << pretty_binary_string(it->key())
 	     << " stray shard " << dendl;
+	if (repairer) {
+	  repairer->remove_key(db, PREFIX_OBJ, it->key());
+	}
 	++errors;
       } else {
 	shard_kvals.emplace(it->key(), it->value());
@@ -17789,6 +17805,24 @@ bool BlueStoreRepairer::preprocess_misreference(KeyValueDB *db)
   return false;
 }
 
+bool BlueStoreRepairer::remove_onode(
+  KeyValueDB *db,
+  const std::string& object_key,
+  const std::map<string, bufferlist>& shards,
+  uint32_t error_cnt_fixed)
+{
+  std::lock_guard l(lock);
+  if (!remove_onode_txn) {
+    remove_onode_txn = db->get_transaction();
+  }
+  remove_onode_txn->rmkey(PREFIX_OBJ, object_key);
+  for (auto x: shards) {
+    remove_onode_txn->rmkey(PREFIX_OBJ, x.first);
+  }
+  to_repair_cnt += error_cnt_fixed;
+  return true;
+}
+
 unsigned BlueStoreRepairer::apply(KeyValueDB* db)
 {
   //NB: not for use in multithreading mode!!!
@@ -17816,6 +17850,11 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
     auto ok = db->submit_transaction_sync(fix_misreferences_txn) == 0;
     ceph_assert(ok);
     fix_misreferences_txn = nullptr;
+  }
+  if (remove_onode_txn) {
+    auto ok = db->submit_transaction_sync(remove_onode_txn) == 0;
+    ceph_assert(ok);
+    remove_onode_txn = nullptr;
   }
   if (fix_onode_txn) {
     auto ok = db->submit_transaction_sync(fix_onode_txn) == 0;
