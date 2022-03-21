@@ -87,7 +87,7 @@ public:
         f->dump_string("length", len_hex);
         f->close_section();
       };
-      alloc->dump(iterated_allocation);
+      alloc->foreach(iterated_allocation);
       f->close_section();
       f->close_section();
     } else if (command == "bluestore allocator score " + name) {
@@ -213,7 +213,7 @@ double Allocator::get_fragmentation_score()
     score_sum += get_score(len);
     sum += len;
   };
-  dump(iterated_allocation);
+  foreach(iterated_allocation);
 
 
   double ideal = get_score(sum);
