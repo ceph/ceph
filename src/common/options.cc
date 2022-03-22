@@ -2107,6 +2107,11 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("force mons to trim mdsmaps/fsmaps through this epoch"),
 
+    Option("mds_beacon_mon_down_grace", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(1_min)
+    .set_description("tolerance in seconds for missed MDS beacons to monitors")
+    .set_long_description("The interval without beacons before Ceph declares an MDS laggy when a monitor is down."),
+
     Option("mon_mds_skip_sanity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .add_service("mon")

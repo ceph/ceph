@@ -216,6 +216,19 @@ public:
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 
+  int quorum_age() const {
+    auto age = std::chrono::duration_cast<std::chrono::seconds>(
+      ceph::mono_clock::now() - quorum_since);
+    return age.count();
+  }
+
+  bool is_mon_down() const {
+    int max = monmap->size();
+    int actual = get_quorum().size();
+    auto now = ceph::real_clock::now();
+    return actual < max && now > monmap->created.to_real_time();
+  }
+
   // -- elector --
 private:
   std::unique_ptr<Paxos> paxos;
