@@ -186,6 +186,8 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
     dout_impl(pdpp->get_cct(), ceph::dout::need_dynamic(pdpp->get_subsys()), v) \
       pdpp->gen_prefix(*_dout)
 
+#define ldpp_derr(dpp) ldpp_dout(dpp, -1)
+
 #define lgeneric_subdout(cct, sub, v) dout_impl(cct, ceph_subsys_##sub, v) *_dout
 #define lgeneric_dout(cct, v) dout_impl(cct, ceph_subsys_, v) *_dout
 #define lgeneric_derr(cct) dout_impl(cct, ceph_subsys_, -1) *_dout
