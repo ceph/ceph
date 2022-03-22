@@ -325,12 +325,14 @@ public:
   bool can_read(client_t client) const {
     return get_sm()->states[state].can_read == ANY ||
       (get_sm()->states[state].can_read == AUTH && parent->is_auth()) ||
-      (get_sm()->states[state].can_read == XCL && client >= 0 && get_xlock_by_client() == client);
+      (get_sm()->states[state].can_read == XCL && client >= 0 && get_xlock_by_client() == client) ||
+      (get_sm()->states[state].can_read == XCL && client >= 0 && (get_xlock_by_client() == -1 && is_rdlocked()));
   }
   bool can_read_projected(client_t client) const {
     return get_sm()->states[state].can_read_projected == ANY ||
       (get_sm()->states[state].can_read_projected == AUTH && parent->is_auth()) ||
-      (get_sm()->states[state].can_read_projected == XCL && client >= 0 && get_xlock_by_client() == client);
+      (get_sm()->states[state].can_read_projected == XCL && client >= 0 && get_xlock_by_client() == client) ||
+      (get_sm()->states[state].can_read == XCL && client >= 0 && (get_xlock_by_client() == -1 && is_rdlocked()));
   }
   bool can_rdlock(client_t client) const {
     return get_sm()->states[state].can_rdlock == ANY ||
