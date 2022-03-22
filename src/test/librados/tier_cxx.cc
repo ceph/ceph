@@ -2544,6 +2544,52 @@ static int _get_pg_num(Rados& cluster, string pool_name)
   return -1;
 }
 
+int make_hitset(Rados& cluster, librados::IoCtx& cache_ioctx, int num_pg, 
+    int num, std::map<int, HitSet>& hitsets, std::string& cache_pool_name) 
+{
+  int pg = num_pg;
+  // do a bunch of writes
+  for (int i=0; i<num; ++i) {
+    bufferlist bl;
+    bl.append("a");
+    ceph_assert(0 == cache_ioctx.write(stringify(i), bl, 1, 0));
+  }
+
+  // get HitSets
+  for (int i=0; i<pg; ++i) {
+    list< pair<time_t,time_t> > ls;
+    AioCompletion *c = librados::Rados::aio_create_completion();
+    ceph_assert(0 == cache_ioctx.hit_set_list(i, c, &ls));
+    c->wait_for_complete();
+    c->release();
+    std::cout << "pg " << i << " ls " << ls << std::endl;
+    ceph_assert(!ls.empty());
+
+    // get the latest
+    c = librados::Rados::aio_create_completion();
+    bufferlist bl;
+    ceph_assert(0 == cache_ioctx.hit_set_get(i, c, ls.back().first, &bl));
+    c->wait_for_complete();
+    c->release();
+
+    try {
+      auto p = bl.cbegin();
+      decode(hitsets[i], p);
+    }
+    catch (buffer::error& e) {
+      std::cout << "failed to decode hit set; bl len is " << bl.length() << "\n";
+      bl.hexdump(std::cout);
+      std::cout << std::endl;
+      throw e;
+    }
+
+    // cope with racing splits by refreshing pg_num
+    if (i == pg - 1)
+      pg = _get_pg_num(cluster, cache_pool_name);
+  }
+  return pg;
+}
+
 TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
   ceph_assert(num_pg > 0);
@@ -2572,46 +2618,11 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
 
   int num = 200;
 
-  // do a bunch of writes
-  for (int i=0; i<num; ++i) {
-    bufferlist bl;
-    bl.append("a");
-    ASSERT_EQ(0, cache_ioctx.write(stringify(i), bl, 1, 0));
-  }
-
-  // get HitSets
   std::map<int,HitSet> hitsets;
-  for (int i=0; i<num_pg; ++i) {
-    list< pair<time_t,time_t> > ls;
-    AioCompletion *c = librados::Rados::aio_create_completion();
-    ASSERT_EQ(0, cache_ioctx.hit_set_list(i, c, &ls));
-    c->wait_for_complete();
-    c->release();
-    std::cout << "pg " << i << " ls " << ls << std::endl;
-    ASSERT_FALSE(ls.empty());
 
-    // get the latest
-    c = librados::Rados::aio_create_completion();
-    bufferlist bl;
-    ASSERT_EQ(0, cache_ioctx.hit_set_get(i, c, ls.back().first, &bl));
-    c->wait_for_complete();
-    c->release();
+  num_pg = make_hitset(cluster, cache_ioctx, num_pg, num, hitsets, cache_pool_name);
 
-    try {
-      auto p = bl.cbegin();
-      decode(hitsets[i], p);
-    }
-    catch (buffer::error& e) {
-      std::cout << "failed to decode hit set; bl len is " << bl.length() << "\n";
-      bl.hexdump(std::cout);
-      std::cout << std::endl;
-      throw e;
-    }
-
-    // cope with racing splits by refreshing pg_num
-    if (i == num_pg - 1)
-      num_pg = _get_pg_num(cluster, cache_pool_name);
-  }
+  int retry = 0;
 
   for (int i=0; i<num; ++i) {
     string n = stringify(i);
@@ -2626,6 +2637,12 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
 	found = true;
 	break;
       }
+    }
+    if (!found && retry < 5) {
+      num_pg = make_hitset(cluster, cache_ioctx, num_pg, num, hitsets, cache_pool_name);
+      i--;
+      retry++;
+      continue;
     }
     ASSERT_TRUE(found);
   }
