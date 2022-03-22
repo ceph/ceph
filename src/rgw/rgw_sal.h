@@ -20,10 +20,8 @@
 #include "common/tracer.h"
 
 class RGWGetDataCB;
-struct RGWObjState;
 class RGWAccessListFilter;
 class RGWLC;
-class RGWObjManifest;
 struct RGWZoneGroup;
 struct RGWZoneParams;
 struct RGWRealm;
@@ -100,6 +98,50 @@ public:
   virtual void handle_response(int r) = 0;
   virtual void set_response(RGWStorageStats& _stats) {
     stats = _stats;
+  }
+};
+
+struct RGWObjState {
+  rgw_obj obj;
+  bool is_atomic{false};
+  bool has_attrs{false};
+  bool exists{false};
+  uint64_t size{0}; //< size of raw object
+  uint64_t accounted_size{0}; //< size before compression, encryption
+  ceph::real_time mtime;
+  uint64_t epoch{0};
+  bufferlist obj_tag;
+  bufferlist tail_tag;
+  std::string write_tag;
+  bool fake_tag{false};
+  std::string shadow_obj;
+  bool has_data{false};
+  bufferlist data;
+  bool prefetch_data{false};
+  bool keep_tail{false};
+  bool is_olh{false};
+  bufferlist olh_tag;
+  uint64_t pg_ver{false};
+  uint32_t zone_short_id{0};
+  bool compressed{false};
+
+  /* important! don't forget to update copy constructor */
+
+  RGWObjVersionTracker objv_tracker;
+
+  std::map<std::string, ceph::buffer::list> attrset;
+
+  RGWObjState();
+  RGWObjState(const RGWObjState& rhs);
+  ~RGWObjState();
+
+  bool get_attr(std::string name, bufferlist& dest) {
+    auto iter = attrset.find(name);
+    if (iter != attrset.end()) {
+      dest = iter->second;
+      return true;
+    }
+    return false;
   }
 };
 
@@ -292,7 +334,7 @@ class Store {
         rgw::notify::EventType event_type, const std::string* object_name=nullptr) = 0;
     /** No-req_state variant (e.g., rgwlc) */
     virtual std::unique_ptr<Notification> get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, RGWObjectCtx* rctx,
+    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) = 0;
 
@@ -381,7 +423,7 @@ class Store {
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
-				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -390,7 +432,7 @@ class Store {
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
-				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) = 0;
@@ -850,14 +892,10 @@ public:
  */
 class Object {
   protected:
-    rgw_obj_key key;
-    Bucket* bucket;
-    std::string index_hash_source;
-    uint64_t obj_size;
-    Attrs attrs;
-    ceph::real_time mtime;
-    bool delete_marker{false};
-    bool in_extra_data{false};
+    RGWObjState state; /**< The key and primary metadata for the object */
+    Bucket* bucket; /**< @a Bucket containing this object */
+    Attrs attrs; /**< Cache of attributes for this object */
+    bool delete_marker{false}; /**< True if this object has a delete marker */
 
   public:
 
@@ -928,40 +966,33 @@ class Object {
     };
 
     Object()
-      : key(),
+      : state(),
       bucket(nullptr),
-      index_hash_source(),
-      obj_size(),
-      attrs(),
-      mtime() {}
+      attrs()
+      {}
     Object(const rgw_obj_key& _k)
-      : key(_k),
+      : state(),
       bucket(),
-      index_hash_source(),
-      obj_size(),
-      attrs(),
-      mtime() {}
+      attrs()
+      { state.obj.key = _k; }
     Object(const rgw_obj_key& _k, Bucket* _b)
-      : key(_k),
+      : state(),
       bucket(_b),
-      index_hash_source(),
-      obj_size(),
-      attrs(),
-      mtime() {}
+      attrs()
+      { state.obj.init(_b->get_key(), _k); }
     Object(Object& _o) = default;
 
     virtual ~Object() = default;
 
     /** Shortcut synchronous delete call for common deletes */
     virtual int delete_object(const DoutPrefixProvider* dpp,
-			      RGWObjectCtx* obj_ctx,
 			      optional_yield y,
 			      bool prevent_versioning = false) = 0;
     /** Asynchronous delete call */
     virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
 			       bool keep_index_consistent, optional_yield y) = 0;
     /** Copy an this object to another object. */
-    virtual int copy_object(RGWObjectCtx& obj_ctx, User* user,
+    virtual int copy_object(User* user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -981,28 +1012,54 @@ class Object {
     /** Set the ACL for this object */
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     /** Mark further operations on this object as being atomic */
-    virtual void set_atomic(RGWObjectCtx* rctx) const = 0;
+    virtual void set_atomic() {
+      state.is_atomic = true;
+    }
+    /** Check if this object is atomic */
+    bool is_atomic() { return state.is_atomic; }
     /** Pre-fetch data when reading */
-    virtual void set_prefetch_data(RGWObjectCtx* rctx) = 0;
+    virtual void set_prefetch_data() {
+      state.prefetch_data = true;
+    }
+    /** Check if this object should prefetch */
+    bool is_prefetch_data() { return state.prefetch_data; }
     /** Mark data as compressed */
-    virtual void set_compressed(RGWObjectCtx* rctx) = 0;
+    virtual void set_compressed() {
+      state.compressed = true;
+    }
+    /** Check if this object is compressed */
+    bool is_compressed() { return state.compressed; }
+    /** Invalidate cached info about this object, except atomic, prefetch, and
+     * compressed */
+    virtual void invalidate() {
+      rgw_obj obj = state.obj;
+      bool is_atomic = state.is_atomic;
+      bool prefetch_data = state.prefetch_data;
+      bool compressed = state.compressed;
+
+      state = RGWObjState();
+      state.obj = obj;
+      state.is_atomic = is_atomic;
+      state.prefetch_data = prefetch_data;
+      state.compressed = compressed;
+    }
 
     /** Check to see if this object has an empty key.  This means it's uninitialized */
-    bool empty() const { return key.empty(); }
+    bool empty() const { return state.obj.empty(); }
     /** Get the name of this object */
-    const std::string &get_name() const { return key.name; }
+    const std::string &get_name() const { return state.obj.key.name; }
 
     /** Get the object state for this object.  Will be removed in the future */
-    virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh = true) = 0;
+    virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state, optional_yield y, bool follow_olh = true) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_obj* target_obj = NULL) = 0;
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y) = 0;
     /** Get attributes for this object */
-    virtual int get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) = 0;
+    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) = 0;
     /** Modify attributes for this object. */
-    virtual int modify_obj_attrs(RGWObjectCtx* rctx, const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) = 0;
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) = 0;
     /** Delete attributes for this object */
-    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, const char* attr_name, optional_yield y) = 0;
+    virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) = 0;
     /** Check to see if this object has expired */
     virtual bool is_expired() = 0;
     /** Create a randomized instance ID for this object */
@@ -1010,8 +1067,7 @@ class Object {
     /** Get a multipart serializer for this object */
     virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) = 0;
     /** Move the data of an object to new placement storage */
-    virtual int transition(RGWObjectCtx& rctx,
-			   Bucket* bucket,
+    virtual int transition(Bucket* bucket,
 			   const rgw_placement_rule& placement_rule,
 			   const real_time& mtime,
 			   uint64_t olh_epoch,
@@ -1020,63 +1076,58 @@ class Object {
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump store-specific object layout info in JSON */
-    virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f, RGWObjectCtx* obj_ctx) = 0;
+    virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) = 0;
 
     /** Get the cached attributes for this object */
-    Attrs& get_attrs(void) { return attrs; }
+    Attrs& get_attrs(void) { return state.attrset; }
     /** Get the (const) cached attributes for this object */
-    const Attrs& get_attrs(void) const { return attrs; }
+    const Attrs& get_attrs(void) const { return state.attrset; }
     /** Set the cached attributes for this object */
-    virtual int set_attrs(Attrs a) { attrs = a; return 0; }
+    virtual int set_attrs(Attrs a) { state.attrset = a; state.has_attrs = true; return 0; }
+    /** Check to see if attributes are cached on this object */
+    bool has_attrs(void) { return state.has_attrs; }
     /** Get the cached modification time for this object */
-    ceph::real_time get_mtime(void) const { return mtime; }
+    ceph::real_time get_mtime(void) const { return state.mtime; }
     /** Get the cached size for this object */
-    uint64_t get_obj_size(void) const { return obj_size; }
+    uint64_t get_obj_size(void) const { return state.size; }
     /** Get the bucket containing this object */
     Bucket* get_bucket(void) const { return bucket; }
     /** Set the bucket containing this object */
-    void set_bucket(Bucket* b) { bucket = b; }
+    void set_bucket(Bucket* b) { bucket = b; state.obj.bucket = b->get_key(); }
     /** Get the sharding hash representation of this object */
-    std::string get_hash_source(void) { return index_hash_source; }
+    std::string get_hash_source(void) { return state.obj.index_hash_source; }
     /** Set the sharding hash representation of this object */
-    void set_hash_source(std::string s) { index_hash_source = s; }
+    void set_hash_source(std::string s) { state.obj.index_hash_source = s; }
     /** Build an Object Identifier string for this object */
-    std::string get_oid(void) const { return key.get_oid(); }
+    std::string get_oid(void) const { return state.obj.key.get_oid(); }
     /** True if this object is a delete marker (newest version is deleted) */
     bool get_delete_marker(void) { return delete_marker; }
     /** True if this object is stored in the extra data pool */
-    bool get_in_extra_data(void) { return in_extra_data; }
+    bool get_in_extra_data(void) { return state.obj.is_in_extra_data(); }
     /** Set the in_extra_data field */
-    void set_in_extra_data(bool i) { in_extra_data = i; }
+    void set_in_extra_data(bool i) { state.obj.set_in_extra_data(i); }
     /** Helper to sanitize object size, offset, and end values */
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
     /** Set the cached size of this object */
-    void set_obj_size(uint64_t s) { obj_size = s; }
+    void set_obj_size(uint64_t s) { state.size = s; }
     /** Set the cached name of this object */
-    virtual void set_name(const std::string& n) { key = n; }
+    virtual void set_name(const std::string& n) { state.obj.key = n; }
     /** Set the cached key of this object */
-    virtual void set_key(const rgw_obj_key& k) { key = k; }
+    virtual void set_key(const rgw_obj_key& k) { state.obj.key = k; }
     /** Get an rgw_obj representing this object */
-    virtual rgw_obj get_obj(void) const {
-      rgw_obj obj(bucket->get_key(), key);
-      obj.set_in_extra_data(in_extra_data);
-      obj.index_hash_source = index_hash_source;
-      return obj;
-    }
+    virtual rgw_obj get_obj(void) const { return state.obj; }
 
     /** Restore the previous swift version of this object */
-    virtual int swift_versioning_restore(RGWObjectCtx* obj_ctx,
-					 bool& restored,   /* out */
+    virtual int swift_versioning_restore(bool& restored,   /* out */
 					 const DoutPrefixProvider* dpp) = 0;
     /** Copy the current version of a swift object to the configured destination bucket*/
-    virtual int swift_versioning_copy(RGWObjectCtx* obj_ctx,
-				      const DoutPrefixProvider* dpp,
+    virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;
 
     /** Get a new ReadOp for this object */
-    virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx*) = 0;
+    virtual std::unique_ptr<ReadOp> get_read_op() = 0;
     /** Get a new DeleteOp for this object */
-    virtual std::unique_ptr<DeleteOp> get_delete_op(RGWObjectCtx*) = 0;
+    virtual std::unique_ptr<DeleteOp> get_delete_op() = 0;
 
     /** Get @a count OMAP values via listing, starting at @a marker for this object */
     virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
@@ -1100,18 +1151,20 @@ class Object {
 
     /* dang - This is temporary, until the API is completed */
     /** Get the key for this object */
-    rgw_obj_key& get_key() { return key; }
+    rgw_obj_key& get_key() { return state.obj.key; }
     /** Set the instance for this object */
-    void set_instance(const std::string &i) { key.set_instance(i); }
+    void set_instance(const std::string &i) { state.obj.key.set_instance(i); }
     /** Get the instance for this object */
-    const std::string &get_instance() const { return key.instance; }
+    const std::string &get_instance() const { return state.obj.key.instance; }
     /** Check to see if this object has an instance set */
-    bool have_instance(void) { return key.have_instance(); }
+    bool have_instance(void) { return state.obj.key.have_instance(); }
+    /** Clear the instance on this object */
+    void clear_instance() { state.obj.key.instance.clear(); }
 
     friend inline std::ostream& operator<<(std::ostream& out, const Object& o) {
       if (o.bucket)
 	out << o.bucket << ":";
-      out << o.key;
+      out << o.state.obj.key;
       return out;
     }
     friend inline std::ostream& operator<<(std::ostream& out, const Object* o) {
@@ -1187,15 +1240,14 @@ public:
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() = 0;
 
   /** Initialize this upload */
-  virtual int init(const DoutPrefixProvider* dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) = 0;
+  virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) = 0;
   /** List all the parts of this upload, filling the parts cache */
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			 int num_parts, int marker,
 			 int* next_marker, bool* truncated,
 			 bool assume_unsorted = false) = 0;
   /** Abort this upload */
-  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct,
-		    RGWObjectCtx* obj_ctx) = 0;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct) = 0;
   /** Complete this upload, making it available as a normal object */
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
@@ -1205,17 +1257,16 @@ public:
 		       RGWCompressionInfo& cs_info, off_t& ofs,
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
-		       rgw::sal::Object* target_obj,
-		       RGWObjectCtx* obj_ctx) = 0;
+		       rgw::sal::Object* target_obj) = 0;
 
   /** Get placement and/or attribute info for this upload */
-  virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;
+  virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;
 
   /** Get a Writer to write to a part of this upload */
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  std::unique_ptr<rgw::sal::Object> _head_obj,
-			  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+			  const rgw_user& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) = 0;
