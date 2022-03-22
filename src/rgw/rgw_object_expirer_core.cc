@@ -108,7 +108,7 @@ int RGWObjExpStore::objexp_hint_add(const DoutPrefixProvider *dpp,
   cls_timeindex_add(op, utime_t(delete_at), keyext, hebl);
 
   string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key, cct->_conf->rgw_objexp_hints_num_shards));
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_params().log_pool, shard_name));
+  auto obj = rados_svc->obj(rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, shard_name));
   int r = obj.open(dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
@@ -131,7 +131,7 @@ int RGWObjExpStore::objexp_hint_list(const DoutPrefixProvider *dpp,
   cls_timeindex_list(op, utime_t(start_time), utime_t(end_time), marker, max_entries, entries,
         out_marker, truncated);
 
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_params().log_pool, oid));
+  auto obj = rados_svc->obj(rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, oid));
   int r = obj.open(dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
@@ -180,7 +180,7 @@ int RGWObjExpStore::objexp_hint_trim(const DoutPrefixProvider *dpp,
                                const string& from_marker,
                                const string& to_marker)
 {
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_params().log_pool, oid));
+  auto obj = rados_svc->obj(rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, oid));
   int r = obj.open(dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;

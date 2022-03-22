@@ -2071,9 +2071,6 @@ struct rgw_name_to_flag {
   uint32_t flag;
 };
 
-extern int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
-                                   const std::string& str, uint32_t *perm);
-
 /** time parsing */
 extern int parse_time(const char *time_str, real_time *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
@@ -2413,3 +2410,5 @@ int decode_bl(bufferlist& bl, T& t)
   }
   return 0;
 }
+
+extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);

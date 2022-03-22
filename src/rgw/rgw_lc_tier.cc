@@ -1104,8 +1104,8 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   }
   dest_obj.init(target_bucket, target_obj_name);
 
-  status_obj = rgw_raw_obj(tier_ctx.store->get_zone()->get_params().log_pool,
-      "lc_multipart_" + tier_ctx.obj->get_oid());
+  rgw_pool pool = static_cast<rgw::sal::RadosStore*>(tier_ctx.store)->svc()->zone->get_zone_params().log_pool;
+  status_obj = rgw_raw_obj(pool, "lc_multipart_" + tier_ctx.obj->get_oid());
 
   ret = read_upload_status(tier_ctx.dpp, tier_ctx.store, &status_obj, &status);
 

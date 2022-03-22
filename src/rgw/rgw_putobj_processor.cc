@@ -18,6 +18,7 @@
 #include "rgw_multi.h"
 #include "rgw_compression.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone.h"
 #include "rgw_sal_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -630,7 +631,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);
   if (cur_manifest) {
-    cur_manifest->append(dpp, manifest, store->get_zone());
+    cur_manifest->append(dpp, manifest, store->svc()->zone->get_zonegroup(), store->svc()->zone->get_zone_params());
     obj_op.meta.manifest = cur_manifest;
   } else {
     obj_op.meta.manifest = &manifest;

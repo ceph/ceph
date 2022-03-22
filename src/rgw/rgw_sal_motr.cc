@@ -837,31 +837,78 @@ void MotrStore::finalize(void)
 {
 }
 
-const RGWZoneGroup& MotrZone::get_zonegroup()
+const std::string& MotrZoneGroup::get_endpoint() const
 {
-  return *zonegroup;
+  if (!group.endpoints.empty()) {
+      return group.endpoints.front();
+  } else {
+    // use zonegroup's master zone endpoints
+    auto z = group.zones.find(group.master_zone);
+    if (z != group.zones.end() && !z->second.endpoints.empty()) {
+      return z->second.endpoints.front();
+    }
+  }
+  return empty;
 }
 
-int MotrZone::get_zonegroup(const std::string& id, RGWZoneGroup& zg)
+bool MotrZoneGroup::placement_target_exists(std::string& target) const
 {
-  /* XXX: for now only one zonegroup supported */
-  zg = *zonegroup;
+  return !!group.placement_targets.count(target);
+}
+
+int MotrZoneGroup::get_placement_target_names(std::set<std::string>& names) const
+{
+  for (const auto& target : group.placement_targets) {
+    names.emplace(target.second.name);
+  }
+
   return 0;
 }
 
-const RGWZoneParams& MotrZone::get_params()
+int MotrZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
+				       std::unique_ptr<PlacementTier>* tier)
 {
-  return *zone_params;
+  std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
+  titer = group.placement_targets.find(rule.name);
+  if (titer == group.placement_targets.end()) {
+    return -ENOENT;
+  }
+
+  const auto& target_rule = titer->second;
+  std::map<std::string, RGWZoneGroupPlacementTier>::const_iterator ttier;
+  ttier = target_rule.tier_targets.find(rule.storage_class);
+  if (ttier == target_rule.tier_targets.end()) {
+    // not found
+    return -ENOENT;
+  }
+
+  PlacementTier* t;
+  t = new MotrPlacementTier(store, ttier->second);
+  if (!t)
+    return -ENOMEM;
+
+  tier->reset(t);
+  return 0;
+}
+
+ZoneGroup& MotrZone::get_zonegroup()
+{
+  return zonegroup;
+}
+
+int MotrZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* group)
+{
+  /* XXX: for now only one zonegroup supported */
+  ZoneGroup* zg;
+  zg = new MotrZoneGroup(store, zonegroup.get_group());
+
+  group->reset(zg);
+  return 0;
 }
 
 const rgw_zone_id& MotrZone::get_id()
 {
   return cur_zone_id;
-}
-
-const RGWRealm& MotrZone::get_realm()
-{
-  return *realm;
 }
 
 const std::string& MotrZone::get_name() const
@@ -1071,6 +1118,18 @@ int MotrObject::transition(Bucket* bucket,
     uint64_t olh_epoch,
     const DoutPrefixProvider* dpp,
     optional_yield y)
+{
+  return 0;
+}
+
+int MotrObject::transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y)
 {
   return 0;
 }
@@ -2759,6 +2818,16 @@ std::unique_ptr<Writer> MotrStore::get_atomic_writer(const DoutPrefixProvider *d
   return std::make_unique<MotrAtomicWriter>(dpp, y,
                   std::move(_head_obj), this, owner,
                   ptail_placement_rule, olh_epoch, unique_tag);
+}
+
+const std::string& MotrStore::get_compression_type(const rgw_placement_rule& rule)
+{
+      return zone.zone_params->get_compression_type(rule);
+}
+
+bool MotrStore::valid_placement(const rgw_placement_rule& rule)
+{
+  return zone.zone_params->valid_placement(rule);
 }
 
 std::unique_ptr<User> MotrStore::get_user(const rgw_user &u)

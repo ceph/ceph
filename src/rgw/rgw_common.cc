@@ -1828,6 +1828,25 @@ static struct rgw_name_to_flag cap_names[] = { {"*",     RGW_CAP_ALL},
 		  {"write", RGW_CAP_WRITE},
 		  {NULL, 0} };
 
+static int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
+			    const string& str, uint32_t *perm)
+{
+  list<string> strs;
+  get_str_list(str, strs);
+  list<string>::iterator iter;
+  uint32_t v = 0;
+  for (iter = strs.begin(); iter != strs.end(); ++iter) {
+    string& s = *iter;
+    for (int i = 0; mapping[i].type_name; i++) {
+      if (s.compare(mapping[i].type_name) == 0)
+        v |= mapping[i].flag;
+    }
+  }
+
+  *perm = v;
+  return 0;
+}
+
 int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
 {
   return rgw_parse_list_of_flags(cap_names, str, perm);
@@ -2920,21 +2939,33 @@ void rgw_obj::dump(Formatter *f) const
   encode_json("key", key, f);
 }
 
-int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
-			    const string& str, uint32_t *perm)
+int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id)
 {
-  list<string> strs;
-  get_str_list(str, strs);
-  list<string>::iterator iter;
-  uint32_t v = 0;
-  for (iter = strs.begin(); iter != strs.end(); ++iter) {
-    string& s = *iter;
-    for (int i = 0; mapping[i].type_name; i++) {
-      if (s.compare(mapping[i].type_name) == 0)
-        v |= mapping[i].flag;
-    }
+  auto pos = bucket_instance.rfind(':');
+  if (pos == string::npos) {
+    return -EINVAL;
   }
 
-  *perm = v;
+  string first = bucket_instance.substr(0, pos);
+  string second = bucket_instance.substr(pos + 1);
+
+  pos = first.find(':');
+
+  if (pos == string::npos) {
+    *shard_id = -1;
+    *bucket_name = first;
+    *bucket_id = second;
+    return 0;
+  }
+
+  *bucket_name = first.substr(0, pos);
+  *bucket_id = first.substr(pos + 1);
+
+  string err;
+  *shard_id = strict_strtol(second.c_str(), 10, &err);
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+
   return 0;
 }
