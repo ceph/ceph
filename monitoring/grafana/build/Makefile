@@ -1,10 +1,10 @@
 
-GRAFANA_VERSION ?= 6.7.4-1
+GRAFANA_VERSION ?= 8.2.6-1
 PIECHART_VERSION ?= "1.6.1"
 STATUS_PANEL_VERSION ?= "1.0.9"
 DASHBOARD_DIR := "../../ceph-mixin/dashboards_out"
 DASHBOARD_PROVISIONING := "ceph-dashboard.yml"
-IMAGE := "docker.io/centos:8"
+IMAGE := "docker.io/redhat/ubi8:8.5"
 PKGMGR := "dnf"
 GF_CONFIG := "/etc/grafana/grafana.ini"
 # clip off "-<whatever> from the end of GRAFANA_VERSION
