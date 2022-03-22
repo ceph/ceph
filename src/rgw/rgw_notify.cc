@@ -624,7 +624,7 @@ rgw::sal::Object* get_object_with_atttributes(
     if (!src_obj->get_bucket()) {
       src_obj->set_bucket(res.bucket);
     }
-    if (src_obj->get_obj_attrs(res.obj_ctx, res.yield, res.dpp) < 0) {
+    if (src_obj->get_obj_attrs(res.yield, res.dpp) < 0) {
       return nullptr;
     }
   }
@@ -966,7 +966,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::Object* _object,
 			     rgw::sal::Object* _src_object,
 			     const std::string* _object_name) :
-  dpp(_s), store(_store), s(_s), size(0) /* XXX */, obj_ctx(_s->obj_ctx),
+  dpp(_s), store(_store), s(_s), size(0) /* XXX */,
   object(_object), src_object(_src_object), bucket(_s->bucket.get()),
   object_name(_object_name),
   tagset(_s->tagset),
@@ -979,7 +979,6 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,
-			     RGWObjectCtx* _obj_ctx,
 			     rgw::sal::Object* _object,
 			     rgw::sal::Object* _src_object,
 			     rgw::sal::Bucket* _bucket,
@@ -988,7 +987,6 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     std::string& _req_id,
 			     optional_yield y) :
     dpp(_dpp), store(_store), s(nullptr), size(0) /* XXX */,
-    obj_ctx(_obj_ctx),
     object(_object), src_object(_src_object), bucket(_bucket),
     object_name(nullptr),
     user_id(_user_id),

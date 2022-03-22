@@ -1751,12 +1751,10 @@ class DB {
       bool bs_initialized;
 
       public:
-      Object(DB *_store, const RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
+      Object(DB *_store, const RGWBucketInfo& _bucket_info, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
       obj(_obj),
       state(NULL), versioning_disabled(false),
       bs_initialized(false) {}
-
-      Object(DB *_store, const RGWBucketInfo& _bucket_info, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info), obj(_obj) {}
 
       Object(DB *_store, const RGWBucketInfo& _bucket_info, const rgw_obj& _obj, const std::string& _obj_id) : store(_store), bucket_info(_bucket_info), obj(_obj), obj_id(_obj_id) {}
 
@@ -1892,7 +1890,6 @@ class DB {
           const rgw_obj& olh_obj, rgw_obj *target);
 
       int get_state(const DoutPrefixProvider *dpp, RGWObjState **pstate, bool follow_olh);
-      int get_manifest(const DoutPrefixProvider *dpp, RGWObjManifest **pmanifest);
 
       DB *get_store() { return store; }
       rgw_obj& get_obj() { return obj; }

@@ -404,13 +404,12 @@ protected:
     virtual const ACLOwner& get_owner() const override { return owner; }
     virtual ceph::real_time& get_mtime() { return mtime; }
     virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
-    virtual int init(const DoutPrefixProvider* dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
+    virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;
     virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			 int num_parts, int marker,
 			 int* next_marker, bool* truncated,
 			 bool assume_unsorted = false) override;
-    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct,
-		    RGWObjectCtx* obj_ctx) override;
+    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct) override;
     virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
@@ -419,13 +418,12 @@ protected:
 		       RGWCompressionInfo& cs_info, off_t& ofs,
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
-		       rgw::sal::Object* target_obj,
-		       RGWObjectCtx* obj_ctx) override;
-    virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
+		       rgw::sal::Object* target_obj) override;
+    virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
     virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  std::unique_ptr<rgw::sal::Object> _head_obj,
-			  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+			  const rgw_user& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
@@ -435,10 +433,6 @@ protected:
     private:
       DBStore* store;
       RGWAccessControlPolicy acls;
-      /* XXX: to be removed. Till Dan's patch comes, a placeholder
-       * for RGWObjState
-       */
-      RGWObjState state;
 
     public:
       struct DBReadOp : public ReadOp {
@@ -460,12 +454,11 @@ protected:
       struct DBDeleteOp : public DeleteOp {
         private:
           DBObject* source;
-          RGWObjectCtx* rctx;
           DB::Object op_target;
           DB::Object::Delete parent_op;
 
         public:
-          DBDeleteOp(DBObject* _source, RGWObjectCtx* _rctx);
+          DBDeleteOp(DBObject* _source);
 
           virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
       };
@@ -485,12 +478,11 @@ protected:
       DBObject(DBObject& _o) = default;
 
       virtual int delete_object(const DoutPrefixProvider* dpp,
-          RGWObjectCtx* obj_ctx,
           optional_yield y,
           bool prevent_versioning = false) override;
       virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
           bool keep_index_consistent, optional_yield y) override;
-      virtual int copy_object(RGWObjectCtx& obj_ctx, User* user,
+      virtual int copy_object(User* user,
           req_info* info, const rgw_zone_id& source_zone,
           rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
           rgw::sal::Bucket* src_bucket,
@@ -507,42 +499,36 @@ protected:
           const DoutPrefixProvider* dpp, optional_yield y) override;
       virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
       virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
-      virtual void set_atomic(RGWObjectCtx* rctx) const override;
-      virtual void set_prefetch_data(RGWObjectCtx* rctx) override;
-      virtual void set_compressed(RGWObjectCtx* rctx) override;
 
-      virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh = true) override;
-      virtual int set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_obj* target_obj = NULL) override;
-      virtual int get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
-      virtual int modify_obj_attrs(RGWObjectCtx* rctx, const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) override;
-      virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, const char* attr_name, optional_yield y) override;
+      virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state, optional_yield y, bool follow_olh = true) override;
+      virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y) override;
+      virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
+      virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) override;
+      virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) override;
       virtual bool is_expired() override;
       virtual void gen_rand_obj_instance_name() override;
       virtual std::unique_ptr<Object> clone() override {
         return std::unique_ptr<Object>(new DBObject(*this));
       }
       virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) override;
-      virtual int transition(RGWObjectCtx& rctx,
-          Bucket* bucket,
+      virtual int transition(Bucket* bucket,
           const rgw_placement_rule& placement_rule,
           const real_time& mtime,
           uint64_t olh_epoch,
           const DoutPrefixProvider* dpp,
           optional_yield y) override;
       virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
-      virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f, RGWObjectCtx* obj_ctx) override;
+      virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
       /* Swift versioning */
-      virtual int swift_versioning_restore(RGWObjectCtx* obj_ctx,
-          bool& restored,
+      virtual int swift_versioning_restore(bool& restored,
           const DoutPrefixProvider* dpp) override;
-      virtual int swift_versioning_copy(RGWObjectCtx* obj_ctx,
-          const DoutPrefixProvider* dpp,
+      virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
           optional_yield y) override;
 
       /* OPs */
-      virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx *) override;
-      virtual std::unique_ptr<DeleteOp> get_delete_op(RGWObjectCtx*) override;
+      virtual std::unique_ptr<ReadOp> get_read_op() override;
+      virtual std::unique_ptr<DeleteOp> get_delete_op() override;
 
       /* OMAP */
       virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
@@ -590,7 +576,7 @@ protected:
 	    	    optional_yield y,
 		        std::unique_ptr<rgw::sal::Object> _head_obj,
 		        DBStore* _store,
-    		    const rgw_user& _owner, RGWObjectCtx& obj_ctx,
+    		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag);
@@ -639,7 +625,7 @@ public:
 		       optional_yield y, MultipartUpload* upload,
 		       std::unique_ptr<rgw::sal::Object> _head_obj,
 		       DBStore* _store,
-		       const rgw_user& owner, RGWObjectCtx& obj_ctx,
+		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t part_num, const std::string& part_num_str);
     ~DBMultipartWriter() = default;
@@ -721,7 +707,7 @@ public:
 
   virtual std::unique_ptr<Notification> get_notification(
     const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
-    rgw::sal::Object* src_obj, RGWObjectCtx* rctx,
+    rgw::sal::Object* src_obj,
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
     std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
     optional_yield y) override;
@@ -780,7 +766,7 @@ public:
       virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
-				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -788,7 +774,7 @@ public:
       virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
-				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
