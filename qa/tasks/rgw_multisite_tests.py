@@ -72,7 +72,7 @@ class RGWMultisiteTests(Task):
         log.info('creating test user..')
         user = multisite.User('rgw-multisite-test-user')
         user.create(master_zone, ['--display-name', 'Multisite Test User',
-                                  '--gen-access-key', '--gen-secret'])
+                                  '--gen-access-key', '--gen-secret', '--caps', 'roles=*'])
 
         config = self.config.get('config', {})
         tests.init_multi(realm, user, tests.Config(**config))
