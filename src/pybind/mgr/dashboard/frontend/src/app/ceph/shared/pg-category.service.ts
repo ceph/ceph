@@ -54,7 +54,7 @@ export class PgCategoryService {
 
   private getPgStatesFromText(pgStatesText: string) {
     const pgStates = pgStatesText
-      .replace(/[^a-z]+/g, ' ')
+      .replace(/[^a-z_]+/g, ' ')
       .trim()
       .split(' ');
 
