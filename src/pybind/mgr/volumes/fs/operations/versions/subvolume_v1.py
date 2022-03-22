@@ -131,6 +131,10 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.metadata_mgr.update_section("source", "group", subvolume.group_name)
         self.metadata_mgr.update_section("source", "subvolume", subvolume.subvol_name)
         self.metadata_mgr.update_section("source", "snapshot", snapname)
+        snappath = subvolume.snapshot_data_path(snapname).decode('utf-8')
+        self.metadata_mgr.update_section("source", "snappath", snappath)
+        snapsize = int(self.fs.getxattr(snappath, 'ceph.dir.rbytes'))
+        self.metadata_mgr.update_section("source", "size", snapsize)
         if flush:
             self.metadata_mgr.flush()
 
@@ -138,6 +142,29 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         self.metadata_mgr.remove_section("source")
         if flush:
             self.metadata_mgr.flush()
+
+    def add_clone_progress(self, idle_time, start_time):
+        self.metadata_mgr.add_section("progress")
+        # Update idle_time and start_time only once.
+        #     idle_time: Time spent waiting in pending state
+        #     start_time: Time at which clone entered in-progress state.
+        #                 (or time at which clone bulk copy started)
+        #
+        # We will not recalculate above times if the clone copy or the
+        # mgr crashes and re-enters the 'in-progress' state. Doing so
+        # incorrectly updates 'idle_time' and 'start_time'
+        try:
+            self.metadata_mgr.get_option("progress", "idle_time")
+            self.metadata_mgr.get_option("progress", "start_time")
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                self.metadata_mgr.update_section("progress", "idle_time", idle_time)
+                self.metadata_mgr.update_section("progress", "start_time", start_time)
+                self.metadata_mgr.flush()
+
+    def remove_clone_progress(self):
+        self.metadata_mgr.remove_section("progress")
+        self.metadata_mgr.flush()
 
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
@@ -647,6 +674,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 'volume'   : self.metadata_mgr.get_option("source", "volume"),
                 'subvolume': self.metadata_mgr.get_option("source", "subvolume"),
                 'snapshot' : self.metadata_mgr.get_option("source", "snapshot"),
+                'size'     : self.metadata_mgr.get_option("source", "size"),
             }
 
             try:
@@ -660,6 +688,22 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
         return clone_source
 
+    def _get_clone_progress(self):
+        try:
+            src_usedbytes = int(self.metadata_mgr.get_option("source", "size"))
+            clone_usedbytes = int(self._recursive_size(self.path))
+        except MetadataMgrException as me:
+            raise VolumeException(-errno.EINVAL, f"error fetching clone progress metadata - {me}")
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], f"error fetching clone progress metadata - {e.args[1]}")
+
+        progress = "0.00" if src_usedbytes == 0 else f"{((clone_usedbytes / src_usedbytes) * 100.0):.2f}"
+        clone_progress = {
+            'size'               : str(clone_usedbytes),
+            'percentage'         : progress,
+        }
+        return clone_progress
+
     @property
     def status(self):
         state = SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
@@ -669,6 +713,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         }
         if not SubvolumeOpSm.is_complete_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
             subvolume_status["source"] = self._get_clone_source()
+            try:
+                subvolume_status["progress"] = self._get_clone_progress()
+            except VolumeException:
+                # don't fail the clone status command on failure to get the clone progress status.
+                # This is very well possible if snapshot is accidently deleted from back end and
+                # such cases.
+                pass
+
         return subvolume_status
 
     @property

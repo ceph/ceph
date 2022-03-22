@@ -359,6 +359,9 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def _recursive_size(self, path):
+        return int(self.fs.getxattr(path, 'ceph.dir.rbytes'))
+
     def info(self):
         subvolpath = (self.metadata_mgr.get_global_option(
                       MetadataManager.GLOBAL_META_KEY_PATH))

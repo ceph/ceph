@@ -5,6 +5,7 @@ import errno
 import logging
 from contextlib import contextmanager
 from typing import Optional
+from datetime import datetime, timedelta
 
 import cephfs
 from mgr_util import lock_timeout_log
@@ -217,13 +218,30 @@ def set_quota_on_clone(fs_handle, clone_volumes_pair):
         except cephfs.Error as e:
              raise VolumeException(-e.args[0], e.args[1])
 
+def update_clone_progress(fs_handle, clone_volumes, start_time):
+    st = fs_handle.statx(clone_volumes[0].path, cephfs.CEPH_STATX_BTIME,
+                         cephfs.AT_SYMLINK_NOFOLLOW)
+    clone_creation_time = st["btime"]
+    idle_time = start_time - clone_creation_time
+    total_idle_secs = str(idle_time.total_seconds()).split(".")[0]
+    clone_volumes[0].add_clone_progress(total_idle_secs,
+                                        start_time.isoformat(timespec='seconds'))
+
 def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(fs_client, volname) as fs_handle:
         with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
             src_path = clone_volumes[1].snapshot_data_path(clone_volumes[2])
             dst_path = clone_volumes[0].path
+            start_time = datetime.now()
+            update_clone_progress(fs_handle, clone_volumes, start_time)
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
             set_quota_on_clone(fs_handle, clone_volumes)
+            end_time = datetime.now()
+            # start_time could have changed if crashed and recovered. Hence fetch from config file
+            actual_start_time = datetime.fromisoformat(clone_volumes[0].metadata_mgr.get_option("progress", "start_time"))
+            idle_time = clone_volumes[0].metadata_mgr.get_option("progress", "idle_time")
+            log.info(f"Clone copy time: ({volname}, {groupname}, {subvolname}, idle_time = {str(idle_time)}, "
+                     f"completed_time = {str(end_time-actual_start_time)})")
 
 def log_clone_failure(volname, groupname, subvolname, ve):
     if ve.errno == -errno.EINTR:
@@ -262,6 +280,7 @@ def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvoln
             with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
                 clone_volumes[1].detach_snapshot(clone_volumes[2], index)
                 clone_volumes[0].remove_clone_source(flush=True)
+                clone_volumes[0].remove_clone_progress()
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
