@@ -46,6 +46,41 @@ extern rgw::sal::Store* newMotrStore(CephContext *cct);
 #endif
 }
 
+RGWObjState::RGWObjState() {
+}
+
+RGWObjState::~RGWObjState() {
+}
+
+RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
+  is_atomic = rhs.is_atomic;
+  has_attrs = rhs.has_attrs;
+  exists = rhs.exists;
+  size = rhs.size;
+  accounted_size = rhs.accounted_size;
+  mtime = rhs.mtime;
+  epoch = rhs.epoch;
+  if (rhs.obj_tag.length()) {
+    obj_tag = rhs.obj_tag;
+  }
+  if (rhs.tail_tag.length()) {
+    tail_tag = rhs.tail_tag;
+  }
+  write_tag = rhs.write_tag;
+  fake_tag = rhs.fake_tag;
+  shadow_obj = rhs.shadow_obj;
+  has_data = rhs.has_data;
+  if (rhs.data.length()) {
+    data = rhs.data;
+  }
+  prefetch_data = rhs.prefetch_data;
+  keep_tail = rhs.keep_tail;
+  is_olh = rhs.is_olh;
+  objv_tracker = rhs.objv_tracker;
+  pg_ver = rhs.pg_ver;
+  compressed = rhs.compressed;
+}
+
 rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache, bool use_gc)
 {
   if (svc.compare("rados") == 0) {

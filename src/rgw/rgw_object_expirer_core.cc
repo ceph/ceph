@@ -212,16 +212,14 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
     return ret;
   }
 
-  RGWObjectCtx rctx(store);
-
   rgw_obj_key key = hint.obj_key;
   if (key.instance.empty()) {
     key.instance = "null";
   }
 
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
-  obj->set_atomic(&rctx);
-  ret = obj->delete_object(dpp, &rctx, null_yield);
+  obj->set_atomic();
+  ret = obj->delete_object(dpp, null_yield);
 
   return ret;
 }

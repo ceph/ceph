@@ -340,10 +340,9 @@ class RGWLCStreamRead
 
   public:
   RGWLCStreamRead(CephContext *_cct, const DoutPrefixProvider *_dpp,
-      RGWObjectCtx& obj_ctx, rgw::sal::Object *_obj,
-      const real_time &_mtime) :
+      rgw::sal::Object *_obj, const real_time &_mtime) :
     cct(_cct), dpp(_dpp), obj(_obj), mtime(_mtime),
-    read_op(obj->get_read_op(&obj_ctx)) {}
+    read_op(obj->get_read_op()) {}
 
   ~RGWLCStreamRead() {};
   int set_range(off_t _ofs, off_t _end);
@@ -785,7 +784,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
     return -1;
   }
 
-  tier_ctx.obj->set_atomic(&tier_ctx.rctx);
+  tier_ctx.obj->set_atomic();
 
   /* Prepare Read from source */
   /* TODO: Define readf, writef as stack variables. For some reason,
@@ -794,7 +793,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
    */
   std::shared_ptr<RGWLCStreamRead> readf;
   readf.reset(new RGWLCStreamRead(tier_ctx.cct, tier_ctx.dpp,
-        tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
+        tier_ctx.obj, tier_ctx.o.meta.mtime));
 
   std::shared_ptr<RGWLCCloudStreamPut> writef;
   writef.reset(new RGWLCCloudStreamPut(tier_ctx.dpp, obj_properties, tier_ctx.conn,
@@ -840,14 +839,14 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
     return -1;
   }
 
-  tier_ctx.obj->set_atomic(&tier_ctx.rctx);
+  tier_ctx.obj->set_atomic();
 
   /* TODO: Define readf, writef as stack variables. For some reason,
    * when used as stack variables (esp., readf), the transition seems to
    * be taking lot of time eventually erroring out at times. */
   std::shared_ptr<RGWLCStreamRead> readf;
   readf.reset(new RGWLCStreamRead(tier_ctx.cct, tier_ctx.dpp,
-        tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
+        tier_ctx.obj, tier_ctx.o.meta.mtime));
 
   std::shared_ptr<RGWLCCloudStreamPut> writef;
   writef.reset(new RGWLCCloudStreamPut(tier_ctx.dpp, obj_properties, tier_ctx.conn,
@@ -1125,7 +1124,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   }
 
   if (ret == -ENOENT) { 
-    RGWLCStreamRead readf(tier_ctx.cct, tier_ctx.dpp, tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime);
+    RGWLCStreamRead readf(tier_ctx.cct, tier_ctx.dpp, tier_ctx.obj, tier_ctx.o.meta.mtime);
 
     readf.init();
 
