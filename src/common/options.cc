@@ -6007,7 +6007,12 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(-1)
-    .set_description(""),
+    .set_description("The number of seconds that simulate one \"day\" in order to debug RGW LifeCycle. "
+                     "Do *not* modify for a production cluster.")
+    .set_long_description("For debugging RGW LifeCycle, the number of seconds that are equivalent to "
+                          "one simulated \"day\". Values less than 1 are ignored and do not change LifeCycle behavior. "
+                          "For example, during debugging if one wanted every 10 minutes to be equivalent to one day, "
+                          "then this would be set to 600, the number of seconds in 10 minutes."),
 
     Option("rgw_mp_lock_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(600)
