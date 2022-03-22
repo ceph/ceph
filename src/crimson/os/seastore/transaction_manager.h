@@ -302,6 +302,7 @@ public:
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
+    ceph_assert(is_aligned(laddr_hint, (uint64_t)epm->get_block_size()));
     auto ext = cache->alloc_new_extent<T>(
       t,
       len,
@@ -327,6 +328,7 @@ public:
     extent_len_t len) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}", t, len, hint);
+    ceph_assert(is_aligned(hint, (uint64_t)epm->get_block_size()));
     return lba_manager->alloc_extent(
       t,
       hint,
