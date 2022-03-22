@@ -890,6 +890,9 @@ def cephfs_setup(ctx, config):
             name = fs_config.pop('name')
             temp = deepcopy(cephfs_config)
             teuthology.deep_merge(temp, fs_config)
+            subvols = config.get('subvols', None)
+            if subvols:
+                teuthology.deep_merge(temp, {'subvols': subvols})
             fs = Filesystem(ctx, fs_config=temp, name=name, create=True)
             if set_allow_multifs:
                 fs.set_allow_multifs()

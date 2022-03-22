@@ -1351,3 +1351,22 @@ class CephFSMount(object):
         checksum_text = self.run_shell(cmd).stdout.getvalue().strip()
         checksum_sorted = sorted(checksum_text.split('\n'), key=lambda v: v.split()[1])
         return hashlib.md5(('\n'.join(checksum_sorted)).encode('utf-8')).hexdigest()
+
+    def validate_subvol_options(self):
+        mount_subvol_num = self.client_config.get('mount_subvol_num', None)
+        if self.cephfs_mntpt and mount_subvol_num is not None:
+            log.warning("You cannot specify both: cephfs_mntpt and mount_subvol_num")
+            log.info(f"Mounting subvol {mount_subvol_num} for now")
+
+        if mount_subvol_num is not None:
+            # mount_subvol must be an index into the subvol path array for the fs
+            if not self.cephfs_name:
+                self.cephfs_name = 'cephfs'
+            assert(hasattr(self.ctx, "created_subvols"))
+            # mount_subvol must be specified under client.[0-9] yaml section
+            subvol_paths = self.ctx.created_subvols[self.cephfs_name]
+            path_to_mount = subvol_paths[mount_subvol_num]
+            self.cephfs_mntpt = path_to_mount
+        elif not self.cephfs_mntpt:
+            # default to the "/" path
+            self.cephfs_mntpt = "/"

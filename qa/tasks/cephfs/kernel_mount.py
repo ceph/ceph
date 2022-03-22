@@ -44,8 +44,6 @@ class KernelMount(CephFSMount):
 
         self.setup_netns()
 
-        if not self.cephfs_mntpt:
-            self.cephfs_mntpt = '/'
         if not self.cephfs_name:
             self.cephfs_name = 'cephfs'
 
@@ -85,6 +83,10 @@ class KernelMount(CephFSMount):
     def _make_mount_cmd_old_or_new_style(self):
         optd = {}
         mnt_stx = ''
+
+        self.validate_subvol_options()
+
+        assert(self.cephfs_mntpt)
         if self.syntax_style == 'v1':
             mnt_stx = f':{self.cephfs_mntpt}'
             if self.client_id:
