@@ -17,6 +17,7 @@ jobs:
         with:
           configuration-path: .github/milestone.yml
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
+        continue-on-error: true
       - name: Assign to Dashboard project
         uses: srggrs/assign-one-project-github-action@65a8ddab497df42ef268001e67bbf976f8fd39e1
         if: contains(github.event.pull_request.labels.*.name, 'dashboard')
