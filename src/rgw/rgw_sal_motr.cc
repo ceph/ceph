@@ -1889,17 +1889,19 @@ out:
 int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t end, RGWGetDataCB* cb)
 {
   int rc;
-  unsigned bs, actual, left;
+  unsigned bs, actual, left, start, bloff, block_start_off;
   struct m0_op *op;
   struct m0_bufvec buf;
   struct m0_bufvec attr;
   struct m0_indexvec ext;
 
+  start = off;
   // make end pointer exclusive:
   // it's easier to work with it this way
   end++;
   ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): off=" << off <<
                        " end=" << end << dendl;
+  off = 0;
   // As `off` may not be parity group size aligned, even using optimal
   // buffer block size, simply reading data from offset `off` could come
   // across parity group boundary. And Motr only allows page-size aligned
@@ -1908,9 +1910,10 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
   // The optimal size of each IO should also take into account the data
   // transfer size to s3 client. For example, 16MB may be nice to read
   // data from motr, but it could be too big for network transfer.
-  //
-  // TODO: We leave proper handling of offset in the future.
+  
   bs = this->get_optimal_bs(end - off);
+  block_start_off = 0;
+  bloff = 1;
   ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): bs=" << bs << dendl;
 
   rc = m0_bufvec_empty_alloc(&buf, 1) ? :
@@ -1938,6 +1941,15 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
     left -= actual;
     // Read from Motr.
     op = nullptr;
+    if( start >= ( block_start_off + bs )) 
+    {
+	block_start_off += bs;
+	ldpp_dout(dpp, 70) << "MotrObject::read_mobj(): block_start_off=" << block_start_off <<dendl;
+	continue;
+    }
+    if( bloff != 0 )
+	bloff = start - block_start_off;
+
     rc = m0_obj_op(this->mobj, M0_OC_READ, &ext, &buf, &attr, 0, 0, &op);
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): init read op rc=" << rc << dendl;
     if (rc != 0) {
@@ -1955,7 +1967,8 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
     }
     // Call `cb` to process returned data.
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): call cb to process data" << dendl;
-    cb->handle_data(bl, 0, actual);
+    cb->handle_data(bl, bloff, actual);
+    bloff = 0;
   }
 
 out:
