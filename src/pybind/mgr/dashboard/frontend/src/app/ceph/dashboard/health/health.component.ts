@@ -63,14 +63,21 @@ export class HealthComponent implements OnInit, OnDestroy {
   };
 
   latencyChartConfig = {
-    chartType: 'line',
+    chartType: 'bar',
+    colors: [
+      {
+        backgroundColor: 'rgba(0, 255, 0, 0.4)',
+      }
+    ],
     options: {
       events: [''],
       scales: {
+        xAxes: [{ stacked: true }],
         yAxes: [{
-            ticks: {
-                beginAtZero: true
-            }
+          stacked: false,
+          ticks: {
+            beginAtZero: true,
+          },
         }]
       },
     }
@@ -290,22 +297,16 @@ export class HealthComponent implements OnInit, OnDestroy {
     chart.labels = osds;
     
     chart.dataset[0] = {  
-      label: "apply latency (ms)",        
-      data: apply_latencies,       
-      order: 1,
-      tension: 0.1,  
-      fill: true, 
-      borderColor: 'rgb(50,205,50)', 
-      backgroundColor: 'rgba(50,205,50, 0.2)'
+      label: "apply latency (ms)",
+      data: apply_latencies,
+      order: 2,
+      backgroundColor: 'rgba(0, 255, 0, 0.4)'
     };
     chart.dataset[1] = {  
-      label: `commit latency (ms)`,       
-      data: commit_latencies,       
-      order: 2,
-      tension: 0.1,  
-      fill: true, 
-      borderColor: 'rgb(75, 192, 192)', 
-      backgroundColor: 'rgba(75, 192, 192, 0.2)'
+      label: `commit latency (ms)`,
+      data: commit_latencies,
+      order: 1,
+      backgroundColor: 'rgba(0,0,255, 0.4)',
      };
   }
 
