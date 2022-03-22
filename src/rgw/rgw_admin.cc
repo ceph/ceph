@@ -6807,7 +6807,6 @@ int main(int argc, const char **argv)
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
-    string marker;
 
     int r = RGWBucketAdminOp::chown(store, bucket_op, marker, dpp(), &err);
     if (r < 0) {
