@@ -129,6 +129,12 @@ you might do something like this:
    rm -rf out dev
    env MDS=1 MON=1 OSD=3 ../src/vstart.sh -n -d
 
+To stop/start/restart daemons on a vstart cluster, use ceph orch-deamon:
+
+.. prompt:: bash
+
+   ceph orch daemon start/stop/restart cluster_name
+
 Running a RadosGW development environment
 -----------------------------------------
 
@@ -146,6 +152,11 @@ You can now use the swift python client to communicate with the RadosGW.
    swift -A http://localhost:8000/auth -U test:tester -K testing list
    swift -A http://localhost:8000/auth -U test:tester -K testing upload mycontainer ceph
    swift -A http://localhost:8000/auth -U test:tester -K testing list
+
+Deployment
+--------------
+
+To deploy a vstart cluster in a container, checkout ceph-container for details [https://github.com/ceph/ceph-container]
 
 
 Run unit tests
