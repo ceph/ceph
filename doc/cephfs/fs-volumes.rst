@@ -349,6 +349,11 @@ The progress of the on going clone is as shown below:
 The progress shown is not accurate. The 'size' depends on recursive stat
 which gets updated at intervals. The same applies for 'percentage'.
 
+The failure reason of the failed clone is shown as below:
+
+#. `errno`  : error number
+#. `errstr` : failure error string
+
 Sample output from an `in-progress` clone operation::
 
   $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
@@ -385,6 +390,32 @@ Sample output from an `pending` clone operation::
       "progress": {
         "size": "0",
         "percentage": "0.00",
+      }
+    }
+  }
+
+(NOTE: since clone is in `pending`/`in-progress` state, `failure` section is shown)
+
+Sample output from a `failed` clone operation::
+
+  $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
+  $ ceph fs clone status cephfs clone1
+  {
+    "status": {
+      "state": "failed",
+      "source": {
+        "volume": "cephfs",
+        "subvolume": "subvol1",
+        "snapshot": "snap1"
+        "size": "104857600"
+      },
+      "progress": {
+        "size": "41943040",
+        "percentage": "40.00",
+      }
+      "failure": {
+        "errno": "122",
+        "errstr": "Disk quota exceeded"
       }
     }
   }
