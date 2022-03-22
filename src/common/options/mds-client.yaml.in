@@ -447,7 +447,7 @@ options:
   default: true
   services:
   - mds_client
-# the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
+# the client should try to use dentry invalidation instead of remounting, on kernels it believes that will work for
 - name: client_try_dentry_invalidate
   type: bool
   level: dev
