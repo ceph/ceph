@@ -298,6 +298,9 @@ class CloudZone(Zone):
 
             return True
 
+        def create_role(self, path, rolename, policy_document, tag_list):
+            assert False
+
     def get_conn(self, credentials):
         return self.Conn(self, credentials)
 
