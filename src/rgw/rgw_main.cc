@@ -195,7 +195,10 @@ int radosgw_Main(int argc, const char **argv)
   map<string,string> defaults = {
     { "debug_rgw", "1/5" },
     { "keyring", "$rgw_data/keyring" },
-    { "objecter_inflight_ops", "24576" }
+    { "objecter_inflight_ops", "24576" },
+    // require a secure mon connection by default
+    { "ms_mon_client_mode", "secure" },
+    { "auth_client_required", "cephx" }
   };
 
   vector<const char*> args;
