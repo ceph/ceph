@@ -178,7 +178,7 @@ struct ElasticConfig {
   void init(CephContext *cct, const JSONFormattable& config) {
     string elastic_endpoint = config["endpoint"];
     id = string("elastic:") + elastic_endpoint;
-    conn.reset(new RGWRESTConn(cct, (RGWSI_Zone*)nullptr, id, { elastic_endpoint }, nullopt /* region */ ));
+    conn.reset(new RGWRESTConn(cct, (rgw::sal::Store*)nullptr, id, { elastic_endpoint }, nullopt /* region */ ));
     explicit_custom_meta = config["explicit_custom_meta"](true);
     index_buckets.init(config["index_buckets_list"], true); /* approve all buckets by default */
     allow_owners.init(config["approved_owners_list"], true); /* approve all bucket owners by default */

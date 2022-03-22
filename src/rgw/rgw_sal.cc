@@ -96,7 +96,12 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
                 .initialize(cct, dpp) < 0) {
-      delete store; store = nullptr;
+      delete store;
+      return nullptr;
+    }
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
     }
     return store;
   }
@@ -114,7 +119,8 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
                 .initialize(cct, dpp) < 0) {
-      delete store; store = nullptr;
+      delete store;
+      return nullptr;
     }
     return store;
   }
@@ -125,7 +131,8 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
 
     if ((*(rgw::sal::DBStore*)store).set_run_lc_thread(use_lc_thread)
                                     .initialize(cct, dpp) < 0) {
-      delete store; store = nullptr;
+      delete store;
+      return nullptr;
     }
 
     /* XXX: temporary - create testid user */
@@ -202,12 +209,17 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
     int ret = rados->init_svc(true, dpp);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
-      delete store; store = nullptr;
-      return store;
+      delete store;
+      return nullptr;
     }
 
     if (rados->init_rados() < 0) {
-      delete store; store = nullptr;
+      delete store;
+      return nullptr;
+    }
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
     }
   }
 

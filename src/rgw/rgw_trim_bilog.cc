@@ -1085,7 +1085,7 @@ class BucketTrimManager::Impl : public TrimCounters::Server,
 
   Impl(rgw::sal::RadosStore* store, const BucketTrimConfig& config)
     : store(store), config(config),
-      status_obj(store->get_zone()->get_params().log_pool, BucketTrimStatus::oid),
+      status_obj(store->svc()->zone->get_zone_params().log_pool, BucketTrimStatus::oid),
       counter(config.counter_size),
       trimmed(config.recent_size, config.recent_duration),
       watcher(store, status_obj, this)
