@@ -471,7 +471,6 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
-  RGWObjectCtx obj_ctx(store);
   std::unique_ptr<rgw::sal::Bucket> b;
   store->get_bucket(NULL, bucket_info, &b);
   std::unique_ptr<rgw::sal::Object> obj = b->get_object(key);
@@ -482,7 +481,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   std::unique_ptr<rgw::sal::Writer> processor;
   processor = store->get_atomic_writer(dpp, y, std::move(obj),
-				       owner.get_id(), obj_ctx,
+				       owner.get_id(),
 				       nullptr, olh_epoch, req_id);
 
   int ret = processor->prepare(y);

@@ -58,7 +58,6 @@ struct reservation_t {
   rgw::sal::RadosStore* const store;
   const req_state* const s;
   size_t size;
-  RGWObjectCtx* obj_ctx;
   rgw::sal::Object* const object;
   rgw::sal::Object* const src_object; // may differ from object
   rgw::sal::Bucket* const bucket;
@@ -81,7 +80,6 @@ struct reservation_t {
   /* ctor for non-request caller (e.g., lifecycle) */
   reservation_t(const DoutPrefixProvider* _dpp,
 		rgw::sal::RadosStore* _store,
-		RGWObjectCtx* _obj_ctx,
 		rgw::sal::Object* _object,
 		rgw::sal::Object* _src_object,
 		rgw::sal::Bucket* _bucket,

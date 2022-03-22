@@ -78,8 +78,8 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
 
 void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op) {
   const rgw_obj obj = head_obj->get_obj();
-  const RGWObjState *obj_state = obj_ctx.get_state(obj);
-  const bool compressed = obj_state->compressed;
+  const RGWObjStateManifest *sm = obj_ctx.get_state(obj);
+  const bool compressed = sm->state.compressed;
   uint32_t alloc_hint_flags = 0;
   if (compressed) {
     alloc_hint_flags |= librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
@@ -175,7 +175,7 @@ RadosWriter::~RadosWriter()
   if (need_to_remove_head) {
     std::string version_id;
     ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    int r = head_obj->delete_object(dpp, &obj_ctx, null_yield);
+    int r = head_obj->delete_object(dpp, null_yield);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
     }
@@ -304,11 +304,11 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  head_obj->set_atomic(&obj_ctx);
+  head_obj->set_atomic();
 
   RGWRados::Object op_target(store->getRados(),
-		  head_obj->get_bucket()->get_info(),
-		  obj_ctx, head_obj->get_obj());
+		  head_obj->get_bucket(),
+		  obj_ctx, head_obj.get());
   RGWRados::Object::Write obj_op(&op_target);
 
   /* some object types shouldn't be versioned, e.g., multipart parts */
@@ -443,8 +443,8 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   }
 
   RGWRados::Object op_target(store->getRados(),
-		  head_obj->get_bucket()->get_info(),
-		  obj_ctx, head_obj->get_obj());
+		  head_obj->get_bucket(),
+		  obj_ctx, head_obj.get());
   RGWRados::Object::Write obj_op(&op_target);
 
   op_target.set_versioning_disabled(true);
@@ -520,7 +520,7 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::sal::Data
 int AppendObjectProcessor::prepare(optional_yield y)
 {
   RGWObjState *astate;
-  int r = head_obj->get_obj_state(dpp, &obj_ctx, &astate, y);
+  int r = head_obj->get_obj_state(dpp, &astate, y);
   if (r < 0) {
     return r;
   }
@@ -572,7 +572,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
     if (iter != astate->attrset.end()) {
       tail_placement_rule.storage_class = iter->second.to_str();
     }
-    cur_manifest = &(*astate->manifest);
+    cur_manifest = dynamic_cast<rgw::sal::RadosObject*>(head_obj.get())->get_manifest();
     manifest.set_prefix(cur_manifest->get_prefix());
     astate->keep_tail = true;
   }
@@ -622,10 +622,10 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   if (r < 0) {
     return r;
   }
-  head_obj->set_atomic(&obj_ctx);
+  head_obj->set_atomic();
   RGWRados::Object op_target(store->getRados(),
-		  head_obj->get_bucket()->get_info(),
-		  obj_ctx, head_obj->get_obj());
+		  head_obj->get_bucket(),
+		  obj_ctx, head_obj.get());
   RGWRados::Object::Write obj_op(&op_target);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);

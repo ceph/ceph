@@ -245,7 +245,6 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
 static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp, 
                                     CephContext *cct,
 				    rgw::sal::Store* store,
-				    RGWObjectCtx& obj_ctx,
 				    RGWBucketInfo& bucket_info,
 				    map<string, bufferlist>& bucket_attrs,
 				    RGWAccessControlPolicy *policy,
@@ -256,7 +255,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   bufferlist bl;
   int ret = 0;
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op(&obj_ctx);
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
   ret = rop->get_attr(dpp, RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
@@ -396,9 +395,9 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   }
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
 
-  RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-  int ret = get_obj_policy_from_attr(dpp, s->cct, store, *obj_ctx,
-                                     bucket_info, bucket_attrs, acl, storage_class, object, s->yield);
+  int ret = get_obj_policy_from_attr(dpp, s->cct, store, bucket_info,
+				     bucket_attrs, acl, storage_class, object,
+				     s->yield);
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
@@ -663,9 +662,9 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     }
     s->object_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
 
-    s->object->set_atomic(s->obj_ctx);
+    s->object->set_atomic();
     if (prefetch_data) {
-      s->object->set_prefetch_data(s->obj_ctx);
+      s->object->set_prefetch_data();
     }
     ret = read_obj_policy(dpp, store, s, s->bucket->get_info(), s->bucket_attrs,
 			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket.get(),
@@ -676,8 +675,8 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 }
 
 static int rgw_iam_remove_objtags(const DoutPrefixProvider *dpp, struct req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
-  object->set_atomic(s->obj_ctx);
-  int op_ret = object->get_obj_attrs(s->obj_ctx, s->yield, dpp);
+  object->set_atomic();
+  int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
     return op_ret;
   rgw::sal::Attrs attrs = object->get_attrs();
@@ -752,8 +751,8 @@ static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl, bool ha
 }
 
 static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, struct req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
-  object->set_atomic(s->obj_ctx);
-  int op_ret = object->get_obj_attrs(s->obj_ctx, s->yield, dpp);
+  object->set_atomic();
+  int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
     return op_ret;
   rgw::sal::Attrs attrs = object->get_attrs();
@@ -956,10 +955,10 @@ int retry_raced_bucket_write(const DoutPrefixProvider *dpp, rgw::sal::Bucket* b,
 
 int RGWGetObj::verify_permission(optional_yield y)
 {
-  s->object->set_atomic(s->obj_ctx);
+  s->object->set_atomic();
 
   if (prefetch_data()) {
-    s->object->set_prefetch_data(s->obj_ctx);
+    s->object->set_prefetch_data();
   }
 
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
@@ -1038,9 +1037,9 @@ void RGWGetObjTags::execute(optional_yield y)
 {
   rgw::sal::Attrs attrs;
 
-  s->object->set_atomic(s->obj_ctx);
+  s->object->set_atomic();
 
-  op_ret = s->object->get_obj_attrs(s->obj_ctx, y, this);
+  op_ret = s->object->get_obj_attrs(y, this);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
         << " ret=" << op_ret << dendl;
@@ -1084,8 +1083,8 @@ void RGWPutObjTags::execute(optional_yield y)
     return;
   }
 
-  s->object->set_atomic(s->obj_ctx);
-  op_ret = s->object->modify_obj_attrs(s->obj_ctx, RGW_ATTR_TAGS, tags_bl, y, this);
+  s->object->set_atomic();
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
   }
@@ -1118,7 +1117,7 @@ void RGWDeleteObjTags::execute(optional_yield y)
   if (rgw::sal::Object::empty(s->object.get()))
     return;
 
-  op_ret = s->object->delete_obj_attrs(this, s->obj_ctx, RGW_ATTR_TAGS, y);
+  op_ret = s->object->delete_obj_attrs(this, RGW_ATTR_TAGS, y);
 }
 
 int RGWGetBucketTags::verify_permission(optional_yield y)
@@ -1559,16 +1558,15 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
 
   std::unique_ptr<rgw::sal::Object> part = bucket->get_object(ent.key);
 
-  RGWObjectCtx obj_ctx(store);
   RGWAccessControlPolicy obj_policy(s->cct);
 
   ldpp_dout(this, 20) << "reading obj=" << part << " ofs=" << cur_ofs
       << " end=" << cur_end << dendl;
 
-  part->set_atomic(&obj_ctx);
-  part->set_prefetch_data(&obj_ctx);
+  part->set_atomic();
+  part->set_prefetch_data();
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op(&obj_ctx);
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op();
 
   if (!swift_slo) {
     /* SLO etag is optional */
@@ -2128,7 +2126,7 @@ void RGWGetObj::execute(optional_yield y)
 
   perfcounter->inc(l_rgw_get);
 
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op(s->obj_ctx));
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -3551,8 +3549,8 @@ int RGWPutObj::verify_permission(optional_yield y)
     std::unique_ptr<rgw::sal::Object> cs_object =
       cs_bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
 
-    cs_object->set_atomic(s->obj_ctx);
-    cs_object->set_prefetch_data(s->obj_ctx);
+    cs_object->set_atomic();
+    cs_object->set_prefetch_data();
 
     /* check source object permissions */
     if (ret = read_obj_policy(this, store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
@@ -3750,7 +3748,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     return ret;
 
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op(s->obj_ctx));
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
 
   ret = read_op->prepare(s->yield, this);
   if (ret < 0)
@@ -3893,11 +3891,10 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   const bool multipart = !multipart_upload_id.empty();
-  auto& obj_ctx = *static_cast<RGWObjectCtx*>(s->obj_ctx);
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
-    op_ret = s->object->swift_versioning_copy(s->obj_ctx, this, s->yield);
+    op_ret = s->object->swift_versioning_copy(this, s->yield);
     if (op_ret < 0) {
       return;
     }
@@ -3926,7 +3923,7 @@ void RGWPutObj::execute(optional_yield y)
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = s->bucket->get_multipart_upload(s->object->get_name(),
 					 multipart_upload_id);
-    op_ret = upload->get_info(this, s->yield, s->obj_ctx, &pdest_placement);
+    op_ret = upload->get_info(this, s->yield, &pdest_placement);
 
     s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
     multipart_trace = tracing::rgw::tracer.add_span(name(), upload->get_trace());
@@ -3944,7 +3941,7 @@ void RGWPutObj::execute(optional_yield y)
     pdest_placement = &s->dest_placement;
     ldpp_dout(this, 20) << "dest_placement for part=" << *pdest_placement << dendl;
     processor = upload->get_writer(this, s->yield, s->object->clone(),
-				   s->user->get_id(), obj_ctx, pdest_placement,
+				   s->user->get_id(), pdest_placement,
 				   multipart_part_num, multipart_part_str);
   } else if(append) {
     if (s->bucket->versioned()) {
@@ -3952,7 +3949,7 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
     processor = store->get_append_writer(this, s->yield, s->object->clone(),
-					 s->bucket_owner.get_id(), obj_ctx,
+					 s->bucket_owner.get_id(),
 					 pdest_placement, s->req_id, position,
 					 &cur_accounted_size);
   } else {
@@ -3965,7 +3962,7 @@ void RGWPutObj::execute(optional_yield y)
       }
     }
     processor = store->get_atomic_writer(this, s->yield, s->object->clone(),
-					 s->bucket_owner.get_id(), obj_ctx,
+					 s->bucket_owner.get_id(),
 					 pdest_placement, olh_epoch, s->req_id);
   }
 
@@ -3986,7 +3983,7 @@ void RGWPutObj::execute(optional_yield y)
       bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
 
     RGWObjState *astate;
-    op_ret = obj->get_obj_state(this, &obj_ctx, &astate, s->yield);
+    op_ret = obj->get_obj_state(this, &astate, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
       return;
@@ -4038,7 +4035,7 @@ void RGWPutObj::execute(optional_yield y)
         compressor.emplace(s->cct, plugin, filter);
         filter = &*compressor;
         // always send incompressible hint when rgw is itself doing compression
-        s->object->set_compressed(s->obj_ctx);
+        s->object->set_compressed();
       }
     }
   }
@@ -4355,7 +4352,7 @@ void RGWPostObj::execute(optional_yield y)
 
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = store->get_atomic_writer(this, s->yield, std::move(obj),
-					 s->bucket_owner.get_id(), *s->obj_ctx,
+					 s->bucket_owner.get_id(),
 					 &s->dest_placement, 0, s->req_id);
     op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
@@ -4724,7 +4721,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
   rgw_obj target_obj;
   rgw::sal::Attrs attrs, rmattrs;
 
-  s->object->set_atomic(s->obj_ctx);
+  s->object->set_atomic();
 
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -4737,7 +4734,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
   }
 
   /* check if obj exists, read orig attrs */
-  op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, s, &target_obj);
+  op_ret = s->object->get_obj_attrs(s->yield, s, &target_obj);
   if (op_ret < 0) {
     return;
   }
@@ -4762,7 +4759,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
     }
   }
 
-  op_ret = s->object->set_obj_attrs(this, s->obj_ctx, &attrs, &rmattrs, s->yield, &target_obj);
+  op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield);
 }
 
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
@@ -4928,12 +4925,11 @@ void RGWDeleteObj::execute(optional_yield y)
   if (!rgw::sal::Object::empty(s->object.get())) {
     uint64_t obj_size = 0;
     std::string etag;
-    RGWObjectCtx* obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
     {
       RGWObjState* astate = nullptr;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
 
-      op_ret = s->object->get_obj_state(this, obj_ctx, &astate, s->yield, true);
+      op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
           return;
@@ -5003,10 +4999,10 @@ void RGWDeleteObj::execute(optional_yield y)
       return;
     }
 
-    s->object->set_atomic(s->obj_ctx);
+    s->object->set_atomic();
     
     bool ver_restored = false;
-    op_ret = s->object->swift_versioning_restore(s->obj_ctx, ver_restored, this);
+    op_ret = s->object->swift_versioning_restore(ver_restored, this);
     if (op_ret < 0) {
       return;
     }
@@ -5022,7 +5018,7 @@ void RGWDeleteObj::execute(optional_yield y)
 	return;
       }
 
-      std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op(obj_ctx);
+      std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op();
       del_op->params.obj_owner = s->owner;
       del_op->params.bucket_owner = s->bucket_owner;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
@@ -5136,8 +5132,8 @@ int RGWCopyObj::verify_permission(optional_yield y)
   s->src_object->set_bucket(src_bucket.get());
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
-    s->src_object->set_atomic(s->obj_ctx);
-    s->src_object->set_prefetch_data(s->obj_ctx);
+    s->src_object->set_atomic();
+    s->src_object->set_prefetch_data();
 
     rgw_placement_rule src_placement;
 
@@ -5247,7 +5243,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
   }
 
   dest_object = dest_bucket->get_object(rgw_obj_key(dest_obj_name));
-  dest_object->set_atomic(s->obj_ctx);
+  dest_object->set_atomic();
 
   /* check dest bucket permissions */
   op_ret = read_bucket_policy(this, store, s, dest_bucket->get_info(),
@@ -5412,8 +5408,8 @@ void RGWCopyObj::execute(optional_yield y)
     dest_object->gen_rand_obj_instance_name();
   }
 
-  s->src_object->set_atomic(s->obj_ctx);
-  dest_object->set_atomic(s->obj_ctx);
+  s->src_object->set_atomic();
+  dest_object->set_atomic();
 
   encode_delete_at_attr(delete_at, attrs);
 
@@ -5432,7 +5428,7 @@ void RGWCopyObj::execute(optional_yield y)
   {
     // get src object size (cached in obj_ctx from verify_permission())
     RGWObjState* astate = nullptr;
-    op_ret = s->src_object->get_obj_state(this, s->obj_ctx, &astate, s->yield, true);
+    op_ret = s->src_object->get_obj_state(this, &astate, s->yield, true);
     if (op_ret < 0) {
       return;
     }
@@ -5470,14 +5466,12 @@ void RGWCopyObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. In case of copying to remote this
    * should fail gently (op_ret == 0) as the dst_obj will not exist here. */
-  op_ret = dest_object->swift_versioning_copy(s->obj_ctx, this, s->yield);
+  op_ret = dest_object->swift_versioning_copy(this, s->yield);
   if (op_ret < 0) {
     return;
   }
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  op_ret = s->src_object->copy_object(obj_ctx,
-	   s->user.get(),
+  op_ret = s->src_object->copy_object(s->user.get(),
 	   &s->info,
 	   source_zone,
 	   dest_object.get(),
@@ -5759,9 +5753,9 @@ void RGWPutACLs::execute(optional_yield y)
   map<string, bufferlist> attrs;
 
   if (!rgw::sal::Object::empty(s->object.get())) {
-    s->object->set_atomic(s->obj_ctx);
+    s->object->set_atomic();
     //if instance is empty, we should modify the latest object
-    op_ret = s->object->modify_obj_attrs(s->obj_ctx, RGW_ATTR_ACL, bl, s->yield, this);
+    op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this);
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
@@ -6189,7 +6183,7 @@ void RGWInitMultipart::execute(optional_yield y)
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
-  op_ret = upload->init(this, s->yield, s->obj_ctx, s->owner, s->dest_placement, attrs);
+  op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
 
   if (op_ret == 0) {
     upload_id = upload->get_upload_id();
@@ -6351,7 +6345,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  op_ret = meta_obj->get_obj_attrs(s->obj_ctx, s->yield, this);
+  op_ret = meta_obj->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj
 		     << " ret=" << op_ret << dendl;
@@ -6382,7 +6376,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
   target_obj->set_attrs(meta_obj->get_attrs());
 
-  op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, target_obj.get(), s->obj_ctx);
+  op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, target_obj.get());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
@@ -6390,7 +6384,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   // remove the upload meta object ; the meta object is not versioned
   // when the bucket is, as that would add an unneeded delete marker
-  int r = meta_obj->delete_object(this, s->obj_ctx, y, true /* prevent versioning */);
+  int r = meta_obj->delete_object(this, y, true /* prevent versioning */);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer->clear_locked();
@@ -6409,7 +6403,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUpload* parts)
 {
   // re-calculate the etag from the parts and compare to the existing object
-  int ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, this);
+  int ret = s->object->get_obj_attrs(s->yield, this);
   if (ret < 0) {
     ldpp_dout(this, 0) << __func__ << "() ERROR: get_obj_attrs() returned ret=" << ret << dendl;
     return false;
@@ -6538,19 +6532,17 @@ void RGWAbortMultipart::execute(optional_yield y)
     return;
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
-  RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-
   jspan_context trace_ctx(false, false);
   if (tracing::rgw::tracer.is_enabled()) {
     // read meta object attributes for trace info
     meta_obj = upload->get_meta_obj();
     meta_obj->set_in_extra_data(true);
-    meta_obj->get_obj_attrs(obj_ctx, s->yield, this);
+    meta_obj->get_obj_attrs(s->yield, this);
     extract_span_context(meta_obj->get_attrs(), trace_ctx);
   }
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
-  op_ret = upload->abort(this, s->cct, obj_ctx);
+  op_ret = upload->abort(this, s->cct);
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)
@@ -6579,7 +6571,7 @@ void RGWListMultipart::execute(optional_yield y)
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
 
   rgw::sal::Attrs attrs;
-  op_ret = upload->get_info(this, s->yield, s->obj_ctx, &placement, &attrs);
+  op_ret = upload->get_info(this, s->yield, &placement, &attrs);
   /* decode policy */
   map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ACL);
   if (iter != attrs.end()) {
@@ -6765,7 +6757,6 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   RGWMultiDelDelete *multi_delete;
   vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
-  RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
   char* buf;
 
   buf = data.c_str();
@@ -6902,7 +6893,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     if (!rgw::sal::Object::empty(obj.get())) {
       RGWObjState* astate = nullptr;
       bool check_obj_lock = obj->have_instance() && bucket->get_info().obj_lock_enabled();
-      const auto ret = obj->get_obj_state(this, obj_ctx, &astate, s->yield, true);
+      const auto ret = obj->get_obj_state(this, &astate, s->yield, true);
 
       if (ret < 0) {
         if (ret == -ENOENT) {
@@ -6941,9 +6932,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
       continue;
     }
 
-    obj->set_atomic(obj_ctx);
+    obj->set_atomic();
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(obj_ctx);
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
     del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
     del_op->params.obj_owner = s->owner;
     del_op->params.bucket_owner = s->bucket_owner;
@@ -7026,9 +7017,9 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
 
     bucket_owner.set_id(bucket->get_info().owner);
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(path.obj_key);
-    obj->set_atomic(s->obj_ctx);
+    obj->set_atomic();
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(s->obj_ctx);
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
     del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
     del_op->params.obj_owner = bowner;
     del_op->params.bucket_owner = bucket_owner;
@@ -7386,7 +7377,6 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   rgw_obj_key object;
   std::tie(bucket_name, object) = *parse_path(path);
 
-  auto& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   std::unique_ptr<rgw::sal::Bucket> bucket;
   ACLOwner bowner;
 
@@ -7422,7 +7412,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   std::unique_ptr<rgw::sal::Writer> processor;
   processor = store->get_atomic_writer(this, s->yield, std::move(obj),
-				       bowner.get_id(), obj_ctx,
+				       bowner.get_id(),
 				       &s->dest_placement, 0, s->req_id);
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -7662,7 +7652,7 @@ ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
 
 int RGWGetAttrs::verify_permission(optional_yield y)
 {
-  s->object->set_atomic(s->obj_ctx);
+  s->object->set_atomic();
 
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
     if (has_s3_existing_tag || has_s3_resource_tag)
@@ -7690,9 +7680,9 @@ void RGWGetAttrs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  s->object->set_atomic(s->obj_ctx);
+  s->object->set_atomic();
 
-  op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, this);
+  op_ret = s->object->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
         << " ret=" << op_ret << dendl;
@@ -7746,9 +7736,9 @@ void RGWRMAttrs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  s->object->set_atomic(s->obj_ctx);
+  s->object->set_atomic();
 
-  op_ret = s->object->set_obj_attrs(this, s->obj_ctx, nullptr, &attrs, y);
+  op_ret = s->object->set_obj_attrs(this, nullptr, &attrs, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to delete obj attrs, obj=" << s->object
 		       << " ret=" << op_ret << dendl;
@@ -7785,7 +7775,7 @@ void RGWSetAttrs::execute(optional_yield y)
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     rgw::sal::Attrs a(attrs);
-    op_ret = s->object->set_obj_attrs(this, s->obj_ctx, &a, nullptr, y);
+    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y);
   } else {
     op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   }
@@ -8256,7 +8246,7 @@ void RGWPutObjRetention::execute(optional_yield y)
   obj_retention.encode(bl);
 
   //check old retention
-  op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, this);
+  op_ret = s->object->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: get obj attr error"<< dendl;
     return;
@@ -8291,7 +8281,7 @@ void RGWPutObjRetention::execute(optional_yield y)
     }
   }
 
-  op_ret = s->object->modify_obj_attrs(s->obj_ctx, RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this);
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this);
 
   return;
 }
@@ -8321,7 +8311,7 @@ void RGWGetObjRetention::execute(optional_yield y)
     op_ret = -ERR_INVALID_REQUEST;
     return;
   }
-  op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, this);
+  op_ret = s->object->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
                        << " ret=" << op_ret << dendl;
@@ -8396,7 +8386,7 @@ void RGWPutObjLegalHold::execute(optional_yield y) {
   bufferlist bl;
   obj_legal_hold.encode(bl);
   //if instance is empty, we should modify the latest object
-  op_ret = s->object->modify_obj_attrs(s->obj_ctx, RGW_ATTR_OBJECT_LEGAL_HOLD, bl, s->yield, this);
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_LEGAL_HOLD, bl, s->yield, this);
   return;
 }
 
@@ -8426,7 +8416,7 @@ void RGWGetObjLegalHold::execute(optional_yield y)
     return;
   }
   map<string, bufferlist> attrs;
-  op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, this);
+  op_ret = s->object->get_obj_attrs(s->yield, this);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
                        << " ret=" << op_ret << dendl;

@@ -1168,9 +1168,9 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   rgw::sal::RadosStore* store;
   rgw_zone_id source_zone;
 
-  RGWBucketInfo bucket_info;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  std::unique_ptr<rgw::sal::Object> obj;
 
-  rgw_obj_key key;
   std::string owner;
   std::string owner_display_name;
   bool versioned;
@@ -1198,8 +1198,6 @@ public:
                          real_time& _timestamp,
                          rgw_zone_set* _zones_trace) : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), store(_store),
                                                       source_zone(_source_zone),
-                                                      bucket_info(_bucket_info),
-                                                      key(_key),
                                                       owner(_owner),
                                                       owner_display_name(_owner_display_name),
                                                       versioned(_versioned),
@@ -1207,12 +1205,14 @@ public:
                                                       del_if_older(_if_older),
                                                       timestamp(_timestamp) {
     if (_delete_marker) {
-      marker_version_id = key.instance;
+      marker_version_id = _key.instance;
     }
 
     if (_zones_trace) {
       zones_trace = *_zones_trace;
     }
+    store->get_bucket(nullptr, _bucket_info, &bucket);
+    obj = bucket->get_object(_key);
   }
 };
 

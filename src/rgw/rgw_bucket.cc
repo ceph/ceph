@@ -315,15 +315,13 @@ bool rgw_bucket_object_check_filter(const std::string& oid)
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Store* store, rgw::sal::Bucket* bucket, rgw_obj_key& key)
 {
-  RGWObjectCtx rctx(store);
-
   if (key.instance.empty()) {
     key.instance = "null";
   }
 
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
-  return object->delete_object(dpp, &rctx, null_yield);
+  return object->delete_object(dpp, null_yield);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -723,8 +721,7 @@ int rgw_object_get_attr(const DoutPrefixProvider *dpp,
 			rgw::sal::Store* store, rgw::sal::Object* obj,
 			const char* attr_name, bufferlist& out_bl, optional_yield y)
 {
-  RGWObjectCtx obj_ctx(store);
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op(&obj_ctx);
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
   return rop->get_attr(dpp, attr_name, out_bl, y);
 }
@@ -2922,7 +2919,7 @@ int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
     for (const auto& obj : results.objs) {
       std::unique_ptr<rgw::sal::Object> r_obj = bucket->get_object(obj.key);
 
-      ret = r_obj->get_obj_attrs(&obj_ctx, y, dpp);
+      ret = r_obj->get_obj_attrs(y, dpp);
       if (ret < 0){
         ldpp_dout(dpp, 0) << "ERROR: failed to read object " << obj.key.name << cpp_strerror(-ret) << dendl;
         continue;
@@ -2963,10 +2960,10 @@ int RGWBucketCtl::chown(rgw::sal::Store* store, rgw::sal::Bucket* bucket,
         bl.clear();
         encode(policy, bl);
 
-	r_obj->set_atomic(&obj_ctx);
+	r_obj->set_atomic();
 	map<string, bufferlist> attrs;
 	attrs[RGW_ATTR_ACL] = bl;
-	ret = r_obj->set_obj_attrs(dpp, &obj_ctx, &attrs, nullptr, y);
+	ret = r_obj->set_obj_attrs(dpp, &attrs, nullptr, y);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-ret) << dendl;
           return ret;

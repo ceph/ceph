@@ -864,14 +864,13 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   std::unique_ptr<rgw::sal::Object> slo_seg = bucket->get_object(rgw_obj_key(obj_name));
 
   /* no prefetch */
-  RGWObjectCtx obj_ctx(store);
-  slo_seg->set_atomic(&obj_ctx);
+  slo_seg->set_atomic();
 
   bool compressed;
   RGWCompressionInfo cs_info;
   uint64_t size_bytes{0};
 
-  r = slo_seg->get_obj_attrs(&obj_ctx, s->yield, s);
+  r = slo_seg->get_obj_attrs(s->yield, s);
   if (r < 0) {
     return r;
   }
@@ -2565,12 +2564,11 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(std::move(subdir_name)));
 
   /* First, get attrset of the object we'll try to retrieve. */
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj->set_atomic(&obj_ctx);
-  obj->set_prefetch_data(&obj_ctx);
+  obj->set_atomic();
+  obj->set_prefetch_data();
 
   RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &obj_ctx, &state, s->yield, false)) {
+  if (obj->get_obj_state(s, &state, s->yield, false)) {
     return false;
   }
 
@@ -2595,12 +2593,11 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
 {
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(index));
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj->set_atomic(&obj_ctx);
-  obj->set_prefetch_data(&obj_ctx);
+  obj->set_atomic();
+  obj->set_prefetch_data();
 
   RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &obj_ctx, &state, s->yield, false)) {
+  if (obj->get_obj_state(s, &state, s->yield, false)) {
     return false;
   }
 

@@ -580,9 +580,9 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
         continue;
       }
 
-      rgw_obj obj(cur_bucket->get_key(), entry.key);
+      std::unique_ptr<rgw::sal::Object> obj = cur_bucket->get_object(entry.key);
 
-      RGWRados::Object op_target(store->getRados(), cur_bucket->get_info(), obj_ctx, obj);
+      RGWRados::Object op_target(store->getRados(), cur_bucket.get(), obj_ctx, obj.get());
 
       stat_ops.push_back(RGWRados::Object::Stat(&op_target));
       RGWRados::Object::Stat& op = stat_ops.back();
@@ -1244,14 +1244,16 @@ int RGWRadosList::process_bucket(
 	continue;
       }
 
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      store->get_bucket(nullptr, bucket_info, &bucket);
       // we need to do this in two cases below, so use a lambda
       auto do_stat_key =
 	[&](const rgw_obj_key& key) -> int {
 	  int ret;
 
-	  rgw_obj obj(bucket_info.bucket, key);
-	  RGWRados::Object op_target(store->getRados(), bucket_info,
-				     obj_ctx, obj);
+	  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
+	  RGWRados::Object op_target(store->getRados(), bucket.get(),
+				     obj_ctx, obj.get());
 
 	  stat_ops.push_back(RGWRados::Object::Stat(&op_target));
 	  RGWRados::Object::Stat& op = stat_ops.back();

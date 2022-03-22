@@ -740,17 +740,13 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
 
 int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 {
-  RGWObjectCtx obj_ctx(store);
-
-  rgw_obj obj(bucket_info.bucket, key);
-
   ldpp_dout(dpp, 0) << __func__ << "(): deleting obj=" << obj << dendl;
 
-  obj_ctx.set_atomic(obj);
+  obj->set_atomic();
 
   RGWObjState *state;
 
-  int ret = store->getRados()->get_obj_state(dpp, &obj_ctx, bucket_info, obj, &state, null_yield);
+  int ret = obj->get_obj_state(dpp, &state, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
@@ -776,26 +772,25 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
     }
   }
 
-  RGWRados::Object del_target(store->getRados(), bucket_info, obj_ctx, obj);
-  RGWRados::Object::Delete del_op(&del_target);
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
 
-  del_op.params.bucket_owner = bucket_info.owner;
-  del_op.params.obj_owner = policy.get_owner();
+  del_op->params.bucket_owner = bucket->get_info().owner;
+  del_op->params.obj_owner = policy.get_owner();
   if (del_if_older) {
-    del_op.params.unmod_since = timestamp;
+    del_op->params.unmod_since = timestamp;
   }
   if (versioned) {
-    del_op.params.versioning_status = BUCKET_VERSIONED;
+    del_op->params.versioning_status = BUCKET_VERSIONED;
   }
-  del_op.params.olh_epoch = versioned_epoch;
-  del_op.params.marker_version_id = marker_version_id;
-  del_op.params.obj_owner.set_id(rgw_user(owner));
-  del_op.params.obj_owner.set_name(owner_display_name);
-  del_op.params.mtime = timestamp;
-  del_op.params.high_precision_time = true;
-  del_op.params.zones_trace = &zones_trace;
+  del_op->params.olh_epoch = versioned_epoch;
+  del_op->params.marker_version_id = marker_version_id;
+  del_op->params.obj_owner.set_id(rgw_user(owner));
+  del_op->params.obj_owner.set_name(owner_display_name);
+  del_op->params.mtime = timestamp;
+  del_op->params.high_precision_time = true;
+  del_op->params.zones_trace = &zones_trace;
 
-  ret = del_op.delete_obj(null_yield, dpp);
+  ret = del_op->delete_obj(dpp, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   }

@@ -565,32 +565,48 @@ namespace rgw::sal {
     return std::make_unique<DBLuaScriptManager>(this);
   }
 
-  int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **state, optional_yield y, bool follow_olh)
+  int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
   {
-    *state = &(this->state);
+    RGWObjState* astate;
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
-    return op_target.get_obj_state(dpp, get_bucket()->get_info(), get_obj(), follow_olh, state);
+    int ret = op_target.get_obj_state(dpp, get_bucket()->get_info(), get_obj(), follow_olh, &astate);
+    if (ret < 0) {
+      return ret;
+    }
+
+    /* Don't overwrite obj, atomic, or prefetch */
+    rgw_obj obj = get_obj();
+    bool is_atomic = state.is_atomic;
+    bool prefetch_data = state.prefetch_data;
+
+    state = *astate;
+    *pstate = &state;
+
+    state.obj = obj;
+    state.is_atomic = is_atomic;
+    state.prefetch_data = prefetch_data;
+    return ret;
   }
 
   int DBObject::read_attrs(const DoutPrefixProvider* dpp, DB::Object::Read &read_op, optional_yield y, rgw_obj* target_obj)
   {
     read_op.params.attrs = &attrs;
     read_op.params.target_obj = target_obj;
-    read_op.params.obj_size = &obj_size;
-    read_op.params.lastmod = &mtime;
+    read_op.params.obj_size = &state.size;
+    read_op.params.lastmod = &state.mtime;
 
     return read_op.prepare(dpp);
   }
 
-  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_obj* target_obj)
+  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y)
   {
     Attrs empty;
     DB::Object op_target(store->getDB(),
-        get_bucket()->get_info(), target_obj ? *target_obj : get_obj());
+        get_bucket()->get_info(), get_obj());
     return op_target.set_attrs(dpp, setattrs ? *setattrs : empty, delattrs);
   }
 
-  int DBObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
+  int DBObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
   {
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
     DB::Object::Read read_op(&op_target);
@@ -598,48 +614,26 @@ namespace rgw::sal {
     return read_attrs(dpp, read_op, y, target_obj);
   }
 
-  int DBObject::modify_obj_attrs(RGWObjectCtx* rctx, const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
+  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
   {
     rgw_obj target = get_obj();
-    int r = get_obj_attrs(rctx, y, dpp, &target);
+    int r = get_obj_attrs(y, dpp, &target);
     if (r < 0) {
       return r;
     }
-    set_atomic(rctx);
+    set_atomic();
     attrs[attr_name] = attr_val;
-    return set_obj_attrs(dpp, rctx, &attrs, nullptr, y, &target);
+    return set_obj_attrs(dpp, &attrs, nullptr, y);
   }
 
-  int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, const char* attr_name, optional_yield y)
+  int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
   {
-    rgw_obj target = get_obj();
     Attrs rmattr;
     bufferlist bl;
 
-    set_atomic(rctx);
+    set_atomic();
     rmattr[attr_name] = bl;
-    return set_obj_attrs(dpp, rctx, nullptr, &rmattr, y, &target);
-  }
-
-  /* RGWObjectCtx will be moved out of sal */
-  /* XXX: Placeholder. Should not be needed later after Dan's patch */
-  void DBObject::set_atomic(RGWObjectCtx* rctx) const
-  {
-    return;
-  }
-
-  /* RGWObjectCtx will be moved out of sal */
-  /* XXX: Placeholder. Should not be needed later after Dan's patch */
-  void DBObject::set_prefetch_data(RGWObjectCtx* rctx)
-  {
-    return;
-  }
-
-  /* RGWObjectCtx will be moved out of sal */
-  /* XXX: Placeholder. Should not be needed later after Dan's patch */
-  void DBObject::set_compressed(RGWObjectCtx* rctx)
-  {
-    return;
+    return set_obj_attrs(dpp, nullptr, &rmattr, y);
   }
 
   bool DBObject::is_expired() {
@@ -648,7 +642,7 @@ namespace rgw::sal {
 
   void DBObject::gen_rand_obj_instance_name()
   {
-     store->getDB()->gen_rand_obj_instance_name(&key);
+     store->getDB()->gen_rand_obj_instance_name(&state.obj.key);
   }
 
 
@@ -691,8 +685,7 @@ namespace rgw::sal {
     return new MPDBSerializer(dpp, store, this, lock_name);
   }
 
-  int DBObject::transition(RGWObjectCtx& rctx,
-      Bucket* bucket,
+  int DBObject::transition(Bucket* bucket,
       const rgw_placement_rule& placement_rule,
       const real_time& mtime,
       uint64_t olh_epoch,
@@ -708,14 +701,14 @@ namespace rgw::sal {
     return true;
   }
 
-  int DBObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f, RGWObjectCtx* obj_ctx)
+  int DBObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f)
   {
     return 0;
   }
 
-  std::unique_ptr<Object::ReadOp> DBObject::get_read_op(RGWObjectCtx* ctx)
+  std::unique_ptr<Object::ReadOp> DBObject::get_read_op()
   {
-    return std::make_unique<DBObject::DBReadOp>(this, ctx);
+    return std::make_unique<DBObject::DBReadOp>(this, nullptr);
   }
 
   DBObject::DBReadOp::DBReadOp(DBObject *_source, RGWObjectCtx *_rctx) :
@@ -763,14 +756,13 @@ namespace rgw::sal {
     return parent_op.get_attr(dpp, name, dest);
   }
 
-  std::unique_ptr<Object::DeleteOp> DBObject::get_delete_op(RGWObjectCtx* ctx)
+  std::unique_ptr<Object::DeleteOp> DBObject::get_delete_op()
   {
-    return std::make_unique<DBObject::DBDeleteOp>(this, ctx);
+    return std::make_unique<DBObject::DBDeleteOp>(this);
   }
 
-  DBObject::DBDeleteOp::DBDeleteOp(DBObject *_source, RGWObjectCtx *_rctx) :
+  DBObject::DBDeleteOp::DBDeleteOp(DBObject *_source) :
     source(_source),
-    rctx(_rctx),
     op_target(_source->store->getDB(),
         _source->get_bucket()->get_info(),
         _source->get_obj()),
@@ -804,9 +796,9 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBObject::delete_object(const DoutPrefixProvider* dpp, RGWObjectCtx* obj_ctx, optional_yield y, bool prevent_versioning)
+  int DBObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, bool prevent_versioning)
   {
-    DB::Object del_target(store->getDB(), bucket->get_info(), *obj_ctx, get_obj());
+    DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
     DB::Object::Delete del_op(&del_target);
 
     del_op.params.bucket_owner = bucket->get_info().owner;
@@ -823,8 +815,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBObject::copy_object(RGWObjectCtx& obj_ctx,
-      User* user,
+  int DBObject::copy_object(User* user,
       req_info* info,
       const rgw_zone_id& source_zone,
       rgw::sal::Object* dest_object,
@@ -860,29 +851,26 @@ namespace rgw::sal {
     return parent_op.iterate(dpp, ofs, end, cb);
   }
 
-  int DBObject::swift_versioning_restore(RGWObjectCtx* obj_ctx,
-      bool& restored,
+  int DBObject::swift_versioning_restore(bool& restored,
       const DoutPrefixProvider* dpp)
   {
     return 0;
   }
 
-  int DBObject::swift_versioning_copy(RGWObjectCtx* obj_ctx,
-      const DoutPrefixProvider* dpp,
+  int DBObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
       optional_yield y)
   {
     return 0;
   }
 
-  int DBMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
-				RGWObjectCtx *obj_ctx)
+  int DBMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
   {
     std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
     meta_obj->set_in_extra_data(true);
     meta_obj->set_hash_source(mp_obj.get_key());
     int ret;
 
-    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op(obj_ctx);
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
     del_op->params.bucket_owner = bucket->get_acl_owner();
     del_op->params.versioning_status = 0;
   
@@ -904,7 +892,7 @@ namespace rgw::sal {
     return bucket->get_object(rgw_obj_key(get_meta(), string(), mp_ns));
   }
 
-  int DBMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs)
+  int DBMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs)
   {
     int ret;
     std::string oid = mp_obj.get_key();
@@ -1006,8 +994,7 @@ namespace rgw::sal {
 				   RGWCompressionInfo& cs_info, off_t& ofs,
 				   std::string& tag, ACLOwner& owner,
 				   uint64_t olh_epoch,
-				   rgw::sal::Object* target_obj,
-				   RGWObjectCtx* obj_ctx)
+				   rgw::sal::Object* target_obj)
   {
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -1116,7 +1103,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs)
+  int DBMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs)
   {
     if (!rule && !attrs) {
       return 0;
@@ -1143,7 +1130,7 @@ namespace rgw::sal {
     bufferlist headbl;
 
     /* Read the obj head which contains the multipart_upload_info */
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op = meta_obj->get_read_op(obj_ctx);
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op = meta_obj->get_read_op();
     int ret = read_op->prepare(y, dpp);
     if (ret < 0) {
       if (ret == -ENOENT) {
@@ -1192,14 +1179,14 @@ namespace rgw::sal {
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
-				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
   {
     return std::make_unique<DBMultipartWriter>(dpp, y, this,
 				 std::move(_head_obj), store, owner,
-				 obj_ctx, ptail_placement_rule, part_num, part_num_str);
+				 ptail_placement_rule, part_num, part_num_str);
   }
 
   DBMultipartWriter::DBMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1207,7 +1194,7 @@ namespace rgw::sal {
                 MultipartUpload* upload,
 		        std::unique_ptr<rgw::sal::Object> _head_obj,
 		        DBStore* _store,
-    		    const rgw_user& _owner, RGWObjectCtx& obj_ctx,
+    		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
                 uint64_t _part_num, const std::string& _part_num_str):
     			Writer(dpp, y),
@@ -1355,7 +1342,7 @@ namespace rgw::sal {
 	    	    optional_yield y,
 		        std::unique_ptr<rgw::sal::Object> _head_obj,
 		        DBStore* _store,
-    		    const rgw_user& _owner, RGWObjectCtx& obj_ctx,
+    		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag) :
@@ -1536,7 +1523,7 @@ namespace rgw::sal {
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
-				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -1547,12 +1534,12 @@ namespace rgw::sal {
   std::unique_ptr<Writer> DBStore::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
-				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) {
     return std::make_unique<DBAtomicWriter>(dpp, y,
-                    std::move(_head_obj), this, owner, obj_ctx,
+                    std::move(_head_obj), this, owner,
                     ptail_placement_rule, olh_epoch, unique_tag);
   }
 
@@ -1753,7 +1740,7 @@ namespace rgw::sal {
 
   std::unique_ptr<Notification> DBStore::get_notification(
     const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
-    rgw::sal::Object* src_obj, RGWObjectCtx* rctx,
+    rgw::sal::Object* src_obj,
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
     std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
     optional_yield y)

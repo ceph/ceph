@@ -316,12 +316,12 @@ static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, cep
   return (timediff >= cmp);
 }
 
-static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj, RGWObjectCtx& ctx, const DoutPrefixProvider *dpp)
+static bool pass_object_lock_check(rgw::sal::Store* store, rgw::sal::Object* obj, const DoutPrefixProvider *dpp)
 {
   if (!obj->get_bucket()->get_info().obj_lock_enabled()) {
     return true;
   }
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op(&ctx);
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = obj->get_read_op();
   int ret = read_op->prepare(null_yield, dpp);
   if (ret < 0) {
     if (ret == -ENOENT) {
@@ -551,7 +551,7 @@ static int remove_expired_obj(
 
   obj = bucket->get_object(obj_key);
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op
-    = obj->get_delete_op(&oc.rctx);
+    = obj->get_delete_op();
   del_op->params.versioning_status
     = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner.set_id(rgw_user {meta.owner});
@@ -561,7 +561,7 @@ static int remove_expired_obj(
   del_op->params.marker_version_id = version_id;
 
   std::unique_ptr<rgw::sal::Notification> notify
-    = store->get_notification(dpp, obj.get(), nullptr, &oc.rctx, event_type,
+    = store->get_notification(dpp, obj.get(), nullptr, event_type,
 			      bucket.get(), lc_id,
 			      const_cast<std::string&>(oc.bucket->get_tenant()),
 			      lc_req_id, null_yield);
@@ -842,8 +842,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
     if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
       rgw_obj_key key(obj.key);
       std::unique_ptr<rgw::sal::MultipartUpload> mpu = target->get_multipart_upload(key.name);
-      RGWObjectCtx rctx(store);
-      int ret = mpu->abort(this, cct, &rctx);
+      int ret = mpu->abort(this, cct);
       if (ret == 0) {
         if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
@@ -909,9 +908,9 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   return 0;
 }
 
-static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, RGWObjectCtx& ctx, bufferlist& tags_bl)
+static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, bufferlist& tags_bl)
 {
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op(&ctx);
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
   return rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, null_yield);
 }
@@ -957,7 +956,7 @@ static int check_tags(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool *skip)
     *skip = true;
 
     bufferlist tags_bl;
-    int ret = read_obj_tags(dpp, oc.obj.get(), oc.rctx, tags_bl);
+    int ret = read_obj_tags(dpp, oc.obj.get(), tags_bl);
     if (ret < 0) {
       if (ret != -ENODATA) {
         ldpp_dout(oc.dpp, 5) << "ERROR: read_obj_tags returned r="
@@ -1126,7 +1125,7 @@ public:
 		      << oc.wq->thr_name() << dendl;
 
     return is_expired &&
-      pass_object_lock_check(oc.store, oc.obj.get(), oc.rctx, dpp);
+      pass_object_lock_check(oc.store, oc.obj.get(), dpp);
   }
 
   int process(lc_op_ctx& oc) {
@@ -1291,7 +1290,7 @@ public:
 
     real_time read_mtime;
 
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(oc.obj->get_read_op(&oc.rctx));
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(oc.obj->get_read_op());
 
     read_op->params.lastmod = &read_mtime;
 
@@ -1307,8 +1306,9 @@ public:
 
     attrs = oc.obj->get_attrs();
     
+    /* TODO dang - need to replace this with something zipper */
     rgw::sal::RadosStore *rados = static_cast<rgw::sal::RadosStore*>(oc.store);
-    RGWRados::Object op_target(rados->getRados(), oc.bucket->get_info(), oc.rctx, oc.obj->get_obj());
+    RGWRados::Object op_target(rados->getRados(), oc.bucket, oc.rctx, oc.obj.get());
     RGWRados::Object::Write obj_op(&op_target);
 
     obj_op.meta.modify_tail = true;
@@ -1389,7 +1389,7 @@ public:
     S3RESTConn conn(oc.cct, oc.store, id, { endpoint }, key, region, host_style);
 
     RGWLCCloudTierCtx tier_ctx(oc.cct, oc.dpp, oc.o, oc.store, oc.bucket->get_info(),
-                        oc.obj.get(), oc.rctx, conn, bucket_name,
+                        oc.obj.get(), conn, bucket_name,
                         oc.tier.t.s3.target_storage_class);
     tier_ctx.acl_mappings = oc.tier.t.s3.acl_mappings;
     tier_ctx.multipart_min_part_size = oc.tier.t.s3.multipart_min_part_size;
@@ -1456,7 +1456,7 @@ public:
     if (!r && oc.tier.tier_type == "cloud-s3") {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
       if (!oc.o.is_current() &&
-          !pass_object_lock_check(oc.store, oc.obj.get(), oc.rctx, oc.dpp)) {
+          !pass_object_lock_check(oc.store, oc.obj.get(), oc.dpp)) {
         /* Skip objects which has object lock enabled. */
         ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is locked. Skipping transition to cloud-s3 tier: " << target_placement.storage_class << dendl;
         return 0;
@@ -1487,7 +1487,7 @@ public:
         return -EINVAL;
       }
 
-      int r = oc.obj->transition(oc.rctx, oc.bucket, target_placement, o.meta.mtime,
+      int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
 	  		         o.versioned_epoch, oc.dpp, null_yield);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
