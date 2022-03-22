@@ -64,6 +64,8 @@ log = logging.getLogger('rgw_multi.tests')
 num_buckets = 0
 run_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(6))
 
+num_roles = 0
+
 def get_zone_connection(zone, credentials):
     """ connect to the zone's first gateway """
     if isinstance(credentials, list):
@@ -444,6 +446,12 @@ def gen_bucket_name():
     num_buckets += 1
     return run_prefix + '-' + str(num_buckets)
 
+def gen_role_name():
+    global num_roles
+
+    num_roles += 1
+    return "roles" + '-' + run_prefix + '-' + str(num_roles)
+
 class ZonegroupConns:
     def __init__(self, zonegroup):
         self.zonegroup = zonegroup
@@ -451,6 +459,7 @@ class ZonegroupConns:
         self.ro_zones = []
         self.rw_zones = []
         self.master_zone = None
+
         for z in zonegroup.zones:
             zone_conn = z.get_conn(user.credentials)
             self.zones.append(zone_conn)
@@ -489,6 +498,19 @@ def check_all_buckets_dont_exist(zone_conn, buckets):
         return False
 
     return True
+
+def create_role_per_zone(zonegroup_conns, roles_per_zone = 1):
+    roles = []
+    zone_role = []
+    for zone in zonegroup_conns.rw_zones:
+        for i in range(roles_per_zone):
+            role_name = gen_role_name()
+            policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/testuser\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
+            role = zone.create_role("", role_name, policy_document, "")
+            roles.append(role_name)
+            zone_role.append((zone, role))
+
+    return roles, zone_role
 
 def create_bucket_per_zone(zonegroup_conns, buckets_per_zone = 1):
     buckets = []
@@ -576,6 +598,9 @@ def new_key(zone, bucket_name, obj_name):
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
     if zone_conn2.zone.has_buckets():
         zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
+
+def check_role_eq(zone_conn1, zone_conn2, role):
+    zone_conn2.check_role_eq(zone_conn1, role['create_role_response']['create_role_result']['role']['role_name'])
 
 def test_object_sync():
     zonegroup = realm.master_zonegroup()
@@ -1662,3 +1687,17 @@ def test_zap_init_bucket_sync_run():
             secondary.zone.start()
 
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def test_role_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    roles, zone_role = create_role_per_zone(zonegroup_conns)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for source_conn, role in zone_role:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+
+            check_role_eq(source_conn, target_conn, role)
