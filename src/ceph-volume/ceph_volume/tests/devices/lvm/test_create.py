@@ -19,7 +19,7 @@ class TestCreate(object):
         assert 'A physical device or logical' in stdout
 
     @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
-    def test_excludes_filestore_bluestore_flags(self, m_has_bs_label, capsys, device_info):
+    def test_excludes_filestore_bluestore_flags(self, m_has_bs_label, fake_call, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=['--data', '/dev/sdfoo', '--filestore', '--bluestore']).main()
@@ -28,7 +28,7 @@ class TestCreate(object):
         assert expected in stderr
 
     @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
-    def test_excludes_other_filestore_bluestore_flags(self, m_has_bs_label, capsys, device_info):
+    def test_excludes_other_filestore_bluestore_flags(self, m_has_bs_label, fake_call, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=[
@@ -40,7 +40,7 @@ class TestCreate(object):
         assert expected in stderr
 
     @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
-    def test_excludes_block_and_journal_flags(self, m_has_bs_label, capsys, device_info):
+    def test_excludes_block_and_journal_flags(self, m_has_bs_label, fake_call, capsys, device_info):
         device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=[
