@@ -320,7 +320,7 @@ struct btree_lba_manager_test : btree_test_base {
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
-    lba_manager.reset(new BtreeLBAManager(*segment_manager, *cache));
+    lba_manager.reset(new BtreeLBAManager(*cache));
     return lba_manager->mkfs(t);
   }
 
