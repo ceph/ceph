@@ -64,6 +64,7 @@ def main(args):
     tube = args["--tube"]
     log_dir = args["--log-dir"]
     archive_dir = args["--archive-dir"]
+    exit_on_empty_queue = args["--exit-on-empty-queue"]
 
     if archive_dir is None:
         archive_dir = teuth_config.archive_base
@@ -103,12 +104,13 @@ def main(args):
             stop()
 
         load_config()
-
+        job_procs = set(filter(lambda p: p.poll() is None, job_procs))
         job = connection.reserve(timeout=60)
         if job is None:
+            if exit_on_empty_queue and not job_procs:
+                log.info("Queue is empty and no supervisor processes running; exiting!")
+                break
             continue
-
-        job_procs = set(filter(lambda p: p.poll() is None, job_procs))
 
         # bury the job so it won't be re-run if it fails
         job.bury()
