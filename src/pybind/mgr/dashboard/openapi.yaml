@@ -3332,6 +3332,31 @@ paths:
                     required:
                     - osds
                     type: object
+                  perf_stat:
+                    description: ''
+                    properties:
+                      osd_perf:
+                        description: ''
+                        items:
+                          properties:
+                            apply_latency_ms:
+                              description: ''
+                              type: integer
+                            commit_latency_ms:
+                              description: ''
+                              type: integer
+                            osd:
+                              description: ''
+                              type: integer
+                          required:
+                          - osd
+                          - commit_latency_ms
+                          - apply_latency_ms
+                          type: object
+                        type: array
+                    required:
+                    - osd_perf
+                    type: object
                   pg_info:
                     description: ''
                     properties:
@@ -3390,6 +3415,7 @@ paths:
                 - mgr_map
                 - mon_status
                 - osd_map
+                - perf_stat
                 - pg_info
                 - pools
                 - rgw
