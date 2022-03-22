@@ -2699,7 +2699,6 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 
   int last_num = 0;
   int part_cnt = 0;
-  uint32_t expected_next = 0;
   ldpp_dout(dpp, 20) << __func__ << ": marker = " << marker << dendl;
   for (const auto& bl: val_vec) {
     if (bl.length() == 0)
@@ -2718,12 +2717,6 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
     ldpp_dout(dpp, 20) << __func__ << ": meta:oid=[" << meta.oid.u_hi << "," << meta.oid.u_lo
                                               << "], meta:pvid=[" << meta.pver.f_container << "," << meta.pver.f_key
                                               << "], meta:layout id=" << meta.layout_id << dendl;
-
-    if (!expected_next)
-      expected_next = info.num + 1;
-    else if (expected_next && info.num != expected_next)
-      return -EINVAL;
-    else expected_next = info.num + 1;
 
     if ((int)info.num > marker) {
       last_num = info.num;
