@@ -39,6 +39,7 @@ set(crimson_seastore_srcs
   journal/segmented_journal.cc
   journal/segment_allocator.cc
   journal.cc
+  device.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)

@@ -542,7 +542,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 TransactionManager::~TransactionManager() {}
 
 TransactionManagerRef make_transaction_manager(
-    SegmentManager& sm,
+    Device &device,
     bool detailed)
 {
   auto scanner = std::make_unique<ExtentReader>();
@@ -551,7 +551,10 @@ TransactionManagerRef make_transaction_manager(
     SegmentCleaner::config_t::get_default(),
     std::move(scanner),
     detailed);
-  auto journal = journal::make_segmented(sm, scanner_ref, *segment_cleaner);
+  ceph_assert(device.get_device_type() == device_type_t::SEGMENTED);
+  auto sm = dynamic_cast<SegmentManager*>(&device);
+  ceph_assert(sm != nullptr);
+  auto journal = journal::make_segmented(*sm, scanner_ref, *segment_cleaner);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
