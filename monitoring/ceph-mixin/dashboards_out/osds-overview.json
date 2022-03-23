@@ -101,14 +101,14 @@
                "refId": "A"
             },
             {
-               "expr": "max (irate(ceph_osd_op_r_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000)",
+               "expr": "max(\n  irate(ceph_osd_op_r_latency_sum[1m]) /\n  on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "MAX read",
                "refId": "B"
             },
             {
-               "expr": "quantile(0.95,\n  (irate(ceph_osd_op_r_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000)\n)",
+               "expr": "quantile(0.95,\n  (\n    irate(ceph_osd_op_r_latency_sum[1m]) /\n      on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m])\n      * 1000\n  )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "@95%ile",
@@ -222,7 +222,7 @@
          ],
          "targets": [
             {
-               "expr": "topk(10,\n  (sort(\n    (irate(ceph_osd_op_r_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000)\n  ))\n)\n\n",
+               "expr": "topk(10,\n  (sort(\n    (\n      irate(ceph_osd_op_r_latency_sum[1m]) /\n        on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) *\n        1000\n    )\n  ))\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -281,21 +281,21 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "avg (irate(ceph_osd_op_w_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000)",
+               "expr": "avg(\n  irate(ceph_osd_op_w_latency_sum[1m]) /\n    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m])\n    * 1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "AVG write",
                "refId": "A"
             },
             {
-               "expr": "max (irate(ceph_osd_op_w_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000)",
+               "expr": "max(\n  irate(ceph_osd_op_w_latency_sum[1m]) /\n    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *\n    1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "MAX write",
                "refId": "B"
             },
             {
-               "expr": "quantile(0.95,\n (irate(ceph_osd_op_w_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000)\n)",
+               "expr": "quantile(0.95, (\n  irate(ceph_osd_op_w_latency_sum[1m]) /\n    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *\n    1000\n))\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "@95%ile write",
@@ -409,7 +409,7 @@
          ],
          "targets": [
             {
-               "expr": "topk(10,\n  (sort(\n    (irate(ceph_osd_op_w_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000)\n  ))\n)\n\n",
+               "expr": "topk(10,\n  (sort(\n    (irate(ceph_osd_op_w_latency_sum[1m]) /\n      on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *\n      1000)\n  ))\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -623,7 +623,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "ceph_osd_numpg\n",
+               "expr": "ceph_osd_numpg",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -728,7 +728,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_bluestore_onode_hits)/(sum(ceph_bluestore_onode_hits) + sum(ceph_bluestore_onode_misses))",
+               "expr": "sum(ceph_bluestore_onode_hits) / (\n  sum(ceph_bluestore_onode_hits) +\n  sum(ceph_bluestore_onode_misses)\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",

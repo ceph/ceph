@@ -266,14 +266,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "irate(ceph_rbd_write_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s]) / irate(ceph_rbd_write_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])",
+               "expr": "irate(ceph_rbd_write_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s]) /\n  irate(ceph_rbd_write_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{pool}} Write",
                "refId": "A"
             },
             {
-               "expr": "irate(ceph_rbd_read_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s]) / irate(ceph_rbd_read_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])",
+               "expr": "irate(ceph_rbd_read_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s]) /\n  irate(ceph_rbd_read_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{pool}} Read",
