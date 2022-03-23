@@ -792,17 +792,42 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         usage = """
 Usage:
   ceph orch daemon add osd host:device1,device2,...
+  ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2,...
 """
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
         try:
-            host_name, block_device = svc_arg.split(":")
-            block_devices = block_device.split(',')
-            devs = DeviceSelection(paths=block_devices)
+            host_name, raw = svc_arg.split(":")
+            drive_group_spec = {
+                'data_devices': []
+            }  # type: Dict
+            drv_grp_spec_arg = None
+            values = raw.split(',')
+            while values:
+                v = values[0].split(',', 1)[0]
+                if '=' in v:
+                    drv_grp_spec_arg, value = v.split('=')
+                    if drv_grp_spec_arg in ['data_devices',
+                                            'db_devices',
+                                            'wal_devices',
+                                            'journal_devices']:
+                        drive_group_spec[drv_grp_spec_arg] = []
+                        drive_group_spec[drv_grp_spec_arg].append(value)
+                    else:
+                        drive_group_spec[drv_grp_spec_arg] = value
+                elif drv_grp_spec_arg is not None:
+                    drive_group_spec[drv_grp_spec_arg].append(v)
+                else:
+                    drive_group_spec['data_devices'].append(v)
+                values.remove(v)
+
+            for dev_type in ['data_devices', 'db_devices', 'wal_devices', 'journal_devices']:
+                drive_group_spec[dev_type] = DeviceSelection(paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
+
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
-                data_devices=devs,
                 method=method,
+                **drive_group_spec,
             )
         except (TypeError, KeyError, ValueError) as e:
             msg = f"Invalid 'host:device' spec: '{svc_arg}': {e}" + usage
