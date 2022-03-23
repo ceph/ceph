@@ -138,6 +138,12 @@ There are a few ways to create new OSDs:
 
     ceph orch daemon add osd host1:/dev/sdb
 
+  Advanced OSD creation from specific devices on a specific host:
+
+  .. prompt:: bash #
+
+    ceph orch daemon add osd host1:data_devices=/dev/sda,/dev/sdb,db_devices=/dev/sdc,osds_per_device=2
+
 * You can use :ref:`drivegroups` to categorize device(s) based on their
   properties. This might be useful in forming a clearer picture of which
   devices are available to consume. Properties include device type (SSD or
