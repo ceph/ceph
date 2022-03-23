@@ -104,6 +104,14 @@ sc::result NotActive::react(const StartScrub&)
   return transit<ReservingReplicas>();
 }
 
+sc::result NotActive::react(const AfterRepairScrub&)
+{
+  dout(10) << "NotActive::react(const AfterRepairScrub&)" << dendl;
+  DECLARE_LOCALS;
+  scrbr->set_scrub_begin_time();
+  return transit<ReservingReplicas>();
+}
+
 // ----------------------- ReservingReplicas ---------------------------------
 
 ReservingReplicas::ReservingReplicas(my_context ctx) : my_base(ctx)
