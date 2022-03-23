@@ -275,7 +275,7 @@ class FSPerfStats(object):
             missing_clients.update(list(culled[1].keys()))
 
     def cull_client_entries(self, raw_perf_counters, incoming_metrics, missing_clients):
-        # this is a bit more involed -- for each rank figure out what clients
+        # this is a bit more involved -- for each rank figure out what clients
         # are missing in incoming report and purge them from our tracked map.
         # but, if this is invoked _after_ cull_mds_entries(), the rank set
         # is same, so we can loop based on that assumption.
