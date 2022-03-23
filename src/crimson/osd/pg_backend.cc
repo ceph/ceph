@@ -867,7 +867,7 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
     name = "_" + aname;
   }
   logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-  return getxattr(os.oi.soid, name).safe_then_interruptible(
+  return getxattr(os.oi.soid, std::move(name)).safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
     osd_op.outdata = std::move(val);
     osd_op.op.xattr.value_len = osd_op.outdata.length();
@@ -887,6 +887,19 @@ PGBackend::getxattr(
   }
 
   return store->get_attr(coll, ghobject_t{soid}, key);
+}
+
+PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
+PGBackend::getxattr(
+  const hobject_t& soid,
+  std::string&& key) const
+{
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+  return seastar::do_with(key, [this, &soid](auto &key) {
+    return store->get_attr(coll, ghobject_t{soid}, key);
+  });
 }
 
 PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
@@ -966,7 +979,7 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
   bp.copy(osd_op.op.xattr.name_len, name);
  
   logger().debug("cmpxattr on obj={} for attr={}", os.oi.soid, name);
-  return getxattr(os.oi.soid, name).safe_then_interruptible(
+  return getxattr(os.oi.soid, std::move(name)).safe_then_interruptible(
     [&delta_stats, &osd_op] (auto &&xattr) {
     int result = 0;
     auto bp = osd_op.indata.cbegin();
