@@ -586,6 +586,7 @@ public:
   int mkdir(std::string_view dirname);
   int rmdir(std::string_view dirname);
   bool wal_is_rotational();
+  bool db_is_rotational();
 
   bool dir_exists(std::string_view dirname);
   int stat(std::string_view dirname, std::string_view filename,
