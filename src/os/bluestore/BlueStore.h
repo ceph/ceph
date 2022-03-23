@@ -2794,6 +2794,7 @@ public:
 
   bool is_rotational() override;
   bool is_journal_rotational() override;
+  bool is_db_rotational() ;
 
   std::string get_default_device_class() override {
     std::string device_class;
