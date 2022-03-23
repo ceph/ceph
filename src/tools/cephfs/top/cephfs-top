@@ -601,7 +601,7 @@ if __name__ == '__main__':
     parser.add_argument('--selftest', dest='selftest', action='store_true',
                         help='Run in selftest mode')
     parser.add_argument('-d', '--delay', nargs='?', default=DEFAULT_REFRESH_INTERVAL,
-                        type=float_greater_than, help='Interval to refresh data '
+                        type=float_greater_than, help='Refresh interval in seconds '
                         f'(default: {DEFAULT_REFRESH_INTERVAL})')
 
     args = parser.parse_args()
