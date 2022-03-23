@@ -3,12 +3,9 @@
 
 #include "tm_driver.h"
 
-#include "crimson/os/seastore/segment_manager/block.h"
-
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
-using namespace crimson::os::seastore::segment_manager::block;
 
 namespace {
   seastar::logger& logger() {
@@ -21,8 +18,8 @@ seastar::future<> TMDriver::write(
   bufferptr ptr)
 {
   logger().debug("Writing offset {}", offset);
-  assert(offset % segment_manager->get_block_size() == 0);
-  assert((ptr.length() % (size_t)segment_manager->get_block_size()) == 0);
+  assert(offset % device->get_block_size() == 0);
+  assert((ptr.length() % (size_t)device->get_block_size()) == 0);
   return seastar::do_with(ptr, [this, offset](auto& ptr) {
     return repeat_eagain([this, offset, &ptr] {
       return tm->with_transaction_intr(
@@ -96,8 +93,8 @@ seastar::future<bufferlist> TMDriver::read(
   size_t size)
 {
   logger().debug("Reading offset {}", offset);
-  assert(offset % segment_manager->get_block_size() == 0);
-  assert(size % (size_t)segment_manager->get_block_size() == 0);
+  assert(offset % device->get_block_size() == 0);
+  assert(size % (size_t)device->get_block_size() == 0);
   auto blptrret = std::make_unique<bufferlist>();
   auto &blret = *blptrret;
   return repeat_eagain([=, &blret] {
@@ -134,8 +131,8 @@ seastar::future<bufferlist> TMDriver::read(
 
 void TMDriver::init()
 {
-  tm = make_transaction_manager(*segment_manager, false /* detailed */);
-  tm->add_segment_manager(segment_manager.get(), true);
+  tm = make_transaction_manager(*device, false /* detailed */);
+  tm->add_device(device.get(), true);
 }
 
 void TMDriver::clear()
@@ -145,29 +142,29 @@ void TMDriver::clear()
 
 size_t TMDriver::get_size() const
 {
-  return segment_manager->get_size() * .5;
+  return device->get_size() * .5;
 }
 
 seastar::future<> TMDriver::mkfs()
 {
   assert(config.path);
-  segment_manager = std::make_unique<
-    segment_manager::block::BlockSegmentManager
-    >(*config.path);
   logger().debug("mkfs");
-  seastore_meta_t meta;
-  meta.seastore_id.generate_random();
-  return segment_manager->mkfs(
-    segment_manager_config_t{
-      true,
-      (magic_t)std::rand(),
-      device_type_t::SEGMENTED,
-      0,
-      meta,
-      secondary_device_set_t()}
-  ).safe_then([this] {
-    logger().debug("");
-    return segment_manager->mount();
+  return Device::make_device(*config.path
+  ).then([this](DeviceRef dev) {
+    device = std::move(dev);
+    seastore_meta_t meta;
+    meta.seastore_id.generate_random();
+    return device->mkfs(
+      device_config_t{
+        true,
+        (magic_t)std::rand(),
+        device_type_t::SEGMENTED,
+        0,
+        meta,
+        secondary_device_set_t()});
+  }).safe_then([this] {
+    logger().debug("device mkfs done");
+    return device->mount();
   }).safe_then([this] {
     init();
     logger().debug("tm mkfs");
@@ -177,10 +174,10 @@ seastar::future<> TMDriver::mkfs()
     return tm->close();
   }).safe_then([this] {
     logger().debug("sm close");
-    return segment_manager->close();
+    return device->close();
   }).safe_then([this] {
     clear();
-    segment_manager.reset();
+    device.reset();
     logger().debug("mkfs complete");
     return TransactionManager::mkfs_ertr::now();
   }).handle_error(
@@ -194,10 +191,10 @@ seastar::future<> TMDriver::mount()
 {
   return (config.mkfs ? mkfs() : seastar::now()
   ).then([this] {
-    segment_manager = std::make_unique<
-      segment_manager::block::BlockSegmentManager
-      >(*config.path);
-    return segment_manager->mount();
+    return Device::make_device(*config.path);
+  }).then([this](DeviceRef dev) {
+    device = std::move(dev);
+    return device->mount();
   }).safe_then([this] {
     init();
     return tm->mount();
@@ -212,7 +209,7 @@ seastar::future<> TMDriver::close()
 {
   return tm->close().safe_then([this] {
     clear();
-    return segment_manager->close();
+    return device->close();
   }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid errror during TMDriver::close"

@@ -19,6 +19,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
+#include "crimson/os/seastore/device.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
@@ -66,13 +67,13 @@ public:
   SeaStore(
     const std::string& root,
     MDStoreRef mdstore,
-    SegmentManagerRef sm,
+    DeviceRef device,
     TransactionManagerRef tm,
     CollectionManagerRef cm,
     OnodeManagerRef om);
   SeaStore(
     const std::string& root,
-    SegmentManagerRef sm,
+    DeviceRef device,
     TransactionManagerRef tm,
     CollectionManagerRef cm,
     OnodeManagerRef om);
@@ -312,8 +313,8 @@ private:
 
   std::string root;
   MDStoreRef mdstore;
-  SegmentManagerRef segment_manager;
-  std::vector<SegmentManagerRef> secondaries;
+  DeviceRef device;
+  std::vector<DeviceRef> secondaries;
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;

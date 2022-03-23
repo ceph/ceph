@@ -27,6 +27,7 @@
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
+#include "crimson/os/seastore/device.h"
 
 namespace crimson::os::seastore {
 class Journal;
@@ -532,18 +533,22 @@ public:
     return segment_cleaner->stat();
   }
 
-  void add_segment_manager(SegmentManager* sm, bool is_primary) {
-    LOG_PREFIX(TransactionManager::add_segment_manager);
-    SUBDEBUG(seastore_tm, "adding segment manager {}, is_primary={}",
-             sm->get_device_id(), is_primary);
-    scanner.add_segment_manager(sm);
-    epm->add_device(sm, is_primary);
+  void add_device(Device* dev, bool is_primary) {
+    LOG_PREFIX(TransactionManager::add_device);
+    SUBDEBUG(seastore_tm, "adding device {}, is_primary={}",
+             dev->get_device_id(), is_primary);
+    epm->add_device(dev, is_primary);
+
+    ceph_assert(dev->get_device_type() == device_type_t::SEGMENTED);
+    auto sm = dynamic_cast<SegmentManager*>(dev);
+    ceph_assert(sm != nullptr);
     epm->add_allocator(
-      device_type_t::SEGMENTED,
+      dev->get_device_type(),
       std::make_unique<SegmentedAllocator>(
 	*segment_cleaner,
 	*sm,
 	segment_cleaner->get_ool_segment_seq_allocator()));
+    scanner.add_segment_manager(sm);
   }
 
   ~TransactionManager();
@@ -576,7 +581,7 @@ public:
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
 TransactionManagerRef make_transaction_manager(
-    SegmentManager& sm,
+    Device &device,
     bool detailed);
 
 }
