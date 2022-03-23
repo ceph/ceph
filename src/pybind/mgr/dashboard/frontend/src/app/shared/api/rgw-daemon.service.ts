@@ -25,7 +25,10 @@ export class RgwDaemonService {
     return this.http.get<RgwDaemon[]>(this.url).pipe(
       tap((daemons: RgwDaemon[]) => {
         this.daemons.next(daemons);
-        if (_.isEmpty(this.selectedDaemon.getValue())) {
+        const selectedDaemon = this.selectedDaemon.getValue();
+        // Set or re-select the default daemon if the current one is not
+        // in the list anymore.
+        if (_.isEmpty(selectedDaemon) || undefined === _.find(daemons, { id: selectedDaemon.id })) {
           this.selectDefaultDaemon(daemons);
         }
       })
