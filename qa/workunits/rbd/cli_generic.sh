@@ -1329,6 +1329,10 @@ test_mirror_snapshot_schedule() {
     expect_fail rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 dummy
     test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 00:15:00'
     test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
+    test "$(rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 7h)" = 'Interval does not exist(7h)'
+    rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 1m
+    test "$(rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 7h)" = 'Schedule does not exist'
+    test "$(rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1)" = 'Schedule does not exist'
 
     rbd rm rbd2/ns1/test1
 
