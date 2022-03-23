@@ -212,7 +212,7 @@ Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Fetch the metadata of a subvolume using::
+Fetch the information of a subvolume using::
 
     $ ceph fs subvolume info <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
@@ -259,6 +259,31 @@ List subvolumes using::
     $ ceph fs subvolume ls <vol_name> [--group_name <subvol_group_name>]
 
 .. note:: subvolumes that are removed but have snapshots retained, are also listed.
+
+Set custom metadata on the subvolume as a key-value pair using::
+
+    $ ceph fs subvolume metadata set <vol_name> <subvol_name> <key_name> <value> [--group_name <subvol_group_name>]
+
+.. note:: If the key_name already exists then the old value will get replaced by the new value.
+
+.. note:: key_name and value should be a string of ASCII characters (as specified in python's string.printable). key_name is case-insensitive and always stored in lower case.
+
+.. note:: Custom metadata on a subvolume is not preserved when snapshotting the subvolume, and hence, is also not preserved when cloning the subvolume snapshot.
+
+Get custom metadata set on the subvolume using the metadata key::
+
+    $ ceph fs subvolume metadata get <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>]
+
+List custom metadata (key-value pairs) set on the subvolume using::
+
+    $ ceph fs subvolume metadata ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Remove custom metadata set on the subvolume using the metadata key::
+
+    $ ceph fs subvolume metadata rm <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>] [--force]
+
+Using the '--force' flag allows the command to succeed that would otherwise
+fail if the metadata key did not exist.
 
 Create a snapshot of a subvolume using::
 
