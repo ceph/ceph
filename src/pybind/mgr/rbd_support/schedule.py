@@ -318,7 +318,11 @@ class Schedule:
     def remove(self,
                interval: Interval,
                start_time: Optional[StartTime] = None) -> None:
-        self.items.discard((interval, start_time))
+        if (interval, start_time) in self.items:
+            self.items.remove((interval, start_time))
+        else:
+            return "Interval does not exist({})".format(interval.to_string())
+        return ""
 
     def next_run(self, now: datetime.datetime) -> str:
         schedule_time = None
@@ -509,19 +513,23 @@ class Schedules:
                interval: Optional[str],
                start_time: Optional[str]) -> None:
         schedule = self.schedules.pop(level_spec.id, None)
+        response = ""
         if schedule:
             if interval is None:
                 schedule = None
             else:
                 try:
-                    schedule.remove(Interval.from_string(interval),
+                    response = schedule.remove(Interval.from_string(interval),
                                     StartTime.from_string(start_time))
                 finally:
                     if schedule:
                         self.schedules[level_spec.id] = schedule
             if not schedule:
                 del self.level_specs[level_spec.id]
+        else:
+            return "Schedule does not exist"
         self.save(level_spec, schedule)
+        return response
 
     def find(self,
              pool_id: str,
