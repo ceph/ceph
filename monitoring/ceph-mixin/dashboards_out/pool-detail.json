@@ -104,7 +104,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "(ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+               "expr": "(ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -186,7 +186,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "(ceph_pool_max_avail / deriv(ceph_pool_stored[6h])) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"} > 0",
+               "expr": "(ceph_pool_max_avail / deriv(ceph_pool_stored[6h])) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"} > 0\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -252,7 +252,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "deriv(ceph_pool_objects[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+               "expr": "deriv(ceph_pool_objects[1m]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Objects per second",
@@ -346,14 +346,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "irate(ceph_pool_rd[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+               "expr": "irate(ceph_pool_rd[1m]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "reads",
                "refId": "A"
             },
             {
-               "expr": "irate(ceph_pool_wr[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+               "expr": "irate(ceph_pool_wr[1m]) *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "writes",
@@ -447,14 +447,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "irate(ceph_pool_rd_bytes[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+               "expr": "irate(ceph_pool_rd_bytes[1m]) +\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "reads",
                "refId": "A"
             },
             {
-               "expr": "irate(ceph_pool_wr_bytes[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+               "expr": "irate(ceph_pool_wr_bytes[1m]) +\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "writes",
@@ -543,7 +543,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "ceph_pool_objects * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+               "expr": "ceph_pool_objects *\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Number of Objects",

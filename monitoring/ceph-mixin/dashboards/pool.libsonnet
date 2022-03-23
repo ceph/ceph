@@ -87,7 +87,10 @@ local u = import 'utils.libsonnet';
         22,
         [],
         '',
-        { refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'], time_options: ['5m', '15m', '1h', '6h', '12h', '24h', '2d', '7d', '30d'] }
+        {
+          refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
+          time_options: ['5m', '15m', '1h', '6h', '12h', '24h', '2d', '7d', '30d'],
+        }
       )
       .addAnnotation(
         u.addAnnotationSchema(
@@ -194,9 +197,14 @@ local u = import 'utils.libsonnet';
         PoolOverviewSingleStatPanel(
           'percent',
           'Compression Eligibility',
-          'Indicates how suitable the data is within the pools that are/have been enabled for compression - averaged across all pools holding compressed data\n',
+          'Indicates how suitable the data is within the pools that are/have been enabled for compression - averaged across all pools holding compressed data',
           'current',
-          '(sum(ceph_pool_compress_under_bytes > 0) / sum(ceph_pool_stored_raw and ceph_pool_compress_under_bytes > 0)) * 100',
+          |||
+            (
+              sum(ceph_pool_compress_under_bytes > 0) /
+                sum(ceph_pool_stored_raw and ceph_pool_compress_under_bytes > 0)
+            ) * 100
+          |||,
           null,
           'table',
           18,
@@ -249,7 +257,11 @@ local u = import 'utils.libsonnet';
         .addTargets(
           [
             u.addTargetSchema(
-              '(ceph_pool_compress_under_bytes / ceph_pool_compress_bytes_used > 0) and on(pool_id) (((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100 > 0.5)',
+              |||
+                (ceph_pool_compress_under_bytes / ceph_pool_compress_bytes_used > 0) and on(pool_id) (
+                  ((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100 > 0.5
+                )
+              |||,
               'A',
               'table',
               1,
@@ -321,7 +333,13 @@ local u = import 'utils.libsonnet';
           'This chart shows the sum of read and write IOPS from all clients by pool',
           'short',
           'IOPS',
-          'topk($topk,round((rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])),1) * on(pool_id) group_left(instance,name) ceph_pool_metadata) ',
+          |||
+            topk($topk,
+              round(
+                (rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])),
+                1
+              ) * on(pool_id) group_left(instance,name) ceph_pool_metadata)
+          |||,
           '{{name}} ',
           0,
           9,
@@ -330,7 +348,12 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(
           u.addTargetSchema(
-            'topk($topk,rate(ceph_pool_wr[30s]) + on(pool_id) group_left(instance,name) ceph_pool_metadata) ',
+            |||
+              topk($topk,
+                rate(ceph_pool_wr[30s]) +
+                  on(pool_id) group_left(instance,name) ceph_pool_metadata
+              )
+            |||,
             '{{name}} - write'
           )
         ),
@@ -339,7 +362,12 @@ local u = import 'utils.libsonnet';
           'The chart shows the sum of read and write bytes from all clients, by pool',
           'Bps',
           'Throughput',
-          'topk($topk,(rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])) * on(pool_id) group_left(instance,name) ceph_pool_metadata)',
+          |||
+            topk($topk,
+              (rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])) *
+                on(pool_id) group_left(instance, name) ceph_pool_metadata
+            )
+          |||,
           '{{name}}',
           12,
           9,
@@ -476,7 +504,10 @@ local u = import 'utils.libsonnet';
           true,
           true,
           '.7,.8',
-          '(ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}',
+          |||
+            (ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)) *
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
+          |||,
           'time_series',
           0,
           0,
@@ -493,7 +524,10 @@ local u = import 'utils.libsonnet';
           false,
           '',
           'current',
-          '(ceph_pool_max_avail / deriv(ceph_pool_stored[6h])) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"} > 0',
+          |||
+            (ceph_pool_max_avail / deriv(ceph_pool_stored[6h])) *
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"} > 0
+          |||,
           'time_series',
           7,
           0,
@@ -510,7 +544,10 @@ local u = import 'utils.libsonnet';
           '',
           'ops',
           'Objects out(-) / in(+) ',
-          'deriv(ceph_pool_objects[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}',
+          |||
+            deriv(ceph_pool_objects[1m]) *
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
+          |||,
           'Objects per second',
           12,
           0,
@@ -521,12 +558,29 @@ local u = import 'utils.libsonnet';
           {
             read_op_per_sec: '#3F6833',
             write_op_per_sec: '#E5AC0E',
-          }, '$pool_name Client IOPS', '', 'iops', 'Read (-) / Write (+)', 'irate(ceph_pool_rd[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}', 'reads', 0, 7, 12, 7
+          },
+          '$pool_name Client IOPS',
+          '',
+          'iops',
+          'Read (-) / Write (+)',
+          |||
+            irate(ceph_pool_rd[1m]) *
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
+          |||,
+          'reads',
+          0,
+          7,
+          12,
+          7
         )
         .addSeriesOverride({ alias: 'reads', transform: 'negative-Y' })
         .addTarget(
           u.addTargetSchema(
-            'irate(ceph_pool_wr[1m]) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}', 'writes'
+            |||
+              irate(ceph_pool_wr[1m]) *
+                on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
+            |||,
+            'writes'
           )
         ),
         PoolDetailGraphPanel(
@@ -538,7 +592,10 @@ local u = import 'utils.libsonnet';
           '',
           'Bps',
           'Read (-) / Write (+)',
-          'irate(ceph_pool_rd_bytes[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}',
+          |||
+            irate(ceph_pool_rd_bytes[1m]) +
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name"}
+          |||,
           'reads',
           12,
           7,
@@ -548,7 +605,10 @@ local u = import 'utils.libsonnet';
         .addSeriesOverride({ alias: 'reads', transform: 'negative-Y' })
         .addTarget(
           u.addTargetSchema(
-            'irate(ceph_pool_wr_bytes[1m]) + on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}',
+            |||
+              irate(ceph_pool_wr_bytes[1m]) +
+                on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
+            |||,
             'writes'
           )
         ),
@@ -561,7 +621,10 @@ local u = import 'utils.libsonnet';
           '',
           'short',
           'Objects',
-          'ceph_pool_objects * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}',
+          |||
+            ceph_pool_objects *
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
+          |||,
           'Number of Objects',
           0,
           14,
