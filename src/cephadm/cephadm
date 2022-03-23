@@ -2555,6 +2555,10 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
             r += ['--config.file=/etc/loki/loki.yml']
         if daemon_type == 'promtail':
             r += ['--config.file=/etc/promtail/promtail.yml']
+        if daemon_type == 'node-exporter':
+            r += ['--path.procfs=/host/proc',
+                  '--path.sysfs=/host/sys',
+                  '--path.rootfs=/rootfs']
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
         r += nfs_ganesha.get_daemon_args()
