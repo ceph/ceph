@@ -219,8 +219,7 @@ Instructions
    upstream developers.  To see what would be reported (without actually
    sending any information to anyone),::
 
-     ceph mgr module enable telemetry
-     ceph telemetry show
+     ceph telemetry preview-all
 
    If you are comfortable with the data that is reported, you can opt-in to
    automatically report the high-level cluster metadata with::
