@@ -1267,8 +1267,14 @@ CephFuse::Handle::Handle(Client *c, int fd) :
 #endif
   last_stag(0)
 {
+  /*
+   * stag 0 and 1 are always reserved for the
+   * inodes of CEPH_NOSNAP and CEPH_SNAPDIR
+   */
   snap_stag_map[CEPH_NOSNAP] = 0;
+  snap_stag_map[CEPH_SNAPDIR] = 1;
   stag_snap_map[0] = CEPH_NOSNAP;
+  stag_snap_map[1] = CEPH_SNAPDIR;
   memset(&args, 0, sizeof(args));
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   memset(&opts, 0, sizeof(opts));
@@ -1573,7 +1579,8 @@ uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
     int first = last_stag & STAG_MASK;
     int stag =  (++last_stag) & STAG_MASK;
     for (; stag != first; stag = (++last_stag) & STAG_MASK) {
-      if (stag == 0)
+      // two reserved stags: 0 for CEPH_NOSNAP and 1 for CEPH_SNAPDIR
+      if (stag == 0 || stag == 1)
 	continue;
 
       auto p = stag_snap_map.find(stag);
