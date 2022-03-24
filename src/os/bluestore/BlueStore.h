@@ -2134,6 +2134,7 @@ private:
   KeyValueDB *db = nullptr;
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
+  std::string manager_type;
   FreelistManager *fm = nullptr;
 
   Allocator *alloc = nullptr;   ///< allocator consumed by BlueStore
@@ -2580,8 +2581,9 @@ private:
   int _open_db(bool create,
 	       bool to_repair_db=false,
 	       bool read_only = false);
-  void _close_db();
+  void _close_db(bool destage_allocation_file);
   void _close_db_leave_bluefs();
+  bool should_use_null_manager();
   int _open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_restore = false);
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
@@ -2794,7 +2796,7 @@ public:
 
   bool is_rotational() override;
   bool is_journal_rotational() override;
-  bool is_db_rotational() ;
+  bool is_db_rotational();
 
   std::string get_default_device_class() override {
     std::string device_class;

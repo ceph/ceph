@@ -138,7 +138,8 @@ const string PREFIX_ZONED_CL_INFO = "G";  // (per-zone cleaner metadata)
 #endif
 
 const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
-
+const string NCB_REAL_FM = "ncb_real_fm";
+const string NCB_NULL_FM = "ncb_null_fm";
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
 // superblock (always the second block of the device).
@@ -5328,6 +5329,16 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
   return 0;
 }
 
+bool BlueStore::should_use_null_manager()
+{
+  bool smr_bdev = false;
+#ifdef HAVE_LIBZBD
+  smr_bdev = bdev->is_smr();
+#endif
+
+  return (cct->_conf->bluestore_allocation_from_file && !is_db_rotational() && !smr_bdev);
+}
+
 int BlueStore::_open_path()
 {
   // sanity check(s)
@@ -5557,26 +5568,25 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_resto
 {
   int r;
 
-  dout(5) << __func__ << "::NCB::freelist_type=" << freelist_type << dendl;
+  dout(5) << __func__ << "::NCB::freelist_type=" << freelist_type << ", manager_type=" << manager_type << dendl;
   ceph_assert(fm == NULL);
-  // fm_restore means we are transitioning from null-fm to bitmap-fm
-  ceph_assert(!fm_restore || (freelist_type != "null"));
+  // fm_restore means we are transitioning from null-fm to real-fm
+  ceph_assert(!fm_restore || (manager_type == NCB_REAL_FM));
+
   // fm restore must pass in a valid transaction
   ceph_assert(!fm_restore || (t != nullptr));
 
-  // When allocation-info is stored in a single file we set freelist_type to "null"
-  bool set_null_freemap = false;
-  if (freelist_type == "null") {
-    // use BitmapFreelistManager with the null option to stop allocations from going to RocksDB
-    // we will store the allocation info in a single file during umount()
-    freelist_type = "bitmap";
-    set_null_freemap = true;
-  }
   fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
   ceph_assert(fm);
-  if (set_null_freemap) {
+  if (manager_type == NCB_NULL_FM) {
+    // use FreelistManager with the null option to stop allocations from going to RocksDB
+    // we will store the allocation info in a single file during umount()
     fm->set_null_manager();
+    dout(10) << __func__ << "::NCB::setting NULL-FM" << dendl;
+  } else {
+    ceph_assert(manager_type == NCB_REAL_FM);
   }
+
   if (t) {
     // create mode. initialize freespace
     dout(20) << __func__ << " initializing freespace" << dendl;
@@ -6369,7 +6379,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   // load allocated extents from bluefs into allocator.
   // And now it's time to do that
   //
-  _close_db();
+  _close_db(false);
   r = _open_db(false, to_repair, read_only);
   if (r < 0) {
     goto out_alloc;
@@ -6395,12 +6405,8 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  if (!is_db_rotational() && !read_only && !to_repair && cct->_conf->bluestore_allocation_from_file
-#ifdef HAVE_LIBZBD
-      && !bdev->is_smr()
-#endif
-    ) {
-    dout(5) << __func__ << "::NCB::Commit to Null-Manager" << dendl;
+  if (should_use_null_manager() && !read_only && !to_repair) {
+    dout(1) << __func__ << "::NCB::Commit to Null-Manager" << dendl;
     commit_to_null_manager();
     need_to_destage_allocation_file = true;
     dout(10) << __func__ << "::NCB::need_to_destage_allocation_file was set" << dendl;
@@ -6413,7 +6419,7 @@ out_alloc:
 out_fm:
   _close_fm();
  out_db:
-  _close_db();
+  _close_db(false);
  out_bdev:
   _close_bdev();
  out_fsid:
@@ -6426,7 +6432,7 @@ out_fm:
 void BlueStore::_close_db_and_around()
 {
   if (db) {
-    _close_db();
+    _close_db(need_to_destage_allocation_file);
   }
   if (bluefs) {
     _close_bluefs();
@@ -6660,7 +6666,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
-    _close_db();
+    _close_db(false);
     return -EIO;
   }
   dout(1) << __func__ << " opened " << kv_backend
@@ -6675,13 +6681,12 @@ void BlueStore::_close_db_leave_bluefs()
   db = nullptr;
 }
 
-void BlueStore::_close_db()
+void BlueStore::_close_db(bool destage_allocation_file)
 {
-  dout(10) << __func__ << ":read_only=" << db_was_opened_read_only << " fm=" << fm << " destage_alloc_file=" << need_to_destage_allocation_file << dendl;
+  dout(10) << __func__ << ":read_only=" << db_was_opened_read_only << " fm=" << fm << " destage_alloc_file=" << destage_allocation_file << dendl;
   _close_db_leave_bluefs();
 
-  if (need_to_destage_allocation_file) {
-    ceph_assert(fm && fm->is_null_manager());
+  if (destage_allocation_file) {
     int ret = store_allocator(alloc);
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
@@ -7103,10 +7108,25 @@ int BlueStore::mkfs()
     goto out_close_alloc;
 
   {
+    if (should_use_null_manager()) {
+      manager_type = NCB_NULL_FM;
+      need_to_destage_allocation_file = true;
+      dout(10) << __func__ << "::NCB::need_to_destage_allocation_file was set" << dendl;
+    } else {
+      manager_type = NCB_REAL_FM;
+    }
+    dout(10) << " manager_type " << manager_type << dendl;
+
     KeyValueDB::Transaction t = db->get_transaction();
     r = _open_fm(t, true);
     if (r < 0)
       goto out_close_db;
+    {
+      bufferlist bl;
+      bl.append(manager_type);
+      t->set(PREFIX_SUPER, "manager_type", bl);
+    }
+
     {
       bufferlist bl;
       encode((uint64_t)0, bl);
@@ -7168,7 +7188,7 @@ int BlueStore::mkfs()
  out_close_fm:
   _close_fm();
  out_close_db:
-  _close_db();
+  _close_db(need_to_destage_allocation_file);
  out_close_alloc:
   _close_alloc();
  out_close_bdev:
@@ -12213,6 +12233,19 @@ int BlueStore::_open_super_meta()
     }
     dout(1) << __func__ << " old blobid_max " << blobid_max << dendl;
     blobid_last = blobid_max.load();
+  }
+
+  // manager_type
+  {
+    bufferlist bl;
+    db->get(PREFIX_SUPER, "manager_type", &bl);
+    if (bl.length()) {
+      manager_type = std::string(bl.c_str(), bl.length());
+    } else {
+      ceph_abort_msg("Not Support manager_type");
+    }
+    dout(5) << __func__ << "::NCB::manager_type=" << manager_type << dendl;
+    ceph_assert(manager_type == NCB_REAL_FM || manager_type == NCB_NULL_FM);
   }
 
   // freelist
@@ -19143,10 +19176,13 @@ Allocator* BlueStore::clone_allocator_without_bluefs(Allocator *src_allocator)
 //---------------------------------------------------------
 static void clear_allocation_objects_from_rocksdb(KeyValueDB *db, CephContext *cct, const std::string &path)
 {
-  dout(5) << "t->rmkeys_by_prefix(PREFIX_ALLOC_BITMAP)" << dendl;
+  dout(1) << __func__ << "::NCB::t->rmkeys_by_prefix(PREFIX_ALLOC_BITMAP)" << dendl;
+  utime_t start_time = ceph_clock_now();
   KeyValueDB::Transaction t = db->get_transaction();
   t->rmkeys_by_prefix(PREFIX_ALLOC_BITMAP);
   db->submit_transaction_sync(t);
+  utime_t duration = ceph_clock_now() - start_time;
+  dout(1) << __func__ << "::NCB::done - duration = " << duration << " seconds" << dendl;
 }
 
 //---------------------------------------------------------
@@ -19206,7 +19242,7 @@ int BlueStore::reset_fm_for_restore()
   fm->shutdown();
   delete fm;
   fm = nullptr;
-  freelist_type = "bitmap";
+  manager_type = NCB_REAL_FM;
   KeyValueDB::Transaction t = db->get_transaction();
   // call _open_fm() with fm_restore set to TRUE
   // this will mark the full device space as allocated (and not just the reserved space)
@@ -19291,7 +19327,7 @@ int BlueStore::push_allocation_to_rocksdb()
   // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
   clear_allocation_objects_from_rocksdb(db, cct, path);
 
-  // then open fm in new mode with the full devie marked as alloctaed
+  // then open fm in new mode with the full device marked as alloctaed
   if (reset_fm_for_restore() != 0) {
     return db_cleanup(-1);
   }
@@ -19325,20 +19361,20 @@ int BlueStore::push_allocation_to_rocksdb()
 #endif // CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
 
 //-------------------------------------------------------------------------------------
-static int commit_freelist_type(KeyValueDB *db, const std::string& freelist_type, CephContext *cct, const std::string &path)
+static int commit_manager_type(KeyValueDB *db, const std::string& manager_type, CephContext *cct, const std::string &path)
 {
-  // When freelist_type to "bitmap" we will store allocation in RocksDB
-  // When allocation-info is stored in a single file we set freelist_type to "null"
+  // When manager_type is "real-fm" we will store allocation in RocksDB
+  // When allocation-info is stored in a single file we set manager_type to "null-fm"
   // This will direct the startup code to read allocation from file and not RocksDB
   KeyValueDB::Transaction t = db->get_transaction();
   if (t == nullptr) {
     derr << "db->get_transaction() failed!!!" << dendl;
     return -1;
   }
-
+  ceph_assert(manager_type == NCB_REAL_FM || manager_type == NCB_NULL_FM);
   bufferlist bl;
-  bl.append(freelist_type);
-  t->set(PREFIX_SUPER, "freelist_type", bl);
+  bl.append(manager_type);
+  t->set(PREFIX_SUPER, "manager_type", bl);
 
   int ret = db->submit_transaction_sync(t);
   if (ret != 0) {
@@ -19350,18 +19386,33 @@ static int commit_freelist_type(KeyValueDB *db, const std::string& freelist_type
 //-------------------------------------------------------------------------------------
 int BlueStore::commit_to_null_manager()
 {
-  dout(5) << "Set FreelistManager to NULL FM..." << dendl;
+  dout(10) << "::NCB::Set FreelistManager to NULL FM..." << dendl;
   fm->set_null_manager();
-  freelist_type = "null";
-#if 1
-  return commit_freelist_type(db, freelist_type, cct, path);
-#else
+  manager_type = NCB_NULL_FM;
+
+  // check the manager type stored on RocksDB and only update if a change is needed
+  {
+    bufferlist bl;
+    db->get(PREFIX_SUPER, "manager_type", &bl);
+    if (bl.length()) {
+      manager_type = std::string(bl.c_str(), bl.length());
+    } else {
+      ceph_abort_msg("Not Support manager_type");
+    }
+    dout(10) << __func__ << "::NCB::manager_type=" << manager_type << dendl;
+    if (manager_type == NCB_NULL_FM) {
+      dout(5) << __func__ << "::NCB::Manager is already set to NULL_FM, nothing to do" << dendl;
+      return 0;
+    }
+  }
+
   // should check how long this step take on a big configuration as deletes are expensive
-  if (commit_freelist_type(db, freelist_type, cct, path) == 0) {
+  if (commit_manager_type(db, manager_type, cct, path) == 0) {
     // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
     clear_allocation_objects_from_rocksdb(db, cct, path);
+    return 0;
   }
-#endif
+  return -1;
 }
 
 
@@ -19370,8 +19421,8 @@ int BlueStore::commit_to_real_manager()
 {
   dout(5) << "Set FreelistManager to Real FM..." << dendl;
   ceph_assert(!fm->is_null_manager());
-  freelist_type = "bitmap";
-  int ret = commit_freelist_type(db, freelist_type, cct, path);
+  manager_type = NCB_REAL_FM;
+  int ret = commit_manager_type(db, manager_type, cct, path);
   if (ret == 0) {
     //remove the allocation_file
     invalidate_allocation_file_on_bluefs();
