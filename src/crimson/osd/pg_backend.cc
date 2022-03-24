@@ -1158,6 +1158,7 @@ PGBackend::omap_get_keys(
 	bool truncated = false;
 	encode(num, osd_op.outdata);
 	encode(truncated, osd_op.outdata);
+	osd_op.rval = 0;
 	return seastar::now();
       }),
       ll_read_errorator::pass_further{}
@@ -1292,6 +1293,7 @@ PGBackend::omap_get_vals(
       crimson::ct_error::enodata::handle([&osd_op] {
         encode(uint32_t{0} /* num */, osd_op.outdata);
         encode(bool{false} /* truncated */, osd_op.outdata);
+        osd_op.rval = 0;
         return ll_read_errorator::now();
       }),
       ll_read_errorator::pass_further{}
@@ -1330,6 +1332,7 @@ PGBackend::omap_get_vals_by_keys(
       crimson::ct_error::enodata::handle([&osd_op] {
         uint32_t num = 0;
         encode(num, osd_op.outdata);
+        osd_op.rval = 0;
         return ll_read_errorator::now();
       }),
       ll_read_errorator::pass_further{}
