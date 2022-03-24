@@ -932,7 +932,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       ss << "failed to find " << entity_name << " in keyring";
       r = -ENOENT;
     } else {
-      keyring.add(entity, entity_auth.key, entity_auth.pending_key);
+      keyring.add(entity, entity_auth);
       if (f)
 	keyring.encode_formatted("auth", f.get(), rdata);
       else
