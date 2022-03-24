@@ -1153,6 +1153,10 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
 	std::move(first), std::move(last));
     }
     break;
+    case Transaction::OP_OMAP_CLEAR:
+    {
+      return _omap_clear(ctx, get_onode(op->oid));
+    }
     case Transaction::OP_COLL_HINT:
     {
       ceph::bufferlist hint;
@@ -1275,6 +1279,37 @@ SeaStore::tm_ret SeaStore::_omap_set_header(
   DEBUGT("{} {} bytes", *ctx.transaction, *onode, header.length());
   assert(0 == "not supported yet");
   return tm_iertr::now();
+}
+
+SeaStore::tm_ret SeaStore::_omap_clear(
+  internal_context_t &ctx,
+  OnodeRef &onode)
+{
+  LOG_PREFIX(SeaStore::_omap_clear);
+  DEBUGT("{} {} keys", *ctx.transaction, *onode);
+  if (auto omap_root = onode->get_layout().omap_root.get(
+    onode->get_metadata_hint(segment_manager->get_block_size()));
+    omap_root.is_null()) {
+    return seastar::now();
+  } else {
+    return seastar::do_with(
+      BtreeOMapManager(*transaction_manager),
+      onode->get_layout().omap_root.get(
+        onode->get_metadata_hint(segment_manager->get_block_size())),
+      [&ctx, &onode](
+      auto &omap_manager,
+      auto &omap_root) {
+      return omap_manager.omap_clear(
+        omap_root,
+        *ctx.transaction)
+      .si_then([&] {
+        if (omap_root.must_update()) {
+          onode->get_mutable_layout(*ctx.transaction
+          ).omap_root.update(omap_root);
+        }
+      });
+    });
+  }
 }
 
 SeaStore::tm_ret SeaStore::_omap_rmkeys(
