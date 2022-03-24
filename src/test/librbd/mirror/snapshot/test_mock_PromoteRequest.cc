@@ -177,7 +177,7 @@ public:
                                           bool result) {
     EXPECT_CALL(mock_utils,
                 can_create_primary_snapshot(_, false, force, _, _))
-      .WillOnce(DoAll(
+      .WillRepeatedly(DoAll(
                   WithArgs<3,4 >(Invoke(
                     [requires_orphan, rollback_snap_id]
                     (bool* orphan, uint64_t *snap_id) {
@@ -309,6 +309,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessForce) {
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
+  expect_can_create_primary_snapshot(mock_utils, true, true, CEPH_NOSNAP, true);
 
   SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
@@ -347,10 +348,50 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
+  expect_can_create_primary_snapshot(mock_utils, true, false, 123, true);
 
   SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
   expect_rollback(mock_image_ctx, 123, &snap_info, 0);
+  MockCreatePrimaryRequest mock_create_primary_request;
+  expect_create_promote_snapshot(mock_image_ctx, mock_create_primary_request,
+                                 0);
+  expect_release_lock(mock_image_ctx, 0);
+
+  C_SaferCond ctx;
+  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessForceRollbackLatestSnapshot) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
+  InSequence seq;
+
+  MockUtils mock_utils;
+  expect_can_create_primary_snapshot(mock_utils, true, true, 123, true);
+  MockCreateNonPrimaryRequest mock_create_non_primary_request;
+  expect_create_orphan_snapshot(mock_image_ctx, mock_create_non_primary_request,
+                                0);
+  MockListWatchersRequest mock_list_watchers_request;
+  expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
+  expect_acquire_lock(mock_image_ctx, 0);
+  expect_can_create_primary_snapshot(mock_utils, true, true, 456, true);
+  SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
+                        {}, 0, 0, {}};
+  expect_rollback(mock_image_ctx, 456, &snap_info, 0);
   MockCreatePrimaryRequest mock_create_primary_request;
   expect_create_promote_snapshot(mock_image_ctx, mock_create_primary_request,
                                  0);
