@@ -530,7 +530,9 @@ void BlueFS::dump_block_extents(ostream& out)
   }
 }
 
-int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
+void BlueFS::foreach_block_extents(
+  unsigned id,
+  std::function<void(uint64_t, uint32_t)> fn)
 {
   std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " bdev " << id << dendl;
@@ -538,11 +540,10 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
   for (auto& p : nodes.file_map) {
     for (auto& q : p.second->fnode.extents) {
       if (q.bdev == id) {
-        extents->insert(q.offset, q.length);
+        fn(q.offset, q.length);
       }
     }
   }
-  return 0;
 }
 
 int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)

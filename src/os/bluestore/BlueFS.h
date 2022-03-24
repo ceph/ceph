@@ -560,7 +560,9 @@ public:
   void dump_block_extents(std::ostream& out);
 
   /// get current extents that we own for given block device
-  int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
+  void foreach_block_extents(
+    unsigned id,
+    std::function<void(uint64_t, uint32_t)> cb);
 
   int open_for_write(
     std::string_view dir,
