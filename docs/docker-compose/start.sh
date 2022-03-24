@@ -8,21 +8,12 @@ git clone \
   -b ${TEUTHOLOGY_BRANCH:-$(git branch --show-current)} \
   https://github.com/ceph/teuthology.git
 
-# Check for .teuthology.yaml file and copy it to teuthology
-if [ -f ".teuthology.yaml" ]; 
-then
-    cp .teuthology.yaml teuthology/.
-else
-    echo ".teuthology.yaml doesn't exists"
-    exit 1
-fi
+cp .teuthology.yaml teuthology/
+cp Dockerfile teuthology/
+cp teuthology.sh teuthology/
+cp custom_conf.yaml teuthology/
 
-# Copy Docker file into teuthology
-cp ./Dockerfile teuthology/.
 
-cp ./teuthology.sh teuthology/
-
-cp ./custom_conf.yaml teuthology/
 
 # Generate an SSH keypair to use
 SSH_PRIVKEY_PATH=$(mktemp -u /tmp/teuthology-ssh-key-XXXXXX)
