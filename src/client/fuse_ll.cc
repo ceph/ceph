@@ -327,7 +327,7 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   struct fuse_entry_param fe;
   Inode *i2, *i1 = cfuse->iget(parent); // see below
   int r;
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   get_fuse_groups(perms, req);
 
   if (!i1)
@@ -376,7 +376,7 @@ static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct stat stbuf;
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -403,7 +403,7 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -424,6 +424,7 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
   if (to_set & FUSE_SET_ATTR_ATIME_NOW) mask |= CEPH_SETATTR_ATIME_NOW;
 #endif
 
+  cfuse->client->convert_attr_to_remote(attr);
   int r = cfuse->client->ll_setattr(in, attr, mask, perms);
   if (r == 0)
     fuse_reply_attr(req, attr, 0);
@@ -445,7 +446,7 @@ static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -465,7 +466,7 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   char buf[size];
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -495,7 +496,7 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   char buf[size];
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -520,7 +521,7 @@ static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -540,7 +541,7 @@ static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   void *dirp;
   Inode *in = cfuse->iget(ino);
   if (!in) {
@@ -567,7 +568,7 @@ static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   char buf[PATH_MAX + 1];  // leave room for a null terminator
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -592,7 +593,7 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *i2, *i1 = cfuse->iget(parent);
   if (!i1) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -627,7 +628,7 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
 
   memset(&fe, 0, sizeof(fe));
-  UserPerm perm(ctx->uid, ctx->gid);
+  UserPerm perm = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   get_fuse_groups(perm, req);
 #ifdef HAVE_SYS_SYNCFS
   auto fuse_multithreaded = cfuse->client->cct->_conf.get_val<bool>(
@@ -681,7 +682,7 @@ static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perm(ctx->uid, ctx->gid);
+  UserPerm perm = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(parent);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -700,7 +701,7 @@ static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(parent);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -721,7 +722,7 @@ static void fuse_ll_symlink(fuse_req_t req, const char *existing,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *i2, *i1 = cfuse->iget(parent);
   if (!i1) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -755,7 +756,7 @@ static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perm(ctx->uid, ctx->gid);
+  UserPerm perm = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(parent);
   Inode *nin = cfuse->iget(newparent);
   if (!in || !nin) {
@@ -786,7 +787,7 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   }
 
   memset(&fe, 0, sizeof(fe));
-  UserPerm perm(ctx->uid, ctx->gid);
+  UserPerm perm = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   get_fuse_groups(perm, req);
 
   /*
@@ -824,7 +825,7 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Fh *fh = NULL;
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -1061,7 +1062,7 @@ static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -1082,7 +1083,7 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   Fh *fh = NULL;
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *i1 = cfuse->iget(parent), *i2;
   if (!i1) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
@@ -1122,7 +1123,7 @@ static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
   struct statvfs stbuf;
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  UserPerm perms(ctx->uid, ctx->gid);
+  UserPerm perms = cfuse->client->convert_perms_to_remote(UserPerm(ctx->uid, ctx->gid));
   Inode *in = cfuse->iget(ino);
   if (!in) {
     fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));

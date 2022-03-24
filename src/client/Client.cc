@@ -15,6 +15,7 @@
 
 // unix-ey fs stuff
 #include <unistd.h>
+#include <exception>
 #include <sys/types.h>
 #include <time.h>
 #include <utime.h>
@@ -166,6 +167,64 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
   Client *client = static_cast<Client*>(p);
   client->flush_set_callback(oset);
+}
+
+void Client::set_id_map(const std::string &map_file, std::unordered_map<uid_t, uid_t> &id_map_local_to_remote, std::unordered_map<uid_t, uid_t> &id_map_remote_to_local) {
+  std::ifstream file(map_file);
+  std::string buff{};
+  while(std::getline(file, buff)) {
+    // skip comments and empty lines
+    if (buff.empty() || buff[0] == '#') {
+      continue;
+    }
+    auto local = buff.substr(0, buff.find(':'));
+    auto remote = buff.substr(buff.find(':')+1);
+    if(local.empty() || remote.empty()) {
+      continue;
+    }
+    uid_t local_id = -1;
+    uid_t remote_id = -1;
+    try {
+      local_id = boost::lexical_cast<uid_t>(local);
+    } catch(const std::exception& e) {
+      ldout(cct, 20) << "local uid '" << local << "' failed to parse to a number" << dendl;
+      continue;
+    }
+    try {
+      remote_id = boost::lexical_cast<uid_t>(remote);
+    } catch(const std::exception& e) {
+      ldout(cct, 20) << "local gid '" << local << "' failed to parse to a number" << dendl;
+      continue;
+    }
+
+    id_map_local_to_remote[local_id] = remote_id;
+    id_map_remote_to_local[remote_id] = local_id;
+  }
+}
+
+bool Client::is_local_uid(uid_t uid) {
+  return uid_map.find(uid) != uid_map.end();
+}
+bool Client::is_remote_uid(uid_t uid) {
+  return uid_map_remote.find(uid) != uid_map_remote.end();
+}
+bool Client::is_local_gid(gid_t gid) {
+  return gid_map.find(gid) != gid_map.end();
+}
+bool Client::is_remote_gid(gid_t gid) {
+  return gid_map_remote.find(gid) != gid_map_remote.end();
+}
+uid_t Client::get_local_uid(uid_t uid) {
+  return uid_map.at(uid);
+}
+uid_t Client::get_remote_uid(uid_t uid) {
+  return uid_map_remote.at(uid);
+}
+gid_t Client::get_local_gid(gid_t gid) {
+  return gid_map.at(gid);
+}
+gid_t Client::get_remote_gid(gid_t gid) {
+  return gid_map_remote.at(gid);
 }
 
 bool Client::is_reserved_vino(vinodeno_t &vino) {
@@ -6939,6 +6998,46 @@ void Client::renew_caps(MetaSession *session)
 // ===============================================================
 // high level (POSIXy) interface
 
+UserPerm Client::convert_perms_to_local(const UserPerm &perms) {
+  UserPerm perms_real = perms;
+  if(is_remote_uid(perms_real.uid())) {
+    perms_real = UserPerm(get_remote_uid(perms_real.uid()), perms_real.gid());
+  }
+  if(is_remote_gid(perms_real.gid())) {
+    perms_real = UserPerm(perms_real.uid(), get_remote_gid(perms_real.gid()));
+  }
+  return perms_real;
+}
+
+UserPerm Client::convert_perms_to_remote(const UserPerm &perms) {
+  UserPerm perms_real = perms;
+  if(is_local_uid(perms_real.uid())) {
+    perms_real = UserPerm(get_local_uid(perms_real.uid()), perms_real.gid());
+  }
+  if(is_local_gid(perms_real.gid())) {
+    perms_real = UserPerm(perms_real.uid(), get_local_gid(perms_real.gid()));
+  }
+  return perms_real;
+}
+
+void Client::convert_attr_to_remote(struct stat *attr) {
+  if(is_local_uid(attr->st_uid)) {
+    attr->st_uid = get_local_uid(attr->st_uid);
+  }
+  if(is_local_gid(attr->st_gid)) {
+    attr->st_gid = get_local_gid(attr->st_gid);
+  }
+}
+
+void Client::convert_attr_to_local(struct stat *attr) {
+  if(is_remote_uid(attr->st_uid)) {
+    attr->st_uid = get_remote_uid(attr->st_uid);
+  }
+  if(is_remote_gid(attr->st_gid)) {
+    attr->st_gid = get_remote_gid(attr->st_gid);
+  }
+}
+
 int Client::_do_lookup(Inode *dir, const string& name, int mask,
 		       InodeRef *target, const UserPerm& perms)
 {
@@ -8255,6 +8354,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   }
   st->st_uid = in->uid;
   st->st_gid = in->gid;
+  convert_attr_to_local(st);
   if (in->ctime > in->mtime) {
     stat_set_ctime_sec(st, in->ctime.sec());
     stat_set_ctime_nsec(st, in->ctime.nsec());
@@ -8321,6 +8421,12 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
   if (mask & CEPH_CAP_AUTH_SHARED) {
     stx->stx_uid = in->uid;
     stx->stx_gid = in->gid;
+    if(is_remote_uid(stx->stx_uid)) {
+      stx->stx_uid = get_remote_uid(stx->stx_uid);
+    }
+    if(is_remote_gid(stx->stx_gid)) {
+      stx->stx_gid = get_remote_gid(stx->stx_gid);
+    }
     stx->stx_mode = in->mode;
     in->btime.to_timespec(&stx->stx_btime);
     stx->stx_mask |= (CEPH_STATX_MODE|CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_BTIME);
@@ -8475,6 +8581,7 @@ int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
   struct stat attr;
   attr.st_uid = new_uid;
   attr.st_gid = new_gid;
+  convert_attr_to_remote(&attr);
   int mask = 0;
   if (new_uid != static_cast<uid_t>(-1)) mask |= CEPH_SETATTR_UID;
   if (new_gid != static_cast<gid_t>(-1)) mask |= CEPH_SETATTR_GID;
@@ -8518,6 +8625,7 @@ int Client::chownat(int dirfd, const char *relpath, uid_t new_uid, gid_t new_gid
   struct stat attr;
   attr.st_uid = new_uid;
   attr.st_gid = new_gid;
+  convert_attr_to_remote(&attr);
   return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID, perms);
 }
 

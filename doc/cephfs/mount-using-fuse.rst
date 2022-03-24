@@ -55,6 +55,16 @@ If you have more than one FS on your Ceph cluster, use the option
 
 You may also add a ``client_fs`` setting to your ``ceph.conf``
 
+You may specify a mapping between the local user's UID (or GID) and the remote
+server's UID (or GID) by using::
+
+    ceph-fuse --id foo --uid-mapping uid_map_file_name --gid-mapping gid_map_file_name
+
+Both files referred to by ``uid_map_file_name`` and ``gid_map_file_name`` have the following structure::
+
+    local_id_1:remote_id_1
+    local_id_2:remote_id_2
+
 Unmounting CephFS
 =================
 

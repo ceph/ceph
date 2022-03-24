@@ -48,6 +48,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <unordered_map>
 
 using std::set;
 using std::map;
@@ -287,6 +288,13 @@ public:
   Client(const Client&&) = delete;
   virtual ~Client() override;
 
+  void set_uid_map(const std::string &map_file) {
+    set_id_map(map_file, uid_map, uid_map_remote);
+  }
+  void set_gid_map(const std::string &map_file) {
+    set_id_map(map_file, gid_map, gid_map_remote);
+  }
+
   static UserPerm pick_my_perms(CephContext *c) {
     uid_t uid = c->_conf->client_mount_uid >= 0 ? c->_conf->client_mount_uid : -1;
     gid_t gid = c->_conf->client_mount_gid >= 0 ? c->_conf->client_mount_gid : -1;
@@ -297,6 +305,10 @@ public:
     gid_t gid = group_id >= 0 ? group_id : -1;
     return UserPerm(uid, gid);
   }
+  UserPerm convert_perms_to_local(const UserPerm &perms);
+  UserPerm convert_perms_to_remote(const UserPerm &perms);
+  void convert_attr_to_remote(struct stat *attr);
+  void convert_attr_to_local(struct stat *attr);
 
   int mount(const std::string &mount_root, const UserPerm& perms,
 	    bool require_mds=false, const std::string &fs_name="");
@@ -1267,6 +1279,10 @@ private:
   };
 
   std::unique_ptr<CephContext, std::function<void(CephContext*)>> cct_deleter;
+  std::unordered_map<uid_t, uid_t> uid_map{};
+  std::unordered_map<uid_t, uid_t> uid_map_remote{};
+  std::unordered_map<uid_t, uid_t> gid_map{};
+  std::unordered_map<uid_t, uid_t> gid_map_remote{};
 
   /* Flags for VXattr */
   static const unsigned VXATTR_RSTAT = 0x1;
@@ -1276,6 +1292,16 @@ private:
   static const VXattr _file_vxattrs[];
   static const VXattr _common_vxattrs[];
 
+
+  void set_id_map(const std::string &map_file, std::unordered_map<uid_t, uid_t> &id_map, std::unordered_map<uid_t, uid_t> &id_map_remote);
+  bool is_local_uid(uid_t uid);
+  bool is_remote_uid(uid_t uid);
+  bool is_local_gid(gid_t gid);
+  bool is_remote_gid(gid_t gid);
+  uid_t get_local_uid(uid_t uid);
+  uid_t get_remote_uid(uid_t uid);
+  gid_t get_local_gid(gid_t gid);
+  gid_t get_remote_gid(gid_t gid);
 
   bool is_reserved_vino(vinodeno_t &vino);
 

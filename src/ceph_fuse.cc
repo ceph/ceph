@@ -87,6 +87,10 @@ void usage()
 "\n";
   fuse_usage();
   generic_client_usage();
+  cout << "  --uid-mapping FILE  set mapping between local UIDs and remote UIDs"
+          " (file has multiple lines in the form `local_uid:remote_uid`)" << std::endl
+       << "  --gid-mapping FILE  set mapping between local GIDs and remote GIDs"
+          " (file has multiple lines in the form `local_gid:remote_gid`)" << std::endl;
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
@@ -111,7 +115,13 @@ int main(int argc, const char **argv, const char *envp[]) {
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
+  std::string uid_map_file = "";
+  std::string gid_map_file = "";
   for (auto i = args.begin(); i != args.end();) {
+    // we just want to check if uid-mapping was provided, no need to have it
+    // as an if branch
+    ceph_argparse_witharg(args, i, &uid_map_file, "--uid-mapping", (char*)nullptr);
+    ceph_argparse_witharg(args, i, &gid_map_file, "--gid-mapping", (char*)nullptr);
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)nullptr)) {
@@ -138,6 +148,17 @@ int main(int argc, const char **argv, const char *envp[]) {
     } else {
       ++i;
     }
+  }
+
+  if(geteuid() != 0) {
+	  if(!uid_map_file.empty()) {
+		  uid_map_file.clear();
+		  cerr << "Only root can set UID mapping" << std::endl;
+	  }
+	  if(!gid_map_file.empty()) {
+		  gid_map_file.clear();
+		  cerr << "Only root can set GID mapping" << std::endl;
+	  }
   }
 
   // args for fuse
@@ -270,6 +291,12 @@ int main(int argc, const char **argv, const char *envp[]) {
     client = new StandaloneClient(messenger, mc, icp);
     if (filer_flags) {
       client->set_filer_flags(filer_flags);
+    }
+    if (!uid_map_file.empty()) {
+      client->set_uid_map(uid_map_file);
+    }
+    if (!gid_map_file.empty()) {
+      client->set_gid_map(gid_map_file);
     }
 
     cfuse = new CephFuse(client, forker.get_signal_fd());
