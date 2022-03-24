@@ -401,10 +401,10 @@ struct transaction_manager_test_t :
   }
 
   void replay() {
-    logger().debug("{}: begin", __func__);
+    logger().info("{}: begin", __func__);
     EXPECT_TRUE(check_usage());
     restart();
-    logger().debug("{}: end", __func__);
+    logger().info("{}: end", __func__);
   }
 
   void check() {
@@ -932,9 +932,9 @@ TEST_F(transaction_manager_test_t, random_writes)
 	submit_transaction(std::move(t));
       }
       replay();
-      logger().debug("random_writes: checking");
+      logger().info("random_writes: {} checking", i);
       check();
-      logger().debug("random_writes: done replaying/checking");
+      logger().info("random_writes: {} done replaying/checking", i);
     }
   });
 }
@@ -990,10 +990,10 @@ TEST_F(transaction_manager_test_t, random_writes_concurrent)
 	});
       }).get0();
     replay();
-    logger().debug("random_writes: checking");
+    logger().info("random_writes_concurrent: checking");
     check();
-    logger().debug(
-      "random_writes: {} suceeded, {} failed",
+    logger().info(
+      "random_writes_concurrent: {} suceeded, {} failed",
       writes,
       failures
     );
