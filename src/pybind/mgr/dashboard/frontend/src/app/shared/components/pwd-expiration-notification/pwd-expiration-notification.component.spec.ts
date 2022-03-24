@@ -8,7 +8,7 @@ import { of as observableOf } from 'rxjs';
 
 import { AlertModule } from 'ngx-bootstrap/alert';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 
 import { SettingsService } from '../../api/settings.service';
 import { AlertPanelComponent } from '../../components/alert-panel/alert-panel.component';
@@ -38,7 +38,7 @@ describe('PwdExpirationNotificationComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes)
     ],
-    providers: [SettingsService, AuthStorageService]
+    providers: [SettingsService, AuthStorageService, i18nProviders]
   });
 
   describe('password expiration date has been set', () => {
