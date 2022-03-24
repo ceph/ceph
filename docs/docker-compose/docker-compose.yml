@@ -59,7 +59,10 @@ services:
         ports:
             - "11300:11300"
   teuthology:
-    build: ./teuthology
+    build:
+      context: ./teuthology
+      args:
+        SSH_PRIVKEY_FILE: $SSH_PRIVKEY_FILE
     depends_on:
         paddles:
             condition: service_healthy
@@ -68,6 +71,7 @@ services:
         - beanstalk
     environment:
       SSH_PRIVKEY:
+      SSH_PRIVKEY_FILE:
       MACHINE_TYPE:
       TESTNODES:
   testnode:

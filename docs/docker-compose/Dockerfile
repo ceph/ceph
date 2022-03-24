@@ -1,9 +1,10 @@
 FROM ubuntu:latest
+ARG SSH_PRIVKEY_FILE=id_ed25519
 ENV DEBIAN_FRONTEND=noninteractive
 RUN \
     mkdir $HOME/.ssh && \
-    touch $HOME/.ssh/id_ed25519 && \
-    chmod 600 $HOME/.ssh/id_ed25519 && \
+    touch $HOME/.ssh/${SSH_PRIVKEY_FILE} && \
+    chmod 600 $HOME/.ssh/${SSH_PRIVKEY_FILE} && \
     echo "StrictHostKeyChecking=no" > $HOME/.ssh/config && \
     echo "UserKnownHostsFile=/dev/null" >> $HOME/.ssh/config
 RUN apt-get update && \

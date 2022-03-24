@@ -15,11 +15,17 @@ cp custom_conf.yaml teuthology/
 
 
 
-# Generate an SSH keypair to use
-SSH_PRIVKEY_PATH=$(mktemp -u /tmp/teuthology-ssh-key-XXXXXX)
-ssh-keygen -t ed25519 -N '' -f $SSH_PRIVKEY_PATH
-export SSH_PRIVKEY=$(cat $SSH_PRIVKEY_PATH)
-export SSH_PUBKEY=$(cat $SSH_PRIVKEY_PATH.pub)
+# Generate an SSH keypair to use if necessary
+if [ -z "$SSH_PRIVKEY_PATH" ]; then
+    SSH_PRIVKEY_PATH=$(mktemp -u /tmp/teuthology-ssh-key-XXXXXX)
+    ssh-keygen -t ed25519 -N '' -f $SSH_PRIVKEY_PATH
+    export SSH_PRIVKEY=$(cat $SSH_PRIVKEY_PATH)
+    export SSH_PUBKEY=$(cat $SSH_PRIVKEY_PATH.pub)
+    export SSH_PRIVKEY_FILE=id_ed25519
+else
+    export SSH_PRIVKEY=$(cat $SSH_PRIVKEY_PATH)
+    export SSH_PRIVKEY_FILE=$(basename $SSH_PRIVKEY_PATH | cut -d. -f1)
+fi
 
 trap "docker-compose down" SIGINT
 docker-compose up \

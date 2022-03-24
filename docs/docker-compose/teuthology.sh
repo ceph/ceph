@@ -1,7 +1,8 @@
 #!/usr/bin/bash
-set -e
 # We don't want -x yet, in case the private key is sensitive
-echo "$SSH_PRIVKEY" > $HOME/.ssh/id_ed25519
+if [ -n "$SSH_PRIVKEY_FILE" ]; then
+    echo "$SSH_PRIVKEY" > $HOME/.ssh/$SSH_PRIVKEY_FILE
+fi
 source /teuthology/virtualenv/bin/activate
 set -x
 if [ -n "$TESTNODES" ]; then
