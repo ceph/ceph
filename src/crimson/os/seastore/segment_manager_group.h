@@ -6,21 +6,17 @@
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
-#include "crimson/os/seastore/logging.h"
 
 namespace crimson::os::seastore {
 
-class SegmentCleaner;
-class TransactionManager;
-
-class ExtentReader {
+class SegmentManagerGroup {
 public:
   std::vector<SegmentManager*>& get_segment_managers() {
     return segment_managers;
   }
 
   using read_ertr = SegmentManager::read_ertr;
-  ExtentReader() {
+  SegmentManagerGroup() {
     segment_managers.resize(DEVICE_ID_MAX, nullptr);
   }
   using read_segment_header_ertr = crimson::errorator<
@@ -122,6 +118,6 @@ private:
       std::size_t& budget_used);
 };
 
-using ExtentReaderRef = std::unique_ptr<ExtentReader>;
+using SegmentManagerGroupRef = std::unique_ptr<SegmentManagerGroup>;
 
 } // namespace crimson::os::seastore

@@ -12,9 +12,9 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/cached_extent.h"
-#include "crimson/os/seastore/extent_reader.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
 
@@ -667,7 +667,7 @@ private:
   const bool detailed;
   const config_t config;
 
-  ExtentReaderRef scanner;
+  SegmentManagerGroupRef sm_group;
 
   SpaceTrackerIRef space_tracker;
   segment_info_set_t segments;
@@ -716,7 +716,7 @@ private:
 public:
   SegmentCleaner(
     config_t config,
-    ExtentReaderRef&& scanner,
+    SegmentManagerGroupRef&& sm_group,
     bool detailed = false);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {
@@ -766,7 +766,7 @@ public:
     return segments[id].get_type();
   }
 
-  using release_ertr = ExtentReader::release_ertr;
+  using release_ertr = SegmentManagerGroup::release_ertr;
   release_ertr::future<> maybe_release_segment(Transaction &t);
 
   void adjust_segment_util(double old_usage, double new_usage) {
@@ -968,7 +968,7 @@ private:
 
   // GC status helpers
   std::unique_ptr<
-    ExtentReader::scan_extents_cursor
+    SegmentManagerGroup::scan_extents_cursor
     > scan_cursor;
 
   /**
@@ -1046,7 +1046,7 @@ private:
   } gc_process;
 
   using gc_ertr = work_ertr::extend_ertr<
-    ExtentReader::scan_extents_ertr
+    SegmentManagerGroup::scan_extents_ertr
     >;
 
   gc_cycle_ret do_gc_cycle();
@@ -1278,7 +1278,7 @@ private:
 
   using scan_extents_ret_bare =
     std::vector<std::pair<segment_id_t, segment_header_t>>;
-  using scan_extents_ertr = ExtentReader::scan_extents_ertr;
+  using scan_extents_ertr = SegmentManagerGroup::scan_extents_ertr;
   using scan_extents_ret = scan_extents_ertr::future<>;
   scan_extents_ret scan_nonfull_segment(
     const segment_header_t& header,
