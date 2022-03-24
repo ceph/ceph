@@ -47,8 +47,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
   return segment_cleaner->mount(
-    segment_manager.get_device_id(),
-    scanner.get_segment_managers()
+    segment_manager.get_device_id()
   ).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this](auto addr) {
@@ -88,8 +87,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   INFO("enter");
   cache->init();
   return segment_cleaner->mount(
-    segment_manager.get_device_id(),
-    scanner.get_segment_managers()
+    segment_manager.get_device_id()
   ).safe_then([this] {
     return journal->replay(
       [this](const auto &offsets, const auto &e, auto last_modified) {

@@ -736,7 +736,7 @@ public:
   using mount_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   using mount_ret = mount_ertr::future<>;
-  mount_ret mount(device_id_t pdevice_id, std::vector<SegmentManager*>& sms);
+  mount_ret mount(device_id_t pdevice_id);
 
   segment_id_t get_segment(
       device_id_t id, segment_seq_t seq, segment_type_t type) final;

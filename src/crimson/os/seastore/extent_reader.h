@@ -21,6 +21,10 @@ public:
     return segment_managers[0]->get_block_size();
   }
 
+  std::vector<SegmentManager*>& get_segment_managers() {
+    return segment_managers;
+  }
+
   using read_ertr = SegmentManager::read_ertr;
   ExtentReader() {
     segment_managers.resize(DEVICE_ID_MAX, nullptr);
@@ -92,10 +96,6 @@ public:
 
 private:
   std::vector<SegmentManager*> segment_managers;
-
-  std::vector<SegmentManager*>& get_segment_managers() {
-    return segment_managers;
-  }
   /// read record metadata for record starting at start
   using read_validate_record_metadata_ertr = read_ertr;
   using read_validate_record_metadata_ret =
@@ -120,8 +120,6 @@ private:
       scan_valid_records_cursor& cursor,
       found_record_handler_t& handler,
       std::size_t& budget_used);
-
-  friend class TransactionManager;
 };
 
 using ExtentReaderRef = std::unique_ptr<ExtentReader>;
