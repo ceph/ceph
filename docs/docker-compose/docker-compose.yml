@@ -19,7 +19,7 @@ services:
     ports:
       - 5432:5432
   paddles:
-    build: ./paddles
+    image: quay.io/ceph-infra/paddles
     environment: 
       PADDLES_SERVER_HOST: 0.0.0.0
       PADDLES_SQLALCHEMY_URL: postgresql+psycopg2://admin:password@postgres:5432/paddles
@@ -61,7 +61,7 @@ services:
   teuthology:
     build: ./teuthology
     depends_on:
-        pulpito:
+        paddles:
             condition: service_healthy
     links:
         - paddles

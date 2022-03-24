@@ -1,9 +1,6 @@
 #!/bin/bash
 # Clone paddles and teuthology
 
-git clone https://github.com/ceph/paddles.git
-cd paddles
-cd ../
 git clone https://github.com/ceph/teuthology.git
 
 # Check for .teuthology.yaml file and copy it to teuthology
