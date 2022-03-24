@@ -397,6 +397,7 @@ public:
 void RGWOp_User_Remove::execute(optional_yield y)
 {
   std::string uid_str;
+  std::string tenant_name;
   bool purge_data;
 
   RGWUserAdminOpState op_state(store);
@@ -405,6 +406,11 @@ void RGWOp_User_Remove::execute(optional_yield y)
   rgw_user uid(uid_str);
 
   RESTArgs::get_bool(s, "purge-data", false, &purge_data);
+
+  RESTArgs::get_string(s, "tenant", tenant_name, &tenant_name);
+  if (!tenant_name.empty()) {
+    uid.tenant = tenant_name;
+  }
 
   // FIXME: no double checking
   if (!uid.empty())
