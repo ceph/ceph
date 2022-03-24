@@ -503,9 +503,9 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 }
 
 SegmentCleaner::mount_ret SegmentCleaner::mount(
-  device_id_t pdevice_id,
-  std::vector<SegmentManager*>& sms)
+  device_id_t pdevice_id)
 {
+  auto& sms = scanner->get_segment_managers();
   logger().debug(
     "SegmentCleaner::mount: {} segment managers", sms.size());
   init_complete = false;
