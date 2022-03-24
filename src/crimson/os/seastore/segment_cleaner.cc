@@ -683,4 +683,21 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
   return seastar::now();
 }
 
+SegmentCleaner::release_ertr::future<>
+SegmentCleaner::maybe_release_segment(Transaction &t)
+{
+  auto to_release = t.get_segment_to_release();
+  if (to_release != NULL_SEG_ID) {
+    LOG_PREFIX(SegmentCleaner::maybe_release_segment);
+    INFOT("releasing segment {}", t, to_release);
+    return scanner->release_segment(to_release
+    ).safe_then([this, to_release] {
+      stats.segments_released++;
+      mark_empty(to_release);
+    });
+  } else {
+    return SegmentManager::release_ertr::now();
+  }
+}
+
 }

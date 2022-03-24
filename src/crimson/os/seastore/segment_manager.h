@@ -214,7 +214,6 @@ public:
 
   /* Methods for discovering device geometry, segmentid set, etc */
   virtual size_t get_size() const = 0;
-  virtual seastore_off_t get_block_size() const = 0;
   virtual seastore_off_t get_segment_size() const = 0;
   virtual device_segment_id_t get_num_segments() const {
     ceph_assert(get_size() % get_segment_size() == 0);

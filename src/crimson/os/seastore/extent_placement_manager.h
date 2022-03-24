@@ -175,10 +175,14 @@ public:
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
-  void add_device(Device* device) {
+  void add_device(Device* device, bool is_primary) {
     auto device_id = device->get_device_id();
     ceph_assert(devices_by_id[device_id] == nullptr);
     devices_by_id[device_id] = device;
+    if (is_primary) {
+      ceph_assert(primary_device == nullptr);
+      primary_device = device;
+    }
   }
 
   void add_allocator(device_type_t type, ExtentAllocatorRef&& allocator) {
@@ -187,6 +191,17 @@ public:
     SUBDEBUG(seastore_journal, "allocators for {}: {}",
       type,
       allocators[type].size());
+  }
+
+  seastore_off_t get_block_size() const {
+    assert(primary_device != nullptr);
+    // assume all the devices have the same block size
+    return primary_device->get_block_size();
+  }
+
+  Device& get_primary_device() {
+    assert(primary_device != nullptr);
+    return *primary_device;
   }
 
   using open_ertr = ExtentOolWriter::open_ertr;
@@ -280,6 +295,7 @@ public:
       allocators.clear();
       devices_by_id.clear();
       devices_by_id.resize(DEVICE_ID_MAX, nullptr);
+      primary_device = nullptr;
     });
   }
 
@@ -307,6 +323,7 @@ private:
 
   std::map<device_type_t, std::vector<ExtentAllocatorRef>> allocators;
   std::vector<Device*> devices_by_id;
+  Device* primary_device = nullptr;
 };
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;
 

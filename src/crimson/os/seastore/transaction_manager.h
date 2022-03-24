@@ -24,7 +24,6 @@
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
@@ -64,7 +63,6 @@ public:
   using base_iertr = Cache::base_iertr;
 
   TransactionManager(
-    SegmentManager &segment_manager,
     SegmentCleanerRef segment_cleaner,
     JournalRef journal,
     CacheRef cache,
@@ -409,15 +407,6 @@ public:
     laddr_t laddr,
     seastore_off_t len) final;
 
-  using release_segment_ret =
-    SegmentCleaner::ExtentCallbackInterface::release_segment_ret;
-  release_segment_ret release_segment(
-    segment_id_t id) final {
-    LOG_PREFIX(TransactionManager::release_segment);
-    SUBDEBUG(seastore_tm, "{}", id);
-    return segment_manager.release(id);
-  }
-
   /**
    * read_root_meta
    *
@@ -534,18 +523,19 @@ public:
   }
 
   extent_len_t get_block_size() const {
-    return segment_manager.get_block_size();
+    return epm->get_block_size();
   }
 
   store_statfs_t store_stat() const {
     return segment_cleaner->stat();
   }
 
-  void add_segment_manager(SegmentManager* sm) {
+  void add_segment_manager(SegmentManager* sm, bool is_primary) {
     LOG_PREFIX(TransactionManager::add_segment_manager);
-    SUBDEBUG(seastore_tm, "adding segment manager {}", sm->get_device_id());
+    SUBDEBUG(seastore_tm, "adding segment manager {}, is_primary={}",
+             sm->get_device_id(), is_primary);
     scanner.add_segment_manager(sm);
-    epm->add_device(sm);
+    epm->add_device(sm, is_primary);
     epm->add_allocator(
       device_type_t::SEGMENTED,
       std::make_unique<SegmentedAllocator>(
@@ -559,10 +549,6 @@ public:
 private:
   friend class Transaction;
 
-  // although there might be multiple devices backing seastore,
-  // only one of them are supposed to hold the journal. This
-  // segment manager is that device
-  SegmentManager &segment_manager;
   SegmentCleanerRef segment_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;

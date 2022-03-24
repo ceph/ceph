@@ -20,6 +20,8 @@ class Device {
 public:
   virtual device_id_t get_device_id() const = 0;
 
+  virtual seastore_off_t get_block_size() const = 0;
+
   using read_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,

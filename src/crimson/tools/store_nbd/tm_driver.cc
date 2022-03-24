@@ -135,7 +135,7 @@ seastar::future<bufferlist> TMDriver::read(
 void TMDriver::init()
 {
   tm = make_transaction_manager(*segment_manager, false /* detailed */);
-  tm->add_segment_manager(segment_manager.get());
+  tm->add_segment_manager(segment_manager.get(), true);
 }
 
 void TMDriver::clear()

@@ -93,7 +93,7 @@ protected:
 
   virtual void _init() override {
     tm = make_transaction_manager(*segment_manager, true);
-    tm->add_segment_manager(segment_manager.get());
+    tm->add_segment_manager(segment_manager.get(), true);
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
   }

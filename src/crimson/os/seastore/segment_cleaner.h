@@ -649,16 +649,6 @@ public:
       seastore_off_t len) = 0;
 
     /**
-     * release_segment
-     *
-     * Release segment.
-     */
-    using release_segment_ertr = SegmentManager::release_ertr;
-    using release_segment_ret = release_segment_ertr::future<>;
-    virtual release_segment_ret release_segment(
-      segment_id_t id) = 0;
-
-    /**
      * submit_transaction_direct
      *
      * Submits transaction without any space throttling.
@@ -776,10 +766,8 @@ public:
     return segments[id].get_type();
   }
 
-  void mark_segment_released(segment_id_t segment) {
-    stats.segments_released++;
-    return mark_empty(segment);
-  }
+  using release_ertr = ExtentReader::release_ertr;
+  release_ertr::future<> maybe_release_segment(Transaction &t);
 
   void adjust_segment_util(double old_usage, double new_usage) {
     assert(stats.segment_util.buckets[std::floor(old_usage * 10)].count > 0);

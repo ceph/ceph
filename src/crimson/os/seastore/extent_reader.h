@@ -15,12 +15,6 @@ class TransactionManager;
 
 class ExtentReader {
 public:
-  seastore_off_t get_block_size() const {
-    assert(segment_managers.size());
-    // assume all segment managers have the same block size
-    return segment_managers[0]->get_block_size();
-  }
-
   std::vector<SegmentManager*>& get_segment_managers() {
     return segment_managers;
   }
@@ -83,6 +77,12 @@ public:
     size_t budget,                     ///< [in] max budget to use
     found_record_handler_t &handler    ///< [in] handler for records
   ); ///< @return used budget
+
+  using release_ertr = SegmentManager::release_ertr;
+  release_ertr::future<> release_segment(segment_id_t id) {
+    assert(segment_managers[id.device_id()] != nullptr);
+    return segment_managers[id.device_id()]->release(id);
+  }
 
   void add_segment_manager(SegmentManager* segment_manager) {
     ceph_assert(!segment_managers[segment_manager->get_device_id()]);
