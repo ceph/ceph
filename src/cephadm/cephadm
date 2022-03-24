@@ -3333,9 +3333,10 @@ class Firewalld(object):
 
 def update_firewalld(ctx, daemon_type):
     # type: (CephadmContext, str) -> None
-    firewall = Firewalld(ctx)
-    firewall.enable_service_for(daemon_type)
-    firewall.apply_rules()
+    if not ('skip_firewalld' in ctx and ctx.skip_firewalld):
+        firewall = Firewalld(ctx)
+        firewall.enable_service_for(daemon_type)
+        firewall.apply_rules()
 
 
 def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
@@ -4837,9 +4838,10 @@ def prepare_dashboard(
     port = int(out)
 
     # Open dashboard port
-    fw = Firewalld(ctx)
-    fw.open_ports([port])
-    fw.apply_rules()
+    if not ('skip_firewalld' in ctx and ctx.skip_firewalld):
+        fw = Firewalld(ctx)
+        fw.open_ports([port])
+        fw.apply_rules()
 
     logger.info('Ceph Dashboard is now available at:\n\n'
                 '\t     URL: https://%s:%s/\n'
