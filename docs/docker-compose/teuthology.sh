@@ -4,11 +4,17 @@ set -e
 echo "$SSH_PRIVKEY" > $HOME/.ssh/id_ed25519
 source /teuthology/virtualenv/bin/activate
 set -x
+if [ -n "$TESTNODES" ]; then
+    for node in $(echo $TESTNODES | tr , ' '); do
+        teuthology-update-inventory $node
+    done
+fi
+export MACHINE_TYPE=${MACHINE_TYPE:-testnode}
 teuthology-suite -v \
     --ceph-repo https://github.com/ceph/ceph.git \
     --suite-repo https://github.com/ceph/ceph.git \
     -c master \
-    -m testnode \
+    -m $MACHINE_TYPE \
     --limit 1 \
     -n 100 \
     --suite teuthology:no-ceph \
@@ -22,5 +28,5 @@ teuthology-suite -v \
     /teuthology/custom_conf.yaml
 teuthology-dispatcher -v \
     --log-dir /teuthology/log \
-    --tube testnode \
+    --tube $MACHINE_TYPE \
     --exit-on-empty-queue

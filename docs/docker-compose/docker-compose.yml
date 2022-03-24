@@ -68,6 +68,8 @@ services:
         - beanstalk
     environment:
       SSH_PRIVKEY:
+      MACHINE_TYPE:
+      TESTNODES:
   testnode:
     build:
       context: .
