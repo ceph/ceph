@@ -321,8 +321,9 @@ std::string to_string(amqp_status_enum s) {
       return "AMQP_STATUS_SSL_CONNECTION_FAILED";
     case _AMQP_STATUS_SSL_NEXT_VALUE:
       return "AMQP_STATUS_INTERNAL"; 
+    default:
+      return "AMQP_STATUS_UNKNOWN";
   }
-  return "AMQP_STATUS_UNKNOWN";
 }
 
 // TODO: add status_to_string on the connection object to prinf full status
