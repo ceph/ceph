@@ -2990,6 +2990,12 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
         fw.open_ports(ports)
         fw.apply_rules()
 
+    if not os.path.exists('/etc/sysctl.d/ceph-tuning.conf'):
+        with open('/etc/sysctl.d/ceph-tuning.conf', 'w') as f:
+            f.write('fs.aio-max-nr = 1048576\n')
+            os.fchmod(f.fileno(), 0o644)
+            os.fchown(f.fileno(), uid, gid)
+
     if reconfig and daemon_type not in Ceph.daemons:
         # ceph daemons do not need a restart; others (presumably) do to pick
         # up the new config

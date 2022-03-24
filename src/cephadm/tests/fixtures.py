@@ -65,6 +65,7 @@ def cephadm_fs(
             fs.create_dir(cd.LOCK_DIR)
             fs.create_dir(cd.LOGROTATE_DIR)
             fs.create_dir(cd.UNIT_DIR)
+            fs.create_dir('/etc/sysctl.d')
 
             yield fs
 
