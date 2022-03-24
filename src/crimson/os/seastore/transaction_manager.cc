@@ -6,7 +6,6 @@
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/journal.h"
 
 /*
@@ -23,15 +22,13 @@ SET_SUBSYS(seastore_tm);
 namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(
-  SegmentManager &_segment_manager,
   SegmentCleanerRef _segment_cleaner,
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef&& epm,
   ExtentReader& scanner)
-  : segment_manager(_segment_manager),
-    segment_cleaner(std::move(_segment_cleaner)),
+  : segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
@@ -47,7 +44,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
   return segment_cleaner->mount(
-    segment_manager.get_device_id()
+    epm->get_primary_device().get_device_id()
   ).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this](auto addr) {
@@ -87,7 +84,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   INFO("enter");
   cache->init();
   return segment_cleaner->mount(
-    segment_manager.get_device_id()
+    epm->get_primary_device().get_device_id()
   ).safe_then([this] {
     return journal->replay(
       [this](const auto &offsets, const auto &e, auto last_modified) {
@@ -340,16 +337,7 @@ TransactionManager::submit_transaction_direct(
       lba_manager->complete_transaction(tref);
       segment_cleaner->update_journal_tail_target(
 	cache->get_oldest_dirty_from().value_or(start_seq));
-      auto to_release = tref.get_segment_to_release();
-      if (to_release != NULL_SEG_ID) {
-        SUBDEBUGT(seastore_t, "releasing segment {}", tref, to_release);
-	return segment_manager.release(to_release
-	).safe_then([this, to_release] {
-	  segment_cleaner->mark_segment_released(to_release);
-	});
-      } else {
-	return SegmentManager::release_ertr::now();
-      }
+      return segment_cleaner->maybe_release_segment(tref);
     }).safe_then([FNAME, &tref] {
       SUBTRACET(seastore_t, "completed", tref);
       return tref.get_handle().complete();
@@ -569,7 +557,6 @@ TransactionManagerRef make_transaction_manager(
   auto lba_manager = lba_manager::create_lba_manager(sm, *cache);
 
   return std::make_unique<TransactionManager>(
-    sm,
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),

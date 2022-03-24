@@ -86,7 +86,7 @@ struct cache_test_t : public seastar_test_suite_t {
     epm.reset(new ExtentPlacementManager());
     cache.reset(new Cache(*epm));
     current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
-    epm->add_device(segment_manager.get());
+    epm->add_device(segment_manager.get(), true);
     return segment_manager->init(
     ).safe_then([this] {
       return seastar::do_with(

@@ -108,7 +108,7 @@ struct btree_test_base :
     block_size = segment_manager->get_block_size();
     next = segment_id_t{segment_manager->get_device_id(), 0};
     scanner_ref.add_segment_manager(segment_manager.get());
-    epm->add_device(segment_manager.get());
+    epm->add_device(segment_manager.get(), true);
     journal->set_write_pipeline(&pipeline);
 
     return segment_manager->init(

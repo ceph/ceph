@@ -189,7 +189,7 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
 {
   return segment_manager->mount(
   ).safe_then([this] {
-    transaction_manager->add_segment_manager(segment_manager.get());
+    transaction_manager->add_segment_manager(segment_manager.get(), true);
     auto sec_devices = segment_manager->get_secondary_devices();
     return crimson::do_for_each(sec_devices, [this](auto& device_entry) {
       device_id_t id = device_entry.first;
@@ -203,7 +203,7 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
 	[this, sm=std::move(sm), magic]() mutable {
 	boost::ignore_unused(magic);  // avoid clang warning;
 	assert(sm->get_magic() == magic);
-	transaction_manager->add_segment_manager(sm.get());
+	transaction_manager->add_segment_manager(sm.get(), false);
 	secondaries.emplace_back(std::move(sm));
 	return seastar::now();
       });
@@ -334,7 +334,7 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
         }).safe_then([this] {
           return crimson::do_for_each(secondaries, [this](auto& sec_sm) {
             return sec_sm->mount().safe_then([this, &sec_sm] {
-              transaction_manager->add_segment_manager(sec_sm.get());
+              transaction_manager->add_segment_manager(sec_sm.get(), false);
               return seastar::now();
             });
           });
@@ -342,13 +342,13 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
       }).safe_then([this] {
         return segment_manager->mount();
       }).safe_then([this] {
-        transaction_manager->add_segment_manager(segment_manager.get());
+        transaction_manager->add_segment_manager(segment_manager.get(), true);
         return transaction_manager->mkfs();
       }).safe_then([this] {
         for (auto& sec_sm : secondaries) {
-          transaction_manager->add_segment_manager(sec_sm.get());
+          transaction_manager->add_segment_manager(sec_sm.get(), false);
         }
-        transaction_manager->add_segment_manager(segment_manager.get());
+        transaction_manager->add_segment_manager(segment_manager.get(), true);
         return transaction_manager->mount();
       }).safe_then([this] {
         return repeat_eagain([this] {
@@ -643,7 +643,7 @@ seastar::future<struct stat> SeaStore::stat(
       struct stat st;
       auto &olayout = onode.get_layout();
       st.st_size = olayout.size;
-      st.st_blksize = transaction_manager->get_block_size();
+      st.st_blksize = segment_manager->get_block_size();
       st.st_blocks = (st.st_size + st.st_blksize - 1) / st.st_blksize;
       st.st_nlink = 1;
       DEBUGT("cid {}, oid {}, return size {}", t, c->get_cid(), oid, st.st_size);
