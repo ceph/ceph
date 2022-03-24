@@ -722,8 +722,7 @@ void cls_rgw_reshard_entry::dump(Formatter *f) const
   encode_json("bucket_id", bucket_id, f);
   encode_json("new_instance_id", new_instance_id, f);
   encode_json("old_num_shards", old_num_shards, f);
-  encode_json("new_num_shards", new_num_shards, f);
-
+  encode_json("tentative_new_num_shards", new_num_shards, f);
 }
 
 void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>& ls)
