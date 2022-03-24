@@ -18,6 +18,7 @@ namespace wnbd {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+#if defined(_WIN32)
 static int call_wnbd_cmd(const po::variables_map &vm,
                         const std::vector<std::string> &args,
                         const std::vector<std::string> &ceph_global_init_args) {
@@ -106,9 +107,14 @@ int parse_options(const std::vector<std::string> &options,
 
   return 0;
 }
+#endif
 
 int execute_list(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(_WIN32)
+  std::cerr << "rbd: wnbd is only supported on Windows" << std::endl;
+  return -EOPNOTSUPP;
+#else
   std::vector<std::string> args;
 
   args.push_back("list");
@@ -122,10 +128,15 @@ int execute_list(const po::variables_map &vm,
   }
 
   return call_wnbd_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 int execute_map(const po::variables_map &vm,
                 const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(_WIN32)
+  std::cerr << "rbd: wnbd is only supported on Windows" << std::endl;
+  return -EOPNOTSUPP;
+#else
   std::vector<std::string> args;
 
   args.push_back("map");
@@ -152,10 +163,15 @@ int execute_map(const po::variables_map &vm,
   }
 
   return call_wnbd_cmd(vm, args, ceph_global_init_args);
+#endif
 }
 
 int execute_unmap(const po::variables_map &vm,
                   const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(_WIN32)
+  std::cerr << "rbd: wnbd is only supported on Windows" << std::endl;
+  return -EOPNOTSUPP;
+#else
   std::string device_name = utils::get_positional_argument(vm, 0);
 
   std::string image_name;
@@ -185,6 +201,27 @@ int execute_unmap(const po::variables_map &vm,
   }
 
   return call_wnbd_cmd(vm, args, ceph_global_init_args);
+#endif
+}
+
+int execute_attach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(_WIN32)
+  std::cerr << "rbd: wnbd is only supported on Windows" << std::endl;
+#else
+  std::cerr << "rbd: wnbd attach command not supported" << std::endl;
+#endif
+  return -EOPNOTSUPP;
+}
+
+int execute_detach(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(_WIN32)
+  std::cerr << "rbd: wnbd is only supported on Windows" << std::endl;
+#else
+  std::cerr << "rbd: wnbd detach command not supported" << std::endl;
+#endif
+  return -EOPNOTSUPP;
 }
 
 } // namespace wnbd
