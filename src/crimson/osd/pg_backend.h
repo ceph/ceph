@@ -211,6 +211,9 @@ public:
   get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
+  get_attr_ierrorator::future<ceph::bufferlist> getxattr(
+    const hobject_t& soid,
+    std::string&& key) const;
   get_attr_ierrorator::future<> get_xattrs(
     const ObjectState& os,
     OSDOp& osd_op,

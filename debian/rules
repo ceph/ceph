@@ -21,6 +21,9 @@ ifeq ($(filter pkg.ceph.jaeger,$(DEB_BUILD_PROFILES)),)
 else
   extraopts += -DWITH_JAEGER=ON
 endif
+ifneq ($(filter pkg.ceph.arrow,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_SYSTEM_ARROW=ON
+endif
 
 extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
 extraopts += -DWITH_MGR_DASHBOARD_FRONTEND=OFF
