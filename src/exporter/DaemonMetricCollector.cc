@@ -137,15 +137,17 @@ void DaemonMetricCollector::send_requests() {
 }
 
 void DaemonMetricCollector::update_sockets() {
-  std::string path = "/tmp/ceph-asok.Qq4nS2";
+  std::string path = "/var/run/ceph/";
   for (const auto & entry : std::filesystem::directory_iterator(path)) {
-    std::string daemon_socket_name = entry.path().filename().string();
-    std::cout << "Got socket: " << daemon_socket_name << std::endl;
-    // remove .asok
-    std::string daemon_name = daemon_socket_name.substr(0, daemon_socket_name.size() - 5);
-    if (clients.find(daemon_name) == clients.end()) {
-      AdminSocketClient sock(entry.path().string());
-      clients.insert({daemon_name, std::move(sock)});
+    if (entry.path().extension() == ".asok") {
+      std::string daemon_socket_name = entry.path().filename().string();
+      std::cout << "Got socket: " << daemon_socket_name << std::endl;
+      // remove .asok
+      std::string daemon_name = daemon_socket_name.substr(0, daemon_socket_name.size() - 5);
+      if (clients.find(daemon_name) == clients.end()) {
+        AdminSocketClient sock(entry.path().string());
+        clients.insert({daemon_name, std::move(sock)});
+      }
     }
   }
 }
