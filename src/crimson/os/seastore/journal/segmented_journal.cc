@@ -28,7 +28,7 @@ namespace crimson::os::seastore::journal {
 
 SegmentedJournal::SegmentedJournal(
   SegmentManager &segment_manager,
-  ExtentReader &scanner,
+  SegmentManagerGroup &sms,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
     segment_seq_allocator(
@@ -47,7 +47,7 @@ SegmentedJournal::SegmentedJournal(
                      crimson::common::get_conf<double>(
                        "seastore_journal_batch_preferred_fullness"),
                      journal_segment_allocator),
-    scanner(scanner)
+    sms(sms)
 {
 }
 
@@ -150,12 +150,12 @@ SegmentedJournal::replay_segment(
   INFO("starting at {} -- {}", seq, header);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
-    ExtentReader::found_record_handler_t(
+    SegmentManagerGroup::found_record_handler_t(
       [s_type=header.type, &handler, this](
       record_locator_t locator,
       const record_group_header_t& header,
       const bufferlist& mdbuf)
-      -> ExtentReader::scan_valid_records_ertr::future<>
+      -> SegmentManagerGroup::scan_valid_records_ertr::future<>
     {
       LOG_PREFIX(Journal::replay_segment);
       auto maybe_record_deltas_list = try_decode_deltas(
@@ -233,7 +233,7 @@ SegmentedJournal::replay_segment(
       });
     }),
     [=](auto &cursor, auto &dhandler) {
-      return scanner.scan_valid_records(
+      return sms.scan_valid_records(
 	cursor,
 	header.segment_nonce,
 	std::numeric_limits<size_t>::max(),
@@ -262,7 +262,7 @@ SegmentedJournal::find_journal_segments()
 	  segment_id_t segment_id{
 	    journal_segment_allocator.get_device_id(),
 	    d_segment_id};
-	  return scanner.read_segment_header(
+	  return sms.read_segment_header(
 	    segment_id
 	  ).safe_then([segment_id, &ret](auto &&header) {
 	    if (header.get_type() == segment_type_t::JOURNAL) {

@@ -28,7 +28,7 @@ struct btree_test_base :
   public seastar_test_suite_t, SegmentProvider {
 
   segment_manager::EphemeralSegmentManagerRef segment_manager;
-  ExtentReaderRef scanner;
+  SegmentManagerGroupRef sms;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
   CacheRef cache;
@@ -98,16 +98,16 @@ struct btree_test_base :
   virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
   seastar::future<> set_up_fut() final {
     segment_manager = segment_manager::create_test_ephemeral();
-    scanner.reset(new ExtentReader());
-    auto& scanner_ref = *scanner.get();
+    sms.reset(new SegmentManagerGroup());
+    auto& sms_ref = *sms.get();
     journal = journal::make_segmented(
-      *segment_manager, scanner_ref, *this);
+      *segment_manager, sms_ref, *this);
     epm.reset(new ExtentPlacementManager());
     cache.reset(new Cache(*epm));
 
     block_size = segment_manager->get_block_size();
     next = segment_id_t{segment_manager->get_device_id(), 0};
-    scanner_ref.add_segment_manager(segment_manager.get());
+    sms_ref.add_segment_manager(segment_manager.get());
     epm->add_device(segment_manager.get(), true);
     journal->set_write_pipeline(&pipeline);
 
@@ -148,7 +148,7 @@ struct btree_test_base :
     }).safe_then([this] {
       test_structure_reset();
       segment_manager.reset();
-      scanner.reset();
+      sms.reset();
       journal.reset();
       epm.reset();
       cache.reset();

@@ -16,7 +16,7 @@ class NVMeBlockDevice;
 }
 
 class SegmentManager;
-class ExtentReader;
+class SegmentManagerGroup;
 class SegmentProvider;
 
 class Journal {
@@ -93,7 +93,7 @@ namespace journal {
 
 JournalRef make_segmented(
   SegmentManager &sm,
-  ExtentReader &reader,
+  SegmentManagerGroup &sms,
   SegmentProvider &provider);
 
 }

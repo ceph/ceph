@@ -178,11 +178,11 @@ void SpaceTrackerSimple::dump_usage(segment_id_t id) const
 
 SegmentCleaner::SegmentCleaner(
   config_t config,
-  ExtentReaderRef&& scr,
+  SegmentManagerGroupRef&& sm_group,
   bool detailed)
   : detailed(detailed),
     config(config),
-    scanner(std::move(scr)),
+    sm_group(std::move(sm_group)),
     ool_segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::OOL)),
     gc_process(*this)
@@ -391,7 +391,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
       return seastar::now();
     }
     scan_cursor =
-      std::make_unique<ExtentReader::scan_extents_cursor>(
+      std::make_unique<SegmentManagerGroup::scan_extents_cursor>(
 	next);
     logger().debug(
       "SegmentCleaner::do_gc: starting gc on segment {}",
@@ -400,7 +400,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
     ceph_assert(!scan_cursor->is_complete());
   }
 
-  return scanner->scan_extents(
+  return sm_group->scan_extents(
     *scan_cursor,
     config.reclaim_bytes_stride
   ).safe_then([this](auto &&_extents) {
@@ -505,7 +505,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 SegmentCleaner::mount_ret SegmentCleaner::mount(
   device_id_t pdevice_id)
 {
-  auto& sms = scanner->get_segment_managers();
+  auto& sms = sm_group->get_segment_managers();
   logger().debug(
     "SegmentCleaner::mount: {} segment managers", sms.size());
   init_complete = false;
@@ -545,20 +545,20 @@ SegmentCleaner::mount_ret SegmentCleaner::mount(
       segments.end(),
       [this, &segment_set](auto& it) {
 	auto segment_id = it.first;
-	return scanner->read_segment_header(
+	return sm_group->read_segment_header(
 	  segment_id
 	).safe_then([segment_id, this, &segment_set](auto header) {
 	  logger().debug(
-	    "ExtentReader::mount: segment_id={} -- {}",
+	    "SegmentCleaner::mount: segment_id={} -- {}",
 	    segment_id, header);
 	  auto s_type = header.get_type();
 	  if (s_type == segment_type_t::NULL_SEG) {
 	    logger().error(
-	      "ExtentReader::mount: got null segment, segment_id={} -- {}",
+	      "SegmentCleaner::mount: got null segment, segment_id={} -- {}",
 	      segment_id, header);
 	    ceph_abort();
 	  }
-	  return scanner->read_segment_tail(
+	  return sm_group->read_segment_tail(
 	    segment_id
 	  ).safe_then([this, segment_id, &segment_set, header](auto tail)
 	    -> scan_extents_ertr::future<> {
@@ -608,7 +608,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
 {
   if (header.get_type() == segment_type_t::OOL) {
     logger().info(
-      "ExtentReader::init_segments: out-of-line segment {}",
+      "SegmentCleaner::scan_nonfull_segment: out-of-line segment {}",
       segment_id);
     return seastar::do_with(
       scan_valid_records_cursor({
@@ -616,11 +616,11 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
 	paddr_t::make_seg_paddr(segment_id, 0)}),
       [this, segment_id, header](auto& cursor) {
       return seastar::do_with(
-	ExtentReader::found_record_handler_t([this, segment_id](
+	SegmentManagerGroup::found_record_handler_t([this, segment_id](
 	    record_locator_t locator,
 	    const record_group_header_t& header,
 	    const bufferlist& mdbuf
-	  ) mutable -> ExtentReader::scan_valid_records_ertr::future<> {
+	  ) mutable -> SegmentManagerGroup::scan_valid_records_ertr::future<> {
 	  LOG_PREFIX(SegmentCleaner::scan_nonfull_segment);
 	  DEBUG("decodeing {} records", header.records);
 	  auto maybe_headers = try_decode_record_headers(header, mdbuf);
@@ -634,7 +634,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
 	    mod_time_point_t ctime = header.commit_time;
 	    auto commit_type = header.commit_type;
 	    if (!ctime) {
-	      ERROR("Scanner::init_segments: extent {} 0 commit_time",
+	      ERROR("SegmentCleaner::scan_nonfull_segment: extent {} 0 commit_time",
 		ctime);
 	      ceph_abort("0 commit_time");
 	    }
@@ -654,7 +654,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
 	  return seastar::now();
 	}),
 	[&cursor, header, segment_id, this](auto& handler) {
-	  return scanner->scan_valid_records(
+	  return sm_group->scan_valid_records(
 	    cursor,
 	    header.segment_nonce,
 	    segments[segment_id.device_id()]->segment_size,
@@ -670,7 +670,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
     });
   } else if (header.get_type() == segment_type_t::JOURNAL) {
     logger().info(
-      "ExtentReader::init_segments: journal segment {}",
+      "SEgmentCleaner::scan_nonfull_segment: journal segment {}",
       segment_id);
     segment_set.emplace_back(std::make_pair(segment_id, std::move(header)));
   } else {
@@ -690,7 +690,7 @@ SegmentCleaner::maybe_release_segment(Transaction &t)
   if (to_release != NULL_SEG_ID) {
     LOG_PREFIX(SegmentCleaner::maybe_release_segment);
     INFOT("releasing segment {}", t, to_release);
-    return scanner->release_segment(to_release
+    return sm_group->release_segment(to_release
     ).safe_then([this, to_release] {
       stats.segments_released++;
       mark_empty(to_release);

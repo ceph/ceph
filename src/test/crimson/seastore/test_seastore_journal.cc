@@ -76,7 +76,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   seastore_off_t block_size;
 
-  ExtentReaderRef scanner;
+  SegmentManagerGroupRef sms;
 
   segment_id_t next;
 
@@ -125,11 +125,11 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   seastar::future<> set_up_fut() final {
     segment_manager = segment_manager::create_test_ephemeral();
     block_size = segment_manager->get_block_size();
-    scanner.reset(new ExtentReader());
+    sms.reset(new SegmentManagerGroup());
     next = segment_id_t(segment_manager->get_device_id(), 0);
-    journal = journal::make_segmented(*segment_manager, *scanner, *this);
+    journal = journal::make_segmented(*segment_manager, *sms, *this);
     journal->set_write_pipeline(&pipeline);
-    scanner->add_segment_manager(segment_manager.get());
+    sms->add_segment_manager(segment_manager.get());
     return segment_manager->init(
     ).safe_then([this] {
       return journal->open_for_write();
@@ -144,7 +144,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     return journal->close(
     ).safe_then([this] {
       segment_manager.reset();
-      scanner.reset();
+      sms.reset();
       journal.reset();
     }).handle_error(
       crimson::ct_error::all_same_way([](auto e) {
@@ -158,7 +158,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     return journal->close(
     ).safe_then([this, f=std::move(f)]() mutable {
       journal = journal::make_segmented(
-	*segment_manager, *scanner, *this);
+	*segment_manager, *sms, *this);
       journal->set_write_pipeline(&pipeline);
       return journal->replay(std::forward<T>(std::move(f)));
     }).safe_then([this] {

@@ -11,7 +11,7 @@
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/journal.h"
-#include "crimson/os/seastore/extent_reader.h"
+#include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/osd/exceptions.h"
@@ -26,7 +26,7 @@ class SegmentedJournal : public Journal {
 public:
   SegmentedJournal(
     SegmentManager &segment_manager,
-    ExtentReader& scanner,
+    SegmentManagerGroup& sms,
     SegmentProvider& cleaner);
   ~SegmentedJournal() {}
 
@@ -56,10 +56,10 @@ private:
   SegmentSeqAllocatorRef segment_seq_allocator;
   SegmentAllocator journal_segment_allocator;
   RecordSubmitter record_submitter;
-  ExtentReader& scanner;
+  SegmentManagerGroup& sms;
   WritePipeline* write_pipeline = nullptr;
 
-  /// read journal segment headers from scanner
+  /// read journal segment headers from sms
   using find_journal_segments_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   using find_journal_segments_ret_bare = std::vector<
