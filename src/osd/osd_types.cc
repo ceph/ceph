@@ -2867,6 +2867,8 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_int("last_scrub_duration", last_scrub_duration);
   f->dump_string("scrub_schedule", dump_scrub_schedule());
   f->dump_float("scrub_duration", scrub_duration);
+  f->dump_int("objects_trimmed", objects_trimmed);
+  f->dump_float("snaptrim_duration", snaptrim_duration);
   stats.dump(f);
   f->open_array_section("up");
   for (auto p = up.cbegin(); p != up.cend(); ++p)
@@ -2962,7 +2964,7 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(27, 22, bl);
+  ENCODE_START(28, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -3019,6 +3021,8 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_sched_status.m_is_periodic, bl);
   encode(objects_scrubbed, bl);
   encode(scrub_duration, bl);
+  encode(objects_trimmed, bl);
+  encode(snaptrim_duration, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -3027,7 +3031,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(27, bl);
+  DECODE_START(28, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3110,6 +3114,10 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(objects_scrubbed, bl);
       decode(scrub_duration, bl);
     }
+    if (struct_v >= 28) {
+      decode(objects_trimmed, bl);
+      decode(snaptrim_duration, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -3146,6 +3154,8 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.scrub_duration = 0.003;
   a.snaptrimq_len = 1048576;
   a.objects_scrubbed = 0;
+  a.objects_trimmed = 0;
+  a.snaptrim_duration = 0.123;
   list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
   a.stats = *l.back();
@@ -3222,7 +3232,9 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.last_scrub_duration == r.last_scrub_duration &&
     l.scrub_sched_status == r.scrub_sched_status &&
     l.objects_scrubbed == r.objects_scrubbed &&
-    l.scrub_duration == r.scrub_duration;
+    l.scrub_duration == r.scrub_duration &&
+    l.objects_trimmed == r.objects_trimmed &&
+    l.snaptrim_duration == r.snaptrim_duration;
 }
 
 // -- store_statfs_t --

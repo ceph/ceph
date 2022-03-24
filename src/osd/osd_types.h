@@ -2271,6 +2271,8 @@ struct pg_stat_t {
   // snaptrimq.size() is 64bit, but let's be serious - anything over 50k is
   // absurd already, so cap it to 2^32 and save 4 bytes at the same time
   uint32_t snaptrimq_len;
+  int64_t objects_trimmed;
+  double snaptrim_duration;
 
   pg_scrubbing_status_t scrub_sched_status;
 
@@ -2297,6 +2299,8 @@ struct pg_stat_t {
       up_primary(-1),
       acting_primary(-1),
       snaptrimq_len(0),
+      objects_trimmed(0),
+      snaptrim_duration(0.0),
       stats_invalid(false),
       dirty_stats_invalid(false),
       omap_stats_invalid(false),
