@@ -347,6 +347,9 @@ private:
     internal_context_t &ctx,
     OnodeRef &onode,
     ceph::bufferlist &&header);
+  tm_ret _omap_clear(
+    internal_context_t &ctx,
+    OnodeRef &onode);
   tm_ret _omap_rmkeys(
     internal_context_t &ctx,
     OnodeRef &onode,
