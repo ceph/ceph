@@ -3292,7 +3292,7 @@ options:
   desc: Tell mon about OSD shutdown on immediate shutdown
   long_desc: Tell the monitor the OSD is shutting down on immediate shutdown. This
     helps with cluster log messages from other OSDs reporting it immediately failed.
-  default: false
+  default: true
   see_also:
   - osd_fast_shutdown
   - osd_mon_shutdown_timeout
