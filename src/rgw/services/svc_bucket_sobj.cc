@@ -640,4 +640,3 @@ int RGWSI_Bucket_SObj::read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
 
   return m.size();
 }
-
