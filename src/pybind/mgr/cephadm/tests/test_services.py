@@ -302,7 +302,7 @@ class TestMonitoring:
                     honor_labels: true
                     static_configs:
                     - targets:
-                      - '[::1]:8081'
+                      - '[::1]:9283'
 
                   - job_name: 'node'
                     static_configs:
