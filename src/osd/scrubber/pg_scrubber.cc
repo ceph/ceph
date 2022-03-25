@@ -189,6 +189,8 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
     dout(10) << "scrubber event --<< StartScrub" << dendl;
   } else {
     clear_queued_or_active();
+    // and just in case snap trimming was blocked by the aborted scrub
+    m_pg->snap_trimmer_scrub_complete();
   }
 }
 
@@ -203,6 +205,8 @@ void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
     dout(10) << "scrubber event --<< AfterRepairScrub" << dendl;
   } else {
     clear_queued_or_active();
+    // and just in case snap trimming was blocked by the aborted scrub
+    m_pg->snap_trimmer_scrub_complete();
   }
 }
 
@@ -1793,11 +1797,6 @@ void PgScrubber::scrub_finish()
       &t);
     int tr = m_osds->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
     ceph_assert(tr == 0);
-
-    if (!m_pg->snap_trimq.empty()) {
-      dout(10) << "scrub finished, requeuing snap_trimmer" << dendl;
-      m_pg->snap_trimmer_scrub_complete();
-    }
   }
 
   if (has_error) {
@@ -1817,6 +1816,9 @@ void PgScrubber::scrub_finish()
   if (m_pg->is_active() && m_pg->is_primary()) {
     m_pg->recovery_state.share_pg_info();
   }
+
+  // we may have blocked the snap trimmer
+  m_pg->snap_trimmer_scrub_complete();
 }
 
 void PgScrubber::on_digest_updates()
