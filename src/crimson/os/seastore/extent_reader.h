@@ -81,8 +81,7 @@ public:
   ); ///< @return used budget
 
   void add_segment_manager(SegmentManager* segment_manager) {
-    assert(!segment_managers[segment_manager->get_device_id()] ||
-      segment_manager == segment_managers[segment_manager->get_device_id()]);
+    ceph_assert(!segment_managers[segment_manager->get_device_id()]);
     segment_managers[segment_manager->get_device_id()] = segment_manager;
   }
 
@@ -92,6 +91,11 @@ public:
     ceph::bufferptr &out) {
     assert(segment_managers[addr.get_device_id()]);
     return segment_managers[addr.get_device_id()]->read(addr, len, out);
+  }
+
+  void reset() {
+    segment_managers.clear();
+    segment_managers.resize(DEVICE_ID_MAX, nullptr);
   }
 
 private:
