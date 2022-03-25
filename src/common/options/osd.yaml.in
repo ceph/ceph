@@ -30,7 +30,7 @@ options:
 - name: osd_smart_report_timeout
   type: uint
   level: advanced
-  desc: Timeout (in seconds) for smarctl to run, default is set to 5
+  desc: Timeout (in seconds) for smartctl to run, default is set to 5
   default: 5
 # verify backend can support configured max object name length
 - name: osd_check_max_object_name_len_on_startup
