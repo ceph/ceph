@@ -1041,7 +1041,7 @@ options:
 - name: mon_smart_report_timeout
   type: uint
   level: advanced
-  desc: Timeout (in seconds) for smarctl to run, default is set to 5
+  desc: Timeout (in seconds) for smartctl to run, default is set to 5
   default: 5
   services:
   - mon
