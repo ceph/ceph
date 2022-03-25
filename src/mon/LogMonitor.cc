@@ -411,7 +411,7 @@ void LogMonitor::log_external(const LogEntry& le)
     }
 
     if (fd >= 0) {
-      fmt::format_to(file_log_buffer, "{}\n", le);
+      fmt::format_to(std::back_inserter(file_log_buffer), "{}\n", le);
       int err = safe_write(fd, file_log_buffer.data(), file_log_buffer.size());
       file_log_buffer.clear();
       if (err < 0) {
