@@ -7,6 +7,10 @@ trap clean_up_after_myself EXIT
 ORIGINAL_CCACHE_CONF="$HOME/.ccache/ccache.conf"
 SAVED_CCACHE_CONF="$HOME/.run-make-check-saved-ccache-conf"
 
+function in_jenkins() {
+    test -n "$JENKINS_HOME"
+}
+
 function save_ccache_conf() {
     test -f $ORIGINAL_CCACHE_CONF && cp $ORIGINAL_CCACHE_CONF $SAVED_CCACHE_CONF || true
 }
@@ -72,6 +76,7 @@ function do_install() {
         if test $ret -eq 100 ; then
             # dpkg was interrupted
             $DRY_RUN sudo dpkg --configure -a
+            in_jenkins && echo "CI_DEBUG: Running 'sudo $install_cmd $pkgs'"
             $DRY_RUN sudo $install_cmd $pkgs
         else
             return $ret
@@ -105,6 +110,7 @@ function prepare() {
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
+        in_jenkins && echo "CI_DEBUG: Running '$install_cmd ccache $which_pkg clang'"
         do_install "$install_cmd" ccache $which_pkg clang
     else
         echo "WARNING: Don't know how to install packages" >&2
@@ -117,6 +123,7 @@ function prepare() {
     fi
 
     if test -f ./install-deps.sh ; then
+            in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
 	    $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
@@ -131,7 +138,7 @@ EOM
     $DRY_RUN export SOURCE_DATE_EPOCH="946684800"
     $DRY_RUN ccache -o sloppiness=time_macros
     $DRY_RUN ccache -o run_second_cpp=true
-    if [ -n "$JENKINS_HOME" ]; then
+    if in_jenkins; then
         # Build host has plenty of space available, let's use it to keep
         # various versions of the built objects. This could increase the cache hit
         # if the same or similar PRs are running several times
@@ -145,6 +152,7 @@ EOM
 
 function configure() {
     local cmake_build_opts=$(detect_ceph_dev_pkgs)
+    in_jenkins && echo "CI_DEBUG: Running do_cmake.sh"
     $DRY_RUN ./do_cmake.sh $cmake_build_opts $@ || return 1
 }
 
@@ -157,6 +165,7 @@ function build() {
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     # older cmake does not support --parallel or -j, so pass it to underlying generator
+    in_jenkins && echo "CI_DEBUG: Running cmake"
     $DRY_RUN cmake --build . $targets -- $BUILD_MAKEOPTS || return 1
     $DRY_RUN ccache -s # print the ccache statistics to evaluate the efficiency
 }
