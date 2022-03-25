@@ -38,6 +38,10 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     "Client operations",
     "ops", PerfCountersBuilder::PRIO_CRITICAL);
   osd_plb.add_u64_counter(
+    l_osd_op_slow,  "slow_op",
+    "Client operations which are considered slow",
+    "sl", PerfCountersBuilder::PRIO_INTERESTING);
+  osd_plb.add_u64_counter(
     l_osd_op_inb,   "op_in_bytes",
     "Client operations total write size",
     "wr", PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));

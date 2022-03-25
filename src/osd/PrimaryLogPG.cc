@@ -4374,10 +4374,13 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
   auto m = op.get_req<MOSDOp>();
   const utime_t now = ceph_clock_now();
 
-  const utime_t latency = now - m->get_recv_stamp();
+  const utime_t latency = now - op.get_initiated();
   const utime_t process_latency = now - op.get_dequeued_time();
 
   osd->logger->inc(l_osd_op);
+  if (latency >= g_conf()->osd_op_complaint_time) {
+    osd->logger->inc(l_osd_op_slow);
+  }
 
   osd->logger->inc(l_osd_op_outb, outb);
   osd->logger->inc(l_osd_op_inb, inb);
