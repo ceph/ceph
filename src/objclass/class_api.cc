@@ -8,6 +8,8 @@
 #include "common/debug.h"
 
 #include "objclass/objclass.h"
+#include "osd/osd_internal_types.h"
+
 #include "osd/ClassHandler.h"
 
 #include "auth/Crypto.h"
