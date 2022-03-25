@@ -3,7 +3,7 @@
 
 #include "segment_allocator.h"
 
-#include <sstream>
+#include <fmt/format.h>
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_cleaner.h"
@@ -18,14 +18,12 @@ SegmentAllocator::SegmentAllocator(
   SegmentProvider &sp,
   SegmentManager &sm)
   : name{name},
+    print_name{fmt::format("D?_{}", name)},
     type{type},
     segment_provider{sp},
     segment_manager{sm}
 {
   ceph_assert(type != segment_type_t::NULL_SEG);
-  std::ostringstream oss;
-  oss << "D?_" << name;
-  print_name = oss.str();
   reset();
 }
 
@@ -118,9 +116,9 @@ SegmentAllocator::open_ret
 SegmentAllocator::open()
 {
   LOG_PREFIX(SegmentAllocator::open);
-  std::ostringstream oss;
-  oss << "D" << device_id_printer_t{get_device_id()} << "_" << name;
-  print_name = oss.str();
+  print_name = fmt::format("D{}_{}",
+                           device_id_printer_t{get_device_id()},
+                           name);
   INFO("{}", print_name);
   return do_open();
 }
