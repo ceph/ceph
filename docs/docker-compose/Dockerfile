@@ -1,5 +1,5 @@
 FROM ubuntu:latest
-ENV DEBIAN_FRONTEND=nonintercative
+ENV DEBIAN_FRONTEND=noninteractive
 RUN \
     mkdir $HOME/.ssh && \
     touch $HOME/.ssh/id_ed25519 && \
