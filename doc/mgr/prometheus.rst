@@ -104,7 +104,7 @@ to ``error``-mode::
 
     ceph config set mgr mgr/prometheus/standby_behaviour error
 
-If set, the prometheus module will repond with a HTTP error when requesting ``/``
+If set, the prometheus module will respond with a HTTP error when requesting ``/``
 from the standby instance. The default error code is 500, but you can configure
 the HTTP response code with::
 
