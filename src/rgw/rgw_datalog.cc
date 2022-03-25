@@ -768,8 +768,8 @@ int RGWDataChangesLog::list_entries(const DoutPrefixProvider *dpp, int max_entri
     if (ret < 0) {
       return ret;
     }
-    if (truncated) {
-      *ptruncated = true;
+    if (!truncated) {
+      *ptruncated = false;
       return 0;
     }
   }
