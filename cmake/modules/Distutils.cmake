@@ -63,9 +63,8 @@ function(distutils_add_cython_module target name src)
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
 
-  set(suffix_var "EXT_SUFFIX")
   execute_process(COMMAND "${Python3_EXECUTABLE}" -c
-    "from distutils import sysconfig; print(sysconfig.get_config_var('${suffix_var}'))"
+    "from distutils import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
     RESULT_VARIABLE result
     OUTPUT_VARIABLE ext_suffix
     ERROR_VARIABLE error
