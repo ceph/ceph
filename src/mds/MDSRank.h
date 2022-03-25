@@ -53,6 +53,7 @@ enum {
   l_mds_request,
   l_mds_reply,
   l_mds_reply_latency,
+  l_mds_slow_reply,
   l_mds_forward,
   l_mds_dir_fetch_complete,
   l_mds_dir_fetch_keys,
@@ -709,4 +710,3 @@ public:
 };
 
 #endif // MDS_RANK_H_
-
