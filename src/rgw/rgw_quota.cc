@@ -962,15 +962,23 @@ public:
     user_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
   }
 
-  void check_bucket_shards(const DoutPrefixProvider *dpp, uint64_t max_objs_per_shard, uint64_t num_shards,
-			   uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) override
+  void check_bucket_shards(const DoutPrefixProvider *dpp, uint64_t max_objs_per_shard,
+                           uint64_t num_shards, uint64_t num_objs, bool is_multisite,
+                           bool& need_resharding, uint32_t *suggested_num_shards) override
   {
     if (num_objs > num_shards * max_objs_per_shard) {
       ldpp_dout(dpp, 0) << __func__ << ": resharding needed: stats.num_objects=" << num_objs
              << " shard max_objects=" <<  max_objs_per_shard * num_shards << dendl;
       need_resharding = true;
       if (suggested_num_shards) {
-        *suggested_num_shards = num_objs * 2 / max_objs_per_shard;
+        uint32_t obj_multiplier = 2;
+        if (is_multisite) {
+          // if we're maintaining bilogs for multisite, reshards are significantly
+          // more expensive. scale up the shard count much faster to minimize the
+          // number of reshard events during a write workload
+          obj_multiplier = 8;
+        }
+        *suggested_num_shards = num_objs * obj_multiplier / max_objs_per_shard;
       }
     } else {
       need_resharding = false;
