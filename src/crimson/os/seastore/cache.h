@@ -501,6 +501,7 @@ public:
     auto result = epm.alloc_new_extent(t, T::TYPE, length, hint);
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->set_paddr(result.paddr);
+    ret->hint = hint;
     t.add_fresh_extent(ret);
     ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
     SUBDEBUGT(seastore_cache, "allocated {} {}B extent at {}, hint={} -- {}",
@@ -872,7 +873,6 @@ private:
     counter_by_extent_t<io_stat_t> fresh_ool_by_ext;
     uint64_t num_trans = 0; // the number of inline records
     uint64_t num_ool_records = 0;
-    uint64_t ool_record_padding_bytes = 0;
     uint64_t ool_record_metadata_bytes = 0;
     uint64_t ool_record_data_bytes = 0;
     uint64_t inline_record_metadata_bytes = 0; // metadata exclude the delta bytes

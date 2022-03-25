@@ -3,6 +3,8 @@
 
 #include "tm_driver.h"
 
+#include "crimson/os/seastore/segment_manager/block.h"
+
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
@@ -132,33 +134,8 @@ seastar::future<bufferlist> TMDriver::read(
 
 void TMDriver::init()
 {
-  auto scanner = std::make_unique<ExtentReader>();
-  scanner->add_segment_manager(segment_manager.get());
-  auto& scanner_ref = *scanner.get();
-  auto segment_cleaner = std::make_unique<SegmentCleaner>(
-    SegmentCleaner::config_t::get_default(),
-    std::move(scanner),
-    false /* detailed */);
-  auto journal = journal::make_segmented(
-    *segment_manager, *scanner, *segment_cleaner);
-  auto epm = std::make_unique<ExtentPlacementManager>();
-  auto cache = std::make_unique<Cache>(scanner_ref, *epm);
-  auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
-
-  epm->add_allocator(
-    device_type_t::SEGMENTED,
-    std::make_unique<SegmentedAllocator>(
-      *segment_cleaner,
-      *segment_manager));
-
-  tm = std::make_unique<TransactionManager>(
-    *segment_manager,
-    std::move(segment_cleaner),
-    std::move(journal),
-    std::move(cache),
-    std::move(lba_manager),
-    std::move(epm),
-    scanner_ref);
+  tm = make_transaction_manager(*segment_manager, false /* detailed */);
+  tm->add_segment_manager(segment_manager.get());
 }
 
 void TMDriver::clear()
