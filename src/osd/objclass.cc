@@ -617,7 +617,6 @@ uint64_t cls_current_version(cls_method_context_t hctx)
   return ctx->pg->get_last_user_version();
 }
 
-
 int cls_current_subop_num(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
@@ -647,6 +646,18 @@ ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
   return ctx->pg->get_osdmap()->get_require_min_compat_client();
+}
+
+const ConfigProxy& cls_get_config(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->pg->get_cct()->_conf;
+}
+
+const object_info_t& cls_get_object_info(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->obs->oi;
 }
 
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {

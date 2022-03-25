@@ -496,6 +496,20 @@ ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
   return ceph_release_t::nautilus;
 }
 
+const ConfigProxy& cls_get_config(cls_method_context_t hctx)
+{
+  // FIXME ; segfault if ever called
+  static ConfigProxy* dummy = nullptr;
+  return *dummy;
+}
+
+const object_info_t& cls_get_object_info(cls_method_context_t hctx)
+{
+  // FIXME ; segfault if ever called
+  static object_info_t* dummy = nullptr;
+  return *dummy;
+}
+
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq)
 {
   return 0;
