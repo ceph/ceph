@@ -1993,6 +1993,8 @@ Then run the following:
             if self.spec_store[service_name].spec.service_type in ('mon', 'mgr'):
                 return f'Unable to remove {service_name} service.\n' \
                        f'Note, you might want to mark the {service_name} service as "unmanaged"'
+        else:
+            return f"Invalid service '{service_name}'. Use 'ceph orch ls' to list available services.\n"
 
         # Report list of affected OSDs?
         if not force and service_name.startswith('osd.'):
