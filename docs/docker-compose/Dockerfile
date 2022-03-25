@@ -32,4 +32,6 @@ RUN \
     chmod +x /teuthology/bootstrap && \
     ./bootstrap
 COPY teuthology.sh /
+RUN mkdir -p /etc/ansible
+COPY ansible_inventory/hosts ansible_inventory/secrets /etc/ansible/
 ENTRYPOINT /teuthology.sh

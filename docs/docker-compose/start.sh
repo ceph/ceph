@@ -9,6 +9,22 @@ if [ ! -d ./teuthology ]; then
     -b ${TEUTHOLOGY_BRANCH:-$(git branch --show-current)} \
     https://github.com/ceph/teuthology.git
 fi
+if [ -n "$ANSIBLE_INVENTORY_REPO" ]; then
+    basename=$(basename $ANSIBLE_INVENTORY_REPO | cut -d. -f1)
+    if [ ! -d "$basename" ]; then
+        git clone \
+            --depth 1 \
+            $ANSIBLE_INVENTORY_REPO
+    fi
+    mkdir -p teuthology/ansible_inventory
+    cp -rf $basename/ansible/ teuthology/ansible_inventory
+    if [ ! -d teuthology/ansible_inventory/hosts ]; then
+        mv -f teuthology/ansible_inventory/inventory teuthology/ansible_inventory/hosts
+    fi
+fi
+# Make the hosts and secrets directories, so that the COPY instruction in the 
+# Dockerfile does not cause a build failure when not using this feature.
+mkdir -p teuthology/ansible_inventory/hosts teuthology/ansible_inventory/secrets
 
 cp .teuthology.yaml teuthology/
 cp Dockerfile teuthology/
