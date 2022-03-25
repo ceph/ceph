@@ -609,6 +609,7 @@ OPTION(osd_max_markdown_count, OPT_INT)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64)
 OPTION(osd_op_pq_min_cost, OPT_U64)
 OPTION(osd_recover_clone_overlap, OPT_BOOL)   // preserve clone_overlap during recovery/migration
+OPTION(osd_aggregated_slow_ops_logging, OPT_BOOL)
 OPTION(osd_op_num_threads_per_shard, OPT_INT)
 OPTION(osd_op_num_threads_per_shard_hdd, OPT_INT)
 OPTION(osd_op_num_threads_per_shard_ssd, OPT_INT)

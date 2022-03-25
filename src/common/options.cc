@@ -2985,6 +2985,10 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_STARTUP)
     .set_description("The number of cache shards to use in the object store."),
 
+    Option("osd_aggregated_slow_ops_logging", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Allow OSD daemon to send an aggregated slow ops to the cluster log."),
+
     Option("osd_op_num_threads_per_shard", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_flag(Option::FLAG_STARTUP)
