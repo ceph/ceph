@@ -7,8 +7,11 @@ source /teuthology/virtualenv/bin/activate
 set -x
 if [ -n "$TESTNODES" ]; then
     for node in $(echo $TESTNODES | tr , ' '); do
-        teuthology-update-inventory $node
+        teuthology-update-inventory -m $MACHINE_TYPE $node
     done
+    CUSTOM_CONF=${CUSTOM_CONF:-}
+else
+    CUSTOM_CONF=/teuthology/containerized_node.yaml
 fi
 export MACHINE_TYPE=${MACHINE_TYPE:-testnode}
 teuthology-suite -v \
@@ -26,7 +29,7 @@ teuthology-suite -v \
     -p 75 \
     --seed 349 \
     --force-priority \
-    /teuthology/custom_conf.yaml
+    $CUSTOM_CONF
 teuthology-dispatcher -v \
     --log-dir /teuthology/log \
     --tube $MACHINE_TYPE \

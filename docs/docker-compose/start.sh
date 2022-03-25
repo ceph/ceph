@@ -29,7 +29,10 @@ mkdir -p teuthology/ansible_inventory/hosts teuthology/ansible_inventory/secrets
 cp .teuthology.yaml teuthology/
 cp Dockerfile teuthology/
 cp teuthology.sh teuthology/
-cp custom_conf.yaml teuthology/
+cp containerized_node.yaml teuthology/
+if [ -n "$CUSTOM_CONF" ]; then
+    cp "$CUSTOM_CONF" teuthology/
+fi
 
 
 
