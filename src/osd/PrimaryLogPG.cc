@@ -4914,8 +4914,8 @@ void PrimaryLogPG::kick_snap_trim()
 
 void PrimaryLogPG::snap_trimmer_scrub_complete()
 {
-  if (is_primary() && is_active() && is_clean()) {
-    ceph_assert(!snap_trimq.empty());
+  if (is_primary() && is_active() && is_clean() && !snap_trimq.empty()) {
+    dout(10) << "scrub finished - requeuing snap_trimmer" << dendl;
     snap_trimmer_machine.process_event(ScrubComplete());
   }
 }
