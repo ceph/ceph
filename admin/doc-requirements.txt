@@ -1,7 +1,7 @@
 Sphinx == 4.4.0
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
-breathe >= 4.20.0
-Jinja2
+breathe >= 4.20.0,!=4.33
+Jinja2 < 3.1
 pyyaml >= 5.1.2
 Cython
 pcpp
