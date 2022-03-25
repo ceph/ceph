@@ -142,7 +142,7 @@ def get_chunks(file_size):
 
 
 def to_bytes(param):
-    # don't convert as follows as it can lead unusable results like coverting
+    # don't convert as follows as it can lead unusable results like converting
     # [1, 2, 3, 4] to '[1, 2, 3, 4]' -
     # str(param).encode('utf-8')
     if isinstance(param, bytes):
@@ -1126,7 +1126,7 @@ class CephFSShell(Cmd):
         # Arguments to the with_argpaser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
-        # neeed to clean it up to ensure the next call works as expected.
+        # need to clean it up to ensure the next call works as expected.
         args.paths.clear()
 
     def do_lpwd(self, arglist):
@@ -1660,7 +1660,7 @@ def execute_cmds_and_quit(args):
         if ',' in cmdarg:
             args_to_onecmd += ' ' + cmdarg[0:-1]
             onecmd_retval = shell.onecmd(args_to_onecmd)
-            # if the curent command failed, let's abort the execution of
+            # if the current command failed, let's abort the execution of
             # series of commands passed.
             if onecmd_retval is not stop_exec_val:
                 return onecmd_retval
