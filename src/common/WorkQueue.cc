@@ -99,7 +99,9 @@ void ThreadPool::worker(WorkThread *wt)
       break;
     }
 
-    if (!_pause && !work_queues.empty()) {
+    if (work_queues.empty()) {
+      ldout(cct, 10) << "worker no work queues" << dendl;
+    } else if (!_pause) {
       WorkQueue_* wq;
       int tries = 2 * work_queues.size();
       bool did = false;
