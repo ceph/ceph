@@ -687,10 +687,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             ssh_options += ['-i', tkey.name]
 
         self._temp_files = temp_files
-        if ssh_options:
-            self._ssh_options = ' '.join(ssh_options)  # type: Optional[str]
-        else:
-            self._ssh_options = None
+        ssh_options += ['-o', 'ServerAliveInterval=7', '-o', 'ServerAliveCountMax=3']
+        self._ssh_options = ' '.join(ssh_options)  # type: Optional[str]
 
         if self.mode == 'root':
             self.ssh_user = self.get_store('ssh_user', default='root')
