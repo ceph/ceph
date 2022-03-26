@@ -48,11 +48,13 @@ Binding NICs to DPDK Applications:
 Configuring OSD DPDKStack
 ==========================
 
-The DPDK RTE initialization process requires the root privileges.
-Therefore, you need to grant the root permission to ceph.
-modify ``/etc/passwd`` to give ceph user root privilege and ``/var/run`` folder write::
+By default, the DPDK RTE initialization process requires the root privileges
+for accessing various resources in system. To grant the root access to
+the ``ceph`` user:
 
-  ceph:x:0:0:Ceph storage service:/var/lib/ceph:/bin/false:/var/run
+.. prompt:: bash #
+
+   usermod -G root ceph
 
 The OSD selects the NICs using ``ms_dpdk_devs_allowlist``:
 
