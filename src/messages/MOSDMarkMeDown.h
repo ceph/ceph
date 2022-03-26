@@ -19,7 +19,7 @@
 
 class MOSDMarkMeDown final : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 3;
 
  public:
@@ -28,6 +28,7 @@ private:
   entity_addrvec_t target_addrs;
   epoch_t epoch = 0;
   bool request_ack = false;          // ack requested
+  bool down_and_dead = false;        // mark down and dead
 
   MOSDMarkMeDown()
     : PaxosServiceMessage{MSG_OSD_MARK_ME_DOWN, 0,
@@ -38,6 +39,12 @@ private:
 			  HEAD_VERSION, COMPAT_VERSION},
       fsid(fs), target_osd(osd), target_addrs(av),
       epoch(e), request_ack(request_ack) {}
+  MOSDMarkMeDown(const uuid_d &fs, int osd, const entity_addrvec_t& av,
+		 epoch_t e, bool request_ack, bool down_and_dead)
+    : PaxosServiceMessage{MSG_OSD_MARK_ME_DOWN, e,
+			  HEAD_VERSION, COMPAT_VERSION},
+      fsid(fs), target_osd(osd), target_addrs(av),
+      epoch(e), request_ack(request_ack), down_and_dead(down_and_dead) {}
  private:
   ~MOSDMarkMeDown() final {}
 
@@ -54,6 +61,8 @@ public:
     decode(target_addrs, p);
     decode(epoch, p);
     decode(request_ack, p);
+    if(header.version >= 4)
+      decode(down_and_dead, p);
   }
 
   void encode_payload(uint64_t features) override {
@@ -67,12 +76,14 @@ public:
     encode(target_addrs, payload, features);
     encode(epoch, payload);
     encode(request_ack, payload);
+    encode(down_and_dead, payload);
   }
 
   std::string_view get_type_name() const override { return "MOSDMarkMeDown"; }
   void print(std::ostream& out) const override {
     out << "MOSDMarkMeDown("
 	<< "request_ack=" << request_ack
+	<< ", down_and_dead=" << down_and_dead
 	<< ", osd." << target_osd
 	<< ", " << target_addrs
 	<< ", fsid=" << fsid
