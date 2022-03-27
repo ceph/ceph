@@ -46,15 +46,18 @@
 #include <string_view>
 
 #include "common/LogClient.h"
+#include "osd/OSDMap.h"
 #include "common/scrub_types.h"
+#include "osd/osd_types_fmt.h"
+
+#include "osd/scrubber_common.h"
 
 struct ScrubMap;
 
 class PG;
 class PgScrubber;
-class PGBackend;
-class PGPool;
-
+struct PGPool;
+using Scrub::PgScrubBeListener;
 
 using data_omap_digests_t =
   std::pair<std::optional<uint32_t>, std::optional<uint32_t>>;
@@ -82,6 +85,20 @@ struct error_counters_t {
   int shallow_errors{0};
   int deep_errors{0};
 };
+
+// the PgScrubber services used by the backend
+struct ScrubBeListener {
+  virtual std::ostream& gen_prefix(std::ostream& out) const = 0;
+  virtual CephContext* get_pg_cct() const = 0;
+  virtual LoggerSinkSet& get_logger() const = 0;
+  virtual bool is_primary() const = 0;
+  virtual spg_t get_pgid() const = 0;
+  virtual const OSDMapRef& get_osdmap() const = 0;
+  virtual void add_to_stats(const object_stat_sum_t& stat) = 0;
+  virtual void submit_digest_fixes(const digests_fixes_t& fixes) = 0;
+  virtual ~ScrubBeListener() = default;
+};
+
 
 /*
  * snaps-related aux structures:
@@ -301,23 +318,22 @@ struct scrub_chunk_t {
 class ScrubBackend {
  public:
   // Primary constructor
-  ScrubBackend(PgScrubber& scrubber,
-               PGBackend& backend,
-               PG& pg,
+  ScrubBackend(ScrubBeListener& scrubber,
+               PgScrubBeListener& pg,
                pg_shard_t i_am,
                bool repair,
                scrub_level_t shallow_or_deep,
                const std::set<pg_shard_t>& acting);
 
   // Replica constructor: no primary map
-  ScrubBackend(PgScrubber& scrubber,
-               PGBackend& backend,
-               PG& pg,
+  ScrubBackend(ScrubBeListener& scrubber,
+               PgScrubBeListener& pg,
                pg_shard_t i_am,
                bool repair,
                scrub_level_t shallow_or_deep);
 
   friend class PgScrubber;
+  friend class TestScrubBackend;
 
   /**
    * reset the per-chunk data structure (scrub_chunk_t).
@@ -355,8 +371,6 @@ class ScrubBackend {
 
   int scrub_process_inconsistent();
 
-  void repair_oinfo_oid(ScrubMap& smap);
-
   const omap_stat_t& this_scrub_omapstats() const { return m_omap_stats; }
 
   int authoritative_peers_count() const { return m_auth_peers.size(); };
@@ -365,9 +379,8 @@ class ScrubBackend {
 
  private:
   // set/constructed at the ctor():
-  PgScrubber& m_scrubber;
-  PGBackend& m_pgbe;
-  PG& m_pg;
+  ScrubBeListener& m_scrubber;
+  Scrub::PgScrubBeListener& m_pg;
   const pg_shard_t m_pg_whoami;
   bool m_repair;
   const scrub_level_t m_depth;
@@ -387,7 +400,7 @@ class ScrubBackend {
 
   // shorthands:
   ConfigProxy& m_conf;
-  LogChannelRef clog;
+  LoggerSinkSet& clog;
 
  private:
 
@@ -533,4 +546,40 @@ class ScrubBackend {
 
   // accessing the PG backend for this translation service
   uint64_t logical_to_ondisk_size(uint64_t logical_size) const;
+};
+
+template <>
+struct fmt::formatter<data_omap_digests_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const data_omap_digests_t& dg, FormatContext& ctx)
+  {
+    // can't use value_or() due to different output types
+    if (std::get<0>(dg).has_value()) {
+      fmt::format_to(ctx.out(), "[{:#x}/", std::get<0>(dg).value());
+    } else {
+      fmt::format_to(ctx.out(), "[---/");
+    }
+    if (std::get<1>(dg).has_value()) {
+      return fmt::format_to(ctx.out(), "{:#x}]", std::get<1>(dg).value());
+    } else {
+      return fmt::format_to(ctx.out(), "---]");
+    }
+  }
+};
+
+template <>
+struct fmt::formatter<std::pair<hobject_t, data_omap_digests_t>> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const std::pair<hobject_t, data_omap_digests_t>& x,
+	      FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(),
+			  "{{ {} - {} }}",
+			  std::get<0>(x),
+			  std::get<1>(x));
+  }
 };

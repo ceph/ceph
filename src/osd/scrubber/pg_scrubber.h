@@ -272,8 +272,9 @@ ostream& operator<<(ostream& out, const scrub_flags_t& sf);
  * the actual scrubbing code.
  */
 class PgScrubber : public ScrubPgIF,
-		   public ScrubMachineListener,
-		   public SnapMapperAccessor {
+                   public ScrubMachineListener,
+                   public SnapMapperAccessor,
+                   public ScrubBeListener {
  public:
   explicit PgScrubber(PG* pg);
 
@@ -567,23 +568,33 @@ class PgScrubber : public ScrubPgIF,
   ostream& show(ostream& out) const override;
 
  public:
-  //  ------------------  the I/F used by the ScrubBackend (not named yet)
+  //  ------------------  the I/F used by the ScrubBackend (ScrubBeListener)
 
   // note: the reason we must have these forwarders, is because of the
   //  artificial PG vs. PrimaryLogPG distinction. Some of the services used
   //  by the scrubber backend are PrimaryLog-specific.
 
-  virtual void add_to_stats(const object_stat_sum_t& stat)
+  void add_to_stats(const object_stat_sum_t& stat) override
   {
     ceph_assert(0 && "expecting a PrimaryLogScrub object");
   }
 
-  virtual void submit_digest_fixes(const digests_fixes_t& fixes)
+  void submit_digest_fixes(const digests_fixes_t& fixes) override
   {
     ceph_assert(0 && "expecting a PrimaryLogScrub object");
   }
 
-  // -------------------------------------------------------------------------------------
+  CephContext* get_pg_cct() const final { return m_pg->cct; }
+ 
+  LoggerSinkSet& get_logger() const final;
+
+  spg_t get_pgid() const final { return m_pg->get_pgid(); }
+
+  /// Returns reference to current osdmap
+  const OSDMapRef& get_osdmap() const final;
+
+
+  // ---------------------------------------------------------------------------
 
   friend ostream& operator<<(ostream& out, const PgScrubber& scrubber);
 
@@ -706,6 +717,8 @@ class PgScrubber : public ScrubPgIF,
   epoch_t m_interval_start{0};	///< interval's 'from' of when scrubbing was
 				///< first scheduled
 
+  void repair_oinfo_oid(ScrubMap& smap);
+
   /*
    * the exact epoch when the scrubbing actually started (started here - cleared
    * checks for no-scrub conf). Incoming events are verified against this, with
@@ -768,13 +781,8 @@ class PgScrubber : public ScrubPgIF,
   int num_digest_updates_pending{0};
   hobject_t m_start, m_end;  ///< note: half-closed: [start,end)
 
-  /// Returns reference to current osdmap
-  const OSDMapRef& get_osdmap() const;
-
   /// Returns epoch of current osdmap
   epoch_t get_osdmap_epoch() const { return get_osdmap()->get_epoch(); }
-
-  CephContext* get_pg_cct() const { return m_pg->cct; }
 
   // collected statistics
   int m_shallow_errors{0};
