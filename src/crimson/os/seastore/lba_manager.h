@@ -110,7 +110,12 @@ public:
     laddr_t addr) = 0;
 
   virtual void complete_transaction(
-    Transaction &t) = 0;
+    Transaction &t,
+    std::vector<CachedExtentRef> &to_clear,	///< extents whose pins are to be cleared,
+						//   as the results of their retirements
+    std::vector<CachedExtentRef> &to_link	///< fresh extents whose pins are to be inserted
+						//   into backref manager's pin set
+  ) = 0;
 
   /**
    * Should be called after replay on each cached extent.
