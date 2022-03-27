@@ -99,7 +99,9 @@ public:
   }
 
   void complete_transaction(
-    Transaction &t) final;
+    Transaction &t,
+    std::vector<CachedExtentRef> &,
+    std::vector<CachedExtentRef> &) final;
 
   /**
    * init_cached_extent

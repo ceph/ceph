@@ -375,7 +375,35 @@ TransactionManager::submit_transaction_direct(
           submit_result.record_block_base,
           start_seq,
           segment_cleaner.get());
-      lba_manager->complete_transaction(tref);
+
+      std::vector<CachedExtentRef> lba_to_clear;
+      std::vector<CachedExtentRef> backref_to_clear;
+      lba_to_clear.reserve(tref.get_retired_set().size());
+      backref_to_clear.reserve(tref.get_retired_set().size());
+      for (auto &e: tref.get_retired_set()) {
+	if (e->is_logical() || is_lba_node(e->get_type()))
+	  lba_to_clear.push_back(e);
+	else if (is_backref_node(e->get_type()))
+	  backref_to_clear.push_back(e);
+      }
+
+      // ...but add_pin from parent->leaf
+      std::vector<CachedExtentRef> lba_to_link;
+      std::vector<CachedExtentRef> backref_to_link;
+      lba_to_link.reserve(tref.get_fresh_block_stats().num);
+      backref_to_link.reserve(tref.get_fresh_block_stats().num);
+      tref.for_each_fresh_block([&](auto &e) {
+	if (e->is_valid()) {
+	  if (is_lba_node(e->get_type()) || e->is_logical())
+	    lba_to_link.push_back(e);
+	  else if (is_backref_node(e->get_type()))
+	    backref_to_link.push_back(e);
+	}
+      });
+
+      lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
+      backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
+
       segment_cleaner->update_journal_tail_target(
 	cache->get_oldest_dirty_from().value_or(start_seq));
       return segment_cleaner->maybe_release_segment(tref);
