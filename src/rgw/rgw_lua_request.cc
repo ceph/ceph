@@ -170,14 +170,19 @@ struct BucketMetaTable : public EmptyMetaTable {
   static std::string TableName() {return "Bucket";}
   static std::string Name() {return TableName() + "Meta";}
 
-  using Type = rgw::sal::Bucket;
-
   static int IndexClosure(lua_State* L) {
-    const auto bucket = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto bucket = s->bucket.get();
 
     const char* index = luaL_checkstring(L, 2);
 
-    if (strcasecmp(index, "Tenant") == 0) {
+    if (rgw::sal::Bucket::empty(bucket)) {
+      if (strcasecmp(index, "Name") == 0) {
+        pushstring(L, s->init_state.url_bucket);
+      } else {
+        lua_pushnil(L);
+      }
+    } else if (strcasecmp(index, "Tenant") == 0) {
       pushstring(L, bucket->get_tenant());
     } else if (strcasecmp(index, "Name") == 0) {
       pushstring(L, bucket->get_name());
@@ -731,7 +736,7 @@ struct RequestMetaTable : public EmptyMetaTable {
         lua_pushnil(L);
       }
     } else if (strcasecmp(index, "Bucket") == 0) {
-      create_metatable<BucketMetaTable>(L, false, s->bucket);
+      create_metatable<BucketMetaTable>(L, false, s);
     } else if (strcasecmp(index, "Object") == 0) {
       create_metatable<ObjectMetaTable>(L, false, s->object);
     } else if (strcasecmp(index, "CopyFrom") == 0) {
