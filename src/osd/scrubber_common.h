@@ -12,6 +12,24 @@ namespace ceph {
 class Formatter;
 }
 
+struct PGPool;
+
+namespace Scrub {
+  class ReplicaReservations;
+}
+
+/// Facilitating scrub-realated object access to private PG data
+class ScrubberPasskey {
+private:
+  friend class Scrub::ReplicaReservations;
+  friend class PrimaryLogScrub;
+  friend class PgScrubber;
+  friend class ScrubBackend;
+  ScrubberPasskey() {}
+  ScrubberPasskey(const ScrubberPasskey&) = default;
+  ScrubberPasskey& operator=(const ScrubberPasskey&) = delete;
+};
+
 namespace Scrub {
 
 /// high/low OP priority
@@ -27,6 +45,25 @@ struct ScrubPreconds {
   bool load_is_low{true};
   bool time_permit{true};
   bool only_deadlined{false};
+};
+
+/// PG services used by the scrubber backend
+struct PgScrubBeListener {
+  virtual ~PgScrubBeListener() = default;
+
+  virtual const PGPool& get_pgpool() const = 0;
+  virtual pg_shard_t get_primary() const = 0;
+  virtual void force_object_missing(ScrubberPasskey,
+                                    const std::set<pg_shard_t>& peer,
+                                    const hobject_t& oid,
+                                    eversion_t version) = 0;
+  virtual const pg_info_t& get_pg_info(ScrubberPasskey) const = 0;
+
+  // query the PG backend for the on-disk size of an object
+  virtual uint64_t logical_to_ondisk_size(uint64_t logical_size) const = 0;
+
+  // used to verify our "cleaness" before scrubbing
+  virtual bool is_waiting_for_unreadable_object() const = 0;
 };
 
 }  // namespace Scrub
