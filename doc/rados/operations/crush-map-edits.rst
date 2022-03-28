@@ -407,8 +407,6 @@ A rule takes the following form::
 
 		id [a unique whole numeric ID]
 		type [ replicated | erasure ]
-		min_size <min-size>
-		max_size <max-size>
 		step take <bucket-name> [class <device-class>]
 		step [choose|chooseleaf] [firstn|indep] <N> type <bucket-type>
 		step emit
@@ -435,26 +433,6 @@ A rule takes the following form::
 :Required: Yes
 :Default: ``replicated``
 :Valid Values: Currently only ``replicated`` and ``erasure``
-
-``min_size``
-
-:Description: If a pool makes fewer replicas than this number, CRUSH will
-              **NOT** select this rule.
-
-:Type: Integer
-:Purpose: A component of the rule mask.
-:Required: Yes
-:Default: ``1``
-
-``max_size``
-
-:Description: If a pool makes more replicas than this number, CRUSH will
-              **NOT** select this rule.
-
-:Type: Integer
-:Purpose: A component of the rule mask.
-:Required: Yes
-:Default: 10
 
 
 ``step take <bucket-name> [class <device-class>]``

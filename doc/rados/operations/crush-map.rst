@@ -1128,8 +1128,6 @@ not to contain any of the same servers, as seen in the following CRUSH rule::
         rule mixed_replicated_rule_two {
                id 1
                type replicated
-               min_size 1
-               max_size 10
                step take ssd_hosts class ssd
                step chooseleaf firstn 1 type host
                step emit
