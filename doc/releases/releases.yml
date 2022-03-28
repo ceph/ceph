@@ -13,10 +13,10 @@
 #
 releases:
   quincy:
-    target_eol: 2024-06-01 ## TODO: True?
+    target_eol: 2024-06-01
     releases:
-      - version: 17.1.0
-        released: 2022-## TODO
+      - version: 17.2.0
+        released: 2022-03-30
 
   pacific:
     target_eol: 2023-06-01

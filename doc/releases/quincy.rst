@@ -5,14 +5,13 @@ Quincy
 Quincy is the 17th stable release of Ceph.  It is named after Squidward 
 Quincy Tentacles from Spongebob Squarepants.
 
-v17.1.0 Quincy
+v17.2.0 Quincy
 ==============
 
 This is the first stable release of Ceph Quincy.
 
 Major Changes from Pacific
 --------------------------
-## TODO
 
 General
 ~~~~~~~
