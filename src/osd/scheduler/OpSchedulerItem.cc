@@ -130,6 +130,15 @@ void PGScrubDigestUpdate::run(OSD* osd,
   pg->unlock();
 }
 
+void PGScrubGotLocalMap::run(OSD* osd,
+			     OSDShard* sdata,
+			     PGRef& pg,
+			     ThreadPool::TPHandle& handle)
+{
+  pg->scrub_send_local_map_ready(epoch_queued, handle);
+  pg->unlock();
+}
+
 void PGScrubGotReplMaps::run(OSD* osd,
 			     OSDShard* sdata,
 			     PGRef& pg,
@@ -139,9 +148,18 @@ void PGScrubGotReplMaps::run(OSD* osd,
   pg->unlock();
 }
 
+void PGScrubMapsCompared::run(OSD* osd,
+			     OSDShard* sdata,
+			     PGRef& pg,
+			     ThreadPool::TPHandle& handle)
+{
+  pg->scrub_send_maps_compared(epoch_queued, handle);
+  pg->unlock();
+}
+
 void PGRepScrub::run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle)
 {
-  pg->replica_scrub(epoch_queued, handle);
+  pg->replica_scrub(epoch_queued, activation_index, handle);
   pg->unlock();
 }
 
@@ -150,7 +168,7 @@ void PGRepScrubResched::run(OSD* osd,
 			    PGRef& pg,
 			    ThreadPool::TPHandle& handle)
 {
-  pg->replica_scrub_resched(epoch_queued, handle);
+  pg->replica_scrub_resched(epoch_queued, activation_index, handle);
   pg->unlock();
 }
 
@@ -160,6 +178,42 @@ void PGScrubReplicaPushes::run([[maybe_unused]] OSD* osd,
 			      ThreadPool::TPHandle& handle)
 {
   pg->scrub_send_replica_pushes(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGScrubScrubFinished::run([[maybe_unused]] OSD* osd,
+			       OSDShard* sdata,
+			       PGRef& pg,
+			       ThreadPool::TPHandle& handle)
+{
+  pg->scrub_send_scrub_is_finished(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGScrubGetNextChunk::run([[maybe_unused]] OSD* osd,
+			       OSDShard* sdata,
+			       PGRef& pg,
+			       ThreadPool::TPHandle& handle)
+{
+  pg->scrub_send_get_next_chunk(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGScrubChunkIsBusy::run([[maybe_unused]] OSD* osd,
+			      OSDShard* sdata,
+			      PGRef& pg,
+			      ThreadPool::TPHandle& handle)
+{
+  pg->scrub_send_chunk_busy(epoch_queued, handle);
+  pg->unlock();
+}
+
+void PGScrubChunkIsFree::run([[maybe_unused]] OSD* osd,
+			      OSDShard* sdata,
+			      PGRef& pg,
+			      ThreadPool::TPHandle& handle)
+{
+  pg->scrub_send_chunk_free(epoch_queued, handle);
   pg->unlock();
 }
 

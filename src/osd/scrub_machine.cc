@@ -191,15 +191,10 @@ NewChunk::NewChunk(my_context ctx) : my_base(ctx)
   scrbr->get_preemptor().adjust_parameters();
 
   //  choose range to work on
-  bool got_a_chunk = scrbr->select_range();
-  if (got_a_chunk) {
-    dout(15) << __func__ << " selection OK" << dendl;
-    post_event(SelectedChunkFree{});
-  } else {
-    dout(10) << __func__ << " selected chunk is busy" << dendl;
-    // wait until we are available (transitioning to Blocked)
-    post_event(ChunkIsBusy{});
-  }
+  //  select_range_n_notify() will signal either SelectedChunkFree or
+  //  ChunkIsBusy. If 'busy', we transition to Blocked, and wait for the
+  //  range to become available.
+  scrbr->select_range_n_notify();
 }
 
 sc::result NewChunk::react(const SelectedChunkFree&)
@@ -307,7 +302,6 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx)
     } else if (ret < 0) {
 
       dout(10) << "BuildMap::BuildMap() Error! Aborting. Ret: " << ret << dendl;
-      // scrbr->mark_local_map_ready();
       post_event(InternalError{});
 
     } else {
@@ -359,13 +353,28 @@ WaitReplicas::WaitReplicas(my_context ctx) : my_base(ctx)
   post_event(GotReplicas{});
 }
 
+/**
+ * note: now that maps_compare_n_cleanup() is "futurized"(*), and we remain in this state
+ *  for a while even after we got all our maps, we must prevent are_all_maps_available()
+ *  (actually - the code after the if()) from being called more than once.
+ * This is basically a separate state, but it's too transitory and artificial to justify
+ *  the cost of a separate state.
+
+ * (*) "futurized" - in Crimson, the call to maps_compare_n_cleanup() returns immediately
+ *  after initiating the process. The actual termination of the maps comparing etc' is
+ *  signalled via an event. As we share the code with "classic" OSD, here too
+ *  maps_compare_n_cleanup() is responsible for signalling the completion of the
+ *  processing.
+ */
 sc::result WaitReplicas::react(const GotReplicas&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "WaitReplicas::react(const GotReplicas&)" << dendl;
 
-  if (scrbr->are_all_maps_available()) {
+  if (!all_maps_already_called && scrbr->are_all_maps_available()) {
     dout(10) << "WaitReplicas::react(const GotReplicas&) got all" << dendl;
+
+    all_maps_already_called = true;
 
     // were we preempted?
     if (scrbr->get_preemptor().disable_and_test()) {  // a test&set
@@ -376,8 +385,9 @@ sc::result WaitReplicas::react(const GotReplicas&)
 
     } else {
 
+      // maps_compare_n_cleanup() will arrange for MapsCompared event to be sent:
       scrbr->maps_compare_n_cleanup();
-      return transit<WaitDigestUpdate>();
+      return discard_event();
     }
   } else {
     return discard_event();
@@ -400,24 +410,14 @@ sc::result WaitDigestUpdate::react(const DigestUpdate&)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "WaitDigestUpdate::react(const DigestUpdate&)" << dendl;
 
-  switch (scrbr->on_digest_updates()) {
+  // on_digest_updates() will either:
+  // - do nothing - if we are still waiting for updates, or
+  // - finish the scrubbing of the current chunk, and:
+  //  - send NextChunk, or
+  //  - send ScrubFinished
 
-    case Scrub::FsmNext::goto_notactive:
-      // scrubbing is done
-      return transit<NotActive>();
-
-    case Scrub::FsmNext::next_chunk:
-      // go get the next chunk
-      return transit<PendingTimer>();
-
-    case Scrub::FsmNext::do_discard:
-      // still waiting for more updates
-      return discard_event();
-  }
-  __builtin_unreachable();  // Prevent a gcc warning.
-			    // Adding a phony 'default:' above is wrong: (a) prevents a
-			    // warning if FsmNext is extended, and (b) elicits a correct
-			    // warning from Clang
+  scrbr->on_digest_updates();
+  return discard_event();
 }
 
 ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub)
@@ -485,39 +485,18 @@ sc::result ActiveReplica::react(const SchedReplica&)
   if (scrbr->get_preemptor().was_preempted()) {
     dout(10) << "replica scrub job preempted" << dendl;
 
-    scrbr->send_replica_map(PreemptionNoted::preempted);
+    scrbr->send_preempted_replica();
     scrbr->replica_handling_done();
     return transit<NotActive>();
   }
 
   // start or check progress of build_replica_map_chunk()
-
-  auto ret = scrbr->build_replica_map_chunk();
-  dout(15) << "ActiveReplica::react(const SchedReplica&) Ret: " << ret << dendl;
-
-  if (ret == -EINPROGRESS) {
-    // must wait for the backend to finish. No external event source.
-    // build_replica_map_chunk() has already requeued a SchedReplica
-    // event.
-
-    dout(20) << "waiting for the backend..." << dendl;
-    return discard_event();
-  }
-
-  if (ret < 0) {
-    //  the existing code ignores this option, treating an error
-    //  report as a success.
-    dout(1) << "Error! Aborting. ActiveReplica::react(SchedReplica) Ret: " << ret
-	    << dendl;
-    scrbr->replica_handling_done();
+  auto ret_init = scrbr->build_replica_map_chunk();
+  if (ret_init != -EINPROGRESS) {
     return transit<NotActive>();
   }
 
-
-  // the local map was created. Send it to the primary.
-  scrbr->send_replica_map(PreemptionNoted::no_preemption);
-  scrbr->replica_handling_done();
-  return transit<NotActive>();
+  return discard_event();
 }
 
 /**

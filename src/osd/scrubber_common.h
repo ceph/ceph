@@ -17,6 +17,10 @@ namespace Scrub {
 /// high/low OP priority
 enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 
+/// Identifies a specific scrub activation within an interval,
+/// see ScrubPGgIF::m_current_token
+using act_token_t = uint32_t;
+
 }  // namespace Scrub
 
 
@@ -108,7 +112,7 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf);
  */
 struct ScrubPgIF {
 
-  virtual ~ScrubPgIF(){};
+  virtual ~ScrubPgIF() = default;
 
   friend ostream& operator<<(ostream& out, const ScrubPgIF& s) { return s.show(out); }
 
@@ -134,11 +138,25 @@ struct ScrubPgIF {
 
   virtual void send_replica_pushes_upd(epoch_t epoch_queued) = 0;
 
-  virtual void send_start_replica(epoch_t epoch_queued) = 0;
+  virtual void send_start_replica(epoch_t epoch_queued, Scrub::act_token_t token) = 0;
 
-  virtual void send_sched_replica(epoch_t epoch_queued) = 0;
+  virtual void send_sched_replica(epoch_t epoch_queued, Scrub::act_token_t token) = 0;
 
   virtual void on_applied_when_primary(const eversion_t &applied_version) = 0;
+
+  virtual void send_full_reset(epoch_t epoch_queued) = 0;
+
+  virtual void send_chunk_free(epoch_t epoch_queued) = 0;
+
+  virtual void send_chunk_busy(epoch_t epoch_queued) = 0;
+
+  virtual void send_local_map_done(epoch_t epoch_queued) = 0;
+
+  virtual void send_get_next_chunk(epoch_t epoch_queued) = 0;
+
+  virtual void send_scrub_is_finished(epoch_t epoch_queued) = 0;
+
+  virtual void send_maps_compared(epoch_t epoch_queued) = 0;
 
   // --------------------------------------------------
 
