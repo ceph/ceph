@@ -3737,7 +3737,7 @@ out:
 
 int MotrStore::delete_motr_idx_by_name(string iname)
 {
-  struct m0_idx idx;
+  struct m0_idx idx = {};
   struct m0_uint128 idx_id;
   struct m0_op *op = nullptr;
 
@@ -3809,7 +3809,7 @@ void MotrStore::index_name_to_motr_fid(string iname, struct m0_uint128 *id)
 int MotrStore::do_idx_op_by_name(string idx_name, enum m0_idx_opcode opcode,
                                  string key_str, bufferlist &bl, bool update)
 {
-  struct m0_idx idx;
+  struct m0_idx idx = {};
   vector<uint8_t> key(key_str.begin(), key_str.end());
   vector<uint8_t> val;
   struct m0_uint128 idx_id;
