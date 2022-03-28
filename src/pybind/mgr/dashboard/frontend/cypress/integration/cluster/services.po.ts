@@ -113,14 +113,14 @@ export class ServicesPageHelper extends PageHelper {
     });
   }
 
-  checkServiceStatus(daemon: string) {
+  checkServiceStatus(daemon: string, expectedStatus = 'running') {
     cy.get('cd-service-daemon-list').within(() => {
       this.getTableCell(this.serviceDetailColumnIndex.daemonType, daemon)
         .parent()
         .find(`datatable-body-cell:nth-child(${this.serviceDetailColumnIndex.status}) .badge`)
         .should(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
-          expect(status).to.include('running');
+          expect(status).to.include(expectedStatus);
         });
     });
   }
@@ -160,5 +160,12 @@ export class ServicesPageHelper extends PageHelper {
     // Wait for modal to close
     cy.get('cd-modal').should('not.exist');
     this.checkExist(serviceName, false);
+  }
+
+  daemonAction(daemon: string, action: string) {
+    cy.get('cd-service-daemon-list').within(() => {
+      this.getTableRow(daemon).click();
+      this.clickActionButton(action);
+    });
   }
 }
