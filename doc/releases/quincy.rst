@@ -12,13 +12,64 @@ This is the first stable release of Ceph Quincy.
 
 Major Changes from Pacific
 --------------------------
-
 ## TODO
 
 General
 ~~~~~~~
   
-## TODO
+* Filestore has been deprecated in Quincy. BlueStore is Ceph's default object
+  store.
+
+* The `ceph-mgr-modules-core` debian package no longer recommends
+  `ceph-mgr-rook`. `ceph-mgr-rook` depends on `python3-numpy`, which
+  cannot be imported in different Python sub-interpreters multiple times
+  when the version of `python3-numpy` is older than 1.19. Because
+  `apt-get` installs the `Recommends` packages by default, `ceph-mgr-rook`
+  was always installed along with the `ceph-mgr` debian package as an
+  indirect dependency. If your workflow depends on this behavior, you
+  might want to install `ceph-mgr-rook` separately.
+
+* The ``device_health_metrics`` pool has been renamed ``.mgr``. It is now
+  used as a common store for all ``ceph-mgr`` modules.
+
+* The ``ceph pg dump`` command now prints three additional columns:
+  `LAST_SCRUB_DURATION` shows the duration (in seconds) of the last completed
+  scrub;
+  `SCRUB_SCHEDULING` conveys whether a PG is scheduled to be scrubbed at a
+  specified time, whether it is queued for scrubbing, or whether it is being
+  scrubbed;
+  `OBJECTS_SCRUBBED` shows the number of objects scrubbed in a PG after a
+  scrub begins.
+
+* A health warning is now reported if the ``require-osd-release`` flag
+  is not set to the appropriate release after a cluster upgrade.
+
+* LevelDB support has been removed. ``WITH_LEVELDB`` is no longer a supported
+  build option.
+
+* Cephadm: ``osd_memory_target_autotune`` is enabled by default, which sets
+  ``mgr/cephadm/autotune_memory_target_ratio`` to ``0.7`` of total RAM. This
+  is unsuitable for hyperconverged infrastructures. For hyperconverged Ceph,
+  please refer to the documentation or set
+  ``mgr/cephadm/autotune_memory_target_ratio`` to ``0.2``.
+
+* telemetry: Improved the opt-in flow so that users can keep sharing the same
+  data, even when new data collections are available. A new 'perf' channel that
+  collects various performance metrics is now avaiable to opt into with:
+  `ceph telemetry on`
+  `ceph telemetry enable channel perf`
+  See a sample report with `ceph telemetry preview`.
+  Note that generating a telemetry report with 'perf' channel data might
+  take a few moments in big clusters.
+  For more details, see:
+  https://docs.ceph.com/en/latest/mgr/telemetry/
+
+* MGR: The progress module disables the pg recovery event by default since the
+  event is expensive and has interrupted other services when there are OSDs
+  being marked in/out from the the cluster. However, the user can still enable
+  this event anytime. For more detail, see:
+
+  https://docs.ceph.com/en/latest/mgr/progress/
 
 Dashboard
 ~~~~~~~~~
@@ -27,8 +78,56 @@ Dashboard
 
 RADOS
 ~~~~~
-  
-## TODO
+* A critical bug in the OMAP format upgrade process is fixed. This bug 
+  could, under certain circumstances, have caused data corruption (in 
+  the form of improperly formatted OMAP keys) after upgrades run on
+  pre-Pacific clusters if the 'bluestore-quick-fix-on-mount' parameter 
+  was set to 'true' or ceph-bluestore-tool's quick-fix/repair commands 
+  were invoked.  
+  Relevant tracker: https://tracker.ceph.com/issues/53062
+
+* the "kvs" Ceph object class is not packaged anymore. The "kvs" Ceph
+  object class offers a distributed flat b-tree key-value store that
+  is implemented on top of the librados objects omap. Because there
+  are no existing internal users of this object class, it is not
+  packaged anymore.
+
+* A new library is available: libcephsqlite. `libcephsqlite` provides a
+  SQLite Virtual File System (VFS) on top of RADOS. The database and
+  journals are striped over RADOS across multiple objects, providing
+  virtually unlimited scaling and throughput that is limiated only by
+  the SQLite client. Applications that use SQLite may change to the Ceph
+  VFS with minimal changes (usually by simply specifying the alternate
+  VFS). We expect the library to be most impactful and useful for applications
+  that were storing state in RADOS omap, especially without striping (which
+  limits scalability).
+
+* OSD: Ceph now uses `mclock_scheduler` for bluestore OSDs as its default
+  `osd_op_queue` to provide QoS. The 'mclock_scheduler' is not supported
+  for filestore OSDs. Therefore, the default 'osd_op_queue' is set to 'wpq'
+  for filestore OSDs and is enforced even if the user attempts to change it.
+
+* MGR: The pg_autoscaler has a new 'scale-down' profile, which provides more
+  performance from the start for new pools. However, the module still uses 
+  the old behavior by default, which is now called the 'scale-up' profile.
+  For more detail, see:
+
+  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+
+* MGR: The pg_autoscaler can now be turned `on` and `off` globally
+  with the `noautoscale` flag. By default this flag is unset and
+  the default pg_autoscale mode remains the same.
+  For more detail, see:
+
+  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+
+* MON/MGR: Pools can now be created with the `--bulk` flag. Any pools created 
+  with `bulk` will use a profile of the `pg_autoscaler` that provides more 
+  performance from the start. However, pools that were created without the 
+  `--bulk` flag use the old behavior by default. For more detail, see:
+
+  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+
 
 RBD block storage
 ~~~~~~~~~~~~~~~~~
@@ -37,13 +136,52 @@ RBD block storage
 
 RGW object storage
 ~~~~~~~~~~~~~~~~~~
-  
-## TODO
+
+* RGW now supports rate limiting by user and/or by bucket. With this
+  feature it is possible to limit user and/or bucket, the total operations
+  and/or bytes per minute can be delivered. This feature allows the
+  admin to limit only READ operations and/or WRITE operations. The
+  rate-limiting configuration could be applied on all users and all buckets
+  by using global configuration.
+
+* `radosgw-admin realm delete` has been renamed to `radosgw-admin realm
+  rm`. This is consistent with the help message.
+
+* S3 bucket notification events now contain an `eTag` key instead of
+  `etag`, and eventName values no longer carry the `s3:` prefix, fixing
+  deviations from the message format that is observed on AWS.
+
+* It is possible to specify ssl options and ciphers for beast frontend
+  now. The default ssl options setting is
+  "no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1". If you want to return to the old
+  behavior, add 'ssl_options=' (empty) to the ``rgw frontends`` configuration.
+
+* The behavior for Multipart Upload was modified so that only 
+  CompleteMultipartUpload notification is sent at the end of the multipart 
+  upload. The POST notification at the beginning of the upload and the PUT 
+  notifications that were sent on each part are no longer sent.
+
 
 CephFS distributed file system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  
-## TODO
+
+* fs: A file system can be created with a specific ID ("fscid"). This is
+  useful in certain recovery scenarios (for example, when a monitor
+  database has been lost and rebuilt, and the restored file system is
+  expected to have the same ID as before).
+
+* fs: A file system can be renamed using the `fs rename` command. Any cephx
+  credentials authorized for the old file system name will need to be
+  reauthorized to the new file system name. Since the operations of the clients
+  using these re-authorized IDs may be disrupted, this command requires the
+  "--yes-i-really-mean-it" flag. Also, mirroring is expected to be disabled
+  on the file system.
+
+* MDS upgrades no longer require all standby MDS daemons to be stoped before
+  upgrading a file systems's sole active MDS.
+
+* CephFS: Failure to replay the journal by a standby-replay daemon now
+  causes the rank to be marked "damaged".
 
 Upgrading from Octopus or Pacific
 ----------------------------------
@@ -231,7 +369,7 @@ Instructions
 
 
 Upgrading from pre-Octopus releases (like Nautilus)
--------------------------------------------------
+---------------------------------------------------
 
 
 ## TODO: Is this true?
