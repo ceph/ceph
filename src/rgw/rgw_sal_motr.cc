@@ -3741,40 +3741,13 @@ int MotrStore::list_users(const DoutPrefixProvider* dpp, const std::string& meta
   return rc;
 }
 
-int MotrStore::open_idx(struct m0_uint128 *id, bool create, struct m0_idx *idx)
-{
-  m0_idx_init(idx, &container.co_realm, id);
-
-  if (!create)
-    return 0; // nothing to do more
-
-  // create index or make sure it's created
-  struct m0_op *op = nullptr;
-  int rc = m0_entity_create(nullptr, &idx->in_entity, &op);
-  if (rc != 0) {
-    ldout(cctx, 0) << "ERROR: m0_entity_create() failed: " << rc << dendl;
-    goto out;
-  }
-
-  m0_op_launch(&op, 1);
-  rc = m0_op_wait(op, M0_BITS(M0_OS_FAILED, M0_OS_STABLE), M0_TIME_NEVER) ?:
-       m0_rc(op);
-  m0_op_fini(op);
-  m0_op_free(op);
-
-  if (rc != 0 && rc != -EEXIST)
-    ldout(cctx, 0) << "ERROR: index create failed: " << rc << dendl;
-out:
-  return rc;
-}
-
 static void set_m0bufvec(struct m0_bufvec *bv, vector<uint8_t>& vec)
 {
   *bv->ov_buf = reinterpret_cast<char*>(vec.data());
   *bv->ov_vec.v_count = vec.size();
 }
 
-// idx must be opened with open_idx() beforehand
+// idx must be opened with open_motr_idx() beforehand
 int MotrStore::do_idx_op(struct m0_idx *idx, enum m0_idx_opcode opcode,
                          vector<uint8_t>& key, vector<uint8_t>& val, bool update)
 {
