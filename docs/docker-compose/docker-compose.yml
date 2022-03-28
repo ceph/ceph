@@ -31,7 +31,7 @@ services:
     healthcheck:
         test: ["CMD", "curl", "-f", "http://0.0.0.0:8080"]
         timeout: 5s
-        interval: 10s
+        interval: 30s
         retries: 2
     ports: 
         - 8080:8080
