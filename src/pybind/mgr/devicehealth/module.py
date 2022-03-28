@@ -278,6 +278,7 @@ class Module(MgrModule):
             'pool': self.pool_name,
             'pg_num': 1,
             'pg_num_min': 1,
+            'pg_num_max': 32,
         }), '')
         r, outb, outs = result.wait()
         assert r == 0
