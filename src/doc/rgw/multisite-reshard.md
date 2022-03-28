@@ -71,6 +71,7 @@ The distinction between *index layout* and *log layout* is important, because in
 
 * Full sync uses a single bucket-wide listing to fetch all objects.
     - Use a cls_lock to prevent different shards from duplicating this work.
+        - Casey pointed out that this substantially reduces parallelism of full sync, and Yuval has recently noticed that it may be easy to induce a scenario where a large amount of ingest into a new bucket is being handled by full sync (with reduced perf);  could there be a way to prime new (and therefore empty) buckets for incremental sync on creation? 
 * When incremental sync gets to the end of a log shard (i.e. listing the log returns truncated=false):
     - If the remote has a newer log generation, flag that shard as 'done' in the bucket sync status.
     - Once all shards in the current generation reach that 'done' state, incremental bucket sync can advance to the next generation.
