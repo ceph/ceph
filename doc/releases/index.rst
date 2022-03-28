@@ -19,6 +19,7 @@ security fixes.
    :maxdepth: 1
    :hidden:
 
+   Quincy (v17.2.*) <quincy>
    Pacific (v16.2.*) <pacific>
    Octopus (v15.2.*) <octopus>
 
@@ -58,7 +59,7 @@ Release timeline
 .. ceph_timeline:: releases.yml quincy pacific octopus
 
 .. _Quincy: quincy
-.. _17.1.0: quincy#v17-1-0-pacific
+.. _17.2.0: quincy#v17-2-0-quincy
 
 
 .. _Pacific: pacific
