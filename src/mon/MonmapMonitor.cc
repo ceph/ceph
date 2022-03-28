@@ -248,6 +248,8 @@ void MonmapMonitor::on_active()
 
   apply_mon_features(mon.get_quorum_mon_features(),
 		     mon.quorum_min_mon_release);
+
+  mon.update_pending_metadata();
 }
 
 bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
