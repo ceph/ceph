@@ -17,14 +17,16 @@ RUN apt-get update && \
     libyaml-dev \
     lsb-release && \
     apt-get clean all
-COPY . /teuthology
-COPY .teuthology.yaml ./root
 WORKDIR /teuthology
+COPY teuthology /teuthology
 RUN \
+    cd /teuthology && \
     mkdir ../archive_dir && \
     mkdir log && \
     chmod +x /teuthology/bootstrap && \
     ./bootstrap
+COPY containerized_node.yaml /teuthology
+COPY .teuthology.yaml /root
 RUN \
     mkdir $HOME/.ssh && \
     touch $HOME/.ssh/${SSH_PRIVKEY_FILE} && \

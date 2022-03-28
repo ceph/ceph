@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+pushd teuthology
 if [ -z "$TEUTHOLOGY_BRANCH" -a -n "$GITHUB_HEAD_REF" ]; then
     TEUTHOLOGY_BRANCH=${GITHUB_HEAD_REF}
 fi
@@ -9,6 +10,7 @@ if [ ! -d ./teuthology ]; then
     -b ${TEUTHOLOGY_BRANCH:-$(git branch --show-current)} \
     https://github.com/ceph/teuthology.git
 fi
+popd
 if [ -n "$ANSIBLE_INVENTORY_REPO" ]; then
     basename=$(basename $ANSIBLE_INVENTORY_REPO | cut -d. -f1)
     if [ ! -d "$basename" ]; then
@@ -26,15 +28,9 @@ fi
 # Dockerfile does not cause a build failure when not using this feature.
 mkdir -p teuthology/ansible_inventory/hosts teuthology/ansible_inventory/secrets
 
-cp .teuthology.yaml teuthology/
-cp Dockerfile teuthology/
-cp teuthology.sh teuthology/
-cp containerized_node.yaml teuthology/
 if [ -n "$CUSTOM_CONF" ]; then
     cp "$CUSTOM_CONF" teuthology/
 fi
-
-
 
 # Generate an SSH keypair to use if necessary
 if [ -z "$SSH_PRIVKEY_PATH" ]; then

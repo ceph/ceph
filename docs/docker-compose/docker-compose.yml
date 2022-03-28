@@ -76,8 +76,8 @@ services:
       TESTNODES:
   testnode:
     build:
-      context: .
-      dockerfile: ./Dockerfile-testnode
+      context: ./testnode
+      dockerfile: ./Dockerfile
     deploy:
       replicas: 3
     depends_on:
