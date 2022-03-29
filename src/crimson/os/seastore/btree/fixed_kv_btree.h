@@ -1018,8 +1018,11 @@ private:
         offset,
         *ret);
       // This can only happen during init_cached_extent
+      // or when backref extent being rewritten by gc space reclaiming
       if (c.pins && !ret->is_pending() && !ret->pin.is_linked()) {
-        assert(ret->is_dirty());
+        assert(ret->is_dirty()
+          || (is_backref_node(ret->get_type())
+            && ret->is_clean()));
         init_internal(*ret);
       }
       auto meta = ret->get_meta();
@@ -1075,8 +1078,11 @@ private:
         offset,
         *ret);
       // This can only happen during init_cached_extent
+      // or when backref extent being rewritten by gc space reclaiming
       if (c.pins && !ret->is_pending() && !ret->pin.is_linked()) {
-        assert(ret->is_dirty());
+        assert(ret->is_dirty()
+          || (is_backref_node(ret->get_type())
+            && ret->is_clean()));
         init_leaf(*ret);
       }
       auto meta = ret->get_meta();
