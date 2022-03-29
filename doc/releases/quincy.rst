@@ -185,21 +185,59 @@ CephFS distributed file system
 Upgrading from Octopus or Pacific
 ----------------------------------
 
+Before starting, make sure your cluster is stable and healthy (no down or
+recovering OSDs).  (This is optional, but recommended.)
+
 .. note::
 
   You can monitor the progress of your upgrade at each stage with the
   ``ceph versions`` command, which will tell you what ceph version(s) are
   running for each type of daemon.
 
-Instructions
-~~~~~~~~~~~~
+Upgrading cephadm clusters
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-## TODO: I replaced the release names in these steps below but is this process accurate still?  It was taken from octopus.rst.
+If your cluster is deployed with cephadm (first introduced in Octopus), then
+the upgrade process is entirely automated.  To initiate the upgrade,
 
-.. highlight:: console
+  .. prompt:: bash #
 
-#. Make sure your cluster is stable and healthy (no down or
-   recovering OSDs).  (Optional, but recommended.)
+    ceph orch upgrade start --ceph-version 17.2.0
+
+The same process is used to upgrade to future minor releases.
+
+Upgrade progress can be monitored with ``ceph -s`` (which provides a simple
+progress bar) or more verbosely with
+
+  .. prompt:: bash #
+
+    ceph -W cephadm
+
+The upgrade can be paused or resumed with
+
+  .. prompt:: bash #
+
+    ceph orch upgrade pause   # to pause
+    ceph orch upgrade resume  # to resume
+
+or canceled with
+
+  .. prompt:: bash #
+
+    ceph orch upgrade stop
+
+Note that canceling the upgrade simply stops the process; there is no ability to
+downgrade back to Octopus or Pacific.
+
+
+Upgrading non-cephadm clusters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+   If you cluster is running Octopus (15.2.x) or later, you might choose
+   to first convert it to use cephadm so that the upgrade to Quincy
+   is automated (see above).  For more information, see
+   :ref:`cephadm-adoption`.
 
 #. Set the ``noout`` flag for the duration of the upgrade. (Optional,
    but recommended.)::
@@ -212,14 +250,14 @@ Instructions
      # systemctl restart ceph-mon.target
 
    Once all monitors are up, verify that the monitor upgrade is
-   complete by looking for the ``octopus`` string in the mon
+   complete by looking for the ``quincy`` string in the mon
    map.  The command::
 
      # ceph mon dump | grep min_mon_release
 
    should report::
 
-     min_mon_release 15 (octopus)
+     min_mon_release 17 (quincy)
 
    If it doesn't, that implies that one or more monitors hasn't been
    upgraded and restarted and/or the quorum does not include all monitors.
@@ -245,23 +283,11 @@ Instructions
 
      # systemctl restart ceph-osd.target
 
-   Note that the first time each OSD starts, it will do a format
-   conversion to improve the accounting for "omap" data.  This may
-   take a few minutes to as much as a few hours (for an HDD with lots
-   of omap data).  You can disable this automatic conversion with::
+#. Upgrade all CephFS MDS daemons. For each CephFS file system,
 
-     # ceph config set osd bluestore_fsck_quick_fix_on_mount false
+   #. Disable standby_replay:
 
-   You can monitor the progress of the OSD upgrades with the
-   ``ceph versions`` or ``ceph osd versions`` commands::
-
-     # ceph osd versions
-     {
-        "ceph version 14.2.5 (...) nautilus (stable)": 12,
-        "ceph version 16.2.0 (...) pacific (stable)": 22,
-     }
-
-#. Upgrade all CephFS MDS daemons.  For each CephFS file system,
+   # ceph fs set <fs_name> allow_standby_replay false
 
    #. Reduce the number of ranks to 1.  (Make note of the original
       number of MDS daemons first if you plan to restore it later.)::
@@ -309,32 +335,15 @@ Instructions
 
      # ceph osd unset noout
 
+#. Consider transitioning your cluster to use the cephadm deployment
+   and orchestration framework to simplify cluster management and
+   future upgrades.  For more information on converting an existing
+   cluster to cephadm, see :ref:`cephadm-adoption`.
+
+Post-upgrade
+~~~~~~~~~~~~
+
 #. Verify the cluster is healthy with ``ceph health``.
-
-   If your CRUSH tunables are older than Hammer, Ceph will now issue a
-   health warning.  If you see a health alert to that effect, you can
-   revert this change with::
-
-     ceph config set mon mon_crush_min_required_version firefly
-
-   If Ceph does not complain, however, then we recommend you also
-   switch any existing CRUSH buckets to straw2, which was added back
-   in the Hammer release.  If you have any 'straw' buckets, this will
-   result in a modest amount of data movement, but generally nothing
-   too severe.::
-
-     ceph osd getcrushmap -o backup-crushmap
-     ceph osd crush set-all-straw-buckets-to-straw2
-
-   If there are problems, you can easily revert with::
-
-     ceph osd setcrushmap -i backup-crushmap
-
-   Moving to 'straw2' buckets will unlock a few recent features, like
-   the `crush-compat` :ref:`balancer <balancer>` mode added back in Luminous.
-
-
-## TODO: Can this whole next step be deleted?
 
 #. If you are upgrading from Mimic, or did not already do so when you
    upgraded to Nautlius, we recommened you enable the new :ref:`v2
@@ -363,6 +372,9 @@ Instructions
 
      ceph telemetry on
 
+   The public dashboard that aggregates Ceph telemetry can be found at
+   `https://telemetry-public.ceph.com/ <https://telemetry-public.ceph.com/>`_.
+
    For more information about the telemetry module, see :ref:`the
    documentation <telemetry>`.
 
@@ -371,16 +383,9 @@ Upgrading from pre-Octopus releases (like Nautilus)
 ---------------------------------------------------
 
 
-## TODO: Is this true?
-
 You *must* first upgrade to Octopus (15.2.z) or Pacific (16.2.z) before
 upgrading to Quincy.
 
-
-Upgrade compatibility notes
----------------------------
-
-## TODO
 
 Changelog
 ---------
