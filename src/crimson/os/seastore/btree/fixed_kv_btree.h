@@ -758,7 +758,7 @@ public:
     node_key_t laddr,
     seastore_off_t len)
   {
-    LOG_PREFIX(FixedKVBtree::get_leaf_if_live);
+    LOG_PREFIX(FixedKVBtree::get_internal_if_live);
     return lower_bound(
       c, laddr
     ).si_then([FNAME, c, addr, laddr, len](auto iter) {
