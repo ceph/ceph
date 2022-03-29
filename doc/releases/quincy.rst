@@ -77,29 +77,11 @@ Dashboard
 
 RADOS
 ~~~~~
-* A critical bug in the OMAP format upgrade process is fixed. This bug 
-  could, under certain circumstances, have caused data corruption (in 
-  the form of improperly formatted OMAP keys) after upgrades run on
-  pre-Pacific clusters if the 'bluestore-quick-fix-on-mount' parameter 
-  was set to 'true' or ceph-bluestore-tool's quick-fix/repair commands 
-  were invoked.  
-  Relevant tracker: https://tracker.ceph.com/issues/53062
-
 * the "kvs" Ceph object class is not packaged anymore. The "kvs" Ceph
   object class offers a distributed flat b-tree key-value store that
   is implemented on top of the librados objects omap. Because there
   are no existing internal users of this object class, it is not
   packaged anymore.
-
-* A new library is available: libcephsqlite. `libcephsqlite` provides a
-  SQLite Virtual File System (VFS) on top of RADOS. The database and
-  journals are striped over RADOS across multiple objects, providing
-  virtually unlimited scaling and throughput that is limiated only by
-  the SQLite client. Applications that use SQLite may change to the Ceph
-  VFS with minimal changes (usually by simply specifying the alternate
-  VFS). We expect the library to be most impactful and useful for applications
-  that were storing state in RADOS omap, especially without striping (which
-  limits scalability).
 
 * OSD: Ceph now uses `mclock_scheduler` for bluestore OSDs as its default
   `osd_op_queue` to provide QoS. The 'mclock_scheduler' is not supported
