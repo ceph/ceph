@@ -61,14 +61,14 @@ General
   Note that generating a telemetry report with 'perf' channel data might
   take a few moments in big clusters.
   For more details, see:
-  https://docs.ceph.com/en/latest/mgr/telemetry/
+  https://docs.ceph.com/en/quincy/mgr/telemetry/
 
 * MGR: The progress module disables the pg recovery event by default since the
   event is expensive and has interrupted other services when there are OSDs
   being marked in/out from the the cluster. However, the user can still enable
   this event anytime. For more detail, see:
 
-  https://docs.ceph.com/en/latest/mgr/progress/
+  https://docs.ceph.com/en/quincy/mgr/progress/
 
 Dashboard
 ~~~~~~~~~
@@ -111,21 +111,21 @@ RADOS
   the old behavior by default, which is now called the 'scale-up' profile.
   For more detail, see:
 
-  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+  https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
 
 * MGR: The pg_autoscaler can now be turned `on` and `off` globally
   with the `noautoscale` flag. By default this flag is unset and
   the default pg_autoscale mode remains the same.
   For more detail, see:
 
-  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+  https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
 
 * MON/MGR: Pools can now be created with the `--bulk` flag. Any pools created 
   with `bulk` will use a profile of the `pg_autoscaler` that provides more 
   performance from the start. However, pools that were created without the 
   `--bulk` flag use the old behavior by default. For more detail, see:
 
-  https://docs.ceph.com/en/latest/rados/operations/placement-groups/
+  https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
 
 
 RBD block storage
