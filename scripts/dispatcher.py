@@ -1,7 +1,7 @@
 """
 usage: teuthology-dispatcher --help
        teuthology-dispatcher --supervisor [-v] --bin-path BIN_PATH --job-config COFNFIG --archive-dir DIR
-       teuthology-dispatcher [-v] [--archive-dir DIR] --log-dir LOG_DIR --tube TUBE
+       teuthology-dispatcher [-v] [--archive-dir DIR] [--exit-on-empty-queue] --log-dir LOG_DIR --tube TUBE
 
 Start a dispatcher for the specified tube. Grab jobs from a beanstalk
 queue and run the teuthology tests they describe as subprocesses. The
@@ -21,13 +21,15 @@ standard arguments:
   --supervisor                   run dispatcher in job supervisor mode
   --bin-path BIN_PATH            teuthology bin path
   --job-config CONFIG            file descriptor of job's config file
+  --exit-on-empty-queue          if the queue is empty, exit
 """
 
 import docopt
+import sys
 
 import teuthology.dispatcher
 
 
 def main():
     args = docopt.docopt(__doc__)
-    teuthology.dispatcher.main(args)
+    sys.exit(teuthology.dispatcher.main(args))

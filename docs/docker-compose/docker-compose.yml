@@ -31,7 +31,7 @@ services:
     healthcheck:
         test: ["CMD", "curl", "-f", "http://0.0.0.0:8080"]
         timeout: 5s
-        interval: 10s
+        interval: 30s
         retries: 2
     ports: 
         - 8080:8080
@@ -59,10 +59,34 @@ services:
         ports:
             - "11300:11300"
   teuthology:
-    build: ./teuthology
+    build:
+      context: ./teuthology
+      args:
+        SSH_PRIVKEY_FILE: $SSH_PRIVKEY_FILE
     depends_on:
         paddles:
             condition: service_healthy
     links:
         - paddles
         - beanstalk
+    environment:
+      SSH_PRIVKEY:
+      SSH_PRIVKEY_FILE:
+      MACHINE_TYPE:
+      TESTNODES:
+  testnode:
+    build:
+      context: ./testnode
+      dockerfile: ./Dockerfile
+    deploy:
+      replicas: 3
+    depends_on:
+        paddles:
+            condition: service_healthy
+    links:
+      - paddles
+    ports:
+      - "22"
+    environment:
+      SSH_PUBKEY:
+    platform: linux/amd64
