@@ -57,6 +57,9 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   hostname?: string;
 
   @Input()
+  hiddenColumns: string[] = [];
+
+  @Input()
   flag?: string;
 
   icons = Icons;
@@ -127,14 +130,8 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         filterable: true
       },
       {
-        name: $localize`Daemon type`,
-        prop: 'daemon_type',
-        flexGrow: 1,
-        filterable: true
-      },
-      {
-        name: $localize`Daemon ID`,
-        prop: 'daemon_id',
+        name: $localize`Daemon name`,
+        prop: 'daemon_name',
         flexGrow: 1,
         filterable: true
       },
@@ -215,6 +212,10 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     this.orchService.status().subscribe((data: { available: boolean }) => {
       this.hasOrchestrator = data.available;
       this.showDocPanel = !data.available;
+    });
+
+    this.columns = this.columns.filter((col: any) => {
+      return !this.hiddenColumns.includes(col.prop);
     });
   }
 
