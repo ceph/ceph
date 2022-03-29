@@ -160,3 +160,36 @@ function call_rgw_admin {
   shift 1
   x $(rgw_admin $cid) "$@"
 }
+
+function get_mstart_parameters {
+  [ $# -ne 1 ] && echo "get_mstart_parameters() needs 1 param" && exit 1
+  # bash arrays start from zero
+  index="$1"
+	index=$((index-1))
+  if [ -n "$DEV_LIST" ]; then
+    IFS=', ' read -r -a dev_list <<< "$DEV_LIST"
+    if [ ${#dev_list[@]} -gt "$index" ]; then
+      local dev_name=${dev_list["$index"]}
+      parameters="--bluestore-devs $dev_name"
+    fi
+  fi
+
+  if [ -n "$DB_DEV_LIST" ]; then
+    IFS=', ' read -r -a db_dev_list <<< "$DB_DEV_LIST"
+    if [ ${#db_dev_list[@]} -gt "$index" ]; then
+      local dev_name=${db_dev_list["$index"]}
+      parameters="$parameters"" -o bluestore_block_db_path=$dev_name"
+    fi
+  fi
+  
+  if [ -n "$WAL_DEV_LIST" ]; then
+    IFS=', ' read -r -a wal_dev_list <<< "$WAL_DEV_LIST"
+    if [ ${#wal_dev_list[@]} -gt "$index" ]; then
+      local dev_name=${wal_dev_list["$index"]}
+      parameters="$parameters"" -o bluestore_block_wal_path=$dev_name"
+    fi
+  fi
+
+  echo "$parameters"
+}
+
