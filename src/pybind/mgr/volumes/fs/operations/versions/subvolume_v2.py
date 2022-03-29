@@ -352,7 +352,7 @@ class SubvolumeV2(SubvolumeV1):
         # machine which removes the entry from the index. Hence, it's safe to removed clone with
         # force option for both.
         acceptable_rm_clone_states = [SubvolumeStates.STATE_COMPLETE, SubvolumeStates.STATE_CANCELED,
-                                      SubvolumeStates.STATE_FAILED]
+                                      SubvolumeStates.STATE_FAILED, SubvolumeStates.STATE_RETAINED]
         if subvol_state not in acceptable_rm_clone_states:
             return False
         return True
