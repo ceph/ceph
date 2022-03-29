@@ -75,7 +75,6 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
                             bool present, bool empty, bool clean,
                             string host, string path,
                             uint64_t size) {
-    ConfigProxy &config = image_ctx->config;
     ASSERT_EQ(present, state.present);
     ASSERT_EQ(empty, state.empty);
     ASSERT_EQ(clean, state.clean);
@@ -83,8 +82,6 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
     ASSERT_EQ(host, state.host);
     ASSERT_EQ(path, state.path);
     ASSERT_EQ(size, state.size);
-    ASSERT_EQ(config.get_val<bool>("rbd_persistent_cache_log_periodic_stats"),
-	      state.log_periodic_stats);
   }
 
   void expect_op_work_queue(MockImageCtx& mock_image_ctx) {
@@ -135,19 +132,17 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_write) {
   ASSERT_EQ(0, finish_ctx.wait());
 }
 
-static void get_jf(const string& s, JSONFormattable *f)
+static void get_jf(const string& s, json_spirit::mObject *f)
 {
-  JSONParser p;
-  bool result = p.parse(s.c_str(), s.size());
+  json_spirit::mValue json_root;
+  bool result = json_spirit::read(s.c_str(), json_root);
   if (!result) {
-    cout << "Failed to parse: '" << s << "'" << std::endl;
+    cout << "failed to parse: '" << s << "'" << std::endl;
+  } else {
+    auto cache_state_root = json_root.get_obj()["persistent_cache"];
+    *f = cache_state_root.get_obj();
   }
   ASSERT_EQ(true, result);
-  try {
-    decode_json_obj(*f, &p);
-  } catch (JSONDecoder::err& e) {
-    ASSERT_TRUE(0 == "Failed to decode JSON object");
-  }
 }
 
 TEST_F(TestMockCacheReplicatedWriteLog, init_state_json_write) {
@@ -156,7 +151,7 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_json_write) {
 
   MockImageCtx mock_image_ctx(*ictx);
 
-  JSONFormattable f;
+  json_spirit::mObject f;
   string strf = "{ \"present\": \"1\", \"empty\": \"0\", \"clean\": \"0\", \
                    \"pwl_host\": \"testhost\", \
                    \"pwl_path\": \"/tmp\", \
