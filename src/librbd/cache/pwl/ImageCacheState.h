@@ -4,11 +4,11 @@
 #ifndef CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H
 #define CEPH_LIBRBD_CACHE_RWL_IMAGE_CACHE_STATE_H
 
+#include "json_spirit/json_spirit.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/cache/Types.h"
 #include <string>
 
-class JSONFormattable;
 namespace ceph {
   class Formatter;
 }
@@ -31,32 +31,40 @@ public:
   bool clean = true;
   std::string host;
   std::string path;
-  std::string cache_type;
+  std::string mode;
   uint64_t size = 0;
-  bool log_periodic_stats;
+  /* After reloading, the following data does not need to be read,
+   * but recalculated. */
+  utime_t stats_timestamp;
+  uint64_t allocated_bytes = 0;
+  uint64_t cached_bytes = 0;
+  uint64_t dirty_bytes = 0;
+  uint64_t free_bytes = 0;
+  uint64_t hits_full = 0;
+  uint64_t hits_partial = 0;
+  uint64_t misses = 0;
+  uint64_t hit_bytes = 0;
+  uint64_t miss_bytes = 0;
 
   ImageCacheState(ImageCtxT* image_ctx, plugin::Api<ImageCtxT>& plugin_api);
 
-  ImageCacheState(ImageCtxT* image_ctx, JSONFormattable& f,
+  ImageCacheState(ImageCtxT* image_ctx, json_spirit::mObject& f,
                   plugin::Api<ImageCtxT>& plugin_api);
 
   ~ImageCacheState() {}
 
-  ImageCacheType get_image_cache_type() const {
-    if (cache_type == "rwl") {
+  ImageCacheType get_image_cache_mode() const {
+    if (mode == "rwl") {
       return IMAGE_CACHE_TYPE_RWL;
-    } else if (cache_type == "ssd") {
+    } else if (mode == "ssd") {
       return IMAGE_CACHE_TYPE_SSD;
     }
     return IMAGE_CACHE_TYPE_UNKNOWN;
   }
 
-
   void write_image_cache_state(Context *on_finish);
 
   void clear_image_cache_state(Context *on_finish);
-
-  void dump(ceph::Formatter *f) const;
 
   static ImageCacheState<ImageCtxT>* create_image_cache_state(
     ImageCtxT* image_ctx, plugin::Api<ImageCtxT>& plugin_api, int &r);
