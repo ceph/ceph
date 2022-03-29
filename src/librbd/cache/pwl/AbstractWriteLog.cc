@@ -314,7 +314,19 @@ void AbstractWriteLog<I>::log_perf() {
 template <typename I>
 void AbstractWriteLog<I>::periodic_stats() {
   std::lock_guard locker(m_lock);
-  ldout(m_image_ctx.cct, 1) << "STATS: m_log_entries=" << m_log_entries.size()
+  m_cache_state->allocated_bytes = m_bytes_allocated;
+  m_cache_state->cached_bytes = m_bytes_cached;
+  m_cache_state->dirty_bytes = m_bytes_dirty;
+  m_cache_state->free_bytes = m_bytes_allocated_cap - m_bytes_allocated;
+  m_cache_state->hits_full = m_perfcounter->get(l_librbd_pwl_rd_hit_req);
+  m_cache_state->hits_partial = m_perfcounter->get(l_librbd_pwl_rd_part_hit_req);
+  m_cache_state->misses = m_perfcounter->get(l_librbd_pwl_rd_req) -
+      m_cache_state->hits_full - m_cache_state->hits_partial;
+  m_cache_state->hit_bytes = m_perfcounter->get(l_librbd_pwl_rd_hit_bytes);
+  m_cache_state->miss_bytes = m_perfcounter->get(l_librbd_pwl_rd_bytes) -
+      m_cache_state->hit_bytes;
+  update_image_cache_state();
+  ldout(m_image_ctx.cct, 5) << "STATS: m_log_entries=" << m_log_entries.size()
                             << ", m_dirty_log_entries=" << m_dirty_log_entries.size()
                             << ", m_free_log_entries=" << m_free_log_entries
                             << ", m_bytes_allocated=" << m_bytes_allocated
@@ -331,15 +343,12 @@ void AbstractWriteLog<I>::periodic_stats() {
 template <typename I>
 void AbstractWriteLog<I>::arm_periodic_stats() {
   ceph_assert(ceph_mutex_is_locked(*m_timer_lock));
-  if (m_periodic_stats_enabled) {
-    m_timer_ctx = new LambdaContext(
-      [this](int r) {
-        /* m_timer_lock is held */
-        periodic_stats();
-        arm_periodic_stats();
-      });
-    m_timer->add_event_after(LOG_STATS_INTERVAL_SECONDS, m_timer_ctx);
-  }
+  m_timer_ctx = new LambdaContext([this](int r) {
+      /* m_timer_lock is held */
+      periodic_stats();
+      arm_periodic_stats();
+    });
+  m_timer->add_event_after(LOG_STATS_INTERVAL_SECONDS, m_timer_ctx);
 }
 
 template <typename I>
@@ -558,17 +567,14 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
   // Start the thread
   m_thread_pool.start();
 
-  m_periodic_stats_enabled = m_cache_state->log_periodic_stats;
   /* Do these after we drop lock */
   later.add(new LambdaContext([this](int r) {
-    if (m_periodic_stats_enabled) {
       /* Log stats for the first time */
       periodic_stats();
       /* Arm periodic stats logging for the first time */
       std::lock_guard timer_locker(*m_timer_lock);
       arm_periodic_stats();
-    }
-  }));
+    }));
   m_image_ctx.op_work_queue->queue(on_finish, 0);
 }
 
@@ -638,13 +644,7 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
     [this, ctx](int r) {
       ldout(m_image_ctx.cct, 6) << "image cache cleaned" << dendl;
       Context *next_ctx = override_ctx(r, ctx);
-      bool periodic_stats_enabled = m_periodic_stats_enabled;
-      m_periodic_stats_enabled = false;
-
-      if (periodic_stats_enabled) {
-        /* Log stats one last time if they were enabled */
-        periodic_stats();
-      }
+      periodic_stats();
       {
         std::lock_guard locker(m_lock);
         check_image_cache_state_clean();
@@ -679,9 +679,7 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
         /* Flush all writes to OSDs (unless disabled) and wait for all
            in-progress flush writes to complete */
         ldout(m_image_ctx.cct, 6) << "flushing" << dendl;
-        if (m_periodic_stats_enabled) {
-          periodic_stats();
-        }
+        periodic_stats();
       }
       flush_dirty_entries(next_ctx);
     });

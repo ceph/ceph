@@ -59,10 +59,6 @@ Here are some cache configuration settings:
 - ``rbd_persistent_cache_size`` The cache size per image. The minimum cache
   size is 1 GB.
 
-- ``rbd_persistent_cache_log_periodic_stats`` This is a debug option. It is
-  used to emit periodic perf stats to the debug log if ``debug rbd pwl`` is
-  set to ``1`` or higher.
-
 The above configurations can be set per-host, per-pool, per-image etc. Eg, to
 set per-host, add the overrides to the appropriate `section`_ in the host's
 ``ceph.conf`` file. To set per-pool, per-image, etc, please refer to the

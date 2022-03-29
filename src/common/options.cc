@@ -8024,10 +8024,6 @@ static std::vector<Option> get_rbd_options() {
     .set_enum_allowed({"disabled", "rwl", "ssd"})
     .set_description("enable persistent write back cache for this volume"),
 
-    Option("rbd_persistent_cache_log_periodic_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("emit periodic perf stats to debug log"),
-
     Option("rbd_persistent_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1073741824)
     .set_min(1073741824)
