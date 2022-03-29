@@ -692,6 +692,13 @@ public:
 
     gc_process.maybe_wake_on_space_used();
     assert(ret > 0);
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
+      "{} segment {} new len: {}~{}, live_bytes: {}",
+      __func__,
+      seg_addr.get_segment_id(),
+      addr,
+      len,
+      space_tracker->get_usage(seg_addr.get_segment_id()));
   }
 
   void mark_space_free(
@@ -705,6 +712,12 @@ public:
     stats.used_bytes -= len;
     auto& seg_addr = addr.as_seg_paddr();
 
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
+      "{} segment {} free len: {}~{}",
+      __func__,
+      seg_addr.get_segment_id(),
+      addr,
+      len);
     auto old_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
     [[maybe_unused]] auto ret = space_tracker->release(
       seg_addr.get_segment_id(),
@@ -714,6 +727,13 @@ public:
     adjust_segment_util(old_usage, new_usage);
     maybe_wake_gc_blocked_io();
     assert(ret >= 0);
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
+      "{} segment {} free len: {}~{}, live_bytes: {}",
+      __func__,
+      seg_addr.get_segment_id(),
+      addr,
+      len,
+      space_tracker->get_usage(seg_addr.get_segment_id()));
   }
 
   SpaceTrackerIRef get_empty_space_tracker() const {
