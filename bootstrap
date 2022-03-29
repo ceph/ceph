@@ -131,7 +131,14 @@ Darwin)
         if brew list $keg >/dev/null 2>&1; then
             echo "Found $keg"
         else
-            brew install $keg
+            if [ "$install" = true ]; then
+                brew install $keg
+            else
+                missing="${missing:+$missing }$keg"
+                echo "Please install missing packages or run './bootstrap install':"
+                echo "brew install $missing"
+                exit 1
+            fi
         fi
     done
     ;;
