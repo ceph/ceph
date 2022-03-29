@@ -85,6 +85,9 @@ To disable mirroring for a given file system::
 
   $ ceph fs snapshot mirror disable <fs_name>
 
+Adding Peers
+------------
+
 Once mirroring is enabled, add a peer to which directory snapshots are to be mirrored.
 Peers are specified by `<client>@<cluster>` and are assigned a unique-id (UUID)
 when added. See `Creating Users` section on how to create Ceph users for mirroring.
@@ -109,6 +112,35 @@ To remove a peer use::
 To list file system mirror peers use::
 
   $ ceph fs snapshot mirror peer_list <fs_name>
+
+Bootstrap Peers
+---------------
+
+Adding a peer (via `peer_add`) requires the peer cluster configuration and user keyring
+to be available in the primary cluster (manager host and hosts running the mirror daemon).
+This can be avoided by bootstrapping and importing a peer token. Peer bootstrap involves
+creating a bootstrap token on the peer cluster via::
+
+  $ ceph fs snapshot mirror peer_bootstrap create <fs_name> <client_entity> <site-name>
+
+e.g.::
+
+  $ ceph fs snapshot mirror peer_bootstrap create backup_fs client.mirror_remote site-remote
+  {"token": "eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ=="}
+
+`site-name` refers to a user-defined string to identify the remote filesystem. In context
+of `peer_add` interface, `site-name` is the passed in `cluster` name from `remote_cluster_spec`.
+
+Import the bootstrap token in the primary cluster via::
+
+  $ ceph fs snapshot mirror peer_bootstrap import <fs_name> <token>
+
+e.g.::
+
+  $ ceph fs snapshot mirror peer_bootstrap import cephfs eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ==
+
+Directory Mirroring
+-------------------
 
 To configure a directory for mirroring, use::
 
@@ -137,32 +169,6 @@ is disallowed::
 
 Commands to check directory mapping (to mirror daemons) and directory distribution are
 detailed in `Mirroring Status` section.
-
-Bootstrap Peers
----------------
-
-Adding a peer (via `peer_add`) requires the peer cluster configuration and user keyring
-to be available in the primary cluster (manager host and hosts running the mirror daemon).
-This can be avoided by bootstrapping and importing a peer token. Peer bootstrap involves
-creating a bootstrap token on the peer cluster via::
-
-  $ ceph fs snapshot mirror peer_bootstrap create <fs_name> <client_entity> <site-name>
-
-e.g.::
-
-  $ ceph fs snapshot mirror peer_bootstrap create backup_fs client.mirror_remote site-remote
-  {"token": "eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ=="}
-
-`site-name` refers to a user-defined string to identify the remote filesystem. In context
-of `peer_add` interface, `site-name` is the passed in `cluster` name from `remote_cluster_spec`.
-
-Import the bootstrap token in the primary cluster via::
-
-  $ ceph fs snapshot mirror peer_bootstrap import <fs_name> <token>
-
-e.g.::
-
-  $ ceph fs snapshot mirror peer_bootstrap import cephfs eyJmc2lkIjogIjBkZjE3MjE3LWRmY2QtNDAzMC05MDc5LTM2Nzk4NTVkNDJlZiIsICJmaWxlc3lzdGVtIjogImJhY2t1cF9mcyIsICJ1c2VyIjogImNsaWVudC5taXJyb3JfcGVlcl9ib290c3RyYXAiLCAic2l0ZV9uYW1lIjogInNpdGUtcmVtb3RlIiwgImtleSI6ICJBUUFhcDBCZ0xtRmpOeEFBVnNyZXozai9YYUV0T2UrbUJEZlJDZz09IiwgIm1vbl9ob3N0IjogIlt2MjoxOTIuMTY4LjAuNTo0MDkxOCx2MToxOTIuMTY4LjAuNTo0MDkxOV0ifQ==
 
 Mirroring Status
 ----------------
