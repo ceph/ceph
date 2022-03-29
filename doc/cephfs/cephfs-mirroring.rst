@@ -44,6 +44,10 @@ The mirror daemon should be spawned using `systemctl(1)` unit files::
 
 .. note:: The user specified here is `mirror` created in the `Creating Users` section.
 
+When running a cluster with the cephadm orchestrator use::
+
+  $ ceph orch apply cephfs-mirror
+
 Interface
 ---------
 
