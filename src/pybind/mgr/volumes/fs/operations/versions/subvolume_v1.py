@@ -166,6 +166,12 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         self.metadata_mgr.remove_section("progress")
         self.metadata_mgr.flush()
 
+    def add_clone_failure(self, errno, errstr):
+        self.metadata_mgr.add_section("failure")
+        self.metadata_mgr.update_section("failure", "errno", errno)
+        self.metadata_mgr.update_section("failure", "errstr", errstr)
+        self.metadata_mgr.flush()
+
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
@@ -704,6 +710,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         }
         return clone_progress
 
+    def _get_clone_failure(self):
+        clone_failure = {
+            'errno'  : self.metadata_mgr.get_option("failure", "errno"),
+            'errstr' : self.metadata_mgr.get_option("failure", "errstr"),
+        }
+        return clone_failure
+
     @property
     def status(self):
         state = SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
@@ -720,6 +733,12 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 # This is very well possible if snapshot is accidently deleted from back end and
                 # such cases.
                 pass
+        if SubvolumeOpSm.is_failed_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
+            try:
+                subvolume_status["failure"] = self._get_clone_failure()
+            except MetadataMgrException:
+                pass
+
 
         return subvolume_status
 
