@@ -9,7 +9,6 @@ overrides:
       - \(PG_DEGRADED\)
       - slow request
       - failed to encode map
-    wait-for-scrub: false
     conf:
       mon:
         mon warn on osd down out interval zero: false

@@ -1,6 +1,5 @@
 overrides:
   ceph:
-    wait-for-scrub: false
     conf:
       client:
         setuser: ceph
