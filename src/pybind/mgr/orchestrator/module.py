@@ -1435,10 +1435,16 @@ Usage:
     def _upgrade_start(self,
                        image: Optional[str] = None,
                        _end_positional_: int = 0,
+                       daemon_types: Optional[str] = None,
+                       hosts: Optional[str] = None,
+                       services: Optional[str] = None,
+                       limit: Optional[int] = None,
                        ceph_version: Optional[str] = None) -> HandleCommandResult:
         """Initiate upgrade"""
         self._upgrade_check_image_name(image, ceph_version)
-        completion = self.upgrade_start(image, ceph_version)
+        dtypes = daemon_types.split(',') if daemon_types is not None else None
+        service_names = services.split(',') if services is not None else None
+        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
