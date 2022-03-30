@@ -406,12 +406,23 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
 }
 void rgw_cls_bi_entry::generate_test_instances(list<rgw_cls_bi_entry*>& o)
 {
+  using ceph::encode;
   rgw_cls_bi_entry *m = new rgw_cls_bi_entry;
+  rgw_bucket_olh_entry *entry = new rgw_bucket_olh_entry;
+  entry->delete_marker = true;
+  entry->epoch = 1234;
+  entry->tag = "tag";
+  entry->key.name = "key.name";
+  entry->key.instance = "key.instance";
+  entry->exists = true;
+  entry->pending_removal = true;
   m->type = BIIndexType::Plain;
   m->idx = "idx";
+  encode(entry,data);
   o.push_back(m);
   o.push_back(new rgw_cls_bi_entry);
 }
+
 void rgw_bucket_olh_entry::dump(Formatter *f) const
 {
   encode_json("key", key, f);
