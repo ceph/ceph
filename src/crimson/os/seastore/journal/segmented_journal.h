@@ -16,9 +16,9 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/osd/exceptions.h"
 #include "segment_allocator.h"
+#include "crimson/os/seastore/segment_seq_allocator.h"
 
 namespace crimson::os::seastore::journal {
-
 /**
  * Manages stream of atomically written records to a SegmentManager.
  */
@@ -46,6 +46,9 @@ public:
     write_pipeline = _write_pipeline;
   }
 
+  SegmentSeqAllocator& get_segment_seq_allocator() final {
+    return *segment_seq_allocator;
+  }
 private:
   submit_record_ret do_submit_record(
     record_t &&record,
@@ -53,6 +56,7 @@ private:
   );
 
   SegmentProvider& segment_provider;
+  SegmentSeqAllocatorRef segment_seq_allocator;
   SegmentAllocator journal_segment_allocator;
   RecordSubmitter record_submitter;
   ExtentReader& scanner;

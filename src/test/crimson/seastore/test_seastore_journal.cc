@@ -80,6 +80,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   segment_id_t next;
 
+  std::map<segment_id_t, segment_seq_t> segment_seqs;
+
   journal_test_t() = default;
 
   seastar::lowres_system_clock::time_point get_last_modified(
@@ -94,12 +96,21 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   void update_segment_avail_bytes(paddr_t offset) final {}
 
-  segment_id_t get_segment(device_id_t id, segment_seq_t seq) final {
+  segment_id_t get_segment(
+    device_id_t id,
+    segment_seq_t seq,
+    segment_type_t) final
+  {
     auto ret = next;
     next = segment_id_t{
       next.device_id(),
       next.device_segment_id() + 1};
+    segment_seqs[ret] = seq;
     return ret;
+  }
+
+  segment_seq_t get_seq(segment_id_t id) {
+    return segment_seqs[id];
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
@@ -224,6 +235,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       0, 0,
       block_size,
       1,
+      MAX_SEG_SEQ,
       bl
     };
   }

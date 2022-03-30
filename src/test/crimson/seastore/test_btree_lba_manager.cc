@@ -41,6 +41,10 @@ struct btree_test_base :
 
   btree_test_base() = default;
 
+  std::map<segment_id_t, segment_seq_t> segment_seqs;
+
+
+
   seastar::lowres_system_clock::time_point get_last_modified(
     segment_id_t id) const final {
     return seastar::lowres_system_clock::time_point();
@@ -52,12 +56,21 @@ struct btree_test_base :
   }
   void update_segment_avail_bytes(paddr_t offset) final {}
 
-  segment_id_t get_segment(device_id_t id, segment_seq_t seq) final {
+  segment_id_t get_segment(
+    device_id_t id,
+    segment_seq_t seq,
+    segment_type_t) final
+  {
     auto ret = next;
     next = segment_id_t{
       next.device_id(),
       next.device_segment_id() + 1};
+    segment_seqs[ret] = seq;
     return ret;
+  }
+
+  segment_seq_t get_seq(segment_id_t id) {
+    return segment_seqs[id];
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
@@ -66,7 +79,7 @@ struct btree_test_base :
   virtual void complete_commit(Transaction &t) {}
   seastar::future<> submit_transaction(TransactionRef t)
   {
-    auto record = cache->prepare_record(*t);
+    auto record = cache->prepare_record(*t, this);
     return journal->submit_record(std::move(record), t->get_handle()).safe_then(
       [this, t=std::move(t)](auto submit_result) mutable {
 	cache->complete_commit(
