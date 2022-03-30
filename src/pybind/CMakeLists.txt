@@ -32,7 +32,14 @@ endif(CMAKE_INSTALL_PREFIX)
 
 execute_process(
   COMMAND
-  ${Python3_EXECUTABLE} -c "from distutils import sysconfig; print(sysconfig.get_python_lib(prefix='${PYTHON_INSTALL_TEMPLATE}'))"
+  ${Python3_EXECUTABLE} -c
+    "import sysconfig;\
+     print(\
+     sysconfig.get_path(\
+     name='purelib',\
+     vars=\
+     {'base': '${PYTHON_INSTALL_TEMPLATE}',\
+      'py_version_short': sysconfig.get_config_var('py_version_short')}))"
   OUTPUT_VARIABLE "PYTHON3_INSTDIR"
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
