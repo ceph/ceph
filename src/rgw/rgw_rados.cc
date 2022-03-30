@@ -784,7 +784,7 @@ class RGWIndexCompletionManager {
   bool _stop{false};
   std::thread retry_thread;
 
-  std::atomic<int> cur_shard {0};
+  std::atomic<unsigned long> cur_shard {0};
 
   void process();
   
@@ -807,7 +807,7 @@ class RGWIndexCompletionManager {
   }
   
   int next_shard() {
-    int result = cur_shard % num_shards;
+    int result = (int)(cur_shard % ((unsigned long)num_shards));
     cur_shard++;
     return result;
   }
