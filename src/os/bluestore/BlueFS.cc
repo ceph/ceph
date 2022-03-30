@@ -2715,6 +2715,15 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   log.writer->pos = log.writer->file->fnode.size =
     log.writer->pos - old_log_jump_to + new_log_jump_to;
 
+  // extend the size threshold for triggering log compact if the compacted
+  // log size is larger than the current threshold. So that we avoid endless
+  // log compact triggering on every write request.
+  if (log.writer->file->fnode.size >=
+          cct->_conf->bluefs_log_compact_min_size) {
+    cct->_conf->bluefs_log_compact_min_size +=
+          cct->_conf->bluefs_log_compact_min_size;
+  }
+
   vselector->add_usage(log_file->vselector_hint, log_file->fnode);
 
   log.lock.unlock();
