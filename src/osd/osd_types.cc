@@ -3119,9 +3119,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(tmp, bl);
       scrub_sched_status.m_is_periodic = tmp;
       decode(objects_scrubbed, bl);
-      decode(scrub_duration, bl);
     }
     if (struct_v >= 28) {
+      decode(scrub_duration, bl);
       decode(objects_trimmed, bl);
       decode(snaptrim_duration, bl);
     }
