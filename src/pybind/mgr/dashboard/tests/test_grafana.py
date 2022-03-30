@@ -53,6 +53,14 @@ class GrafanaTest(ControllerTestCase, KVStoreMockMixin):
         self.assertStatus(200)
         self.assertBody(b'"404"')
 
+    @patch('dashboard.controllers.grafana.GrafanaRestClient.url_validation')
+    def test_validation_endpoint_fails(self, url_validation):
+        url_validation.side_effect = RequestException
+        self.server_settings()
+        self._get('/api/grafana/validation/bar')
+        self.assertStatus(400)
+        self.assertJsonBody({'detail': '', 'code': 'Error', 'component': 'grafana'})
+
     def test_dashboards_unavailable_no_url(self):
         self.server_settings(url="")
         self._post('/api/grafana/dashboards')
