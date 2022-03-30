@@ -15327,9 +15327,9 @@ int BlueStore::_do_alloc_write(
 	      }
 	    }
           }
-          return boost::optional<CompressorRef>(cp);
+          return std::optional<CompressorRef>(cp);
         }
-        return boost::optional<CompressorRef>();
+        return std::optional<CompressorRef>();
       }
     );
 
@@ -15339,9 +15339,9 @@ int BlueStore::_do_alloc_write(
       [&]() {
         double val;
         if (coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
-          return boost::optional<double>(val);
+          return std::optional<double>(val);
         }
-        return boost::optional<double>();
+        return std::optional<double>();
       }
     );
   }
@@ -15354,9 +15354,9 @@ int BlueStore::_do_alloc_write(
     [&]() {
       int64_t val;
       if (coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-        return boost::optional<int64_t>(val);
+        return std::optional<int64_t>(val);
       }
-      return boost::optional<int64_t>();
+      return std::optional<int64_t>();
     }
   );
 
@@ -15373,7 +15373,7 @@ int BlueStore::_do_alloc_write(
 
       // FIXME: memory alignment here is bad
       bufferlist t;
-      boost::optional<int32_t> compressor_message;
+      std::optional<int32_t> compressor_message;
       int r = c->compress(wi.bl, t, compressor_message);
       uint64_t want_len_raw = wi.blob_length * crr;
       uint64_t want_len = p2roundup(want_len_raw, min_alloc_size);
@@ -15809,10 +15809,10 @@ void BlueStore::_choose_write_options(
     [&]() {
       string val;
       if (c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
-	return boost::optional<Compressor::CompressionMode>(
+	return std::optional<Compressor::CompressionMode>(
 	  Compressor::get_comp_mode_type(val));
       }
-      return boost::optional<Compressor::CompressionMode>();
+      return std::optional<Compressor::CompressionMode>();
     }
   );
 
@@ -15845,9 +15845,9 @@ void BlueStore::_choose_write_options(
         [&]() {
           int64_t val;
           if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
-   	    return boost::optional<uint64_t>((uint64_t)val);
+   	    return std::optional<uint64_t>((uint64_t)val);
           }
-          return boost::optional<uint64_t>();
+          return std::optional<uint64_t>();
         }
       );
     }
@@ -15859,9 +15859,9 @@ void BlueStore::_choose_write_options(
         [&]() {
           int64_t val;
           if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
-   	    return boost::optional<uint64_t>((uint64_t)val);
+   	    return std::optional<uint64_t>((uint64_t)val);
           }
-          return boost::optional<uint64_t>();
+          return std::optional<uint64_t>();
         }
       );
     }
