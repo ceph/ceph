@@ -5040,6 +5040,13 @@ def command_bootstrap(ctx):
     if not ctx.output_pub_ssh_key:
         ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, 'ceph.pub')
 
+    if ctx.fsid:
+        data_dir_base = os.path.join(ctx.data_dir, ctx.fsid)
+        if os.path.exists(data_dir_base):
+            raise Error(f"A cluster with the same fsid '{ctx.fsid}' already exists.")
+        else:
+            logger.warning('Specifying an fsid for your cluster offers no advantages and may increase the likelihood of fsid conflicts.')
+
     # verify output files
     for f in [ctx.output_config, ctx.output_keyring,
               ctx.output_pub_ssh_key]:
