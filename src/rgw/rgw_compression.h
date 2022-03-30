@@ -33,7 +33,7 @@ public:
                        RGWCompressionInfo* cs_info_, 
                        bool partial_content_,
                        RGWGetObj_Filter* next);
-  ~RGWGetObj_Decompress() override {}
+  virtual ~RGWGetObj_Decompress() override {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
   int fixup_range(off_t& ofs, off_t& end) override;
@@ -51,6 +51,7 @@ public:
   RGWPutObj_Compress(CephContext* cct_, CompressorRef compressor,
                      rgw::sal::DataProcessor *next)
     : Pipe(next), cct(cct_), compressor(compressor) {}
+  virtual ~RGWPutObj_Compress() override {};
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
 
