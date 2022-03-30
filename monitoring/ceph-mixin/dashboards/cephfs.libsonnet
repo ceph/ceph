@@ -18,7 +18,7 @@ local u = import 'utils.libsonnet';
                            1,
                            '$datasource')
         .addTargets(
-          [u.addTargetSchema(expr, 1, 'time_series', legendFormat)]
+          [u.addTargetSchema(expr, legendFormat)]
         ) + { gridPos: { x: x, y: y, w: w, h: h } };
 
       u.dashboardSchema(
@@ -80,8 +80,6 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(u.addTargetSchema(
           'sum(rate(ceph_objecter_op_w{ceph_daemon=~"($mds_servers).*"}[1m]))',
-          1,
-          'time_series',
           'Write Ops'
         ))
         .addSeriesOverride(

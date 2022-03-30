@@ -418,6 +418,7 @@
             {
                "expr": "topk(10, (sort((irate(ceph_rbd_write_ops[30s]) + on (image, pool, namespace) irate(ceph_rbd_read_ops[30s])))))",
                "format": "table",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
@@ -519,6 +520,7 @@
             {
                "expr": "topk(10, sort(sum(irate(ceph_rbd_read_bytes[30s]) + irate(ceph_rbd_write_bytes[30s])) by (pool, image, namespace)))",
                "format": "table",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
@@ -620,6 +622,7 @@
             {
                "expr": "topk(10,\n  sum(\n    irate(ceph_rbd_write_latency_sum[30s]) / clamp_min(irate(ceph_rbd_write_latency_count[30s]), 1) +\n    irate(ceph_rbd_read_latency_sum[30s]) / clamp_min(irate(ceph_rbd_read_latency_count[30s]), 1)\n  ) by (pool, image, namespace)\n)",
                "format": "table",
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "",
                "refId": "A"
