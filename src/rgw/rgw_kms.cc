@@ -80,7 +80,7 @@ public:
 	return r;
     }
     void* Realloc(void* p, size_t old, size_t nw) {
-	void *r;
+	void *r = nullptr;
 	if (nw) r = malloc(nw);
 	if (nw > old) nw = old;
 	if (r && old) memcpy(r, p, nw);
