@@ -7,7 +7,12 @@ import datetime
 
 import yaml
 from prettytable import PrettyTable
-from natsort import natsorted
+
+try:
+    from natsort import natsorted
+except ImportError:
+    # fallback to normal sort
+    natsorted = sorted  # type: ignore
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
