@@ -811,6 +811,11 @@ class TestCephadm(object):
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
             assert out == "Created no osd(s) on host test; already created?"
+            bad_dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='invalid_hsot'),
+                                    data_devices=DeviceSelection(paths=['']))
+            c = cephadm_module.create_osds(bad_dg)
+            out = wait(cephadm_module, c)
+            assert "Invalid 'host:device' spec: host not found in cluster" in out
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_noncollocated_osd(self, cephadm_module):
