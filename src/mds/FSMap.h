@@ -259,17 +259,21 @@ public:
       return;
     }
 
-    for (auto &f : filesystems) {
-      string_view fs_name = f.second->mds_map.get_fs_name();
+    for(auto it = filesystems.begin(); it != filesystems.end();) {
+      std::string_view fs_name = (*it).second->mds_map.get_fs_name();
       if (std::find(allowed.begin(), allowed.end(), fs_name) == allowed.end()) {
-	filesystems.erase(f.first);
+        it = filesystems.erase( it );
+      } else {
+        ++ it;
       }
     }
 
-    for (auto r : mds_roles) {
-      string_view fs_name = fs_name_from_gid(r.first);
+    for(auto it = mds_roles.begin(); it != mds_roles.end();) {
+      std::string_view fs_name = fs_name_from_gid((*it).first);
       if (std::find(allowed.begin(), allowed.end(), fs_name) == allowed.end()) {
-	mds_roles.erase(r.first);
+        it = mds_roles.erase( it );
+      } else {
+        ++ it;
       }
     }
   }
