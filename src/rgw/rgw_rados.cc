@@ -672,15 +672,15 @@ int RGWRados::get_required_alignment(const DoutPrefixProvider *dpp, const rgw_po
     return r;
   }
 
-  bool requires;
-  r = ioctx.pool_requires_alignment2(&requires);
+  bool req;
+  r = ioctx.pool_requires_alignment2(&req);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: ioctx.pool_requires_alignment2() returned "
       << r << dendl;
     return r;
   }
 
-  if (!requires) {
+  if (!req) {
     *alignment = 0;
     return 0;
   }
