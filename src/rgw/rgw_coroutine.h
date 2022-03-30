@@ -65,7 +65,7 @@ protected:
   void _complete(RGWAioCompletionNotifier *cn, const rgw_io_id& io_id, void *user_info);
 public:
   explicit RGWCompletionManager(CephContext *_cct);
-  ~RGWCompletionManager() override;
+  virtual ~RGWCompletionManager() override;
 
   void complete(RGWAioCompletionNotifier *cn, const rgw_io_id& io_id, void *user_info);
   int get_next(io_completion *io);
@@ -94,7 +94,7 @@ class RGWAioCompletionNotifier : public RefCountedObject {
 
 public:
   RGWAioCompletionNotifier(RGWCompletionManager *_mgr, const rgw_io_id& _io_id, void *_user_data);
-  ~RGWAioCompletionNotifier() override {
+  virtual ~RGWAioCompletionNotifier() override {
     c->release();
     lock.lock();
     bool need_unregister = registered;
@@ -466,7 +466,7 @@ protected:
   bool collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack); /* returns true if found a stack to collect */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
-  ~RGWCoroutinesStack() override;
+  virtual ~RGWCoroutinesStack() override;
 
   int64_t get_id() const {
     return id;
@@ -718,7 +718,7 @@ class RGWSimpleCoroutine : public RGWCoroutine {
 
 public:
   RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct), called_cleanup(false) {}
-  ~RGWSimpleCoroutine() override;
+  virtual ~RGWSimpleCoroutine() override;
 
   virtual int init() { return 0; }
   virtual int send_request(const DoutPrefixProvider *dpp) = 0;
