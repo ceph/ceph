@@ -131,8 +131,14 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
   static auto handle(Func&& func) {
     return [
       func = std::forward<Func>(func)
-    ] (const unthrowable_wrapper&) mutable -> decltype(auto) {
-      if constexpr (std::is_invocable_v<Func, ErrorT>) {
+    ] (const unthrowable_wrapper& raw_error) mutable -> decltype(auto) {
+      if constexpr (std::is_invocable_v<Func, ErrorT, decltype(raw_error)>) {
+	// check whether the handler wants to take the raw error object which
+	// would be the case if it wants conditionally handle-or-pass-further.
+        return std::invoke(std::forward<Func>(func),
+                           ErrorV,
+                           std::move(raw_error));
+      } else if constexpr (std::is_invocable_v<Func, ErrorT>) {
         return std::invoke(std::forward<Func>(func), ErrorV);
       } else {
         return std::invoke(std::forward<Func>(func));
@@ -197,13 +203,17 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
     return [
       func = std::forward<Func>(func)
     ] (stateful_error_t<ErrorT>&& e) mutable -> decltype(auto) {
-      if constexpr (std::is_invocable_v<Func, void>) {
+      if constexpr (std::is_invocable_v<Func>) {
         return std::invoke(std::forward<Func>(func));
       }
       try {
         std::rethrow_exception(e.ep);
       } catch (const ErrorT& obj) {
-        return std::invoke(std::forward<Func>(func), obj);
+        if constexpr (std::is_invocable_v<Func, decltype(obj), decltype(e)>) {
+          return std::invoke(std::forward<Func>(func), obj, e);
+	} else if constexpr (std::is_invocable_v<Func, decltype(obj)>) {
+          return std::invoke(std::forward<Func>(func), obj);
+	}
       }
       ceph_abort_msg("exception type mismatch -- impossible!");
     };
