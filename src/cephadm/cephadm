@@ -4368,6 +4368,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
     subnet_list = subnets.split(',')
     for subnet in subnet_list:
         # ensure the format of the string is as expected address/netmask
+        subnet = subnet.strip()
         if not re.search(r'\/\d+$', subnet):
             rc = 1
             errors.append(f'{subnet} is not in CIDR format (address/netmask)')
@@ -4466,7 +4467,11 @@ def prepare_mon_addresses(
     logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
 
     mon_network = None
-    if not ctx.skip_mon_network:
+    cp = read_config(ctx.config)
+    if cp.has_option('global', 'public_network'):
+        mon_network = cp.get('global', 'public_network')
+
+    if mon_network is None and not ctx.skip_mon_network:
         # make sure IP is configured locally, and then figure out the
         # CIDR network
         errmsg = f'Cannot infer CIDR network for mon IP `{base_ip}`'
@@ -4489,18 +4494,21 @@ def prepare_mon_addresses(
 
 
 def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
-    cluster_network = ''
     ipv6_cluster_network = False
     # the cluster network may not exist on this node, so all we can do is
     # validate that the address given is valid ipv4 or ipv6 subnet
-    if ctx.cluster_network:
-        rc, versions, err_msg = check_subnet(ctx.cluster_network)
+    cp = read_config(ctx.config)
+    cluster_network = ctx.cluster_network
+    if cluster_network is None and cp.has_option('global', 'cluster_network'):
+        cluster_network = cp.get('global', 'cluster_network')
+
+    if cluster_network:
+        rc, versions, err_msg = check_subnet(cluster_network)
         if rc:
             raise Error(f'Invalid --cluster-network parameter: {err_msg}')
-        cluster_network = ctx.cluster_network
         ipv6_cluster_network = True if 6 in versions else False
     else:
-        logger.info('- internal network (--cluster-network) has not '
+        logger.info('Internal network (--cluster-network) has not '
                     'been provided, OSD replication will default to '
                     'the public_network')
 
