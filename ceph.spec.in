@@ -1356,12 +1356,11 @@ install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml %{buildro
 %py_byte_compile %{__python3} %{buildroot}%{python3_sitelib}
 %endif
 
+%clean
+rm -rf %{buildroot}
 # built binaries are no longer necessary at this point,
 # but are consuming ~17GB of disk in the build environment
 rm -rf build
-
-%clean
-rm -rf %{buildroot}
 
 #################################################################################
 # files and systemd scriptlets
