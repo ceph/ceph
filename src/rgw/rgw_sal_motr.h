@@ -435,7 +435,13 @@ class MotrZone : public Zone {
       info.storage_classes = sc;
       zone_params->placement_pools["default"] = info;
     }
-    ~MotrZone() = default;
+    ~MotrZone() {
+      delete current_period;
+      delete zone_params;
+      delete zone_public_config;
+      delete zonegroup;
+      delete realm;
+    };
 
     virtual const RGWZoneGroup& get_zonegroup() override;
     virtual int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) override;
