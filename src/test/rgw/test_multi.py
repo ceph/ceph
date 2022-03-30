@@ -5,12 +5,11 @@ import string
 import argparse
 import sys
 import logging
+import unittest
 try:
     import configparser
 except ImportError:
     import ConfigParser as configparser
-
-import nose.core
 
 from rgw_multi import multisite
 from rgw_multi.zone_rados import RadosZone as RadosZone
@@ -22,12 +21,6 @@ from rgw_multi.zone_ps import PSZone as PSZone
 from rgw_multi.zone_ps import PSZoneConfig as PSZoneConfig
 from rgw_multi.zone_az import AZone as AZone
 from rgw_multi.zone_az import AZoneConfig as AZoneConfig
-
-# make tests from rgw_multi.tests available to nose
-from rgw_multi.tests import *
-from rgw_multi.tests_es import *
-from rgw_multi.tests_ps import *
-from rgw_multi.tests_az import *
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -422,9 +415,11 @@ def init(parse_args):
                     tenant=args.tenant)
     init_multi(realm, user, config)
 
-def setup_module():
-    init(False)
 
 if __name__ == "__main__":
     init(True)
+    loader = unittest.TestLoader()
+    suite = loader.discover(test_path)
+    runner = unittest.TextTestRunner()
+    runner.run(suite)
 

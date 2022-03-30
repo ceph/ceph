@@ -3,8 +3,6 @@ from boto.s3.deletemarker import DeleteMarker
 
 from itertools import zip_longest  # type: ignore
 
-from nose.tools import eq_ as eq
-
 from .multisite import *
 
 log = logging.getLogger(__name__)
@@ -13,28 +11,28 @@ def check_object_eq(k1, k2, check_extra = True):
     assert k1
     assert k2
     log.debug('comparing key name=%s', k1.name)
-    eq(k1.name, k2.name)
-    eq(k1.version_id, k2.version_id)
-    eq(k1.is_latest, k2.is_latest)
-    eq(k1.last_modified, k2.last_modified)
+    assert k1.name == k2.name
+    assert k1.version_id == k2.version_id
+    assert k1.is_latest == k2.is_latest
+    assert k1.last_modified == k2.last_modified
     if isinstance(k1, DeleteMarker):
         assert isinstance(k2, DeleteMarker)
         return
 
-    eq(k1.get_contents_as_string(), k2.get_contents_as_string())
-    eq(k1.metadata, k2.metadata)
-    eq(k1.cache_control, k2.cache_control)
-    eq(k1.content_type, k2.content_type)
-    eq(k1.content_encoding, k2.content_encoding)
-    eq(k1.content_disposition, k2.content_disposition)
-    eq(k1.content_language, k2.content_language)
-    eq(k1.etag, k2.etag)
+    assert k1.get_contents_as_string() == k2.get_contents_as_string()
+    assert k1.metadata == k2.metadata
+    assert k1.cache_control == k2.cache_control
+    assert k1.content_type == k2.content_type
+    assert k1.content_encoding == k2.content_encoding
+    assert k1.content_disposition == k2.content_disposition
+    assert k1.content_language == k2.content_language
+    assert k1.etag == k2.etag
     if check_extra:
-        eq(k1.owner.id, k2.owner.id)
-        eq(k1.owner.display_name, k2.owner.display_name)
-    eq(k1.storage_class, k2.storage_class)
-    eq(k1.size, k2.size)
-    eq(k1.encrypted, k2.encrypted)
+        assert k1.owner.id == k2.owner.id
+        assert k1.owner.display_name == k2.owner.display_name
+    assert k1.storage_class == k2.storage_class
+    assert k1.size == k2.size
+    assert k1.encrypted == k2.encrypted
 
 class RadosZone(Zone):
     def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):

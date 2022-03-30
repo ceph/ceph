@@ -1,7 +1,5 @@
 import logging
-
-from nose import SkipTest
-from nose.tools import assert_not_equal, assert_equal
+from unittest import SkipTest
 
 from boto.s3.deletemarker import DeleteMarker
 
@@ -64,8 +62,8 @@ def init_env():
         elif not conn.zone.is_read_only():
             zones.append(conn)
 
-    assert_not_equal(len(zones), 0)
-    assert_not_equal(len(az_zones), 0)
+    assert len(zones) != 0
+    assert len(az_zones) != 0
     return zones, az_zones
 
 
@@ -187,8 +185,7 @@ def test_az_create_empty_bucket():
      # sync
      zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
      # bucket exist on the archive zone
-     p = check_bucket_exists_on_zone(az_zones[0], bucket_name)
-     assert_equal(p, True)
+     assert check_bucket_exists_on_zone(az_zones[0], bucket_name) is True
 
 
 def test_az_check_empty_bucket_versioning():
@@ -202,10 +199,8 @@ def test_az_check_empty_bucket_versioning():
      # get bucket on archive zone
      bucket_az = az_zones[0].conn.get_bucket(bucket_name)
      # check for non bucket versioning
-     p1 = get_versioning_status(bucket) is None
-     assert_equal(p1, True)
-     p2 = get_versioning_status(bucket_az) is None
-     assert_equal(p2, True)
+     assert get_versioning_status(bucket) is None
+     assert get_versioning_status(bucket_az) is None
 
 
 def test_az_object_replication():
@@ -221,8 +216,7 @@ def test_az_object_replication():
     # check object on archive zone
     bucket_az = az_zones[0].conn.get_bucket(bucket_name)
     key_az = bucket_az.get_key("foo")
-    p1 = key_az.get_contents_as_string(encoding='ascii') == "bar"
-    assert_equal(p1, True)
+    assert key_az.get_contents_as_string(encoding='ascii') == "bar"
 
 
 def test_az_object_replication_versioning():
@@ -238,8 +232,7 @@ def test_az_object_replication_versioning():
     # check object content on archive zone
     bucket_az = az_zones[0].conn.get_bucket(bucket_name)
     key_az = bucket_az.get_key("foo")
-    p1 = key_az.get_contents_as_string(encoding='ascii') == "bar"
-    assert_equal(p1, True)
+    assert key_az.get_contents_as_string(encoding='ascii') == "bar"
     # grab object versioning and etag
     for b_version in bucket.list_versions():
         b_version_id = b_version.version_id
@@ -248,12 +241,9 @@ def test_az_object_replication_versioning():
         b_az_version_id = b_az_version.version_id
         b_az_version_etag = b_az_version.etag
     # check
-    p2 = b_version_id == 'null'
-    assert_equal(p2, True)
-    p3 = b_az_version_id != 'null'
-    assert_equal(p3, True)
-    p4 = b_version_etag == b_az_version_etag
-    assert_equal(p4, True)
+    assert b_version_id == 'null'
+    assert b_az_version_id != 'null'
+    assert b_version_etag == b_az_version_etag
 
 
 def test_az_lazy_activation_of_versioned_bucket():
@@ -267,20 +257,16 @@ def test_az_lazy_activation_of_versioned_bucket():
     # get bucket on archive zone
     bucket_az = az_zones[0].conn.get_bucket(bucket_name)
     # check for non bucket versioning
-    p1 = get_versioning_status(bucket) is None
-    assert_equal(p1, True)
-    p2 = get_versioning_status(bucket_az) is None
-    assert_equal(p2, True)
+    assert get_versioning_status(bucket) is None
+    assert get_versioning_status(bucket_az) is None
     # create object on non archive zone
     key = bucket.new_key("foo")
     key.set_contents_from_string("bar")
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check lazy versioned buckets
-    p3 = get_versioning_status(bucket) is None
-    assert_equal(p3, True)
-    p4 = get_versioning_status(bucket_az) == 'Enabled'
-    assert_equal(p4, True)
+    assert get_versioning_status(bucket) is None
+    assert get_versioning_status(bucket_az) == 'Enabled'
 
 
 def test_az_archive_zone_double_object_replication_versioning():
@@ -296,45 +282,35 @@ def test_az_archive_zone_double_object_replication_versioning():
     # get bucket on archive zone
     bucket_az = az_zones[0].conn.get_bucket(bucket_name)
     # check for non bucket versioning
-    p1 = get_versioning_status(bucket) is None
-    assert_equal(p1, True)
-    p2 = get_versioning_status(bucket_az) == 'Enabled'
-    assert_equal(p2, True)
+    assert get_versioning_status(bucket) is None
+    assert get_versioning_status(bucket_az) == 'Enabled'
     # overwrite object on non archive zone
     key = bucket.new_key("foo")
     key.set_contents_from_string("ouch")
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check lazy versioned buckets
-    p3 = get_versioning_status(bucket) is None
-    assert_equal(p3, True)
-    p4 = get_versioning_status(bucket_az) == 'Enabled'
-    assert_equal(p4, True)
+    assert get_versioning_status(bucket) is None
+    assert get_versioning_status(bucket_az) == 'Enabled'
     # get versioned objects
     objs = get_versioned_objs(bucket)
     objs_az = get_versioned_objs(bucket_az)
     # check version_id, size, and is_latest on non archive zone
-    p5 = objs[0]['foo']['version_id'] == 'null'
-    assert_equal(p5, True)
-    p6 = objs[0]['foo']['size'] == 4
-    assert_equal(p6, True)
-    p7 = objs[0]['foo']['is_latest'] == True
-    assert_equal(p7, True)
+    assert objs[0]['foo']['version_id'] == 'null'
+    assert objs[0]['foo']['size'] == 4
+    assert objs[0]['foo']['is_latest'] == True
     # check version_id, size, is_latest on archive zone
     latest_obj_az_etag = None
     for obj_az  in objs_az:
         current_obj_az = obj_az['foo']
         if current_obj_az['is_latest'] == True:
-            p8 = current_obj_az['size'] == 4
-            assert_equal(p8, True)
+            assert current_obj_az['size'] == 4
             latest_obj_az_etag = current_obj_az['etag']
         else:
-            p9 = current_obj_az['size'] == 3
-            assert_equal(p9, True)
+            assert current_obj_az['size'] == 3
         assert_not_equal(current_obj_az['version_id'], 'null')
     # check last versions' etags
-    p10 = objs[0]['foo']['etag'] == latest_obj_az_etag
-    assert_equal(p10, True)
+    assert objs[0]['foo']['etag'] == latest_obj_az_etag
 
 
 def test_az_deleted_object_replication():
@@ -345,14 +321,12 @@ def test_az_deleted_object_replication():
     bucket = zones[0].create_bucket(bucket_name)
     key = bucket.new_key("foo")
     key.set_contents_from_string("bar")
-    p1 = key.get_contents_as_string(encoding='ascii') == "bar"
-    assert_equal(p1, True)
+    assert key.get_contents_as_string(encoding='ascii') == "bar"
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # update object on non archive zone
     key.set_contents_from_string("soup")
-    p2 = key.get_contents_as_string(encoding='ascii') == "soup"
-    assert_equal(p2, True)
+    assert key.get_contents_as_string(encoding='ascii') == "soup"
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # delete object on non archive zone
@@ -360,18 +334,14 @@ def test_az_deleted_object_replication():
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check object on non archive zone
-    p3 = check_key_exists(key) == False
-    assert_equal(p3, True)
+    assert check_key_exists(key) == False
     # check objects on archive zone
     bucket_az = az_zones[0].conn.get_bucket(bucket_name)
     key_az = bucket_az.get_key("foo")
-    p4 = check_key_exists(key_az) == True
-    assert_equal(p4, True)
-    p5 = key_az.get_contents_as_string(encoding='ascii') == "soup"
-    assert_equal(p5, True)
+    assert check_key_exists(key_az) == True
+    assert key_az.get_contents_as_string(encoding='ascii') == "soup"
     b_ver_az = get_versioned_objs(bucket_az)
-    p6 = len(b_ver_az) == 2
-    assert_equal(p6, True)
+    assert len(b_ver_az) == 2
 
 
 def test_az_bucket_renaming_on_empty_bucket_deletion():
@@ -391,16 +361,13 @@ def test_az_bucket_renaming_on_empty_bucket_deletion():
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check no new buckets on non archive zone
-    p1 = get_number_buckets_by_zone(zones[0]) == num_buckets
-    assert_equal(p1, True)
+    assert get_number_buckets_by_zone(zones[0]) == num_buckets
     # check non deletion on bucket on archive zone
-    p2 = get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 1)
-    assert_equal(p2, True)
+    assert get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 1)
     # check bucket renaming
     bucket_names_az = get_bucket_names_by_zone(az_zones[0])
     new_bucket_name = bucket_name + '-deleted-'
-    p3 = any(bucket_name.startswith(new_bucket_name) for bucket_name in bucket_names_az)
-    assert_equal(p3, True)
+    assert any(bucket_name.startswith(new_bucket_name) for bucket_name in bucket_names_az) is True
 
 
 def test_az_old_object_version_in_archive_zone():
@@ -433,28 +400,22 @@ def test_az_old_object_version_in_archive_zone():
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check same buckets on non archive zone
-    p1 = get_number_buckets_by_zone(zones[0]) == num_buckets
-    assert_equal(p1, True)
+    assert get_number_buckets_by_zone(zones[0]) == num_buckets
     # check for new bucket on archive zone
-    p2 = get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 1)
-    assert_equal(p2, True)
+    assert get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 1)
     # get new bucket name on archive zone
     bucket_names_az = get_bucket_names_by_zone(az_zones[0])
     new_bucket_name_az = get_full_bucket_name(bucket_name + '-deleted-', bucket_names_az)
-    p3 = new_bucket_name_az is not None
-    assert_equal(p3, True)
+    assert new_bucket_name_az is not None
     # check number of objects on archive zone
     new_bucket_az = az_zones[0].conn.get_bucket(new_bucket_name_az)
     new_b_ver_az = get_versioned_objs(new_bucket_az)
-    p4 = len(new_b_ver_az) == 2
-    assert_equal(p4, True)
+    assert len(new_b_ver_az) == 2
     # check versioned objects on archive zone
     new_key_az = new_bucket_az.get_key("foo", version_id=obj_az_version_id)
-    p5 = new_key_az.get_contents_as_string(encoding='ascii') == "zero"
-    assert_equal(p5, True)
+    assert new_key_az.get_contents_as_string(encoding='ascii') == "zero"
     new_key_latest_az = new_bucket_az.get_key("foo")
-    p6 = new_key_latest_az.get_contents_as_string(encoding='ascii') == "one"
-    assert_equal(p6, True)
+    assert new_key_latest_az.get_contents_as_string(encoding='ascii') == "one"
 
 
 def test_az_force_bucket_renaming_if_same_bucket_name():
@@ -470,36 +431,29 @@ def test_az_force_bucket_renaming_if_same_bucket_name():
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check same buckets on non archive zone
-    p1 = get_number_buckets_by_zone(zones[0]) == (num_buckets + 1)
-    assert_equal(p1, True)
+    assert get_number_buckets_by_zone(zones[0]) == (num_buckets + 1)
     # check for new bucket on archive zone
-    p2 = get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 1)
-    assert_equal(p2, True)
+    assert get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 1)
     # delete bucket on non archive zone
     zones[0].delete_bucket(bucket_name)
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check number of buckets on non archive zone
-    p3 = get_number_buckets_by_zone(zones[0]) == num_buckets
-    assert_equal(p3, True)
+    assert get_number_buckets_by_zone(zones[0]) == num_buckets
     # check number of buckets on archive zone
-    p4 = get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 1)
-    assert_equal(p4, True)
+    assert get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 1)
     # get new bucket name on archive zone
     bucket_names_az = get_bucket_names_by_zone(az_zones[0])
     new_bucket_name_az = get_full_bucket_name(bucket_name + '-deleted-', bucket_names_az)
-    p5 = new_bucket_name_az is not None
-    assert_equal(p5, True)
+    assert new_bucket_name_az is not None
     # create bucket on non archive zone
     _ = zones[0].create_bucket(new_bucket_name_az)
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check number of buckets on non archive zone
-    p6 = get_number_buckets_by_zone(zones[0]) == (num_buckets + 1)
-    assert_equal(p6, True)
+    assert get_number_buckets_by_zone(zones[0]) == (num_buckets + 1)
     # check number of buckets on archive zone
-    p7 = get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 2)
-    assert_equal(p7, True)
+    assert get_number_buckets_by_zone(az_zones[0]) == (num_buckets_az + 2)
 
 
 def test_az_versioning_support_in_zones():
@@ -513,45 +467,35 @@ def test_az_versioning_support_in_zones():
     # get bucket on archive zone
     bucket_az = az_zones[0].conn.get_bucket(bucket_name)
     # check non versioned buckets
-    p1 = get_versioning_status(bucket) is None
-    assert_equal(p1, True)
-    p2 = get_versioning_status(bucket_az) is None
-    assert_equal(p2, True)
+    assert get_versioning_status(bucket) is None
+    assert get_versioning_status(bucket_az) is None
     # create object on non archive zone
     key = bucket.new_key("foo")
     key.set_contents_from_string("zero")
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check bucket versioning
-    p3 = get_versioning_status(bucket) is None
-    assert_equal(p3, True)
-    p4 = get_versioning_status(bucket_az) == 'Enabled'
-    assert_equal(p4, True)
+    assert get_versioning_status(bucket) is None
+    assert get_versioning_status(bucket_az) == 'Enabled'
     # enable bucket versioning on non archive zone
     bucket.configure_versioning(True)
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check bucket versioning
-    p5 = get_versioning_status(bucket) == 'Enabled'
-    assert_equal(p5, True)
-    p6 = get_versioning_status(bucket_az) == 'Enabled'
-    assert_equal(p6, True)
+    assert get_versioning_status(bucket) == 'Enabled'
+    assert get_versioning_status(bucket_az) == 'Enabled'
     # delete object on non archive zone
     key.delete()
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check delete-markers and versions on non archive zone
     (b_dm, b_ver) = get_versioned_entries(bucket)
-    p7 = len(b_dm) == 1
-    assert_equal(p7, True)
-    p8 = len(b_ver) == 1
-    assert_equal(p8, True)
+    assert len(b_dm) == 1
+    assert len(b_ver) == 1
     # check delete-markers and versions on archive zone
     (b_dm_az, b_ver_az) = get_versioned_entries(bucket_az)
-    p9 = len(b_dm_az) == 1
-    assert_equal(p9, True)
-    p10 = len(b_ver_az) == 1
-    assert_equal(p10, True)
+    assert len(b_dm_az) == 1
+    assert len(b_ver_az) == 1
     # delete delete-marker on non archive zone
     dm_version_id = b_dm[0]['foo']['version_id']
     bucket.delete_key("foo", version_id=dm_version_id)
@@ -559,16 +503,12 @@ def test_az_versioning_support_in_zones():
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check delete-markers and versions on non archive zone
     (b_dm, b_ver) = get_versioned_entries(bucket)
-    p11 = len(b_dm) == 0
-    assert_equal(p11, True)
-    p12 = len(b_ver) == 1
-    assert_equal(p12, True)
+    assert len(b_dm) == 0
+    assert len(b_ver) == 1
     # check delete-markers and versions on archive zone
     (b_dm_az, b_ver_az) = get_versioned_entries(bucket_az)
-    p13 = len(b_dm_az) == 1
-    assert_equal(p13, True)
-    p14 = len(b_ver_az) == 1
-    assert_equal(p14, True)
+    assert len(b_dm_az) == 1
+    assert len(b_ver_az) == 1
     # delete delete-marker on archive zone
     dm_az_version_id = b_dm_az[0]['foo']['version_id']
     bucket_az.delete_key("foo", version_id=dm_az_version_id)
@@ -576,22 +516,16 @@ def test_az_versioning_support_in_zones():
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # check delete-markers and versions on non archive zone
     (b_dm, b_ver) = get_versioned_entries(bucket)
-    p15 = len(b_dm) == 0
-    assert_equal(p15, True)
-    p16 = len(b_ver) == 1
-    assert_equal(p16, True)
+    assert len(b_dm) == 0
+    assert len(b_ver) == 1
     # check delete-markers and versions on archive zone
     (b_dm_az, b_ver_az) = get_versioned_entries(bucket_az)
-    p17 = len(b_dm_az) == 0
-    assert_equal(p17, True)
-    p17 = len(b_ver_az) == 1
-    assert_equal(p17, True)
+    assert len(b_dm_az) == 0
+    assert len(b_ver_az) == 1
     # check body in zones
     obj_version_id = b_ver[0]['foo']['version_id']
     key = bucket.get_key("foo", version_id=obj_version_id)
-    p18 = key.get_contents_as_string(encoding='ascii') == "zero"
-    assert_equal(p18, True)
+    assert key.get_contents_as_string(encoding='ascii') == "zero"
     obj_az_version_id = b_ver_az[0]['foo']['version_id']
     key_az = bucket_az.get_key("foo", version_id=obj_az_version_id)
-    p19 = key_az.get_contents_as_string(encoding='ascii') == "zero"
-    assert_equal(p19, True)
+    assert key_az.get_contents_as_string(encoding='ascii') == "zero"

@@ -9,15 +9,12 @@ import dateutil.parser
 
 from itertools import combinations
 from io import StringIO
+from unittest import SkipTest
 
 import boto
 import boto.s3.connection
 from boto.s3.website import WebsiteConfiguration
 from boto.s3.cors import CORSConfiguration
-
-from nose.tools import eq_ as eq
-from nose.plugins.attrib import attr
-from nose.plugins.skip import SkipTest
 
 from .multisite import Zone, ZoneGroup, Credentials
 
@@ -1002,14 +999,14 @@ def test_multi_zone_redirect():
 
     key2 = bucket2.get_key(obj)
 
-    eq(data, key2.get_contents_as_string(encoding='ascii'))
+    assert data == key2.get_contents_as_string(encoding='ascii')
 
     key = bucket.new_key(obj)
 
     for x in ['a', 'b', 'c', 'd']:
         data = x*512
         key.set_contents_from_string(data)
-        eq(data, key2.get_contents_as_string(encoding='ascii'))
+        assert data == key2.get_contents_as_string(encoding='ascii')
 
     # revert config changes
     set_sync_from_all(z2, True)
@@ -1246,10 +1243,10 @@ def test_encrypted_object_sync():
     # read the encrypted objects from the second zone
     bucket2 = get_bucket(zone2, bucket_name)
     key = bucket2.get_key('testobj-sse-c', headers=sse_c_headers)
-    eq(data, key.get_contents_as_string(headers=sse_c_headers, encoding='ascii'))
+    assert data == key.get_contents_as_string(headers=sse_c_headers, encoding='ascii')
 
     key = bucket2.get_key('testobj-sse-kms')
-    eq(data, key.get_contents_as_string(encoding='ascii'))
+    assert data == key.get_contents_as_string(encoding='ascii')
 
 def test_bucket_index_log_trim():
     zonegroup = realm.master_zonegroup()
@@ -1314,5 +1311,5 @@ def test_bucket_creation_time():
     zone_buckets = [zone.get_connection().get_all_buckets() for zone in zonegroup_conns.rw_zones]
     for z1, z2 in combinations(zone_buckets, 2):
         for a, b in zip(z1, z2):
-            eq(a.name, b.name)
-            eq(a.creation_date, b.creation_date)
+            assert a.name == b.name
+            assert a.creation_date == b.creation_date

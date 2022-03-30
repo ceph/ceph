@@ -9,8 +9,6 @@ import dateutil
 
 from itertools import zip_longest  # type: ignore
 
-from nose.tools import eq_ as eq
-
 from .multisite import *
 from .tests import *
 from .zone_es import *
@@ -262,15 +260,15 @@ def test_es_bucket_conf():
             for entry in conf:
               d[entry['Key']] = entry['Type']
 
-            eq(len(d), 3)
-            eq(d['x-amz-meta-foo-str'], 'str')
-            eq(d['x-amz-meta-foo-int'], 'int')
-            eq(d['x-amz-meta-foo-date'], 'date')
+            assert len(d) == 3
+            assert d['x-amz-meta-foo-str'] == 'str'
+            assert d['x-amz-meta-foo-int'] == 'int'
+            assert d['x-amz-meta-foo-date'] == 'date'
 
             req.del_config()
 
             conf = req.get_config()
 
-            eq(len(conf), 0)
+            assert len(conf) == 0
 
         break # no need to iterate over all zones

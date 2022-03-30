@@ -3,8 +3,7 @@ rgw multisite testing
 """
 import importlib.util
 import logging
-import nose.core
-import nose.config
+import subprocess
 import sys
 
 from teuthology.config import config as teuth_config
@@ -19,10 +18,10 @@ log = logging.getLogger(__name__)
 class RGWMultisiteTests(Task):
     """
     Runs the rgw_multi tests against a multisite configuration created by the
-    rgw-multisite task. Tests are run with nose, using any additional 'args'
-    provided. Overrides for tests.Config can be set in 'config'. The 'branch'
-    and 'repo' can be overridden to clone the rgw_multi tests from another
-    release.
+    rgw-multisite task. Tests are run with unittest, using any additional
+    'args' provided. Overrides for tests.Config can be set in 'config'. The
+    'branch' and 'repo' can be overridden to clone the rgw_multi tests from
+    another release.
 
         - rgw-multisite-tests:
             args:
@@ -79,40 +78,16 @@ class RGWMultisiteTests(Task):
         tests.realm_meta_checkpoint(realm)
 
     def begin(self):
-        # extra arguments for nose can be passed as a string or list
+        # extra arguments can be passed as a string or list
         extra_args = self.config.get('args', [])
         if not isinstance(extra_args, list):
             extra_args = [extra_args]
-        argv = [__name__] + extra_args
 
         log.info("running rgw multisite tests on '%s' with args=%r",
                  self.module_path, extra_args)
 
-        # run nose tests in the module path
-        conf = nose.config.Config(stream=get_log_stream(), verbosity=2, workingDir=self.module_path)
-        assert nose.run(argv=argv, config=conf), 'rgw multisite test failures'
-
-
-def get_log_stream():
-    """ return a log stream for nose output """
-    # XXX: this is a workaround for IOErrors when nose writes to stderr,
-    # copied from vstart_runner.py
-    class LogStream(object):
-        def __init__(self):
-            self.buffer = ""
-
-        def write(self, data):
-            self.buffer += data
-            if "\n" in self.buffer:
-                lines = self.buffer.split("\n")
-                for line in lines[:-1]:
-                    log.info(line)
-                self.buffer = lines[-1]
-
-        def flush(self):
-            pass
-
-    return LogStream()
+        argv = [sys.executable, self.module_path + "../test_multi.py"] + extra_args
+        testsuite = subprocess.run(argv, check=True)
 
 
 task = RGWMultisiteTests

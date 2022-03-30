@@ -9,6 +9,7 @@ import time
 import os
 from http import server as http_server
 from random import randint
+from unittest import SkipTest
 from .tests import get_realm, \
     ZonegroupConns, \
     zonegroup_meta_checkpoint, \
@@ -28,8 +29,6 @@ from .zone_ps import PSTopic, \
     print_connection_info, \
     get_object_tagging
 from .multisite import User
-from nose import SkipTest
-from nose.tools import assert_not_equal, assert_equal
 import boto.s3.tagging
 
 # configure logging for the tests module
@@ -357,7 +356,7 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
             err = 'no ' + ('deletion' if deletions else 'creation') + ' event found for key: ' + str(key)
             assert False, err
         elif expected_sizes:
-            assert_equal(object_size, expected_sizes.get(key.name))
+            assert object_size == expected_sizes.get(key.name)
 
     if not len(records) == len(keys):
         err = 'superfluous records are found'
@@ -600,9 +599,9 @@ def init_env(require_ps=True):
             zone_meta_checkpoint(conn.zone)
             ps_zone = conn
 
-    assert_not_equal(master_zone, None)
+    assert master_zone is not None
     if require_ps:
-        assert_not_equal(ps_zone, None)
+        assert ps_zone is not None
     return master_zone, ps_zone
 
 
@@ -664,7 +663,7 @@ def test_ps_s3_notification_low_level():
     topic_name = bucket_name + TOPIC_SUFFIX
     topic_conf = PSTopic(ps_zone.conn, topic_name)
     result, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     parsed_result = json.loads(result)
     topic_arn = parsed_result['arn']
     # create s3 notification
@@ -676,48 +675,47 @@ def test_ps_s3_notification_low_level():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     zone_meta_checkpoint(ps_zone.zone)
     # get auto-generated topic
     generated_topic_conf = PSTopic(ps_zone.conn, generated_topic_name)
     result, status = generated_topic_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(status/100, 2)
-    assert_equal(parsed_result['topic']['name'], generated_topic_name)
+    assert status/100 == 2
+    assert parsed_result['topic']['name'] == generated_topic_name
     # get auto-generated notification
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        generated_topic_name)
     result, status = notification_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(status/100, 2)
-    assert_equal(len(parsed_result['topics']), 1)
+    assert status/100 == 2
+    assert len(parsed_result['topics']) == 1
     # get auto-generated subscription
     sub_conf = PSSubscription(ps_zone.conn, notification_name,
                               generated_topic_name)
     result, status = sub_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(status/100, 2)
-    assert_equal(parsed_result['topic'], generated_topic_name)
+    assert status/100 == 2
+    assert parsed_result['topic'] == generated_topic_name
     # delete s3 notification
     _, status = s3_notification_conf.del_config(notification=notification_name)
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # delete topic
     _, status = topic_conf.del_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # verify low-level cleanup
     _, status = generated_topic_conf.get_config()
-    assert_equal(status, 404)
+    assert status == 404
     result, status = notification_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(len(parsed_result['topics']), 0)
+    assert len(parsed_result['topics']) == 0
     # TODO should return 404
-    # assert_equal(status, 404)
+    # assert status == 404
     result, status = sub_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic'], '')
+    assert parsed_result['topic'] == ''
     # TODO should return 404
-    # assert_equal(status, 404)
 
     # cleanup
     topic_conf.del_config()
@@ -737,7 +735,7 @@ def test_ps_s3_notification_records():
     topic_name = bucket_name + TOPIC_SUFFIX
     topic_conf = PSTopic(ps_zone.conn, topic_name)
     result, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     parsed_result = json.loads(result)
     topic_arn = parsed_result['arn']
     # create s3 notification
@@ -748,13 +746,13 @@ def test_ps_s3_notification_records():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     zone_meta_checkpoint(ps_zone.zone)
     # get auto-generated subscription
     sub_conf = PSSubscription(ps_zone.conn, notification_name,
                               topic_name)
     _, status = sub_conf.get_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -794,7 +792,7 @@ def test_ps_s3_notification():
     topic_name = bucket_name + TOPIC_SUFFIX
     topic_conf = PSTopic(ps_zone.conn, topic_name)
     response, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     parsed_result = json.loads(response)
     topic_arn = parsed_result['arn']
     # create one s3 notification
@@ -805,7 +803,7 @@ def test_ps_s3_notification():
                        }]
     s3_notification_conf1 = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf1.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create another s3 notification with the same topic
     notification_name2 = bucket_name + NOTIFICATION_SUFFIX + '_2'
     topic_conf_list = [{'Id': notification_name2,
@@ -814,31 +812,31 @@ def test_ps_s3_notification():
                        }]
     s3_notification_conf2 = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf2.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     zone_meta_checkpoint(ps_zone.zone)
 
     # get all notification on a bucket
     response, status = s3_notification_conf1.get_config()
-    assert_equal(status/100, 2)
-    assert_equal(len(response['TopicConfigurations']), 2)
-    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
-    assert_equal(response['TopicConfigurations'][1]['TopicArn'], topic_arn)
+    assert status/100 == 2
+    assert len(response['TopicConfigurations']) == 2
+    assert response['TopicConfigurations'][0]['TopicArn'] == topic_arn
+    assert response['TopicConfigurations'][1]['TopicArn'] == topic_arn
 
     # get specific notification on a bucket
     response, status = s3_notification_conf1.get_config(notification=notification_name1)
-    assert_equal(status/100, 2)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Id'], notification_name1)
+    assert status/100 == 2
+    assert response['NotificationConfiguration']['TopicConfiguration']['Topic'] == topic_arn
+    assert response['NotificationConfiguration']['TopicConfiguration']['Id'] == notification_name1
     response, status = s3_notification_conf2.get_config(notification=notification_name2)
-    assert_equal(status/100, 2)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Id'], notification_name2)
+    assert status/100 == 2
+    assert response['NotificationConfiguration']['TopicConfiguration']['Topic'] == topic_arn
+    assert response['NotificationConfiguration']['TopicConfiguration']['Id'] == notification_name2
 
     # delete specific notifications
     _, status = s3_notification_conf1.del_config(notification=notification_name1)
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     _, status = s3_notification_conf2.del_config(notification=notification_name2)
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # cleanup
     topic_conf.del_config()
@@ -914,21 +912,21 @@ def test_ps_s3_notification_filter():
 
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     result, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     print('filtering by attributes only supported on master zone')
     skip_notif4 = True
 
     # get all notifications
     result, status = s3_notification_conf.get_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     for conf in result['TopicConfigurations']:
         filter_name = conf['Filter']['Key']['FilterRules'][0]['Name']
         assert filter_name == 'prefix' or filter_name == 'suffix' or filter_name == 'regex', filter_name
 
     if not skip_notif4:
         result, status = s3_notification_conf4.get_config(notification=notification_name+'_4')
-        assert_equal(status/100, 2)
+        assert status/100 == 2
         filter_name = result['NotificationConfiguration']['TopicConfiguration']['Filter']['S3Metadata']['FilterRule'][0]['Name']
         assert filter_name == 'x-amz-meta-foo' or filter_name == 'x-amz-meta-hello'
 
@@ -986,11 +984,11 @@ def test_ps_s3_notification_filter():
         else:
             assert False, 'invalid notification: ' + notif_id
 
-    assert_equal(set(found_in1), set(expected_in1))
-    assert_equal(set(found_in2), set(expected_in2))
-    assert_equal(set(found_in3), set(expected_in3))
+    assert set(found_in1) == set(expected_in1)
+    assert set(found_in2) == set(expected_in2)
+    assert set(found_in3) == set(expected_in3)
     if not skip_notif4:
-        assert_equal(set(found_in4), set(expected_in4))
+        assert set(found_in4) == set(expected_in4)
 
     # cleanup
     s3_notification_conf.del_config()
@@ -1075,7 +1073,7 @@ def test_ps_s3_opaque_data():
     endpoint_args = 'push-endpoint='+endpoint_address+'&OpaqueData='+opaque_data
     topic_conf = PSTopic(ps_zone.conn, topic_name, endpoint=endpoint_address, endpoint_args=endpoint_args)
     result, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     parsed_result = json.loads(result)
     topic_arn = parsed_result['arn']
     # create s3 notification
@@ -1086,7 +1084,7 @@ def test_ps_s3_opaque_data():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # create objects in the bucket
     client_threads = []
@@ -1106,7 +1104,7 @@ def test_ps_s3_opaque_data():
     print('total number of objects: ' + str(len(keys)))
     events = http_server.get_and_reset_events()
     for event in events:
-        assert_equal(event['Records'][0]['opaqueData'], opaque_data)
+        assert event['Records'][0]['opaqueData'] == opaque_data
     
     # cleanup
     for key in keys:
@@ -1130,23 +1128,23 @@ def test_ps_topic():
     # create topic
     topic_conf = PSTopic(ps_zone.conn, topic_name)
     _, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # get topic
     result, _ = topic_conf.get_config()
     # verify topic content
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic']['name'], topic_name)
-    assert_equal(len(parsed_result['subs']), 0)
-    assert_equal(parsed_result['topic']['arn'],
-                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name)
+    assert parsed_result['topic']['name'], topic_name
+    assert len(parsed_result['subs']) == 0
+    assert parsed_result['topic']['arn'] == 'arn:aws:sns:' +\
+            zonegroup.name + ':' + get_tenant() + ':' + topic_name
     # delete topic
     _, status = topic_conf.del_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # verift topic is deleted
     result, status = topic_conf.get_config()
-    assert_equal(status, 404)
+    assert status == 404
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['Code'], 'NoSuchKey')
+    assert parsed_result['Code'] == 'NoSuchKey'
 
 
 def test_ps_topic_with_endpoint():
@@ -1162,13 +1160,13 @@ def test_ps_topic_with_endpoint():
                          endpoint=dest_endpoint,
                          endpoint_args=dest_args)
     _, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # get topic
     result, _ = topic_conf.get_config()
     # verify topic content
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic']['name'], topic_name)
-    assert_equal(parsed_result['topic']['dest']['push_endpoint'], dest_endpoint)
+    assert parsed_result['topic']['name'] == topic_name
+    assert parsed_result['topic']['dest']['push_endpoint'] == dest_endpoint
     # cleanup
     topic_conf.del_config()
 
@@ -1190,21 +1188,20 @@ def test_ps_notification():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # get notification
     result, _ = notification_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(len(parsed_result['topics']), 1)
-    assert_equal(parsed_result['topics'][0]['topic']['name'],
-                 topic_name)
+    assert len(parsed_result['topics']) == 1
+    assert parsed_result['topics'][0]['topic']['name'] == topic_name
     # delete notification
     _, status = notification_conf.del_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     result, status = notification_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(len(parsed_result['topics']), 0)
+    assert len(parsed_result['topics']) == 0
     # TODO should return 404
-    # assert_equal(status, 404)
+    # assert status == 404
 
     # cleanup
     topic_conf.del_config()
@@ -1230,14 +1227,13 @@ def test_ps_notification_events():
                                        topic_name,
                                        events)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # get notification
     result, _ = notification_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(len(parsed_result['topics']), 1)
-    assert_equal(parsed_result['topics'][0]['topic']['name'],
-                 topic_name)
-    assert_not_equal(len(parsed_result['topics'][0]['events']), 0)
+    assert len(parsed_result['topics']) == 1
+    assert parsed_result['topics'][0]['topic']['name'] == topic_name
+    assert len(parsed_result['topics'][0]['events']) != 0
     # TODO add test for invalid event name
 
     # cleanup
@@ -1263,16 +1259,16 @@ def test_ps_subscription():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
                               topic_name)
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # get the subscription
     result, _ = sub_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic'], topic_name)
+    assert parsed_result['topic'] == topic_name
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -1305,12 +1301,12 @@ def test_ps_subscription():
     # we should see the creations as well as the deletions
     # delete subscription
     _, status = sub_conf.del_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     result, status = sub_conf.get_config()
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic'], '')
+    assert parsed_result['topic'] == ''
     # TODO should return 404
-    # assert_equal(status, 404)
+    # assert status == 404
 
     # cleanup
     notification_conf.del_config()
@@ -1330,17 +1326,17 @@ def test_ps_admin():
     topic_conf = PSTopic(ps_zone.conn, topic_name)
     topic_conf.set_config()
     result, status = topic_conf.get_config()
-    assert_equal(status, 200)
+    assert status == 200
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic']['name'], topic_name)
+    assert parsed_result['topic']['name'] == topic_name
     result, status = ps_zone.zone.cluster.admin(['topic', 'list', '--uid', get_user()] + ps_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
     parsed_result = json.loads(result)
     assert len(parsed_result['topics']) > 0
     result, status = ps_zone.zone.cluster.admin(['topic', 'get', '--uid', get_user(), '--topic', topic_name] + ps_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic']['name'], topic_name)
+    assert parsed_result['topic']['name'] == topic_name
 
     # create s3 topics
     endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
@@ -1348,16 +1344,16 @@ def test_ps_admin():
     topic_conf_s3 = PSTopicS3(master_zone.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
     topic_conf_s3.set_config()
     result, status = topic_conf_s3.get_config()
-    assert_equal(status, 200)
-    assert_equal(result['GetTopicResponse']['GetTopicResult']['Topic']['Name'], topic_name)
+    assert status == 200
+    assert result['GetTopicResponse']['GetTopicResult']['Topic']['Name'] == topic_name
     result, status = master_zone.zone.cluster.admin(['topic', 'list', '--uid', get_user()] + master_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
     parsed_result = json.loads(result)
     assert len(parsed_result['topics']) > 0
     result, status = master_zone.zone.cluster.admin(['topic', 'get', '--uid', get_user(), '--topic', topic_name] + master_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic']['name'], topic_name)
+    assert parsed_result['topic']['name'] == topic_name
 
     # create bucket on the first of the rados zones
     bucket = master_zone.create_bucket(bucket_name)
@@ -1367,17 +1363,17 @@ def test_ps_admin():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
                               topic_name)
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     result, status = ps_zone.zone.cluster.admin(['subscription', 'get', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX] 
             + ps_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['name'], bucket_name+SUB_SUFFIX)
+    assert parsed_result['name'] == bucket_name+SUB_SUFFIX
     # create objects in the bucket
     number_of_objects = 110
     for i in range(number_of_objects):
@@ -1388,36 +1384,36 @@ def test_ps_admin():
     zone_bucket_checkpoint(ps_zone.zone, master_zone.zone, bucket_name)
     result, status = ps_zone.zone.cluster.admin(['subscription', 'pull', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX] 
             + ps_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
     parsed_result = json.loads(result)
     marker = parsed_result['next_marker']
     events1 = parsed_result['events']
     result, status = ps_zone.zone.cluster.admin(['subscription', 'pull', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX, '--marker', marker]
             + ps_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
     parsed_result = json.loads(result)
     events2 = parsed_result['events'] 
     
     keys = list(bucket.list())
     verify_events_by_elements({"events": events1+events2}, keys, exact_match=False)
 
-    # ack an event in the subscription 
+    # ack an event in the subscription
     result, status = ps_zone.zone.cluster.admin(['subscription', 'ack', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX, '--event-id', events2[0]['id']]
             + ps_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
 
     # remove the subscription
     result, status = ps_zone.zone.cluster.admin(['subscription', 'rm', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX]
             + ps_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
 
     # remove the topics
     result, status = ps_zone.zone.cluster.admin(['topic', 'rm', '--uid', get_user(), '--topic', topic_name]
             + ps_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
     result, status = master_zone.zone.cluster.admin(['topic', 'rm', '--uid', get_user(), '--topic', topic_name]
             + master_zone.zone.zone_arg())
-    assert_equal(status, 0)
+    assert status == 0
 
     # cleanup
     for key in bucket.list():
@@ -1448,12 +1444,12 @@ def test_ps_incremental_sync():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
                               topic_name)
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     
     # create more objects in the bucket
     for i in range(number_of_objects, 2*number_of_objects):
@@ -1471,7 +1467,7 @@ def test_ps_incremental_sync():
         count += 1
    
     # make sure we have 10 and not 20 events
-    assert_equal(count, number_of_objects)
+    assert count == number_of_objects
 
     # cleanup
     for key in bucket.list():
@@ -1507,32 +1503,32 @@ def test_ps_event_type_subscription():
     notification_create_conf = PSNotification(ps_zone.conn, bucket_name,
                                               topic_create_name, "OBJECT_CREATE")
     _, status = notification_create_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create notifications for objects deletion
     notification_delete_conf = PSNotification(ps_zone.conn, bucket_name,
                                               topic_delete_name, "OBJECT_DELETE")
     _, status = notification_delete_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create notifications for all events
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name, "OBJECT_DELETE,OBJECT_CREATE")
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription for objects creation
     sub_create_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX+'_create',
                                      topic_create_name)
     _, status = sub_create_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription for objects deletion
     sub_delete_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX+'_delete',
                                      topic_delete_name)
     _, status = sub_delete_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription for all events
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX+'_all',
                               topic_name)
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -1556,7 +1552,7 @@ def test_ps_event_type_subscription():
     for event in events['events']:
         log.debug('Event (OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
-    assert_equal(len(events['events']), 0)
+    assert len(events['events']) == 0
     # get the events from the all events subscription
     result, _ = sub_conf.get_events()
     events = json.loads(result)
@@ -1604,11 +1600,11 @@ def test_ps_event_type_subscription():
 
     # test subscription deletion when topic is specified
     _, status = sub_create_conf.del_config(topic=True)
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     _, status = sub_delete_conf.del_config(topic=True)
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     _, status = sub_conf.del_config(topic=True)
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # cleanup
     notification_create_conf.del_config()
@@ -1637,12 +1633,12 @@ def test_ps_event_fetching():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
                               topic_name)
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 100
     for i in range(number_of_objects):
@@ -1695,12 +1691,12 @@ def test_ps_event_acking():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
                               topic_name)
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -1724,7 +1720,7 @@ def test_ps_event_acking():
         if events_to_ack == 0:
             break
         _, status = sub_conf.ack_events(event['id'])
-        assert_equal(status/100, 2)
+        assert status/100 == 2
         events_to_ack -= 1
 
     # verify that acked events are gone
@@ -1760,12 +1756,12 @@ def test_ps_creation_triggers():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
                               topic_name)
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket using PUT
     key = bucket.new_key('put')
     key.set_contents_from_string('bar')
@@ -1813,10 +1809,10 @@ def test_ps_versioned_deletion():
     # create topics
     topic_conf1 = PSTopic(ps_zone.conn, topic_name+'_1')
     _, status = topic_conf1.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     topic_conf2 = PSTopic(ps_zone.conn, topic_name+'_2')
     _, status = topic_conf2.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     
     # create bucket on the first of the rados zones
     bucket = master_zone.create_bucket(bucket_name)
@@ -1831,23 +1827,23 @@ def test_ps_versioned_deletion():
                                         topic_name+'_1',
                                         event_type1)
     _, status = notification_conf1.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     event_type2 = 'DELETE_MARKER_CREATE'
     notification_conf2 = PSNotification(ps_zone.conn, bucket_name,
                                         topic_name+'_2',
                                         event_type2)
     _, status = notification_conf2.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     
     # create subscriptions
     sub_conf1 = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX+'_1',
                                topic_name+'_1')
     _, status = sub_conf1.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     sub_conf2 = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX+'_2',
                                topic_name+'_2')
     _, status = sub_conf2.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     
     # create objects in the bucket
     key = bucket.new_key('foo')
@@ -1875,13 +1871,13 @@ def test_ps_versioned_deletion():
     events = json.loads(result)
     for event in events['events']:
         log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
-        assert_equal(str(event['event']), event_type1)
+        assert str(event['event']) == event_type1
 
     result, _ = sub_conf2.get_events()
     events = json.loads(result)
     for event in events['events']:
         log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
-        assert_equal(str(event['event']), event_type2)
+        assert str(event['event']) == event_type2
 
     # cleanup
     # follwing is needed for the cleanup in the case of 3-zones
@@ -1919,7 +1915,7 @@ def test_ps_push_http():
     # create topic
     topic_conf = PSTopic(ps_zone.conn, topic_name)
     _, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create bucket on the first of the rados zones
     bucket = master_zone.create_bucket(bucket_name)
     # wait for sync
@@ -1928,12 +1924,12 @@ def test_ps_push_http():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
                               topic_name, endpoint='http://'+host+':'+str(port))
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -1982,7 +1978,7 @@ def test_ps_s3_push_http():
     topic_conf = PSTopic(ps_zone.conn, topic_name,
                          endpoint='http://'+host+':'+str(port))
     result, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     parsed_result = json.loads(result)
     topic_arn = parsed_result['arn']
     # create bucket on the first of the rados zones
@@ -1997,7 +1993,7 @@ def test_ps_s3_push_http():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -2045,7 +2041,7 @@ def test_ps_push_amqp():
     task.start()
     topic_conf = PSTopic(ps_zone.conn, topic_name)
     _, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create bucket on the first of the rados zones
     bucket = master_zone.create_bucket(bucket_name)
     # wait for sync
@@ -2054,13 +2050,13 @@ def test_ps_push_amqp():
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create subscription
     sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
                               topic_name, endpoint='amqp://'+hostname,
                               endpoint_args='amqp-exchange='+exchange+'&amqp-ack-level=broker')
     _, status = sub_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -2112,7 +2108,7 @@ def test_ps_s3_push_amqp():
                          endpoint='amqp://' + hostname,
                          endpoint_args='amqp-exchange=' + exchange + '&amqp-ack-level=none')
     result, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     parsed_result = json.loads(result)
     topic_arn = parsed_result['arn']
     # create bucket on the first of the rados zones
@@ -2127,7 +2123,7 @@ def test_ps_s3_push_amqp():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -2171,7 +2167,7 @@ def test_ps_delete_bucket():
     topic_name = bucket_name + TOPIC_SUFFIX
     topic_conf = PSTopic(ps_zone.conn, topic_name)
     response, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     parsed_result = json.loads(response)
     topic_arn = parsed_result['arn']
     # create one s3 notification
@@ -2182,13 +2178,13 @@ def test_ps_delete_bucket():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # create non-s3 notification
     notification_conf = PSNotification(ps_zone.conn, bucket_name,
                                        topic_name)
     _, status = notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # create objects in the bucket
     number_of_objects = 10
@@ -2218,10 +2214,10 @@ def test_ps_delete_bucket():
 
     # s3 notification is deleted with bucket
     _, status = s3_notification_conf.get_config(notification=notification_name)
-    assert_equal(status, 404)
+    assert status == 404
     # non-s3 notification is deleted with bucket
     _, status = notification_conf.get_config()
-    assert_equal(status, 404)
+    assert status == 404
     # cleanup
     sub_conf.del_config()
     topic_conf.del_config()
@@ -2276,15 +2272,15 @@ def test_ps_s3_topic_update():
                           endpoint='amqp://' + hostname,
                           endpoint_args='amqp-exchange=' + exchange + '&amqp-ack-level=none')
     result, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     parsed_result = json.loads(result)
     topic_arn = parsed_result['arn']
     # get topic
     result, _ = topic_conf.get_config()
     # verify topic content
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic']['name'], topic_name)
-    assert_equal(parsed_result['topic']['dest']['push_endpoint'], topic_conf.parameters['push-endpoint'])
+    assert parsed_result['topic']['name'] == topic_name
+    assert parsed_result['topic']['dest']['push_endpoint'] == topic_conf.parameters['push-endpoint']
     
     # create http server
     port = random.randint(10000, 20000)
@@ -2303,7 +2299,7 @@ def test_ps_s3_topic_update():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -2320,13 +2316,13 @@ def test_ps_s3_topic_update():
     topic_conf = PSTopic(ps_zone.conn, topic_name,
                          endpoint='http://'+ hostname + ':' + str(port))
     _, status = topic_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # get topic
     result, _ = topic_conf.get_config()
     # verify topic content
     parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic']['name'], topic_name)
-    assert_equal(parsed_result['topic']['dest']['push_endpoint'], topic_conf.parameters['push-endpoint'])
+    assert parsed_result['topic']['name'] == topic_name
+    assert parsed_result['topic']['dest']['push_endpoint'] == topic_conf.parameters['push-endpoint']
 
     # delete current objects and create new objects in the bucket
     for key in bucket.list():
@@ -2350,7 +2346,7 @@ def test_ps_s3_topic_update():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     
     # delete current objects and create new objects in the bucket
     for key in bucket.list():
@@ -2409,13 +2405,13 @@ def test_ps_s3_notification_update():
     result, status = topic_conf1.set_config()
     parsed_result = json.loads(result)
     topic_arn1 = parsed_result['arn']
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     topic_conf2 = PSTopic(ps_zone.conn, topic_name2,
                           endpoint='http://'+hostname+':'+str(http_port))
     result, status = topic_conf2.set_config()
     parsed_result = json.loads(result)
     topic_arn2 = parsed_result['arn']
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # create bucket on the first of the rados zones
     bucket = master_zone.create_bucket(bucket_name)
@@ -2429,7 +2425,7 @@ def test_ps_s3_notification_update():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -2449,7 +2445,7 @@ def test_ps_s3_notification_update():
                        }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # delete current objects and create new objects in the bucket
     for key in bucket.list():
@@ -2509,13 +2505,13 @@ def test_ps_s3_multiple_topics_notification():
     result, status = topic_conf1.set_config()
     parsed_result = json.loads(result)
     topic_arn1 = parsed_result['arn']
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     topic_conf2 = PSTopic(ps_zone.conn, topic_name2,
                           endpoint='http://'+hostname+':'+str(http_port))
     result, status = topic_conf2.set_config()
     parsed_result = json.loads(result)
     topic_arn2 = parsed_result['arn']
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # create bucket on the first of the rados zones
     bucket = master_zone.create_bucket(bucket_name)
@@ -2537,21 +2533,21 @@ def test_ps_s3_multiple_topics_notification():
         }]
     s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     result, _ = s3_notification_conf.get_config()
-    assert_equal(len(result['TopicConfigurations']), 2)
-    assert_equal(result['TopicConfigurations'][0]['Id'], notification_name1)
-    assert_equal(result['TopicConfigurations'][1]['Id'], notification_name2)
+    assert len(result['TopicConfigurations']) == 2
+    assert result['TopicConfigurations'][0]['Id'] == notification_name1
+    assert result['TopicConfigurations'][1]['Id'] == notification_name2
 
     # get auto-generated subscriptions
     sub_conf1 = PSSubscription(ps_zone.conn, notification_name1,
                                topic_name1)
     _, status = sub_conf1.get_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
     sub_conf2 = PSSubscription(ps_zone.conn, notification_name2,
                                topic_name2)
     _, status = sub_conf2.get_config()
-    assert_equal(status/100, 2)
+    assert status/100 == 2
 
     # create objects in the bucket
     number_of_objects = 10
