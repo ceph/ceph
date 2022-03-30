@@ -766,7 +766,10 @@ PG::do_osd_ops(
           }
         }
       } else if (result > 0 && may_write && !rvec) {
-          result = 0;
+        result = 0;
+      } else if (result < 0 && (m->ops.empty() ?
+        0 : m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK)) {
+        result = 0;
       }
       auto reply = crimson::make_message<MOSDOpReply>(m.get(),
                                              result,
@@ -791,6 +794,10 @@ PG::do_osd_ops(
     [m, this] (const std::error_code& e) {
       auto reply = crimson::make_message<MOSDOpReply>(
         m.get(), -e.value(), get_osdmap_epoch(), 0, false);
+      if (m->ops.empty() ? 0 :
+        m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
+        reply->set_result(0);
+      }
       reply->set_enoent_reply_versions(
         peering_state.get_info().last_update,
         peering_state.get_info().last_user_version);
