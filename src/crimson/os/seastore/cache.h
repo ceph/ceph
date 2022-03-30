@@ -544,7 +544,8 @@ public:
    * Construct the record for Journal from transaction.
    */
   record_t prepare_record(
-    Transaction &t ///< [in, out] current transaction
+    Transaction &t, ///< [in, out] current transaction
+    SegmentProvider *cleaner
   );
 
   /**

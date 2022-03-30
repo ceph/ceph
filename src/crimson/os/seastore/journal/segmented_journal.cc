@@ -31,10 +31,12 @@ SegmentedJournal::SegmentedJournal(
   ExtentReader &scanner,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
+    segment_seq_allocator(new SegmentSeqAllocator),
     journal_segment_allocator("JOURNAL",
                               segment_type_t::JOURNAL,
                               segment_provider,
-                              segment_manager),
+                              segment_manager,
+			      *segment_seq_allocator),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
@@ -78,7 +80,7 @@ SegmentedJournal::prep_replay_segments(
 	rt.second.journal_segment_seq;
     });
 
-  journal_segment_allocator.set_next_segment_seq(
+  segment_seq_allocator->set_next_segment_seq(
     segments.rbegin()->second.journal_segment_seq + 1);
   std::for_each(
     segments.begin(),
@@ -147,12 +149,14 @@ SegmentedJournal::replay_segment(
   INFO("starting at {} -- {}", seq, header);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
-    ExtentReader::found_record_handler_t([=, &handler](
+    ExtentReader::found_record_handler_t(
+      [s_type=header.type, &handler, this](
       record_locator_t locator,
       const record_group_header_t& header,
       const bufferlist& mdbuf)
       -> ExtentReader::scan_valid_records_ertr::future<>
     {
+      LOG_PREFIX(Journal::replay_segment);
       auto maybe_record_deltas_list = try_decode_deltas(
           header, mdbuf, locator.record_block_base);
       if (!maybe_record_deltas_list) {
@@ -165,6 +169,7 @@ SegmentedJournal::replay_segment(
       return seastar::do_with(
         std::move(*maybe_record_deltas_list),
         [write_result=locator.write_result,
+	 s_type,
          this,
          FNAME,
          &handler](auto& record_deltas_list)
@@ -172,6 +177,7 @@ SegmentedJournal::replay_segment(
         return crimson::do_for_each(
           record_deltas_list,
           [write_result,
+	   s_type,
            this,
            FNAME,
            &handler](record_deltas_t& record_deltas)
@@ -186,6 +192,7 @@ SegmentedJournal::replay_segment(
           return crimson::do_for_each(
             record_deltas.deltas,
             [locator,
+	     s_type,
              this,
              FNAME,
              &handler](auto &p)
@@ -202,16 +209,13 @@ SegmentedJournal::replay_segment(
             if (delta.paddr != P_ADDR_NULL) {
               auto& seg_addr = delta.paddr.as_seg_paddr();
               auto delta_paddr_segment_seq = segment_provider.get_seq(seg_addr.get_segment_id());
-              auto delta_paddr_segment_type = segment_seq_to_type(delta_paddr_segment_seq);
-              auto locator_segment_seq = locator.write_result.start_seq.segment_seq;
-              if (delta_paddr_segment_type == segment_type_t::NULL_SEG ||
-                  (delta_paddr_segment_type == segment_type_t::JOURNAL &&
-                   delta_paddr_segment_seq > locator_segment_seq)) {
+              if (s_type == segment_type_t::NULL_SEG ||
+                  (delta_paddr_segment_seq != delta.ext_seq)) {
                 SUBDEBUG(seastore_cache,
-                         "delta is obsolete, delta_paddr_segment_seq={}, locator_segment_seq={} -- {}",
+                         "delta is obsolete, delta_paddr_segment_seq={}, -- {}",
                          segment_seq_printer_t{delta_paddr_segment_seq},
-                         segment_seq_printer_t{locator_segment_seq},
                          delta);
+		assert(delta_paddr_segment_seq > delta.ext_seq);
                 return replay_ertr::now();
               }
             }

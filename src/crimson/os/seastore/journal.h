@@ -7,6 +7,7 @@
 
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/segment_seq_allocator.h"
 
 namespace crimson::os::seastore {
 
@@ -83,6 +84,8 @@ public:
 	       seastar::lowres_system_clock::time_point last_modified)>;
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
+
+  virtual SegmentSeqAllocator& get_segment_seq_allocator() = 0;
 
   virtual ~Journal() {}
 };
