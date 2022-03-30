@@ -1,0 +1,15 @@
+name: "Update Angular Dependencies"
+on:
+  schedule:
+    - cron: "30 1 * * *"
+
+jobs:
+  ngxUptodate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Updating ng dependencies
+        uses: tinesoft/ngx-uptodate@master
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          project-path: "/src/pybind/mgr/dashboard/frontend"
+          pr-title: "mgr/dashboard: update angular dependencies"
