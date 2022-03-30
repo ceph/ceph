@@ -94,6 +94,8 @@
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
+%bcond_with system_arrow
+%bcond_with system_utf8proc
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
@@ -260,10 +262,11 @@ BuildRequires:	socat
 %if 0%{with zbd}
 BuildRequires:  libzbd-devel
 %endif
+BuildRequires:  thrift-devel >= 0.13.0
+BuildRequires:  re2-devel
 %if 0%{with jaeger}
 BuildRequires:  bison
 BuildRequires:  flex
-BuildRequires:  thrift-devel >= 0.13.0
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  json-devel
 %endif
@@ -275,6 +278,13 @@ BuildRequires:  libevent-devel
 %if 0%{with system_pmdk}
 BuildRequires:  libpmem-devel
 BuildRequires:  libpmemobj-devel
+%endif
+%if 0%{with system_arrow}
+BuildRequires:  arrow-devel
+BuildRequires:  parquet-devel
+%endif
+%if 0%{with system_utf8proc}
+BuildRequires:  utf8proc-devel
 %endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
@@ -1246,6 +1256,9 @@ export LDFLAGS="$RPM_LD_FLAGS"
 %if 0%{with seastar}
 # seastar uses longjmp() to implement coroutine. and this annoys longjmp_chk()
 export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
+# remove from CFLAGS too because it causes the arrow submodule to fail with:
+#   warning _FORTIFY_SOURCE requires compiling with optimization (-O)
+export CFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
 %endif
 
 env | sort
@@ -1334,6 +1347,12 @@ cmake .. \
 %endif
 %if 0%{?rhel}
     -DWITH_FMT_HEADER_ONLY:BOOL=ON \
+%endif
+%if 0%{with system_arrow}
+    -DWITH_SYSTEM_ARROW:BOOL=ON \
+%endif
+%if 0%{without system_utf8proc}
+    -DWITH_SYSTEM_UTF8PROC:BOOL=OFF \
 %endif
     -DWITH_GRAFANA:BOOL=ON
 

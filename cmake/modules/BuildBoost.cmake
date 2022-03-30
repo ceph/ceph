@@ -1,8 +1,9 @@
-# This module builds Boost
-# executables are. It sets the following variables:
+# This module builds Boost. It sets the following variables:
 #
 #  Boost_FOUND : boolean            - system has Boost
+#  BOOST_ROOT : path
 #  Boost_LIBRARIES : list(filepath) - the libraries needed to use Boost
+#  Boost_LIBRARY_DIR_RELEASE : path - the library path
 #  Boost_INCLUDE_DIRS : list(path)  - the Boost include directories
 #
 # Following hints are respected
@@ -190,8 +191,10 @@ macro(build_boost version)
   # target, so we can collect "Boost_LIBRARIES" which is then used by
   # ExternalProject_Add(Boost ...)
   set(install_dir "${CMAKE_BINARY_DIR}/boost")
+  set(BOOST_ROOT ${install_dir})
   set(Boost_INCLUDE_DIRS ${install_dir}/include)
   set(Boost_INCLUDE_DIR ${install_dir}/include)
+  set(Boost_LIBRARY_DIR_RELEASE ${install_dir}/lib)
   set(Boost_VERSION ${version})
   # create the directory so cmake won't complain when looking at the imported
   # target

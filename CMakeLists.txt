@@ -400,7 +400,10 @@ option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push 
 option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka push endpoint" ON)
 option(WITH_RADOSGW_LUA_PACKAGES "Rados Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for Rados Gateway" ON)
-option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" OFF)
+option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
+
+option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
+option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" ON)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
