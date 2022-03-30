@@ -197,14 +197,13 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
     return [
       func = std::forward<Func>(func)
     ] (stateful_error_t<ErrorT>&& e) mutable -> decltype(auto) {
+      if constexpr (std::is_invocable_v<Func, void>) {
+        return std::invoke(std::forward<Func>(func));
+      }
       try {
         std::rethrow_exception(e.ep);
       } catch (const ErrorT& obj) {
-        if constexpr (std::is_invocable_v<Func, decltype(obj)>) {
-          return std::invoke(std::forward<Func>(func), obj);
-        } else {
-          return std::invoke(std::forward<Func>(func));
-        }
+        return std::invoke(std::forward<Func>(func), obj);
       }
       ceph_abort_msg("exception type mismatch -- impossible!");
     };
