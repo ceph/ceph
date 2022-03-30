@@ -10,8 +10,8 @@
     - name: tell lvm to ignore loop devices
       lineinfile:
         path: /etc/lvm/lvm.conf
-        line: '        global_filter = [ "r|loop|", "a|.*|" ]'
-        insertafter: '^devices {'
+        line: "\tfilter = [ 'r|loop.*|' ]"
+        insertafter: 'devices {'
     - name: lvm allow changes depsite duplicate PVIDs
       lineinfile:
         path: /etc/lvm/lvm.conf
