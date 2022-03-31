@@ -44,6 +44,13 @@
   using these re-authorized IDs may be disrupted, this command requires the
   "--yes-i-really-mean-it" flag. Also, mirroring is expected to be disabled
   on the file system.
+
+* fs: A FS volume can be renamed using the `fs volume rename` command. Any cephx
+  credentials authorized for the old volume name will need to be reauthorized to
+  the new volume name. Since the operations of the clients using these re-authorized
+  IDs may be disrupted, this command requires the "--yes-i-really-mean-it" flag. Also,
+  mirroring is expected to be disabled on the file system.
+
 * MDS upgrades no longer require stopping all standby MDS daemons before
   upgrading the sole active MDS for a file system.
 
