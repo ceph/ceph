@@ -1480,8 +1480,10 @@ options:
   type: str
   level: advanced
   desc: File-system path for ops log.
-  long_desc: Path to file that RGW will log ops logs to.
+  long_desc: Path to file that RGW will log ops logs to. A cephadm deployment will automatically
+    rotate these logs under /var/log/ceph/. Other deployments should arrange for similar log rotation.
   fmt_desc: The file-system path for writing operations logs.
+  daemon_default: /var/log/ceph/ops-log-$cluster-$name.log
   services:
   - rgw
   see_also:
