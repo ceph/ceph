@@ -41,7 +41,9 @@ namespace ceph {
 #define CEPHFS_FEATURE_NAUTILUS         12
 #define CEPHFS_FEATURE_DELEG_INO        13
 #define CEPHFS_FEATURE_OCTOPUS          13
+#define CEPHFS_FEATURE_PACIFIC          14
 #define CEPHFS_FEATURE_METRIC_COLLECT   14
+#define CEPHFS_FEATURE_QUINCY           15
 #define CEPHFS_FEATURE_ALTERNATE_NAME   15
 #define CEPHFS_FEATURE_MAX              15
 
@@ -58,7 +60,9 @@ namespace ceph {
   CEPHFS_FEATURE_NAUTILUS,              \
   CEPHFS_FEATURE_DELEG_INO,             \
   CEPHFS_FEATURE_OCTOPUS,               \
+  CEPHFS_FEATURE_PACIFIC,               \
   CEPHFS_FEATURE_METRIC_COLLECT,        \
+  CEPHFS_FEATURE_QUINCY,                \
   CEPHFS_FEATURE_ALTERNATE_NAME,        \
 }
 
