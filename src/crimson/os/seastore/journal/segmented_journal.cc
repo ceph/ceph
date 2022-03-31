@@ -27,7 +27,6 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentedJournal::SegmentedJournal(
-  SegmentManagerGroup &sms,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
     segment_seq_allocator(
@@ -45,7 +44,7 @@ SegmentedJournal::SegmentedJournal(
                      crimson::common::get_conf<double>(
                        "seastore_journal_batch_preferred_fullness"),
                      journal_segment_allocator),
-    sms(sms)
+    sm_group(*segment_provider.get_segment_manager_group())
 {
 }
 
@@ -230,7 +229,7 @@ SegmentedJournal::replay_segment(
       });
     }),
     [=](auto &cursor, auto &dhandler) {
-      return sms.scan_valid_records(
+      return sm_group.scan_valid_records(
 	cursor,
 	header.segment_nonce,
 	std::numeric_limits<size_t>::max(),
@@ -249,7 +248,7 @@ SegmentedJournal::replay_ret SegmentedJournal::replay(
   delta_handler_t &&delta_handler)
 {
   LOG_PREFIX(Journal::replay);
-  return sms.find_journal_segment_headers(
+  return sm_group.find_journal_segment_headers(
   ).safe_then([this, FNAME, delta_handler=std::move(delta_handler)]
     (auto &&segment_headers) mutable -> replay_ret {
     INFO("got {} segments", segment_headers.size());

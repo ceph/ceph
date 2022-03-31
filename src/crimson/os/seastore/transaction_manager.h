@@ -69,8 +69,7 @@ public:
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
-    ExtentPlacementManagerRef&& epm,
-    SegmentManagerGroup& sms);
+    ExtentPlacementManagerRef &&epm);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -548,7 +547,7 @@ public:
     ceph_assert(dev->get_device_type() == device_type_t::SEGMENTED);
     auto sm = dynamic_cast<SegmentManager*>(dev);
     ceph_assert(sm != nullptr);
-    sms.add_segment_manager(sm);
+    sm_group.add_segment_manager(sm);
   }
 
   ~TransactionManager();
@@ -561,7 +560,7 @@ private:
   LBAManagerRef lba_manager;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
-  SegmentManagerGroup& sms;
+  SegmentManagerGroup &sm_group;
 
   WritePipeline write_pipeline;
 

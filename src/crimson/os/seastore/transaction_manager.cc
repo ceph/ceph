@@ -26,14 +26,13 @@ TransactionManager::TransactionManager(
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
-  ExtentPlacementManagerRef&& epm,
-  SegmentManagerGroup& sms)
+  ExtentPlacementManagerRef &&epm)
   : segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
-    sms(sms)
+    sm_group(*segment_cleaner->get_segment_manager_group())
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -157,7 +156,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
     return epm->close();
   }).safe_then([FNAME, this] {
     INFO("completed");
-    sms.reset();
+    sm_group.reset();
     return seastar::now();
   });
 }
@@ -542,12 +541,11 @@ TransactionManager::~TransactionManager() {}
 TransactionManagerRef make_transaction_manager(bool detailed)
 {
   auto sms = std::make_unique<SegmentManagerGroup>();
-  auto& sms_ref = *sms.get();
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
     std::move(sms),
     detailed);
-  auto journal = journal::make_segmented(sms_ref, *segment_cleaner);
+  auto journal = journal::make_segmented(*segment_cleaner);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
@@ -557,8 +555,7 @@ TransactionManagerRef make_transaction_manager(bool detailed)
     std::move(journal),
     std::move(cache),
     std::move(lba_manager),
-    std::move(epm),
-    sms_ref);
+    std::move(epm));
 }
 
 }

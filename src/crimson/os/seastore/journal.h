@@ -90,9 +90,7 @@ using JournalRef = std::unique_ptr<Journal>;
 
 namespace journal {
 
-JournalRef make_segmented(
-  SegmentManagerGroup &sms,
-  SegmentProvider &provider);
+JournalRef make_segmented(SegmentProvider &provider);
 
 }
 
