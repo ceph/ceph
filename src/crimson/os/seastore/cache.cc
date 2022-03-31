@@ -985,6 +985,7 @@ record_t Cache::prepare_record(
 	  0,
 	  t.root->get_version() - 1,
 	  MAX_SEG_SEQ,
+	  segment_type_t::NULL_SEG,
 	  std::move(delta_bl)
 	});
     } else {
@@ -1002,6 +1003,9 @@ record_t Cache::prepare_record(
 	  cleaner
 	  ? cleaner->get_seq(i->get_paddr().as_seg_paddr().get_segment_id())
 	  : MAX_SEG_SEQ,
+	  cleaner
+	  ? cleaner->get_type(i->get_paddr().as_seg_paddr().get_segment_id())
+	  : segment_type_t::NULL_SEG,
 	  std::move(delta_bl)
 	});
       i->last_committed_crc = final_crc;

@@ -81,6 +81,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   segment_id_t next;
 
   std::map<segment_id_t, segment_seq_t> segment_seqs;
+  std::map<segment_id_t, segment_type_t> segment_types;
 
   journal_test_t() = default;
 
@@ -99,18 +100,23 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   segment_id_t get_segment(
     device_id_t id,
     segment_seq_t seq,
-    segment_type_t) final
+    segment_type_t type) final
   {
     auto ret = next;
     next = segment_id_t{
       next.device_id(),
       next.device_segment_id() + 1};
     segment_seqs[ret] = seq;
+    segment_types[ret] = type;
     return ret;
   }
 
   segment_seq_t get_seq(segment_id_t id) {
     return segment_seqs[id];
+  }
+
+  segment_type_t get_type(segment_id_t id) final {
+    return segment_types[id];
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
@@ -236,6 +242,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       block_size,
       1,
       MAX_SEG_SEQ,
+      segment_type_t::NULL_SEG,
       bl
     };
   }

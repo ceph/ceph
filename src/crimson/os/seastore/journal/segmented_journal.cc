@@ -31,7 +31,8 @@ SegmentedJournal::SegmentedJournal(
   ExtentReader &scanner,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
-    segment_seq_allocator(new SegmentSeqAllocator),
+    segment_seq_allocator(
+      new SegmentSeqAllocator(segment_type_t::JOURNAL)),
     journal_segment_allocator("JOURNAL",
                               segment_type_t::JOURNAL,
                               segment_provider,
@@ -209,13 +210,16 @@ SegmentedJournal::replay_segment(
             if (delta.paddr != P_ADDR_NULL) {
               auto& seg_addr = delta.paddr.as_seg_paddr();
               auto delta_paddr_segment_seq = segment_provider.get_seq(seg_addr.get_segment_id());
+	      auto delta_paddr_segment_type = segment_provider.get_type(seg_addr.get_segment_id());
               if (s_type == segment_type_t::NULL_SEG ||
-                  (delta_paddr_segment_seq != delta.ext_seq)) {
+                  (delta_paddr_segment_seq != delta.ext_seq ||
+		   delta_paddr_segment_type != delta.seg_type)) {
                 SUBDEBUG(seastore_cache,
-                         "delta is obsolete, delta_paddr_segment_seq={}, -- {}",
+                         "delta is obsolete, delta_paddr_segment_seq={},"
+			 " delta_paddr_segment_type={} -- {}",
                          segment_seq_printer_t{delta_paddr_segment_seq},
+			 delta_paddr_segment_type,
                          delta);
-		assert(delta_paddr_segment_seq > delta.ext_seq);
                 return replay_ertr::now();
               }
             }

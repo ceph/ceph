@@ -210,7 +210,7 @@ static constexpr segment_seq_t MAX_SEG_SEQ =
 static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
 static constexpr segment_seq_t MAX_VALID_SEG_SEQ = MAX_SEG_SEQ - 2;
 
-enum class segment_type_t {
+enum class segment_type_t : uint8_t {
   JOURNAL = 0,
   OOL,
   NULL_SEG,
@@ -912,6 +912,7 @@ struct delta_info_t {
   seastore_off_t length = NULL_SEG_OFF;         ///< extent length
   extent_version_t pversion;                   ///< prior version
   segment_seq_t ext_seq;		       ///< seq of the extent's segment
+  segment_type_t seg_type;
   ceph::bufferlist bl;                         ///< payload
 
   DENC(delta_info_t, v, p) {
@@ -924,6 +925,7 @@ struct delta_info_t {
     denc(v.length, p);
     denc(v.pversion, p);
     denc(v.ext_seq, p);
+    denc(v.seg_type, p);
     denc(v.bl, p);
     DENC_FINISH(p);
   }

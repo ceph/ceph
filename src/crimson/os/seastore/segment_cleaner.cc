@@ -183,6 +183,8 @@ SegmentCleaner::SegmentCleaner(
   : detailed(detailed),
     config(config),
     scanner(std::move(scr)),
+    ool_segment_seq_allocator(
+      new SegmentSeqAllocator(segment_type_t::OOL)),
     gc_process(*this)
 {}
 
