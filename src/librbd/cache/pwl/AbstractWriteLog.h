@@ -236,6 +236,7 @@ private:
 
   void pwl_init(Context *on_finish, pwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
+  void handle_update_image_cache_state(int r);
   void check_image_cache_state_clean();
 
   void flush_dirty_entries(Context *on_finish);
@@ -399,7 +400,7 @@ protected:
   virtual uint64_t get_max_extent() {
     return 0;
   }
-
+  void update_image_cache_state(void);
 };
 
 } // namespace pwl
