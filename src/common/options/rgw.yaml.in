@@ -1447,7 +1447,10 @@ options:
   type: bool
   level: advanced
   desc: Use RADOS for ops log
-  long_desc: If set, RGW will store ops log information in RADOS.
+  long_desc: If set, RGW will store ops log information in RADOS. WARNING,
+    there is no automation to clean up these log entries, so by default they
+    will pile up without bound. This MUST NOT be enabled unless the admin has
+    a strategy to manage and trim these log entries with `radosgw-admin log rm`.
   fmt_desc: Whether the operations log should be written to the
     Ceph Storage Cluster backend.
   default: false
@@ -1455,6 +1458,8 @@ options:
   - rgw
   see_also:
   - rgw_enable_ops_log
+  - rgw_log_object_name_utc
+  - rgw_log_object_name
   with_legacy: true
 # path to unix domain socket where ops log can go
 - name: rgw_ops_log_socket_path
