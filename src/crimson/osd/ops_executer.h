@@ -228,6 +228,9 @@ private:
     return crimson::ct_error::operation_not_supported::make();
   }
 
+  interruptible_errorated_future<osd_op_errorator>
+  do_execute_op(OSDOp& osd_op);
+
 public:
   template <class MsgT>
   OpsExecuter(Ref<PG> pg,

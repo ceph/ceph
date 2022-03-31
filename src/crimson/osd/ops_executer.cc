@@ -476,6 +476,19 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
+  return (osd_op.op.flags & CEPH_OSD_OP_FLAG_FAILOK) ?
+    do_execute_op(osd_op).handle_error_interruptible(
+      crimson::ct_error::eagain::pass_further{},
+      crimson::ct_error::einprogress::pass_further{},
+      osd_op_errorator::all_same_way([] {
+        return osd_op_errorator::now();
+      }))
+    : do_execute_op(osd_op);
+}
+
+OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
+OpsExecuter::do_execute_op(OSDOp& osd_op)
+{
   // TODO: dispatch via call table?
   // TODO: we might want to find a way to unify both input and output
   // of each op.
