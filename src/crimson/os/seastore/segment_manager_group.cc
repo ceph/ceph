@@ -12,6 +12,7 @@ namespace crimson::os::seastore {
 SegmentManagerGroup::read_segment_tail_ret
 SegmentManagerGroup::read_segment_tail(segment_id_t segment)
 {
+  assert(has_device(segment.device_id()));
   auto& segment_manager = *segment_managers[segment.device_id()];
   return segment_manager.read(
     paddr_t::make_seg_paddr(
@@ -54,6 +55,7 @@ SegmentManagerGroup::read_segment_tail(segment_id_t segment)
 SegmentManagerGroup::read_segment_header_ret
 SegmentManagerGroup::read_segment_header(segment_id_t segment)
 {
+  assert(has_device(segment.device_id()));
   auto& segment_manager = *segment_managers[segment.device_id()];
   return segment_manager.read(
     paddr_t::make_seg_paddr(segment, 0),
@@ -160,6 +162,7 @@ SegmentManagerGroup::scan_valid_records(
   found_record_handler_t &handler)
 {
   LOG_PREFIX(SegmentManagerGroup::scan_valid_records);
+  assert(has_device(cursor.get_segment_id().device_id()));
   auto& segment_manager =
     *segment_managers[cursor.get_segment_id().device_id()];
   if (cursor.get_segment_offset() == 0) {
@@ -260,6 +263,7 @@ SegmentManagerGroup::read_validate_record_metadata(
 {
   LOG_PREFIX(SegmentManagerGroup::read_validate_record_metadata);
   auto& seg_addr = start.as_seg_paddr();
+  assert(has_device(seg_addr.get_segment_id().device_id()));
   auto& segment_manager = *segment_managers[seg_addr.get_segment_id().device_id()];
   auto block_size = segment_manager.get_block_size();
   auto segment_size = static_cast<int64_t>(segment_manager.get_segment_size());
@@ -335,6 +339,7 @@ SegmentManagerGroup::read_validate_data(
   const record_group_header_t &header)
 {
   LOG_PREFIX(SegmentManagerGroup::read_validate_data);
+  assert(has_device(record_base.get_device_id()));
   auto& segment_manager = *segment_managers[record_base.get_device_id()];
   auto data_addr = record_base.add_offset(header.mdlength);
   TRACE("reading record group data blocks {}~{}", data_addr, header.dlength);

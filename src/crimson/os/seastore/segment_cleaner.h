@@ -357,14 +357,8 @@ class SpaceTrackerSimple : public SpaceTrackerI {
   }
 public:
   SpaceTrackerSimple(const SpaceTrackerSimple &) = default;
-  SpaceTrackerSimple(std::vector<SegmentManager*> sms) {
+  SpaceTrackerSimple(const std::vector<SegmentManager*> &sms) {
     for (auto sm : sms) {
-      if (!sm) {
-	// sms is a vector that is indexed by device id and
-	// always has "max_device" elements, some of which
-	// may be null.
-	continue;
-      }
       live_bytes_by_segment.add_device(
 	sm->get_device_id(),
 	sm->get_num_segments(),
@@ -466,16 +460,10 @@ class SpaceTrackerDetailed : public SpaceTrackerI {
 
 public:
   SpaceTrackerDetailed(const SpaceTrackerDetailed &) = default;
-  SpaceTrackerDetailed(std::vector<SegmentManager*> sms)
+  SpaceTrackerDetailed(const std::vector<SegmentManager*> &sms)
   {
     block_size_by_segment_manager.resize(DEVICE_ID_MAX, 0);
     for (auto sm : sms) {
-      // sms is a vector that is indexed by device id and
-      // always has "max_device" elements, some of which
-      // may be null.
-      if (!sm) {
-	continue;
-      }
       segment_usage.add_device(
 	sm->get_device_id(),
 	sm->get_num_segments(),

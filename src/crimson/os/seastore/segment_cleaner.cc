@@ -505,7 +505,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 SegmentCleaner::mount_ret SegmentCleaner::mount(
   device_id_t pdevice_id)
 {
-  auto& sms = sm_group->get_segment_managers();
+  const auto& sms = sm_group->get_segment_managers();
   logger().debug(
     "SegmentCleaner::mount: {} segment managers", sms.size());
   init_complete = false;
@@ -524,12 +524,6 @@ SegmentCleaner::mount_ret SegmentCleaner::mount(
   
   segments.clear();
   for (auto sm : sms) {
-    // sms is a vector that is indexed by device id and
-    // always has "max_device" elements, some of which
-    // may be null.
-    if (!sm) {
-      continue;
-    }
     segments.add_segment_manager(*sm);
     stats.empty_segments += sm->get_num_segments();
   }
