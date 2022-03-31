@@ -199,6 +199,7 @@ std::ostream &operator<<(std::ostream &out, const delta_info_t &delta)
 	     << ", length: " << delta.length
 	     << ", pversion: " << delta.pversion
 	     << ", ext_seq: " << delta.ext_seq
+	     << ", seg_type: " << delta.seg_type
 	     << ")";
 }
 

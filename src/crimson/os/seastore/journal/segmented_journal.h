@@ -46,9 +46,6 @@ public:
     write_pipeline = _write_pipeline;
   }
 
-  SegmentSeqAllocator& get_segment_seq_allocator() final {
-    return *segment_seq_allocator;
-  }
 private:
   submit_record_ret do_submit_record(
     record_t &&record,

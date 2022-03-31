@@ -550,7 +550,7 @@ public:
       std::make_unique<SegmentedAllocator>(
 	*segment_cleaner,
 	*sm,
-	journal->get_segment_seq_allocator()));
+	segment_cleaner->get_ool_segment_seq_allocator()));
   }
 
   ~TransactionManager();
