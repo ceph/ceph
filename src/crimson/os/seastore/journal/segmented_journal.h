@@ -25,7 +25,6 @@ namespace crimson::os::seastore::journal {
 class SegmentedJournal : public Journal {
 public:
   SegmentedJournal(
-    SegmentManager &segment_manager,
     SegmentManagerGroup& sms,
     SegmentProvider& cleaner);
   ~SegmentedJournal() {}
@@ -58,15 +57,6 @@ private:
   RecordSubmitter record_submitter;
   SegmentManagerGroup& sms;
   WritePipeline* write_pipeline = nullptr;
-
-  /// read journal segment headers from sms
-  using find_journal_segments_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using find_journal_segments_ret_bare = std::vector<
-    std::pair<segment_id_t, segment_header_t>>;
-  using find_journal_segments_ret = find_journal_segments_ertr::future<
-    find_journal_segments_ret_bare>;
-  find_journal_segments_ret find_journal_segments();
 
   /// return ordered vector of segments to replay
   using replay_segments_t = std::vector<

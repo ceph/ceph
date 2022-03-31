@@ -17,9 +17,8 @@ SegmentManagerGroup::read_segment_tail(segment_id_t segment)
   return segment_manager.read(
     paddr_t::make_seg_paddr(
       segment,
-      segment_manager.get_segment_size() -
-        segment_manager.get_rounded_tail_length()),
-    segment_manager.get_rounded_tail_length()
+      segment_manager.get_segment_size() - get_rounded_tail_length()),
+    get_rounded_tail_length()
   ).handle_error(
     read_segment_header_ertr::pass_further{},
     crimson::ct_error::assert_all{
@@ -59,7 +58,7 @@ SegmentManagerGroup::read_segment_header(segment_id_t segment)
   auto& segment_manager = *segment_managers[segment.device_id()];
   return segment_manager.read(
     paddr_t::make_seg_paddr(segment, 0),
-    segment_manager.get_block_size()
+    get_rounded_header_length()
   ).handle_error(
     read_segment_header_ertr::pass_further{},
     crimson::ct_error::assert_all{
@@ -384,6 +383,51 @@ SegmentManagerGroup::consume_next_records(
     if (cursor.is_complete()) {
       INFO("complete at {}, no more record group", cursor);
     }
+  });
+}
+
+SegmentManagerGroup::find_journal_segment_headers_ret
+SegmentManagerGroup::find_journal_segment_headers()
+{
+  return seastar::do_with(
+    get_segment_managers(),
+    find_journal_segment_headers_ret_bare{},
+    [this](auto &sms, auto& ret) -> find_journal_segment_headers_ret
+  {
+    return crimson::do_for_each(sms,
+      [this, &ret](SegmentManager *sm)
+    {
+      LOG_PREFIX(SegmentManagerGroup::find_journal_segment_headers);
+      auto device_id = sm->get_device_id();
+      auto num_segments = sm->get_num_segments();
+      INFO("processing {} with {} segments",
+           device_id_printer_t{device_id}, num_segments);
+      return crimson::do_for_each(
+        boost::counting_iterator<device_segment_id_t>(0),
+        boost::counting_iterator<device_segment_id_t>(num_segments),
+        [this, &ret, device_id](device_segment_id_t d_segment_id)
+      {
+        segment_id_t segment_id{device_id, d_segment_id};
+        return read_segment_header(segment_id
+        ).safe_then([segment_id, &ret](auto &&header) {
+          if (header.get_type() == segment_type_t::JOURNAL) {
+            ret.emplace_back(std::make_pair(segment_id, std::move(header)));
+          }
+        }).handle_error(
+          crimson::ct_error::enoent::handle([](auto) {
+            return find_journal_segment_headers_ertr::now();
+          }),
+          crimson::ct_error::enodata::handle([](auto) {
+            return find_journal_segment_headers_ertr::now();
+          }),
+          crimson::ct_error::input_output_error::pass_further{}
+        );
+      });
+    }).safe_then([&ret]() mutable {
+      return find_journal_segment_headers_ret{
+        find_journal_segment_headers_ertr::ready_future_marker{},
+        std::move(ret)};
+    });
   });
 }
 

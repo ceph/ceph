@@ -30,13 +30,11 @@ class segment_info_set_t {
     segment_manager_info_t(
       device_id_t device_id,
       device_segment_id_t num_segments,
-      seastore_off_t segment_size,
       seastore_off_t block_size,
       size_t empty_segments,
       size_t size)
       : device_id(device_id),
 	num_segments(num_segments),
-	segment_size(segment_size),
 	block_size(block_size),
 	empty_segments(empty_segments),
 	size(size),
@@ -45,7 +43,6 @@ class segment_info_set_t {
 
     device_id_t device_id = 0;
     device_segment_id_t num_segments = 0;
-    seastore_off_t segment_size = 0;
     seastore_off_t block_size = 0;
     size_t empty_segments = 0;
     size_t size = 0;
@@ -120,11 +117,14 @@ public:
     journal_segments = 0;
     avail_bytes = 0;
     opened_segments = 0;
+    segment_size = 0;
   }
 
   void add_segment_manager(SegmentManager& segment_manager)
   {
     device_id_t d_id = segment_manager.get_device_id();
+    auto ssize = segment_manager.get_segment_size();
+    ceph_assert(ssize != 0);
     segments.add_device(
       d_id,
       segment_manager.get_num_segments(),
@@ -132,13 +132,19 @@ public:
     sm_infos[segment_manager.get_device_id()].emplace(
       d_id,
       segment_manager.get_num_segments(),
-      segment_manager.get_segment_size(),
       segment_manager.get_block_size(),
       segment_manager.get_num_segments(),
       segment_manager.get_size());
 
     total_bytes += segment_manager.get_size();
     avail_bytes += segment_manager.get_size();
+
+    // assume all the segment managers share the same settings as follows.
+    if (segment_size == 0) {
+      segment_size = ssize;
+    } else {
+      ceph_assert(segment_size == ssize);
+    }
   }
 
   device_segment_id_t size() const {
@@ -159,13 +165,6 @@ public:
     return segments.end();
   }
 
-  auto device_begin(device_id_t id) {
-    return segments.device_begin(id);
-  }
-  auto device_end(device_id_t id) {
-    return segments.device_end(id);
-  }
-
   // the following methods are used for keeping track of
   // seastore disk space usage
   void segment_opened(segment_id_t segment) {
@@ -174,15 +173,15 @@ public:
     ceph_assert(segments[segment].is_empty());
     // must be opening a new segment
     auto [iter, inserted] = sm_info->open_segment_avails.emplace(
-      segment, sm_info->segment_size);
+      segment, get_segment_size());
     opened_segments++;
     ceph_assert(inserted);
   }
   void segment_emptied(segment_id_t segment) {
     auto& sm_info = sm_infos[segment.device_id()];
     sm_info->empty_segments++;
-    sm_info->avail_bytes += sm_info->segment_size;
-    avail_bytes += sm_info->segment_size;
+    sm_info->avail_bytes += get_segment_size();
+    avail_bytes += get_segment_size();
   }
   void segment_closed(segment_id_t segment) {
     assert(segments.contains(segment));
@@ -199,11 +198,11 @@ public:
       opened_segments--;
     } else {
       ceph_assert(segment_info.is_empty());
-      assert(sm_info->avail_bytes >= (size_t)sm_info->segment_size);
-      assert(avail_bytes >= (size_t)sm_info->segment_size);
+      assert(sm_info->avail_bytes >= (std::size_t)get_segment_size());
+      assert(avail_bytes >= (std::size_t)get_segment_size());
       assert(sm_info->empty_segments > 0);
-      sm_info->avail_bytes -= sm_info->segment_size;
-      avail_bytes -= sm_info->segment_size;
+      sm_info->avail_bytes -= get_segment_size();
+      avail_bytes -= get_segment_size();
       sm_info->empty_segments--;
     }
     segment_info.set_closed();
@@ -219,7 +218,8 @@ public:
 	offset);
       return;
     }
-    auto new_avail_bytes = sm_info->segment_size - offset.as_seg_paddr().get_segment_off();
+    auto new_avail_bytes = get_segment_size() -
+                           offset.as_seg_paddr().get_segment_off();
     if (iter->second < new_avail_bytes) {
       crimson::get_logger(ceph_subsys_seastore_cleaner).error(
 	"SegmentCleaner::update_segment_avail_bytes:"
@@ -272,6 +272,11 @@ public:
     }
     return num;
   }
+  seastore_off_t get_segment_size() const {
+    assert(segment_size != 0);
+    return segment_size;
+  }
+
 private:
   std::vector<std::optional<segment_manager_info_t>> sm_infos;
   segment_map_t<segment_info_t> segments;
@@ -280,6 +285,7 @@ private:
   size_t total_bytes = 0;
   size_t avail_bytes = 0;
   size_t opened_segments = 0;
+  seastore_off_t segment_size = 0;
 
   friend class SegmentCleaner;
 };
@@ -290,7 +296,7 @@ private:
 class SegmentProvider {
 public:
   virtual segment_id_t get_segment(
-      device_id_t id, segment_seq_t seq, segment_type_t type) = 0;
+      segment_seq_t seq, segment_type_t type) = 0;
 
   virtual void close_segment(segment_id_t) {}
 
@@ -309,6 +315,8 @@ public:
     segment_id_t id) const = 0;
 
   virtual void update_segment_avail_bytes(paddr_t offset) = 0;
+
+  virtual SegmentManagerGroup* get_segment_manager_group() = 0;
 
   virtual ~SegmentProvider() {}
 };
@@ -692,8 +700,6 @@ private:
   /// head of journal
   journal_seq_t journal_head;
 
-  device_id_t journal_device_id;
-
   ExtentCallbackInterface *ecb = nullptr;
 
   /// populated if there is an IO blocked on hard limits
@@ -714,10 +720,10 @@ public:
   using mount_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   using mount_ret = mount_ertr::future<>;
-  mount_ret mount(device_id_t pdevice_id);
+  mount_ret mount();
 
   segment_id_t get_segment(
-      device_id_t id, segment_seq_t seq, segment_type_t type) final;
+      segment_seq_t seq, segment_type_t type) final;
 
   void close_segment(segment_id_t segment) final;
 
@@ -752,6 +758,10 @@ public:
 
   segment_type_t get_type(segment_id_t id) final {
     return segments[id].get_type();
+  }
+
+  SegmentManagerGroup* get_segment_manager_group() final {
+    return sm_group.get();
   }
 
   using release_ertr = SegmentManagerGroup::release_ertr;
@@ -1053,9 +1063,7 @@ private:
   }
 
   size_t get_bytes_available_current_segment() const {
-    auto& seg_addr = journal_head.offset.as_seg_paddr();
-    auto segment_size =
-      segments[seg_addr.get_segment_id().device_id()]->segment_size;
+    auto segment_size = segments.get_segment_size();
     return segment_size - get_bytes_used_current_segment();
   }
 
@@ -1109,12 +1117,10 @@ private:
     if (journal_head == JOURNAL_SEQ_NULL) {
       // this for calculating journal bytes in the journal
       // replay phase in which journal_head is not set
-      return segments.get_journal_segments() * segments[journal_device_id]->segment_size;
+      return segments.get_journal_segments() * segments.get_segment_size();
     } else {
       assert(journal_head >= journal_tail_committed);
-      auto& seg_addr = journal_head.offset.as_seg_paddr();
-      auto segment_size =
-	segments[seg_addr.get_segment_id().device_id()]->segment_size;
+      auto segment_size = segments.get_segment_size();
       return (journal_head.segment_seq - journal_tail_committed.segment_seq + 1) *
 	segment_size;
     }
@@ -1319,7 +1325,6 @@ private:
     assert(s_type != segment_type_t::NULL_SEG);
     segments[segment].type = s_type;
     if (s_type == segment_type_t::JOURNAL) {
-      assert(journal_device_id == segment.device_id());
       segments.new_journal_segment();
     } else {
       assert(s_type == segment_type_t::OOL);

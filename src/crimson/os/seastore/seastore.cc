@@ -1653,7 +1653,7 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   return Device::make_device(
     device
   ).then([&device](DeviceRef device_obj) {
-    auto tm = make_transaction_manager(*device_obj, false /* detailed */);
+    auto tm = make_transaction_manager(false /* detailed */);
     auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
     return std::make_unique<SeaStore>(
       device,

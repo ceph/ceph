@@ -39,11 +39,10 @@ struct btree_test_base :
 
   segment_id_t next;
 
-  btree_test_base() = default;
-
   std::map<segment_id_t, segment_seq_t> segment_seqs;
   std::map<segment_id_t, segment_type_t> segment_types;
 
+  btree_test_base() = default;
 
   seastar::lowres_system_clock::time_point get_last_modified(
     segment_id_t id) const final {
@@ -57,29 +56,31 @@ struct btree_test_base :
   void update_segment_avail_bytes(paddr_t offset) final {}
 
   segment_id_t get_segment(
-    device_id_t id,
     segment_seq_t seq,
-    segment_type_t type) final
-  {
+    segment_type_t type
+  ) final {
     auto ret = next;
     next = segment_id_t{
-      next.device_id(),
+      segment_manager->get_device_id(),
       next.device_segment_id() + 1};
     segment_seqs[ret] = seq;
     segment_types[ret] = type;
     return ret;
   }
 
-  segment_seq_t get_seq(segment_id_t id) {
+  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+
+  void update_journal_tail_committed(journal_seq_t committed) final {}
+
+  SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
+
+  segment_seq_t get_seq(segment_id_t id) final {
     return segment_seqs[id];
   }
 
-  segment_type_t get_type(segment_id_t id) {
+  segment_type_t get_type(segment_id_t id) final {
     return segment_types[id];
   }
-
-  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
-  void update_journal_tail_committed(journal_seq_t committed) final {}
 
   virtual void complete_commit(Transaction &t) {}
   seastar::future<> submit_transaction(TransactionRef t)
@@ -100,8 +101,7 @@ struct btree_test_base :
     segment_manager = segment_manager::create_test_ephemeral();
     sms.reset(new SegmentManagerGroup());
     auto& sms_ref = *sms.get();
-    journal = journal::make_segmented(
-      *segment_manager, sms_ref, *this);
+    journal = journal::make_segmented(sms_ref, *this);
     epm.reset(new ExtentPlacementManager());
     cache.reset(new Cache(*epm));
 
