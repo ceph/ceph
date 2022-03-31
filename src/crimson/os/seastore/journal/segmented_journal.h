@@ -24,9 +24,7 @@ namespace crimson::os::seastore::journal {
  */
 class SegmentedJournal : public Journal {
 public:
-  SegmentedJournal(
-    SegmentManagerGroup& sms,
-    SegmentProvider& cleaner);
+  SegmentedJournal(SegmentProvider &segment_provider);
   ~SegmentedJournal() {}
 
   open_for_write_ret open_for_write() final;
@@ -55,7 +53,7 @@ private:
   SegmentSeqAllocatorRef segment_seq_allocator;
   SegmentAllocator journal_segment_allocator;
   RecordSubmitter record_submitter;
-  SegmentManagerGroup& sms;
+  SegmentManagerGroup &sm_group;
   WritePipeline* write_pipeline = nullptr;
 
   /// return ordered vector of segments to replay
