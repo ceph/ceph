@@ -839,6 +839,12 @@ struct cls_rgw_gc_set_entry_op {
 
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<cls_rgw_gc_set_entry_op*>& ls);
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32); // version and length prefix
+    constexpr size_t expr_secs_overhead = sizeof(__u32); // expiration_seconds_overhead
+    return start_overhead + expr_secs_overhead + info.estimate_encoded_size();
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_set_entry_op)
 

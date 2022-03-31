@@ -29,6 +29,7 @@ class RGWGC : public DoutPrefixProvider {
   static constexpr uint64_t seed = 8675309;
 
   int tag_index(const string& tag);
+  int send_chain(const cls_rgw_obj_chain& chain, const std::string& tag);
 
   class GCWorker : public Thread {
     const DoutPrefixProvider *dpp;
@@ -51,7 +52,7 @@ public:
     finalize();
   }
   vector<bool> transitioned_objects_cache;
-  int send_chain(cls_rgw_obj_chain& chain, const string& tag);
+  std::tuple<int, std::optional<cls_rgw_obj_chain>> send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag);
 
   // asynchronously defer garbage collection on an object that's still being read
   int async_defer_chain(const string& tag, const cls_rgw_obj_chain& info);

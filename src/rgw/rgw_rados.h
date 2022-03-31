@@ -1474,7 +1474,7 @@ public:
   int unlock(const rgw_pool& pool, const string& oid, rgw_zone_id& zone_id, string& owner_id);
 
   void update_gc_chain(const DoutPrefixProvider *dpp, rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
-  int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag);
+  std::tuple<int, std::optional<cls_rgw_obj_chain>> send_chain_to_gc(cls_rgw_obj_chain& chain, const std::string& tag);
   void delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain, const string& tag);
   int gc_operate(const DoutPrefixProvider *dpp, string& oid, librados::ObjectWriteOperation *op);
   int gc_aio_operate(const std::string& oid, librados::AioCompletion *c,

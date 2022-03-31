@@ -4812,10 +4812,10 @@ int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp
     //Delete objects inline just in case gc hasn't been initialised, prevents crashes
     store->delete_objs_inline(dpp, chain, tag);
   } else {
-    auto ret = store->gc->send_chain(chain, tag); // do it synchronously
-    if (ret < 0) {
+    auto [ret, leftover_chain] = store->gc->send_split_chain(chain, tag); // do it synchronously
+    if (ret < 0 && leftover_chain) {
       //Delete objects inline if send chain to gc fails
-      store->delete_objs_inline(dpp, chain, tag);
+      store->delete_objs_inline(dpp, *leftover_chain, tag);
     }
   }
   return 0;
@@ -4835,13 +4835,13 @@ void RGWRados::update_gc_chain(const DoutPrefixProvider *dpp, rgw_obj& head_obj,
   }
 }
 
-int RGWRados::send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag)
+std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWRados::send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag)
 {
   if (chain.empty()) {
-    return 0;
+    return {0, std::nullopt};
   }
 
-  return gc->send_chain(chain, tag);
+  return gc->send_split_chain(chain, tag);
 }
 
 void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain, const string& tag)
