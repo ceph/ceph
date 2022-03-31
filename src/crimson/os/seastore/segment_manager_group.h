@@ -45,6 +45,38 @@ public:
     device_ids.clear();
   }
 
+  /**
+   * get device info
+   *
+   * Assume all segment managers share the same following information.
+   */
+  seastore_off_t get_block_size() const {
+    assert(device_ids.size());
+    return segment_managers[*device_ids.begin()]->get_block_size();
+  }
+
+  seastore_off_t get_segment_size() const {
+    assert(device_ids.size());
+    return segment_managers[*device_ids.begin()]->get_segment_size();
+  }
+
+  const seastore_meta_t &get_meta() const {
+    assert(device_ids.size());
+    return segment_managers[*device_ids.begin()]->get_meta();
+  }
+
+  std::size_t get_rounded_header_length() const {
+    return p2roundup(
+      ceph::encoded_sizeof_bounded<segment_header_t>(),
+      (std::size_t)get_block_size());
+  }
+
+  std::size_t get_rounded_tail_length() const {
+    return p2roundup(
+      ceph::encoded_sizeof_bounded<segment_tail_t>(),
+      (std::size_t)get_block_size());
+  }
+
   using read_segment_header_ertr = crimson::errorator<
     crimson::ct_error::enoent,
     crimson::ct_error::enodata,
@@ -100,6 +132,23 @@ public:
     size_t budget,                     ///< [in] max budget to use
     found_record_handler_t &handler    ///< [in] handler for records
   ); ///< @return used budget
+
+  /*
+   * read journal segment headers
+   */
+  using find_journal_segment_headers_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using find_journal_segment_headers_ret_bare = std::vector<
+    std::pair<segment_id_t, segment_header_t>>;
+  using find_journal_segment_headers_ret = find_journal_segment_headers_ertr::future<
+    find_journal_segment_headers_ret_bare>;
+  find_journal_segment_headers_ret find_journal_segment_headers();
+
+  using open_ertr = SegmentManager::open_ertr;
+  open_ertr::future<SegmentRef> open(segment_id_t id) {
+    assert(has_device(id.device_id()));
+    return segment_managers[id.device_id()]->open(id);
+  }
 
   using release_ertr = SegmentManager::release_ertr;
   release_ertr::future<> release_segment(segment_id_t id) {

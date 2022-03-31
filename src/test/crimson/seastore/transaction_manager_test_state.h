@@ -71,7 +71,7 @@ protected:
 };
 
 auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
-  auto tm = make_transaction_manager(*sm, true);
+  auto tm = make_transaction_manager(true);
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     "",
@@ -92,7 +92,7 @@ protected:
   TMTestState() : EphemeralTestState() {}
 
   virtual void _init() override {
-    tm = make_transaction_manager(*segment_manager, true);
+    tm = make_transaction_manager(true);
     tm->add_device(segment_manager.get(), true);
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();

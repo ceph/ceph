@@ -7,11 +7,10 @@
 namespace crimson::os::seastore::journal {
 
 JournalRef make_segmented(
-  SegmentManager &sm,
   SegmentManagerGroup &sms,
   SegmentProvider &provider)
 {
-  return std::make_unique<SegmentedJournal>(sm, sms, provider);
+  return std::make_unique<SegmentedJournal>(sms, provider);
 }
 
 }

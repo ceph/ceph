@@ -10,19 +10,18 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore {
 
 SegmentedAllocator::SegmentedAllocator(
-  SegmentProvider& sp,
-  SegmentManager& sm,
+  SegmentProvider &sp,
   SegmentSeqAllocator &ssa)
-  : cold_writer{"COLD", sp, sm, ssa},
-    rewrite_writer{"REWRITE", sp, sm, ssa}
-{}
+  : cold_writer{"COLD", sp, ssa},
+    rewrite_writer{"REWRITE", sp, ssa}
+{
+}
 
 SegmentedAllocator::Writer::Writer(
   std::string name,
   SegmentProvider& sp,
-  SegmentManager& sm,
   SegmentSeqAllocator &ssa)
-  : segment_allocator(name, segment_type_t::OOL, sp, sm, ssa),
+  : segment_allocator(name, segment_type_t::OOL, sp, ssa),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(

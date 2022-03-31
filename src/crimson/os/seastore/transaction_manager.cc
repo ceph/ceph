@@ -44,7 +44,6 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
   return segment_cleaner->mount(
-    epm->get_primary_device().get_device_id()
   ).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this](auto addr) {
@@ -84,7 +83,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   INFO("enter");
   cache->init();
   return segment_cleaner->mount(
-    epm->get_primary_device().get_device_id()
   ).safe_then([this] {
     return journal->replay(
       [this](const auto &offsets, const auto &e, auto last_modified) {
@@ -156,10 +154,10 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
     cache->dump_contents();
     return journal->close();
   }).safe_then([this] {
-    sms.reset();
     return epm->close();
-  }).safe_then([FNAME] {
+  }).safe_then([FNAME, this] {
     INFO("completed");
+    sms.reset();
     return seastar::now();
   });
 }
@@ -541,9 +539,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 
 TransactionManager::~TransactionManager() {}
 
-TransactionManagerRef make_transaction_manager(
-    Device &device,
-    bool detailed)
+TransactionManagerRef make_transaction_manager(bool detailed)
 {
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto& sms_ref = *sms.get();
@@ -551,10 +547,7 @@ TransactionManagerRef make_transaction_manager(
     SegmentCleaner::config_t::get_default(),
     std::move(sms),
     detailed);
-  ceph_assert(device.get_device_type() == device_type_t::SEGMENTED);
-  auto sm = dynamic_cast<SegmentManager*>(&device);
-  ceph_assert(sm != nullptr);
-  auto journal = journal::make_segmented(*sm, sms_ref, *segment_cleaner);
+  auto journal = journal::make_segmented(sms_ref, *segment_cleaner);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);

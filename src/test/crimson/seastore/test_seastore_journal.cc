@@ -98,20 +98,25 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   void update_segment_avail_bytes(paddr_t offset) final {}
 
   segment_id_t get_segment(
-    device_id_t id,
     segment_seq_t seq,
-    segment_type_t type) final
-  {
+    segment_type_t type
+  ) final {
     auto ret = next;
     next = segment_id_t{
-      next.device_id(),
+      segment_manager->get_device_id(),
       next.device_segment_id() + 1};
     segment_seqs[ret] = seq;
     segment_types[ret] = type;
     return ret;
   }
 
-  segment_seq_t get_seq(segment_id_t id) {
+  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+
+  void update_journal_tail_committed(journal_seq_t paddr) final {}
+
+  SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
+
+  segment_seq_t get_seq(segment_id_t id) final {
     return segment_seqs[id];
   }
 
@@ -119,15 +124,12 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     return segment_types[id];
   }
 
-  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
-  void update_journal_tail_committed(journal_seq_t paddr) final {}
-
   seastar::future<> set_up_fut() final {
     segment_manager = segment_manager::create_test_ephemeral();
     block_size = segment_manager->get_block_size();
     sms.reset(new SegmentManagerGroup());
     next = segment_id_t(segment_manager->get_device_id(), 0);
-    journal = journal::make_segmented(*segment_manager, *sms, *this);
+    journal = journal::make_segmented(*sms, *this);
     journal->set_write_pipeline(&pipeline);
     sms->add_segment_manager(segment_manager.get());
     return segment_manager->init(
@@ -158,7 +160,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     return journal->close(
     ).safe_then([this, f=std::move(f)]() mutable {
       journal = journal::make_segmented(
-	*segment_manager, *sms, *this);
+	*sms, *this);
       journal->set_write_pipeline(&pipeline);
       return journal->replay(std::forward<T>(std::move(f)));
     }).safe_then([this] {

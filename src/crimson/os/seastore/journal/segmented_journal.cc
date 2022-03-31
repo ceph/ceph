@@ -27,7 +27,6 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentedJournal::SegmentedJournal(
-  SegmentManager &segment_manager,
   SegmentManagerGroup &sms,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
@@ -36,8 +35,7 @@ SegmentedJournal::SegmentedJournal(
     journal_segment_allocator("JOURNAL",
                               segment_type_t::JOURNAL,
                               segment_provider,
-                              segment_manager,
-			      *segment_seq_allocator),
+                              *segment_seq_allocator),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
@@ -86,10 +84,9 @@ SegmentedJournal::prep_replay_segments(
   std::for_each(
     segments.begin(),
     segments.end(),
-    [this, FNAME](auto &seg)
+    [FNAME](auto &seg)
   {
     if (seg.first != seg.second.physical_segment_id ||
-        seg.first.device_id() != journal_segment_allocator.get_device_id() ||
         seg.second.get_type() != segment_type_t::JOURNAL) {
       ERROR("illegal journal segment for replay -- {}", seg.second);
       ceph_abort();
@@ -248,48 +245,11 @@ SegmentedJournal::replay_segment(
   );
 }
 
-SegmentedJournal::find_journal_segments_ret
-SegmentedJournal::find_journal_segments()
-{
-  return seastar::do_with(
-    find_journal_segments_ret_bare{},
-    [this](auto &ret) -> find_journal_segments_ret {
-      return crimson::do_for_each(
-	boost::counting_iterator<device_segment_id_t>(0),
-	boost::counting_iterator<device_segment_id_t>(
-	  journal_segment_allocator.get_num_segments()),
-	[this, &ret](device_segment_id_t d_segment_id) {
-	  segment_id_t segment_id{
-	    journal_segment_allocator.get_device_id(),
-	    d_segment_id};
-	  return sms.read_segment_header(
-	    segment_id
-	  ).safe_then([segment_id, &ret](auto &&header) {
-	    if (header.get_type() == segment_type_t::JOURNAL) {
-	      ret.emplace_back(std::make_pair(segment_id, std::move(header)));
-	    }
-	  }).handle_error(
-	    crimson::ct_error::enoent::handle([](auto) {
-	      return find_journal_segments_ertr::now();
-	    }),
-	    crimson::ct_error::enodata::handle([](auto) {
-	      return find_journal_segments_ertr::now();
-	    }),
-	    crimson::ct_error::input_output_error::pass_further{}
-	  );
-	}).safe_then([&ret]() mutable {
-	  return find_journal_segments_ret{
-	    find_journal_segments_ertr::ready_future_marker{},
-	    std::move(ret)};
-	});
-    });
-}
-
 SegmentedJournal::replay_ret SegmentedJournal::replay(
   delta_handler_t &&delta_handler)
 {
   LOG_PREFIX(Journal::replay);
-  return find_journal_segments(
+  return sms.find_journal_segment_headers(
   ).safe_then([this, FNAME, delta_handler=std::move(delta_handler)]
     (auto &&segment_headers) mutable -> replay_ret {
     INFO("got {} segments", segment_headers.size());

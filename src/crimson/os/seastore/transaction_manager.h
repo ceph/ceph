@@ -539,16 +539,15 @@ public:
     SUBDEBUG(seastore_tm, "adding device {}, is_primary={}",
              dev->get_device_id(), is_primary);
     epm->add_device(dev, is_primary);
+    epm->add_allocator(
+      dev->get_device_type(),
+      std::make_unique<SegmentedAllocator>(
+        *segment_cleaner,
+        segment_cleaner->get_ool_segment_seq_allocator()));
 
     ceph_assert(dev->get_device_type() == device_type_t::SEGMENTED);
     auto sm = dynamic_cast<SegmentManager*>(dev);
     ceph_assert(sm != nullptr);
-    epm->add_allocator(
-      dev->get_device_type(),
-      std::make_unique<SegmentedAllocator>(
-	*segment_cleaner,
-	*sm,
-	segment_cleaner->get_ool_segment_seq_allocator()));
     sms.add_segment_manager(sm);
   }
 
@@ -581,8 +580,6 @@ public:
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
-TransactionManagerRef make_transaction_manager(
-    Device &device,
-    bool detailed);
+TransactionManagerRef make_transaction_manager(bool detailed);
 
 }

@@ -76,8 +76,7 @@ class SegmentedAllocator : public ExtentAllocator {
   class Writer : public ExtentOolWriter {
   public:
     Writer(std::string name,
-           SegmentProvider& sp,
-           SegmentManager& sm,
+           SegmentProvider &sp,
            SegmentSeqAllocator &ssa);
     Writer(Writer &&) = default;
 
@@ -113,8 +112,7 @@ class SegmentedAllocator : public ExtentAllocator {
   };
 public:
   SegmentedAllocator(
-    SegmentProvider& sp,
-    SegmentManager& sm,
+    SegmentProvider &sp,
     SegmentSeqAllocator &ssa);
 
   Writer &get_writer(placement_hint_t hint) {

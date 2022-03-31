@@ -238,14 +238,13 @@ void SegmentCleaner::register_metrics()
 }
 
 segment_id_t SegmentCleaner::get_segment(
-    device_id_t device_id,
     segment_seq_t seq,
     segment_type_t type)
 {
   LOG_PREFIX(SegmentCleaner::get_segment);
   assert(seq != NULL_SEG_SEQ);
-  for (auto it = segments.device_begin(device_id);
-       it != segments.device_end(device_id);
+  for (auto it = segments.begin();
+       it != segments.end();
        ++it) {
     auto seg_id = it->first;
     auto& segment_info = it->second;
@@ -255,8 +254,7 @@ segment_id_t SegmentCleaner::get_segment(
       return seg_id;
     }
   }
-  ERROR("(TODO) handle out of space from device {} with segment_seq={}",
-        device_id, segment_seq_printer_t{seq});
+  ERROR("out of space with segment_seq={}", segment_seq_printer_t{seq});
   ceph_abort();
   return NULL_SEG_ID;
 }
@@ -502,8 +500,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
   });
 }
 
-SegmentCleaner::mount_ret SegmentCleaner::mount(
-  device_id_t pdevice_id)
+SegmentCleaner::mount_ret SegmentCleaner::mount()
 {
   const auto& sms = sm_group->get_segment_managers();
   logger().debug(
@@ -513,7 +510,6 @@ SegmentCleaner::mount_ret SegmentCleaner::mount(
   journal_tail_target = JOURNAL_SEQ_NULL;
   journal_tail_committed = JOURNAL_SEQ_NULL;
   journal_head = JOURNAL_SEQ_NULL;
-  journal_device_id = pdevice_id;
   
   space_tracker.reset(
     detailed ?
@@ -647,11 +643,11 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
 	  }
 	  return seastar::now();
 	}),
-	[&cursor, header, segment_id, this](auto& handler) {
+	[&cursor, header, this](auto& handler) {
 	  return sm_group->scan_valid_records(
 	    cursor,
 	    header.segment_nonce,
-	    segments[segment_id.device_id()]->segment_size,
+	    segments.get_segment_size(),
 	    handler);
 	}
       );
