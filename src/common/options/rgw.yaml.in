@@ -1450,7 +1450,7 @@ options:
   long_desc: If set, RGW will store ops log information in RADOS.
   fmt_desc: Whether the operations log should be written to the
     Ceph Storage Cluster backend.
-  default: true
+  default: false
   services:
   - rgw
   see_also:
