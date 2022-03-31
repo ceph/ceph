@@ -1389,13 +1389,12 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
-    if (!(dirty_from != JOURNAL_SEQ_NULL &&
+    if (unlikely(!(dirty_from != JOURNAL_SEQ_NULL &&
                 dirty_from != JOURNAL_SEQ_MAX &&
-                dirty_from != NO_DELTAS))
-      ERRORT("{}", *i);
-    ceph_assert(dirty_from != JOURNAL_SEQ_NULL &&
-                dirty_from != JOURNAL_SEQ_MAX &&
-                dirty_from != NO_DELTAS);
+                dirty_from != NO_DELTAS))) {
+      ERRORT("{}", t, *i);
+      ceph_abort();
+    }
     if (dirty_from < seq) {
       TRACET("next extent -- {}", t, *i);
       if (!cand.empty() && cand.back()->get_dirty_from() > dirty_from) {
