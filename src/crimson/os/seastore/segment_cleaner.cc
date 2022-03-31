@@ -575,7 +575,7 @@ SegmentCleaner::mount_ret SegmentCleaner::mount(
 	    }
 	    init_mark_segment_closed(
 	      segment_id,
-	      header.journal_segment_seq,
+	      header.segment_seq,
 	      header.type);
 	    return seastar::now();
 	  }).handle_error(
@@ -662,7 +662,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
     }).safe_then([this, segment_id, header](auto) {
       init_mark_segment_closed(
 	segment_id,
-	header.journal_segment_seq,
+	header.segment_seq,
 	header.type);
       return seastar::now();
     });
@@ -676,7 +676,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_nonfull_segment(
   }
   init_mark_segment_closed(
     segment_id,
-    header.journal_segment_seq,
+    header.segment_seq,
     header.type);
   return seastar::now();
 }

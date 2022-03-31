@@ -1290,7 +1290,7 @@ using segment_nonce_t = uint32_t;
  * 2) Replay starting at record located at that segment's journal_tail
  */
 struct segment_header_t {
-  segment_seq_t journal_segment_seq;
+  segment_seq_t segment_seq;
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
@@ -1304,7 +1304,7 @@ struct segment_header_t {
 
   DENC(segment_header_t, v, p) {
     DENC_START(1, 1, p);
-    denc(v.journal_segment_seq, p);
+    denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
     denc(v.segment_nonce, p);
@@ -1315,7 +1315,7 @@ struct segment_header_t {
 std::ostream &operator<<(std::ostream &out, const segment_header_t &header);
 
 struct segment_tail_t {
-  segment_seq_t journal_segment_seq;
+  segment_seq_t segment_seq;
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
@@ -1332,7 +1332,7 @@ struct segment_tail_t {
 
   DENC(segment_tail_t, v, p) {
     DENC_START(1, 1, p);
-    denc(v.journal_segment_seq, p);
+    denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
     denc(v.segment_nonce, p);
