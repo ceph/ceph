@@ -115,9 +115,9 @@ using OSDOperationRegistry = OperationRegistryT<
  */
 class OperationThrottler : public Blocker,
 			private md_config_obs_t {
-  template <typename F>
+  template <typename OperationT, typename F>
   auto with_throttle(
-    OperationRef op,
+    OperationT* op,
     crimson::osd::scheduler::params_t params,
     F &&f) {
     if (!max_in_progress) return f();
@@ -138,9 +138,9 @@ public:
 			  const std::set<std::string> &changed) final;
   void update_from_config(const ConfigProxy &conf);
 
-  template <typename F>
+  template <typename OperationT, typename F>
   seastar::future<> with_throttle_while(
-    OperationRef op,
+    OperationT* op,
     crimson::osd::scheduler::params_t params,
     F &&f) {
     return with_throttle(op, params, f).then([this, params, op, f](bool cont) {
