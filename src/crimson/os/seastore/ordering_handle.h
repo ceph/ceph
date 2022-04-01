@@ -61,7 +61,8 @@ struct OrderingHandle {
 
   template <typename T>
   seastar::future<> enter(T &t) {
-    return op->with_blocking_future(phase_handle.enter(t));
+    //return op->with_blocking_future(phase_handle.enter(t));
+    return seastar::now();
   }
 
   void exit() {
