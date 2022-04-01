@@ -70,6 +70,35 @@ private:
   virtual void dump_detail(ceph::Formatter *f) const = 0;
 };
 
+template <class T>
+class TrackableOperationT : public OperationT<T> {
+  T* that() {
+    return static_cast<T*>(this);
+  }
+  const T* that() const {
+    return static_cast<const T*>(this);
+  }
+
+  template<class EventT>
+  decltype(auto) get_event() {
+    // all out derivates are supposed to define the list of tracking
+    // events accessible via `std::get`. This will usually boil down
+    // into an instance of `std::tuple`.
+    return std::get<EventT>(that()->tracking_events);
+  }
+
+protected:
+  using OperationT<T>::OperationT;
+
+  template <class EventT, class... Args>
+  void track_event(Args&&... args) {
+    // the idea is to have a visitor-like interface that allows to double
+    // dispatch (backend, blocker type)
+    get_event<EventT>().trigger(*that(), std::forward<Args>(args)...);
+  }
+};
+
+
 /**
  * Maintains a set of lists of all active ops.
  */
