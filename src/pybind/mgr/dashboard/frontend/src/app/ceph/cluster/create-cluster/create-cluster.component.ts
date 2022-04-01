@@ -10,7 +10,7 @@ import { ClusterService } from '~/app/shared/api/cluster.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { ActionLabelsI18n, AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
+import { AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -50,7 +50,6 @@ export class CreateClusterComponent implements OnDestroy {
     private router: Router,
     private hostService: HostService,
     private notificationService: NotificationService,
-    private actionLabels: ActionLabelsI18n,
     private clusterService: ClusterService,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
@@ -163,18 +162,6 @@ export class CreateClusterComponent implements OnDestroy {
     } else {
       this.router.navigate(['/dashboard']);
     }
-  }
-
-  showSubmitButtonLabel() {
-    return !this.wizardStepsService.isLastStep()
-      ? this.actionLabels.NEXT
-      : $localize`Expand Cluster`;
-  }
-
-  showCancelButtonLabel() {
-    return !this.wizardStepsService.isFirstStep()
-      ? this.actionLabels.BACK
-      : this.actionLabels.CANCEL;
   }
 
   ngOnDestroy(): void {

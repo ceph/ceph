@@ -26,6 +26,12 @@ When('I click on {string} button', (button: string) => {
   cy.get(`[aria-label="${button}"]`).first().click();
 });
 
+When('I click on {string} button inside the modal', (button: string) => {
+  cy.get('cd-modal').within(() => {
+    cy.get(`[aria-label="${button}"]`).first().click();
+  });
+});
+
 // When you are clicking on an action in the table actions dropdown button
 When('I click on {string} button from the table actions', (button: string) => {
   cy.get('.table-actions button.dropdown-toggle').first().click();
@@ -65,7 +71,7 @@ And('{string} option {string}', (action: string, labels: string) => {
  */
 And('enter {string} {string}', (field: string, value: string) => {
   cy.get('cd-modal').within(() => {
-    cy.get(`input[id=${field}]`).type(value);
+    cy.get(`input[id=${field}]`).clear().type(value);
   });
 });
 
@@ -132,12 +138,18 @@ Then('I should see rows with following entries', (entries) => {
   });
 });
 
+Then('I should see the following columns in the table', (columns: any) => {
+  columns.hashes().forEach((column: any) => {
+    cy.get('.datatable-header').its(0).find('.datatable-header-cell').contains(column.fields);
+  });
+});
+
 And('I should see row {string} have {string}', (row: string, options: string) => {
   if (options) {
     cy.get('cd-table .search input').first().clear().type(row);
     for (const option of options.split(',')) {
       cy.contains(
-        `datatable-body-row datatable-body-cell .datatable-body-cell-label .badge`,
+        `datatable-body-row datatable-body-cell .datatable-body-cell-label span`,
         option
       ).should('exist');
     }
@@ -154,4 +166,28 @@ And('I should see row {string} does not have {string}', (row: string, options: s
       ).should('not.exist');
     }
   }
+});
+
+And('select {string} {string}', (selectionName: string, option: string) => {
+  cy.get(`select[name=${selectionName}]`).select(option);
+  cy.get(`select[name=${selectionName}] option:checked`).contains(option);
+});
+
+And('I filter {string} by {string}', (name: string, option: string) => {
+  cy.get('.tc_filter_name > button').click();
+  cy.contains(`.tc_filter_name .dropdown-item`, name).click();
+
+  cy.get('.tc_filter_option > button').click();
+  cy.contains(`.tc_filter_option .dropdown-item`, option).click();
+});
+
+Then('I should see {string} heading', (name: string) => {
+  cy.get('legend.cd-header').contains(name);
+});
+
+And('I should see the following entries in the table', (entries: any) => {
+  entries.hashes().forEach((entry: any) => {
+    cy.get('.table.table-striped').should('contain.text', entry.fields);
+  });
+  cy.get('.table.table-striped').should('contain.text', 'Hosts')
 });

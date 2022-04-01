@@ -79,12 +79,12 @@
   <div class="card-footer">
     <button class="btn btn-accent m-2 float-right"
             (click)="onNextStep()"
-            aria-label="Next"
-            i18n>{{ showSubmitButtonLabel() }}</button>
+            [attr.aria-label]="!wizardStepsService.isLastStep() ? 'Next' : 'Expand Cluster'"
+            i18n>{{ !wizardStepsService.isLastStep() ? 'Next' : 'Expand Cluster' }}</button>
     <cd-back-button class="m-2 float-right"
-                    aria-label="Close"
+                    [attr.aria-label]="!wizardStepsService.isFirstStep() ? 'Back' : 'Cancel'"
                     (backAction)="onPreviousStep()"
-                    [name]="showCancelButtonLabel()"></cd-back-button>
+                    [name]="!wizardStepsService.isFirstStep() ? 'Back' : 'Cancel'"></cd-back-button>
   </div>
 </div>
 

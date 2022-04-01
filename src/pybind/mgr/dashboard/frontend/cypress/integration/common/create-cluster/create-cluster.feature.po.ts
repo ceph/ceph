@@ -2,8 +2,15 @@ import { Given, Then } from 'cypress-cucumber-preprocessor/steps';
 
 Given('I am on the {string} section', (page: string) => {
   cy.get('cd-wizard').within(() => {
-    cy.get('.nav-link').should('contain.text', page).first().click();
-    cy.get('.nav-link.active').should('contain.text', page);
+    cy.get('.nav-link').contains(page).click();
+    cy.get('.nav-link.active').contains(page);
+  });
+});
+
+Then('I go to the {string} section', (page: string) => {
+  cy.get('cd-wizard').within(() => {
+    cy.get('.nav-link').contains(page).click();
+    cy.get('.nav-link.active').contains(page);
   });
 });
 

@@ -102,32 +102,26 @@ describe('CreateClusterComponent', () => {
   it('should show the button labels correctly', () => {
     component.createCluster();
     fixture.detectChanges();
-    let submitBtnLabel = component.showSubmitButtonLabel();
-    expect(submitBtnLabel).toEqual('Next');
-    let cancelBtnLabel = component.showCancelButtonLabel();
-    expect(cancelBtnLabel).toEqual('Cancel');
+    const submitBtnLabel = fixture.debugElement.query(By.css('.btn.btn-accent.m-2.float-right')).nativeElement;
+    const cancelBtnLabel = fixture.debugElement.query(By.css('.btn.btn-light.tc_backButton')).nativeElement;
+    expect(submitBtnLabel.innerHTML).toEqual('Next');
+    expect(cancelBtnLabel.innerHTML).toEqual('Cancel');
 
     component.onNextStep();
     fixture.detectChanges();
-    submitBtnLabel = component.showSubmitButtonLabel();
-    expect(submitBtnLabel).toEqual('Next');
-    cancelBtnLabel = component.showCancelButtonLabel();
-    expect(cancelBtnLabel).toEqual('Back');
+    expect(submitBtnLabel.innerHTML).toEqual('Next');
+    expect(cancelBtnLabel.innerHTML).toEqual('Back');
 
     component.onNextStep();
     fixture.detectChanges();
-    submitBtnLabel = component.showSubmitButtonLabel();
-    expect(submitBtnLabel).toEqual('Next');
-    cancelBtnLabel = component.showCancelButtonLabel();
-    expect(cancelBtnLabel).toEqual('Back');
+    expect(submitBtnLabel.innerHTML).toEqual('Next');
+    expect(cancelBtnLabel.innerHTML).toEqual('Back');
 
     // Last page of the wizard
     component.onNextStep();
     fixture.detectChanges();
-    submitBtnLabel = component.showSubmitButtonLabel();
-    expect(submitBtnLabel).toEqual('Expand Cluster');
-    cancelBtnLabel = component.showCancelButtonLabel();
-    expect(cancelBtnLabel).toEqual('Back');
+    expect(submitBtnLabel.innerHTML).toEqual('Expand Cluster');
+    expect(cancelBtnLabel.innerHTML).toEqual('Back');
   });
 
   it('should ensure osd creation did not happen when no devices are selected', () => {
