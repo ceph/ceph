@@ -196,6 +196,7 @@ public:
   friend struct CopyFromFinisher;
   friend class PromoteCallback;
   friend struct PromoteFinisher;
+  friend struct C_scatter;
   friend struct C_gather;
   
   struct ProxyReadOp {
@@ -257,6 +258,19 @@ public:
     ~FlushOp() { ceph_assert(!on_flush); }
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
+
+  struct CLSScatterOp {
+    OpContext *ctx = nullptr;
+    ObjectContextRef obc;
+    OpRequestRef op;
+    std::vector<ceph_tid_t> objecter_tids;
+    int rval = 0;
+
+    CLSScatterOp(OpContext *ctx_, ObjectContextRef obc_, OpRequestRef op_)
+      : ctx(ctx_), obc(obc_), op(op_)  {}
+    CLSScatterOp() {}
+    ~CLSScatterOp() {}
+  };
 
   struct CLSGatherOp {
     OpContext *ctx = nullptr;
@@ -1367,6 +1381,11 @@ protected:
 
   friend struct C_Flush;
 
+  // -- cls_scatter --
+  std::map<hobject_t, CLSScatterOp> cls_scatter_ops;
+  void cancel_cls_scatter(std::map<hobject_t,CLSScatterOp>::iterator iter, bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_cls_scatter_ops(bool requeue, std::vector<ceph_tid_t> *tids);
+
   // -- cls_gather --
   std::map<hobject_t, CLSGatherOp> cls_gather_ops;
   void cancel_cls_gather(std::map<hobject_t,CLSGatherOp>::iterator iter, bool requeue, std::vector<ceph_tid_t> *tids);
@@ -1520,6 +1539,8 @@ public:
   int do_tmapup_slow(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& osd_op, ceph::buffer::list& bl);
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
+  int start_cls_scatter(OpContext *ctx, const std::map<std::string, bufferlist> &tgt_objs, const std::string& pool,
+			const char *cls, const char *method, bufferlist& inbl);
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 

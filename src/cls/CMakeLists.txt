@@ -341,12 +341,12 @@ set_target_properties(cls_fifo PROPERTIES
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_fifo DESTINATION ${cls_dir})
 
-# cls_test_remote_reads
-set(cls_test_remote_reads_srcs test_remote_reads/cls_test_remote_reads.cc)
-add_library(cls_test_remote_reads SHARED ${cls_test_remote_reads_srcs})
-set_target_properties(cls_test_remote_reads PROPERTIES
+# cls_test_remote_operations
+set(cls_test_remote_operations_srcs test_remote_operations/cls_test_remote_operations.cc)
+add_library(cls_test_remote_operations SHARED ${cls_test_remote_operations_srcs})
+set_target_properties(cls_test_remote_operations PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_test_remote_reads DESTINATION ${cls_dir})
+install(TARGETS cls_test_remote_operations DESTINATION ${cls_dir})

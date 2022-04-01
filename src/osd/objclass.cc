@@ -715,6 +715,44 @@ uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
   return ctx->pg->get_pool().stripe_width;
 }
 
+struct ScatterFinisher : public PrimaryLogPG::OpFinisher {
+  OSDOp *osd_op;
+  ScatterFinisher(OSDOp *osd_op_) : osd_op(osd_op_) {}
+  int execute() override {
+    return 0;
+  }
+};
+
+int cls_cxx_scatter(cls_method_context_t hctx, const std::map<std::string, bufferlist> &tgt_objs, const std::string& pool,
+		    const char *cls, const char *method, bufferlist& inbl) {
+
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
+  // always pick first OSDOp
+  int subop_num = 0;
+  OSDOp *osd_op = &(*(*pctx)->ops)[subop_num];
+  auto [iter, inserted] = (*pctx)->op_finishers.emplace(std::make_pair(subop_num, std::make_unique<ScatterFinisher>(osd_op)));
+  assert(inserted);
+  return (*pctx)->pg->start_cls_scatter(*pctx, tgt_objs, pool, cls, method, inbl);
+}
+
+int cls_cxx_scatter_wait_for_completions(cls_method_context_t hctx) {
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
+  PrimaryLogPG::OpFinisher* op_finisher = nullptr;
+  int r = 0;
+  int subop_num = 0;
+  auto op_finisher_it = (*pctx)->op_finishers.find(subop_num);
+  if (op_finisher_it != (*pctx)->op_finishers.end()) {
+    op_finisher = op_finisher_it->second.get();
+  }
+  if (op_finisher == nullptr) {
+    r = -EAGAIN;
+  } else {
+    ScatterFinisher *sf = (ScatterFinisher*)op_finisher;
+    r = sf->osd_op->rval;
+  }
+  return r;
+}
+
 struct GatherFinisher : public PrimaryLogPG::OpFinisher {
   std::map<std::string, bufferlist> src_obj_buffs;
   OSDOp *osd_op;

@@ -151,6 +151,12 @@ extern void cls_cxx_subop_version(cls_method_context_t hctx, std::string *s);
 
 extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
 
+/* scatter */
+extern int cls_cxx_scatter(cls_method_context_t hctx, const std::map<std::string, bufferlist> &tgt_objs, const std::string& pool,
+			   const char *cls, const char *method, bufferlist& inbl);
+
+extern int cls_cxx_scatter_wait_for_completions(cls_method_context_t hctx);
+
 /* gather */
 extern int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
 			  const char *cls, const char *method, bufferlist& inbl);

@@ -10344,6 +10344,78 @@ void PrimaryLogPG::cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids)
   }
 }
 
+struct C_scatter : public Context {
+  PrimaryLogPGRef pg;
+  hobject_t oid;
+  epoch_t last_peering_reset;
+  OSDOp *osd_op;
+  C_scatter(PrimaryLogPG *pg_, hobject_t oid_, epoch_t lpr_, OSDOp *osd_op_) :
+    pg(pg_), oid(oid_), last_peering_reset(lpr_), osd_op(osd_op_) {}
+  void finish(int r) override {
+    if (r == -ECANCELED)
+      return;
+    std::scoped_lock locker{*pg};
+    auto p = pg->cls_scatter_ops.find(oid);
+    if (p == pg->cls_scatter_ops.end()) {
+      // op was cancelled
+      return;
+    }
+    if (last_peering_reset != pg->get_last_peering_reset()) {
+      return;
+    }
+    osd_op->rval = r;
+    PrimaryLogPG::OpContext *ctx = p->second.ctx;
+    pg->cls_scatter_ops.erase(p);
+    pg->execute_ctx(ctx);
+  }
+};
+
+int PrimaryLogPG::start_cls_scatter(OpContext *ctx, const std::map<std::string, bufferlist> &tgt_obj_buffs, const std::string& pool,
+				   const char *cls, const char *method, bufferlist& inbl)
+{
+  OpRequestRef op = ctx->op;
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+
+  auto pool_id = osd->objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name), pool);
+  object_locator_t oloc(pool_id);
+
+  ObjectState& obs = ctx->new_obs;
+  object_info_t& oi = obs.oi;
+  const hobject_t& soid = oi.soid;
+
+  ObjectContextRef obc = get_object_context(soid, false);
+  C_GatherBuilder scatter(cct);
+
+  auto [iter, inserted] = cls_scatter_ops.emplace(soid, CLSScatterOp(ctx, obc, op));
+  ceph_assert(inserted);
+
+  auto &csop = iter->second;
+
+  for (std::map<std::string, bufferlist>::const_iterator it = tgt_obj_buffs.begin(); it != tgt_obj_buffs.end(); it++) {
+    std::string oid = it->first;
+    ObjectOperation obj_op;
+    bufferlist bl = it->second;
+    obj_op.call(cls, method, bl);
+
+    uint32_t flags = 0;
+    version_t user_version;
+    SnapContext snapc(m->get_snap_seq(), m->get_snaps());
+    ceph::real_time mtime;
+    ceph_tid_t tid = osd->objecter->mutate(object_t(oid), oloc, obj_op, snapc, mtime,
+					   flags, scatter.new_sub());
+    csop.objecter_tids.push_back(tid);
+    dout(10) << __func__ << " tgt=" << oid << ", src=" << soid << dendl;
+  }
+
+  // always pick first OSDOp
+  int subop_num = 0;
+  C_scatter *fin = new C_scatter(this, soid, get_last_peering_reset(), &(*ctx->ops)[subop_num]);
+  scatter.set_finisher(new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard())));
+  scatter.activate();
+
+  return -EINPROGRESS;
+}
+
 struct C_gather : public Context {
   PrimaryLogPGRef pg;
   hobject_t oid;
@@ -11232,6 +11304,37 @@ bool PrimaryLogPG::is_present_clone(hobject_t coid)
     return true;
   ObjectContextRef obc = get_object_context(coid, false);
   return obc && obc->obs.exists;
+}
+
+// ========================================================================
+// cls scatter
+//
+
+void PrimaryLogPG::cancel_cls_scatter(map<hobject_t,CLSScatterOp>::iterator iter, bool requeue,
+				     vector<ceph_tid_t> *tids)
+{
+  auto &csop = iter->second;
+  for (std::vector<ceph_tid_t>::iterator p = csop.objecter_tids.begin(); p != csop.objecter_tids.end(); p++) {
+    tids->push_back(*p);
+    dout(10) << __func__ << " " << csop.obc->obs.oi.soid << " tid " << *p << dendl;
+  }
+  csop.objecter_tids.clear();
+  close_op_ctx(csop.ctx);
+  csop.ctx = NULL;
+  if (requeue) {
+    if (csop.op)
+      requeue_op(csop.op);
+  }
+  cls_scatter_ops.erase(iter);
+}
+
+void PrimaryLogPG::cancel_cls_scatter_ops(bool requeue, vector<ceph_tid_t> *tids)
+{
+  dout(10) << __func__ << dendl;
+  map<hobject_t,CLSScatterOp>::iterator p = cls_scatter_ops.begin();
+  while (p != cls_scatter_ops.end()) {
+    cancel_cls_scatter(p++, requeue, tids);
+  }
 }
 
 // ========================================================================
@@ -12887,6 +12990,7 @@ void PrimaryLogPG::on_shutdown()
   cancel_flush_ops(false, &tids);
   cancel_proxy_ops(false, &tids);
   cancel_manifest_ops(false, &tids);
+  cancel_cls_scatter_ops(false, &tids);
   cancel_cls_gather_ops(false, &tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
 
@@ -13005,6 +13109,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   cancel_flush_ops(is_primary(), &tids);
   cancel_proxy_ops(is_primary(), &tids);
   cancel_manifest_ops(is_primary(), &tids);
+  cancel_cls_scatter_ops(is_primary(), &tids);
   cancel_cls_gather_ops(is_primary(), &tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
 
