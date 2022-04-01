@@ -22,7 +22,7 @@ namespace crimson::osd {
 class ShardServices;
 
 class OSDMapGate {
-  struct OSDMapBlocker : public Blocker {
+  struct OSDMapBlocker : public BlockerT<OSDMapBlocker> {
     const char * type_name;
     epoch_t epoch;
 
@@ -37,10 +37,6 @@ class OSDMapGate {
     seastar::shared_promise<epoch_t> promise;
 
     void dump_detail(Formatter *f) const final;
-  private:
-    const char *get_type_name() const final {
-      return type_name;
-    }
   };
 
   // order the promises in ascending order of the waited osdmap epoch,
