@@ -161,7 +161,7 @@ public:
   virtual ~BlockerT() = default;
 private:
   const char *get_type_name() const final {
-    return T::type_name;
+    return static_cast<const T*>(this)->type_name;
   }
 };
 
