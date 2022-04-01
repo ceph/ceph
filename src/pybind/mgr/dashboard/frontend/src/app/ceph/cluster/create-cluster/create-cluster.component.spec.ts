@@ -102,8 +102,10 @@ describe('CreateClusterComponent', () => {
   it('should show the button labels correctly', () => {
     component.createCluster();
     fixture.detectChanges();
-    const submitBtnLabel = fixture.debugElement.query(By.css('.btn.btn-accent.m-2.float-right')).nativeElement;
-    const cancelBtnLabel = fixture.debugElement.query(By.css('.btn.btn-light.tc_backButton')).nativeElement;
+    const submitBtnLabel = fixture.debugElement.query(By.css('.btn.btn-accent.m-2.float-right'))
+      .nativeElement;
+    const cancelBtnLabel = fixture.debugElement.query(By.css('.btn.btn-light.tc_backButton'))
+      .nativeElement;
     expect(submitBtnLabel.innerHTML).toEqual('Next');
     expect(cancelBtnLabel.innerHTML).toEqual('Cancel');
 

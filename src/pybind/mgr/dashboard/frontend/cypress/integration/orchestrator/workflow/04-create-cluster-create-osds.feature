@@ -11,7 +11,7 @@ Feature: Cluster expansion osd creation
 
     Scenario Outline: Create OSDs
         Given I am on the "Create OSDs" section
-        Then I click on "Add" button
+        When I click on "Add" button
         And I filter "Hostname" by "<hostname>"
         And I filter "Type" by "hdd"
         Then I click on "Add" button inside the modal

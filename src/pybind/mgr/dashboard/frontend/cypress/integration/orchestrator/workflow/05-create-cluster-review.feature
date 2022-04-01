@@ -18,7 +18,7 @@ Feature: Cluster expansion review section
             | Storage Capacity |
             | CPUs |
             | Memory |
-    
+
     Scenario: Verify Host Details table and its fields exists
         Given I am on the "Review" section
         Then I should see "Host Details" heading

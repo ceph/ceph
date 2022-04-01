@@ -168,6 +168,40 @@ And('I should see row {string} does not have {string}', (row: string, options: s
   }
 });
 
+Then('I expand the row {string}', (row: string) => {
+  cy.contains('.datatable-body-row', row).find('.tc_expand-collapse').click();
+});
+
+And('I go to the {string} tab', (names: string) => {
+  for (const name of names.split(', ')) {
+    cy.contains('.nav.nav-tabs li', name).click();
+  }
+});
+
+And('I should see row {string} have {string} on this tab', (row: string, options: string) => {
+  if (options) {
+    cy.get('cd-table').should('exist');
+    cy.get('datatable-scroller, .empty-row');
+    cy.get('.datatable-row-detail').within(() => {
+      cy.get('cd-table .search input').first().clear().type(row);
+      for (const option of options.split(',')) {
+        cy.contains(
+          `datatable-body-row datatable-body-cell .datatable-body-cell-label span`,
+          option
+        ).should('exist');
+      }
+    });
+  }
+});
+
+Then('I should see the table is empty on this tab', () => {
+  cy.wait(100);
+  cy.contains('.datatable-footer-inner .page-count span', 'total').should(($elem) => {
+    const text = $elem.first().text();
+    expect(Number(text.match(/(\d+)\s+\w*/)[1])).to.equal(0);
+  });
+});
+
 And('select {string} {string}', (selectionName: string, option: string) => {
   cy.get(`select[name=${selectionName}]`).select(option);
   cy.get(`select[name=${selectionName}] option:checked`).contains(option);
@@ -189,5 +223,5 @@ And('I should see the following entries in the table', (entries: any) => {
   entries.hashes().forEach((entry: any) => {
     cy.get('.table.table-striped').should('contain.text', entry.fields);
   });
-  cy.get('.table.table-striped').should('contain.text', 'Hosts')
+  cy.get('.table.table-striped').should('contain.text', 'Hosts');
 });
