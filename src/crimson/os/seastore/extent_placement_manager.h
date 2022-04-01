@@ -92,6 +92,7 @@ public:
   void init_ool_writers(SegmentProvider &sp, SegmentSeqAllocator &ssa) {
     // Currently only one SegmentProvider is supported, so hardcode the
     // writers_by_hint for now.
+    writer_seed = 0;
     writer_refs.clear();
     writers_by_hint.resize((std::size_t)placement_hint_t::NUM_HINTS, {});
 
@@ -235,9 +236,10 @@ private:
     assert(hint_index < writers_by_hint.size());
     auto& writers = writers_by_hint[hint_index];
     assert(writers.size() > 0);
-    return writers[std::rand() % writers.size()];
+    return writers[writer_seed++ % writers.size()];
   }
 
+  std::size_t writer_seed = 0;
   std::vector<ExtentOolWriterRef> writer_refs;
   std::vector<std::vector<ExtentOolWriter*>> writers_by_hint;
   std::vector<Device*> devices_by_id;
