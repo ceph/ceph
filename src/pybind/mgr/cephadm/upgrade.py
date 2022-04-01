@@ -87,8 +87,9 @@ class UpgradeState:
 
     @classmethod
     def from_json(cls, data: dict) -> Optional['UpgradeState']:
+        valid_params = UpgradeState.__init__.__code__.co_varnames
         if data:
-            c = {k: v for k, v in data.items()}
+            c = {k: v for k, v in data.items() if k in valid_params}
             if 'repo_digest' in c:
                 c['target_digests'] = [c.pop('repo_digest')]
             return cls(**c)
