@@ -9,15 +9,7 @@ SET_SUBSYS(seastore_journal);
 
 namespace crimson::os::seastore {
 
-SegmentedAllocator::SegmentedAllocator(
-  SegmentProvider &sp,
-  SegmentSeqAllocator &ssa)
-  : cold_writer{"COLD", sp, ssa},
-    rewrite_writer{"REWRITE", sp, ssa}
-{
-}
-
-SegmentedAllocator::Writer::Writer(
+SegmentedOolWriter::SegmentedOolWriter(
   std::string name,
   SegmentProvider& sp,
   SegmentSeqAllocator &ssa)
@@ -34,13 +26,13 @@ SegmentedAllocator::Writer::Writer(
 {
 }
 
-SegmentedAllocator::Writer::write_ertr::future<>
-SegmentedAllocator::Writer::write_record(
+SegmentedOolWriter::alloc_write_ertr::future<>
+SegmentedOolWriter::write_record(
   Transaction& t,
   record_t&& record,
   std::list<LogicalCachedExtentRef>&& extents)
 {
-  LOG_PREFIX(SegmentedAllocator::Writer::write_record);
+  LOG_PREFIX(SegmentedOolWriter::write_record);
   assert(extents.size());
   assert(extents.size() == record.extents.size());
   assert(!record.deltas.size());
@@ -71,12 +63,12 @@ SegmentedAllocator::Writer::write_record(
   });
 }
 
-SegmentedAllocator::Writer::write_iertr::future<>
-SegmentedAllocator::Writer::do_write(
+SegmentedOolWriter::alloc_write_iertr::future<>
+SegmentedOolWriter::do_write(
   Transaction& t,
   std::list<LogicalCachedExtentRef>& extents)
 {
-  LOG_PREFIX(SegmentedAllocator::Writer::do_write);
+  LOG_PREFIX(SegmentedOolWriter::do_write);
   assert(!extents.empty());
   if (!record_submitter.is_available()) {
     DEBUGT("{} extents={} wait ...",
@@ -114,7 +106,7 @@ SegmentedAllocator::Writer::do_write(
       DEBUGT("{} extents={} submit {} extents and roll, unavailable ...",
              t, segment_allocator.get_name(),
              extents.size(), num_extents);
-      auto fut_write = write_ertr::now();
+      auto fut_write = alloc_write_ertr::now();
       if (num_extents > 0) {
         assert(record_submitter.check_action(record.size) !=
                action_t::ROLL);
@@ -163,7 +155,7 @@ SegmentedAllocator::Writer::do_write(
         if (!extents.empty()) {
           return do_write(t, extents);
         } else {
-          return write_iertr::now();
+          return alloc_write_iertr::now();
         }
       });
     }
@@ -179,13 +171,13 @@ SegmentedAllocator::Writer::do_write(
     write_record(t, std::move(record), std::move(pending_extents)));
 }
 
-SegmentedAllocator::Writer::write_iertr::future<>
-SegmentedAllocator::Writer::write(
+SegmentedOolWriter::alloc_write_iertr::future<>
+SegmentedOolWriter::alloc_write_ool_extents(
   Transaction& t,
   std::list<LogicalCachedExtentRef>& extents)
 {
   if (extents.empty()) {
-    return write_iertr::now();
+    return alloc_write_iertr::now();
   }
   return seastar::with_gate(write_guard, [this, &t, &extents] {
     return do_write(t, extents);
