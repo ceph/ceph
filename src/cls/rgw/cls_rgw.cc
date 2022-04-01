@@ -1751,8 +1751,15 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   BIOLHEntry olh(hctx, op.key);
   bool olh_read_attempt = false;
   bool olh_found = false;
-  if (!existed && op.delete_marker) {
-    /* read olh */
+  if (!existed && op.delete_marker && !op.s3_seq_dms) {
+    /* see if this would create a sequential delete-marker, and if so
+     * error out; note that configuration option can restore standard
+     * S3 behavior, as passed in through the op; note: op.s3_seq_dms
+     * should reflect config option
+     * rgw_enable_s3_consecutive_delete_markers
+     */
+
+    // read olh
     ret = olh.init(&olh_found);
     if (ret < 0) {
       return ret;

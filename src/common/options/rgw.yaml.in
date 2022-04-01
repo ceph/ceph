@@ -1795,6 +1795,22 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_enable_s3_consecutive_delete_markers
+  type: bool
+  level: advanced
+  desc: RGW enable S3 consecutive delete-markers
+  long_desc: According to S3 documentation, issuing a delete to an
+    already-deleted object in a versioned bucket results in another
+    delete-marker being added to the bucket index. In some cases, this
+    can lead to extra work and large buck indicies. So by default RGW
+    will not add that consecutive delete-marker, but standard S3 behavior
+    can be restored by setting this to true.
+  fmt_desc: Enables S3 behavior of allowing multiple consecutive
+    delete-markers.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_defer_to_bucket_acls
   type: str
   level: advanced

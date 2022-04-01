@@ -494,24 +494,41 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
   return 0;
 }
 
-int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
-                            const cls_rgw_obj_key& key, const bufferlist& olh_tag,
-                            bool delete_marker, const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
+int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx,
+			    const std::string& oid,
+			    const cls_rgw_obj_key& key,
+			    const bufferlist& olh_tag,
+			    bool delete_marker,
+			    const std::string& op_tag,
+			    const rgw_bucket_dir_entry_meta *meta,
+			    uint64_t olh_epoch,
+			    ceph::real_time unmod_since,
+			    bool high_precision_time,
+			    bool log_op,
+			    const rgw_zone_set& zones_trace,
+			    bool s3_seq_dms)
 {
   librados::ObjectWriteOperation op;
   cls_rgw_bucket_link_olh(op, key, olh_tag, delete_marker, op_tag, meta,
                           olh_epoch, unmod_since, high_precision_time, log_op,
-                          zones_trace);
+                          zones_trace, s3_seq_dms);
 
   return io_ctx.operate(oid, &op);
 }
 
 
-void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
-                            const bufferlist& olh_tag, bool delete_marker,
-                            const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
+void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
+			     const cls_rgw_obj_key& key,
+			     const bufferlist& olh_tag,
+			     bool delete_marker,
+			     const std::string& op_tag,
+			     const rgw_bucket_dir_entry_meta *meta,
+			     uint64_t olh_epoch,
+			     ceph::real_time unmod_since,
+			     bool high_precision_time,
+			     bool log_op,
+			     const rgw_zone_set& zones_trace,
+			     bool s3_seq_dms)
 {
   bufferlist in, out;
   rgw_cls_link_olh_op call;
@@ -527,6 +544,7 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
   call.unmod_since = unmod_since;
   call.high_precision_time = high_precision_time;
   call.zones_trace = zones_trace;
+  call.s3_seq_dms = s3_seq_dms;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BUCKET_LINK_OLH, in);
 }

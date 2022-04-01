@@ -6960,19 +6960,25 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   return -ERR_BUSY_RESHARDING;
 }
 
-int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& olh_state, const rgw_obj& obj_instance,
+int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp,
+				    const RGWBucketInfo& bucket_info,
+				    RGWObjState& olh_state,
+				    const rgw_obj& obj_instance,
                                     bool delete_marker,
-                                    const string& op_tag,
+                                    const std::string& op_tag,
                                     struct rgw_bucket_dir_entry_meta *meta,
                                     uint64_t olh_epoch,
                                     real_time unmod_since, bool high_precision_time,
-                                    rgw_zone_set *_zones_trace, bool log_data_change)
+                                    rgw_zone_set *_zones_trace,
+				    bool log_data_change)
 {
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, obj_instance, &ref);
   if (r < 0) {
     return r;
   }
+
+  const bool s3_seq_dms = cct->_conf->rgw_enable_s3_consecutive_delete_markers;
 
   rgw_zone_set zones_trace;
   if (_zones_trace) {
@@ -6991,7 +6997,7 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, const RGWBuck
 		      cls_rgw_bucket_link_olh(op, key, olh_state.olh_tag,
                                               delete_marker, op_tag, meta, olh_epoch,
 					      unmod_since, high_precision_time,
-					      svc.zone->get_zone().log_data, zones_trace);
+					      svc.zone->get_zone().log_data, zones_trace, s3_seq_dms);
                       return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
                     });
   if (r < 0) {
