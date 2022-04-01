@@ -547,6 +547,9 @@ TransactionManagerRef make_transaction_manager(bool detailed)
     detailed);
   auto journal = journal::make_segmented(*segment_cleaner);
   auto epm = std::make_unique<ExtentPlacementManager>();
+  epm->init_ool_writers(
+      *segment_cleaner,
+      segment_cleaner->get_ool_segment_seq_allocator());
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
 
