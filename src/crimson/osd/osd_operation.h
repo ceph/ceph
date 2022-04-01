@@ -115,14 +115,6 @@ using OSDOperationRegistry = OperationRegistryT<
  */
 class OperationThrottler : public Blocker,
 			private md_config_obs_t {
-public:
-  OperationThrottler(ConfigProxy &conf);
-
-  const char** get_tracked_conf_keys() const final;
-  void handle_conf_change(const ConfigProxy& conf,
-			  const std::set<std::string> &changed) final;
-  void update_from_config(const ConfigProxy &conf);
-
   template <typename F>
   auto with_throttle(
     OperationRef op,
@@ -137,6 +129,14 @@ public:
 	return x;
       });
   }
+
+public:
+  OperationThrottler(ConfigProxy &conf);
+
+  const char** get_tracked_conf_keys() const final;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set<std::string> &changed) final;
+  void update_from_config(const ConfigProxy &conf);
 
   template <typename F>
   seastar::future<> with_throttle_while(
