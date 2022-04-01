@@ -200,6 +200,8 @@ void Server::create_logger()
                    "Request type set file layout latency");
   plb.add_time_avg(l_mdss_req_setdirlayout_latency, "req_setdirlayout_latency",
                    "Request type set directory layout latency");
+  plb.add_time_avg(l_mdss_req_getvxattr_latency, "req_getvxattr_latency",
+                   "Request type get virtual extended attribute latency");
   plb.add_time_avg(l_mdss_req_setxattr_latency, "req_setxattr_latency",
                    "Request type set extended attribute latency");
   plb.add_time_avg(l_mdss_req_rmxattr_latency, "req_rmxattr_latency",
@@ -2009,6 +2011,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_SETDIRLAYOUT:
     code = l_mdss_req_setdirlayout_latency;
     break;
+  case CEPH_MDS_OP_GETVXATTR:
+    code = l_mdss_req_getvxattr_latency;
+    break;
   case CEPH_MDS_OP_SETXATTR:
     code = l_mdss_req_setxattr_latency;
     break;
@@ -2580,6 +2585,9 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     // lookupsnap does not reference a CDentry; treat it as a getattr
   case CEPH_MDS_OP_GETATTR:
     handle_client_getattr(mdr, false);
+    break;
+  case CEPH_MDS_OP_GETVXATTR:
+    handle_client_getvxattr(mdr);
     break;
 
   case CEPH_MDS_OP_SETATTR:
@@ -5421,11 +5429,85 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
 }
 
 // XATTRS
-
-int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
-				file_layout_t *layout, bool validate)
+int Server::parse_layout_vxattr_json(
+  string name, string value, const OSDMap& osdmap, file_layout_t *layout)
 {
-  dout(20) << "parse_layout_vxattr name " << name << " value '" << value << "'" << dendl;
+  auto parse_pool = [&](std::string pool_name, int64_t pool_id) -> int64_t {
+    if (pool_name != "") {
+      int64_t _pool_id = osdmap.lookup_pg_pool_name(pool_name);
+      if (_pool_id < 0) {
+	dout(10) << __func__ << ": unknown pool name:" << pool_name << dendl;
+	return -CEPHFS_EINVAL;
+      }
+      return _pool_id;
+    } else if (pool_id >= 0) {
+      const auto pools = osdmap.get_pools();
+      if (pools.find(pool_id) == pools.end()) {
+	dout(10) << __func__ << ": unknown pool id:" << pool_id << dendl;
+	return -CEPHFS_EINVAL;
+      }
+      return pool_id;
+    } else {
+      return -CEPHFS_EINVAL;
+    }
+  };
+
+  try {
+    if (name == "layout.json") {
+      JSONParser json_parser;
+      if (json_parser.parse(value.c_str(), value.length()) and json_parser.is_object()) {
+	std::string field;
+	try {
+	  field = "object_size";
+	  JSONDecoder::decode_json("object_size", layout->object_size, &json_parser, true);
+
+	  field = "stripe_unit";
+	  JSONDecoder::decode_json("stripe_unit", layout->stripe_unit, &json_parser, true);
+
+	  field = "stripe_count";
+	  JSONDecoder::decode_json("stripe_count", layout->stripe_count, &json_parser, true);
+
+	  field = "pool_namespace";
+	  JSONDecoder::decode_json("pool_namespace", layout->pool_ns, &json_parser, false);
+
+	  field = "pool_id";
+	  int64_t pool_id = 0;
+	  JSONDecoder::decode_json("pool_id", pool_id, &json_parser, false);
+
+	  field = "pool_name";
+	  std::string pool_name;
+	  JSONDecoder::decode_json("pool_name", pool_name, &json_parser, false);
+
+	  pool_id = parse_pool(pool_name, pool_id);
+	  if (pool_id < 0) {
+	    return (int)pool_id;
+	  }
+	  layout->pool_id = pool_id;
+	} catch (JSONDecoder::err&) {
+	  dout(10) << __func__ << ": json is missing a mandatory field named "
+		   << field << dendl;
+	  return -CEPHFS_EINVAL;
+	}
+      } else {
+	dout(10) << __func__ << ": bad json" << dendl;
+	return -CEPHFS_EINVAL;
+      }
+    } else {
+      dout(10) << __func__ << ": unknown layout vxattr " << name << dendl;
+      return -CEPHFS_ENODATA; // no such attribute
+    }
+  } catch (boost::bad_lexical_cast const&) {
+    dout(10) << __func__ << ": bad vxattr value:" << value
+	     << ", unable to parse for xattr:" << name << dendl;
+    return -CEPHFS_EINVAL;
+  }
+  return 0;
+}
+
+// parse old style layout string
+int Server::parse_layout_vxattr_string(
+  string name, string value, const OSDMap& osdmap, file_layout_t *layout)
+{
   try {
     if (name == "layout") {
       string::iterator begin = value.begin();
@@ -5436,14 +5518,14 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 	return -CEPHFS_EINVAL;
       }
       string left(begin, end);
-      dout(10) << " parsed " << m << " left '" << left << "'" << dendl;
+      dout(10) << __func__ << ": parsed " << m << " left '" << left << "'" << dendl;
       if (begin != end)
 	return -CEPHFS_EINVAL;
       for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
         // Skip validation on each attr, we do it once at the end (avoid
         // rejecting intermediate states if the overall result is ok)
-	int r = parse_layout_vxattr(string("layout.") + q->first, q->second,
-                                    osdmap, layout, false);
+	int r = parse_layout_vxattr_string(string("layout.") + q->first, q->second,
+					   osdmap, layout);
 	if (r < 0)
 	  return r;
       }
@@ -5459,28 +5541,54 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
       } catch (boost::bad_lexical_cast const&) {
 	int64_t pool = osdmap.lookup_pg_pool_name(value);
 	if (pool < 0) {
-	  dout(10) << " unknown pool " << value << dendl;
+	  dout(10) << __func__ << ": unknown pool " << value << dendl;
 	  return -CEPHFS_ENOENT;
 	}
 	layout->pool_id = pool;
       }
+    } else if (name == "layout.pool_id") {
+      layout->pool_id = boost::lexical_cast<int64_t>(value);
+    } else if (name == "layout.pool_name") {
+      layout->pool_id = osdmap.lookup_pg_pool_name(value);
+      if (layout->pool_id < 0) {
+	dout(10) << __func__ << ": unknown pool " << value << dendl;
+	return -CEPHFS_EINVAL;
+      }
     } else if (name == "layout.pool_namespace") {
       layout->pool_ns = value;
     } else {
-      dout(10) << " unknown layout vxattr " << name << dendl;
-      return -CEPHFS_EINVAL;
+      dout(10) << __func__ << ": unknown layout vxattr " << name << dendl;
+      return -CEPHFS_ENODATA; // no such attribute
     }
   } catch (boost::bad_lexical_cast const&) {
-    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    dout(10) << __func__ << ": bad vxattr value, unable to parse int for "
+	     << name << dendl;
     return -CEPHFS_EINVAL;
+  }
+  return 0;
+}
+
+int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
+				file_layout_t *layout, bool validate)
+{
+  dout(20) << __func__ << ": name:" << name << " value:'" << value << "'" << dendl;
+
+  int r;
+  if (name == "layout.json") {
+    r = parse_layout_vxattr_json(name, value, osdmap, layout);
+  } else {
+    r = parse_layout_vxattr_string(name, value, osdmap, layout);
+  }
+  if (r < 0) {
+    return r;
   }
 
   if (validate && !layout->is_valid()) {
-    dout(10) << "bad layout" << dendl;
+    dout(10) << __func__ << ": bad layout" << dendl;
     return -CEPHFS_EINVAL;
   }
   if (!mds->mdsmap->is_data_pool(layout->pool_id)) {
-    dout(10) << " invalid data pool " << layout->pool_id << dendl;
+    dout(10) << __func__ << ": invalid data pool " << layout->pool_id << dendl;
     return -CEPHFS_EINVAL;
   }
   return 0;
@@ -6292,6 +6400,159 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
+void Server::handle_client_getvxattr(MDRequestRef& mdr)
+{
+  const auto& req = mdr->client_request;
+  string xattr_name{req->get_path2()};
+
+  // is a ceph virtual xattr?
+  if (!is_ceph_vxattr(xattr_name)) {
+    respond_to_request(mdr, -CEPHFS_ENODATA);
+    return;
+  }
+
+  CInode *cur = rdlock_path_pin_ref(mdr, true, false);
+  if (!cur) {
+    return;
+  }
+
+  if (is_ceph_dir_vxattr(xattr_name)) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -CEPHFS_ENODATA);
+      return;
+    }
+  } else if (is_ceph_file_vxattr(xattr_name)) {
+    if (cur->is_dir()) {
+      respond_to_request(mdr, -CEPHFS_ENODATA);
+      return;
+    }
+  }
+
+  CachedStackStringStream css;
+  int r = 0;
+  ceph::bufferlist bl;
+  // handle these vxattrs
+  if ((xattr_name.substr(0, 15) == "ceph.dir.layout"sv) ||
+      (xattr_name.substr(0, 16) == "ceph.file.layout"sv)) {
+    std::string layout_field;
+
+    struct layout_xattr_info_t {
+      enum class InheritanceStatus : uint32_t {
+	DEFAULT = 0,
+	SET = 1,
+	INHERITED = 2
+      };
+
+      const file_layout_t     layout;
+      const InheritanceStatus status;
+
+      layout_xattr_info_t(const file_layout_t& l, InheritanceStatus inh)
+        : layout(l), status(inh) { }
+
+      static std::string status_to_string(InheritanceStatus status) {
+	switch (status) {
+	  case InheritanceStatus::DEFAULT: return "default"s;
+	  case InheritanceStatus::SET: return "set"s;
+	  case InheritanceStatus::INHERITED: return "inherited"s;
+	  default: return "unknown"s;
+	}
+      }
+    };
+
+    auto is_default_layout = [&](const file_layout_t& layout) -> bool {
+      return (layout == mdcache->default_file_layout);
+    };
+    auto get_inherited_layout = [&](CInode *cur) -> layout_xattr_info_t {
+      auto orig_in = cur;
+
+      while (cur) {
+        if (cur->get_projected_inode()->has_layout()) {
+	  auto& curr_layout = cur->get_projected_inode()->layout;
+	  if (is_default_layout(curr_layout)) {
+	    return {curr_layout, layout_xattr_info_t::InheritanceStatus::DEFAULT};
+	  }
+          if (cur == orig_in) {
+	      // we've found a new layout at this inode
+	      return {curr_layout, layout_xattr_info_t::InheritanceStatus::SET};
+          } else {
+	      return {curr_layout, layout_xattr_info_t::InheritanceStatus::INHERITED};
+          }
+        }
+
+        if (cur->is_root()) {
+          break;
+	}
+
+        cur = cur->get_projected_parent_dir()->get_inode();
+      }
+      mds->clog->error() << "no layout found at root dir!";
+      ceph_abort("no layout found at root dir! something is really messed up with layouts!");
+    };
+
+    if (xattr_name == "ceph.dir.layout.json"sv ||
+	xattr_name == "ceph.file.layout.json"sv) {
+      // fetch layout only for valid xattr_name
+      const auto lxi = get_inherited_layout(cur);
+
+      *css << "{\"stripe_unit\": " << lxi.layout.stripe_unit
+	   << ", \"stripe_count\": " << lxi.layout.stripe_count
+	   << ", \"object_size\": " << lxi.layout.object_size
+	   << ", \"pool_name\": ";
+      mds->objecter->with_osdmap([lxi, &css](const OSDMap& o) {
+	  *css << "\"";
+          if (o.have_pg_pool(lxi.layout.pool_id)) {
+	    *css << o.get_pool_name(lxi.layout.pool_id);
+	  }
+	  *css << "\"";
+	});
+      *css << ", \"pool_id\": " << (uint64_t)lxi.layout.pool_id;
+      *css << ", \"pool_namespace\": \"" << lxi.layout.pool_ns << "\"";
+      *css << ", \"inheritance\": \"@"
+	   << layout_xattr_info_t::status_to_string(lxi.status) << "\"}";
+    } else if ((xattr_name == "ceph.dir.layout.pool_name"sv) ||
+	       (xattr_name == "ceph.file.layout.pool_name"sv)) {
+      // fetch layout only for valid xattr_name
+      const auto lxi = get_inherited_layout(cur);
+      mds->objecter->with_osdmap([lxi, &css](const OSDMap& o) {
+	  if (o.have_pg_pool(lxi.layout.pool_id)) {
+	  *css << o.get_pool_name(lxi.layout.pool_id);
+	  }
+	  });
+    } else if ((xattr_name == "ceph.dir.layout.pool_id"sv) ||
+               (xattr_name == "ceph.file.layout.pool_id"sv)) {
+      // fetch layout only for valid xattr_name
+      const auto lxi = get_inherited_layout(cur);
+      *css << (uint64_t)lxi.layout.pool_id;
+    } else {
+      r = -CEPHFS_ENODATA; // no such attribute
+    }
+  } else if (xattr_name.substr(0, 12) == "ceph.dir.pin"sv) {
+    if (xattr_name == "ceph.dir.pin"sv) {
+      *css << cur->get_projected_inode()->export_pin;
+    } else if (xattr_name == "ceph.dir.pin.random"sv) {
+      *css << cur->get_projected_inode()->export_ephemeral_random_pin;
+    } else if (xattr_name == "ceph.dir.pin.distributed"sv) {
+      *css << cur->get_projected_inode()->export_ephemeral_distributed_pin;
+    } else {
+      // otherwise respond as invalid request
+      // since we only handle ceph vxattrs here
+      r = -CEPHFS_ENODATA; // no such attribute
+    }
+  } else {
+    // otherwise respond as invalid request
+    // since we only handle ceph vxattrs here
+    r = -CEPHFS_ENODATA; // no such attribute
+  }
+
+  if (r == 0) {
+    ENCODE_START(1, 1, bl);
+    encode(css->strv(), bl);
+    ENCODE_FINISH(bl);
+    mdr->reply_extra_bl = bl;
+  }
+
+  respond_to_request(mdr, r);
+}
 
 // =================================================================
 // DIRECTORY and NAMESPACE OPS
