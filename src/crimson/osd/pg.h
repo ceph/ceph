@@ -613,7 +613,7 @@ private:
     eversion_t& v);
 
 private:
-  OSDMapGate osdmap_gate;
+  PG_OSDMapGate osdmap_gate;
   ShardServices &shard_services;
 
   cached_map_t osdmap;
