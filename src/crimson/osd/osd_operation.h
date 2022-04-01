@@ -52,7 +52,65 @@ struct InterruptibleOperation : Operation {
 
 template <typename T>
 class OperationT : public InterruptibleOperation {
+  std::vector<Blocker*> blockers;
+
+  void add_blocker(Blocker *b) {
+    blockers.push_back(b);
+  }
+
+  void clear_blocker(Blocker *b) {
+    auto iter = std::find(blockers.begin(), blockers.end(), b);
+    if (iter != blockers.end()) {
+      blockers.erase(iter);
+    }
+  }
+
 public:
+  template <typename U>
+  seastar::future<U> with_blocking_future(blocking_future<U> &&f) {
+    if (f.fut.available()) {
+      return std::move(f.fut);
+    }
+    assert(f.blocker);
+    add_blocker(f.blocker);
+    return std::move(f.fut).then_wrapped([this, blocker=f.blocker](auto &&arg) {
+      clear_blocker(blocker);
+      return std::move(arg);
+    });
+  }
+
+  template <typename InterruptCond, typename U>
+  ::crimson::interruptible::interruptible_future<InterruptCond, U>
+  with_blocking_future_interruptible(blocking_future<U> &&f) {
+    if (f.fut.available()) {
+      return std::move(f.fut);
+    }
+    assert(f.blocker);
+    add_blocker(f.blocker);
+    auto fut = std::move(f.fut).then_wrapped([this, blocker=f.blocker](auto &&arg) {
+      clear_blocker(blocker);
+      return std::move(arg);
+    });
+    return ::crimson::interruptible::interruptible_future<
+      InterruptCond, U>(std::move(fut));
+  }
+
+  template <typename InterruptCond, typename U>
+  ::crimson::interruptible::interruptible_future<InterruptCond, U>
+  with_blocking_future_interruptible(
+    blocking_interruptible_future<InterruptCond, U> &&f) {
+    if (f.fut.available()) {
+      return std::move(f.fut);
+    }
+    assert(f.blocker);
+    add_blocker(f.blocker);
+    return std::move(f.fut).template then_wrapped_interruptible(
+      [this, blocker=f.blocker](auto &&arg) {
+      clear_blocker(blocker);
+      return std::move(arg);
+    });
+  }
+
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
 

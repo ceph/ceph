@@ -16,10 +16,15 @@ void Operation::dump(ceph::Formatter* f) const
     dump_detail(f);
     f->close_section();
   }
+#if 0
+  // TODO: implement when necessary at the leaf class layer
+  // as that's the place that will be aware about the exact
+  // type of an event container.
   f->open_array_section("blockers");
   for (auto &blocker : blockers) {
     blocker->dump(f);
   }
+#endif
   f->close_section();
   f->close_section();
 }

@@ -39,7 +39,8 @@ class Blocker;
  */
 template <typename Fut>
 class blocking_future_detail {
-  friend class Operation;
+// just as a scaffolding for the transition from blocking_future
+public:
   friend class Blocker;
   Blocker *blocker;
   Fut fut;
@@ -361,51 +362,6 @@ class Operation : public boost::intrusive_ref_counter<
   virtual const char *get_type_name() const = 0;
   virtual void print(std::ostream &) const = 0;
 
-  template <typename T>
-  seastar::future<T> with_blocking_future(blocking_future<T> &&f) {
-    if (f.fut.available()) {
-      return std::move(f.fut);
-    }
-    assert(f.blocker);
-    add_blocker(f.blocker);
-    return std::move(f.fut).then_wrapped([this, blocker=f.blocker](auto &&arg) {
-      clear_blocker(blocker);
-      return std::move(arg);
-    });
-  }
-
-  template <typename InterruptCond, typename T>
-  ::crimson::interruptible::interruptible_future<InterruptCond, T>
-  with_blocking_future_interruptible(blocking_future<T> &&f) {
-    if (f.fut.available()) {
-      return std::move(f.fut);
-    }
-    assert(f.blocker);
-    add_blocker(f.blocker);
-    auto fut = std::move(f.fut).then_wrapped([this, blocker=f.blocker](auto &&arg) {
-      clear_blocker(blocker);
-      return std::move(arg);
-    });
-    return ::crimson::interruptible::interruptible_future<
-      InterruptCond, T>(std::move(fut));
-  }
-
-  template <typename InterruptCond, typename T>
-  ::crimson::interruptible::interruptible_future<InterruptCond, T>
-  with_blocking_future_interruptible(
-    blocking_interruptible_future<InterruptCond, T> &&f) {
-    if (f.fut.available()) {
-      return std::move(f.fut);
-    }
-    assert(f.blocker);
-    add_blocker(f.blocker);
-    return std::move(f.fut).template then_wrapped_interruptible(
-      [this, blocker=f.blocker](auto &&arg) {
-      clear_blocker(blocker);
-      return std::move(arg);
-    });
-  }
-
   void dump(ceph::Formatter *f) const;
   void dump_brief(ceph::Formatter *f) const;
   virtual ~Operation() = default;
@@ -415,21 +371,9 @@ class Operation : public boost::intrusive_ref_counter<
 
   registry_hook_t registry_hook;
 
-  std::vector<Blocker*> blockers;
   uint64_t id = 0;
   void set_id(uint64_t in_id) {
     id = in_id;
-  }
-
-  void add_blocker(Blocker *b) {
-    blockers.push_back(b);
-  }
-
-  void clear_blocker(Blocker *b) {
-    auto iter = std::find(blockers.begin(), blockers.end(), b);
-    if (iter != blockers.end()) {
-      blockers.erase(iter);
-    }
   }
 
   friend class OperationRegistryI;
