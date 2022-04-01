@@ -17,6 +17,8 @@
 #include <seastar/core/future-util.hh>
 
 #include "include/ceph_assert.h"
+#include "include/utime.h"
+#include "common/Clock.h"
 #include "crimson/common/interruptible_future.h"
 
 namespace ceph {
@@ -155,10 +157,138 @@ private:
   virtual const char *get_type_name() const = 0;
 };
 
+template <class T>
+struct Event {
+  T* that() {
+    return static_cast<T*>(this);
+  }
+  const T* that() const {
+    return static_cast<const T*>(this);
+  }
+
+  template <class OpT, class... Args>
+  void trigger(OpT&& op, Args&&... args) {
+    that()->internal_backend.handle(*that(),
+                                    std::forward<OpT>(op),
+                                    std::forward<Args>(args)...);
+  }
+};
+
+
+// simplest event type for recording things like beginning or end
+// of TrackableOperation's life.
+template <class T>
+struct TimeEvent : Event<T> {
+  struct Backend {
+    // `T` is passed solely to let implementations to discriminate
+    // basing on the type-of-event.
+    virtual void handle(T&, const Operation&) = 0;
+  };
+
+  // for the sake of dumping ops-in-flight.
+  struct InternalBackend final : Backend {
+    void handle(T&, const Operation&) override {
+      timestamp = ceph_clock_now();
+    }
+  private:
+    utime_t timestamp;
+  } internal_backend;
+};
+
+
 template <typename T>
 class BlockerT : public Blocker {
 public:
+  struct BlockingEvent : Event<typename T::BlockingEvent> {
+    using Blocker = std::decay_t<T>;
+
+    struct Backend {
+      // `T` is based solely to let implementations to discriminate
+      // basing on the type-of-event.
+      virtual void handle(typename T::BlockingEvent&, const Operation&, const T&) = 0;
+    };
+
+    struct InternalBackend : Backend {
+      void handle(typename T::BlockingEvent&,
+                  const Operation&,
+                  const T& blocker) override {
+        this->timestamp = ceph_clock_now();
+        this->blocker = &blocker;
+      }
+
+      utime_t timestamp;
+      const T* blocker;
+    } internal_backend;
+
+    // we don't want to make any BlockerT to be aware and coupled with
+    // an operation. to not templatize an entire path from an op to
+    // a blocker, type erasuring is used.
+    struct TriggerI {
+      TriggerI(BlockingEvent& event) : event(event) {}
+
+      template <class FutureT>
+      auto maybe_record_blocking(FutureT&& fut, const T& blocker) {
+        if (!fut.available()) {
+	  // a full blown call via vtable. that's the cost for templatization
+	  // avoidance. anyway, most of the things actually have the type
+	  // knowledge.
+	  record_blocking(blocker);
+	  return std::forward<FutureT>(fut).finally(
+	    [&event=this->event, &blocker] () mutable {
+	    // beware trigger instance may be already dead when this
+	    // is executed!
+	    record_unblocking(event, blocker);
+	  });
+	}
+	return std::forward<FutureT>(fut);
+      }
+      virtual ~TriggerI() = default;
+    protected:
+      // it's for the sake of erasing the OpT type
+      virtual void record_blocking(const T& blocker) = 0;
+
+      static void record_unblocking(BlockingEvent& event, const T& blocker) {
+	assert(event.internal_backend.blocker == &blocker);
+	event.internal_backend.blocker = nullptr;
+      }
+
+      BlockingEvent& event;
+    };
+
+    template <class OpT>
+    struct Trigger : TriggerI {
+      Trigger(BlockingEvent& event, const OpT& op) : TriggerI(event), op(op) {}
+
+      template <class FutureT>
+      auto maybe_record_blocking(FutureT&& fut, const T& blocker) {
+        if (!fut.available()) {
+	  // no need for the dynamic dispatch! if we're lucky, a compiler
+	  // should collapse all these abstractions into a bunch of movs.
+	  this->Trigger::record_blocking(blocker);
+	  return std::forward<FutureT>(fut).finally(
+	    [&event=this->event, &blocker] () mutable {
+	    Trigger::record_unblocking(event, blocker);
+	  });
+	}
+	return std::forward<FutureT>(fut);
+      }
+
+    protected:
+      void record_blocking(const T& blocker) override {
+	this->event.trigger(op, blocker);
+      }
+
+      const OpT& op;
+    };
+  };
+
   virtual ~BlockerT() = default;
+  template <class TriggerT, class... Args>
+  decltype(auto) track_blocking(TriggerT&& trigger, Args&&... args) {
+    return std::forward<TriggerT>(trigger).maybe_record_blocking(
+      std::forward<Args>(args)..., static_cast<const T&>(*this));
+  }
+
 private:
   const char *get_type_name() const final {
     return static_cast<const T*>(this)->type_name;
