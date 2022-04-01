@@ -113,8 +113,11 @@ using OSDOperationRegistry = OperationRegistryT<
  * expensive and simply limits the number that can be
  * concurrently active.
  */
-class OperationThrottler : public Blocker,
+class OperationThrottler : public BlockerT<OperationThrottler>,
 			private md_config_obs_t {
+  friend BlockerT<OperationThrottler>;
+  static constexpr const char* type_name = "OperationThrottler";
+
   template <typename OperationT, typename F>
   auto with_throttle(
     OperationT* op,
@@ -153,11 +156,7 @@ public:
 
 private:
   void dump_detail(Formatter *f) const final;
-  const char *get_type_name() const final {
-    return "OperationThrottler";
-  }
 
-private:
   crimson::osd::scheduler::SchedulerRef scheduler;
 
   uint64_t max_in_progress = 0;
