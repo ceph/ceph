@@ -5859,22 +5859,26 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   auto& op = osd_op.op;
   auto& oi = ctx->new_obs.oi;
   auto& soid = oi.soid;
+  uint64_t size = oi.size;
+  uint64_t offset = op.extent.offset;
+  uint64_t length = op.extent.length;
 
-  if (op.extent.truncate_seq) {
-    dout(0) << "sparse_read does not support truncation sequence " << dendl;
-    return -EINVAL;
+  // are we beyond truncate_size?
+  if ((oi.truncate_seq < op.extent.truncate_seq) &&
+       (op.extent.offset + op.extent.length > op.extent.truncate_size) &&
+       (size > op.extent.truncate_size)) {
+    size = op.extent.truncate_size;
+  }
+
+  if (offset > size) {
+    length = 0;
+  } else if (offset + length > size) {
+    length = size - offset;
   }
 
   ++ctx->num_read;
   if (pool.info.is_erasure()) {
     // translate sparse read to a normal one if not supported
-    uint64_t offset = op.extent.offset;
-    uint64_t length = op.extent.length;
-    if (offset > oi.size) {
-      length = 0;
-    } else if (offset + length > oi.size) {
-      length = oi.size - offset;
-    }
 
     if (length > 0) {
       ctx->pending_async_reads.push_back(
@@ -5898,7 +5902,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     map<uint64_t, uint64_t> m;
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 					      info.pgid.shard),
-			       op.extent.offset, op.extent.length, m);
+			       offset, length, m);
     if (r < 0)  {
       return r;
     }

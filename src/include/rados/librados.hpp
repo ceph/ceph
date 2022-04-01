@@ -551,7 +551,9 @@ inline namespace v14_2_0 {
      * see aio_sparse_read()
      */
     void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
-                    bufferlist *data_bl, int *prval);
+                     bufferlist *data_bl, int *prval,
+                     uint64_t truncate_size = 0,
+                     uint32_t truncate_seq = 0);
 
     /**
      * omap_get_vals: keys and values from the object omap

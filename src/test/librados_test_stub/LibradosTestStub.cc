@@ -902,7 +902,9 @@ void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,
 
 void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
                                       std::map<uint64_t,uint64_t> *m,
-                                      bufferlist *pbl, int *prval) {
+                                      bufferlist *pbl, int *prval,
+                                      uint64_t truncate_size,
+                                      uint32_t truncate_seq) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
 
   ObjectOperationTestImpl op;
