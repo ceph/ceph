@@ -67,12 +67,4 @@ void AggregateBlocker::dump_detail(ceph::Formatter *f) const
   f->close_section();
 }
 
-void OrderedExclusivePhase::dump_detail(ceph::Formatter* f) const
-{
-}
-
-void OrderedConcurrentPhase::dump_detail(ceph::Formatter* f) const
-{
-}
-
 }
