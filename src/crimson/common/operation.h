@@ -558,13 +558,14 @@ public:
  * resolve) a new phase prior to exiting the previous one will ensure that
  * the op ordering is preserved.
  */
-class OrderedExclusivePhase : public PipelineStageIT<OrderedExclusivePhase> {
-  void dump_detail(ceph::Formatter *f) const final;
+template <class T>
+class OrderedExclusivePhaseT : public PipelineStageIT<T> {
+  void dump_detail(ceph::Formatter *f) const final {}
 
   class ExitBarrier final : public PipelineExitBarrierI {
-    OrderedExclusivePhase *phase;
+    OrderedExclusivePhaseT *phase;
   public:
-    ExitBarrier(OrderedExclusivePhase *phase) : phase(phase) {}
+    ExitBarrier(OrderedExclusivePhaseT *phase) : phase(phase) {}
 
     seastar::future<> wait() final {
       return seastar::now();
@@ -597,12 +598,14 @@ public:
     });
   }
 
-  OrderedExclusivePhase(const char *type_name) : type_name(type_name) {}
-
-  const char * type_name;
-
 private:
   seastar::shared_mutex mutex;
+};
+
+// TODO: drop this after migrating to the new event tracking infrastructure.
+struct OrderedExclusivePhase : OrderedExclusivePhaseT<OrderedExclusivePhase> {
+  OrderedExclusivePhase(const char *type_name) : type_name(type_name) {}
+  const char * type_name;
 };
 
 /**
@@ -610,15 +613,16 @@ private:
  * they will proceed to the next stage in the order in which they called
  * enter.
  */
-class OrderedConcurrentPhase : public PipelineStageIT<OrderedConcurrentPhase> {
-  void dump_detail(ceph::Formatter *f) const final;
+template <class T>
+class OrderedConcurrentPhaseT : public PipelineStageIT<T> {
+  void dump_detail(ceph::Formatter *f) const final {}
 
   class ExitBarrier final : public PipelineExitBarrierI {
-    OrderedConcurrentPhase *phase;
+    OrderedConcurrentPhaseT *phase;
     std::optional<seastar::future<>> barrier;
   public:
     ExitBarrier(
-      OrderedConcurrentPhase *phase,
+      OrderedConcurrentPhaseT *phase,
       seastar::future<> &&barrier) : phase(phase), barrier(std::move(barrier)) {}
 
     seastar::future<> wait() final {
@@ -657,12 +661,13 @@ public:
       new ExitBarrier{this, mutex.lock()});
   }
 
-  OrderedConcurrentPhase(const char *type_name) : type_name(type_name) {}
-
-  const char * type_name;
-
 private:
   seastar::shared_mutex mutex;
+};
+
+struct OrderedConcurrentPhase : OrderedConcurrentPhaseT<OrderedConcurrentPhase> {
+  OrderedConcurrentPhase(const char *type_name) : type_name(type_name) {}
+  const char * type_name;
 };
 
 /**
@@ -670,7 +675,8 @@ private:
  * may exit in any order.  Useful mainly for informational purposes between
  * stages with constraints.
  */
-class UnorderedStage : public PipelineStageIT<UnorderedStage> {
+template <class T>
+class UnorderedStageT : public PipelineStageIT<T> {
   void dump_detail(ceph::Formatter *f) const final {}
 
   class ExitBarrier final : public PipelineExitBarrierI {
@@ -693,11 +699,11 @@ public:
     return seastar::make_ready_future<PipelineExitBarrierI::Ref>(
       new ExitBarrier);
   }
-
-  UnorderedStage(const char *type_name) : type_name(type_name) {}
-
-  const char * type_name;
 };
 
+struct UnorderedStage : UnorderedStageT<UnorderedStage> {
+  UnorderedStage(const char *type_name) : type_name(type_name) {}
+  const char * type_name;
+};
 
 }
