@@ -183,6 +183,10 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
     F &&f) {
     if (!max_in_progress) return f();
     auto fut = acquire_throttle(params);
+    // At any given moment a particular op can  be blocked by a given
+    // OperationThrottler instance no more than once. This means the
+    // same throtter won't be on the op's blockers list more than one
+    // time.
     return op->with_blocking_future(std::move(fut))
       .then(std::forward<F>(f))
       .then([this](auto x) {
