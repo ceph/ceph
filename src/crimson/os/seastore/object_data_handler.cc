@@ -369,6 +369,90 @@ extent_to_write_list_t get_buffers(laddr_t offset, bufferlist &bl)
   return ret;
 };
 
+ObjectDataHandler::write_ret ObjectDataHandler::zerowrite(
+  context_t ctx,
+  laddr_t _offset,
+  extent_len_t _len,
+  lba_pin_list_t &&_pins)
+{
+  return seastar::do_with(
+    _offset,
+    _offset + _len,
+    std::move(_pins),
+    extent_to_write_list_t(),
+    bufferlist(),
+    bufferlist(),
+    [ctx](laddr_t &offset, laddr_t &end, auto &pins, auto &to_write,
+      auto &head_bl, auto &end_bl) {
+    LOG_PREFIX(ObjectDataHandler::zerowrite);
+    DEBUGT("zerowrite: {}~{}",
+           ctx.t,
+           offset,
+           end);
+    ceph_assert(pins.size() >= 1);
+    auto pin_begin = pins.front()->get_key();
+    ceph_assert(pin_begin <= offset);
+    auto pin_end = pins.back()->get_key() + pins.back()->get_length();
+    ceph_assert(pin_end >= end);
+    return split_pin_left(
+      ctx,
+      pins.front(),
+      offset
+    ).si_then([ctx, pin_begin, &offset, &end, &pins, &to_write, &head_bl]
+      (auto p) {
+      auto &[left_extent, headptr] = p;
+      if (left_extent) {
+        ceph_assert(left_extent->addr == pin_begin);
+        to_write.push_front(std::move(*left_extent));
+      }
+      if (headptr) {
+        head_bl.append(*headptr);
+        offset -= headptr->length();
+        assert_aligned(offset);
+      }
+      return split_pin_right(
+        ctx,
+        pins.back(),
+        end);
+    }).si_then([ctx, pin_end, &offset, &end, &pins, &to_write, &head_bl, &end_bl]
+      (auto p) {
+      auto &[right_extent, tailptr] = p;
+      if (tailptr) {
+        end_bl.append(*tailptr);
+        assert_aligned(end - pins.back()->get_key() + end_bl.length());
+      }
+      if (pins.front() == pins.back()) {
+        bufferptr newbpt = bufferptr(ceph::buffer::create(end -
+	   (offset + head_bl.length()) , 0));
+        bufferlist newbl;
+        newbl.append(head_bl);
+        newbl.append(newbpt);
+        newbl.append(end_bl);
+        head_bl.swap(newbl);
+        to_write.splice(to_write.end(), get_buffers(offset, head_bl));
+      } else {
+        to_write.splice(to_write.end(), get_buffers(offset, head_bl));
+        bufferptr newbpt = bufferptr(ceph::buffer::create(end -
+	  pins.back()->get_key(), 0));
+        bufferlist newbl;
+        newbl.append(newbpt);
+        newbl.append(end_bl);
+        end_bl.swap(newbl);
+        to_write.splice(to_write.end(), get_buffers(pins.back()->get_key(), end_bl));
+      }
+      if (right_extent) {
+        ceph_assert((right_extent->addr  + right_extent->len) == pin_end);
+        to_write.push_back(std::move(*right_extent));
+      }
+      return write_iertr::now();
+    }).si_then([ctx, &pins] {
+      return do_removals(ctx, pins);
+    }).si_then([ctx, &to_write] {
+      return do_insertions(ctx, to_write);
+    });
+  });
+}
+
 ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
   context_t ctx,
   laddr_t _offset,
@@ -432,6 +516,39 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
 	return do_removals(ctx, pins);
       }).si_then([ctx, &to_write] {
 	return do_insertions(ctx, to_write);
+      });
+    });
+}
+
+ObjectDataHandler::zero_ret ObjectDataHandler::zero(
+  context_t ctx,
+  objaddr_t offset,
+  extent_len_t len)
+{
+  return with_object_data(
+    ctx,
+    [this, ctx, offset, len](auto &object_data) {
+      LOG_PREFIX(ObjectDataHandler::zero);
+      DEBUGT("zero to {}~{}, object_data: {}~{}, is_null {}",
+             ctx.t,
+             offset,
+             len,
+             object_data.get_reserved_data_base(),
+             object_data.get_reserved_data_len(),
+             object_data.is_null());
+      return prepare_data_reservation(
+	ctx,
+	object_data,
+	p2roundup(offset + len, ctx.tm.get_block_size())
+      ).si_then([this, ctx, offset, len, &object_data] {
+	auto logical_offset = object_data.get_reserved_data_base() + offset;
+	return ctx.tm.get_pins(
+	  ctx.t,
+	  logical_offset,
+	  len
+	).si_then([this, ctx, logical_offset, len](auto pins) {
+	  return zerowrite(ctx, logical_offset, len, std::move(pins));
+	});
       });
     });
 }

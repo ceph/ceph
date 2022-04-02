@@ -1167,6 +1167,12 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
       i.decode_bl(hint);
       return tm_iertr::now();
     }
+    case Transaction::OP_ZERO:
+    {
+      objaddr_t off = op->off;
+      extent_len_t len = op->len;
+      return _zero(ctx, get_onode(op->oid), off, len);
+    }
     default:
       ERROR("bad op {}", static_cast<unsigned>(op->op));
       return crimson::ct_error::input_output_error::make();
@@ -1223,6 +1229,33 @@ SeaStore::tm_ret SeaStore::_write(
         offset,
         bl);
     });
+}
+
+SeaStore::tm_ret SeaStore::_zero(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  objaddr_t offset,
+  extent_len_t len)
+{
+  LOG_PREFIX(SeaStore::_zero);
+  DEBUGT("onode={} {}~{}", *ctx.transaction, *onode, offset, len);
+  if (offset + len >= max_object_size) {
+    return crimson::ct_error::input_output_error::make();
+  }
+  auto &object_size = onode->get_mutable_layout(*ctx.transaction).size;
+  object_size = std::max<uint64_t>(offset + len, object_size);
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [=, &ctx, &onode](auto &objhandler) {
+      return objhandler.zero(
+        ObjectDataHandler::context_t{
+          *transaction_manager,
+          *ctx.transaction,
+          *onode,
+        },
+        offset,
+        len);
+  });
 }
 
 SeaStore::omap_set_kvs_ret
