@@ -1143,6 +1143,7 @@ namespace ct_error {
   using address_in_use = ct_error_code<std::errc::address_in_use>;
   using address_not_available = ct_error_code<std::errc::address_not_available>;
   using ecanceled = ct_error_code<std::errc::operation_canceled>;
+  using einprogress = ct_error_code<std::errc::operation_in_progress>;
 
   struct pass_further_all {
     template <class ErrorT>
