@@ -205,10 +205,7 @@ public:
     crimson::osd::scheduler::params_t params,
     F &&f) {
     return with_throttle(op, params, f).then([this, params, op, f](bool cont) {
-      if (cont)
-	return with_throttle_while(op, params, f);
-      else
-	return seastar::make_ready_future<>();
+      return cont ? with_throttle_while(op, params, f) : seastar::now();
     });
   }
 
