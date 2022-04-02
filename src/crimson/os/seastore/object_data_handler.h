@@ -66,6 +66,13 @@ public:
     objaddr_t offset,
     const bufferlist &bl);
 
+  using zero_iertr = base_iertr;
+  using zero_ret = zero_iertr::future<>;
+  zero_ret zero(
+    context_t ctx,
+    objaddr_t offset,
+    extent_len_t len);
+
   /// Reads data in [offset, offset + len)
   using read_iertr = base_iertr;
   using read_ret = read_iertr::future<bufferlist>;
@@ -100,6 +107,14 @@ private:
     context_t ctx,        ///< [in] ctx
     laddr_t offset,       ///< [in] write offset
     bufferlist &&bl,      ///< [in] buffer to write
+    lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
+  );
+
+  //Zero region [offset, offset + len]
+  write_ret zerowrite(
+    context_t ctx,        ///< [in] ctx
+    laddr_t offset,       ///< [in] zero offset
+    extent_len_t len,     ///< [in] len to zero
     lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
   );
 
