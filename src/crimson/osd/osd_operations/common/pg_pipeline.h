@@ -12,18 +12,18 @@ class CommonPGPipeline {
 protected:
   friend class InternalClientRequest;
 
-  OrderedExclusivePhase wait_for_active = {
-    "CommonPGPipeline:::wait_for_active"
-  };
-  OrderedExclusivePhase recover_missing = {
-    "CommonPGPipeline::recover_missing"
-  };
-  OrderedExclusivePhase get_obc = {
-    "CommonPGPipeline::get_obc"
-  };
-  OrderedExclusivePhase process = {
-    "CommonPGPipeline::process"
-  };
+  struct WaitForActive : OrderedExclusivePhaseT<WaitForActive> {
+    static constexpr auto type_name = "CommonPGPipeline:::wait_for_active";
+  } wait_for_active;
+  struct RecoverMissing : OrderedExclusivePhaseT<RecoverMissing> {
+    static constexpr auto type_name = "CommonPGPipeline::recover_missing";
+  } recover_missing;
+  struct GetOBC : OrderedExclusivePhaseT<GetOBC> {
+    static constexpr auto type_name = "CommonPGPipeline::get_obc";
+  } get_obc;
+  struct Process : OrderedExclusivePhaseT<Process> {
+    static constexpr auto type_name = "CommonPGPipeline::process";
+  } process;
 };
 
 } // namespace crimson::osd

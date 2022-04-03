@@ -26,24 +26,29 @@ class ClientRequest final : public OperationT<ClientRequest>,
 
 public:
   class ConnectionPipeline {
-    OrderedExclusivePhase await_map = {
-      "ClientRequest::ConnectionPipeline::await_map"
-    };
-    OrderedExclusivePhase get_pg = {
-      "ClientRequest::ConnectionPipeline::get_pg"
-    };
+    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
+      static constexpr auto type_name =
+        "ClientRequest::ConnectionPipeline::await_map";
+    } await_map;
+
+    struct GetPG : OrderedExclusivePhaseT<GetPG> {
+      static constexpr auto type_name =
+        "ClientRequest::ConnectionPipeline::get_pg";
+    } get_pg;
+
     friend class ClientRequest;
   };
+
   class PGPipeline : public CommonPGPipeline {
-    OrderedExclusivePhase await_map = {
-      "ClientRequest::PGPipeline::await_map"
-    };
-    OrderedConcurrentPhase wait_repop = {
-      "ClientRequest::PGPipeline::wait_repop"
-    };
-    OrderedExclusivePhase send_reply = {
-      "ClientRequest::PGPipeline::send_reply"
-    };
+    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
+      static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
+    } await_map;
+    struct WaitRepop : OrderedConcurrentPhaseT<WaitRepop> {
+      static constexpr auto type_name = "ClientRequest::PGPipeline::wait_repop";
+    } wait_repop;
+    struct SendReply : OrderedExclusivePhaseT<SendReply> {
+      static constexpr auto type_name = "ClientRequest::PGPipeline::send_reply";
+    } send_reply;
     friend class ClientRequest;
   };
 
