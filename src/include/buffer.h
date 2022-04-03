@@ -863,7 +863,9 @@ struct error_code;
 	if (first_round) {
 	  impl_f(first_round);
 	}
-	if (const auto second_round = len - first_round; second_round) {
+	// no C++17 for the sake of the C++11 guarantees of librados, sorry.
+	const auto second_round = len - first_round;
+	if (second_round) {
 	  _refill(second_round);
 	  impl_f(second_round);
 	}
