@@ -1013,10 +1013,14 @@ class HostCache():
         self.daemons[host][dd.name()] = dd
 
     def rm_daemon(self, host: str, name: str) -> None:
+        logger.debug('mgr/cephadm/inventory: rm_daemon')
+        logger.debug('host: %s' % host)
+        logger.debug('name: %s' % name)
         assert not name.startswith('ha-rgw.')
 
         if host in self.daemons:
             if name in self.daemons[host]:
+                logger.debug('rm_daemon(): removing: %s' % name)
                 del self.daemons[host][name]
 
     def daemon_cache_filled(self) -> bool:

@@ -112,7 +112,7 @@ class CephadmServe:
 
     def _serve_sleep(self) -> None:
         sleep_interval = max(
-            30,
+            15,
             min(
                 self.mgr.host_check_interval,
                 self.mgr.facts_cache_timeout,
@@ -394,8 +394,11 @@ class CephadmServe:
             self.mgr.remove_health_warning(k)
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
             ls = self.mgr.list_servers()
+            self.log.debug('self.mgr.list_servers():')
             self.log.debug(ls)
             managed = self.mgr.cache.get_daemon_names()
+            self.log.debug('self.mgr.cache.get_daemon_names():')
+            self.log.debug(managed)
             host_detail = []     # type: List[str]
             host_num_daemons = 0
             daemon_detail = []  # type: List[str]
@@ -431,9 +434,11 @@ class CephadmServe:
                         # we assume that all tcmu-runner daemons are managed by cephadm
                         managed.append(name)
                     if host not in self.mgr.inventory:
+                        self.log.debug('%s not in self.mgr.inventory' % host)
                         missing_names.append(name)
                         host_num_daemons += 1
                     if name not in managed:
+                        self.log.debug('%s not in managed' % name)
                         daemon_detail.append(
                             'stray daemon %s on host %s not managed by cephadm' % (name, host))
                 if missing_names:

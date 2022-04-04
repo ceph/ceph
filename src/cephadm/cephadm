@@ -6874,9 +6874,17 @@ def command_rm_daemon(ctx):
     call(ctx, ['systemctl', 'stop', unit_name],
          verbosity=CallVerbosity.DEBUG)
 
+    # remove the mon from cluster after we stop the mon.
+    # necessary to do this here because <insert-reason-here>
     if daemon_type == 'mon':
-        call(ctx, ['ceph', 'mon', 'rm', daemon_id],
-            verbosity=CallVerbosity.DEBUG)
+        ctx.command = ['ceph', '--name', 'mon.', 'rm', daemon_id]
+        ctx.keyring = os.path.join(get_data_dir(ctx.fsid, ctx.data_dir, 'mon', daemon_id), 'keyring')
+        ctx.mount = []
+        ctx.volume = []
+        ctx.no_hosts = False
+        ctx.timeout = ctx.timeout if ctx.timeout else 60
+        command_shell(ctx)
+
     call(ctx, ['systemctl', 'reset-failed', unit_name],
          verbosity=CallVerbosity.DEBUG)
     call(ctx, ['systemctl', 'disable', unit_name],
