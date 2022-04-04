@@ -62,6 +62,7 @@ class ServiceType(enum.Enum):
     alertmanager = 'alertmanager'
     grafana = 'grafana'
     node_exporter = 'node-exporter'
+    exporter = 'exporter'
     prometheus = 'prometheus'
     loki = 'loki'
     promtail = 'promtail'

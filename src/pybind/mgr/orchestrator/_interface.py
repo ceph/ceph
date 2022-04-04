@@ -464,6 +464,7 @@ class Orchestrator(object):
             'mon': self.apply_mon,
             'nfs': self.apply_nfs,
             'node-exporter': self.apply_node_exporter,
+            'exporter': self.apply_exporter,
             'osd': lambda dg: self.apply_drivegroups([dg]),  # type: ignore
             'prometheus': self.apply_prometheus,
             'loki': self.apply_loki,
@@ -644,6 +645,10 @@ class Orchestrator(object):
         """Update existing a Node-Exporter daemon(s)"""
         raise NotImplementedError()
 
+    def apply_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a exporter daemon(s)"""
+        raise NotImplementedError()
+
     def apply_loki(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Loki daemon(s)"""
         raise NotImplementedError()
@@ -732,6 +737,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'alertmanager': 'alertmanager',
         'prometheus': 'prometheus',
         'node-exporter': 'node-exporter',
+        'exporter': 'exporter',
         'loki': 'loki',
         'promtail': 'promtail',
         'crash': 'crash',
@@ -761,6 +767,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'loki': ['loki'],
         'promtail': ['promtail'],
         'node-exporter': ['node-exporter'],
+        'exporter': ['exporter'],
         'crash': ['crash'],
         'container': ['container'],
         'agent': ['agent'],
