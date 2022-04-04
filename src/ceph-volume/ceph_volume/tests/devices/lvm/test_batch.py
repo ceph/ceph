@@ -32,6 +32,8 @@ class TestBatch(object):
     def test_reject_partition(self, mocked_device):
         mocked_device.return_value = MagicMock(
             is_partition=True,
+            has_fs=False,
+            is_lvm_member=False,
             has_gpt_headers=False,
             has_partitions=False,
         )
