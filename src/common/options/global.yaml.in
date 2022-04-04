@@ -5321,18 +5321,38 @@ options:
   - hdd
   - ssd
   with_legacy: true
-- name: bluestore_avl_alloc_ff_max_search_count
+- name: bluestore_avl_alloc_nf_search_time
+  type: float 
+  level: dev
+  desc: Maximum time in seconds to spend in near-fit mode.  Set to 0 to disable.
+  long_desc: 'Maximum time in seconds to spend in near-fit mode before giving up and 
+    switching to best-fit mode.  Increasing this parameter may allow for less 
+    fragmented large writes, but also increases the time spent in _block_picker()
+    which can itself become a performance bottleneck.  Setting this value to 0 disables
+    the limit.'
+  default: 1_ms 
+- name: bluestore_avl_alloc_nf_min_distance
   type: uint
   level: dev
-  desc: Search for this many ranges in first-fit mode before switching over to
-    to best-fit mode. 0 to iterate through all ranges for required chunk.
-  default: 100
-- name: bluestore_avl_alloc_ff_max_search_bytes
-  type: size
+  desc: Starting distance to search in near-fit mode between ceph_clock_now() checks.
+  long_desc: 'Starting distance to search forward between ceph_clock_now() time checks
+    when in near-fit mode. Every time we check ceph_clock_now() we will double the current
+    value to reduce the total number of time checks while keeping the maximum time overage
+    to 2x or the average search * bluestore_avl_alloc_nf_max_distance, whichever is lower.'
+  default: 8
+  see_also:
+  - bluestore_avl_alloc_nf_search_time
+  - bluestore_avl_alloc_nf_max_distance
+- name: bluestore_avl_alloc_nf_max_distance
+  type: uint
   level: dev
-  desc: Maximum distance to search in first-fit mode before switching over to
-    to best-fit mode. 0 to iterate through all ranges for required chunk.
-  default: 16_M
+  desc: Maximum distance to search in near-fit mode between ceph_clock_now() checks.
+  long_desc: 'Maximum distance to search in near-fit mode between ceph_clock_now() checks.
+    This provides an upper bound on how many searches we will do between clock checks.'
+  default: 1024
+  see_also:
+  - bluestore_avl_alloc_nf_search_time
+  - bluestore_avl_alloc_nf_min_distance
 - name: bluestore_avl_alloc_bf_threshold
   type: uint
   level: dev

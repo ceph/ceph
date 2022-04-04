@@ -154,27 +154,35 @@ private:
   uint64_t range_size_alloc_threshold = 0;
   /*
    * The minimum free space, in percent, which must be available
-   * in allocator to continue allocations in a first-fit fashion.
+   * in allocator to continue allocations in a near-fit fashion.
    * Once the allocator's free space drops below this level we dynamically
    * switch to using best-fit allocations.
    */
   int range_size_alloc_free_pct = 0;
   /*
-   * Maximum number of segments to check in the first-fit mode, without this
-   * limit, fragmented device can see lots of iterations and _block_picker()
-   * becomes the performance limiting factor on high-performance storage.
+   * Maximum time in seconds (ns resolution) to spend in near-fit mode before
+   * giving up and switching to best-fit mode.  Increasing this parameter may
+   * allow for less fragmented large writes, but also increases the time spent
+   * in _block_picker() which can itself become a performance bottleneck.
+   * Setting this value to 0 disables the limit.
    */
-  const uint32_t max_search_count;
+  const double nf_search_time;
   /*
-   * Maximum distance to search forward from the last offset, without this
-   * limit, fragmented device can see lots of iterations and _block_picker()
-   * becomes the performance limiting factor on high-performance storage.
+   * Starting distance to search forward between ceph_clock_now() time checks
+   * when in near-fit mode. Every time we check ceph_clock_now() we will
+   * double the current value to reduce the total number of time checks while
+   * keeping the maximum time overage to 2x or searchtime * 
+   * bluestore_avl_alloc_nf_max_distance, whichever is lower.
    */
-  const uint32_t max_search_bytes;
+  const uint32_t nf_min_distance;
   /*
-  * Max amount of range entries allowed. 0 - unlimited
-  */
+   * Maximum distance to search in near-fit mode between ceph_clock_now()
+   * checks.  This provides an upper bound on how many searches we will do
+   * between clock checks.
+   */
+  const uint32_t nf_max_distance;
   uint64_t range_count_cap = 0;
+  uint64_t nf_misses = 0;
 
   void _range_size_tree_rm(range_seg_t& r) {
     ceph_assert(num_free >= r.length());

@@ -36,7 +36,10 @@ def eval_value(v, typ):
         else:
             return f'"{v}"'
     except ValueError:
-        times = dict(_min=60,
+        times = dict(_ns=0.000000001,
+                     _us=0.000001,
+                     _ms=0.001,
+                     _min=60,
                      _hr=60*60,
                      _day=24*60*60,
                      _K=1 << 10,

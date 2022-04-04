@@ -35,20 +35,48 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
 {
   const auto compare = range_tree.key_comp();
   uint32_t search_count = 0;
+  uint64_t max_search = nf_min_distance;
+  utime_t start_time = ceph_clock_now();
   uint64_t search_bytes = 0;
+
   auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
+    search_bytes = rs->start - rs_start->start;
     uint64_t offset = p2roundup(rs->start, align);
+//    *cursor = offset + size;
+
     if (offset + size <= rs->end) {
       *cursor = offset + size;
+      auto r = ((double) rand() / (RAND_MAX));
+      if (r < 0.001) {
+        utime_t cur_time = ceph_clock_now();
+        auto search_time = cur_time - start_time;
+        ldout(cct, 0) << __func__ << " search_time: " << search_time
+                      << ", search_count:" << search_count << ", search_bytes: "
+                      << search_bytes << ", alloc_size: " << size << ", cursor: "
+                      << *cursor << ", max_search: " << max_search << ", nf_misses "
+                      << nf_misses << ", tree_size: " << range_tree.size() << dendl;
+      }
       return offset;
     }
-    if (max_search_count > 0 && ++search_count > max_search_count) {
-      return -1ULL;
-    }
-    if (search_bytes = rs->start - rs_start->start;
-	max_search_bytes > 0 && search_bytes > max_search_bytes) {
-      return -1ULL;
+    // If we are taking too long, give up and switch to best-fit
+    if (nf_search_time > 0 && ++search_count > max_search) {
+      utime_t cur_time = ceph_clock_now();
+      auto search_time = cur_time - start_time;
+      if (search_time > nf_search_time) {
+        nf_misses++;
+        ldout(cct, 0) << __func__ << " search_time: " << search_time
+                      << ", search_count:" << search_count << ", search_bytes: "
+                      << search_bytes << ", alloc_size: " << size << ", cursor: "
+                      << *cursor << ", max_search: " << max_search << ", nf_misses "
+                      << nf_misses << ", tree_size: " << range_tree.size() << dendl;
+        return -1ULL;
+      }
+      if (max_search * 2 <= nf_max_distance) {
+        max_search *= 2;
+      } else {
+        max_search += nf_max_distance;
+      }
     }
   }
   if (*cursor == 0) {
@@ -57,16 +85,41 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
   }
   // If we reached end, start from beginning till cursor.
   for (auto rs = range_tree.begin(); rs != rs_start; ++rs) {
+    auto sb2 = rs->start - rs_start->start;
+
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
-      *cursor = offset + size;
+      auto r = ((double) rand() / (RAND_MAX));
+      if (r < 0.001) {
+        utime_t cur_time = ceph_clock_now();
+        auto search_time = cur_time - start_time;
+        ldout(cct, 0) << __func__ << " search_time: " << search_time
+                      << ", search_count:" << search_count << ", search_bytes: "
+                      << search_bytes << ", alloc_size: " << size << ", cursor: "
+                      << *cursor << ", max_search: " << max_search << ", nf_misses "
+                      << nf_misses << ", tree_size: " << range_tree.size() << dendl;
+      }
       return offset;
     }
-    if (max_search_count > 0 && ++search_count > max_search_count) {
-      return -1ULL;
-    }
-    if (max_search_bytes > 0 && search_bytes + rs->start > max_search_bytes) {
-      return -1ULL;
+    // If we are taking too long, give up and switch to best-fit
+    if (nf_search_time > 0 && ++search_count > max_search) {
+      utime_t cur_time = ceph_clock_now();
+      auto search_time = cur_time - start_time;
+      if (search_time > nf_search_time) {
+        nf_misses++;
+        ldout(cct, 0) << __func__ << " search_time: " << search_time
+                      << ", search_count:" << search_count << ", search_bytes: "
+                      << search_bytes << ", alloc_size: " << size << ", cursor: "
+                      << *cursor << ", max_search: " << max_search << ", nf_misses "
+                      << nf_misses << ", tree_size: " << range_tree.size() << dendl;
+        return -1ULL;
+      }
+      if (max_search * 2 <= nf_max_distance) {
+        max_search *= 2;
+      } else {
+        max_search += nf_max_distance;
+      }
+
     }
   }
   return -1ULL;
@@ -342,10 +395,13 @@ AvlAllocator::AvlAllocator(CephContext* cct,
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
   range_size_alloc_free_pct(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct")),
-  max_search_count(
-    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_ff_max_search_count")),
-  max_search_bytes(
-    cct->_conf.get_val<Option::size_t>("bluestore_avl_alloc_ff_max_search_bytes")),
+  nf_search_time(
+    cct->_conf.get_val<double>("bluestore_avl_alloc_nf_search_time")),
+  nf_min_distance(
+    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_nf_min_distance")),
+  nf_max_distance(
+    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_nf_max_distance")),
+
   range_count_cap(max_mem / sizeof(range_seg_t)),
   cct(cct)
 {}

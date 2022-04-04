@@ -399,6 +399,18 @@ struct Option {
   }
 };
 
+constexpr double operator"" _ns (unsigned long long ns) {
+  return double(ns * 0.000000001L);
+}
+
+constexpr double operator"" _us (unsigned long long us) {
+  return double(us * 0.000001L);
+}
+
+constexpr double operator"" _ms (unsigned long long ms) {
+  return double(ms * 0.001L);
+}
+
 constexpr unsigned long long operator"" _min (unsigned long long min) {
   return min * 60;
 }
