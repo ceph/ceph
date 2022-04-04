@@ -2594,7 +2594,7 @@ int64_t librados::Rados::pool_lookup(const char *name)
 
 int librados::Rados::pool_reverse_lookup(int64_t id, std::string *name)
 {
-  return client->pool_get_name(id, name);
+  return client->pool_get_name(id, name, true);
 }
 
 int librados::Rados::mon_command(string cmd, const bufferlist& inbl,

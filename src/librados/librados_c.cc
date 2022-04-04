@@ -440,7 +440,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_pool_reverse_lookup)(
   tracepoint(librados, rados_pool_reverse_lookup_enter, cluster, id, maxlen);
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   std::string name;
-  int r = radosp->pool_get_name(id, &name);
+  int r = radosp->pool_get_name(id, &name, true);
   if (r < 0) {
     tracepoint(librados, rados_pool_reverse_lookup_exit, r, "");
     return r;
