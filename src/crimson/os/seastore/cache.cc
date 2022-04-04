@@ -985,6 +985,7 @@ record_t Cache::prepare_record(
 	  0,
 	  t.root->get_version() - 1,
 	  MAX_SEG_SEQ,
+	  segment_type_t::NULL_SEG,
 	  std::move(delta_bl)
 	});
     } else {
@@ -1002,6 +1003,9 @@ record_t Cache::prepare_record(
 	  cleaner
 	  ? cleaner->get_seq(i->get_paddr().as_seg_paddr().get_segment_id())
 	  : MAX_SEG_SEQ,
+	  cleaner
+	  ? cleaner->get_type(i->get_paddr().as_seg_paddr().get_segment_id())
+	  : segment_type_t::NULL_SEG,
 	  std::move(delta_bl)
 	});
       i->last_committed_crc = final_crc;
@@ -1389,13 +1393,12 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
-    if (!(dirty_from != JOURNAL_SEQ_NULL &&
+    if (unlikely(!(dirty_from != JOURNAL_SEQ_NULL &&
                 dirty_from != JOURNAL_SEQ_MAX &&
-                dirty_from != NO_DELTAS))
-      ERRORT("{}", *i);
-    ceph_assert(dirty_from != JOURNAL_SEQ_NULL &&
-                dirty_from != JOURNAL_SEQ_MAX &&
-                dirty_from != NO_DELTAS);
+                dirty_from != NO_DELTAS))) {
+      ERRORT("{}", t, *i);
+      ceph_abort();
+    }
     if (dirty_from < seq) {
       TRACET("next extent -- {}", t, *i);
       if (!cand.empty() && cand.back()->get_dirty_from() > dirty_from) {

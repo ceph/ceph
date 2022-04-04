@@ -85,8 +85,6 @@ public:
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
 
-  virtual SegmentSeqAllocator& get_segment_seq_allocator() = 0;
-
   virtual ~Journal() {}
 };
 using JournalRef = std::unique_ptr<Journal>;
