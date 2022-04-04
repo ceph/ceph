@@ -6002,7 +6002,7 @@ int Client::resolve_mds(
   } else {
     // It did not parse as an integer, it is not a wildcard, it must be a name
     const mds_gid_t mds_gid = fsmap->find_mds_gid_by_name(mds_spec);
-    if (mds_gid == 0) {
+    if (mds_gid == mds_gid_t{0}) {
       lderr(cct) << __func__ << ": no MDS daemons found by name `" << mds_spec << "'" << dendl;
       lderr(cct) << "FSMap: " << *fsmap << dendl;
       return -CEPHFS_ENOENT;
