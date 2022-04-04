@@ -49,9 +49,9 @@ bool SimpleBitmap::set(uint64_t offset, uint64_t length)
 {
   dout(20) <<" [" << std::hex << offset << ", " << length << "]" << dendl;
 
-  if (offset + length >= m_num_bits) {
+  if (offset + length > m_num_bits) {
     derr << __func__ << "::offset + length = " << offset + length << " exceeds map size = " << m_num_bits << dendl;
-    ceph_assert(offset + length < m_num_bits);
+    ceph_assert(offset + length <= m_num_bits);
     return false;
   }
 
@@ -103,9 +103,9 @@ bool SimpleBitmap::set(uint64_t offset, uint64_t length)
 //----------------------------------------------------------------------------
 bool SimpleBitmap::clr(uint64_t offset, uint64_t length)
 {
-  if (offset + length >= m_num_bits) {
+  if (offset + length > m_num_bits) {
     derr << __func__ << "::offset + length = " << offset + length << " exceeds map size = " << m_num_bits << dendl;
-    ceph_assert(offset + length < m_num_bits);
+    ceph_assert(offset + length <= m_num_bits);
     return false;
   }
 
@@ -186,6 +186,9 @@ extent_t SimpleBitmap::get_next_set_extent(uint64_t offset)
   int           ffs = __builtin_ffsll(word) - 1;
   extent_t      ext;
   ext.offset = words_to_bits(word_idx) + ffs;
+  if (ext.offset >= m_num_bits ) {
+    return null_extent;
+  }
 
   // set all bits from current to LSB
   uint64_t      clr_mask = FULL_MASK << ffs;
@@ -245,6 +248,9 @@ extent_t SimpleBitmap::get_next_clr_extent(uint64_t offset)
   int      ffz = __builtin_ffsll(~word) - 1;
   extent_t ext;
   ext.offset = words_to_bits(word_idx) + ffz;
+  if (ext.offset >= m_num_bits ) {
+    return null_extent;
+  }
 
   // clear all bits from current position to LSB
   word &= (FULL_MASK << ffz);
