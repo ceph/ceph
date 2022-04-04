@@ -199,6 +199,7 @@ std::ostream &operator<<(std::ostream &out, const delta_info_t &delta)
 	     << ", length: " << delta.length
 	     << ", pversion: " << delta.pversion
 	     << ", ext_seq: " << delta.ext_seq
+	     << ", seg_type: " << delta.seg_type
 	     << ")";
 }
 
@@ -214,7 +215,7 @@ std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
 std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 {
   return out << "segment_header_t("
-	     << "segment_seq=" << segment_seq_printer_t{header.journal_segment_seq}
+	     << "segment_seq=" << segment_seq_printer_t{header.segment_seq}
 	     << ", segment_id=" << header.physical_segment_id
 	     << ", journal_tail=" << header.journal_tail
 	     << ", segment_nonce=" << header.segment_nonce
@@ -225,7 +226,7 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail)
 {
   return out << "segment_tail_t("
-	     << "segment_seq=" << tail.journal_segment_seq
+	     << "segment_seq=" << tail.segment_seq
 	     << ", segment_id=" << tail.physical_segment_id
 	     << ", journal_tail=" << tail.journal_tail
 	     << ", segment_nonce=" << tail.segment_nonce

@@ -31,7 +31,8 @@ SegmentedJournal::SegmentedJournal(
   ExtentReader &scanner,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
-    segment_seq_allocator(new SegmentSeqAllocator),
+    segment_seq_allocator(
+      new SegmentSeqAllocator(segment_type_t::JOURNAL)),
     journal_segment_allocator("JOURNAL",
                               segment_type_t::JOURNAL,
                               segment_provider,
@@ -76,12 +77,12 @@ SegmentedJournal::prep_replay_segments(
     segments.begin(),
     segments.end(),
     [](const auto &lt, const auto &rt) {
-      return lt.second.journal_segment_seq <
-	rt.second.journal_segment_seq;
+      return lt.second.segment_seq <
+	rt.second.segment_seq;
     });
 
   segment_seq_allocator->set_next_segment_seq(
-    segments.rbegin()->second.journal_segment_seq + 1);
+    segments.rbegin()->second.segment_seq + 1);
   std::for_each(
     segments.begin(),
     segments.end(),
@@ -107,7 +108,7 @@ SegmentedJournal::prep_replay_segments(
 	auto& seg_addr = replay_from.as_seg_paddr();
 	return seg.first == seg_addr.get_segment_id();
       });
-    if (from->second.journal_segment_seq != journal_tail.segment_seq) {
+    if (from->second.segment_seq != journal_tail.segment_seq) {
       ERROR("journal_tail {} does not match {}",
             journal_tail, from->second);
       ceph_abort();
@@ -126,7 +127,7 @@ SegmentedJournal::prep_replay_segments(
     from, segments.end(), ret.begin(),
     [this](const auto &p) {
       auto ret = journal_seq_t{
-	p.second.journal_segment_seq,
+	p.second.segment_seq,
 	paddr_t::make_seg_paddr(
 	  p.first,
 	  journal_segment_allocator.get_block_size())
@@ -209,13 +210,16 @@ SegmentedJournal::replay_segment(
             if (delta.paddr != P_ADDR_NULL) {
               auto& seg_addr = delta.paddr.as_seg_paddr();
               auto delta_paddr_segment_seq = segment_provider.get_seq(seg_addr.get_segment_id());
+	      auto delta_paddr_segment_type = segment_provider.get_type(seg_addr.get_segment_id());
               if (s_type == segment_type_t::NULL_SEG ||
-                  (delta_paddr_segment_seq != delta.ext_seq)) {
+                  (delta_paddr_segment_seq != delta.ext_seq ||
+		   delta_paddr_segment_type != delta.seg_type)) {
                 SUBDEBUG(seastore_cache,
-                         "delta is obsolete, delta_paddr_segment_seq={}, -- {}",
+                         "delta is obsolete, delta_paddr_segment_seq={},"
+			 " delta_paddr_segment_type={} -- {}",
                          segment_seq_printer_t{delta_paddr_segment_seq},
+			 delta_paddr_segment_type,
                          delta);
-		assert(delta_paddr_segment_seq > delta.ext_seq);
                 return replay_ertr::now();
               }
             }
