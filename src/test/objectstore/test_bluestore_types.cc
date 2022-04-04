@@ -2149,6 +2149,39 @@ TEST(SimpleBitmap, boundaries)
   }
 }
 
+//---------------------------------------------------------------------------------
+TEST(SimpleBitmap, boundaries2)
+{
+  const uint64_t bit_count_base = 64 << 10; // 64Kb = 8MB
+  const extent_t null_extent    = {0, 0};
+
+  for (unsigned i = 0; i < 64; i++) {
+    uint64_t     bit_count   = bit_count_base + i;
+    extent_t     full_extent = {0, bit_count};
+    SimpleBitmap sbmap(g_ceph_context, bit_count);
+
+    sbmap.set(0, bit_count);
+    ASSERT_TRUE(sbmap.get_next_set_extent(0) == full_extent);
+    ASSERT_TRUE(sbmap.get_next_clr_extent(0) == null_extent);
+
+    for (uint64_t bit = 0; bit < bit_count; bit++) {
+      sbmap.clr(bit, 1);
+    }
+    ASSERT_TRUE(sbmap.get_next_set_extent(0) == null_extent);
+    ASSERT_TRUE(sbmap.get_next_clr_extent(0) == full_extent);
+
+    for (uint64_t bit = 0; bit < bit_count; bit++) {
+      sbmap.set(bit, 1);
+    }
+    ASSERT_TRUE(sbmap.get_next_set_extent(0) == full_extent);
+    ASSERT_TRUE(sbmap.get_next_clr_extent(0) == null_extent);
+
+    sbmap.clr(0, bit_count);
+    ASSERT_TRUE(sbmap.get_next_set_extent(0) == null_extent);
+    ASSERT_TRUE(sbmap.get_next_clr_extent(0) == full_extent);
+  }
+}
+
 TEST(shared_blob_2hash_tracker_t, basic_test)
 {
   shared_blob_2hash_tracker_t t1(1024 * 1024, 4096);
