@@ -896,9 +896,14 @@ function test_activate_osd() {
     kill_daemons $dir TERM osd || return 1
 
     activate_osd $dir 0 --osd-max-backfills 20 || return 1
+    local scheduler=$(get_op_scheduler 0)
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
         config get osd_max_backfills)
-    test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
+    if [ "$scheduler" = "mclock_scheduler" ]; then
+      test "$backfills" = '{"osd_max_backfills":"1000"}' || return 1
+    else
+      test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
+    fi
 
     teardown $dir || return 1
 }
