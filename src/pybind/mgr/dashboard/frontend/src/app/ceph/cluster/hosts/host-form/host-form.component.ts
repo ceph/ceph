@@ -57,17 +57,13 @@ export class HostFormComponent extends CdForm implements OnInit {
     }
     this.createForm();
     this.hostService.list('false').subscribe((resp: any[]) => {
-      this.hostnames = resp.map((host) => {
-        return host['hostname'];
-      });
+      this.hostnames = resp.map((host) => host['hostname']);
       this.loadingReady();
     });
 
     this.hostService.getLabels().subscribe((resp: string[]) => {
       const uniqueLabels = new Set(resp.concat(this.hostService.predefinedLabels));
-      this.labelsOption = Array.from(uniqueLabels).map((label) => {
-        return { enabled: true, name: label, selected: false, description: null };
-      });
+      this.labelsOption = Array.from(uniqueLabels).map((label) => ({ enabled: true, name: label, selected: false, description: null }));
     });
   }
 
@@ -82,9 +78,7 @@ export class HostFormComponent extends CdForm implements OnInit {
       hostname: new FormControl('', {
         validators: [
           Validators.required,
-          CdValidators.custom('uniqueName', (hostname: string) => {
-            return this.hostnames && this.hostnames.indexOf(hostname) !== -1;
-          })
+          CdValidators.custom('uniqueName', (hostname: string) => this.hostnames && this.hostnames.indexOf(hostname) !== -1)
         ]
       }),
       addr: new FormControl('', {

@@ -200,7 +200,7 @@
           <span *ngIf="selectionType">
             {{ selectedCount }} <ng-container i18n="X selected">selected</ng-container> /
           </span>
-          <span *ngIf="rowCount != data?.length">
+          <span *ngIf="rowCount !== data?.length">
             {{ rowCount }} <ng-container i18n="X found">found</ng-container> /
           </span>
           <span>

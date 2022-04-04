@@ -9,6 +9,7 @@ import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bo
 import { ToastrModule } from 'ngx-toastr';
 import { Observable, of } from 'rxjs';
 
+import { CephfsDirectoriesComponent } from './cephfs-directories.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -26,7 +27,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, modalServiceShow, PermissionHelper } from '~/testing/unit-test-helper';
-import { CephfsDirectoriesComponent } from './cephfs-directories.component';
 
 describe('CephfsDirectoriesComponent', () => {
   let component: CephfsDirectoriesComponent;
@@ -95,7 +95,7 @@ describe('CephfsDirectoriesComponent', () => {
           mockLib.quotas(1024 * modifier, 10 * modifier),
           mockData.updatedQuotas[dirPath] || {}
         ),
-        snapshots: snapshots
+        snapshots
       };
     },
     // Only used inside other mocks
@@ -154,9 +154,7 @@ describe('CephfsDirectoriesComponent', () => {
       modal = modalServiceShow(comp, init);
       return modal;
     },
-    getNodeById: (path: string) => {
-      return mockLib.useNode(path);
-    },
+    getNodeById: (path: string) => mockLib.useNode(path),
     updateNodes: (path: string) => {
       const p: Promise<any[]> = component.treeOptions.getChildren({ id: path });
       return noAsyncUpdate ? () => p : mockLib.asyncNodeUpdate(p);
@@ -191,9 +189,7 @@ describe('CephfsDirectoriesComponent', () => {
       };
     },
     treeActions: {
-      toggleActive: (_a: any, node: any, _b: any) => {
-        return mockLib.updateNodes(node.id);
-      }
+      toggleActive: (_a: any, node: any, _b: any) => mockLib.updateNodes(node.id)
     },
     mkDir: (path: string, name: string, maxFiles: number, maxBytes: number) => {
       const dir = mockLib.dir(path, name, 3);
@@ -784,9 +780,9 @@ describe('CephfsDirectoriesComponent', () => {
 
         it('shows the right texts', () => {
           assert.quotaUpdateModalTexts(
-            `Update CephFS files quota for '/a/c/b'`,
-            `The inherited files quota 10 from '/a' is the maximum value to be used.`,
-            `Updated CephFS files quota for '/a/c/b'`
+            'Update CephFS files quota for \'/a/c/b\'',
+            'The inherited files quota 10 from \'/a\' is the maximum value to be used.',
+            'Updated CephFS files quota for \'/a/c/b\''
           );
         });
       });
@@ -808,9 +804,9 @@ describe('CephfsDirectoriesComponent', () => {
 
         it('shows the right texts', () => {
           assert.quotaUpdateModalTexts(
-            `Update CephFS size quota for '/a/c/b'`,
-            `The inherited size quota 1 KiB from '/a' is the maximum value to be used.`,
-            `Updated CephFS size quota for '/a/c/b'`
+            'Update CephFS size quota for \'/a/c/b\'',
+            'The inherited size quota 1 KiB from \'/a\' is the maximum value to be used.',
+            'Updated CephFS size quota for \'/a/c/b\''
           );
         });
       });
@@ -822,13 +818,13 @@ describe('CephfsDirectoriesComponent', () => {
           assert.quotaUpdateModalField('binary', 'Max size', 'max_bytes', 512, 1024);
         });
 
-        it(`uses 'Set' action instead of 'Update' if the quota is not set (0)`, () => {
+        it('uses \'Set\' action instead of \'Update\' if the quota is not set (0)', () => {
           mockLib.updateQuotaThroughModal('max_bytes', 0);
           mockLib.updateQuotaThroughModal('max_bytes', 200);
           assert.quotaUpdateModalTexts(
-            `Set CephFS size quota for '/a/c/b'`,
-            `The inherited size quota 1 KiB from '/a' is the maximum value to be used.`,
-            `Set CephFS size quota for '/a/c/b'`
+            'Set CephFS size quota for \'/a/c/b\'',
+            'The inherited size quota 1 KiB from \'/a\' is the maximum value to be used.',
+            'Set CephFS size quota for \'/a/c/b\''
           );
         });
       });
@@ -848,9 +844,9 @@ describe('CephfsDirectoriesComponent', () => {
 
         it('shows the right texts', () => {
           assert.quotaUnsetModalTexts(
-            `Unset CephFS files quota for '/a/c/b'`,
-            `Unset files quota 5 from '/a/c/b' in order to inherit files quota 10 from '/a'.`,
-            `Unset CephFS files quota for '/a/c/b'`
+            'Unset CephFS files quota for \'/a/c/b\'',
+            'Unset files quota 5 from \'/a/c/b\' in order to inherit files quota 10 from \'/a\'.',
+            'Unset CephFS files quota for \'/a/c/b\''
           );
         });
       });
@@ -868,9 +864,9 @@ describe('CephfsDirectoriesComponent', () => {
 
         it('shows the right texts', () => {
           assert.quotaUnsetModalTexts(
-            `Unset CephFS size quota for '/a/c/b'`,
-            `Unset size quota 512 B from '/a/c/b' in order to inherit size quota 1 KiB from '/a'.`,
-            `Unset CephFS size quota for '/a/c/b'`
+            'Unset CephFS size quota for \'/a/c/b\'',
+            'Unset size quota 512 B from \'/a/c/b\' in order to inherit size quota 1 KiB from \'/a\'.',
+            'Unset CephFS size quota for \'/a/c/b\''
           );
         });
       });
@@ -880,19 +876,19 @@ describe('CephfsDirectoriesComponent', () => {
           mockLib.selectNode('/a');
           mockLib.unsetQuotaThroughModal('max_bytes');
           assert.quotaUnsetModalTexts(
-            `Unset CephFS size quota for '/a'`,
-            `Unset size quota 1 KiB from '/a' in order to have no quota on the directory.`,
-            `Unset CephFS size quota for '/a'`
+            'Unset CephFS size quota for \'/a\'',
+            'Unset size quota 1 KiB from \'/a\' in order to have no quota on the directory.',
+            'Unset CephFS size quota for \'/a\''
           );
         });
 
         it('uses different Text if quota is already inherited', () => {
           mockLib.unsetQuotaThroughModal('max_bytes');
           assert.quotaUnsetModalTexts(
-            `Unset CephFS size quota for '/a/c/b'`,
-            `Unset size quota 2 KiB from '/a/c/b' which isn't used because of the inheritance ` +
-              `of size quota 1 KiB from '/a'.`,
-            `Unset CephFS size quota for '/a/c/b'`
+            'Unset CephFS size quota for \'/a/c/b\'',
+            'Unset size quota 2 KiB from \'/a/c/b\' which isn\'t used because of the inheritance ' +
+              'of size quota 1 KiB from \'/a\'.',
+            'Unset CephFS size quota for \'/a/c/b\''
           );
         });
       });
@@ -914,21 +910,21 @@ describe('CephfsDirectoriesComponent', () => {
       actions = component.quota.tableActions;
     });
 
-    it(`shows 'Set' for empty and not set quotas`, () => {
+    it('shows \'Set\' for empty and not set quotas', () => {
       const isSetVisible = actions[0].visible;
       expect(isSetVisible(empty())).toBe(true);
       expect(isSetVisible(select(0))).toBe(true);
       expect(isSetVisible(select(1))).toBe(false);
     });
 
-    it(`shows 'Update' for set quotas only`, () => {
+    it('shows \'Update\' for set quotas only', () => {
       const isUpdateVisible = actions[1].visible;
       expect(isUpdateVisible(empty())).toBeFalsy();
       expect(isUpdateVisible(select(0))).toBe(false);
       expect(isUpdateVisible(select(1))).toBe(true);
     });
 
-    it(`only enables 'Unset' for set quotas only`, () => {
+    it('only enables \'Unset\' for set quotas only', () => {
       const isUnsetDisabled = actions[2].disable;
       expect(isUnsetDisabled(empty())).toBe(true);
       expect(isUnsetDisabled(select(0))).toBe(true);

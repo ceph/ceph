@@ -5,6 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
+import { ContextComponent } from './context.component';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import {
@@ -12,7 +13,6 @@ import {
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
 import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
-import { ContextComponent } from './context.component';
 
 describe('ContextComponent', () => {
   let component: ContextComponent;

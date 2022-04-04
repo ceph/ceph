@@ -214,9 +214,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
       this.showDocPanel = !data.available;
     });
 
-    this.columns = this.columns.filter((col: any) => {
-      return !this.hiddenColumns.includes(col.prop);
-    });
+    this.columns = this.columns.filter((col: any) => !this.hiddenColumns.includes(col.prop));
   }
 
   ngOnChanges() {
@@ -246,8 +244,8 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     return _.get(
       {
         '-1': 'badge-danger',
-        '0': 'badge-warning',
-        '1': 'badge-success'
+        0: 'badge-warning',
+        1: 'badge-success'
       },
       row.status,
       'badge-dark'
@@ -278,9 +276,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
 
   sortDaemonEvents() {
     this.daemons.forEach((daemon: any) => {
-      daemon.events?.sort((event1: any, event2: any) => {
-        return new Date(event2.created).getTime() - new Date(event1.created).getTime();
-      });
+      daemon.events?.sort((event1: any, event2: any) => new Date(event2.created).getTime() - new Date(event1.created).getTime());
     });
   }
   getServices(context: CdTableFetchDataContext) {

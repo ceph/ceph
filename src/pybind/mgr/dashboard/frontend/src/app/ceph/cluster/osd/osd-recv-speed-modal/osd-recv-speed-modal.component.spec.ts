@@ -8,10 +8,10 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
+import { OsdRecvSpeedModalComponent } from './osd-recv-speed-modal.component';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { OsdRecvSpeedModalComponent } from './osd-recv-speed-modal.component';
 
 describe('OsdRecvSpeedModalComponent', () => {
   let component: OsdRecvSpeedModalComponent;
@@ -85,9 +85,7 @@ describe('OsdRecvSpeedModalComponent', () => {
     });
 
     it('should get and set priority correctly', () => {
-      const defaultPriority = _.find(component.priorities, (p) => {
-        return _.isEqual(p.name, 'default');
-      });
+      const defaultPriority = _.find(component.priorities, (p) => _.isEqual(p.name, 'default'));
       expect(setPriority).toHaveBeenCalledWith(defaultPriority);
     });
 
@@ -116,9 +114,7 @@ describe('OsdRecvSpeedModalComponent', () => {
 
       component.setPriority(customPriority);
 
-      const customInPriorities = _.find(component.priorities, (p) => {
-        return p.name === 'custom';
-      });
+      const customInPriorities = _.find(component.priorities, (p) => p.name === 'custom');
 
       expect(customInPriorities).not.toBeNull();
       expect(component.osdRecvSpeedForm.getValue('priority')).toBe('custom');
@@ -142,9 +138,7 @@ describe('OsdRecvSpeedModalComponent', () => {
 
       component.setPriority(lowPriority);
 
-      const customInPriorities = _.find(component.priorities, (p) => {
-        return p.name === 'custom';
-      });
+      const customInPriorities = _.find(component.priorities, (p) => p.name === 'custom');
 
       expect(customInPriorities).toBeUndefined();
       expect(component.osdRecvSpeedForm.getValue('priority')).toBe('low');

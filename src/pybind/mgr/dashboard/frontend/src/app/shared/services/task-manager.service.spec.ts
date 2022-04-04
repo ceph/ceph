@@ -3,9 +3,9 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import _ from 'lodash';
 import { BehaviorSubject } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 const summary: Record<string, any> = {
   executing_tasks: [],
@@ -60,13 +60,13 @@ describe('TaskManagerService', () => {
   }));
 
   it('should subscribe and process executing taks', fakeAsync(() => {
-    const original_subscriptions = _.cloneDeep(taskManagerService.subscriptions);
+    const originalSubscriptions = _.cloneDeep(taskManagerService.subscriptions);
     _.assign(summary, {
       executing_tasks: [{ name: 'foo', metadata: {} }],
       finished_tasks: []
     });
     summaryService.refresh();
     tick();
-    expect(taskManagerService.subscriptions).toEqual(original_subscriptions);
+    expect(taskManagerService.subscriptions).toEqual(originalSubscriptions);
   }));
 });

@@ -4,12 +4,12 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { CephfsClientsComponent } from './cephfs-clients.component';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
-import { CephfsClientsComponent } from './cephfs-clients.component';
 
 describe('CephfsClientsComponent', () => {
   let component: CephfsClientsComponent;

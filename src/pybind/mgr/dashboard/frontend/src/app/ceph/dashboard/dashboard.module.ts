@@ -6,7 +6,6 @@ import { RouterModule } from '@angular/router';
 import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { ChartsModule } from 'ng2-charts';
 
-import { SharedModule } from '~/app/shared/shared.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { FeedbackComponent } from '../shared/feedback/feedback.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
@@ -18,6 +17,7 @@ import { MdsSummaryPipe } from './mds-summary.pipe';
 import { MgrSummaryPipe } from './mgr-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { OsdSummaryPipe } from './osd-summary.pipe';
+import { SharedModule } from '~/app/shared/shared.module';
 
 @NgModule({
   imports: [

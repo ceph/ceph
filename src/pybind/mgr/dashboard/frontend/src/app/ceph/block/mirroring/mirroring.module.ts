@@ -5,7 +5,6 @@ import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { SharedModule } from '~/app/shared/shared.module';
 import { BootstrapCreateModalComponent } from './bootstrap-create-modal/bootstrap-create-modal.component';
 import { BootstrapImportModalComponent } from './bootstrap-import-modal/bootstrap-import-modal.component';
 import { DaemonListComponent } from './daemon-list/daemon-list.component';
@@ -16,6 +15,7 @@ import { OverviewComponent } from './overview/overview.component';
 import { PoolEditModeModalComponent } from './pool-edit-mode-modal/pool-edit-mode-modal.component';
 import { PoolEditPeerModalComponent } from './pool-edit-peer-modal/pool-edit-peer-modal.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
+import { SharedModule } from '~/app/shared/shared.module';
 
 @NgModule({
   imports: [

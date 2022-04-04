@@ -5,6 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { CreateClusterComponent } from './create-cluster.component';
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
@@ -16,7 +17,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { CreateClusterComponent } from './create-cluster.component';
 
 describe('CreateClusterComponent', () => {
   let component: CreateClusterComponent;

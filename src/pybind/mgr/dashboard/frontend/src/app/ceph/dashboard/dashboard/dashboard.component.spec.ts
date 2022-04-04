@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { DashboardComponent } from './dashboard.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('DashboardComponent', () => {
   let component: DashboardComponent;

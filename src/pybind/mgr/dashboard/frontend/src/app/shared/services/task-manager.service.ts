@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/consistent-type-assertions */
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
@@ -9,10 +10,14 @@ import { SummaryService } from './summary.service';
 
 class TaskSubscription {
   name: string;
-  metadata: object;
+  metadata: Record<string, unknown>;
   onTaskFinished: (finishedTask: FinishedTask) => any;
 
-  constructor(name: string, metadata: object, onTaskFinished: any) {
+  constructor(
+    name: string,
+    metadata: Record<string, unknown>,
+    onTaskFinished: any
+  ) {
     this.name = name;
     this.metadata = metadata;
     this.onTaskFinished = onTaskFinished;
@@ -31,8 +36,12 @@ export class TaskManagerService {
       const finishedTasks = summary.finished_tasks;
       const newSubscriptions: Array<TaskSubscription> = [];
       for (const subscription of this.subscriptions) {
-        const finishedTask = <FinishedTask>this._getTask(subscription, finishedTasks);
-        const executingTask = <ExecutingTask>this._getTask(subscription, executingTasks);
+        const finishedTask = <FinishedTask>(
+          this.getTask(subscription, finishedTasks)
+        );
+        const executingTask = <ExecutingTask>(
+          this.getTask(subscription, executingTasks)
+        );
         if (finishedTask !== null && executingTask === null) {
           subscription.onTaskFinished(finishedTask);
         }
@@ -44,13 +53,22 @@ export class TaskManagerService {
     });
   }
 
-  subscribe(name: string, metadata: object, onTaskFinished: (finishedTask: FinishedTask) => any) {
-    this.subscriptions.push(new TaskSubscription(name, metadata, onTaskFinished));
+  subscribe(
+    name: string,
+    metadata: Record<string, unknown>,
+    onTaskFinished: (finishedTask: FinishedTask) => any
+  ) {
+    this.subscriptions.push(
+      new TaskSubscription(name, metadata, onTaskFinished)
+    );
   }
 
-  private _getTask(subscription: TaskSubscription, tasks: Array<Task>): Task {
+  private getTask(subscription: TaskSubscription, tasks: Array<Task>): Task {
     for (const task of tasks) {
-      if (task.name === subscription.name && _.isEqual(task.metadata, subscription.metadata)) {
+      if (
+        task.name === subscription.name &&
+        _.isEqual(task.metadata, subscription.metadata)
+      ) {
         return task;
       }
     }

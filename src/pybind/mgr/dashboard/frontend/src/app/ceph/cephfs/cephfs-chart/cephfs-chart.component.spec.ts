@@ -2,8 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ChartsModule } from 'ng2-charts';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsChartComponent } from './cephfs-chart.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsChartComponent', () => {
   let component: CephfsChartComponent;

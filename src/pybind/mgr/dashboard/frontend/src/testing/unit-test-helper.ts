@@ -1,3 +1,4 @@
+/* eslint-disable prefer-arrow/prefer-arrow-functions */
 import { DebugElement, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
@@ -30,13 +31,14 @@ import {
   PrometheusRule
 } from '~/app/shared/models/prometheus-alerts';
 
+// eslint-disable-next-line prefer-arrow/prefer-arrow-functions
 export function configureTestBed(configuration: any, entryComponents?: any) {
   configureTestSuite(() => {
     if (entryComponents) {
       // Declare entryComponents without having to add them to a module
       // This is needed since Jest doesn't yet support not declaring entryComponents
       TestBed.configureTestingModule(configuration).overrideModule(BrowserDynamicTestingModule, {
-        set: { entryComponents: entryComponents }
+        set: { entryComponents }
       });
     } else {
       TestBed.configureTestingModule(configuration);
@@ -47,7 +49,10 @@ export function configureTestBed(configuration: any, entryComponents?: any) {
 export class PermissionHelper {
   tac: TableActionsComponent;
   permission: Permission;
-  selection: { single: object; multiple: object[] };
+  selection: {
+    single: Record<string, unknown>;
+    multiple: Record<string, unknown>[];
+  };
 
   /**
    * @param permission The permissions used by this test.
@@ -56,7 +61,13 @@ export class PermissionHelper {
    *   a correct test run.
    *   Defaults to `{ single: {}, multiple: [{}, {}] }`.
    */
-  constructor(permission: Permission, selection?: { single: object; multiple: object[] }) {
+  constructor(
+    permission: Permission,
+    selection?: {
+      single: Record<string, unknown>;
+      multiple: Record<string, unknown>[];
+    }
+  ) {
     this.permission = permission;
     this.selection = _.defaultTo(selection, { single: {}, multiple: [{}, {}] });
   }
@@ -115,15 +126,15 @@ export class PermissionHelper {
     return result;
   }
 
-  private testScenario(selection: object[]) {
+  setSelection(selection: Record<string, unknown>[]) {
+    this.tac.selection.selected = selection;
+    this.tac.onSelectionChange();
+  }
+
+  private testScenario(selection: Record<string, unknown>[]) {
     this.setSelection(selection);
     const action: CdTableAction = this.tac.currentAction;
     return action ? action.name : '';
-  }
-
-  setSelection(selection: object[]) {
-    this.tac.selection.selected = selection;
-    this.tac.onSelectionChange();
   }
 }
 
@@ -137,7 +148,10 @@ export class FormHelper {
   /**
    * Changes multiple values in multiple controls
    */
-  setMultipleValues(values: { [controlName: string]: any }, markAsDirty?: boolean) {
+  setMultipleValues(
+    values: { [controlName: string]: any },
+    markAsDirty?: boolean
+  ) {
     Object.keys(values).forEach((key) => {
       this.setValue(key, values[key], markAsDirty);
     });
@@ -146,7 +160,11 @@ export class FormHelper {
   /**
    * Changes the value of a control
    */
-  setValue(control: AbstractControl | string, value: any, markAsDirty?: boolean): AbstractControl {
+  setValue(
+    control: AbstractControl | string,
+    value: any,
+    markAsDirty?: boolean
+  ): AbstractControl {
     control = this.getControl(control);
     if (markAsDirty) {
       control.markAsDirty();
@@ -155,17 +173,14 @@ export class FormHelper {
     return control;
   }
 
-  private getControl(control: AbstractControl | string): AbstractControl {
-    if (typeof control === 'string') {
-      return this.form.get(control);
-    }
-    return control;
-  }
-
   /**
    * Change the value of the control and expect the control to be valid afterwards.
    */
-  expectValidChange(control: AbstractControl | string, value: any, markAsDirty?: boolean) {
+  expectValidChange(
+    control: AbstractControl | string,
+    value: any,
+    markAsDirty?: boolean
+  ) {
     this.expectValid(this.setValue(control, value, markAsDirty));
   }
 
@@ -194,6 +209,13 @@ export class FormHelper {
    */
   expectError(control: AbstractControl | string, error: string) {
     expect(this.getControl(control).hasError(error)).toBeTruthy();
+  }
+
+  private getControl(control: AbstractControl | string): AbstractControl {
+    if (typeof control === 'string') {
+      return this.form.get(control);
+    }
+    return control;
   }
 }
 
@@ -269,9 +291,7 @@ export class FixtureHelper {
 
   getTextAll(css: string) {
     const elements = this.getElementByCssAll(css);
-    return elements.map((element) => {
-      return element ? element.nativeElement.textContent.trim() : null;
-    });
+    return elements.map((element) => element ? element.nativeElement.textContent.trim() : null);
   }
 
   getElementByCss(css: string) {
@@ -288,7 +308,7 @@ export class FixtureHelper {
 export class PrometheusHelper {
   createSilence(id: string) {
     return {
-      id: id,
+      id,
       createdBy: `Creator of ${id}`,
       comment: `A comment for ${id}`,
       startsAt: new Date('2022-02-22T22:22:00').toISOString(),
@@ -305,11 +325,11 @@ export class PrometheusHelper {
 
   createRule(name: string, severity: string, alerts: any[]): PrometheusRule {
     return {
-      name: name,
+      name,
       labels: {
-        severity: severity
+        severity
       },
-      alerts: alerts
+      alerts
     } as PrometheusRule;
   }
 
@@ -333,7 +353,7 @@ export class PrometheusHelper {
 
   createNotificationAlert(name: string, status = 'firing'): AlertmanagerNotificationAlert {
     return {
-      status: status,
+      status,
       labels: {
         alertname: name
       },
@@ -421,8 +441,7 @@ export class Mocks {
     return { name, type, type_id, id, children, device_class };
   }
 
-  static getPool = (name: string, id: number): Pool => {
-    return _.merge(new Pool(name), {
+  static getPool = (name: string, id: number): Pool => _.merge(new Pool(name), {
       pool: id,
       type: 'replicated',
       pg_num: 256,
@@ -431,7 +450,6 @@ export class Mocks {
       pg_placement_num_target: 256,
       size: 3
     });
-  };
 
   /**
    * Create the following test crush map:
@@ -629,11 +647,12 @@ export class TabHelper {
 export class OrchestratorHelper {
   /**
    * Mock Orchestrator status.
+   *
    * @param available is the Orchestrator enabled?
    * @param features A list of enabled Orchestrator features.
    */
   static mockStatus(available: boolean, features?: OrchestratorFeature[]) {
-    const orchStatus = { available: available, description: '', features: {} };
+    const orchStatus = { available, description: '', features: {} };
     if (features) {
       features.forEach((feature: OrchestratorFeature) => {
         orchStatus.features[feature] = { available: true };

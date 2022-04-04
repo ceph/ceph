@@ -1,8 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { CrushRuleService } from './crush-rule.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CrushRuleService', () => {
   let service: CrushRuleService;

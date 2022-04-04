@@ -5,10 +5,10 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { TreeModule } from '@circlon/angular-tree-component';
 import { of } from 'rxjs';
 
+import { CrushmapComponent } from './crushmap.component';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { CrushmapComponent } from './crushmap.component';
 
 describe('CrushmapComponent', () => {
   let component: CrushmapComponent;

@@ -7,10 +7,10 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { throwError } from 'rxjs';
 
+import { FeedbackComponent } from './feedback.component';
 import { FeedbackService } from '~/app/shared/api/feedback.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { FeedbackComponent } from './feedback.component';
 
 describe('FeedbackComponent', () => {
   let component: FeedbackComponent;

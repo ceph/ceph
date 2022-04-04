@@ -155,16 +155,14 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
     );
 
     apiActionsObs = bootstrapPoolNames
-      .reduce((obs, poolName) => {
-        return concat(
+      .reduce((obs, poolName) => concat(
           obs,
           this.rbdMirroringService.importBootstrapToken(
             poolName,
             this.importBootstrapForm.getValue('direction'),
             this.importBootstrapForm.getValue('token')
           )
-        );
-      }, apiActionsObs)
+        ), apiActionsObs)
       .pipe(last());
 
     const finishHandler = () => {

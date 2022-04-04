@@ -4,7 +4,6 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import _ from 'lodash';
 import { ToastrService } from 'ngx-toastr';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -12,6 +11,7 @@ import { FinishedTask } from '../models/finished-task';
 import { CdDatePipe } from '../pipes/cd-date.pipe';
 import { NotificationService } from './notification.service';
 import { TaskMessageService } from './task-message.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('NotificationService', () => {
   let service: NotificationService;
@@ -63,7 +63,9 @@ describe('NotificationService', () => {
   }));
 
   describe('Saved notifications', () => {
-    const expectSavedNotificationToHave = (expected: object) => {
+    const expectSavedNotificationToHave = (
+      expected: Record<string, unknown>
+    ) => {
       tick(510);
       expect(service['dataSource'].getValue().length).toBe(1);
       const notification = service['dataSource'].getValue()[0];
@@ -81,7 +83,7 @@ describe('NotificationService', () => {
 
     beforeEach(() => {
       spyOn(service, 'show').and.callThrough();
-      service.cancel((<any>service)['justShownTimeoutId']);
+      service.cancel((service as any)['justShownTimeoutId']);
     });
 
     it('should create a success notification and save it', fakeAsync(() => {

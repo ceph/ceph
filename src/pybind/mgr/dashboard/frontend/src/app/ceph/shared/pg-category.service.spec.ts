@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { PgCategory } from './pg-category.model';
 import { PgCategoryService } from './pg-category.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('PgCategoryService', () => {
   let service: PgCategoryService;

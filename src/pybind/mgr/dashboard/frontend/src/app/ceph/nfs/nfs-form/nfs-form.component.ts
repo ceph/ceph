@@ -12,6 +12,7 @@ import _ from 'lodash';
 import { forkJoin, Observable, of } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
 
+import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
 import { NfsFSAbstractionLayer } from '~/app/ceph/nfs/models/nfs.fsal';
 import { Directory, NfsService } from '~/app/shared/api/nfs.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -27,7 +28,6 @@ import { Permission } from '~/app/shared/models/permissions';
 import { CdHttpErrorResponse } from '~/app/shared/services/api-interceptor.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -61,22 +61,18 @@ export class NfsFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
 
-  pathDataSource = (text$: Observable<string>) => {
-    return text$.pipe(
+  pathDataSource = (text$: Observable<string>) => text$.pipe(
       debounceTime(200),
       distinctUntilChanged(),
       mergeMap((token: string) => this.getPathTypeahead(token)),
       map((val: string[]) => val)
     );
-  };
 
-  bucketDataSource = (text$: Observable<string>) => {
-    return text$.pipe(
+  bucketDataSource = (text$: Observable<string>) => text$.pipe(
       debounceTime(200),
       distinctUntilChanged(),
       mergeMap((token: string) => this.getBucketTypeahead(token))
     );
-  };
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -169,16 +165,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
       }),
       transportUDP: new FormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => {
-            return !value;
-          })
+          CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => !value)
         ]
       }),
       transportTCP: new FormControl(true, {
         validators: [
-          CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => {
-            return !value;
-          })
+          CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => !value)
         ]
       }),
       clients: this.formBuilder.array([]),
@@ -230,9 +222,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   resolveFsals(res: string[]) {
     res.forEach((fsal) => {
-      const fsalItem = this.nfsService.nfsFsal.find((currentFsalItem) => {
-        return fsal === currentFsalItem.value;
-      });
+      const fsalItem = this.nfsService.nfsFsal.find((currentFsalItem) => fsal === currentFsalItem.value);
 
       if (_.isObjectLike(fsalItem)) {
         this.allFsals.push(fsalItem);

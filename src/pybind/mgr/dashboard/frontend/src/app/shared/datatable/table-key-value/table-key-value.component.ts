@@ -10,10 +10,10 @@ import {
 
 import _ from 'lodash';
 
+import { TableComponent } from '../table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
-import { TableComponent } from '../table/table.component';
 
 interface KeyValueItem {
   key: string;
@@ -141,7 +141,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
       } else {
         throw new Error(
           `Array contains too many elements (${first.length}). ` +
-            `Needs to be of type [string, any][]`
+            'Needs to be of type [string, any][]'
         );
       }
     } else if (_.isObject(first)) {

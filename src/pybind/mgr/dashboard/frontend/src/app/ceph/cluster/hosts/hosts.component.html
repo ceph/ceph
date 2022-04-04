@@ -61,7 +61,7 @@
 
 <ng-template #maintenanceConfirmTpl>
   <div *ngFor="let msg of errorMessage; let last=last">
-    <ul *ngIf="!last || errorMessage.length == '1'">
+    <ul *ngIf="!last || errorMessage.length === '1'">
       <li i18n>{{ msg }}</li>
     </ul>
   </div>

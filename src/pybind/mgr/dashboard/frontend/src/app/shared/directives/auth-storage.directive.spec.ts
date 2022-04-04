@@ -1,12 +1,12 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { AuthStorageDirective } from './auth-storage.directive';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { AuthStorageDirective } from './auth-storage.directive';
 @Component({
-  template: `<div id="permitted" *cdScope="condition; matchAll: matchAll"></div>`
+  template: '<div id="permitted" *cdScope="condition; matchAll: matchAll"></div>'
 })
 export class AuthStorageDirectiveTestComponent {
   condition: string | string[] | object;

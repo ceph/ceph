@@ -27,7 +27,7 @@ export class TaskWrapperService {
       call.subscribe(
         (resp) => {
           if (resp.status === 202) {
-            this._handleExecutingTasks(task);
+            this.handleExecutingTasks(task);
           } else {
             this.summaryService.refresh();
             task.success = true;
@@ -46,7 +46,7 @@ export class TaskWrapperService {
     });
   }
 
-  _handleExecutingTasks(task: FinishedTask) {
+  handleExecutingTasks(task: FinishedTask) {
     const notification = new CdNotificationConfig(
       NotificationType.info,
       this.taskMessageService.getRunningTitle(task)

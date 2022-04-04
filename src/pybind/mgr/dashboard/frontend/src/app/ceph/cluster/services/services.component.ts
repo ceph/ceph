@@ -4,6 +4,8 @@ import { Router } from '@angular/router';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { delay } from 'rxjs/operators';
 
+import { PlacementPipe } from './placement.pipe';
+import { ServiceFormComponent } from './service-form/service-form.component';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -25,8 +27,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { PlacementPipe } from './placement.pipe';
-import { ServiceFormComponent } from './service-form/service-form.component';
 
 const BASE_URL = 'services';
 
@@ -170,9 +170,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       }
     ];
 
-    this.columns = columns.filter((col: any) => {
-      return !this.hiddenColumns.includes(col.prop);
-    });
+    this.columns = columns.filter((col: any) => !this.hiddenColumns.includes(col.prop));
 
     this.orchService.status().subscribe((status: OrchestratorStatus) => {
       this.orchStatus = status;
@@ -216,9 +214,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     this.cephServiceService.list().subscribe(
       (services: CephServiceSpec[]) => {
         this.services = services;
-        this.services = this.services.filter((col: any) => {
-          return !this.hiddenServices.includes(col.service_name);
-        });
+        this.services = this.services.filter((col: any) => !this.hiddenServices.includes(col.service_name));
         this.isLoadingServices = false;
       },
       () => {

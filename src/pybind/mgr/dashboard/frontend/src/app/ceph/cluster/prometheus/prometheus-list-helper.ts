@@ -4,7 +4,7 @@ import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 
 @Directive()
-// tslint:disable-next-line: directive-class-suffix
+// eslint-disable-next-line @angular-eslint/directive-class-suffix
 export class PrometheusListHelper extends ListWithDetails implements OnInit {
   public isPrometheusConfigured = false;
   public isAlertmanagerConfigured = false;

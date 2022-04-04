@@ -7,6 +7,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
+import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
+import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
+import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
+import { OsdFormComponent } from './osd-form.component';
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
 import { HostService } from '~/app/shared/api/host.service';
@@ -15,10 +19,6 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FixtureHelper, FormHelper } from '~/testing/unit-test-helper';
-import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
-import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
-import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
-import { OsdFormComponent } from './osd-form.component';
 
 describe('OsdFormComponent', () => {
   let form: CdFormGroup;
@@ -57,7 +57,7 @@ describe('OsdFormComponent', () => {
 
   const selectDevices = (type: string) => {
     const event: DevicesSelectionChangeEvent = {
-      type: type,
+      type,
       filters: [],
       data: devices,
       dataOut: []
@@ -75,7 +75,7 @@ describe('OsdFormComponent', () => {
 
   const clearDevices = (type: string) => {
     const event: DevicesSelectionClearEvent = {
-      type: type,
+      type,
       clearedDevices: []
     };
     component.onDevicesCleared(event);

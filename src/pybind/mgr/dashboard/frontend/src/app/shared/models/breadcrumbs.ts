@@ -38,7 +38,7 @@ export class BreadcrumbsResolver implements Resolve<IBreadcrumb[]> {
         ? data.breadcrumbs
         : data.breadcrumbs.text || data.text || path;
 
-    const crumbs: IBreadcrumb[] = [{ text: text, path: path }];
+    const crumbs: IBreadcrumb[] = [{ text, path }];
 
     return of(crumbs);
   }

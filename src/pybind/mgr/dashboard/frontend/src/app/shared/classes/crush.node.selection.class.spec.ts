@@ -2,9 +2,9 @@ import { FormControl } from '@angular/forms';
 
 import _ from 'lodash';
 
-import { configureTestBed, Mocks } from '~/testing/unit-test-helper';
 import { CrushNode } from '../models/crush-node';
 import { CrushNodeSelectionClass } from './crush.node.selection.class';
+import { configureTestBed, Mocks } from '~/testing/unit-test-helper';
 
 describe('CrushNodeSelectionService', () => {
   const nodes = Mocks.getCrushMap();

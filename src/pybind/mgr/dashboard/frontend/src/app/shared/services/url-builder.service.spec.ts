@@ -2,11 +2,11 @@ import { URLVerbs } from '../constants/app.constants';
 import { URLBuilderService } from './url-builder.service';
 
 describe('URLBuilderService', () => {
-  const BASE = 'pool';
-  const urlBuilder = new URLBuilderService(BASE);
+  const base = 'pool';
+  const urlBuilder = new URLBuilderService(base);
 
   it('get base', () => {
-    expect(urlBuilder.base).toBe(BASE);
+    expect(urlBuilder.base).toBe(base);
   });
 
   it('build absolute URL', () => {

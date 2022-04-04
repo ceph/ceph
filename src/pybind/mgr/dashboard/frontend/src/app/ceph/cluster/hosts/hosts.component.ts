@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { Subscription } from 'rxjs';
 import { map, mergeMap } from 'rxjs/operators';
 
+import { HostFormComponent } from './host-form/host-form.component';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -33,7 +34,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { HostFormComponent } from './host-form/host-form.component';
 
 const BASE_URL = 'hosts';
 
@@ -267,9 +267,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       }
     ];
 
-    this.columns = this.columns.filter((col: any) => {
-      return !this.hiddenColumns.includes(col.prop);
-    });
+    this.columns = this.columns.filter((col: any) => !this.hiddenColumns.includes(col.prop));
   }
 
   ngOnDestroy() {
@@ -295,9 +293,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     this.hostService.getLabels().subscribe((resp: string[]) => {
       const host = this.selection.first();
       const labels = new Set(resp.concat(this.hostService.predefinedLabels));
-      const allLabels = Array.from(labels).map((label) => {
-        return { enabled: true, name: label };
-      });
+      const allLabels = Array.from(labels).map((label) => ({ enabled: true, name: label }));
       this.modalService.show(FormModalComponent, {
         titleText: $localize`Edit Host: ${host.hostname}`,
         fields: [
@@ -446,7 +442,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       actionDescription: 'remove',
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('host/remove', { hostname: hostname }),
+          task: new FinishedTask('host/remove', { hostname }),
           call: this.hostService.delete(hostname)
         })
     });

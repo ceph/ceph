@@ -1,9 +1,9 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { MgrModuleDetailsComponent } from './mgr-module-details.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { MgrModuleDetailsComponent } from './mgr-module-details.component';
 
 describe('MgrModuleDetailsComponent', () => {
   let component: MgrModuleDetailsComponent;

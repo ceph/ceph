@@ -8,12 +8,12 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
+import { OsdPgScrubModalComponent } from './osd-pg-scrub-modal.component';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { OsdPgScrubModalComponent } from './osd-pg-scrub-modal.component';
 
 describe('OsdPgScrubModalComponent', () => {
   let component: OsdPgScrubModalComponent;

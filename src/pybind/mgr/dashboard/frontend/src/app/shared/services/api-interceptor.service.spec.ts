@@ -5,12 +5,12 @@ import { Router } from '@angular/router';
 
 import { ToastrService } from 'ngx-toastr';
 
-import { AppModule } from '~/app/app.module';
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
 import { ApiInterceptorService } from './api-interceptor.service';
 import { NotificationService } from './notification.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
+import { AppModule } from '~/app/app.module';
 
 describe('ApiInterceptorService', () => {
   let notificationService: NotificationService;
@@ -54,9 +54,7 @@ describe('ApiInterceptorService', () => {
     message?: string,
     options?: any,
     application?: string
-  ) => {
-    return new CdNotification(new CdNotificationConfig(type, title, message, options, application));
-  };
+  ) => new CdNotification(new CdNotificationConfig(type, title, message, options, application));
 
   configureTestBed({
     imports: [AppModule, HttpClientTestingModule],
@@ -110,7 +108,7 @@ describe('ApiInterceptorService', () => {
         {
           status: 403
         },
-        [['error'], {'state': {'header': 'Access Denied', 'icon': 'fa fa-lock', 'message': 'Sorry, you don’t have permission to view this page or resource.', 'source': 'forbidden'}}] // prettier-ignore
+        [['error'], {state: {header: 'Access Denied', icon: 'fa fa-lock', message: 'Sorry, you don’t have permission to view this page or resource.', source: 'forbidden'}}] // prettier-ignore
       );
     });
 

@@ -1,8 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { SettingsService } from './settings.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('SettingsService', () => {
   let service: SettingsService;
@@ -89,27 +89,27 @@ describe('SettingsService', () => {
       increment = 0;
     });
 
-    it(`should return true if 'value' does not contain an empty string`, fakeAsync(() => {
+    it('should return true if \'value\' does not contain an empty string', fakeAsync(() => {
       expectSettingsApiCall(exampleUrl, { value: exampleValue }, exampleValue);
     }));
 
-    it(`should return false if 'value' does contain an empty string`, fakeAsync(() => {
+    it('should return false if \'value\' does contain an empty string', fakeAsync(() => {
       expectSettingsApiCall(exampleUrl, { value: '' }, '');
     }));
 
-    it(`should return true if 'instance' does not contain an empty string`, fakeAsync(() => {
+    it('should return true if \'instance\' does not contain an empty string', fakeAsync(() => {
       expectSettingsApiCall(exampleUrl, { value: exampleValue }, exampleValue);
     }));
 
-    it(`should return false if 'instance' does contain an empty string`, fakeAsync(() => {
+    it('should return false if \'instance\' does contain an empty string', fakeAsync(() => {
       expectSettingsApiCall(exampleUrl, { instance: '' }, '');
     }));
 
-    it(`should return false if the api object is empty`, fakeAsync(() => {
+    it('should return false if the api object is empty', fakeAsync(() => {
       expectSettingsApiCall(exampleUrl, {}, '');
     }));
 
-    it(`should call the API once even if it is called multiple times`, fakeAsync(() => {
+    it('should call the API once even if it is called multiple times', fakeAsync(() => {
       expectSettingsApiCall(exampleUrl, { value: exampleValue }, exampleValue);
       testConfig(exampleUrl, exampleValue);
       httpTesting.expectNone(exampleUrl);

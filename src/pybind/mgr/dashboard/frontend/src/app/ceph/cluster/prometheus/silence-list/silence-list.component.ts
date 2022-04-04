@@ -4,6 +4,7 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 import { Observable, Subscriber } from 'rxjs';
 
+import { PrometheusListHelper } from '../prometheus-list-helper';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -20,7 +21,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { PrometheusListHelper } from '../prometheus-list-helper';
 
 const BASE_URL = 'monitoring/silences';
 

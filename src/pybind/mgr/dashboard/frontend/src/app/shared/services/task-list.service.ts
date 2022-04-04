@@ -11,13 +11,13 @@ import { TaskMessageService } from './task-message.service';
 export class TaskListService implements OnDestroy {
   summaryDataSubscription: Subscription;
 
-  getUpdate: () => Observable<object>;
+  getUpdate: () => Observable<Record<string, unknown>>;
   preProcessing: (_: any) => any[];
   setList: (_: any[]) => void;
   onFetchError: (error: any) => void;
   taskFilter: (task: ExecutingTask) => boolean;
   itemFilter: (item: any, task: ExecutingTask) => boolean;
-  builders: object;
+  builders: Record<string, unknown>;
   summary: Summary;
 
   constructor(
@@ -26,29 +26,29 @@ export class TaskListService implements OnDestroy {
   ) {}
 
   /**
-   * @param {() => Observable<object>} getUpdate Method that calls the api and
+   * @param getUpdate Method that calls the api and
    * returns that without subscribing.
-   * @param {(_: any) => any[]} preProcessing Method executed before merging
+   * @param preProcessing Method executed before merging
    * Tasks with Items
-   * @param {(_: any[]) => void} setList  Method used to update array of item in the component.
-   * @param {(error: any) => void} onFetchError Method called when there were
+   * @param setList  Method used to update array of item in the component.
+   * @param onFetchError Method called when there were
    * problems while fetching data.
-   * @param {(task: ExecutingTask) => boolean} taskFilter callback used in tasks_array.filter()
-   * @param {(item, task: ExecutingTask) => boolean} itemFilter callback used in
+   * @param taskFilter callback used in tasks_array.filter()
+   * @param itemFilter callback used in
    * items_array.filter()
-   * @param {object} builders
+   * @param builders
    * object with builders for each type of task.
    * You can also use a 'default' one.
    * @memberof TaskListService
    */
   init(
-    getUpdate: () => Observable<object>,
+    getUpdate: () => Observable<Record<string, unknown>>,
     preProcessing: (_: any) => any[],
     setList: (_: any[]) => void,
     onFetchError: (error: any) => void,
     taskFilter: (task: ExecutingTask) => boolean,
     itemFilter: (item: any, task: ExecutingTask) => boolean,
-    builders: object
+    builders: Record<string, unknown>
   ) {
     this.getUpdate = getUpdate;
     this.preProcessing = preProcessing;
@@ -66,15 +66,26 @@ export class TaskListService implements OnDestroy {
 
   fetch() {
     this.getUpdate().subscribe((resp: any) => {
-      this.updateData(resp, this.summary['executing_tasks'].filter(this.taskFilter));
+      this.updateData(
+        resp,
+        this.summary['executing_tasks'].filter(this.taskFilter)
+      );
     }, this.onFetchError);
+  }
+
+  ngOnDestroy() {
+    if (this.summaryDataSubscription) {
+      this.summaryDataSubscription.unsubscribe();
+    }
   }
 
   private updateData(resp: any, tasks: ExecutingTask[]) {
     const data: any[] = this.preProcessing ? this.preProcessing(resp) : resp;
     this.addMissing(data, tasks);
     data.forEach((item) => {
-      const executingTasks = tasks.filter((task) => this.itemFilter(item, task));
+      const executingTasks = tasks.filter((task) =>
+        this.itemFilter(item, task)
+      );
       item.cdExecuting = this.getTaskAction(executingTasks);
     });
     this.setList(data);
@@ -86,7 +97,9 @@ export class TaskListService implements OnDestroy {
       const existing = data.find((item) => this.itemFilter(item, task));
       const builder = this.builders[task.name];
       if (!existing && (builder || defaultBuilder)) {
-        data.push(builder ? builder(task.metadata) : defaultBuilder(task.metadata));
+        data.push(
+          builder ? builder(task.metadata) : defaultBuilder(task.metadata)
+        );
       }
     });
   }
@@ -101,11 +114,5 @@ export class TaskListService implements OnDestroy {
         return this.taskMessageService.getRunningText(task) + '...' + progress;
       })
       .join(', ');
-  }
-
-  ngOnDestroy() {
-    if (this.summaryDataSubscription) {
-      this.summaryDataSubscription.unsubscribe();
-    }
   }
 }

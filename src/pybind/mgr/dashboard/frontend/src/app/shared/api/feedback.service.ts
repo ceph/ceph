@@ -24,10 +24,10 @@ export class FeedbackService {
     return this.http.post(
       'api/feedback',
       {
-        project: project,
-        tracker: tracker,
-        subject: subject,
-        description: description,
+        project,
+        tracker,
+        subject,
+        description,
         api_key: apiKey
       },
       {

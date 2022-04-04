@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import {
@@ -31,15 +32,6 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   @ViewChild('highlightTpl', { static: true })
   highlightTpl: TemplateRef<any>;
 
-  private detailTable: TableComponent;
-  @ViewChild('detailTable')
-  set content(content: TableComponent) {
-    this.detailTable = content;
-    if (content) {
-      content.updateColumns();
-    }
-  }
-
   @ViewChild('tree') tree: TreeComponent;
 
   icons = Icons;
@@ -59,10 +51,97 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     }
   };
 
+  private detailTable: TableComponent;
+  @ViewChild('detailTable')
+  set content(content: TableComponent) {
+    this.detailTable = content;
+    if (content) {
+      content.updateColumns();
+    }
+  }
   constructor(
     private iscsiBackstorePipe: IscsiBackstorePipe,
     private booleanTextPipe: BooleanTextPipe
   ) {}
+
+  onNodeSelected(tree: TreeModel, node: TreeNode) {
+    TREE_ACTIONS.ACTIVATE(tree, node, true);
+    if (node.data.cdId) {
+      this.title = node.data.name;
+      const tempData = this.metadata[node.data.cdId] || {};
+
+      if (node.data.cdId === 'root') {
+        this.detailTable?.toggleColumn({ prop: 'default', isHidden: true });
+        this.data = _.map(
+          this.settings.target_default_controls,
+          (value, key) => {
+            value = this.format(value);
+            return {
+              displayName: key,
+              default: value,
+              current: !_.isUndefined(tempData[key])
+                ? this.format(tempData[key])
+                : value
+            };
+          }
+        );
+        // Target level authentication was introduced in ceph-iscsi config v11
+        if (this.cephIscsiConfigVersion > 10) {
+          ['user', 'password', 'mutual_user', 'mutual_password'].forEach(
+            (key) => {
+              this.data.push({
+                displayName: key,
+                default: null,
+                current: tempData[key]
+              });
+            }
+          );
+        }
+      } else if (node.data.cdId.toString().startsWith('disk_')) {
+        this.detailTable?.toggleColumn({ prop: 'default', isHidden: true });
+        this.data = _.map(
+          this.settings.disk_default_controls[tempData.backstore],
+          (value, key) => {
+            value = this.format(value);
+            return {
+              displayName: key,
+              default: value,
+              current: !_.isUndefined(tempData.controls[key])
+                ? this.format(tempData.controls[key])
+                : value
+            };
+          }
+        );
+        this.data.push({
+          displayName: 'backstore',
+          default: this.iscsiBackstorePipe.transform(
+            this.settings.default_backstore
+          ),
+          current: this.iscsiBackstorePipe.transform(tempData.backstore)
+        });
+        ['wwn', 'lun'].forEach((k) => {
+          if (k in tempData) {
+            this.data.push({
+              displayName: k,
+              default: undefined,
+              current: tempData[k]
+            });
+          }
+        });
+      } else {
+        this.detailTable?.toggleColumn({ prop: 'default', isHidden: false });
+        this.data = _.map(tempData, (value, key) => ({
+          displayName: key,
+          default: undefined,
+          current: this.format(value)
+        }));
+      }
+    } else {
+      this.data = undefined;
+    }
+
+    this.detailTable?.updateColumns();
+  }
 
   ngOnInit() {
     this.columns = [
@@ -94,6 +173,10 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     }
 
     this.data = undefined;
+  }
+
+  onUpdateData() {
+    this.tree.treeModel.expandAll();
   }
 
   private generateTree() {
@@ -144,7 +227,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       });
       disks.push({
         name: `${disk.pool}/${disk.image}`,
-        cdId: cdId,
+        cdId,
         cdIcon: cssClasses.disks.leaf
       });
     });
@@ -180,11 +263,13 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
       let status = '';
       if (client.info) {
-        status = Object.keys(client.info.state).includes('LOGGED_IN') ? 'logged_in' : 'logged_out';
+        status = Object.keys(client.info.state).includes('LOGGED_IN')
+          ? 'logged_in'
+          : 'logged_out';
       }
       clients.push({
         name: client.client_iqn,
-        status: status,
+        status,
         cdId: 'client_' + client.client_iqn,
         children: luns,
         cdIcon: cssClasses.initiators.leaf
@@ -269,78 +354,5 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       return this.booleanTextPipe.transform(value);
     }
     return value;
-  }
-
-  onNodeSelected(tree: TreeModel, node: TreeNode) {
-    TREE_ACTIONS.ACTIVATE(tree, node, true);
-    if (node.data.cdId) {
-      this.title = node.data.name;
-      const tempData = this.metadata[node.data.cdId] || {};
-
-      if (node.data.cdId === 'root') {
-        this.detailTable?.toggleColumn({ prop: 'default', isHidden: true });
-        this.data = _.map(this.settings.target_default_controls, (value, key) => {
-          value = this.format(value);
-          return {
-            displayName: key,
-            default: value,
-            current: !_.isUndefined(tempData[key]) ? this.format(tempData[key]) : value
-          };
-        });
-        // Target level authentication was introduced in ceph-iscsi config v11
-        if (this.cephIscsiConfigVersion > 10) {
-          ['user', 'password', 'mutual_user', 'mutual_password'].forEach((key) => {
-            this.data.push({
-              displayName: key,
-              default: null,
-              current: tempData[key]
-            });
-          });
-        }
-      } else if (node.data.cdId.toString().startsWith('disk_')) {
-        this.detailTable?.toggleColumn({ prop: 'default', isHidden: true });
-        this.data = _.map(this.settings.disk_default_controls[tempData.backstore], (value, key) => {
-          value = this.format(value);
-          return {
-            displayName: key,
-            default: value,
-            current: !_.isUndefined(tempData.controls[key])
-              ? this.format(tempData.controls[key])
-              : value
-          };
-        });
-        this.data.push({
-          displayName: 'backstore',
-          default: this.iscsiBackstorePipe.transform(this.settings.default_backstore),
-          current: this.iscsiBackstorePipe.transform(tempData.backstore)
-        });
-        ['wwn', 'lun'].forEach((k) => {
-          if (k in tempData) {
-            this.data.push({
-              displayName: k,
-              default: undefined,
-              current: tempData[k]
-            });
-          }
-        });
-      } else {
-        this.detailTable?.toggleColumn({ prop: 'default', isHidden: false });
-        this.data = _.map(tempData, (value, key) => {
-          return {
-            displayName: key,
-            default: undefined,
-            current: this.format(value)
-          };
-        });
-      }
-    } else {
-      this.data = undefined;
-    }
-
-    this.detailTable?.updateColumns();
-  }
-
-  onUpdateData() {
-    this.tree.treeModel.expandAll();
   }
 }

@@ -6,11 +6,11 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
+import { RgwUserListComponent } from './rgw-user-list.component';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
-import { RgwUserListComponent } from './rgw-user-list.component';
 
 describe('RgwUserListComponent', () => {
   let component: RgwUserListComponent;

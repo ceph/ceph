@@ -27,7 +27,8 @@ export class FormatterService {
 
   /**
    * Convert the given value into bytes.
-   * @param {string} value The value to be converted, e.g. 1024B, 10M, 300KiB or 1ZB.
+   *
+   * @param value The value to be converted, e.g. 1024B, 10M, 300KiB or 1ZB.
    * @param error_value The value returned in case the regular expression did not match. Defaults to
    *                    null.
    * @returns Returns the given value in bytes without any unit appended or the defined error value

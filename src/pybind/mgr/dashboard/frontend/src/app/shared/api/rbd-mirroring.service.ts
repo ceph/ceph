@@ -61,12 +61,12 @@ export class RbdMirroringService {
   }
 
   getSiteName() {
-    return this.http.get(`api/block/mirroring/site_name`);
+    return this.http.get('api/block/mirroring/site_name');
   }
 
   setSiteName(@cdEncodeNot siteName: string) {
     return this.http.put(
-      `api/block/mirroring/site_name`,
+      'api/block/mirroring/site_name',
       { site_name: siteName },
       { observe: 'response' }
     );
@@ -82,8 +82,8 @@ export class RbdMirroringService {
     @cdEncodeNot token: string
   ) {
     const request = {
-      direction: direction,
-      token: token
+      direction,
+      token
     };
     return this.http.post(`api/block/mirroring/pool/${poolName}/bootstrap/peer`, request, {
       observe: 'response'

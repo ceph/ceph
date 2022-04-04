@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { WizardComponent } from './wizard.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { WizardComponent } from './wizard.component';
 
 describe('WizardComponent', () => {
   let component: WizardComponent;

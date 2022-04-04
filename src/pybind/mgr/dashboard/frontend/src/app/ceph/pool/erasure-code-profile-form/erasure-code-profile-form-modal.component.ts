@@ -135,12 +135,10 @@ export class ErasureCodeProfileFormModalComponent
   }
 
   private baseValueValidation(dataChunk: boolean = false): boolean {
-    return this.validValidation(() => {
-      return (
+    return this.validValidation(() => (
         this.getKMSum() > this.deviceCount &&
         this.form.getValue('k') > this.form.getValue('m') === dataChunk
-      );
-    });
+      ));
   }
 
   private validValidation(fn: () => boolean, plugin?: string): boolean {

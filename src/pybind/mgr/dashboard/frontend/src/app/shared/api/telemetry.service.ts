@@ -14,7 +14,7 @@ export class TelemetryService {
   }
 
   enable(enable: boolean = true) {
-    const body = { enable: enable };
+    const body = { enable };
     if (enable) {
       body['license_name'] = 'sharing-1-0';
     }

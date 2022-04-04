@@ -20,7 +20,7 @@ export class FormLoadingDirective {
     private componentFactoryResolver: ComponentFactoryResolver
   ) {}
 
-  @Input('cdFormLoading') set cdFormLoading(condition: LoadingStatus) {
+  @Input() set cdFormLoading(condition: LoadingStatus) {
     let factory: any;
     let content: any;
 

@@ -4,11 +4,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
+import { CreateClusterReviewComponent } from './create-cluster-review.component';
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { CreateClusterReviewComponent } from './create-cluster-review.component';
 
 describe('CreateClusterReviewComponent', () => {
   let component: CreateClusterReviewComponent;

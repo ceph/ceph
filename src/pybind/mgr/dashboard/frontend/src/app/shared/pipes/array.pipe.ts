@@ -12,6 +12,7 @@ export class ArrayPipe implements PipeTransform {
   /**
    * Convert the given value into an array. If the value is already an
    * array, then nothing happens, except the `force` flag is set.
+   *
    * @param value The value to process.
    * @param force Convert the specified value to an array, either it is
    *              already an array.

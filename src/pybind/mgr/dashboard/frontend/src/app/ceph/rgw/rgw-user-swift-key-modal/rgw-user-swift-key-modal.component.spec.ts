@@ -5,9 +5,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
+import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal.component';
 
 describe('RgwUserSwiftKeyModalComponent', () => {
   let component: RgwUserSwiftKeyModalComponent;

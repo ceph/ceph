@@ -3,6 +3,8 @@ import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/c
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscriber, Subscription } from 'rxjs';
 
+import { PoolEditModeModalComponent } from '../pool-edit-mode-modal/pool-edit-mode-modal.component';
+import { PoolEditPeerModalComponent } from '../pool-edit-peer-modal/pool-edit-peer-modal.component';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -14,8 +16,6 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { PoolEditModeModalComponent } from '../pool-edit-mode-modal/pool-edit-mode-modal.component';
-import { PoolEditPeerModalComponent } from '../pool-edit-peer-modal/pool-edit-peer-modal.component';
 
 @Component({
   selector: 'cd-mirroring-pools',
@@ -120,7 +120,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
   editPeersModal(mode: string) {
     const initialState = {
       poolName: this.selection.first().name,
-      mode: mode
+      mode
     };
     if (mode === 'edit') {
       initialState['peerUUID'] = this.getPeerUUID();

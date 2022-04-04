@@ -2,8 +2,8 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { of, Subscription } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { TimerService } from './timer.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('TimerService', () => {
   let service: TimerService;

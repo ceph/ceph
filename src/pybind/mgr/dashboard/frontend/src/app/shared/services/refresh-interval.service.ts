@@ -11,6 +11,7 @@ export class RefreshIntervalService implements OnDestroy {
   private intervalDataSource = new BehaviorSubject(null);
   private intervalSubscription: Subscription;
   // Observable streams
+  // eslint-disable-next-line @typescript-eslint/member-ordering
   intervalData$ = this.intervalDataSource.asObservable();
 
   constructor(private ngZone: NgZone) {

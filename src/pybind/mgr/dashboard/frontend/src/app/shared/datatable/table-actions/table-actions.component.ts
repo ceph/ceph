@@ -101,8 +101,8 @@ export class TableActionsComponent implements OnChanges, OnInit {
   /**
    * Determines if action can be used for the button
    *
-   * @param {CdTableAction} action
-   * @returns {boolean}
+   * @param action
+   * @returns
    */
   private showableAction(action: CdTableAction): boolean {
     const condition = action.canBePrimary;
@@ -125,8 +125,8 @@ export class TableActionsComponent implements OnChanges, OnInit {
    * - If no or multiple selections are made
    * - If one selection is made, but a task is executed on that item
    *
-   * @param {CdTableAction} action
-   * @returns {Boolean}
+   * @param action
+   * @returns
    */
   disableSelectionAction(action: CdTableAction): Boolean {
     const disable = action.disable;

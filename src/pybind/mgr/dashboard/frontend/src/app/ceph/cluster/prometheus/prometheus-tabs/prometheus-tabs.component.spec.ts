@@ -3,8 +3,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { PrometheusTabsComponent } from './prometheus-tabs.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('PrometheusTabsComponent', () => {
   let component: PrometheusTabsComponent;

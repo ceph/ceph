@@ -8,6 +8,11 @@ import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
+import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
+import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
+import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
+import { RbdSnapshotModel } from './rbd-snapshot.model';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -24,11 +29,6 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
-import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
-import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
-import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
-import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
-import { RbdSnapshotModel } from './rbd-snapshot.model';
 
 describe('RbdSnapshotListComponent', () => {
   let component: RbdSnapshotListComponent;
@@ -36,12 +36,8 @@ describe('RbdSnapshotListComponent', () => {
   let summaryService: SummaryService;
 
   const fakeAuthStorageService = {
-    isLoggedIn: () => {
-      return true;
-    },
-    getPermissions: () => {
-      return new Permissions({ 'rbd-image': ['read', 'update', 'create', 'delete'] });
-    }
+    isLoggedIn: () => true,
+    getPermissions: () => new Permissions({ 'rbd-image': ['read', 'update', 'create', 'delete'] })
   };
 
   configureTestBed(
@@ -142,7 +138,7 @@ describe('RbdSnapshotListComponent', () => {
       task.name = task_name;
       task.metadata = {
         image_spec: 'rbd/foo',
-        snapshot_name: snapshot_name
+        snapshot_name
       };
       summaryService.addRunningTask(task);
     };
@@ -297,7 +293,7 @@ describe('RbdSnapshotListComponent', () => {
       [2, false]
     ])('should be enabled with version %d and protected %s', (version, is_protected) => {
       actions.cloneFormatVersion = version;
-      const selection = new CdTableSelection([{ name: 'someName', is_protected: is_protected }]);
+      const selection = new CdTableSelection([{ name: 'someName', is_protected }]);
       const disableDesc = actions.getCloneDisableDesc(selection, ['layering']);
       expect(disableDesc).toBe(false);
     });

@@ -95,7 +95,7 @@
           permissions.log.read || permissions.prometheus.read">
         <a (click)="toggleSubMenu('cluster')"
            class="nav-link dropdown-toggle"
-           [attr.aria-expanded]="displayedSubMenu == 'cluster'"
+           [attr.aria-expanded]="displayedSubMenu === 'cluster'"
            aria-controls="collapseBasic">
           <ng-container i18n>Cluster</ng-container>
         </a>
@@ -183,7 +183,7 @@
           (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi)">
         <a class="nav-link dropdown-toggle"
            (click)="toggleSubMenu('block')"
-           [attr.aria-expanded]="displayedSubMenu == 'block'"
+           [attr.aria-expanded]="displayedSubMenu === 'block'"
            aria-controls="collapseBasic"
            [ngStyle]="blockHealthColor()">
           <ng-container i18n>Block</ng-container>
@@ -243,7 +243,7 @@
           *ngIf="permissions.rgw.read && enabledFeature.rgw">
         <a class="nav-link dropdown-toggle"
            (click)="toggleSubMenu('rgw')"
-           [attr.aria-expanded]="displayedSubMenu == 'rgw'"
+           [attr.aria-expanded]="displayedSubMenu === 'rgw'"
            aria-controls="collapseBasic">
           <ng-container i18n>Object Gateway</ng-container>
         </a>

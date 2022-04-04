@@ -22,7 +22,7 @@ export class AuthService {
   ) {}
 
   check(token: string) {
-    return this.http.post('api/auth/check', { token: token });
+    return this.http.post('api/auth/check', { token });
   }
 
   login(credentials: Credentials): Observable<LoginResponse> {

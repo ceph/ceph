@@ -6,8 +6,8 @@ import _ from 'lodash';
  * or, if applied on a method, the specified method.
  *
  * @export
- * @param {Function} [target=null]
- * @returns {*}
+ * @param [target=null]
+ * @returns
  */
 export function cdEncode(...args: any[]): any {
   switch (args.length) {
@@ -27,9 +27,9 @@ export function cdEncode(...args: any[]): any {
  * to be sent in the request's body.
  *
  * @export
- * @param {Object} target
- * @param {string} propertyKey
- * @param {number} index
+ * @param target
+ * @param propertyKey
+ * @param index
  */
 export function cdEncodeNot(target: object, propertyKey: string, index: number) {
   const metadataKey = `__ignore_${propertyKey}`;
@@ -61,7 +61,7 @@ function encodeMethod(target: any, propertyKey: string, descriptor: PropertyDesc
   }
   const originalMethod = descriptor.value;
 
-  descriptor.value = function () {
+  descriptor.value = function() {
     const metadataKey = `__ignore_${propertyKey}`;
     const indices: number[] = target[metadataKey] || [];
     const args = [];

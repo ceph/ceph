@@ -4,8 +4,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { ModalComponent } from './modal.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('ModalComponent', () => {
   let component: ModalComponent;

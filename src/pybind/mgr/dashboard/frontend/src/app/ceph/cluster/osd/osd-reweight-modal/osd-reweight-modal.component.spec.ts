@@ -7,13 +7,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
+import { OsdReweightModalComponent } from './osd-reweight-modal.component';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { BackButtonComponent } from '~/app/shared/components/back-button/back-button.component';
 import { ModalComponent } from '~/app/shared/components/modal/modal.component';
 import { SubmitButtonComponent } from '~/app/shared/components/submit-button/submit-button.component';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { OsdReweightModalComponent } from './osd-reweight-modal.component';
 
 describe('OsdReweightModalComponent', () => {
   let component: OsdReweightModalComponent;

@@ -5,6 +5,15 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
+import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
+import { RgwUserCapability } from '../models/rgw-user-capability';
+import { RgwUserS3Key } from '../models/rgw-user-s3-key';
+import { RgwUserSubuser } from '../models/rgw-user-subuser';
+import { RgwUserSwiftKey } from '../models/rgw-user-swift-key';
+import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rgw-user-capability-modal.component';
+import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
+import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
+import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -16,15 +25,6 @@ import { CdValidators, isEmptyInputValue } from '~/app/shared/forms/cd-validator
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
-import { RgwUserCapability } from '../models/rgw-user-capability';
-import { RgwUserS3Key } from '../models/rgw-user-s3-key';
-import { RgwUserSubuser } from '../models/rgw-user-subuser';
-import { RgwUserSwiftKey } from '../models/rgw-user-swift-key';
-import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rgw-user-capability-modal.component';
-import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
-import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
-import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -375,20 +375,17 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
 
   /**
    * Delete a subuser.
-   * @param {number} index The subuser to delete.
+   *
+   * @param index The subuser to delete.
    */
   deleteSubuser(index: number) {
     const subuser = this.subusers[index];
     // Create an observable to delete the subuser when the form is submitted.
     this.submitObservables.push(this.rgwUserService.deleteSubuser(this.getUID(), subuser.id));
     // Remove the associated S3 keys.
-    this.s3Keys = this.s3Keys.filter((key) => {
-      return key.user !== subuser.id;
-    });
+    this.s3Keys = this.s3Keys.filter((key) => key.user !== subuser.id);
     // Remove the associated Swift keys.
-    this.swiftKeys = this.swiftKeys.filter((key) => {
-      return key.user !== subuser.id;
-    });
+    this.swiftKeys = this.swiftKeys.filter((key) => key.user !== subuser.id);
     // Remove the subuser to update the UI.
     this.subusers.splice(index, 1);
     // Mark the form as dirty to be able to submit it.
@@ -425,7 +422,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * Delete the given capability:
    * - Delete it from the local array to update the UI
    * - Create an observable that will be executed on form submit
-   * @param {number} index The capability to delete.
+   *
+   * @param index The capability to delete.
    */
   deleteCapability(index: number) {
     const cap = this.capabilities[index];
@@ -484,7 +482,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
 
   /**
    * Delete a S3 key.
-   * @param {number} index The S3 key to delete.
+   *
+   * @param index The S3 key to delete.
    */
   deleteS3Key(index: number) {
     const key = this.s3Keys[index];
@@ -498,7 +497,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
 
   /**
    * Show the specified subuser in a modal dialog.
-   * @param {number | undefined} index The subuser to show.
+   *
+   * @param index The subuser to show.
    */
   showSubuserModal(index?: number) {
     const uid = this.getUID();
@@ -521,7 +521,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
 
   /**
    * Show the specified S3 key in a modal dialog.
-   * @param {number | undefined} index The S3 key to show.
+   *
+   * @param index The S3 key to show.
    */
   showS3KeyModal(index?: number) {
     const modalRef = this.modalService.show(RgwUserS3KeyModalComponent);
@@ -543,7 +544,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
 
   /**
    * Show the specified Swift key in a modal dialog.
-   * @param {number} index The Swift key to show.
+   *
+   * @param index The Swift key to show.
    */
   showSwiftKeyModal(index: number) {
     const modalRef = this.modalService.show(RgwUserSwiftKeyModalComponent);
@@ -553,7 +555,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
 
   /**
    * Show the specified capability in a modal dialog.
-   * @param {number | undefined} index The S3 key to show.
+   *
+   * @param index The S3 key to show.
    */
   showCapabilityModal(index?: number) {
     const modalRef = this.modalService.show(RgwUserCapabilityModalComponent);
@@ -574,19 +577,19 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
 
   /**
    * Check if the general user settings (display name, email, ...) have been modified.
-   * @return {Boolean} Returns TRUE if the general user settings have been modified.
+   *
+   * @return Returns TRUE if the general user settings have been modified.
    */
   private _isGeneralDirty(): boolean {
     return ['display_name', 'email', 'max_buckets_mode', 'max_buckets', 'suspended'].some(
-      (path) => {
-        return this.userForm.get(path).dirty;
-      }
+      (path) => this.userForm.get(path).dirty
     );
   }
 
   /**
    * Check if the user quota has been modified.
-   * @return {Boolean} Returns TRUE if the user quota has been modified.
+   *
+   * @return Returns TRUE if the user quota has been modified.
    */
   private _isUserQuotaDirty(): boolean {
     return [
@@ -595,14 +598,13 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       'user_quota_max_size',
       'user_quota_max_objects_unlimited',
       'user_quota_max_objects'
-    ].some((path) => {
-      return this.userForm.get(path).dirty;
-    });
+    ].some((path) => this.userForm.get(path).dirty);
   }
 
   /**
    * Check if the bucket quota has been modified.
-   * @return {Boolean} Returns TRUE if the bucket quota has been modified.
+   *
+   * @return Returns TRUE if the bucket quota has been modified.
    */
   private _isBucketQuotaDirty(): boolean {
     return [
@@ -611,9 +613,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       'bucket_quota_max_size',
       'bucket_quota_max_objects_unlimited',
       'bucket_quota_max_objects'
-    ].some((path) => {
-      return this.userForm.get(path).dirty;
-    });
+    ].some((path) => this.userForm.get(path).dirty);
   }
 
   /**
@@ -633,7 +633,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     };
     const email = this.userForm.getValue('email');
     if (_.isString(email) && email.length > 0) {
-      _.merge(result, { email: email });
+      _.merge(result, { email });
     }
     const generateKey = this.userForm.getValue('generate_key');
     if (!generateKey) {
@@ -719,7 +719,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
 
   /**
    * Helper method to get the user candidates for S3 keys.
-   * @returns {Array} Returns a list of user identifiers.
+   *
+   * @returns Returns a list of user identifiers.
    */
   private _getS3KeyUserCandidates() {
     let result = [];

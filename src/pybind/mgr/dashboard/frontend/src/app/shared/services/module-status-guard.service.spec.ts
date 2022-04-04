@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 import { HttpClient } from '@angular/common/http';
 import { Component, NgZone } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
@@ -6,9 +7,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf, throwError } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrModuleService } from '../api/mgr-module.service';
 import { ModuleStatusGuardService } from './module-status-guard.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('ModuleStatusGuardService', () => {
   let service: ModuleStatusGuardService;
@@ -28,7 +29,7 @@ describe('ModuleStatusGuardService', () => {
   const routes: Routes = [{ path: '**', component: FooComponent }];
 
   const testCanActivate = (
-    getResult: {},
+    getResult: Record<string, unknown>,
     activateResult: boolean,
     urlResult: string,
     backend = 'cephadm',

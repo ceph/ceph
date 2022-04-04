@@ -1,0 +1,96 @@
+{
+  "root": true,
+  "ignorePatterns": [
+    "projects/**/*"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "*.ts"
+      ],
+      "parserOptions": {
+        "project": [
+          "tsconfig.json",
+          "e2e/tsconfig.json"
+        ],
+        "createDefaultProgram": true
+      },
+      "extends": [
+        "plugin:@angular-eslint/ng-cli-compat",
+        "plugin:@angular-eslint/ng-cli-compat--formatting-add-on",
+        "plugin:@angular-eslint/template/process-inline-templates"
+      ],
+      "rules": {
+        "quotes": [2, "single", {"avoidEscape": true}],
+        "@angular-eslint/component-selector": [
+          "error",
+          {
+            "type": "element",
+            "prefix": "cd",
+            "style": "kebab-case"
+          }
+        ],
+        "@angular-eslint/directive-selector": [
+          "error",
+          {
+            "type": "attribute",
+            "prefix": "cd",
+            "style": "camelCase"
+          }
+        ],
+        "@angular-eslint/no-attribute-decorator": "error",
+        "@angular-eslint/no-forward-ref": "error",
+        "@typescript-eslint/consistent-type-definitions": "error",
+        "@typescript-eslint/dot-notation": "off",
+        "@typescript-eslint/naming-convention": [
+          "warn",
+          {
+            "selector": "variable",
+            "format": ["camelCase"]
+          }
+        ],
+        "@typescript-eslint/explicit-member-accessibility": [
+          "off",
+          {
+            "accessibility": "explicit"
+          }
+        ],
+        // TODO: Change to error - From L58 to L67
+        "@typescript-eslint/no-empty-function": "error",
+        "@typescript-eslint/member-ordering": "warn", 
+        "no-underscore-dangle": "warn",
+        "@typescript-eslint/ban-types": "warn",
+        "prefer-arrow/prefer-arrow-functions": "warn",
+        "@typescript-eslint/consistent-type-assertions": "warn",
+        "@typescript-eslint/no-unused-expressions": "warn",
+        "max-len": "warn",
+        "@typescript-eslint/prefer-for-of": "warn",
+        "prefer-const": "warn",
+        "brace-style": [
+          "error",
+          "1tbs"
+        ],
+        "id-blacklist": "warn",
+        "import/no-deprecated": "error",
+        "import/order": "error",
+        "no-duplicate-imports": "error",
+        "no-empty": [
+          "error",
+          {
+            "allowEmptyCatch": true
+          }
+        ],
+        "no-multiple-empty-lines": "error"
+      }
+    },
+    {
+      "files": [
+        "*.html"
+      ],
+      "extends": [
+        "plugin:@angular-eslint/template/recommended"
+      ],
+      "rules": {}
+    }
+  ]
+}

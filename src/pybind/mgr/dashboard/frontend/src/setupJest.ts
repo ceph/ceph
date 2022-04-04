@@ -1,3 +1,4 @@
+/* eslint-disable no-throw-literal */
 import '@angular/localize/init';
 
 import 'jest-preset-angular';

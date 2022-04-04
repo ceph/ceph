@@ -5,12 +5,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { WorkbenchLayoutComponent } from './workbench-layout.component';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { WorkbenchLayoutComponent } from './workbench-layout.component';
 
 describe('WorkbenchLayoutComponent', () => {
   let component: WorkbenchLayoutComponent;

@@ -1,7 +1,7 @@
 import { Validators } from '@angular/forms';
 
-import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { Pool } from '../pool';
+import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 
 export class PoolFormData {
   poolTypes: string[];

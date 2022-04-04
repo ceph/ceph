@@ -3,12 +3,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
+import { TableActionsComponent } from './table-actions.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
-import { TableActionsComponent } from './table-actions.component';
 
 describe('TableActionsComponent', () => {
   let component: TableActionsComponent;
@@ -170,9 +170,7 @@ describe('TableActionsComponent', () => {
         permission: 'delete',
         icon: 'fa-times',
         canBePrimary: (selection: CdTableSelection) => selection.hasSelection,
-        disable: () => {
-          return 'Delete action disabled description';
-        },
+        disable: () => 'Delete action disabled description',
         name: 'DeleteDesc'
       };
 
@@ -191,22 +189,16 @@ describe('TableActionsComponent', () => {
       permission: 'update',
       icon: 'fa-pencil',
       name: 'Edit',
-      click: () => {
-        return 'Edit action click';
-      }
+      click: () => 'Edit action click'
     };
 
     it('should call click action if action is not disabled', () => {
-      editClickAction.disable = () => {
-        return false;
-      };
+      editClickAction.disable = () => false;
       expect(component.useClickAction(editClickAction)).toBe('Edit action click');
     });
 
     it('should not call click action if action is disabled', () => {
-      editClickAction.disable = () => {
-        return true;
-      };
+      editClickAction.disable = () => true;
       expect(component.useClickAction(editClickAction)).toBeFalsy();
     });
   });

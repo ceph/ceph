@@ -25,7 +25,7 @@ export class UserService {
   }
 
   create(user: UserFormModel) {
-    return this.http.post(`api/user`, user);
+    return this.http.post('api/user', user);
   }
 
   update(user: UserFormModel) {
@@ -54,8 +54,8 @@ export class UserService {
 
   validatePassword(password: string, username: string = null, oldPassword: string = null) {
     return this.http.post('api/user/validate_password', {
-      password: password,
-      username: username,
+      password,
+      username,
       old_password: oldPassword
     });
   }

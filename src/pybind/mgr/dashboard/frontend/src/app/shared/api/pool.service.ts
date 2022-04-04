@@ -67,8 +67,6 @@ export class PoolService {
     return this.http
       .get(`${this.apiPath}?attrs=${attrsStr}`)
       .toPromise()
-      .then((resp: any) => {
-        return resp;
-      });
+      .then((resp: any) => resp);
   }
 }

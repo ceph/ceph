@@ -4,9 +4,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
+import { RoleDetailsComponent } from './role-details.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { RoleDetailsComponent } from './role-details.component';
 
 describe('RoleDetailsComponent', () => {
   let component: RoleDetailsComponent;

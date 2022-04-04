@@ -5,10 +5,10 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
-import { AuthService } from '~/app/shared/api/auth.service';
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { AuthModule } from '../auth.module';
 import { LoginComponent } from './login.component';
+import { AuthService } from '~/app/shared/api/auth.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('LoginComponent', () => {
   let component: LoginComponent;

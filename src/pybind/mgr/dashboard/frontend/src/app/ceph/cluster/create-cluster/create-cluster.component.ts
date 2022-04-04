@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { forkJoin, Subscription } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 
+import { DriveGroup } from '../osd/osd-form/drive-group.model';
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -20,7 +21,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
-import { DriveGroup } from '../osd/osd-form/drive-group.model';
 
 @Component({
   selector: 'cd-create-cluster',

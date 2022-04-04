@@ -3,10 +3,10 @@ import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
+import { CephfsListComponent } from './cephfs-list.component';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { CephfsListComponent } from './cephfs-list.component';
 
 @Component({ selector: 'cd-cephfs-tabs', template: '' })
 class CephfsTabsStubComponent {

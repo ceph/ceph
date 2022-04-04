@@ -14,10 +14,11 @@ import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
   providedIn: 'root'
 })
 export class PrometheusAlertService {
-  private canAlertsBeNotified = false;
   alerts: AlertmanagerAlert[] = [];
   rules: PrometheusRule[] = [];
   activeAlerts: number;
+
+  private canAlertsBeNotified = false;
 
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
@@ -40,14 +41,16 @@ export class PrometheusAlertService {
   getRules() {
     this.prometheusService.ifPrometheusConfigured(() => {
       this.prometheusService.getRules('alerting').subscribe((groups) => {
-        this.rules = groups['groups'].reduce((acc, group) => {
-          return acc.concat(
-            group.rules.map((rule) => {
-              rule.group = group.name;
-              return rule;
-            })
-          );
-        }, []);
+        this.rules = groups['groups'].reduce(
+          (acc, group) =>
+            acc.concat(
+              group.rules.map((rule) => {
+                rule.group = group.name;
+                return rule;
+              })
+            ),
+          []
+        );
       });
     });
   }
@@ -70,31 +73,43 @@ export class PrometheusAlertService {
     this.canAlertsBeNotified = true;
   }
 
-  private notifyOnAlertChanges(alerts: AlertmanagerAlert[], oldAlerts: AlertmanagerAlert[]) {
+  private notifyOnAlertChanges(
+    alerts: AlertmanagerAlert[],
+    oldAlerts: AlertmanagerAlert[]
+  ) {
     const changedAlerts = this.getChangedAlerts(
       this.alertFormatter.convertToCustomAlerts(alerts),
       this.alertFormatter.convertToCustomAlerts(oldAlerts)
     );
-    const suppressedFiltered = _.filter(changedAlerts, (alert) => {
-      return alert.status !== 'suppressed';
-    });
+    const suppressedFiltered = _.filter(
+      changedAlerts,
+      (alert) => alert.status !== 'suppressed'
+    );
     const notifications = suppressedFiltered.map((alert) =>
       this.alertFormatter.convertAlertToNotification(alert)
     );
     this.alertFormatter.sendNotifications(notifications);
   }
 
-  private getChangedAlerts(alerts: PrometheusCustomAlert[], oldAlerts: PrometheusCustomAlert[]) {
+  private getChangedAlerts(
+    alerts: PrometheusCustomAlert[],
+    oldAlerts: PrometheusCustomAlert[]
+  ) {
     const updatedAndNew = _.differenceWith(alerts, oldAlerts, _.isEqual);
     return updatedAndNew.concat(this.getVanishedAlerts(alerts, oldAlerts));
   }
 
-  private getVanishedAlerts(alerts: PrometheusCustomAlert[], oldAlerts: PrometheusCustomAlert[]) {
-    return _.differenceWith(oldAlerts, alerts, (a, b) => a.fingerprint === b.fingerprint).map(
-      (alert) => {
-        alert.status = 'resolved';
-        return alert;
-      }
-    );
+  private getVanishedAlerts(
+    alerts: PrometheusCustomAlert[],
+    oldAlerts: PrometheusCustomAlert[]
+  ) {
+    return _.differenceWith(
+      oldAlerts,
+      alerts,
+      (a, b) => a.fingerprint === b.fingerprint
+    ).map((alert) => {
+      alert.status = 'resolved';
+      return alert;
+    });
   }
 }

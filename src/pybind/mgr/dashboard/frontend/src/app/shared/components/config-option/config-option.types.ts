@@ -2,8 +2,8 @@ import { Validators } from '@angular/forms';
 
 import _ from 'lodash';
 
-import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { ConfigFormModel } from './config-option.model';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 
 export class ConfigOptionTypes {
   // TODO: I18N
@@ -71,9 +71,7 @@ export class ConfigOptionTypes {
   ];
 
   public static getType(type: string): any {
-    const currentType = _.find(this.knownTypes, (t) => {
-      return t.name === type;
-    });
+    const currentType = _.find(this.knownTypes, (t) => t.name === type);
 
     if (currentType !== undefined) {
       return currentType;

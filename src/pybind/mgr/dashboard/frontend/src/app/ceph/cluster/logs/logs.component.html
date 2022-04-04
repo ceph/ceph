@@ -31,7 +31,7 @@
                     [innerHTML]="line.message | searchHighlight: search"></span>
             </p>
 
-            <ng-container *ngIf="clog.length != 0 else noEntriesTpl"></ng-container>
+            <ng-container *ngIf="clog.length !== 0 else noEntriesTpl"></ng-container>
           </div>
         </div>
       </ng-template>
@@ -62,7 +62,7 @@
                     [innerHTML]="line.message | searchHighlight: search"></span>
             </p>
 
-            <ng-container *ngIf="audit_log.length != 0 else noEntriesTpl"></ng-container>
+            <ng-container *ngIf="audit_log.length !== 0 else noEntriesTpl"></ng-container>
           </div>
         </div>
       </ng-template>

@@ -7,6 +7,9 @@ import _ from 'lodash';
 import moment from 'moment';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
+import { UserFormMode } from './user-form-mode.enum';
+import { UserFormRoleModel } from './user-form-role.model';
+import { UserFormModel } from './user-form.model';
 import { AuthService } from '~/app/shared/api/auth.service';
 import { RoleService } from '~/app/shared/api/role.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
@@ -25,9 +28,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PasswordPolicyService } from '~/app/shared/services/password-policy.service';
-import { UserFormMode } from './user-form-mode.enum';
-import { UserFormRoleModel } from './user-form-role.model';
-import { UserFormModel } from './user-form.model';
 
 @Component({
   selector: 'cd-user-form',
@@ -258,9 +258,7 @@ export class UserFormComponent extends CdForm implements OnInit {
     for (const role of this.allRoles) {
       if (roles.indexOf(role.name) !== -1 && role.scopes_permissions['user']) {
         const userPermissions = role.scopes_permissions['user'];
-        return ['read', 'update'].every((permission) => {
-          return userPermissions.indexOf(permission) !== -1;
-        });
+        return ['read', 'update'].every((permission) => userPermissions.indexOf(permission) !== -1);
       }
     }
     return false;

@@ -144,9 +144,7 @@ export class BreadcrumbsComponent implements OnDestroy {
 
   private getTitleFromCrumbs(crumbs: IBreadcrumb[]): string {
     const currentLocation = crumbs
-      .map((crumb: IBreadcrumb) => {
-        return crumb.text || '';
-      })
+      .map((crumb: IBreadcrumb) => crumb.text || '')
       .join(' > ');
     if (currentLocation.length > 0) {
       return `Ceph: ${currentLocation}`;

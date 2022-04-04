@@ -59,7 +59,8 @@ export class RbdSnapshotFormModalComponent {
   /**
    * Set the 'editing' flag. If set to TRUE, the modal dialog is in
    * 'Edit' mode, otherwise in 'Create' mode.
-   * @param {boolean} editing
+   *
+   * @param editing
    */
   setEditing(editing: boolean = true) {
     this.editing = editing;

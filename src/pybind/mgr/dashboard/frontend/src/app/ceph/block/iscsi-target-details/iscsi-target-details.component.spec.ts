@@ -3,9 +3,9 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { TreeModel, TreeModule } from '@circlon/angular-tree-component';
 
+import { IscsiTargetDetailsComponent } from './iscsi-target-details.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { IscsiTargetDetailsComponent } from './iscsi-target-details.component';
 
 describe('IscsiTargetDetailsComponent', () => {
   let component: IscsiTargetDetailsComponent;

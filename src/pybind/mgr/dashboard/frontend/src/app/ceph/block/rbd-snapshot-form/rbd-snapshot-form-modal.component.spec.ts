@@ -6,11 +6,11 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
+import { RbdSnapshotFormModalComponent } from './rbd-snapshot-form-modal.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { RbdSnapshotFormModalComponent } from './rbd-snapshot-form-modal.component';
 
 describe('RbdSnapshotFormModalComponent', () => {
   let component: RbdSnapshotFormModalComponent;

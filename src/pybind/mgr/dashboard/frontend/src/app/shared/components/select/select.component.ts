@@ -3,10 +3,10 @@ import { FormControl, ValidatorFn } from '@angular/forms';
 
 import _ from 'lodash';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SelectMessages } from './select-messages.model';
 import { SelectOption } from './select-option.model';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-select',
@@ -75,7 +75,7 @@ export class SelectComponent implements OnInit, OnChanges {
     }
     option.selected = !option.selected;
     this.updateOptions();
-    this.selection.emit({ option: option });
+    this.selection.emit({ option });
   }
 
   private updateOptions() {

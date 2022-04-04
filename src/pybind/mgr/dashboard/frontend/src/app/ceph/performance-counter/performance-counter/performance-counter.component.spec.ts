@@ -3,10 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { TablePerformanceCounterComponent } from '../table-performance-counter/table-performance-counter.component';
 import { PerformanceCounterComponent } from './performance-counter.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('PerformanceCounterComponent', () => {
   let component: PerformanceCounterComponent;

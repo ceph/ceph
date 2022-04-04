@@ -7,11 +7,11 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { PoolEditModeModalComponent } from './pool-edit-mode-modal.component';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { PoolEditModeModalComponent } from './pool-edit-mode-modal.component';
 
 describe('PoolEditModeModalComponent', () => {
   let component: PoolEditModeModalComponent;

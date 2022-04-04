@@ -5,19 +5,19 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
-import { ModalService } from '~/app/shared/services/modal.service';
-import { configureTestBed, FixtureHelper } from '~/testing/unit-test-helper';
 import { BackButtonComponent } from '../back-button/back-button.component';
 import { FormButtonPanelComponent } from '../form-button-panel/form-button-panel.component';
 import { ModalComponent } from '../modal/modal.component';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { ConfirmationModalComponent } from './confirmation-modal.component';
+import { configureTestBed, FixtureHelper } from '~/testing/unit-test-helper';
+import { ModalService } from '~/app/shared/services/modal.service';
 
 @NgModule({})
 export class MockModule {}
 
 @Component({
-  template: `<ng-template #fillTpl>Template based description.</ng-template>`
+  template: '<ng-template #fillTpl>Template based description.</ng-template>'
 })
 class MockComponent {
   @ViewChild('fillTpl', { static: true })

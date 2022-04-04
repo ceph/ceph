@@ -8,6 +8,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { RoleFormComponent } from './role-form.component';
+import { RoleFormModel } from './role-form.model';
 import { RoleService } from '~/app/shared/api/role.service';
 import { ScopeService } from '~/app/shared/api/scope.service';
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
@@ -15,8 +17,6 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { RoleFormComponent } from './role-form.component';
-import { RoleFormModel } from './role-form.model';
 
 describe('RoleFormComponent', () => {
   let component: RoleFormComponent;

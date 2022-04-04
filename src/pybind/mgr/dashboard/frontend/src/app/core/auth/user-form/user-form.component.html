@@ -115,7 +115,7 @@
                  for="pwdExpirationDate">
             <ng-container i18n>Password expiration date</ng-container>
             <cd-helper class="text-pre-wrap"
-                       *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0">
+                       *ngIf="pwdExpirationSettings.pwdExpirationSpan === 0">
               <p>
                 The Dashboard setting defining the expiration interval of
                 passwords is currently set to <strong>0</strong>. This means

@@ -1,10 +1,10 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdConfigurationSourceField } from '../models/configuration';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
 import { PoolService } from './pool.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('PoolService', () => {
   let service: PoolService;

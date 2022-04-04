@@ -9,8 +9,8 @@ export class DurationPipe implements PipeTransform {
    * Translates seconds into human readable format of seconds, minutes, hours, days, and years
    * source: https://stackoverflow.com/a/34270811
    *
-   * @param  {number} seconds The number of seconds to be processed
-   * @return {string}         The phrase describing the the amount of time
+   * @param seconds The number of seconds to be processed
+   * @return         The phrase describing the the amount of time
    */
   transform(seconds: number): string {
     if (seconds === null || seconds <= 0) {

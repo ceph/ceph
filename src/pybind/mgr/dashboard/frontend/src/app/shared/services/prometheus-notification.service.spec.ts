@@ -4,7 +4,6 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ToastrModule, ToastrService } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
-import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -13,6 +12,7 @@ import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 import { PrometheusNotificationService } from './prometheus-notification.service';
+import { configureTestBed, PrometheusHelper } from '~/testing/unit-test-helper';
 
 describe('PrometheusNotificationService', () => {
   let service: PrometheusNotificationService;
@@ -21,7 +21,7 @@ describe('PrometheusNotificationService', () => {
   let prometheusService: PrometheusService;
   let prometheus: PrometheusHelper;
   let shown: CdNotificationConfig[];
-  let getNotificationSinceMock: Function;
+  let getNotificationSinceMock: () => void;
 
   const toastFakeService = {
     error: () => true,
@@ -49,7 +49,7 @@ describe('PrometheusNotificationService', () => {
     spyOn(notificationService, 'show').and.callThrough();
     spyOn(notificationService, 'save').and.callFake((n) => shown.push(n));
 
-    spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
+    spyOn(window, 'setTimeout').and.callFake((fn: () => void) => fn());
 
     prometheusService = TestBed.inject(PrometheusService);
     getNotificationSinceMock = () => of(notifications);
@@ -106,6 +106,7 @@ describe('PrometheusNotificationService', () => {
       tick(20);
     };
 
+    // eslint-disable-next-line @typescript-eslint/ban-types
     const expectShown = (expected: object[]) => {
       tick(500);
       expect(shown.length).toBe(expected.length);

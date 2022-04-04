@@ -37,7 +37,8 @@ export class CdTableSelection {
 
   /**
    * Get the first selected row.
-   * @return {any | null}
+   *
+   * @return
    */
   first() {
     return this.hasSelection ? this._selected[0] : null;

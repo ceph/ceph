@@ -5,16 +5,15 @@ import { URLVerbs } from '../constants/app.constants';
 export class URLBuilderService {
   constructor(readonly base: string) {}
 
+  static buildURL(absolute: boolean, ...segments: string[]): string {
+    return URLBuilderService.concatURLSegments([
+      ...(absolute ? ['/'] : []),
+      ...segments
+    ]);
+  }
+
   private static concatURLSegments(segments: string[]): string {
     return segments.reduce(Location.joinWithSlash);
-  }
-
-  static buildURL(absolute: boolean, ...segments: string[]): string {
-    return URLBuilderService.concatURLSegments([...(absolute ? ['/'] : []), ...segments]);
-  }
-
-  private getURL(verb: URLVerbs, absolute = true, ...segments: string[]): string {
-    return URLBuilderService.buildURL(absolute, this.base, verb, ...segments);
   }
 
   getCreate(absolute = true): string {
@@ -46,5 +45,13 @@ export class URLBuilderService {
   // Prometheus wording
   getRecreate(item: string, absolute = true): string {
     return this.getURL(URLVerbs.RECREATE, absolute, item);
+  }
+
+  private getURL(
+    verb: URLVerbs,
+    absolute = true,
+    ...segments: string[]
+  ): string {
+    return URLBuilderService.buildURL(absolute, this.base, verb, ...segments);
   }
 }

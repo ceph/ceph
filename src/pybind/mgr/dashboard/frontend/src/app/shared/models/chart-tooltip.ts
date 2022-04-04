@@ -13,10 +13,11 @@ export class ChartTooltip {
 
   /**
    * Creates an instance of ChartTooltip.
-   * @param {ElementRef} chartCanvas Canvas Element
-   * @param {ElementRef} chartTooltip Tooltip Element
-   * @param {Function} getStyleLeft Function that calculates the value of Left
-   * @param {Function} getStyleTop Function that calculates the value of Top
+   *
+   * @param chartCanvas Canvas Element
+   * @param chartTooltip Tooltip Element
+   * @param getStyleLeft Function that calculates the value of Left
+   * @param getStyleTop Function that calculates the value of Top
    * @memberof ChartTooltip
    */
   constructor(
@@ -34,7 +35,7 @@ export class ChartTooltip {
   /**
    * Implementation of a ChartJS custom tooltip function.
    *
-   * @param {any} tooltip
+   * @param tooltip
    * @memberof ChartTooltip
    */
   customTooltips(tooltip: any) {
@@ -55,9 +56,7 @@ export class ChartTooltip {
     // Set Text
     if (tooltip.body) {
       const titleLines = tooltip.title || [];
-      const bodyLines = tooltip.body.map((bodyItem: any) => {
-        return bodyItem.lines;
-      });
+      const bodyLines = tooltip.body.map((bodyItem: any) => bodyItem.lines);
 
       let innerHtml = '<thead>';
 

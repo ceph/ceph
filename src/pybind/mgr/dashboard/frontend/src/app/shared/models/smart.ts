@@ -1,3 +1,4 @@
+/* eslint-disable id-blacklist */
 export interface SmartAttribute {
   flags: {
     auto_keep: boolean;

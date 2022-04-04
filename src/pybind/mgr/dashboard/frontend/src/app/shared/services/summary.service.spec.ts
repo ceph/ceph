@@ -4,11 +4,11 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf, Subscriber, Subscription } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { ExecutingTask } from '../models/executing-task';
 import { Summary } from '../models/summary.model';
 import { AuthStorageService } from './auth-storage.service';
 import { SummaryService } from './summary.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('SummaryService', () => {
   let summaryService: SummaryService;
@@ -161,17 +161,17 @@ describe('SummaryService', () => {
         result = response;
       });
 
-      const exec_task = new ExecutingTask('rbd/delete', {
+      const execTask = new ExecutingTask('rbd/delete', {
         pool_name: 'somePool',
         image_name: 'someImage'
       });
 
-      result.executing_tasks = [exec_task];
+      result.executing_tasks = [execTask];
       nextSummary(result);
 
       expect(result.executing_tasks.length).toBe(1);
 
-      summaryService.addRunningTask(exec_task);
+      summaryService.addRunningTask(execTask);
 
       expect(result.executing_tasks.length).toBe(1);
     });

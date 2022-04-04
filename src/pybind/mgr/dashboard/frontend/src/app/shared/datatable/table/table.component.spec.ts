@@ -9,6 +9,7 @@ import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import _ from 'lodash';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
+import { TableComponent } from './table.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
@@ -16,7 +17,6 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
   let component: TableComponent;
@@ -404,15 +404,15 @@ describe('TableComponent', () => {
 
     it('should search with spaces', () => {
       const expectedResult = [{ a: 2, b: 20, c: false }];
-      expectSearch(`'Index times ten':20`, expectedResult);
+      expectSearch('\'Index times ten\':20', expectedResult);
       expectSearch('index+times+ten:20', expectedResult);
     });
 
     it('should filter results although column name is incomplete', () => {
       component.data = createFakeData(3);
-      expectSearch(`'Index times ten'`, []);
-      expectSearch(`'Ind'`, []);
-      expectSearch(`'Ind:'`, [
+      expectSearch('\'Index times ten\'', []);
+      expectSearch('\'Ind\'', []);
+      expectSearch('\'Ind:\'', [
         { a: 0, b: 0, c: false },
         { a: 1, b: 10, c: true },
         { a: 2, b: 20, c: false }
@@ -452,7 +452,7 @@ describe('TableComponent', () => {
   describe('after ngInit', () => {
     const toggleColumn = (prop: string, checked: boolean) => {
       component.toggleColumn({
-        prop: prop,
+        prop,
         isHidden: checked
       });
     };

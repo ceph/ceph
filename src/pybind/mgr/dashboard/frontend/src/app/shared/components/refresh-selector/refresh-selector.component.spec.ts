@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
+import { RefreshSelectorComponent } from './refresh-selector.component';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { RefreshSelectorComponent } from './refresh-selector.component';
 
 describe('RefreshSelectorComponent', () => {
   let component: RefreshSelectorComponent;

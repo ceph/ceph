@@ -81,6 +81,7 @@ export class NotificationService {
 
   /**
    * Method for showing a notification.
+   *
    * @param {NotificationType} type toastr type
    * @param {string} title
    * @param {string} [message] The message to be displayed. Note, use this field
@@ -217,7 +218,8 @@ export class NotificationService {
 
   /**
    * Prevent the notification from being shown.
-   * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
+   *
+   * @param timeoutId A number representing the ID of the timeout to be canceled.
    */
   cancel(timeoutId: number) {
     window.clearTimeout(timeoutId);
@@ -225,7 +227,8 @@ export class NotificationService {
 
   /**
    * Suspend showing the notification toasties.
-   * @param {boolean} suspend Set to ``true`` to disable/hide toasties.
+   *
+   * @param suspend Set to ``true`` to disable/hide toasties.
    */
   suspendToasties(suspend: boolean) {
     this.hideToasties = suspend;

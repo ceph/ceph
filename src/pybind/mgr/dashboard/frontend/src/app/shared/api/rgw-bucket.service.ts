@@ -22,6 +22,7 @@ export class RgwBucketService extends ApiClient {
 
   /**
    * Get the list of buckets.
+   *
    * @return Observable<Object[]>
    */
   list(stats: boolean = false, uid: string = '') {
@@ -32,15 +33,13 @@ export class RgwBucketService extends ApiClient {
       }
       return this.http.get(this.url, {
         headers: { Accept: this.getVersionHeaderValue(1, 1) },
-        params: params
+        params
       });
     });
   }
 
   get(bucket: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(`${this.url}/${bucket}`, { params: params });
-    });
+    return this.rgwDaemonService.request((params: HttpParams) => this.http.get(`${this.url}/${bucket}`, { params }));
   }
 
   create(
@@ -52,8 +51,7 @@ export class RgwBucketService extends ApiClient {
     lock_mode: 'GOVERNANCE' | 'COMPLIANCE',
     lock_retention_period_days: string
   ) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.post(this.url, null, {
+    return this.rgwDaemonService.request((params: HttpParams) => this.http.post(this.url, null, {
         params: new HttpParams({
           fromObject: {
             bucket,
@@ -66,8 +64,7 @@ export class RgwBucketService extends ApiClient {
             daemon_name: params.get('daemon_name')
           }
         })
-      });
-    });
+      }));
   }
 
   update(
@@ -90,20 +87,21 @@ export class RgwBucketService extends ApiClient {
       params = params.append('mfa_token_pin', mfaTokenPin);
       params = params.append('lock_mode', lockMode);
       params = params.append('lock_retention_period_days', lockRetentionPeriodDays);
-      return this.http.put(`${this.url}/${bucket}`, null, { params: params });
+      return this.http.put(`${this.url}/${bucket}`, null, { params });
     });
   }
 
   delete(bucket: string, purgeObjects = true) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.append('purge_objects', purgeObjects ? 'true' : 'false');
-      return this.http.delete(`${this.url}/${bucket}`, { params: params });
+      return this.http.delete(`${this.url}/${bucket}`, { params });
     });
   }
 
   /**
    * Check if the specified bucket exists.
-   * @param {string} bucket The bucket name to check.
+   *
+   * @param bucket The bucket name to check.
    * @return Observable<boolean>
    */
   exists(bucket: string) {

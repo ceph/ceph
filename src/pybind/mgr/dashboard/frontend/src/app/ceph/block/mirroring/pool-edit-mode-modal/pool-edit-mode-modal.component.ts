@@ -4,12 +4,12 @@ import { AbstractControl, FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription } from 'rxjs';
 
+import { PoolEditModeResponseModel } from './pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { PoolEditModeResponseModel } from './pool-edit-mode-response.model';
 
 @Component({
   selector: 'cd-pool-edit-mode-modal',

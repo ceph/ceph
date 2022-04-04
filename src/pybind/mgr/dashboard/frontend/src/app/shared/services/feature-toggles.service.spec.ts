@@ -1,8 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { discardPeriodicTasks, fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { FeatureTogglesService } from './feature-toggles.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('FeatureTogglesService', () => {
   let httpTesting: HttpTestingController;

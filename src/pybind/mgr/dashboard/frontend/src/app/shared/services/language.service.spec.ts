@@ -1,8 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { LanguageService } from './language.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('LanguageService', () => {
   let service: LanguageService;

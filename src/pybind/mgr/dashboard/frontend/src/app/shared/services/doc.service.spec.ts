@@ -3,9 +3,9 @@ import { TestBed } from '@angular/core/testing';
 
 import { Subscriber } from 'rxjs';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { SharedModule } from '../shared.module';
 import { DocService } from './doc.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('DocService', () => {
   let service: DocService;

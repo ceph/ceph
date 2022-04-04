@@ -1,9 +1,9 @@
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { CephfsDetailComponent } from './cephfs-detail.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { CephfsDetailComponent } from './cephfs-detail.component';
 
 @Component({ selector: 'cd-cephfs-chart', template: '' })
 class CephfsChartStubComponent {

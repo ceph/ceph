@@ -445,8 +445,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     }
   }
 
-  searchLabels = (text$: Observable<string>) => {
-    return merge(
+  searchLabels = (text$: Observable<string>) => merge(
       text$.pipe(debounceTime(200), distinctUntilChanged()),
       this.labelFocus,
       this.labelClick.pipe(filter(() => !this.typeahead.isPopupOpen()))
@@ -457,7 +456,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           .slice(0, 10)
       )
     );
-  };
 
   fileUpload(files: FileList, controlName: string) {
     const file: File = files[0];

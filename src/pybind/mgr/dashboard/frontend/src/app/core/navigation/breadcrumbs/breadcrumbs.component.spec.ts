@@ -5,9 +5,9 @@ import { Title } from '@angular/platform-browser';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { BreadcrumbsComponent } from './breadcrumbs.component';
 import { PerformanceCounterBreadcrumbsResolver } from '~/app/app-routing.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { BreadcrumbsComponent } from './breadcrumbs.component';
 
 describe('BreadcrumbsComponent', () => {
   let component: BreadcrumbsComponent;

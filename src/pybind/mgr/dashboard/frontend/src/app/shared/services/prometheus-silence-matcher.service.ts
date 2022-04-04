@@ -39,6 +39,10 @@ export class PrometheusSilenceMatcherService {
     return this.describeMatch(rules);
   }
 
+  getAttributePath(name: string): string {
+    return this.valueAttributePath[name];
+  }
+
   private getMatchedRules(
     matcher: AlertmanagerSilenceMatcher,
     rules: PrometheusRule[]
@@ -47,17 +51,15 @@ export class PrometheusSilenceMatcherService {
     return rules.filter((r) => _.get(r, attributePath) === matcher.value);
   }
 
-  private describeMatch(rules: PrometheusRule[]): AlertmanagerSilenceMatcherMatch {
+  private describeMatch(
+    rules: PrometheusRule[]
+  ): AlertmanagerSilenceMatcherMatch {
     let alerts = 0;
     rules.forEach((r) => (alerts += r.alerts.length));
     return {
       status: this.getMatchText(rules.length, alerts),
       cssClass: alerts ? 'has-success' : 'has-warning'
     };
-  }
-
-  getAttributePath(name: string): string {
-    return this.valueAttributePath[name];
   }
 
   private getMatchText(rules: number, alerts: number): string {

@@ -6,10 +6,10 @@
                  || healthData.mon_status
                  || healthData.osd_map
                  || healthData.mgr_map
-                 || healthData.hosts != null
-                 || healthData.rgw != null
+                 || healthData.hosts !== null
+                 || healthData.rgw !== null
                  || healthData.fs_map
-                 || healthData.iscsi_daemons != null">
+                 || healthData.iscsi_daemons !== null">
 
     <cd-info-card cardTitle="Cluster Status"
                   i18n-cardTitle
@@ -29,7 +29,7 @@
              [ngStyle]="healthData.health.status | healthColor"
              [ngbPopover]="healthChecks"
              popoverClass="info-card-popover-cluster-status">
-          {{ healthData.health.status }} <i *ngIf="healthData.health?.status != 'HEALTH_OK'"
+          {{ healthData.health.status }} <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
                                             class="fa fa-exclamation-triangle"></i>
         </div>
       </ng-container>
@@ -45,7 +45,7 @@
                   link="/hosts"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="healthData.hosts != null">
+                  *ngIf="healthData.hosts !== null">
       {{ healthData.hosts }} total
     </cd-info-card>
 
@@ -77,7 +77,7 @@
                   *ngIf="healthData.mgr_map">
       <span *ngFor="let result of (healthData.mgr_map | mgrSummary)"
             [ngClass]="result.class"
-            [title]="result.titleText != null ? result.titleText : ''">
+            [title]="result.titleText !== null ? result.titleText : ''">
         {{ result.content }}
       </span>
     </cd-info-card>
@@ -87,7 +87,7 @@
                   link="/rgw/daemon"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="enabledFeature.rgw && healthData.rgw != null">
+                  *ngIf="enabledFeature.rgw && healthData.rgw !== null">
       {{ healthData.rgw }} total
     </cd-info-card>
 
@@ -99,7 +99,7 @@
       <!-- TODO: check text-area-size-2 -->
       <span *ngFor="let result of transformedResult"
             [ngClass]="result.class"
-            [title]="result.titleText != null ? result.titleText : ''">
+            [title]="result.titleText !== null ? result.titleText : ''">
         {{ result.content }}
       </span>
     </cd-info-card>
@@ -109,7 +109,7 @@
                   link="/block/iscsi"
                   class="cd-status-card"
                   contentClass="content-highlight"
-                  *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons != null">
+                  *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons !== null">
       {{ healthData.iscsi_daemons.up + healthData.iscsi_daemons.down }} total
       <span class="card-text-line-break"></span>
       {{ healthData.iscsi_daemons.up }} up,
@@ -139,7 +139,7 @@
                   i18n-cardTitle
                   class="cd-capacity-card cd-chart-card"
                   contentClass="content-chart"
-                  *ngIf="healthData.pg_info?.object_stats?.num_objects != null">
+                  *ngIf="healthData.pg_info?.object_stats?.num_objects !== null">
       <cd-health-pie [data]="healthData"
                      (prepareFn)="prepareObjects($event[0], $event[1])">
       </cd-health-pie>

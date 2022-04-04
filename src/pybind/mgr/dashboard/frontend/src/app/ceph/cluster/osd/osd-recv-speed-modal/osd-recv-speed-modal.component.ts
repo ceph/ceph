@@ -91,9 +91,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   }
 
   detectPriority(configOptionValues: any, callbackFn: Function) {
-    const priority = _.find(this.priorities, (p) => {
-      return _.isEqual(p.values, configOptionValues);
-    });
+    const priority = _.find(this.priorities, (p) => _.isEqual(p.values, configOptionValues));
 
     this.osdRecvSpeedForm.controls.customizePriority.setValue(false);
 
@@ -138,9 +136,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   }
 
   setPriority(priority: any) {
-    const customPriority = _.find(this.priorities, (p) => {
-      return p.name === 'custom';
-    });
+    const customPriority = _.find(this.priorities, (p) => p.name === 'custom');
 
     if (priority.name === 'custom') {
       if (!customPriority) {
@@ -190,7 +186,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       const customPriority = {
         name: 'custom',
         text: $localize`Custom`,
-        values: values
+        values
       };
       this.setPriority(customPriority);
     } else {
@@ -202,9 +198,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
 
   onPriorityChange(selectedPriorityName: string) {
     const selectedPriority =
-      _.find(this.priorities, (p) => {
-        return p.name === selectedPriorityName;
-      }) || this.priorities[0];
+      _.find(this.priorities, (p) => p.name === selectedPriorityName) || this.priorities[0];
     // Uncheck the 'Customize priority values' checkbox.
     this.osdRecvSpeedForm.get('customizePriority').setValue(false);
     // Set the priority profile values.
@@ -220,7 +214,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       };
     });
 
-    this.configService.bulkCreate({ options: options }).subscribe(
+    this.configService.bulkCreate({ options }).subscribe(
       () => {
         this.notificationService.show(
           NotificationType.success,

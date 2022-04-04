@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/member-ordering */
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
@@ -18,6 +19,7 @@ export class TimeDiffService {
 
   /**
    * Get the duration in the format '[Nd] [Nh] [Nm]', e.g. '2d 1h 15m'.
+   *
    * @param ms The time in milliseconds.
    * @return The duration. An empty string is returned if the duration is
    *   less than a minute.

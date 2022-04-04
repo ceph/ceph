@@ -20,7 +20,7 @@ export class ClusterService {
   updateStatus(status: string) {
     return this.http.put(
       `${this.baseURL}`,
-      { status: status },
+      { status },
       { headers: { Accept: 'application/vnd.ceph.api.v0.1+json' } }
     );
   }

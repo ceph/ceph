@@ -229,9 +229,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   columnFilters: CdTableColumnFilter[] = [];
   selectedFilter: CdTableColumnFilter;
   get columnFiltered(): boolean {
-    return _.some(this.columnFilters, (filter) => {
-      return filter.value !== undefined;
-    });
+    return _.some(this.columnFilters, (filter) => filter.value !== undefined);
   }
 
   constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) {}
@@ -239,9 +237,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   static prepareSearch(search: string) {
     search = search.toLowerCase().replace(/,/g, '');
     if (search.match(/['"][^'"]+['"]/)) {
-      search = search.replace(/['"][^'"]+['"]/g, (match: string) => {
-        return match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+');
-      });
+      search = search.replace(/['"][^'"]+['"]/g, (match: string) => match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+'));
     }
     return search.split(' ').filter((word) => word);
   }
@@ -298,9 +294,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (_.isInteger(this.autoReload) && this.autoReload > 0) {
       this.ngZone.runOutsideAngular(() => {
         this.reloadSubscriber = observableTimer(0, this.autoReload).subscribe(() => {
-          this.ngZone.run(() => {
-            return this.reloadData();
-          });
+          this.ngZone.run(() => this.reloadData());
         });
       });
     } else if (!this.autoReload) {
@@ -433,15 +427,13 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   initColumnFilters() {
     let filterableColumns = _.filter(this.localColumns, { filterable: true });
     filterableColumns = [...filterableColumns, ...this.extraFilterableColumns];
-    this.columnFilters = filterableColumns.map((col: CdTableColumn) => {
-      return {
+    this.columnFilters = filterableColumns.map((col: CdTableColumn) => ({
         column: col,
         options: [],
         value: col.filterInitValue
           ? this.createColumnFilterOption(col.filterInitValue, col.pipe)
           : undefined
-      };
-    });
+      }));
     this.selectedFilter = _.first(this.columnFilters);
   }
 
@@ -462,9 +454,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
       if (_.isUndefined(filter.column.filterOptions)) {
         // only allow types that can be easily converted into string
-        const pre = _.filter(_.map(this.data, filter.column.prop), (v) => {
-          return (_.isString(v) && v !== '') || _.isBoolean(v) || _.isFinite(v) || _.isDate(v);
-        });
+        const pre = _.filter(_.map(this.data, filter.column.prop), (v) => (_.isString(v) && v !== '') || _.isBoolean(v) || _.isFinite(v) || _.isDate(v));
         values = _.sortedUniq(pre.sort());
       } else {
         values = filter.column.filterOptions;
@@ -522,8 +512,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
     this.columnFiltersChanged.emit({
       filters: appliedFilters,
-      data: data,
-      dataOut: dataOut
+      data,
+      dataOut
     });
 
     // Remove the selection if previously-selected rows are filtered out.
@@ -736,7 +726,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   createSortingDefinition(prop: TableColumnProp): SortPropDir[] {
     return [
       {
-        prop: prop,
+        prop,
         dir: SortDirection.asc
       }
     ];
@@ -793,8 +783,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (searchTerm.length === 0) {
       return rows;
     }
-    return rows.filter((row) => {
-      return (
+    return rows.filter((row) => (
         columns.filter((col) => {
           let cellValue: any = _.get(row, col.prop);
 
@@ -821,17 +810,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
           return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
         }).length > 0
-      );
-    });
+      ));
   }
 
   getRowClass() {
     // Return the function used to populate a row's CSS classes.
-    return () => {
-      return {
+    return () => ({
         clickable: !_.isUndefined(this.selectionType)
-      };
-    };
+      });
   }
 
   toggleExpandRow(row: any, isExpanded: boolean, event: any) {

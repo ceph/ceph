@@ -1,8 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { fakeAsync, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { ClusterService } from './cluster.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('ClusterService', () => {
   let service: ClusterService;

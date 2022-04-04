@@ -3,11 +3,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
+import { OsdDetailsComponent } from './osd-details.component';
 import { TablePerformanceCounterComponent } from '~/app/ceph/performance-counter/table-performance-counter/table-performance-counter.component';
 import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { OsdDetailsComponent } from './osd-details.component';
 
 describe('OsdDetailsComponent', () => {
   let component: OsdDetailsComponent;

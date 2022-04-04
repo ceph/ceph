@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 
+import { UserPasswordFormComponent } from '../user-password-form/user-password-form.component';
 import { AuthService } from '~/app/shared/api/auth.service';
 import { UserService } from '~/app/shared/api/user.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -8,7 +9,6 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PasswordPolicyService } from '~/app/shared/services/password-policy.service';
-import { UserPasswordFormComponent } from '../user-password-form/user-password-form.component';
 
 @Component({
   selector: 'cd-login-password-form',

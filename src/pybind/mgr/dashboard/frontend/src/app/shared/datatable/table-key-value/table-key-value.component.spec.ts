@@ -6,14 +6,14 @@ import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap'
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
+import { TableComponent } from '../table/table.component';
+import { TableKeyValueComponent } from './table-key-value.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { TableComponent } from '../table/table.component';
-import { TableKeyValueComponent } from './table-key-value.component';
 
 describe('TableKeyValueComponent', () => {
   let component: TableKeyValueComponent;

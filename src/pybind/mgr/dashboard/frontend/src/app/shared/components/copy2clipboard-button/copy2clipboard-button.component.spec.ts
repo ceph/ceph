@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import * as BrowserDetect from 'detect-browser';
 import { ToastrService } from 'ngx-toastr';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('Copy2ClipboardButtonComponent', () => {
   let component: Copy2ClipboardButtonComponent;

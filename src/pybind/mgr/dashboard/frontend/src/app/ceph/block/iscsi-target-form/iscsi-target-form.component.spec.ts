@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -6,13 +7,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
+import { IscsiTargetFormComponent } from './iscsi-target-form.component';
 import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
 import { configureTestBed, FormHelper, IscsiHelper } from '~/testing/unit-test-helper';
-import { IscsiTargetFormComponent } from './iscsi-target-form.component';
 
 describe('IscsiTargetFormComponent', () => {
   let component: IscsiTargetFormComponent;
@@ -162,6 +163,7 @@ describe('IscsiTargetFormComponent', () => {
     fixture = TestBed.createComponent(IscsiTargetFormComponent);
     component = fixture.componentInstance;
     httpTesting = TestBed.inject(HttpTestingController);
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     activatedRoute = <ActivatedRouteStub>TestBed.inject(ActivatedRoute);
     fixture.detectChanges();
 
@@ -585,6 +587,7 @@ describe('IscsiTargetFormComponent', () => {
     });
   });
 
+  // eslint-disable-next-line prefer-arrow/prefer-arrow-functions
   function validateAuth(formHelper: FormHelper) {
     IscsiHelper.validateUser(formHelper, 'auth.user');
     IscsiHelper.validatePassword(formHelper, 'auth.password');

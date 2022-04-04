@@ -7,10 +7,10 @@ import { NgbActiveModal, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 
+import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal.component';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal.component';
 
 describe('RbdTrashMoveModalComponent', () => {
   let component: RbdTrashMoveModalComponent;

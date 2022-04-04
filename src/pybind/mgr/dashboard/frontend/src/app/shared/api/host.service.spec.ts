@@ -1,8 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { configureTestBed } from '~/testing/unit-test-helper';
 import { HostService } from './host.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('HostService', () => {
   let service: HostService;

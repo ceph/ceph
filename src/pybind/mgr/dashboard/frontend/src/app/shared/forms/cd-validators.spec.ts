@@ -10,15 +10,11 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FormHelper } from '~/testing/unit-test-helper';
 
 let mockBucketExists = observableOf(true);
-jest.mock('~/app/shared/api/rgw-bucket.service', () => {
-  return {
-    RgwBucketService: jest.fn().mockImplementation(() => {
-      return {
+jest.mock('~/app/shared/api/rgw-bucket.service', () => ({
+    RgwBucketService: jest.fn().mockImplementation(() => ({
         exists: () => mockBucketExists
-      };
-    })
-  };
-});
+      }))
+  }));
 
 describe('CdValidators', () => {
   let formHelper: FormHelper;
@@ -317,9 +313,7 @@ describe('CdValidators', () => {
     });
 
     it('should error because of successful condition', () => {
-      const conditionFn = (value: string) => {
-        return value === 'abc';
-      };
+      const conditionFn = (value: string) => value === 'abc';
       // Define prereqs that force the validator to validate the value of
       // the 'y' control.
       const validatorFn = CdValidators.requiredIf(
@@ -493,7 +487,7 @@ describe('CdValidators', () => {
       y = new FormControl('aaa');
       form = new CdFormGroup({
         x: new FormControl('aaa'),
-        y: y
+        y
       });
       formHelper = new FormHelper(form);
     });
@@ -532,9 +526,7 @@ describe('CdValidators', () => {
         x: new FormControl(
           '',
           null,
-          CdValidators.unique((value) => {
-            return observableOf('xyz' === value);
-          })
+          CdValidators.unique((value) => observableOf('xyz' === value))
         )
       });
       formHelper = new FormHelper(form);
@@ -642,9 +634,7 @@ describe('CdValidators', () => {
     let callbackCalled: boolean;
 
     const fakeUserService = {
-      validatePassword: () => {
-        return observableOf({ valid: valid, credits: 17, valuation: 'foo' });
-      }
+      validatePassword: () => observableOf({ valid, credits: 17, valuation: 'foo' })
     };
 
     beforeEach(() => {

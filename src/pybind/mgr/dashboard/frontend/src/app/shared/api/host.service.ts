@@ -5,14 +5,14 @@ import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
 import { map, mergeMap, toArray } from 'rxjs/operators';
 
-import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
-import { InventoryHost } from '~/app/ceph/cluster/inventory/inventory-host.model';
-import { ApiClient } from '~/app/shared/api/api-client';
-import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { Daemon } from '../models/daemon.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { InventoryHost } from '~/app/ceph/cluster/inventory/inventory-host.model';
+import { ApiClient } from '~/app/shared/api/api-client';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 
 @Injectable({
   providedIn: 'root'
@@ -30,14 +30,14 @@ export class HostService extends ApiClient {
   list(facts: string): Observable<object[]> {
     return this.http.get<object[]>(this.baseURL, {
       headers: { Accept: 'application/vnd.ceph.api.v1.1+json' },
-      params: { facts: facts }
+      params: { facts }
     });
   }
 
   create(hostname: string, addr: string, labels: string[], status: string) {
     return this.http.post(
       this.baseURL,
-      { hostname: hostname, addr: addr, labels: labels, status: status },
+      { hostname, addr, labels, status },
       { observe: 'response', headers: { Accept: CdHelperClass.cdVersionHeader('0', '1') } }
     );
   }
@@ -76,10 +76,10 @@ export class HostService extends ApiClient {
       `${this.baseURL}/${hostname}`,
       {
         update_labels: updateLabels,
-        labels: labels,
-        maintenance: maintenance,
-        force: force,
-        drain: drain
+        labels,
+        maintenance,
+        force,
+        drain
       },
       { headers: { Accept: this.getVersionHeaderValue(0, 1) } }
     );
@@ -109,7 +109,7 @@ export class HostService extends ApiClient {
   getInventory(hostname: string, refresh?: boolean): Observable<InventoryHost> {
     const params = this.getInventoryParams(refresh);
     return this.http.get<InventoryHost>(`${this.baseURL}/${hostname}/inventory`, {
-      params: params
+      params
     });
   }
 
@@ -120,7 +120,7 @@ export class HostService extends ApiClient {
    */
   inventoryList(refresh?: boolean): Observable<InventoryHost[]> {
     const params = this.getInventoryParams(refresh);
-    return this.http.get<InventoryHost[]>(`${this.baseUIURL}/inventory`, { params: params });
+    return this.http.get<InventoryHost[]>(`${this.baseUIURL}/inventory`, { params });
   }
 
   /**
@@ -138,13 +138,11 @@ export class HostService extends ApiClient {
     }
     return observable.pipe(
       mergeMap((hosts: InventoryHost[]) => {
-        const devices = _.flatMap(hosts, (host) => {
-          return host.devices.map((device) => {
+        const devices = _.flatMap(hosts, (host) => host.devices.map((device) => {
             device.hostname = host.name;
             device.uid = device.device_id ? device.device_id : `${device.hostname}-${device.path}`;
             return device;
-          });
-        });
+          }));
         return observableOf(devices);
       })
     );

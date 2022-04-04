@@ -6,6 +6,12 @@ import { By } from '@angular/platform-browser';
 import _ from 'lodash';
 import { of } from 'rxjs';
 
+import { HealthPieComponent } from '../health-pie/health-pie.component';
+import { MdsSummaryPipe } from '../mds-summary.pipe';
+import { MgrSummaryPipe } from '../mgr-summary.pipe';
+import { MonSummaryPipe } from '../mon-summary.pipe';
+import { OsdSummaryPipe } from '../osd-summary.pipe';
+import { HealthComponent } from './health.component';
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
@@ -15,12 +21,6 @@ import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.ser
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { HealthPieComponent } from '../health-pie/health-pie.component';
-import { MdsSummaryPipe } from '../mds-summary.pipe';
-import { MgrSummaryPipe } from '../mgr-summary.pipe';
-import { MonSummaryPipe } from '../mon-summary.pipe';
-import { OsdSummaryPipe } from '../osd-summary.pipe';
-import { HealthComponent } from './health.component';
 
 describe('HealthComponent', () => {
   let component: HealthComponent;
@@ -42,9 +42,7 @@ describe('HealthComponent', () => {
     pg_info: { object_stats: { num_objects: 0 } }
   };
   const fakeAuthStorageService = {
-    getPermissions: () => {
-      return new Permissions({ log: ['read'] });
-    }
+    getPermissions: () => new Permissions({ log: ['read'] })
   };
   let fakeFeatureTogglesService: jasmine.Spy;
 
@@ -273,7 +271,7 @@ describe('HealthComponent', () => {
               data.reduce((j, k) => j + k)
             )
           ),
-          label: label
+          label
         }
       ]
     });

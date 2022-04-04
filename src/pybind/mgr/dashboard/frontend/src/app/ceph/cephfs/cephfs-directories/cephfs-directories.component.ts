@@ -76,9 +76,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   loading = {};
   treeOptions: ITreeOptions = {
     useVirtualScroll: true,
-    getChildren: (node: TreeNode): Promise<any[]> => {
-      return this.updateDirectory(node.id);
-    },
+    getChildren: (node: TreeNode): Promise<any[]> => this.updateDirectory(node.id),
     actionMapping: {
       mouse: {
         click: this.selectAndShowNode.bind(this),

@@ -6,6 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { ServicesComponent } from './services.component';
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CoreModule } from '~/app/core/core.module';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -15,16 +16,13 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { ServicesComponent } from './services.component';
 
 describe('ServicesComponent', () => {
   let component: ServicesComponent;
   let fixture: ComponentFixture<ServicesComponent>;
 
   const fakeAuthStorageService = {
-    getPermissions: () => {
-      return new Permissions({ hosts: ['read'] });
-    }
+    getPermissions: () => new Permissions({ hosts: ['read'] })
   };
 
   const services = [

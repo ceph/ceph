@@ -1,9 +1,11 @@
+/* eslint-disable prefer-arrow/prefer-arrow-functions */
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { of } from 'rxjs';
 
+import { IscsiComponent } from './iscsi.component';
 import { IscsiService } from '~/app/shared/api/iscsi.service';
 import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
@@ -11,7 +13,6 @@ import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { IscsiComponent } from './iscsi.component';
 
 describe('IscsiComponent', () => {
   let component: IscsiComponent;
@@ -19,13 +20,13 @@ describe('IscsiComponent', () => {
   let iscsiService: IscsiService;
   let tcmuiscsiData: Record<string, any>;
 
-  const fakeService = {
-    overview: () => {
-      return new Promise(function () {
-        return;
-      });
-    }
-  };
+const fakeService = {
+  // eslint-disable-next-line arrow-body-style
+  overview: () => new Promise(() => {
+    return;
+  })
+};
+
 
   configureTestBed({
     imports: [BrowserAnimationsModule, SharedModule],

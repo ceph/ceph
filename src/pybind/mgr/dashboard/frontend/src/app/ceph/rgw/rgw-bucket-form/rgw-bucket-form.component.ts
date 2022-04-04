@@ -5,6 +5,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 import { forkJoin } from 'rxjs';
 
+import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
+import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
@@ -16,8 +18,6 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
-import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 
 @Component({
   selector: 'cd-rgw-bucket-form',

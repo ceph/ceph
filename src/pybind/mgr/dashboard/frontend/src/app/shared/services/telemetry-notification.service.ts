@@ -4,10 +4,10 @@ import { EventEmitter, Injectable, Output } from '@angular/core';
   providedIn: 'root'
 })
 export class TelemetryNotificationService {
-  visible = false;
-
   @Output()
   update: EventEmitter<boolean> = new EventEmitter<boolean>();
+
+  visible = false;
 
   setVisibility(visible: boolean) {
     this.visible = visible;

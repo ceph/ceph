@@ -7,6 +7,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
+import { RgwDaemonDetailsComponent } from '../rgw-daemon-details/rgw-daemon-details.component';
+import { RgwDaemonListComponent } from './rgw-daemon-list.component';
 import { PerformanceCounterModule } from '~/app/ceph/performance-counter/performance-counter.module';
 import { RgwDaemon } from '~/app/ceph/rgw/models/rgw-daemon';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
@@ -15,8 +17,6 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
-import { RgwDaemonDetailsComponent } from '../rgw-daemon-details/rgw-daemon-details.component';
-import { RgwDaemonListComponent } from './rgw-daemon-list.component';
 
 describe('RgwDaemonListComponent', () => {
   let component: RgwDaemonListComponent;

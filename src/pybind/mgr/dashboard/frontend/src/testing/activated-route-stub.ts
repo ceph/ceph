@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/member-ordering */
 import { ActivatedRoute } from '@angular/router';
 
 import { ReplaySubject } from 'rxjs';
@@ -9,9 +10,9 @@ import { ReplaySubject } from 'rxjs';
 export class ActivatedRouteStub extends ActivatedRoute {
   // Use a ReplaySubject to share previous values with subscribers
   // and pump new values into the `params` observable
-  private subject = new ReplaySubject<object>();
+  private subject = new ReplaySubject<Record<string, unknown>>();
 
-  constructor(initialParams?: object) {
+  constructor(initialParams?: Record<string, unknown>) {
     super();
     this.setParams(initialParams);
   }
@@ -20,7 +21,7 @@ export class ActivatedRouteStub extends ActivatedRoute {
   readonly params = this.subject.asObservable();
 
   /** Set the params observables's next value */
-  setParams(params?: object) {
+  setParams(params?: Record<string, unknown>) {
     this.subject.next(params);
   }
 }

@@ -9,15 +9,15 @@ import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError } from 'rxjs';
 
+import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
+import { RgwUserCapability } from '../models/rgw-user-capability';
+import { RgwUserS3Key } from '../models/rgw-user-s3-key';
+import { RgwUserFormComponent } from './rgw-user-form.component';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
-import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
-import { RgwUserCapability } from '../models/rgw-user-capability';
-import { RgwUserS3Key } from '../models/rgw-user-s3-key';
-import { RgwUserFormComponent } from './rgw-user-form.component';
 
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
@@ -294,7 +294,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `Created Object Gateway user 'null'`
+        'Created Object Gateway user \'null\''
       );
     });
 
@@ -305,7 +305,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        `Updated Object Gateway user 'null'`
+        'Updated Object Gateway user \'null\''
       );
     });
   });
