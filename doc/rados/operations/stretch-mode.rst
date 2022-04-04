@@ -83,8 +83,6 @@ named ``site1`` and ``site2``::
   rule stretch_rule {
           id 1
           type replicated
-          min_size 1
-          max_size 10
           step take site1
           step chooseleaf firstn 2 type host
           step emit
