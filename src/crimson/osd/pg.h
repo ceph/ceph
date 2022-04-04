@@ -599,17 +599,15 @@ private:
   do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
     seastar::lw_shared_ptr<OpsExecuter> ox,
     std::vector<OSDOp>& ops,
-    const OpInfo &op_info,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   std::tuple<interruptible_future<>, interruptible_future<>>
   submit_transaction(
-    const OpInfo& op_info,
-    const std::vector<OSDOp>& ops,
     ObjectContextRef&& obc,
     ceph::os::Transaction&& txn,
-    osd_op_params_t&& oop);
+    osd_op_params_t&& oop,
+    std::vector<pg_log_entry_t>&& log_entries);
   interruptible_future<> repair_object(
     const hobject_t& oid,
     eversion_t& v);
