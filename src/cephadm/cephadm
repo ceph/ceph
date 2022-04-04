@@ -44,7 +44,7 @@ from pathlib import Path
 FuncT = TypeVar('FuncT', bound=Callable)
 
 # Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
+DEFAULT_IMAGE = 'docker.io/rhcsdashboard/ceph-exporter'
 DEFAULT_IMAGE_IS_MAIN = True
 DEFAULT_IMAGE_RELEASE = 'quincy'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.33.4'
@@ -914,6 +914,53 @@ class CephIscsi(object):
 ##################################
 
 
+class CephExporter(object):
+    """Defines a Ceph-exporter container"""
+
+    daemon_type = 'exporter'
+    entrypoint = '/usr/bin/ceph-exporter'
+
+    port_map = {
+        'exporter': 9085,
+    }
+
+    def __init__(self,
+                 ctx,
+                 fsid,
+                 daemon_id,
+                 image=DEFAULT_IMAGE):
+        # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
+        self.ctx = ctx
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.image = image
+
+    @classmethod
+    def init(cls, ctx, fsid, daemon_id):
+        # type: (CephadmContext, str, Union[int, str]) -> CephIscsi
+        return cls(ctx, fsid, daemon_id,
+                   get_parm(ctx.config_json), ctx.image)
+
+    @staticmethod
+    def get_container_mounts():
+        mounts = dict()
+        mounts['/var/run/ceph'] = '/var/run/ceph:z'
+        return mounts
+
+    def get_daemon_name(self):
+        # type: () -> str
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def get_container_name(self, desc=None):
+        # type: (Optional[str]) -> str
+        cname = 'ceph-%s-%s' % (self.fsid, self.get_daemon_name())
+        if desc:
+            cname = '%s-%s' % (cname, desc)
+        return cname
+
+##################################
+
+
 class HAproxy(object):
     """Defines an HAproxy container"""
     daemon_type = 'haproxy'
@@ -1267,6 +1314,7 @@ def get_supported_daemons():
     supported_daemons.extend(Monitoring.components)
     supported_daemons.append(NFSGanesha.daemon_type)
     supported_daemons.append(CephIscsi.daemon_type)
+    supported_daemons.append(CephExporter.daemon_type)
     supported_daemons.append(CustomContainer.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
@@ -2874,6 +2922,10 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         log_dir = get_log_dir(fsid, ctx.log_dir)
         mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
 
+    if daemon_type == CephExporter.daemon_type:
+        assert daemon_id
+        mounts.update(CephExporter.get_container_mounts())
+
     if daemon_type == Keepalived.daemon_type:
         assert daemon_id
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
@@ -2966,6 +3018,9 @@ def get_container(ctx: CephadmContext,
         entrypoint = NFSGanesha.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
         envs.extend(NFSGanesha.get_container_envs())
+    elif daemon_type == CephExporter.daemon_type:
+        entrypoint = CephExporter.entrypoint
+        name = '%s.%s' % (daemon_type, daemon_id)
     elif daemon_type == HAproxy.daemon_type:
         name = '%s.%s' % (daemon_type, daemon_id)
         container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
@@ -5792,6 +5847,17 @@ def command_deploy(ctx):
         c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
+                      reconfig=ctx.reconfig,
+                      ports=daemon_ports)
+    
+    elif daemon_type == CephExporter.daemon_type:
+        if not ctx.reconfig and not redeploy and not daemon_ports:
+            daemon_ports = list(CephExporter.port_map.values())
+
+        uid = 0
+        gid = 0
+        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
+        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
 

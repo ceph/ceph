@@ -111,13 +111,12 @@ private:
     // Construct a response message based on the program state.
     void create_response()
     {
-        std::cout << "Got request on " << request_.target() << std::endl;
         if(request_.target() == "/metrics")
         {
             response_.set(http::field::content_type, "text/plain");
             DaemonMetricCollector &collector = collector_instance();
             std::string metrics = collector.get_metrics();
-            beast::ostream(response_.body()) << "Perf Counters\n" << metrics << std::endl;
+            beast::ostream(response_.body()) << metrics << std::endl;
         }
         else
         {
@@ -167,7 +166,6 @@ void http_server(tcp::acceptor& acceptor, tcp::socket& socket)
   acceptor.async_accept(socket,
       [&](beast::error_code ec)
       {
-          std::cout << "async accept" << std::endl;
           if(!ec)
               std::make_shared<http_connection>(std::move(socket))->start();
           http_server(acceptor, socket);
