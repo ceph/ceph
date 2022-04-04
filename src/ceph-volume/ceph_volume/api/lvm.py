@@ -409,6 +409,13 @@ class PVolume(object):
             run_on_host=True
         )
 
+    def as_dict(self):
+        obj = {}
+        obj.update(self.pv_api)
+        obj['tags'] = self.tags
+        obj['name'] = self.name
+        return obj
+
 
 def create_pv(device):
     """
@@ -513,6 +520,7 @@ class VolumeGroup(object):
         for k, v in kw.items():
             setattr(self, k, v)
         self.name = kw['vg_name']
+        self.vg_api = kw
         if not self.name:
             raise ValueError('VolumeGroup must have a non-empty name')
         self.tags = parse_tags(kw.get('vg_tags', ''))
@@ -543,6 +551,13 @@ class VolumeGroup(object):
         Returns VG size in bytes
         """
         return int(self.vg_extent_size) * int(self.vg_extent_count)
+
+    def as_dict(self):
+        obj = {}
+        obj.update(self.vg_api)
+        obj['name'] = self.name
+        obj['tags'] = self.tags
+        return obj
 
     def sizing(self, parts=None, size=None):
         """
@@ -791,7 +806,7 @@ def get_device_vgs(device, name_prefix=''):
 #
 ###############################
 
-LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
+LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size,lv_dm_path'
 LV_CMD_OPTIONS =  ['--noheadings', '--readonly', '--separator=";"', '-a',
                    '--units=b', '--nosuffix']
 
@@ -824,7 +839,7 @@ class Volume(object):
         obj.update(self.lv_api)
         obj['tags'] = self.tags
         obj['name'] = self.name
-        obj['type'] = self.tags['ceph.type']
+        obj['type'] = self.tags.get('ceph.type', '')
         obj['path'] = self.lv_path
         return obj
 
