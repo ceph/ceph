@@ -17,7 +17,6 @@ void DaemonMetricCollector::request_loop(boost::asio::deadline_timer &timer) {
   timer.async_wait([&](const boost::system::error_code& e) {
     std::cerr << e << std::endl;
     update_sockets();
-    std::cout << "updating metrics" << std::endl;
     send_requests();
     timer.expires_from_now(boost::posix_time::seconds(stats_period));
     request_loop(timer);
@@ -128,7 +127,7 @@ void DaemonMetricCollector::send_requests() {
           } else {
             add_double_or_int_metric(ss, perf_values, name, description, mtype, labels);
           }
-          result += ss.str() + "\n";
+          result += ss.str();
         }
       }
     }
@@ -138,10 +137,9 @@ void DaemonMetricCollector::send_requests() {
 
 void DaemonMetricCollector::update_sockets() {
   std::string path = "/var/run/ceph/";
-  for (const auto & entry : std::filesystem::directory_iterator(path)) {
+  for (const auto & entry : std::filesystem::recursive_directory_iterator(path)) {
     if (entry.path().extension() == ".asok") {
       std::string daemon_socket_name = entry.path().filename().string();
-      std::cout << "Got socket: " << daemon_socket_name << std::endl;
       // remove .asok
       std::string daemon_name = daemon_socket_name.substr(0, daemon_socket_name.size() - 5);
       if (clients.find(daemon_name) == clients.end()) {
