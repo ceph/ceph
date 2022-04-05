@@ -90,11 +90,6 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& o
   }
 }
 
-int rgw_policy_from_attrset(const DoutPrefixProvider *dpp,
-			    CephContext *cct,
-			    std::map<std::string, bufferlist>& attrset,
-			    RGWAccessControlPolicy *policy);
-
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;
