@@ -10,7 +10,7 @@
 
 namespace crimson::osd {
 
-class InternalClientRequest : public TrackableOperationT<InternalClientRequest>,
+class InternalClientRequest : public PhasedOperationT<InternalClientRequest>,
                               private CommonClientRequest {
 public:
   explicit InternalClientRequest(Ref<PG> pg);
@@ -42,7 +42,6 @@ private:
   seastar::future<> do_process();
 
   Ref<PG> pg;
-  PipelineHandle handle;
   OpInfo op_info;
 };
 

@@ -156,6 +156,14 @@ protected:
   }
 };
 
+template <class T>
+class PhasedOperationT : public TrackableOperationT<T> {
+  using base_t = TrackableOperationT<T>;
+protected:
+  using TrackableOperationT<T>::TrackableOperationT;
+
+  PipelineHandle handle;
+};
 
 /**
  * Maintains a set of lists of all active ops.

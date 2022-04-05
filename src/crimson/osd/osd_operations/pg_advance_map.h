@@ -20,13 +20,11 @@ namespace crimson::osd {
 class OSD;
 class PG;
 
-class PGAdvanceMap : public TrackableOperationT<PGAdvanceMap> {
+class PGAdvanceMap : public PhasedOperationT<PGAdvanceMap> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::pg_advance_map;
 
 protected:
-  PipelineHandle handle;
-
   OSD &osd;
   Ref<PG> pg;
 
