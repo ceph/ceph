@@ -80,9 +80,11 @@ seastar::future<> ClientRequest::start()
   return seastar::repeat([this, opref=IRef{this}]() mutable {
       logger().debug("{}: in repeat", *this);
       return enter_stage(cp().await_map).then([this]() {
-	return with_blocking_future(
-	    osd.osdmap_gate.wait_for_map(
-	      m->get_min_epoch()));
+	return with_blocking_event<OSD_OSDMapGate::OSDMapBlocker::BlockingEvent>(
+	  [this](auto&& trigger) {
+	  return osd.osdmap_gate.wait_for_map(std::move(trigger),
+			                      m->get_min_epoch());
+	});
       }).then([this](epoch_t epoch) {
 	return with_blocking_future(handle.enter(cp().get_pg));
       }).then([this] {

@@ -66,6 +66,7 @@ public:
   // wait for an osdmap whose epoch is greater or equal to given epoch
   blocking_future<epoch_t>
   wait_for_map(epoch_t epoch);
+  // TODO: define me!
   seastar::future<epoch_t>
   wait_for_map(typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
 	       epoch_t epoch);

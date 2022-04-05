@@ -6,6 +6,7 @@
 #include "osd/osd_op_util.h"
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
 #include "crimson/osd/osd_operations/common/pg_pipeline.h"
@@ -103,7 +104,8 @@ private:
 
 public:
   std::tuple<
-    ConnectionPipeline::AwaitMap::BlockingEvent
+    ConnectionPipeline::AwaitMap::BlockingEvent,
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent
   > tracking_events;
 };
 
