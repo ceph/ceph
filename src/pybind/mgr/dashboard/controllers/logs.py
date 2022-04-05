@@ -26,7 +26,8 @@ LOGS_SCHEMA = {
         "channel": (str, ""),
         "priority": (str, ""),
         "message": (str, ""),
-    }], "Audit log")
+    }], "Audit log"),
+    "cephadm": ([str], "")
 }
 
 
@@ -38,12 +39,15 @@ class Logs(BaseController):
         self._log_initialized = False
         self.log_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
         self.audit_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
+        self.cephadm_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
 
     def append_log(self, log_struct):
-        if log_struct['channel'] == 'audit':
-            self.audit_buffer.appendleft(log_struct)
-        else:
+        if log_struct['channel'] == 'cluster':
             self.log_buffer.appendleft(log_struct)
+        elif log_struct['channel'] == 'audit':
+            self.audit_buffer.appendleft(log_struct)
+        elif log_struct['channel'] == 'cephadm':
+            self.cephadm_buffer.appendleft(log_struct)
 
     def load_buffer(self, buf, channel_name):
         lines = CephService.send_command(
@@ -57,6 +61,7 @@ class Logs(BaseController):
 
             self.load_buffer(self.log_buffer, 'cluster')
             self.load_buffer(self.audit_buffer, 'audit')
+            self.load_buffer(self.audit_buffer, 'cephadm')
 
             NotificationQueue.register(self.append_log, 'clog')
 
@@ -69,4 +74,5 @@ class Logs(BaseController):
         return dict(
             clog=list(self.log_buffer),
             audit_log=list(self.audit_buffer),
+            cephadm_log=list(self.cephadm_buffer)
         )

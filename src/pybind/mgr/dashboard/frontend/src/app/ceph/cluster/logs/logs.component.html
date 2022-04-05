@@ -7,7 +7,7 @@
       cdStatefulTab="logs">
     <li ngbNavItem="cluster-logs">
       <a ngbNavLink
-         i18n>Cluster Logs</a>
+         i18n>Cluster</a>
       <ng-template ngbNavContent>
         <div class="card bg-light mb-3"
              *ngIf="clog">
@@ -38,7 +38,7 @@
     </li>
     <li ngbNavItem="audit-logs">
       <a ngbNavLink
-         i18n>Audit Logs</a>
+         i18n>Audit</a>
       <ng-template ngbNavContent>
         <div class="card bg-light mb-3"
              *ngIf="audit_log">
@@ -63,6 +63,37 @@
             </p>
 
             <ng-container *ngIf="audit_log.length != 0 else noEntriesTpl"></ng-container>
+          </div>
+        </div>
+      </ng-template>
+    </li>
+    <li ngbNavItem="cephadm-logs">
+      <a ngbNavLink
+         i18n>Cephadm</a>
+      <ng-template ngbNavContent>
+        <div class="card bg-light mb-3"
+             *ngIf="cephadm_log">
+          <div class="btn-group"
+               role="group"
+               *ngIf="cephadm_log.length">
+            <cd-download-button [objectItem]="cephadm_log"
+                                [textItem]="cephadmLogText"
+                                fileName="cephadm_log">
+            </cd-download-button>
+            <cd-copy-2-clipboard-button
+                    [source]="cephadmLogText"
+                    [byId]="false">
+            </cd-copy-2-clipboard-button>
+          </div>
+          <div class="card-body">
+            <p *ngFor="let line of cephadm_log">
+              <span class="timestamp">{{ line.stamp | cdDate }}</span>
+              <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
+              <span class="message"
+                    [innerHTML]="line.message | searchHighlight: search"></span>
+            </p>
+
+            <ng-container *ngIf="cephadm_log.length != 0 else noEntriesTpl"></ng-container>
           </div>
         </div>
       </ng-template>
