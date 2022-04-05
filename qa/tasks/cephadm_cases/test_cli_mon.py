@@ -63,4 +63,4 @@ class TestCephadmCLI(MgrTestCase):
 
         time.sleep(60)
 
-        self.wait_for_health('stray daemon(s) not managed by cephadm', 200)
+        self.wait_for_health_clear(200)
