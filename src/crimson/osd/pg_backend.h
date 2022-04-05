@@ -218,7 +218,9 @@ public:
     const ObjectState& os,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
-  using cmp_xattr_errorator = ::crimson::os::FuturizedStore::get_attr_errorator;
+  using cmp_xattr_errorator = get_attr_errorator::extend<
+    crimson::ct_error::ecanceled,
+    crimson::ct_error::invarg>;
   using cmp_xattr_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,

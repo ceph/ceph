@@ -980,7 +980,10 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
  
   logger().debug("cmpxattr on obj={} for attr={}", os.oi.soid, name);
   return getxattr(os.oi.soid, std::move(name)).safe_then_interruptible(
-    [&delta_stats, &osd_op] (auto &&xattr) {
+    [&delta_stats, &osd_op] (auto &&xattr) -> cmp_xattr_ierrorator::future<> {
+    delta_stats.num_rd++;
+    delta_stats.num_rd_kb += shift_round_up(osd_op.op.xattr.value_len, 10);
+
     int result = 0;
     auto bp = osd_op.indata.cbegin();
     bp += osd_op.op.xattr.name_len;
@@ -1014,13 +1017,22 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
     }
     if (result == 0) {
       logger().info("cmp_xattr: comparison returned false");
-      osd_op.rval = -ECANCELED;
+      return crimson::ct_error::ecanceled::make();
+    } else if (result == -EINVAL) {
+      return crimson::ct_error::invarg::make();
     } else {
-      osd_op.rval = result;
+      osd_op.rval = 1;
+      return cmp_xattr_ierrorator::now();
     }
-    delta_stats.num_rd++;
-    delta_stats.num_rd_kb += shift_round_up(osd_op.op.xattr.value_len, 10);
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enodata::handle([&delta_stats, &osd_op] ()
+      ->cmp_xattr_errorator::future<> {
+      delta_stats.num_rd++;
+      delta_stats.num_rd_kb += shift_round_up(osd_op.op.xattr.value_len, 10);
+      return crimson::ct_error::ecanceled::make();
+    }),
+    cmp_xattr_errorator::pass_further{}
+  );
 }
 
 PGBackend::rm_xattr_iertr::future<>
