@@ -10398,7 +10398,6 @@ int PrimaryLogPG::start_cls_scatter(OpContext *ctx, const std::map<std::string, 
     obj_op.call(cls, method, bl);
 
     uint32_t flags = 0;
-    version_t user_version;
     SnapContext snapc(m->get_snap_seq(), m->get_snaps());
     ceph::real_time mtime;
     ceph_tid_t tid = osd->objecter->mutate(object_t(oid), oloc, obj_op, snapc, mtime,
