@@ -154,6 +154,13 @@ protected:
     // dispatch (backend, blocker type)
     get_event<EventT>().trigger(*that(), std::forward<Args>(args)...);
   }
+
+  template <class BlockingEventT, class F>
+  auto with_blocking_event(F&& f) {
+    return std::forward<F>(f)(typename BlockingEventT::template Trigger<T>{
+      get_event<BlockingEventT>(), *that()
+    });
+  }
 };
 
 template <class T>
@@ -161,6 +168,14 @@ class PhasedOperationT : public TrackableOperationT<T> {
   using base_t = TrackableOperationT<T>;
 protected:
   using TrackableOperationT<T>::TrackableOperationT;
+
+  template <class StageT>
+  auto enter_stage(StageT& stage) {
+    return this->template with_blocking_event<typename StageT::BlockingEvent>(
+      [&stage, this] (auto&& trigger) {
+      return handle.enter<T>(stage, std::move(trigger));
+    });
+  }
 
   PipelineHandle handle;
 };
