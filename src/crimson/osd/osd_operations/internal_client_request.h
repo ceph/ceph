@@ -10,7 +10,7 @@
 
 namespace crimson::osd {
 
-class InternalClientRequest : public OperationT<InternalClientRequest>,
+class InternalClientRequest : public TrackableOperationT<InternalClientRequest>,
                               private CommonClientRequest {
 public:
   explicit InternalClientRequest(Ref<PG> pg);

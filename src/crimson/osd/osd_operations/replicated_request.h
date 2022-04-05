@@ -18,7 +18,7 @@ namespace crimson::osd {
 class OSD;
 class PG;
 
-class RepRequest final : public OperationT<RepRequest> {
+class RepRequest final : public TrackableOperationT<RepRequest> {
 public:
   class ConnectionPipeline {
     OrderedExclusivePhase await_map = {

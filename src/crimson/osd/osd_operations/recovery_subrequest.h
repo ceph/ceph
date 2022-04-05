@@ -15,7 +15,7 @@ namespace crimson::osd {
 class OSD;
 class PG;
 
-class RecoverySubRequest final : public OperationT<RecoverySubRequest> {
+class RecoverySubRequest final : public TrackableOperationT<RecoverySubRequest> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::background_recovery_sub;
 

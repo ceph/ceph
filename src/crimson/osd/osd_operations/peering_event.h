@@ -21,7 +21,7 @@ class OSD;
 class ShardServices;
 class PG;
 
-class PeeringEvent : public OperationT<PeeringEvent> {
+class PeeringEvent : public TrackableOperationT<PeeringEvent> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 

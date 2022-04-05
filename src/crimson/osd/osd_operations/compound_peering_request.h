@@ -18,7 +18,7 @@ class PG;
 
 using osd_id_t = int;
 
-class CompoundPeeringRequest : public OperationT<CompoundPeeringRequest> {
+class CompoundPeeringRequest : public TrackableOperationT<CompoundPeeringRequest> {
 public:
   static constexpr OperationTypeCode type =
     OperationTypeCode::compound_peering_request;
