@@ -18,7 +18,7 @@ namespace crimson::osd {
 class OSD;
 class PG;
 
-class RepRequest final : public TrackableOperationT<RepRequest> {
+class RepRequest final : public PhasedOperationT<RepRequest> {
 public:
   class ConnectionPipeline {
     OrderedExclusivePhase await_map = {
@@ -52,7 +52,6 @@ private:
   OSD &osd;
   crimson::net::ConnectionRef conn;
   Ref<MOSDRepOp> req;
-  PipelineHandle handle;
 };
 
 }

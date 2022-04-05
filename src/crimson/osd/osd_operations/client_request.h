@@ -16,13 +16,12 @@ namespace crimson::osd {
 class PG;
 class OSD;
 
-class ClientRequest final : public TrackableOperationT<ClientRequest>,
+class ClientRequest final : public PhasedOperationT<ClientRequest>,
                             private CommonClientRequest {
   OSD &osd;
   crimson::net::ConnectionRef conn;
   Ref<MOSDOp> m;
   OpInfo op_info;
-  PipelineHandle handle;
 
 public:
   class ConnectionPipeline {
