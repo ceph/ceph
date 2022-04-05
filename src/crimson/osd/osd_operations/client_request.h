@@ -16,7 +16,7 @@ namespace crimson::osd {
 class PG;
 class OSD;
 
-class ClientRequest final : public OperationT<ClientRequest>,
+class ClientRequest final : public TrackableOperationT<ClientRequest>,
                             private CommonClientRequest {
   OSD &osd;
   crimson::net::ConnectionRef conn;

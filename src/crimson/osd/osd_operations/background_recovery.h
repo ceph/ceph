@@ -15,7 +15,7 @@ namespace crimson::osd {
 class PG;
 class ShardServices;
 
-class BackgroundRecovery : public OperationT<BackgroundRecovery> {
+class BackgroundRecovery : public TrackableOperationT<BackgroundRecovery> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::background_recovery;
 
