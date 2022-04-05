@@ -2128,18 +2128,10 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   Formatter *formatter = flusher.get_formatter();
   void *handle = nullptr;
   std::string metadata_key = "user";
-  if (op_state.max_entries > 1000) {
-    op_state.max_entries = 1000;
-  }
-
-  int ret = store->meta_list_keys_init(dpp, metadata_key, op_state.marker, &handle);
-  if (ret < 0) {
-    return ret;
-  }
-
   bool truncated = false;
   uint64_t count = 0;
-  uint64_t left = 0;
+  std::list<std::string> users;
+
   flusher.start(0);
 
   // open the result object section
@@ -2147,32 +2139,27 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
 
   // open the user id list array section
   formatter->open_array_section("keys");
-  do {
-    std::list<std::string> keys;
-    left = op_state.max_entries - count;
-    ret = store->meta_list_keys_next(dpp, handle, left, keys, &truncated);
-    if (ret < 0 && ret != -ENOENT) {
-      return ret;
-    } if (ret != -ENOENT) {
-      for (std::list<std::string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-      formatter->dump_string("key", *iter);
-        ++count;
-      }
-    }
-  } while (truncated && left > 0);
-  // close user id list section
-  formatter->close_section();
 
+  int ret = store->list_users(dpp, metadata_key, op_state.marker, op_state.max_entries, handle, &truncated, users);
+  if (ret < 0 && ret != -ENOENT) {
+    cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  if (ret != -ENOENT) {
+    for (std::list<std::string>::iterator iter = users.begin(); iter != users.end(); ++iter){
+      formatter->dump_string("key", *iter);
+    }
+  }
+  count = users.size();
+  formatter->close_section();
   formatter->dump_bool("truncated", truncated);
   formatter->dump_int("count", count);
   if (truncated) {
-    formatter->dump_string("marker", store->meta_get_marker(handle));
+    formatter->dump_string("marker", op_state.marker);
   }
 
   // close result object section
   formatter->close_section();
-
-  store->meta_list_keys_complete(handle);
 
   flusher.flush();
   return 0;

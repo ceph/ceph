@@ -695,6 +695,9 @@ public:
         return "dbstore";
       }
 
+      virtual int list_users(const DoutPrefixProvider* dpp, const std::string& metadata_key,
+                        std::string& marker, int max_entries, void *&handle,
+                        bool* truncated, std::list<std::string>& users) override;
       virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
       virtual int get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) override;
       virtual int get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) override;

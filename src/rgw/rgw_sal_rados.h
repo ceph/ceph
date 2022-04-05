@@ -433,6 +433,9 @@ class RadosStore : public Store {
     virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override;
     virtual void meta_list_keys_complete(void* handle) override;
     virtual std::string meta_get_marker(void* handle) override;
+    virtual int list_users(const DoutPrefixProvider* dpp, const std::string& metadata_key,
+                          std::string& marker, int max_entries, void *&handle,
+                          bool* truncated, std::list<std::string>& users) override;
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override;
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return rados->get_sync_module(); }
     virtual std::string get_host_id() { return rados->host_id; }

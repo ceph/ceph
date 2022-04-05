@@ -8166,52 +8166,34 @@ next:
     if (opt_cmd == OPT::USER_LIST) {
       metadata_key = "user";
     }
+
+    bool truncated = false;
     void *handle;
-    int max = 1000;
-    int ret = store->meta_list_keys_init(dpp(), metadata_key, marker, &handle);
-    if (ret < 0) {
+    uint64_t count = 0;
+    std::list<std::string> users;
+
+    formatter->open_object_section("result");
+
+    formatter->open_array_section("keys");
+    int ret = store->list_users(dpp(), metadata_key, marker, max_entries, handle, &truncated, users);
+     if (ret < 0 && ret != ENOENT) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-
-    bool truncated;
-    uint64_t count = 0;
-
-    if (max_entries_specified) {
-      formatter->open_object_section("result");
-    }
-    formatter->open_array_section("keys");
-
-    uint64_t left;
-    do {
-      list<string> keys;
-      left = (max_entries_specified ? max_entries - count : max);
-      ret = store->meta_list_keys_next(dpp(), handle, left, keys, &truncated);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      } if (ret != -ENOENT) {
-	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-	  formatter->dump_string("key", *iter);
-          ++count;
-	}
-	formatter->flush(cout);
+    if (ret != -ENOENT) {
+      for (std::list<std::string>::iterator iter = users.begin(); iter != users.end(); ++iter){
+        formatter->dump_string("key", *iter);
       }
-    } while (truncated && left > 0);
-
+    }
+    count = users.size();
     formatter->close_section();
-
-    if (max_entries_specified) {
-      encode_json("truncated", truncated, formatter.get());
-      encode_json("count", count, formatter.get());
-      if (truncated) {
-        encode_json("marker", store->meta_get_marker(handle), formatter.get());
-      }
-      formatter->close_section();
+    encode_json("truncated", truncated, formatter.get());
+    encode_json("count", count, formatter.get());
+    if (truncated) {
+      encode_json("marker", marker, formatter.get());
     }
+    formatter->close_section();
     formatter->flush(cout);
-
-    store->meta_list_keys_complete(handle);
   }
 
   if (opt_cmd == OPT::MDLOG_LIST) {
