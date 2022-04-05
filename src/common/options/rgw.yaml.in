@@ -1955,6 +1955,30 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_data_sync_poll_interval
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: Once multisite's incremental sync of a datalog shard is caught up
+    with its source, it will wait this long (in seconds) before polling for
+    more changes.
+  services:
+  - rgw
+  see_also:
+  - rgw_meta_sync_poll_interval
+  with_legacy: true
+- name: rgw_meta_sync_poll_interval
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: Once multisite's incremental sync of a mdlog shard is caught up
+    with its source, it will wait this long (in seconds) before polling for
+    more changes.
+  services:
+  - rgw
+  see_also:
+  - rgw_data_sync_poll_interval
+  with_legacy: true
 - name: rgw_bucket_quota_ttl
   type: int
   level: advanced
