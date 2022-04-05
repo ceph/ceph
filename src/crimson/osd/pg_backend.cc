@@ -1024,7 +1024,15 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
       osd_op.rval = 1;
       return cmp_xattr_ierrorator::now();
     }
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enodata::handle([&delta_stats, &osd_op] ()
+      ->cmp_xattr_errorator::future<> {
+      delta_stats.num_rd++;
+      delta_stats.num_rd_kb += shift_round_up(osd_op.op.xattr.value_len, 10);
+      return crimson::ct_error::ecanceled::make();
+    }),
+    cmp_xattr_errorator::pass_further{}
+  );
 }
 
 PGBackend::rm_xattr_iertr::future<>
