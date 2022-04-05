@@ -2987,6 +2987,13 @@ int MotrStore::meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, 
   return 0;
 }
 
+int MotrStore::list_users(const DoutPrefixProvider* dpp, const std::string& metadata_key,
+                        std::string& marker, int max_entries, void *&handle,
+                        bool* truncated, std::list<std::string>& users)
+{
+    return 0;
+}
+
 int MotrStore::open_idx(struct m0_uint128 *id, bool create, struct m0_idx *idx)
 {
   m0_idx_init(idx, &container.co_realm, id);
