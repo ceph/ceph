@@ -2719,7 +2719,8 @@ Then run the following:
 
         if limit is not None:
             if limit < 1:
-                raise OrchestratorError(f'Upgrade aborted - --limit arg must be a positive integer, not {limit}')
+                raise OrchestratorError(
+                    f'Upgrade aborted - --limit arg must be a positive integer, not {limit}')
 
         return self.upgrade.upgrade_start(image, version, daemon_types, hosts, services, limit)
 
