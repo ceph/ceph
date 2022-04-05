@@ -2628,4 +2628,9 @@ inline int parse_value_and_bound(
   return 0;
 }
 
+int rgw_policy_from_attrset(const DoutPrefixProvider *dpp,
+                            CephContext *cct,
+                            std::map<std::string, bufferlist>& attrset,
+                            RGWAccessControlPolicy *policy);
+
 #endif /* CEPH_RGW_OP_H */
