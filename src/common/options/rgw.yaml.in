@@ -1979,6 +1979,42 @@ options:
   see_also:
   - rgw_data_sync_poll_interval
   with_legacy: true
+- name: rgw_bucket_sync_spawn_window
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: The maximum number of items that bucket sync is willing to
+    process in parallel (per remote bilog shard).
+  services:
+  - rgw
+  see_also:
+  - rgw_data_sync_spawn_window
+  - rgw_meta_sync_spawn_window
+  with_legacy: true
+- name: rgw_data_sync_spawn_window
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: The maximum number of items that data sync is willing to
+    process in parallel (per remote datalog shard).
+  services:
+  - rgw
+  see_also:
+  - rgw_bucket_sync_spawn_window
+  - rgw_meta_sync_spawn_window
+  with_legacy: true
+- name: rgw_meta_sync_spawn_window
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: The maximum number of items that metadata sync is willing to
+    process in parallel (per remote mdlog shard).
+  services:
+  - rgw
+  see_also:
+  - rgw_bucket_sync_spawn_window
+  - rgw_data_sync_spawn_window
+  with_legacy: true
 - name: rgw_bucket_quota_ttl
   type: int
   level: advanced
