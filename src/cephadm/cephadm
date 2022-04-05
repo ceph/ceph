@@ -6876,15 +6876,24 @@ def command_rm_daemon(ctx):
 
     # remove the mon from cluster after we stop the mon.
     # necessary to do this here because <insert-reason-here>
+    # if daemon_type == 'mon':
+    #     logger.debug('command_rm_daemon(): monitor')
+    #     ctx.command = ['ceph', 'mon', 'remove', daemon_id]
+    #     ctx.keyring = os.path.join(get_data_dir(ctx.fsid, ctx.data_dir, 'mon', daemon_id), 'keyring')
+    #     ctx.mount = []
+    #     ctx.volume = []
+    #     ctx.no_hosts = False
+    #     ctx.timeout = ctx.timeout if ctx.timeout else 60
+    #     command_shell(ctx)
+
     if daemon_type == 'mon':
-        logger.debug('command_rm_daemon(): monitor')
-        ctx.command = ['ceph', 'mon', 'remove', daemon_id]
-        ctx.keyring = os.path.join(get_data_dir(ctx.fsid, ctx.data_dir, 'mon', daemon_id), 'keyring')
-        ctx.mount = []
-        ctx.volume = []
-        ctx.no_hosts = False
-        ctx.timeout = ctx.timeout if ctx.timeout else 60
-        command_shell(ctx)
+        c = CephContainer(
+            ctx,
+            image=ctx.image,
+            entrypoint='/usr/bin/ceph',
+            ['mon', 'remove', daemon_id]
+        )
+        call(ctx, c.run_cmd(), desc=c.entrypoint)
 
     call(ctx, ['systemctl', 'reset-failed', unit_name],
          verbosity=CallVerbosity.DEBUG)
