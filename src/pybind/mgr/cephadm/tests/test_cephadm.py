@@ -166,9 +166,11 @@ class TestCephadm(object):
         resolve_ip.side_effect = ['192.168.122.1', '127.0.0.1', '127.0.0.1']
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         cephadm_module._add_host(HostSpec('test', '192.168.122.1'))
-        assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '192.168.122.1')]
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == [
+            HostSpec('test', '192.168.122.1')]
         cephadm_module._add_host(HostSpec('test'))
-        assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', '192.168.122.1')]
+        assert wait(cephadm_module, cephadm_module.get_hosts()) == [
+            HostSpec('test', '192.168.122.1')]
         with pytest.raises(OrchestratorError):
             cephadm_module._add_host(HostSpec('test2'))
 
@@ -894,7 +896,8 @@ class TestCephadm(object):
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
-            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands) for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
+            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands)
+                       for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
 
     @pytest.mark.parametrize(
         "devices, preview, exp_commands",
@@ -919,7 +922,8 @@ class TestCephadm(object):
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
-            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands) for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
+            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands)
+                       for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([
