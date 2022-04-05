@@ -146,6 +146,8 @@ file under each ``[client.radosgw.{instance-name}]`` instance.
 .. confval:: rgw_data_log_obj_prefix
 .. confval:: rgw_data_log_num_shards
 .. confval:: rgw_md_log_max_shards
+.. confval:: rgw_data_sync_poll_interval
+.. confval:: rgw_meta_sync_poll_interval
 
 .. important:: The values of :confval:`rgw_data_log_num_shards` and
    :confval:`rgw_md_log_max_shards` should not be changed after sync has

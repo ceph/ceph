@@ -1765,8 +1765,7 @@ public:
   }
 
   utime_t get_idle_interval() const {
-#define INCREMENTAL_INTERVAL 20
-    ceph::timespan interval = std::chrono::seconds(INCREMENTAL_INTERVAL);
+    ceph::timespan interval = std::chrono::seconds(cct->_conf->rgw_data_sync_poll_interval);
     if (!ceph::coarse_real_clock::is_zero(error_retry_time)) {
       auto now = ceph::coarse_real_clock::now();
       if (error_retry_time > now) {
