@@ -39,7 +39,10 @@ tasks:
 - cephadm:
 - cephadm.shell:
     host.a:
+      - ceph config set mgr mgr/cephadm/host_check_interval 15
+      - ceph config set mgr mgr/cephadm/facts_cache_timeout 15
       - ceph config set mgr mgr/cephadm/daemon_cache_timeout 15
+      - ceph config set mgr mgr/cephadm/device_cache_timeout 15
       - ceph orch apply mds a
 - cephfs_test_runner:
     modules:

@@ -6887,13 +6887,9 @@ def command_rm_daemon(ctx):
     #     command_shell(ctx)
 
     if daemon_type == 'mon':
-        c = CephContainer(
-            ctx,
-            image=ctx.image,
-            entrypoint='/usr/bin/ceph',
-            ['mon', 'remove', daemon_id]
-        )
-        call(ctx, c.run_cmd(), desc=c.entrypoint)
+        ctx.timeout = ctx.timeout if ctx.timeout else 60
+        call(ctx, ['ceph', 'mon', 'remove', daemon_id],
+            verbosity=CallVerbosity.DEBUG)
 
     call(ctx, ['systemctl', 'reset-failed', unit_name],
          verbosity=CallVerbosity.DEBUG)
