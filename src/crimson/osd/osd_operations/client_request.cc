@@ -11,6 +11,7 @@
 #include "crimson/osd/osd.h"
 #include "common/Formatter.h"
 #include "crimson/osd/osd_operation_sequencer.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
 
