@@ -158,6 +158,21 @@ private:
   virtual const char *get_type_name() const = 0;
 };
 
+// the main template. by default an operation has no extenral
+// event handler (the empty tuple). specializing the template
+// allows to define backends on per-operation-type manner.
+// NOTE: basically this could be a function but C++ disallows
+// differentiating return type among specializations.
+template <class T>
+struct EventBackendRegistry {
+  template <typename...> static constexpr bool always_false = false;
+
+  static std::tuple<> get_backends() {
+    static_assert(always_false<T>, "Registry specialization not found");
+    return {};
+  }
+};
+
 template <class T>
 struct Event {
   T* that() {
@@ -172,6 +187,14 @@ struct Event {
     that()->internal_backend.handle(*that(),
                                     std::forward<OpT>(op),
                                     std::forward<Args>(args)...);
+    // let's call `handle()` for concrete event type from each single
+    // of our backends. the order in the registry matters.
+    std::apply([&, //args=std::forward_as_tuple(std::forward<Args>(args)...),
+		this] (auto... backend) {
+      (..., backend.handle(*that(),
+                           std::forward<OpT>(op),
+                           std::forward<Args>(args)...));
+    }, EventBackendRegistry<std::decay_t<OpT>>::get_backends());
   }
 };
 
