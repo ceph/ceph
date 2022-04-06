@@ -737,8 +737,7 @@ class CephFSShell(Cmd):
                 return
             copy_to_local(root_src_dir, b'-')
         elif is_file_exists(args.remote_path):
-            copy_to_local(root_src_dir,
-                          root_dst_dir + b'/' + root_src_dir)
+            copy_to_local(root_src_dir, root_dst_dir)
         elif b'/' in root_src_dir and is_file_exists(fname[1], fname[0]):
             copy_to_local(root_src_dir, root_dst_dir)
         else:
