@@ -1,7 +1,7 @@
 
 GRAFANA_VERSION ?= 8.3.5-1
-PIECHART_VERSION ?= "1.6.1"
-STATUS_PANEL_VERSION ?= "1.0.9"
+PIECHART_VERSION ?= "1.6.2"
+STATUS_PANEL_VERSION ?= "1.0.11"
 DASHBOARD_DIR := "../../ceph-mixin/dashboards_out"
 DASHBOARD_PROVISIONING := "ceph-dashboard.yml"
 IMAGE := "docker.io/redhat/ubi8:8.5"
