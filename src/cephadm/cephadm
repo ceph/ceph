@@ -787,10 +787,7 @@ class CephIscsi(object):
         # remove extra container args for tcmu container.
         # extra args could cause issue with forking service type
         tcmu_container.container_args = []
-        # set container limits to unlimited as defaults (Docker 4096 / Podman 2048)
-        # prevents the creation of max lun (default 255)
-        pids_unlimited = '-1' if isinstance(self.ctx.container_engine, Podman) else '0'
-        tcmu_container.container_args.extend(['--pids-limit=%s' % pids_unlimited])
+        set_pids_limit_unlimited(self.ctx, tcmu_container.container_args)
         return tcmu_container
 
 ##################################
@@ -2680,6 +2677,17 @@ def get_ceph_volume_container(ctx: CephadmContext,
     )
 
 
+def set_pids_limit_unlimited(ctx: CephadmContext, container_args: List[str]) -> None:
+    # set container's pids-limit to unlimited rather than default (Docker 4096 / Podman 2048)
+    # Useful for daemons like iscsi where the default pids-limit limits the number of luns
+    # per iscsi target or rgw where increasing the rgw_thread_pool_size to a value near
+    # the default pids-limit may cause the container to crash.
+    if isinstance(ctx.container_engine, Podman):
+        container_args.append('--pids-limit=-1')
+    else:
+        container_args.append('--pids-limit=0')
+
+
 def get_container(ctx: CephadmContext,
                   fsid: str, daemon_type: str, daemon_id: Union[int, str],
                   privileged: bool = False,
@@ -2701,6 +2709,7 @@ def get_container(ctx: CephadmContext,
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % daemon_id
+        set_pids_limit_unlimited(ctx, container_args)
     elif daemon_type == 'rbd-mirror':
         entrypoint = '/usr/bin/rbd-mirror'
         name = 'client.rbd-mirror.%s' % daemon_id
@@ -2734,6 +2743,7 @@ def get_container(ctx: CephadmContext,
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
         privileged = True
+        set_pids_limit_unlimited(ctx, container_args)
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, fsid, daemon_id)
         entrypoint = cc.entrypoint
@@ -2762,8 +2772,6 @@ def get_container(ctx: CephadmContext,
 
     # if using podman, set -d, --conmon-pidfile & --cidfile flags
     # so service can have Type=Forking
-    # set containers limits to unlimited as defaults (Docker 4096 / Podman 2048)
-    # prevents some app customizations from running
     if isinstance(ctx.container_engine, Podman):
         runtime_dir = '/run'
         container_args.extend([
@@ -2772,14 +2780,9 @@ def get_container(ctx: CephadmContext,
             runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, daemon_id),
             '--cidfile',
             runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id),
-            '--pids-limit=-1',
         ])
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             container_args.append('--cgroups=split')
-    else:
-        container_args.extend([
-            '--pids-limit=0',
-        ])
 
     return CephContainer.for_daemon(
         ctx,
