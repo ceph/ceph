@@ -6207,7 +6207,8 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     return r;
   }
   BlueFSVolumeSelector* vselector = nullptr;
-  if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
+  if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ||
+      cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced") {
 
     string options = cct->_conf->bluestore_rocksdb_options;
     string options_annex = cct->_conf->bluestore_rocksdb_options_annex;
@@ -6245,7 +6246,8 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
           rocks_opts.max_bytes_for_level_multiplier,
           reserved_factor,
           cct->_conf->bluestore_volume_selection_reserved,
-          cct->_conf->bluestore_volume_selection_policy == "use_some_extra");
+          cct->_conf->bluestore_volume_selection_policy.find("use_some_extra")
+             == 0);
     }    
   }
   if (create) {
