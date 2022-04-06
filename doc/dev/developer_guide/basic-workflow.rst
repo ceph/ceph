@@ -55,8 +55,8 @@ setting the ``Assignee`` field.  If your tracker permissions have not been
 elevated, simply add a comment with a short message like "I am working on this
 issue".
 
-Forking and Cloning the Ceph Repostory
---------------------------------------
+Forking and Cloning the Ceph Repository
+---------------------------------------
 
 This section, and the ones that follow, correspond to nodes in the above chart.
 
