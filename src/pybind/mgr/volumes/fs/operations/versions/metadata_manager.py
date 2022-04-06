@@ -26,6 +26,10 @@ class MetadataManager(object):
     GLOBAL_META_KEY_PATH    = "path"
     GLOBAL_META_KEY_STATE   = "state"
 
+    CLONE_FAILURE_SECTION = "CLONE_FAILURE"
+    CLONE_FAILURE_META_KEY_ERRNO = "errno"
+    CLONE_FAILURE_META_KEY_ERROR_MSG = "error_msg"
+
     MAX_IO_BYTES = 8 * 1024
 
     def __init__(self, fs, config_path, mode):
