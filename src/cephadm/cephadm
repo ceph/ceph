@@ -4692,7 +4692,7 @@ def command_bootstrap(ctx):
     logger.info('Please consider enabling telemetry to help improve Ceph:\n\n'
                 '\tceph telemetry on\n\n'
                 'For more information see:\n\n'
-                '\thttps://docs.ceph.com/docs/pacific/mgr/telemetry/\n')
+                '\thttps://docs.ceph.com/en/pacific/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
     return 0
 
