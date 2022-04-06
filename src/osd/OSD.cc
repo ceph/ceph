@@ -4857,87 +4857,100 @@ void OSD::load_pgs()
     derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
   }
 
-  int num = 0;
+  ThreadPool tp(cct, "OSD::load_pgs_tp", "load_pgs_tp", cct->_conf->osd_load_pgs_threads);
+  ContextWQ wq("OSD::load_pgs_wq", ceph::make_timespan(cct->_conf->osd_load_pg_timeout), &tp);
+  tp.start();
+
+  std::atomic<int> num = 0;
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        ++it) {
-    spg_t pgid;
-    if (it->is_temp(&pgid) ||
-       (it->is_pg(&pgid) && PG::_has_removal_flag(store.get(), pgid))) {
-      dout(10) << "load_pgs " << *it
-	       << " removing, legacy or flagged for removal pg" << dendl;
-      recursive_remove_collection(cct, store.get(), pgid, *it);
-      continue;
-    }
-
-    if (!it->is_pg(&pgid)) {
-      dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
-      continue;
-    }
-
-    dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
-    epoch_t map_epoch = 0;
-    int r = PG::peek_map_epoch(store.get(), pgid, &map_epoch);
-    if (r < 0) {
-      derr << __func__ << " unable to peek at " << pgid << " metadata, skipping"
-	   << dendl;
-      continue;
-    }
-
-    PGRef pg;
-    if (map_epoch > 0) {
-      OSDMapRef pgosdmap = service.try_get_map(map_epoch);
-      if (!pgosdmap) {
-	if (!get_osdmap()->have_pg_pool(pgid.pool())) {
-	  derr << __func__ << ": could not find map for epoch " << map_epoch
-	       << " on pg " << pgid << ", but the pool is not present in the "
-	       << "current map, so this is probably a result of bug 10617.  "
-	       << "Skipping the pg for now, you can use ceph-objectstore-tool "
-	       << "to clean it up later." << dendl;
-	  continue;
-	} else {
-	  derr << __func__ << ": have pgid " << pgid << " at epoch "
-	       << map_epoch << ", but missing map.  Crashing."
-	       << dendl;
-	  ceph_abort_msg("Missing map in load_pgs");
-	}
+    auto ctx = make_lambda_context([this, it, &num]{
+      spg_t pgid;
+      if (it->is_temp(&pgid) ||
+         (it->is_pg(&pgid) && PG::_has_removal_flag(store.get(), pgid))) {
+	dout(10) << "load_pgs " << *it
+	         << " removing, legacy or flagged for removal pg" << dendl;
+	recursive_remove_collection(cct, store.get(), pgid, *it);
+	return;
       }
-      pg = _make_pg(pgosdmap, pgid);
-    } else {
-      pg = _make_pg(get_osdmap(), pgid);
-    }
-    if (!pg) {
-      recursive_remove_collection(cct, store.get(), pgid, *it);
-      continue;
-    }
 
-    // there can be no waiters here, so we don't call _wake_pg_slot
+      if (!it->is_pg(&pgid)) {
+	dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
+	return;
+      }
 
-    pg->lock();
-    pg->ch = store->open_collection(pg->coll);
+      dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
+      epoch_t map_epoch = 0;
+      int r = PG::peek_map_epoch(store.get(), pgid, &map_epoch);
+      if (r < 0) {
+	derr << __func__ << " unable to peek at " << pgid << " metadata, skipping"
+	     << dendl;
+	return;
+      }
 
-    // read pg state, log
-    pg->read_state(store.get());
+      PGRef pg;
+      if (map_epoch > 0) {
+	OSDMapRef pgosdmap = service.try_get_map(map_epoch);
+	if (!pgosdmap) {
+	  if (!get_osdmap()->have_pg_pool(pgid.pool())) {
+	    derr << __func__ << ": could not find map for epoch " << map_epoch
+		 << " on pg " << pgid << ", but the pool is not present in the "
+		 << "current map, so this is probably a result of bug 10617.  "
+		 << "Skipping the pg for now, you can use ceph-objectstore-tool "
+		 << "to clean it up later." << dendl;
+	    return;
+	  } else {
+	    derr << __func__ << ": have pgid " << pgid << " at epoch "
+		 << map_epoch << ", but missing map.  Crashing."
+		 << dendl;
+	    ceph_abort_msg("Missing map in load_pgs");
+	  }
+	}
+	pg = _make_pg(pgosdmap, pgid);
+      } else {
+	pg = _make_pg(get_osdmap(), pgid);
+      }
+      if (!pg) {
+	recursive_remove_collection(cct, store.get(), pgid, *it);
+	return;
+      }
 
-    if (pg->dne())  {
-      dout(10) << "load_pgs " << *it << " deleting dne" << dendl;
-      pg->ch = nullptr;
+      // there can be no waiters here, so we don't call _wake_pg_slot
+
+      pg->lock();
+      pg->ch = store->open_collection(pg->coll);
+
+      // read pg state, log
+      pg->read_state(store.get());
+
+      if (pg->dne())  {
+	dout(10) << "load_pgs " << *it << " deleting dne" << dendl;
+	pg->ch = nullptr;
+	pg->unlock();
+	recursive_remove_collection(cct, store.get(), pgid, *it);
+	return;
+      }
+      {
+	uint32_t shard_index = pgid.hash_to_shard(shards.size());
+	assert(NULL != shards[shard_index]);
+	store->set_collection_commit_queue(pg->coll, &(shards[shard_index]->context_queue));
+      }
+
+      dout(10) << __func__ << " loaded " << *pg << dendl;
       pg->unlock();
-      recursive_remove_collection(cct, store.get(), pgid, *it);
-      continue;
-    }
-    {
-      uint32_t shard_index = pgid.hash_to_shard(shards.size());
-      assert(NULL != shards[shard_index]);
-      store->set_collection_commit_queue(pg->coll, &(shards[shard_index]->context_queue));
-    }
 
-    dout(10) << __func__ << " loaded " << *pg << dendl;
-    pg->unlock();
+      register_pg(pg);
+      ++num;
+    });
 
-    register_pg(pg);
-    ++num;
+    wq.queue(ctx);
   }
+
+  wq.drain();
+  tp.drain();
+  tp.stop();
+
   dout(0) << __func__ << " opened " << num << " pgs" << dendl;
 }
 

@@ -587,6 +587,18 @@ options:
   level: advanced
   desc: compact OSD's object store's OMAP on start
   default: false
+- name: osd_load_pgs_threads
+  type: int
+  level: advanced
+  desc: number of threads to load PGs on start
+  default: 4
+  with_legacy: true
+- name: osd_load_pg_timeout
+  type: int
+  level: advanced
+  desc: timeout of loading a PG in seconds
+  default: 15
+  with_legacy: true
 # flags for specific control purpose during osd mount() process.
 # e.g., can be 1 to skip over replaying journal
 # or 2 to skip over mounting omap or 3 to skip over both.
