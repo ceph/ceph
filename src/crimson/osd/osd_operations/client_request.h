@@ -37,6 +37,7 @@ public:
     } get_pg;
 
     friend class ClientRequest;
+    friend class LttngBackend;
   };
 
   class PGPipeline : public CommonPGPipeline {
@@ -50,6 +51,7 @@ public:
       static constexpr auto type_name = "ClientRequest::PGPipeline::send_reply";
     } send_reply;
     friend class ClientRequest;
+    friend class LttngBackend;
   };
 
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
