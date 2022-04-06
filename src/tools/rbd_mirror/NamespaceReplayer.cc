@@ -848,7 +848,10 @@ void NamespaceReplayer<I>::add_peer(const Peer<I>& peer, Context* on_finish) {
   ceph_assert(peer.pool_watcher == nullptr);
 
   auto result = m_peers.insert({peer.uuid, peer});
-  ceph_assert(result.second);
+  if (!result.second) {
+    dout(20) << "peer already added peer=" << peer << dendl;
+    return;
+  }
 
   result.first->second.io_ctx.dup(peer.io_ctx);
   result.first->second.io_ctx.set_namespace(m_namespace_name);
@@ -892,7 +895,6 @@ template <typename I>
 void NamespaceReplayer<I>::handle_init_remote_status_updater(
     Peer<I>& peer, int r, Context *on_finish) {
   dout(10) << "r=" << r << dendl;
-
   std::lock_guard locker{m_lock};
 
   if (r < 0) {
@@ -901,7 +903,7 @@ void NamespaceReplayer<I>::handle_init_remote_status_updater(
 
     delete peer.status_updater;
     peer.status_updater = nullptr;
-    on_finish->complete(r);
+    m_threads->work_queue->queue(on_finish, r);
     return;
   }
 
@@ -919,18 +921,24 @@ void NamespaceReplayer<I>::init_remote_pool_watcher(Peer<I>& peer,
     return;
   }
 
+  auto ctx = new LambdaContext([this, &peer, on_finish](int r) {
+    handle_init_remote_pool_watcher(peer, r, on_finish);
+  });
+
   ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(!peer.pool_watcher);
   RemotePoolMeta remote_pool_meta;
-  ceph_assert(m_pool_meta_cache->get_remote_pool_meta(peer.io_ctx.get_id(),
-    peer.uuid, &remote_pool_meta) == 0);
+  int r = m_pool_meta_cache->get_remote_pool_meta(peer.io_ctx.get_id(),
+    peer.uuid, &remote_pool_meta);
+  if (r < 0) {
+    m_threads->work_queue->queue(ctx, r);
+    return;
+  }
+
   peer.pool_watcher = PoolWatcher<I>::create(
       m_threads, peer.io_ctx, remote_pool_meta.mirror_uuid,
       m_remote_pool_watcher_listener);
 
-  auto ctx = new LambdaContext([this, &peer, on_finish](int r) {
-    handle_init_remote_pool_watcher(peer, r, on_finish);
-  });
   peer.pool_watcher->init(create_async_context_callback(
     m_threads->work_queue, ctx));
 }
@@ -1046,12 +1054,15 @@ void NamespaceReplayer<I>::shut_down_remote_pool_watcher(
   dout(10) << dendl;
 
   std::lock_guard locker{m_lock};
-  ceph_assert(peer.pool_watcher);
-
   Context* ctx = new LambdaContext([this, &peer, on_finish](int r) {
     handle_shut_down_remote_pool_watcher(peer, r, on_finish);
   });
   ctx = create_async_context_callback(m_threads->work_queue, ctx);
+
+  if (peer.pool_watcher == nullptr) {
+    m_threads->work_queue->queue(ctx);
+    return;
+  }
   peer.pool_watcher->shut_down(ctx);
 }
 
