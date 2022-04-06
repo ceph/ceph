@@ -544,4 +544,4 @@ if $for_make_check; then
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
 
-in_jenkins && echo "CI_DEBUG: End install-deps.sh"
+in_jenkins && echo "CI_DEBUG: End install-deps.sh" || true
