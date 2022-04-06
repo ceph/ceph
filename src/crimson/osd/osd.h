@@ -37,7 +37,6 @@ class MOSDMap;
 class MOSDRepOpReply;
 class MOSDRepOp;
 class MOSDScrub2;
-class OSDMap;
 class OSDMeta;
 class Heartbeat;
 
