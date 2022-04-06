@@ -1,10 +1,10 @@
 
-GRAFANA_VERSION ?= 6.7.4-1
-PIECHART_VERSION ?= "1.4.0"
-STATUS_PANEL_VERSION ?= "1.0.9"
+GRAFANA_VERSION ?= 8.3.5-1
+PIECHART_VERSION ?= "1.6.2"
+STATUS_PANEL_VERSION ?= "1.0.11"
 DASHBOARD_DIR := "../dashboards"
 DASHBOARD_PROVISIONING := "ceph-dashboard.yml"
-IMAGE := "docker.io/centos:8"
+IMAGE := "docker.io/redhat/ubi8:8.5"
 PKGMGR := "dnf"
 GF_CONFIG := "/etc/grafana/grafana.ini"
 # clip off "-<whatever> from the end of GRAFANA_VERSION
@@ -80,6 +80,5 @@ push:
 clean:
 	sudo podman rmi ${LOCALTAG} || true
 	sudo podman rmi quay.io/${TAG} || true
-	sudo podman rmi localhost/tmp/oci-image || true
 	rm -f grafana-*.rpm* auth.json
 	rm -f ${DASHBOARD_PROVISIONING}
