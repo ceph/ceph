@@ -4297,7 +4297,7 @@ void *BlueStore::MempoolThread::entry()
     _resize_shards(interval_stats_trim);
     interval_stats_trim = false;
 
-    store->_update_cache_logger();
+    store->_update_logger();
     auto wait = ceph::make_timespan(
       store->cct->_conf->bluestore_cache_trim_interval);
     cond.wait_for(l, wait);
@@ -4412,15 +4412,20 @@ void BlueStore::MempoolThread::_update_cache_settings()
 #define dout_prefix *_dout << "bluestore.OmapIteratorImpl(" << this << ") "
 
 BlueStore::OmapIteratorImpl::OmapIteratorImpl(
-  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
-  : c(c), o(o), it(it)
+  PerfCounters* _logger, CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
+  : logger(_logger), c(c), o(o), it(it)
 {
+  logger->inc(l_bluestore_omap_iterator_count);
   std::shared_lock l(c->lock);
   if (o->onode.has_omap()) {
     o->get_omap_key(string(), &head);
     o->get_omap_tail(&tail);
     it->lower_bound(head);
   }
+}
+BlueStore::OmapIteratorImpl::~OmapIteratorImpl()
+{
+  logger->dec(l_bluestore_omap_iterator_count);
 }
 
 string BlueStore::OmapIteratorImpl::_stringify() const
@@ -5238,7 +5243,15 @@ void BlueStore::_init_logger()
 		    "Sum for extents that have been merged due to garbage "
 		    "collection");
   //****************************************
-
+  // misc
+  //****************************************
+  b.add_u64_counter(l_bluestore_omap_iterator_count, "omap_iterator_count",
+    "Open omap iterators count");
+  b.add_u64_counter(l_bluestore_omap_rmkeys_count, "omap_rmkeys_count",
+    "amount of omap keys removed via rmkeys");
+  b.add_u64_counter(l_bluestore_omap_rmkey_ranges_count, "omap_rmkey_range_count",
+    "amount of omap key ranges removed via rmkeys");
+  //****************************************
   // other client ops latencies
   //****************************************
   b.add_time_avg(l_bluestore_omap_seek_to_first_lat, "omap_seek_to_first_lat",
@@ -10582,7 +10595,7 @@ void BlueStore::_reap_collections()
   }
 }
 
-void BlueStore::_update_cache_logger()
+void BlueStore::_update_logger()
 {
   uint64_t num_onodes = 0;
   uint64_t num_pinned_onodes = 0;
@@ -12157,7 +12170,7 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
     bounds.upper_bound = std::move(upper_bound);
   }
   KeyValueDB::Iterator it = db->get_iterator(o->get_omap_prefix(), 0, std::move(bounds));
-  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
+  return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(logger,c, o, it));
 }
 
 // -----------------
@@ -16538,7 +16551,6 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   auto p = bl.cbegin();
   __u32 num;
   string final_key;
-
   if (!o->onode.has_omap()) {
     goto out;
   }
@@ -16547,6 +16559,7 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
     o->get_omap_key(string(), &final_key);
     size_t base_key_len = final_key.size();
     decode(num, p);
+    logger->inc(l_bluestore_omap_rmkeys_count, num);
     while (num--) {
       string key;
       decode(key, p);
@@ -16580,6 +16593,7 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
     o->flush();
     o->get_omap_key(first, &key_first);
     o->get_omap_key(last, &key_last);
+    logger->inc(l_bluestore_omap_rmkey_ranges_count);
     txc->t->rm_range_keys(prefix, key_first, key_last);
     dout(20) << __func__ << " remove range start: "
              << pretty_binary_string(key_first) << " end: "
@@ -16588,7 +16602,6 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   txc->note_modified_object(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
