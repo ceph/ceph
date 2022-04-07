@@ -314,17 +314,6 @@ void AbstractWriteLog<I>::log_perf() {
 template <typename I>
 void AbstractWriteLog<I>::periodic_stats() {
   std::lock_guard locker(m_lock);
-  m_cache_state->allocated_bytes = m_bytes_allocated;
-  m_cache_state->cached_bytes = m_bytes_cached;
-  m_cache_state->dirty_bytes = m_bytes_dirty;
-  m_cache_state->free_bytes = m_bytes_allocated_cap - m_bytes_allocated;
-  m_cache_state->hits_full = m_perfcounter->get(l_librbd_pwl_rd_hit_req);
-  m_cache_state->hits_partial = m_perfcounter->get(l_librbd_pwl_rd_part_hit_req);
-  m_cache_state->misses = m_perfcounter->get(l_librbd_pwl_rd_req) -
-      m_cache_state->hits_full - m_cache_state->hits_partial;
-  m_cache_state->hit_bytes = m_perfcounter->get(l_librbd_pwl_rd_hit_bytes);
-  m_cache_state->miss_bytes = m_perfcounter->get(l_librbd_pwl_rd_bytes) -
-      m_cache_state->hit_bytes;
   update_image_cache_state();
   ldout(m_image_ctx.cct, 5) << "STATS: m_log_entries=" << m_log_entries.size()
                             << ", m_dirty_log_entries=" << m_dirty_log_entries.size()
@@ -589,6 +578,19 @@ void AbstractWriteLog<I>::update_image_cache_state() {
 template <typename I>
 void AbstractWriteLog<I>::update_image_cache_state(Context *on_finish) {
   ldout(m_image_ctx.cct, 10) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  m_cache_state->allocated_bytes = m_bytes_allocated;
+  m_cache_state->cached_bytes = m_bytes_cached;
+  m_cache_state->dirty_bytes = m_bytes_dirty;
+  m_cache_state->free_bytes = m_bytes_allocated_cap - m_bytes_allocated;
+  m_cache_state->hits_full = m_perfcounter->get(l_librbd_pwl_rd_hit_req);
+  m_cache_state->hits_partial = m_perfcounter->get(l_librbd_pwl_rd_part_hit_req);
+  m_cache_state->misses = m_perfcounter->get(l_librbd_pwl_rd_req) -
+      m_cache_state->hits_full - m_cache_state->hits_partial;
+  m_cache_state->hit_bytes = m_perfcounter->get(l_librbd_pwl_rd_hit_bytes);
+  m_cache_state->miss_bytes = m_perfcounter->get(l_librbd_pwl_rd_bytes) -
+      m_cache_state->hit_bytes;
   m_cache_state->write_image_cache_state(on_finish);
 }
 
@@ -618,6 +620,7 @@ void AbstractWriteLog<I>::init(Context *on_finish) {
   Context *ctx = new LambdaContext(
     [this, on_finish](int r) {
       if (r >= 0) {
+        std::lock_guard locker(m_lock);
         update_image_cache_state(on_finish);
       } else {
         on_finish->complete(r);
@@ -637,6 +640,9 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
 
   Context *ctx = new LambdaContext(
     [this, on_finish](int r) {
+      if (m_perfcounter) {
+        perf_stop();
+      }
       ldout(m_image_ctx.cct, 6) << "shutdown complete" << dendl;
       m_image_ctx.op_work_queue->queue(on_finish, r);
     });
@@ -645,20 +651,14 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
       ldout(m_image_ctx.cct, 6) << "image cache cleaned" << dendl;
       Context *next_ctx = override_ctx(r, ctx);
       periodic_stats();
-      {
-        std::lock_guard locker(m_lock);
-        check_image_cache_state_clean();
-        m_wake_up_enabled = false;
-        m_log_entries.clear();
-        m_cache_state->clean = true;
-        m_cache_state->empty = true;
 
-        remove_pool_file();
-
-        if (m_perfcounter) {
-          perf_stop();
-        }
-      }
+      std::lock_guard locker(m_lock);
+      check_image_cache_state_clean();
+      m_wake_up_enabled = false;
+      m_log_entries.clear();
+      m_cache_state->clean = true;
+      m_cache_state->empty = true;
+      remove_pool_file();
       update_image_cache_state(next_ctx);
     });
   ctx = new LambdaContext(
