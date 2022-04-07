@@ -84,13 +84,6 @@ struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
     ASSERT_EQ(size, state.size);
   }
 
-  void expect_op_work_queue(MockImageCtx& mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.op_work_queue, queue(_, _))
-      .WillRepeatedly(Invoke([](Context* ctx, int r) {
-                        ctx->complete(r);
-                      }));
-  }
-
   void expect_context_complete(MockContextRWL& mock_context, int r) {
     EXPECT_CALL(mock_context, complete(r))
       .WillRepeatedly(Invoke([&mock_context](int r) {
