@@ -155,3 +155,34 @@ And('I should see row {string} does not have {string}', (row: string, options: s
     }
   }
 });
+
+And('I go to the {string} tab', (names: string) => {
+  for (const name of names.split(', ')) {
+    cy.contains('.nav.nav-tabs li', name).click();
+  }
+});
+
+And('select {string} {string}', (selectionName: string, option: string) => {
+  cy.get(`select[name=${selectionName}]`).select(option);
+  cy.get(`select[name=${selectionName}] option:checked`).contains(option);
+});
+
+When('I expand the row {string}', (row: string) => {
+  cy.contains('.datatable-body-row', row).first().find('.tc_expand-collapse').click();
+});
+
+And('I should see row {string} have {string} on this tab', (row: string, options: string) => {
+  if (options) {
+    cy.get('cd-table').should('exist');
+    cy.get('datatable-scroller, .empty-row');
+    cy.get('.datatable-row-detail').within(() => {
+      cy.get('cd-table .search input').first().clear().type(row);
+      for (const option of options.split(',')) {
+        cy.contains(
+          `datatable-body-row datatable-body-cell .datatable-body-cell-label span`,
+          option
+        ).should('exist');
+      }
+    });
+  }
+});
