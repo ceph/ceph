@@ -796,8 +796,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EINVAL, "error cloning subvolume")
 
     def detach_snapshot(self, snapname, track_id):
-        if not snapname.encode('utf-8') in self.list_snapshots():
-            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
         try:
             with open_clone_index(self.fs, self.vol_spec) as index:
                 index.untrack(track_id)
