@@ -60,6 +60,10 @@ std::string boost_string_to_std(boost::json::string js) {
   return res;
 }
 
+std::string quote(std::string value) {
+	return "\"" + value + "\"";
+}
+
 void DaemonMetricCollector::send_requests() {
   std::string result;
   for(auto client : clients) {
@@ -93,17 +97,17 @@ void DaemonMetricCollector::send_requests() {
           // Labels
           // FIXME: test this, based on mgr_module perfpath_to_path_labels
           if (daemon_name.substr(0, 4) == "rgw.") {
-            labels = "instance_id=" + daemon_name.substr(4, std::string::npos);
+            labels = std::string("instance_id=") + quote(daemon_name.substr(4, std::string::npos));
           } else {
-            labels = "ceph_daemon=" + daemon_name;
+            labels = "ceph_daemon=" + quote(daemon_name);
             if (daemon_name.substr(0, 11) == "rbd-mirror.") {
               std::regex re("^rbd_mirror_image_([^/]+)/(?:(?:([^/]+)/)?)(.*)\\.(replay(?:_bytes|_latency)?)$");
               std::smatch match;
               if (std::regex_search(daemon_name, match, re) == true) {
                 name = "ceph_rbd_mirror_image_" + match.str(4);
-                labels += ",pool=" + match.str(1);
-                labels += ",namespace=" + match.str(2);
-                labels += ",image=" + match.str(3);
+                labels += ",pool=" + quote(match.str(1));
+                labels += ",namespace=" + quote(match.str(2));
+								labels += ",image=" + quote(match.str(3));
               }
             }
           }
