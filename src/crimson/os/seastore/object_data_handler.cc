@@ -58,6 +58,43 @@ struct extent_to_write_t {
 };
 using extent_to_write_list_t = std::list<extent_to_write_t>;
 
+/**
+ * append_extent_to_write
+ *
+ * Appends passed extent_to_write_t maintaining invariant that the
+ * list may not contain consecutive zero elements by checking and
+ * combining them.
+ */
+void append_extent_to_write(
+  extent_to_write_list_t &to_write, extent_to_write_t &&to_append)
+{
+  assert(
+    to_write.empty() ||
+    (to_write.back().addr + to_write.back().len) == to_append.addr);
+  if (to_write.empty() || to_write.back().to_write || to_append.to_write) {
+    to_write.push_back(std::move(to_append));
+  } else {
+    to_write.back().len += to_append.len;
+  }
+}
+
+/**
+ * splice_extent_to_write
+ *
+ * splices passed extent_to_write_list_t maintaining invariant that the
+ * list may not contain consecutive zero elements by checking and
+ * combining them.
+ */
+void splice_extent_to_write(
+  extent_to_write_list_t &to_write, extent_to_write_list_t &&to_splice)
+{
+  if (!to_splice.empty()) {
+    append_extent_to_write(to_write, std::move(to_splice.front()));
+    to_splice.pop_front();
+    to_write.splice(to_write.end(), std::move(to_splice));
+  }
+}
+
 /// Removes extents/mappings in pins
 ObjectDataHandler::write_ret do_removals(
   context_t ctx,
@@ -362,6 +399,80 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 }
 
 /**
+ * get_zero_buffers
+ *
+ * Returns extent_to_write_t's reflecting a zero region extending
+ * from offset~len with headptr optionally on the left and tailptr
+ * optionally on the right.
+ */
+extent_to_write_list_t get_zero_buffers(
+  const extent_len_t block_size,
+  laddr_t offset, extent_len_t len,
+  std::optional<bufferptr> &&headptr, std::optional<bufferptr> &&tailptr)
+{
+  auto zero_left = p2roundup(offset, (laddr_t)block_size);
+  auto zero_right = p2align(offset + len, (laddr_t)block_size);
+  auto left = headptr ? (offset - headptr->length()) : offset;
+  auto right = tailptr ?
+    (offset + len + tailptr->length()) :
+    (offset + len);
+
+  assert(
+    (headptr && ((zero_left - left) ==
+		 p2roundup(headptr->length(), block_size))) ^
+    (!headptr && (zero_left == left)));
+  assert(
+    (tailptr && ((right - zero_right) ==
+		 p2roundup(tailptr->length(), block_size))) ^
+    (!tailptr && (right == zero_right)));
+
+  assert(right > left);
+  assert((left % block_size) == 0);
+  assert((right % block_size) == 0);
+
+  // zero region too small for a reserved section,
+  // headptr and tailptr in same extent
+  if (zero_right <= zero_left) {
+    bufferlist bl;
+    if (headptr) {
+      bl.append(*headptr);
+    }
+    bl.append_zero(
+      right - left - bl.length() - (tailptr ? tailptr->length() : 0));
+    if (tailptr) {
+      bl.append(*tailptr);
+    }
+    assert(bl.length() % block_size == 0);
+    assert(bl.length() == (right - left));
+    return {{left, bl}};
+  } else {
+    // reserved section between ends, headptr and tailptr in different extents
+    extent_to_write_list_t ret;
+    if (headptr) {
+      bufferlist headbl;
+      headbl.append(*headptr);
+      headbl.append_zero(zero_left - left - headbl.length());
+      assert(headbl.length() % block_size == 0);
+      assert(headbl.length() > 0);
+      ret.emplace_back(left, headbl);
+    }
+    // reserved zero region
+    ret.emplace_back(zero_left, zero_right - zero_left);
+    assert(ret.back().len % block_size == 0);
+    assert(ret.back().len > 0);
+    if (tailptr) {
+      bufferlist tailbl;
+      tailbl.append(*tailptr);
+      tailbl.append_zero(right - zero_right - tailbl.length());
+      assert(tailbl.length() % block_size == 0);
+      assert(tailbl.length() > 0);
+      ret.emplace_back(zero_right, tailbl);
+    }
+    return ret;
+  }
+}
+
+/**
  * get_buffers
  *
  * Returns extent_to_write_t's from bl.
@@ -375,148 +486,87 @@ extent_to_write_list_t get_buffers(laddr_t offset, bufferlist &bl)
   return ret;
 };
 
-ObjectDataHandler::write_ret ObjectDataHandler::zerowrite(
-  context_t ctx,
-  laddr_t _offset,
-  extent_len_t _len,
-  lba_pin_list_t &&_pins)
-{
-  return seastar::do_with(
-    _offset,
-    _offset + _len,
-    std::move(_pins),
-    extent_to_write_list_t(),
-    bufferlist(),
-    bufferlist(),
-    [ctx](laddr_t &offset, laddr_t &end, auto &pins, auto &to_write,
-      auto &head_bl, auto &end_bl) {
-    LOG_PREFIX(ObjectDataHandler::zerowrite);
-    DEBUGT("zerowrite: {}~{}",
-           ctx.t,
-           offset,
-           end);
-    ceph_assert(pins.size() >= 1);
-    auto pin_begin = pins.front()->get_key();
-    ceph_assert(pin_begin <= offset);
-    auto pin_end = pins.back()->get_key() + pins.back()->get_length();
-    ceph_assert(pin_end >= end);
-    return split_pin_left(
-      ctx,
-      pins.front(),
-      offset
-    ).si_then([ctx, pin_begin, &offset, &end, &pins, &to_write, &head_bl]
-      (auto p) {
-      auto &[left_extent, headptr] = p;
-      if (left_extent) {
-        ceph_assert(left_extent->addr == pin_begin);
-        to_write.push_front(std::move(*left_extent));
-      }
-      if (headptr) {
-        head_bl.append(*headptr);
-        offset -= headptr->length();
-        assert_aligned(offset);
-      }
-      return split_pin_right(
-        ctx,
-        pins.back(),
-        end);
-    }).si_then([ctx, pin_end, &offset, &end, &pins, &to_write, &head_bl, &end_bl]
-      (auto p) {
-      auto &[right_extent, tailptr] = p;
-      if (tailptr) {
-        end_bl.append(*tailptr);
-        assert_aligned(end - pins.back()->get_key() + end_bl.length());
-      }
-      if (pins.front() == pins.back()) {
-        bufferptr newbpt = bufferptr(ceph::buffer::create(end -
-	   (offset + head_bl.length()) , 0));
-        bufferlist newbl;
-        newbl.append(head_bl);
-        newbl.append(newbpt);
-        newbl.append(end_bl);
-        head_bl.swap(newbl);
-        to_write.splice(to_write.end(), get_buffers(offset, head_bl));
-      } else {
-        to_write.splice(to_write.end(), get_buffers(offset, head_bl));
-        bufferptr newbpt = bufferptr(ceph::buffer::create(end -
-	  pins.back()->get_key(), 0));
-        bufferlist newbl;
-        newbl.append(newbpt);
-        newbl.append(end_bl);
-        end_bl.swap(newbl);
-        to_write.splice(to_write.end(), get_buffers(pins.back()->get_key(), end_bl));
-      }
-      if (right_extent) {
-        ceph_assert((right_extent->addr  + right_extent->len) == pin_end);
-        to_write.push_back(std::move(*right_extent));
-      }
-      return write_iertr::now();
-    }).si_then([ctx, &pins] {
-      return do_removals(ctx, pins);
-    }).si_then([ctx, &to_write] {
-      return do_insertions(ctx, to_write);
-    });
-  });
-}
-
 ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
   context_t ctx,
   laddr_t _offset,
-  bufferlist &&bl,
+  extent_len_t len,
+  std::optional<bufferlist> &&bl,
   lba_pin_list_t &&_pins)
 {
+  if (bl) {
+    assert(bl->length() == len);
+  }
   return seastar::do_with(
     _offset,
     std::move(bl),
+    std::optional<bufferptr>(),
     std::move(_pins),
     extent_to_write_list_t(),
-    [ctx](laddr_t &offset, auto &bl, auto &pins, auto &to_write) {
+    [ctx, len](laddr_t &offset, auto &bl, auto &headptr,
+	       auto &pins, auto &to_write) {
       LOG_PREFIX(ObjectDataHandler::overwrite);
       DEBUGT("overwrite: {}~{}",
 	     ctx.t,
 	     offset,
-	     bl.length());
+	     len);
       ceph_assert(pins.size() >= 1);
       auto pin_begin = pins.front()->get_key();
       ceph_assert(pin_begin <= offset);
       auto pin_end = pins.back()->get_key() + pins.back()->get_length();
-      ceph_assert(pin_end >= (offset + bl.length()));
+      ceph_assert(pin_end >= (offset + len));
 
       return split_pin_left(
 	ctx,
 	pins.front(),
 	offset
-      ).si_then([ctx, pin_begin, &offset, &bl, &pins, &to_write](
+      ).si_then([ctx, len, pin_begin, &offset, &headptr, &pins, &to_write](
 		 auto p) {
-	auto &[left_extent, headptr] = p;
+	auto &[left_extent, _headptr] = p;
 	if (left_extent) {
 	  ceph_assert(left_extent->addr == pin_begin);
-	  to_write.push_front(std::move(*left_extent));
+	  append_extent_to_write(to_write, std::move(*left_extent));
 	}
-	if (headptr) {
-	  bufferlist newbl;
-	  newbl.append(*headptr);
-	  newbl.append(bl);
-	  bl.swap(newbl);
-	  offset -= headptr->length();
-	  assert_aligned(offset);
+	if (_headptr) {
+	  assert(_headptr->length() > 0);
+	  headptr = std::move(_headptr);
 	}
 	return split_pin_right(
 	  ctx,
 	  pins.back(),
-	  offset + bl.length());
-      }).si_then([ctx, pin_end, &offset, &bl, &to_write](
-		  auto p) {
+	  offset + len);
+      }).si_then([ctx, len, pin_begin, pin_end,
+		  &offset, &bl, &headptr, &to_write](auto p) {
 	auto &[right_extent, tailptr] = p;
-	if (tailptr) {
-	  bl.append(*tailptr);
-	  assert_aligned(bl.length());
+	if (bl) {
+	  bufferlist write_bl;
+	  if (headptr) {
+	    write_bl.append(*headptr);
+	    offset -= headptr->length();
+	    assert_aligned(offset);
+	  }
+	  write_bl.claim_append(*bl);
+	  if (tailptr) {
+	    write_bl.append(*tailptr);
+	    assert_aligned(write_bl.length());
+	  }
+	  splice_extent_to_write(to_write, get_buffers(offset, write_bl));
+	} else {
+	  splice_extent_to_write(
+	    to_write,
+	    get_zero_buffers(
+	      ctx.tm.get_block_size(),
+	      offset,
+	      len,
+	      std::move(headptr),
+	      std::move(tailptr)));
 	}
-	to_write.splice(to_write.end(), get_buffers(offset, bl));
 	if (right_extent) {
 	  ceph_assert((right_extent->addr  + right_extent->len) == pin_end);
-	  to_write.push_back(std::move(*right_extent));
+	  append_extent_to_write(to_write, std::move(*right_extent));
 	}
+	assert(to_write.size());
+	assert(pin_begin == to_write.front().addr);
+	assert(pin_end == (to_write.back().addr + to_write.back().len));
 	return write_iertr::now();
       }).si_then([ctx, &pins] {
 	return do_removals(ctx, pins);
@@ -553,7 +603,9 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
 	  logical_offset,
 	  len
 	).si_then([this, ctx, logical_offset, len](auto pins) {
-	  return zerowrite(ctx, logical_offset, len, std::move(pins));
+	  return overwrite(
+	    ctx, logical_offset, len,
+	    std::nullopt, std::move(pins));
 	});
       });
     });
@@ -587,7 +639,9 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
 	  bl.length()
 	).si_then([this, ctx,logical_offset, &bl](
 		   auto pins) {
-	  return overwrite(ctx, logical_offset, bufferlist(bl), std::move(pins));
+	  return overwrite(
+	    ctx, logical_offset, bl.length(),
+	    bufferlist(bl), std::move(pins));
 	});
       });
     });
