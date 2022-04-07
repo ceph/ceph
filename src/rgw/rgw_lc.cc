@@ -1952,7 +1952,7 @@ static inline void get_lc_oid(CephContext *cct,
   return;
 }
 
-static std::string get_lc_shard_name(const rgw_bucket& bucket){
+static std::string get_bucket_lc_key(const rgw_bucket& bucket){
   return string_join_reserve(':', bucket.tenant, bucket.name, bucket.marker);
 }
 
@@ -1968,9 +1968,9 @@ int RGWLC::process(LCWorker* worker,
      * can be processed without traversing any state entries (we
      * do need the entry {pro,epi}logue which update the state entry
      * for this bucket) */
-    auto bucket_entry_marker = get_lc_shard_name(optional_bucket->get_key());
-    auto index = get_lc_index(store->ctx(), bucket_entry_marker);
-    ret = process_bucket(index, max_secs, worker, bucket_entry_marker, once);
+    auto bucket_lc_key = get_bucket_lc_key(optional_bucket->get_key());
+    auto index = get_lc_index(store->ctx(), bucket_lc_key);
+    ret = process_bucket(index, max_secs, worker, bucket_lc_key, once);
     return ret;
   } else {
     /* generate an index-shard sequence unrelated to any other
@@ -2531,14 +2531,13 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
 			   const F& f) {
   CephContext *cct = store->ctx();
 
-  string shard_id = get_lc_shard_name(bucket);
-
+  auto bucket_lc_key = get_bucket_lc_key(bucket);
   string oid; 
-  get_lc_oid(cct, shard_id, &oid);
+  get_lc_oid(cct, bucket_lc_key, &oid);
 
   /* XXX it makes sense to take shard_id for a bucket_id? */
   rgw::sal::Lifecycle::LCEntry entry;
-  entry.bucket = shard_id;
+  entry.bucket = bucket_lc_key;
   entry.status = lc_uninitial;
   int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
 
@@ -2644,9 +2643,9 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
     return 0;    // No entry, nothing to fix
   }
 
-  auto shard_name = get_lc_shard_name(bucket->get_key());
+  auto bucket_lc_key = get_bucket_lc_key(bucket->get_key());
   std::string lc_oid;
-  get_lc_oid(store->ctx(), shard_name, &lc_oid);
+  get_lc_oid(store->ctx(), bucket_lc_key, &lc_oid);
 
   rgw::sal::Lifecycle::LCEntry entry;
   // There are multiple cases we need to encounter here
@@ -2654,7 +2653,7 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
   // 2. entry doesn't exist, which usually happens when reshard has happened prior to update and next LC process has already dropped the update
   // 3. entry exists matching the current bucket id which was after a reshard (needs to be updated to the marker)
   // We are not dropping the old marker here as that would be caught by the next LC process update
-  int ret = sal_lc->get_entry(lc_oid, shard_name, entry);
+  int ret = sal_lc->get_entry(lc_oid, bucket_lc_key, entry);
   if (ret == 0) {
     ldpp_dout(dpp, 5) << "Entry already exists, nothing to do" << dendl;
     return ret; // entry is already existing correctly set to marker
