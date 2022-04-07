@@ -21,37 +21,26 @@ namespace librbd {
 namespace cache {
 namespace pwl {
 
-namespace {
-bool get_json_format(const std::string& s, json_spirit::mObject *o) {
-  json_spirit::mValue json_root;
-  if (!json_spirit::read(s.c_str(), json_root)) {
-    return false;
-  } else {
-    auto cache_state_root = json_root.get_obj()["persistent_cache"];
-    *o = cache_state_root.get_obj();
-  }
-  return true;
-}
-} // namespace
-
 template <typename I>
-ImageCacheState<I>::ImageCacheState(I *image_ctx, plugin::Api<I>& plugin_api) :
-    m_image_ctx(image_ctx), m_plugin_api(plugin_api) {
-  ldout(image_ctx->cct, 20) << "Initialize RWL cache state with config data. "
-                            << dendl;
+void ImageCacheState<I>::init_from_config() {
+  ldout(m_image_ctx->cct, 20) << dendl;
 
-  ConfigProxy &config = image_ctx->config;
+  present = false;
+  empty = true;
+  clean = true;
+  host = "";
+  path = "";
+  ConfigProxy &config = m_image_ctx->config;
   mode = config.get_val<std::string>("rbd_persistent_cache_mode");
+  size = 0;
 }
 
 template <typename I>
-ImageCacheState<I>::ImageCacheState(
-    I *image_ctx, json_spirit::mObject &o, plugin::Api<I>& plugin_api) :
-    m_image_ctx(image_ctx), m_plugin_api(plugin_api) {
-  ldout(image_ctx->cct, 20) << "Initialize RWL cache state with data from "
-                            << "server side"<< dendl;
+bool ImageCacheState<I>::init_from_metadata(json_spirit::mValue& json_root) {
+  ldout(m_image_ctx->cct, 20) << dendl;
 
   try {
+    auto& o = json_root.get_obj();
     present = o["present"].get_bool();
     empty = o["empty"].get_bool();
     clean = o["clean"].get_bool();
@@ -60,9 +49,12 @@ ImageCacheState<I>::ImageCacheState(
     mode = o["mode"].get_str();
     size = o["size"].get_uint64();
   } catch (std::runtime_error& e) {
-    lderr(image_ctx->cct) << "failed to parse cache state: " << e.what()
-                          << dendl;
+    lderr(m_image_ctx->cct) << "failed to parse cache state: " << e.what()
+                            << dendl;
+    return false;
   }
+
+  return true;
 }
 
 template <typename I>
@@ -87,11 +79,7 @@ void ImageCacheState<I>::write_image_cache_state(Context *on_finish) {
   o["misses"] = misses;
   o["hit_bytes"] = hit_bytes;
   o["miss_bytes"] = miss_bytes;
-  json_spirit::mObject cache_state_obj;
-  cache_state_obj["persistent_cache"] = o;
-  stringstream json_string;
-  json_spirit::write(cache_state_obj, json_string);
-  std::string image_state_json = json_string.str();
+  std::string image_state_json = json_spirit::write(o);
 
   ldout(m_image_ctx->cct, 20) << __func__ << " Store state: "
                               << image_state_json << dendl;
@@ -137,22 +125,23 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
     r = -EINVAL;
   }else if ((!dirty_cache || cache_state_str.empty()) && cache_desired) {
     cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
+    cache_state->init_from_config();
   } else {
     ceph_assert(!cache_state_str.empty());
-    json_spirit::mObject o;
-    bool success = get_json_format(cache_state_str, &o);
-    if (!success) {
-      lderr(image_ctx->cct) << "failed to parse cache state: "
-                            << cache_state_str << dendl;
+    json_spirit::mValue json_root;
+    if (!json_spirit::read(cache_state_str.c_str(), json_root)) {
+      lderr(image_ctx->cct) << "failed to parse cache state" << dendl;
       r = -EINVAL;
       return nullptr;
     }
-
-    bool cache_exists = o["present"].get_bool();
-    if (!cache_exists) {
-      cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
-    } else {
-      cache_state = new ImageCacheState<I>(image_ctx, o, plugin_api);
+    cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
+    if (!cache_state->init_from_metadata(json_root)) {
+      delete cache_state;
+      r = -EINVAL;
+      return nullptr;
+    }
+    if (!cache_state->present) {
+      cache_state->init_from_config();
     }
   }
   return cache_state;
@@ -166,13 +155,13 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
   cls_client::metadata_get(&image_ctx->md_ctx, image_ctx->header_oid,
 			   IMAGE_CACHE_STATE, &cache_state_str);
   if (!cache_state_str.empty()) {
-    json_spirit::mObject o;
-    bool success = get_json_format(cache_state_str, &o);
-    if (!success) {
+    // ignore errors, best effort
+    cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
+    json_spirit::mValue json_root;
+    if (!json_spirit::read(cache_state_str.c_str(), json_root)) {
       lderr(image_ctx->cct) << "failed to parse cache state" << dendl;
-      cache_state = new ImageCacheState<I>(image_ctx, plugin_api);
     } else {
-      cache_state = new ImageCacheState<I>(image_ctx, o, plugin_api);
+      cache_state->init_from_metadata(json_root);
     }
   }
   return cache_state;

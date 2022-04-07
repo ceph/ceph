@@ -46,10 +46,8 @@ public:
   uint64_t hit_bytes = 0;
   uint64_t miss_bytes = 0;
 
-  ImageCacheState(ImageCtxT* image_ctx, plugin::Api<ImageCtxT>& plugin_api);
-
-  ImageCacheState(ImageCtxT* image_ctx, json_spirit::mObject& f,
-                  plugin::Api<ImageCtxT>& plugin_api);
+  ImageCacheState(ImageCtxT* image_ctx, plugin::Api<ImageCtxT>& plugin_api)
+      : m_image_ctx(image_ctx), m_plugin_api(plugin_api) {}
 
   ~ImageCacheState() {}
 
@@ -61,6 +59,9 @@ public:
     }
     return IMAGE_CACHE_TYPE_UNKNOWN;
   }
+
+  void init_from_config();
+  bool init_from_metadata(json_spirit::mValue& json_root);
 
   void write_image_cache_state(Context *on_finish);
 
