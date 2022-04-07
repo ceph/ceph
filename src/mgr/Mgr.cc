@@ -602,6 +602,7 @@ void Mgr::handle_mon_map()
     monc->start_mon_command({fmt::format(cmd, name)}, {},
 			    &c->outbl, &c->outs, c);
   }
+  dout(20) << "daemon_state.cull() is called" << dendl;
   daemon_state.cull("mon", names_exist);
 }
 

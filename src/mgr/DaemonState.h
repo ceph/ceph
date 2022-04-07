@@ -223,7 +223,7 @@ private:
   std::map<std::string,ceph::ref_t<DeviceState>> devices;
 
   void _erase(const DaemonKey& dmk);
-
+  
   ceph::ref_t<DeviceState> _get_or_create_device(const std::string& dev) {
     auto em = devices.try_emplace(dev, nullptr);
     auto& d = em.first->second;
@@ -238,7 +238,8 @@ private:
 
 public:
   DaemonStateIndex() {}
-
+  void _print_all();
+  void _print_by_server();
   // FIXME: shouldn't really be public, maybe construct DaemonState
   // objects internally to avoid this.
   PerfCounterTypes types;

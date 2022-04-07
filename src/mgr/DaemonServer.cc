@@ -2978,7 +2978,7 @@ void DaemonServer::adjust_pgs()
 void DaemonServer::got_service_map()
 {
   std::lock_guard l(lock);
-
+  dout(10) << "got service map" << dendl;
   cluster_state.with_servicemap([&](const ServiceMap& service_map) {
       if (pending_service_map.epoch == 0) {
 	// we just started up

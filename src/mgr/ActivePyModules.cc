@@ -124,7 +124,8 @@ PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 PyObject *ActivePyModules::list_servers_python()
 {
   dout(10) << " >" << dendl;
-
+  daemon_state._print_all();
+  daemon_state._print_by_server();
   without_gil_t no_gil;
   return daemon_state.with_daemons_by_server([this, &no_gil]
       (const std::map<std::string, DaemonStateCollection> &all) {

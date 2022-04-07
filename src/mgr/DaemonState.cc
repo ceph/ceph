@@ -207,7 +207,34 @@ const std::map<std::string,std::string>& DaemonState::_get_config_defaults()
   }
   return config_defaults;
 }
-
+void DaemonStateIndex::_print_all()
+{
+  std::string output = "all: ";
+  for (auto const &pair: all) {
+    output += std::string(pair.first.type);
+    output += ".";
+    output += std::string(pair.first.name);
+    output += " ";
+  }
+  dout(10) << output << dendl;
+}
+void DaemonStateIndex::_print_by_server()
+{
+  std::string output = "by_server:\n";
+  for (const auto &[hostname, dmc] : by_server) {
+      output += std::string(hostname);
+      output += ": ";
+      for (const auto &[key, state] : dmc) {
+        output += std::string(key.type);
+        output += ".";
+        output += std::string(key.name);
+        output += " ";
+      }
+      output += "\n";
+      
+    }
+  dout(10) << output << dendl;
+}
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
   std::unique_lock l{lock};
@@ -216,13 +243,19 @@ void DaemonStateIndex::insert(DaemonStatePtr dm)
 
 void DaemonStateIndex::_insert(DaemonStatePtr dm)
 {
+  dout(20) << "_insert:" << dm->key << dendl;
   if (all.count(dm->key)) {
     _erase(dm->key);
   }
-
+  dout(10) << "dm->hostname: " << dm->hostname << dendl;
+  _print_by_server();
+  dout(10) << "inserting: " << dm->key << " " << "to by_server" << dendl;
   by_server[dm->hostname][dm->key] = dm;
+  _print_by_server();
+  _print_all();
+  dout(10) << "inserting: " << dm->key << " " << "to all" << dendl;
   all[dm->key] = dm;
-
+  _print_all();
   for (auto& i : dm->devices) {
     auto d = _get_or_create_device(i.first);
     d->daemons.insert(dm->key);
@@ -239,11 +272,11 @@ void DaemonStateIndex::_insert(DaemonStatePtr dm)
 void DaemonStateIndex::_erase(const DaemonKey& dmk)
 {
   ceph_assert(ceph_mutex_is_wlocked(lock));
-
   const auto to_erase = all.find(dmk);
+  dout(10) << "_erase: " << dmk.type << "." << dmk.name << dendl;
   ceph_assert(to_erase != all.end());
   const auto dm = to_erase->second;
-
+  dout(10) << "dm->hostname: " << dm->hostname << dendl;
   for (auto& i : dm->devices) {
     auto d = _get_or_create_device(i.first);
     ceph_assert(d->daemons.count(dmk));
@@ -260,12 +293,17 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
   }
 
   auto &server_collection = by_server[dm->hostname];
+  _print_by_server();
   server_collection.erase(dm->key);
+  dout(10) << "erasing: " << dm->key << " from by_server" << dendl;
+  _print_by_server();
   if (server_collection.empty()) {
     by_server.erase(dm->hostname);
   }
-
+  _print_all();
   all.erase(to_erase);
+  dout(10) << "erasing: " << dmk.type << "." << dmk.name << " from all" << dendl;
+  _print_all();
 }
 
 DaemonStateCollection DaemonStateIndex::get_by_service(
@@ -331,6 +369,7 @@ void DaemonStateIndex::_rm(const DaemonKey &key)
 void DaemonStateIndex::cull(const std::string& svc_name,
 			    const std::set<std::string>& names_exist)
 {
+  dout(10) << "cull" << dendl;
   std::vector<string> victims;
 
   std::unique_lock l{lock};
@@ -341,6 +380,7 @@ void DaemonStateIndex::cull(const std::string& svc_name,
     if (daemon_key.type != svc_name)
       break;
     if (names_exist.count(daemon_key.name) == 0) {
+      dout(10) << "victims.push_back(" << daemon_key.name << ")" << dendl;
       victims.push_back(daemon_key.name);
     }
   }
@@ -354,6 +394,7 @@ void DaemonStateIndex::cull(const std::string& svc_name,
 
 void DaemonStateIndex::cull_services(const std::set<std::string>& types_exist)
 {
+  dout(10) << "cull_services" << dendl;
   std::set<DaemonKey> victims;
 
   std::unique_lock l{lock};

@@ -720,6 +720,9 @@ class Module(MgrModule):
         self._ready.set()
 
         while not self._shutdown.is_set():
+            servers = self.list_servers()
+            self.log.info("servers:")
+            self.log.info(servers)
             # Lazy periodic write back of completed events
             if self._dirty:
                 self._save()
