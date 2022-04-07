@@ -253,7 +253,7 @@ The goal is to run a query like
 
 ::
 
-    rate(node_disk_bytes_written[30s]) and
+    rate(node_disk_written_bytes_total[30s]) and
     on (device,instance) ceph_disk_occupation_human{ceph_daemon="osd.0"}
 
 Out of the box the above query will not return any metrics since the ``instance`` labels of
@@ -284,7 +284,7 @@ To correlate an OSD and its disks write rate, the following query can be used:
 ::
 
     label_replace(
-        rate(node_disk_bytes_written[30s]),
+        rate(node_disk_written_bytes_total[30s]),
         "exported_instance",
         "$1",
         "instance",
