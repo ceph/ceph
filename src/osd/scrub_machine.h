@@ -123,11 +123,11 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub);
   ~ScrubMachine();
 
-  PG* m_pg;  // only used for dout messages
   spg_t m_pg_id;
   ScrubMachineListener* m_scrbr;
+  std::ostream& gen_prefix(std::ostream& out) const;
 
-  void my_states() const;
+  std::string current_states_desc() const;
   void assert_not_active() const;
   [[nodiscard]] bool is_reserving() const;
   [[nodiscard]] bool is_accepting_updates() const;
