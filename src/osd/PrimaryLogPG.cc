@@ -1683,6 +1683,11 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
   m_scrubber = make_unique<PrimaryLogScrub>(this);
 }
 
+PrimaryLogPG::~PrimaryLogPG()
+{
+  m_scrubber.reset();
+}
+
 void PrimaryLogPG::get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc)
 {
   src_oloc = oloc;
