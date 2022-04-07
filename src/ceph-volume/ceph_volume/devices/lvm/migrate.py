@@ -14,6 +14,7 @@ from ceph_volume.systemd import systemctl
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
 
+
 def get_cluster_name(osd_id, osd_fsid):
     """
     From an ``osd_id`` and/or an ``osd_fsid``, filter out all the LVs in the
@@ -28,13 +29,15 @@ def get_cluster_name(osd_id, osd_fsid):
     if not lvs:
         mlogger.error(
             'Unable to find any LV for source OSD: id:{} fsid:{}'.format(
-                osd_id,  osd_fsid)        )
+                osd_id,  osd_fsid))
         raise SystemExit('Unexpected error, terminating')
     return next(iter(lvs)).tags["ceph.cluster_name"]
+
 
 def get_osd_path(osd_id, osd_fsid):
     return '/var/lib/ceph/osd/{}-{}'.format(
         get_cluster_name(osd_id, osd_fsid), osd_id)
+
 
 def find_associated_devices(osd_id, osd_fsid):
     """
@@ -50,11 +53,12 @@ def find_associated_devices(osd_id, osd_fsid):
     if not lvs:
         mlogger.error(
             'Unable to find any LV for source OSD: id:{} fsid:{}'.format(
-                osd_id,  osd_fsid)        )
+                osd_id,  osd_fsid))
         raise SystemExit('Unexpected error, terminating')
 
     devices = set(ensure_associated_lvs(lvs, lv_tags))
     return [(Device(path), type) for path, type in devices if path]
+
 
 def ensure_associated_lvs(lvs, lv_tags):
     """
@@ -82,7 +86,7 @@ def ensure_associated_lvs(lvs, lv_tags):
         for ceph_lvs, type in backing_devices:
 
             if ceph_lvs:
-                verified_devices.extend([(l.lv_path, type) for l in ceph_lvs])
+                verified_devices.extend([(_lv.lv_path, type) for _lv in ceph_lvs])
                 continue
 
             # must be a disk partition, by querying blkid by the uuid we are
@@ -102,6 +106,7 @@ def ensure_associated_lvs(lvs, lv_tags):
             verified_devices.append((osd_device, type))
 
     return verified_devices
+
 
 class VolumeTagTracker(object):
     def __init__(self, devices, target_lv):
@@ -243,6 +248,7 @@ class VolumeTagTracker(object):
         else:
             self.target_lv.clear_tags()
 
+
 class Migrate(object):
 
     help = 'Migrate BlueFS data from to another LVM device'
@@ -258,13 +264,13 @@ class Migrate(object):
                 continue
             if type == 'block':
                 if 'data' not in self.args.from_:
-                    continue;
+                    continue
             elif type == 'db':
                 if 'db' not in self.args.from_:
-                    continue;
+                    continue
             elif type == 'wal':
                 if 'wal' not in self.args.from_:
-                    continue;
+                    continue
             ret.append([device, type])
         if ret == []:
             mlogger.error('Source device list is empty')
@@ -344,7 +350,7 @@ class Migrate(object):
                 system.chown(os.path.join(osd_path, "block.{}".format(
                     target_type)))
                 terminal.success('Migration successful.')
-        except:
+        except (Exception, SystemExit):
             tag_tracker.undo()
             raise
 
@@ -393,7 +399,7 @@ class Migrate(object):
                     'Failed to migrate to : {}'.format(self.args.target))
             else:
                 terminal.success('Migration successful.')
-        except:
+        except (Exception, SystemExit):
             tag_tracker.undo()
             raise
 
@@ -405,11 +411,8 @@ class Migrate(object):
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
                 mlogger.error('OSD is running, stop it with: '
-                    'systemctl stop ceph-osd@{}'.format(
-                        self.args.osd_id))
-                raise SystemExit(
-                    'Unable to migrate devices associated with OSD ID: {}'
-                        .format(self.args.osd_id))
+                              'systemctl stop ceph-osd@{}'.format(self.args.osd_id))
+                raise SystemExit('Unable to migrate devices associated with OSD ID: {}'.format(self.args.osd_id))
 
         target_lv = api.get_lv_by_fullname(self.args.target)
         if not target_lv:
@@ -421,21 +424,21 @@ class Migrate(object):
         devices = find_associated_devices(self.args.osd_id, self.args.osd_fsid)
         if (not target_lv.used_by_ceph):
             self.migrate_to_new(self.args.osd_id, self.args.osd_fsid,
-                devices,
-                target_lv)
+                                devices,
+                                target_lv)
         else:
             if (target_lv.tags['ceph.osd_id'] != self.args.osd_id or
                     target_lv.tags['ceph.osd_fsid'] != self.args.osd_fsid):
-                mlogger.error(
-                    'Target Logical Volume isn\'t used by the specified OSD: '
-                        '{} FSID: {}'.format(self.args.osd_id,
-                            self.args.osd_fsid))
+                mlogger.error('Target Logical Volume isn\'t used by the specified OSD: '
+                              '{} FSID: {}'.format(self.args.osd_id,
+                                                   self.args.osd_fsid))
                 raise SystemExit(
                     'Unable to migrate to : {}'.format(self.args.target))
 
-            self.migrate_to_existing(self.args.osd_id, self.args.osd_fsid,
-                devices,
-                target_lv)
+            self.migrate_to_existing(self.args.osd_id,
+                                     self.args.osd_fsid,
+                                     devices,
+                                     target_lv)
 
     def make_parser(self, prog, sub_command_help):
         parser = argparse.ArgumentParser(
@@ -531,6 +534,7 @@ class Migrate(object):
 
         self.migrate_osd()
 
+
 class NewVolume(object):
     def __init__(self, create_type, argv):
         self.create_type = create_type
@@ -599,7 +603,7 @@ class NewVolume(object):
                 system.chown(os.path.join(osd_path, "block.{}".format(
                     self.create_type)))
                 terminal.success('New volume attached.')
-        except:
+        except (Exception, SystemExit):
             tag_tracker.undo()
             raise
         return
@@ -609,11 +613,10 @@ class NewVolume(object):
         if self.args.osd_id and not self.args.no_systemd:
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
-                mlogger.error('OSD ID is running, stop it with:'
-                    ' systemctl stop ceph-osd@{}'.format(self.args.osd_id))
-                raise SystemExit(
-                    'Unable to attach new volume for OSD: {}'.format(
-                        self.args.osd_id))
+                mlogger.error('OSD ID is running, stop it with: '
+                              'systemctl stop ceph-osd@{}'.format(self.args.osd_id))
+                raise SystemExit('Unable to attach '
+                                 'new volume for OSD: {}'.format(self.args.osd_id))
 
         target_lv = api.get_lv_by_fullname(self.args.target)
         if not target_lv:
@@ -630,12 +633,12 @@ class NewVolume(object):
                 'Unable to attach new volume : {}'.format(self.args.target))
         else:
             devices = find_associated_devices(self.args.osd_id,
-                self.args.osd_fsid)
-            self.make_new_volume(
-                self.args.osd_id,
-                self.args.osd_fsid,
-                devices,
-                target_lv)
+                                              self.args.osd_fsid)
+            self.make_new_volume(self.args.osd_id,
+                                 self.args.osd_fsid,
+                                 devices,
+                                 target_lv)
+
 
 class NewWAL(NewVolume):
 
@@ -664,6 +667,7 @@ class NewWAL(NewVolume):
         self.args = parser.parse_args(self.argv)
 
         self.new_volume()
+
 
 class NewDB(NewVolume):
 
