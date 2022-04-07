@@ -2066,6 +2066,13 @@ parse_key_value(const std::string_view& in_str,
 extern boost::optional<std::pair<std::string_view,std::string_view>>
 parse_key_value(const std::string_view& in_str);
 
+struct rgw_name_to_flag {
+  const char *type_name;
+  uint32_t flag;
+};
+
+extern int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
+                                   const std::string& str, uint32_t *perm);
 
 /** time parsing */
 extern int parse_time(const char *time_str, real_time *time);
