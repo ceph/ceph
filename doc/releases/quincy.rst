@@ -83,10 +83,20 @@ RADOS
   are no existing internal users of this object class, it is not
   packaged anymore.
 
-* OSD: Ceph now uses `mclock_scheduler` for bluestore OSDs as its default
+* OSD: Ceph now uses `mclock_scheduler` for BlueStore OSDs as its default
   `osd_op_queue` to provide QoS. The 'mclock_scheduler' is not supported
-  for filestore OSDs. Therefore, the default 'osd_op_queue' is set to 'wpq'
-  for filestore OSDs and is enforced even if the user attempts to change it.
+  for Filestore OSDs. Therefore, the default 'osd_op_queue' is set to `wpq`
+  for Filestore OSDs and is enforced even if the user attempts to change it.
+  For more details on configuring mclock see,
+
+  https://docs.ceph.com/en/latest/rados/configuration/mclock-config-ref/
+
+  An outstanding issue exists during runtime where the mclock config options
+  related to reservation, weight and limit cannot be modified after switching
+  to the `custom` mclock profile using the `ceph config set ...` command.
+  This is tracked by: https://tracker.ceph.com/issues/55153. Until the issue
+  is fixed, users are advised to avoid using the 'custom' profile or use the
+  workaround mentioned in the tracker.
 
 * MGR: The pg_autoscaler has a new 'scale-down' profile, which provides more
   performance from the start for new pools. However, the module still uses 
