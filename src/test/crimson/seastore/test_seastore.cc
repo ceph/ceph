@@ -790,24 +790,57 @@ TEST_F(seastore_test_t, sparse_read)
 TEST_F(seastore_test_t, zero)
 {
   run_async([this] {
-    auto &test_obj = get_object(make_oid(0));
-    test_obj.write(
-      *seastore,
-      1024,
-      1024,
-      'a');
-    test_obj.read(
-      *seastore,
-      1024,
-      1024);
-    test_obj.check_size(*seastore);
-    test_obj.zero(*seastore, 1124, 200);
-    test_obj.read(
-      *seastore,
-      1024,
-      1024);
-    test_obj.check_size(*seastore);
+    auto test_zero = [this](
+      // [(off, len, repeat)]
+      std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> writes,
+      uint64_t zero_off, uint64_t zero_len) {
 
-    remove_object(test_obj);
+      // Test zero within a block
+      auto &test_obj = get_object(make_oid(0));
+      uint64_t size = 0;
+      for (auto &[off, len, repeat]: writes) {
+	for (decltype(repeat) i = 0; i < repeat; ++i) {
+	  test_obj.write(*seastore, off + (len * repeat), len, 'a');
+	}
+	size = off + (len * (repeat + 1));
+      }
+      test_obj.read(
+	*seastore,
+	0,
+	size);
+      test_obj.check_size(*seastore);
+      test_obj.zero(*seastore, zero_off, zero_len);
+      test_obj.read(
+	*seastore,
+	0,
+	size);
+      test_obj.check_size(*seastore);
+      remove_object(test_obj);
+    };
+
+    const uint64_t BS = 4<<10;
+
+    // Test zero within a block
+    test_zero(
+      {{1<<10, 1<<10, 1}},
+      1124, 200);
+
+    // Multiple writes, partial on left, partial on right.
+    test_zero(
+      {{BS, BS, 10}},
+      BS + 128,
+      BS * 4);
+
+    // Single large write, block boundary on right, partial on left.
+    test_zero(
+      {{BS, BS * 10, 1}},
+      BS + 128,
+      (BS * 4) - 128);
+
+    // Multiple writes, block boundary on left, partial on right.
+    test_zero(
+      {{BS, BS, 10}},
+      BS,
+      (BS * 4) + 128);
   });
 }
