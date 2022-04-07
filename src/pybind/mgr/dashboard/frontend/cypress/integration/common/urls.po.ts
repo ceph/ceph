@@ -36,6 +36,9 @@ export class UrlsCollection extends PageHelper {
     'mgr-modules': { url: '#/mgr-modules', id: 'cd-mgr-module-list' },
 
     // Logs
-    logs: { url: '#/logs', id: 'cd-logs' }
+    logs: { url: '#/logs', id: 'cd-logs' },
+
+    // RGW Daemons
+    'rgw daemons': { url: '#/rgw/daemon', id: 'cd-rgw-daemon-list' }
   };
 }
