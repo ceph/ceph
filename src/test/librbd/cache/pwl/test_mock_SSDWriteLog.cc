@@ -134,34 +134,22 @@ TEST_F(TestMockCacheSSDWriteLog, init_state_write) {
   ASSERT_EQ(0, finish_ctx.wait());
 }
 
-static void get_jf(const string& s, json_spirit::mObject *f)
-{
-  json_spirit::mValue json_root;
-  bool result = json_spirit::read(s.c_str(), json_root);
-  if (!result) {
-    cout << "failed to parse: '" << s << "'" << std::endl;
-  } else {
-    auto cache_state_root = json_root.get_obj()["persistent_cache"];
-    *f = cache_state_root.get_obj();
-  }
-  ASSERT_EQ(true, result);
-}
-
 TEST_F(TestMockCacheSSDWriteLog, init_state_json_write) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-
-  json_spirit::mObject f;
-  string strf = "{ \"present\": \"1\", \"empty\": \"0\", \"clean\": \"0\", \
-                   \"pwl_host\": \"testhost\", \
-                   \"pwl_path\": \"/tmp\", \
-                   \"pwl_size\": \"1024\" }";
-  get_jf(strf, &f);
   MockApi mock_api;
-  MockImageCacheStateSSD image_cache_state(&mock_image_ctx, f, mock_api);
+  MockImageCacheStateSSD image_cache_state(&mock_image_ctx, mock_api);
 
+  string strf = "{ \"present\": true, \"empty\": false, \"clean\": false, \
+                   \"host\": \"testhost\", \
+                   \"path\": \"/tmp\", \
+                   \"mode\": \"ssd\", \
+                   \"size\": 1024 }";
+  json_spirit::mValue json_root;
+  ASSERT_TRUE(json_spirit::read(strf.c_str(), json_root));
+  ASSERT_TRUE(image_cache_state.init_from_metadata(json_root));
   validate_cache_state(ictx, image_cache_state, true, false, false,
                        "testhost", "/tmp", 1024);
 
