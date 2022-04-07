@@ -312,7 +312,13 @@ list(APPEND mds_files
 add_subdirectory(json_spirit)
 
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
-include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
+
+# use the rapidjson headers from s3select's submodule
+if(NOT TARGET RapidJSON::RapidJSON)
+  add_library(RapidJSON::RapidJSON INTERFACE IMPORTED)
+  set_target_properties(RapidJSON::RapidJSON PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/s3select/rapidjson/include")
+endif()
 
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
 find_package(fmt 7.0.0 QUIET)
