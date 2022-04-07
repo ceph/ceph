@@ -106,15 +106,8 @@ private:
   write_ret overwrite(
     context_t ctx,        ///< [in] ctx
     laddr_t offset,       ///< [in] write offset
-    bufferlist &&bl,      ///< [in] buffer to write
-    lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
-  );
-
-  //Zero region [offset, offset + len]
-  write_ret zerowrite(
-    context_t ctx,        ///< [in] ctx
-    laddr_t offset,       ///< [in] zero offset
-    extent_len_t len,     ///< [in] len to zero
+    extent_len_t len,     ///< [in] len to write, len == bl->length() if bl
+    std::optional<bufferlist> &&bl, ///< [in] buffer to write, empty for zeros
     lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
   );
 
