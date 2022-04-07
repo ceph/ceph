@@ -691,11 +691,22 @@ class Module(MgrModule):
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
             lambda: defaultdict(lambda: defaultdict(int))))
 
+        # 'separated' mode
+        anonymized_daemon_dict = {}
+        daemon_count: Dict[str, int] = defaultdict(int)
+
         for daemon in all_perf_counters:
+            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
+
+            if mode == 'separated':
+                # anonymize individual daemon names except osds
+                if (daemon_type != 'osd'):
+                    anonymized_daemon = daemon_type + '-anonymized.' + str(daemon_count[daemon_type])
+                    anonymized_daemon_dict[anonymized_daemon] = daemon
+                    daemon_count[daemon_type] +=1
 
             # Calculate num combined daemon types if in aggregated mode
             if mode == 'aggregated':
-                daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
                 if 'num_combined_daemons' not in result[daemon_type]:
                     result[daemon_type]['num_combined_daemons'] = 1
                 else:
@@ -720,13 +731,21 @@ class Module(MgrModule):
 
                 if mode == 'separated':
                     # Add value to result
-                    result[daemon][col_0][col_1]['value'] = \
-                            all_perf_counters[daemon][collection]['value']
+                    if (daemon_type == 'osd'): # no need to anonymize
+                        result[daemon][col_0][col_1]['value'] = \
+                                all_perf_counters[daemon][collection]['value']
+                    else:
+                        result[anonymized_daemon][col_0][col_1]['value'] = \
+                                all_perf_counters[daemon][collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
                     if 'count' in all_perf_counters[daemon][collection]:
-                        result[daemon][col_0][col_1]['count'] = \
-                                all_perf_counters[daemon][collection]['count']
+                        if (daemon_type == 'osd'): # no need to anonymize
+                            result[daemon][col_0][col_1]['count'] = \
+                                    all_perf_counters[daemon][collection]['count']
+                        else:
+                            result[anonymized_daemon][col_0][col_1]['count'] = \
+                                    all_perf_counters[daemon][collection]['count']
                 elif mode == 'aggregated':
                     # Not every rgw daemon has the same schema. Specifically, each rgw daemon
                     # has a uniquely-named collection that starts off identically (i.e.
@@ -751,6 +770,9 @@ class Module(MgrModule):
                 else:
                     self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
                     return {}
+
+        if mode == 'separated':
+            self.log.debug('Anonymized daemon mapping for telemetry perf_counters (anonymized: real): {}'.format(anonymized_daemon_dict))
 
         return result
 
