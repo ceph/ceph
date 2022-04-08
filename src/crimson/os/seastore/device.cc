@@ -11,8 +11,8 @@ std::ostream& operator<<(std::ostream& out, const device_spec_t& ds)
 {
   return out << "device_spec("
              << "magic=" << ds.magic
-             << ", device_type=" << ds.dtype
-             << ", device_id=" << device_id_printer_t{ds.id}
+             << ", dtype=" << ds.dtype
+             << ", id=" << device_id_printer_t{ds.id}
              << ")";
 }
 
@@ -20,13 +20,12 @@ std::ostream& operator<<(std::ostream& out, const device_config_t& conf)
 {
   out << "device_config_t("
       << "major_dev=" << conf.major_dev
-      << ", magic=" << conf.magic
-      << ", device_type=" << conf.dtype
-      << ", device_id=" << device_id_printer_t{conf.device_id}
+      << ", spec=" << conf.spec
       << ", meta=" << conf.meta
       << ", secondary(";
   for (const auto& [k, v] : conf.secondary_devices) {
-    out << std::to_string(k) << ": " << v;
+    out << device_id_printer_t{k}
+        << ": " << v;
   }
   return out << "))";
 }
