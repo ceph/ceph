@@ -89,7 +89,6 @@ private:
         {
         case http::verb::get:
             response_.result(http::status::ok);
-            response_.set(http::field::server, "Beast");
             create_response();
             break;
 
@@ -111,9 +110,21 @@ private:
     // Construct a response message based on the program state.
     void create_response()
     {
-        if(request_.target() == "/metrics")
+        if (request_.target() == "/") {
+            response_.set(http::field::content_type, "text/html; charset=utf-8");
+            beast::ostream(response_.body())
+                << "<html>\n"
+                <<  "<head><title>Ceph Exporter</title></head>\n"
+                <<  "<body>\n"
+                <<  "<h1>Ceph Exporter</h1>\n"
+
+                <<  "<p><a href='/metrics'>Metrics</a></p>"
+                <<  "</body>\n"
+                <<  "</html>\n";
+        }
+        else if(request_.target() == "/metrics")
         {
-            response_.set(http::field::content_type, "text/plain");
+            response_.set(http::field::content_type, "text/plain; charset=utf-8");
             DaemonMetricCollector &collector = collector_instance();
             std::string metrics = collector.get_metrics();
             beast::ostream(response_.body()) << metrics << std::endl;
@@ -175,7 +186,7 @@ void http_server(tcp::acceptor& acceptor, tcp::socket& socket)
 std::string dns_lookup(std::string hostname) {
     boost::asio::io_service io_service;
     boost::asio::ip::tcp::resolver resolver(io_service);
-    boost::asio::ip::tcp::resolver::query query(hostname, "9085");
+    boost::asio::ip::tcp::resolver::query query(hostname, "9926");
     boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
     boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
     std::string ip_address = endpoint.address().to_string();
@@ -190,7 +201,7 @@ void http_server_thread_entrypoint() {
 
         std::string ip_address = dns_lookup(hostname);
         auto const address = net::ip::make_address(ip_address);
-        unsigned short port = static_cast<unsigned short>(std::atoi("9085"));
+        unsigned short port = static_cast<unsigned short>(std::atoi("9926"));
 
         net::io_context ioc{1};
 
