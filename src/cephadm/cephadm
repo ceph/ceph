@@ -2401,6 +2401,10 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
             r += ['--config.file=/etc/loki/loki.yml']
         if daemon_type == 'promtail':
             r += ['--config.file=/etc/promtail/promtail.yml']
+        if daemon_type == 'node-exporter':
+            r += ['--path.procfs=/host/proc',
+                  '--path.sysfs=/host/sys',
+                  '--path.rootfs=/rootfs']
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
         r += nfs_ganesha.get_daemon_args()
@@ -2819,6 +2823,11 @@ def get_container(ctx: CephadmContext,
             # by ubuntu 18.04 kernel!)
         ]
         container_args.extend(monitoring_args)
+        if daemon_type == 'node-exporter':
+            # in order to support setting '--path.procfs=/host/proc','--path.sysfs=/host/sys',
+            # '--path.rootfs=/rootfs' for node-exporter we need to disable selinux separation
+            # between the node-exporter container and the host to avoid selinux denials
+            container_args.extend(['--security-opt', 'label=disable'])
     elif daemon_type == 'crash':
         ceph_args = ['-n', name]
     elif daemon_type in Ceph.daemons:
