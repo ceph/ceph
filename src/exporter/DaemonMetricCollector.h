@@ -5,10 +5,13 @@
 #include <map>
 #include <vector>
 
+#include<filesystem>
 #include <string>
 #include <map>
 #include <vector>
 #include <boost/asio.hpp>
+
+namespace fs = std::filesystem;
 
 class DaemonMetricCollector {
  public:
@@ -23,6 +26,7 @@ private:
   std::map<std::string, AdminSocketClient> clients;
   std::string metrics;
   int stats_period; // time to wait before sending requests again
+  fs::path socketdir = "/var/run/ceph/";
   void update_sockets();
   void request_loop(boost::asio::deadline_timer &timer);
   void send_requests();
