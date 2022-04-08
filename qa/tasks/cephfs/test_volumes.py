@@ -308,6 +308,16 @@ class TestVolumesHelper(CephFSTestCase):
         trashdir = os.path.join("./", "volumes", "_deleting")
         self.mount_a.wait_for_dir_empty(trashdir, timeout=timeout)
 
+    def _wait_for_subvol_trash_empty(self, subvol, group="_nogroup", timeout=30):
+        trashdir = os.path.join("./", "volumes", group, subvol, ".trash")
+        try:
+            self.mount_a.wait_for_dir_empty(trashdir, timeout=timeout)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOENT:
+                pass
+            else:
+                raise
+
     def _assert_meta_location_and_version(self, vol_name, subvol_name, subvol_group=None, version=2, legacy=False):
         if legacy:
             subvol_path = self._get_subvolume_path(vol_name, subvol_name, group_name=subvol_group)
@@ -901,6 +911,108 @@ class TestSubvolumeGroups(TestVolumesHelper):
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_quota_exceeded_subvolume_removal(self):
+        """
+        Tests subvolume removal if it's group quota is exceeded
+        """
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # create 99 files of 1MB to exceed quota
+        self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=99)
+
+        try:
+            # write two files of 1MB file to exceed the quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=2)
+            # For quota to be enforced
+            time.sleep(20)
+            # create 400 files of 1MB to exceed quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=400)
+        except CommandFailedError:
+            # Delete subvolume when group quota is exceeded
+            self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+        else:
+            self.fail(f"expected filling subvolume {subvolname} with 400 files of size 1MB to fail")
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_exceeded_subvolume_removal_retained_snaps(self):
+        """
+        Tests retained snapshot subvolume removal if it's group quota is exceeded
+        """
+        group = self._generate_random_group_name()
+        subvolname = self._generate_random_subvolume_name()
+        snapshot1, snapshot2 = self._generate_random_snapshot_name(2)
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # create 99 files of 1MB to exceed quota
+        self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=99)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot1, "--group_name", group)
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolname, snapshot2, "--group_name", group)
+
+        try:
+            # write two files of 1MB file to exceed the quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=2)
+            # For quota to be enforced
+            time.sleep(20)
+            # create 400 files of 1MB to exceed quota
+            self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=400)
+        except CommandFailedError:
+            # remove with snapshot retention
+            self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group, "--retain-snapshots")
+            # remove snapshot1
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot1, "--group_name", group)
+            # remove snapshot2 (should remove volume)
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolname, snapshot2, "--group_name", group)
+            # verify subvolume trash is clean
+            self._wait_for_subvol_trash_empty(subvolname, group=group)
+        else:
+            self.fail(f"expected filling subvolume {subvolname} with 400 files of size 1MB to fail")
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_group_quota_subvolume_removal(self):
         """
