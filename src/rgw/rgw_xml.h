@@ -20,7 +20,7 @@ public:
   typedef std::map<std::string, XMLObj *>::iterator const_map_iter_t;
 
   XMLObjIter();
-  ~XMLObjIter();
+  virtual ~XMLObjIter();
   void set(const XMLObjIter::const_map_iter_t &_cur, const XMLObjIter::const_map_iter_t &_end);
   XMLObj *get_next();
   bool get_name(std::string& name) const;
@@ -133,7 +133,7 @@ protected:
 
 public:
   RGWXMLParser();
-  ~RGWXMLParser() override;
+  virtual ~RGWXMLParser() override;
 
   // initialize the parser, must be called before parsing
   bool init();
