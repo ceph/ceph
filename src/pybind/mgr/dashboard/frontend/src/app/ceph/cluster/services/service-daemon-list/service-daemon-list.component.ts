@@ -21,7 +21,6 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -48,6 +47,9 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   @ViewChild('listTpl', { static: true })
   listTpl: TemplateRef<any>;
 
+  @ViewChild('cpuTpl', { static: true })
+  cpuTpl: TemplateRef<any>;
+
   @ViewChildren('daemonsTable')
   daemonsTableTpls: QueryList<TemplateRef<TableComponent>>;
 
@@ -59,6 +61,12 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
 
   @Input()
   flag?: string;
+
+  total = 100;
+
+  warningThreshold = 0.8;
+
+  errorThreshold = 0.9;
 
   icons = Icons;
 
@@ -82,7 +90,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     private cephServiceService: CephServiceService,
     private orchService: OrchestratorService,
     private relativeDatePipe: RelativeDatePipe,
-    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private dimlessBinary: DimlessBinaryPipe,
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private daemonService: DaemonService,
@@ -141,32 +149,6 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         filterable: true
       },
       {
-        name: $localize`Container ID`,
-        prop: 'container_id',
-        flexGrow: 2,
-        filterable: true,
-        cellTransformation: CellTemplate.truncate,
-        customTemplateConfig: {
-          length: 12
-        }
-      },
-      {
-        name: $localize`Container Image name`,
-        prop: 'container_image_name',
-        flexGrow: 3,
-        filterable: true
-      },
-      {
-        name: $localize`Container Image ID`,
-        prop: 'container_image_id',
-        flexGrow: 2,
-        filterable: true,
-        cellTransformation: CellTemplate.truncate,
-        customTemplateConfig: {
-          length: 12
-        }
-      },
-      {
         name: $localize`Version`,
         prop: 'version',
         flexGrow: 1,
@@ -186,21 +168,23 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         flexGrow: 1
       },
       {
-        name: $localize`Daemon Events`,
-        prop: 'events',
-        flexGrow: 5,
-        cellTemplate: this.listTpl
+        name: $localize`CPU Usage`,
+        prop: 'cpu_percentage',
+        flexGrow: 1,
+        cellTemplate: this.cpuTpl
       },
       {
         name: $localize`Memory Usage`,
         prop: 'memory_usage',
         flexGrow: 1,
-        pipe: this.dimlessBinaryPipe
+        pipe: this.dimlessBinary,
+        cellClass: 'text-right'
       },
       {
-        name: $localize`CPU %`,
-        prop: 'cpu_percentage',
-        flexGrow: 1
+        name: $localize`Daemon Events`,
+        prop: 'events',
+        flexGrow: 2,
+        cellTemplate: this.listTpl
       }
     ];
 
