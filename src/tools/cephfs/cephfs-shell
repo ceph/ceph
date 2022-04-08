@@ -611,8 +611,7 @@ class CephFSShell(Cmd):
     put_parser.add_argument('local_path', type=str, action=path_to_bytes,
                             help='Path of the file in the local system')
     put_parser.add_argument('remote_path', type=str, action=path_to_bytes,
-                            help='Path of the file in the remote system.',
-                            nargs='?', default='.')
+                            help='Path of the file in the remote system')
     put_parser.add_argument('-f', '--force', action='store_true',
                             help='Overwrites the destination if it already exists.')
 
@@ -621,6 +620,21 @@ class CephFSShell(Cmd):
         """
         Copy a local file/directory to CephFS.
         """
+        if args.local_path != b'-' and not os.path.isfile(args.local_path) \
+                and not os.path.isdir(args.local_path):
+            set_exit_code_msg(errno.ENOENT,
+                              msg=f"error: "
+                                  f"{args.local_path.decode('utf-8')}: "
+                                  f"No such file or directory")
+            return
+
+        if (is_file_exists(args.remote_path) or is_dir_exists(
+                args.remote_path)) and not args.force:
+            set_exit_code_msg(msg=f"error: file/directory "
+                                  f"{args.remote_path.decode('utf-8')} "
+                                  f"exists, use --force to overwrite")
+            return
+
         root_src_dir = args.local_path
         root_dst_dir = args.remote_path
         if args.local_path == b'.' or args.local_path == b'./':
@@ -654,14 +668,6 @@ class CephFSShell(Cmd):
             root_dst_dir += b'/'
 
         if args.local_path == b'-' or os.path.isfile(root_src_dir):
-            if not args.force:
-                if os.path.isfile(root_src_dir):
-                    dst_file = root_dst_dir
-                    if is_file_exists(dst_file):
-                        set_exit_code_msg(errno.EEXIST,
-                                          f"{dst_file.decode('utf-8')}: file "
-                                          "exists! use --force to overwrite")
-                        return
             if args.local_path == b'-':
                 root_src_dir = b'-'
             copy_from_local(root_src_dir, root_dst_dir)
