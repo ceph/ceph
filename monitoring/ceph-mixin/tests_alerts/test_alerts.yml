@@ -546,6 +546,12 @@ tests:
     - series: 'node_network_mtu_bytes{device="eth4",instance="node-exporter",
       job="node-exporter"}'
       values: '9000 9000 9000 9000 9000'
+    - series: 'node_network_mtu_bytes{device="eth4",instance="hostname1",
+      job="node-exporter"}'
+      values: '2200 2200 2200 2200 2200'
+    - series: 'node_network_mtu_bytes{device="eth4",instance="hostname2",
+      job="node-exporter"}'
+      values: '2400 2400 2400 2400 2400'
     - series: 'node_network_up{device="eth0",instance="node-exporter",
       job="node-exporter"}'
       values: '0 0 0 0 0'
@@ -557,21 +563,50 @@ tests:
       values: '1 1 1 1 1'
     - series: 'node_network_up{device="eth3",instance="node-exporter",
       job="node-exporter"}'
-      values: '0 0 0 0 0'
+      values: '1 1 1 1 1'
     - series: 'node_network_up{device="eth4",instance="node-exporter",
       job="node-exporter"}'
       values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth4",instance="hostname1",
+      job="node-exporter"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth4",instance="hostname2",
+      job="node-exporter"}'
+      values: '0 0 0 0 0'
    promql_expr_test:
-     - expr: node_network_mtu_bytes{device!="lo"} * (node_network_up{device!="lo"} > 0) != on() group_left()
-             (quantile(0.5, node_network_mtu_bytes{device!="lo"}))
+     - expr: |
+          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
+            scalar(
+              max by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
+                quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
+            )
+          or
+          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
+            scalar(
+              min by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
+                quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
+            )
        eval_time: 1m
        exp_samples:
          - labels: '{device="eth4", instance="node-exporter", job="node-exporter"}'
            value: 9000
+         - labels: '{device="eth4", instance="hostname1", job="node-exporter"}'
+           value: 2200
    alert_rule_test:
      - eval_time: 1m
        alertname: CephNodeInconsistentMTU
        exp_alerts:
+       - exp_labels:
+           device: eth4
+           instance: hostname1
+           job: node-exporter
+           severity: warning
+           type: ceph_default
+         exp_annotations:
+           summary: MTU settings across Ceph hosts are inconsistent
+           description: >
+               Node hostname1 has a different MTU size (2200)
+               than the median of devices named eth4.
        - exp_labels:
            device: eth4
            instance: node-exporter
@@ -582,7 +617,7 @@ tests:
            summary: MTU settings across Ceph hosts are inconsistent
            description: >
                Node node-exporter has a different MTU size (9000)
-               than the median value on device eth4.
+               than the median of devices named eth4.
 
  # pool full, data series has 6 but using topk(5) so to ensure the
  # results are working as expected
@@ -876,7 +911,7 @@ tests:
           documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#fs-degraded
           summary: Ceph filesystem is degraded
           description: >
-            One or more metdata daemons (MDS ranks) are failed or in a
+            One or more metadata daemons (MDS ranks) are failed or in a
             damaged state. At best the filesystem is partially available,
             worst case is the filesystem is completely unusable.
  - interval: 1m
@@ -1738,7 +1773,7 @@ tests:
             During data consistency checks (scrub), at least one PG has been flagged as being
             damaged or inconsistent.
 
-            Check to see which PG is affected, and attempt a manual repair if neccessary. To list
+            Check to see which PG is affected, and attempt a manual repair if necessary. To list
             problematic placement groups, use 'rados list-inconsistent-pg <pool>'. To repair PGs use
             the 'ceph pg repair <pg_num>' command.
  - interval: 1m
@@ -1858,7 +1893,7 @@ tests:
           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-availability
           summary: Placement group is unavailable, blocking some I/O
           description: >
-            Data availability is reduced impacting the clusters abilty to service I/O to some data. One or
+            Data availability is reduced impacting the clusters ability to service I/O to some data. One or
             more placement groups (PGs) are in a state that blocks IO.
  - interval: 1m
    input_series:
