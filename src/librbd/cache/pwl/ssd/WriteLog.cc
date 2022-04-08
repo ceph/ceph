@@ -270,8 +270,6 @@ void WriteLog<I>::remove_pool_file() {
       lderr(m_image_ctx.cct) << "failed to remove empty pool \""
                              << this->m_log_pool_name << "\": " << dendl;
     } else {
-      m_cache_state->clean = true;
-      m_cache_state->empty = true;
       m_cache_state->present = false;
     }
   } else {
