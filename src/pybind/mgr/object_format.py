@@ -3,11 +3,11 @@
 
 import enum
 
-class Format(enum.Enum):
-    plain = 'plain'
-    json = 'json'
-    json_pretty = 'json-pretty'
-    yaml = 'yaml'
-    xml_pretty = 'xml-pretty'
-    xml = 'xml'
 
+class Format(enum.Enum):
+    plain = "plain"
+    json = "json"
+    json_pretty = "json-pretty"
+    yaml = "yaml"
+    xml_pretty = "xml-pretty"
+    xml = "xml"
