@@ -2,7 +2,7 @@
 Quincy
 ======
 
-Quincy is the 17th stable release of Ceph.  It is named after Squidward 
+Quincy is the 17th stable release of Ceph.  It is named after Squidward
 Quincy Tentacles from Spongebob Squarepants.
 
 v17.2.0 Quincy
@@ -15,7 +15,7 @@ Major Changes from Pacific
 
 General
 ~~~~~~~
-  
+
 * Filestore has been deprecated in Quincy. BlueStore is Ceph's default object
   store.
 
@@ -72,8 +72,29 @@ General
 
 Dashboard
 ~~~~~~~~~
-
-## TODO
+* Day 1: the new "Cluster Expansion Wizard" will guide users through post-install steps:
+  adding new hosts, storage devices or services.
+* NFS: the Dashboard now allows users to fully manage all NFS exports from a single place.
+* New mgr module (feedback): users can quickly report Ceph tracker issues
+  or suggestions directly from the Dashboard or the CLI.
+* New "Message of the Day": cluster admins can publish a custom message in a banner.
+* Cephadm integration improvements:
+   * Host management: maintenance, specs and labelling,
+   * Service management: edit and display logs,
+   * Daemon management (start, stop, restart, reload),
+   * New services supported: ingress (HAProxy) and SNMP-gateway.
+* Monitoring and alerting:
+   * 43 new alerts have been added (totalling 68) improving observability of events affecting:
+     cluster health, monitors, storage devices, PGs and CephFS.
+   * Alerts can now be sent externally as SNMP traps via the new SNMP gateway service
+     (the MIB is provided).
+   * Improved integrated full/nearfull event notifications.
+   * Grafana Dashboards now use grafonnet format (though they're still available
+     in JSON format).
+   * Stack update: images for monitoring containers have been updated.
+     Grafana 8.3.5, Prometheus 2.33.4, Alertmanager 0.23.0 and Node Exporter 1.3.1.
+     This reduced exposure to several Grafana vulnerabilities (CVE-2021-43798,
+     CVE-2021-39226, CVE-2021-43798,  CVE-2020-29510, CVE-2020-29511).
 
 RADOS
 ~~~~~
@@ -99,7 +120,7 @@ RADOS
   workaround mentioned in the tracker.
 
 * MGR: The pg_autoscaler has a new 'scale-down' profile, which provides more
-  performance from the start for new pools. However, the module still uses 
+  performance from the start for new pools. However, the module still uses
   the old behavior by default, which is now called the 'scale-up' profile.
   For more detail, see:
 
@@ -112,9 +133,9 @@ RADOS
 
   https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
 
-* MON/MGR: Pools can now be created with the `--bulk` flag. Any pools created 
-  with `bulk` will use a profile of the `pg_autoscaler` that provides more 
-  performance from the start. However, pools that were created without the 
+* MON/MGR: Pools can now be created with the `--bulk` flag. Any pools created
+  with `bulk` will use a profile of the `pg_autoscaler` that provides more
+  performance from the start. However, pools that were created without the
   `--bulk` flag use the old behavior by default. For more detail, see:
 
   https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
@@ -122,7 +143,7 @@ RADOS
 
 RBD block storage
 ~~~~~~~~~~~~~~~~~
-  
+
 ## TODO
 
 RGW object storage
@@ -147,9 +168,9 @@ RGW object storage
   "no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1". If you want to return to the old
   behavior, add 'ssl_options=' (empty) to the ``rgw frontends`` configuration.
 
-* The behavior for Multipart Upload was modified so that only 
-  CompleteMultipartUpload notification is sent at the end of the multipart 
-  upload. The POST notification at the beginning of the upload and the PUT 
+* The behavior for Multipart Upload was modified so that only
+  CompleteMultipartUpload notification is sent at the end of the multipart
+  upload. The POST notification at the beginning of the upload and the PUT
   notifications that were sent on each part are no longer sent.
 
 
