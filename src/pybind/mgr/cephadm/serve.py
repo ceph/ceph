@@ -1265,7 +1265,15 @@ class CephadmServe:
                 if stdin:
                     self.log.debug('stdin: %s' % stdin)
 
-                python = connr.choose_python()
+                try:
+                    # if host has gone offline this is likely where we'll fail first
+                    python = connr.choose_python()
+                except RuntimeError as e:
+                    self.mgr.offline_hosts.add(host)
+                    self.mgr._reset_con(host)
+                    if error_ok:
+                        return [], [str(e)], 1
+                    raise
                 if not python:
                     raise RuntimeError(
                         'unable to find python on %s (tried %s in %s)' % (
