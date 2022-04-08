@@ -925,7 +925,7 @@ class CephExporter(object):
     entrypoint = '/usr/bin/ceph-exporter'
 
     port_map = {
-        'exporter': 9085,
+        'exporter': 9926,
     }
 
     def __init__(self,
@@ -5223,7 +5223,7 @@ def prepare_ssh(
         cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
-        for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
+        for t in ['exporter', 'prometheus', 'grafana', 'node-exporter', 'alertmanager']:
             logger.info('Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
 
