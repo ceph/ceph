@@ -297,9 +297,10 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
                     device_spec_t{magic, dtype, (device_id_t)id});
                   return sec_dev->mkfs(device_config_t{
                       false,
-                      magic,
-                      dtype,
-                      (device_id_t)id,
+                      device_spec_t{
+                        magic,
+                        dtype,
+                        (device_id_t)id},
                       seastore_meta_t{new_osd_fsid},
                       secondary_device_set_t()}
                   ).safe_then([this, sec_dev=std::move(sec_dev), id]() mutable {
@@ -318,9 +319,10 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
           return device->mkfs(
             device_config_t{
               true,
-              (magic_t)std::rand(),
-              device_type_t::SEGMENTED,
-              0,
+              device_spec_t{
+                (magic_t)std::rand(),
+                device_type_t::SEGMENTED,
+                0},
               seastore_meta_t{new_osd_fsid},
               sds}
           );

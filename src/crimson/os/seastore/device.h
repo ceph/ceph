@@ -15,9 +15,9 @@ namespace crimson::os::seastore {
 using magic_t = uint64_t;
 
 struct device_spec_t{
-  magic_t magic;
-  device_type_t dtype;
-  device_id_t id;
+  magic_t magic = 0;
+  device_type_t dtype = device_type_t::NONE;
+  device_id_t id = DEVICE_ID_NULL;
   DENC(device_spec_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.magic, p);
@@ -34,11 +34,17 @@ using secondary_device_set_t =
 
 struct device_config_t {
   bool major_dev = false;
-  magic_t magic = 0;
-  device_type_t dtype = device_type_t::NONE;
-  device_id_t device_id = DEVICE_ID_NULL;
+  device_spec_t spec;
   seastore_meta_t meta;
   secondary_device_set_t secondary_devices;
+  DENC(device_config_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.major_dev, p);
+    denc(v.spec, p);
+    denc(v.meta, p);
+    denc(v.secondary_devices, p);
+    DENC_FINISH(p);
+  }
 };
 
 std::ostream& operator<<(std::ostream&, const device_config_t&);
@@ -113,6 +119,5 @@ public:
 
 }
 
-WRITE_CLASS_DENC(
-  crimson::os::seastore::device_spec_t
-)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::device_spec_t)
+WRITE_CLASS_DENC(crimson::os::seastore::device_config_t)
