@@ -53,7 +53,8 @@ std::ostream &operator<<(std::ostream &lhs, const test_extent_record_t &rhs) {
 
 struct transaction_manager_test_t :
   public seastar_test_suite_t,
-  TMTestState {
+  TMTestState,
+  ::testing::WithParamInterface<const char*> {
 
   std::random_device rd;
   std::mt19937 gen;
@@ -71,8 +72,22 @@ struct transaction_manager_test_t :
     return static_cast<char>(std::uniform_int_distribution<>(0, 255)(gen));
   }
 
+  bool for_segmented() {
+    std::string j_type = GetParam();
+    if (j_type == "segmented") {
+      return true;
+    }
+    return false;
+  }
   seastar::future<> set_up_fut() final {
-    return tm_setup();
+    std::string j_type = GetParam();
+    if (j_type == "segmented") {
+      return tm_setup();
+    } else if (j_type == "circularbounded") {
+      return tm_setup(journal_type::CIRCULARBOUNDED_JOURNAL);
+    } else {
+      ceph_assert(0 == "no support");
+    }
   }
 
   seastar::future<> tear_down_fut() final {
@@ -360,9 +375,10 @@ struct transaction_manager_test_t :
     test_transaction_t &t,
     laddr_t hint,
     extent_len_t len,
-    char contents) {
+    char contents,
+    placement_hint_t p_hint = placement_hint_t::HOT) {
     auto extent = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->alloc_extent<TestBlock>(trans, hint, len);
+      return tm->alloc_extent<TestBlock>(trans, hint, len, p_hint);
     }).unsafe_get0();
     extent->set_contents(contents);
     EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
@@ -374,12 +390,14 @@ struct transaction_manager_test_t :
   TestBlockRef alloc_extent(
     test_transaction_t &t,
     laddr_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    placement_hint_t p_hint = placement_hint_t::HOT) {
     return alloc_extent(
       t,
       hint,
       len,
-      get_random_contents());
+      get_random_contents(),
+      p_hint);
   }
 
   bool check_usage() {
@@ -391,30 +409,36 @@ struct transaction_manager_test_t :
 	return backref_manager->scan_mapped_space(
 	  t,
 	  [&tracker](auto offset, auto len, depth_t) {
-	    logger().debug("check_usage: tracker alloc {}~{}",
-	      offset, len);
-	    tracker->allocate(
-	      offset.as_seg_paddr().get_segment_id(),
-	      offset.as_seg_paddr().get_segment_off(),
-	      len);
+	    if (offset.get_addr_type() == addr_types_t::SEGMENT) {
+	      logger().debug("check_usage: tracker alloc {}~{}",
+		offset, len);
+	      tracker->allocate(
+		offset.as_seg_paddr().get_segment_id(),
+		offset.as_seg_paddr().get_segment_off(),
+		len);
+	    }
 	  }).si_then([&tracker, this] {
 	    auto &backrefs = cache->get_backrefs();
 	    for (auto &backref : backrefs) {
-	      logger().debug("check_usage: by backref, tracker alloc {}~{}",
-		backref.paddr, backref.len);
-	      tracker->allocate(
-		backref.paddr.as_seg_paddr().get_segment_id(),
-		backref.paddr.as_seg_paddr().get_segment_off(),
-		backref.len);
+	      if (backref.paddr.get_addr_type() == addr_types_t::SEGMENT) {
+		logger().debug("check_usage: by backref, tracker alloc {}~{}",
+		  backref.paddr, backref.len);
+		tracker->allocate(
+		  backref.paddr.as_seg_paddr().get_segment_id(),
+		  backref.paddr.as_seg_paddr().get_segment_off(),
+		  backref.len);
+	      }
 	    }
 	    auto &del_backrefs = cache->get_del_backrefs();
 	    for (auto &del_backref : del_backrefs) {
-	      logger().debug("check_usage: by backref, tracker release {}~{}",
-		del_backref.paddr, del_backref.len);
-	      tracker->release(
-		del_backref.paddr.as_seg_paddr().get_segment_id(),
-		del_backref.paddr.as_seg_paddr().get_segment_off(),
-		del_backref.len);
+	      if (del_backref.paddr.get_addr_type() == addr_types_t::SEGMENT) {
+		logger().debug("check_usage: by backref, tracker release {}~{}",
+		  del_backref.paddr, del_backref.len);
+		tracker->release(
+		  del_backref.paddr.as_seg_paddr().get_segment_id(),
+		  del_backref.paddr.as_seg_paddr().get_segment_off(),
+		  del_backref.len);
+	      }
 	    }
 	    return seastar::now();
 	  });
@@ -603,7 +627,8 @@ struct transaction_manager_test_t :
 		boost::make_counting_iterator(num),
 		[&, this](auto) {
 		  return tm->alloc_extent<TestBlock>(
-		    *(t.t), L_ADDR_MIN, size
+		    *(t.t), L_ADDR_MIN, size,
+		    for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE
 		  ).si_then([&, this](auto extent) {
 		    extent->set_contents(get_random_contents());
 		    EXPECT_FALSE(
@@ -645,7 +670,8 @@ struct transaction_manager_test_t :
               auto extent = alloc_extent(
                 t,
                 i * BSIZE,
-                BSIZE);
+                BSIZE,
+		for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
               ASSERT_EQ(i * BSIZE, extent->get_laddr());
               if (try_submit_transaction(std::move(t)))
                 break;
@@ -701,7 +727,7 @@ struct tm_multi_device_test_t :
   tm_multi_device_test_t() : transaction_manager_test_t(3) {}
 };
 
-TEST_F(tm_single_device_test_t, basic)
+TEST_P(tm_single_device_test_t, basic)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -712,7 +738,8 @@ TEST_F(tm_single_device_test_t, basic)
 	t,
 	ADDR,
 	SIZE,
-	'a');
+	'a',
+	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -722,7 +749,7 @@ TEST_F(tm_single_device_test_t, basic)
   });
 }
 
-TEST_F(tm_single_device_test_t, mutate)
+TEST_P(tm_single_device_test_t, mutate)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -733,7 +760,8 @@ TEST_F(tm_single_device_test_t, mutate)
 	t,
 	ADDR,
 	SIZE,
-	'a');
+	'a',
+	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -760,7 +788,7 @@ TEST_F(tm_single_device_test_t, mutate)
   });
 }
 
-TEST_F(tm_single_device_test_t, allocate_lba_conflict)
+TEST_P(tm_single_device_test_t, allocate_lba_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -774,7 +802,8 @@ TEST_F(tm_single_device_test_t, allocate_lba_conflict)
       t,
       ADDR,
       SIZE,
-      'a');
+      'a',
+      for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
     ASSERT_EQ(ADDR, extent->get_laddr());
     check_mappings(t);
     check();
@@ -783,7 +812,8 @@ TEST_F(tm_single_device_test_t, allocate_lba_conflict)
       t2,
       ADDR2,
       SIZE,
-      'a');
+      'a',
+      for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
     ASSERT_EQ(ADDR2, extent2->get_laddr());
     check_mappings(t2);
     extent2.reset();
@@ -793,7 +823,7 @@ TEST_F(tm_single_device_test_t, allocate_lba_conflict)
   });
 }
 
-TEST_F(tm_single_device_test_t, mutate_lba_conflict)
+TEST_P(tm_single_device_test_t, mutate_lba_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -803,7 +833,8 @@ TEST_F(tm_single_device_test_t, mutate_lba_conflict)
 	auto extent = alloc_extent(
 	  t,
 	  laddr_t(i * SIZE),
-	  SIZE);
+	  SIZE,
+	  for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       }
       check_mappings(t);
       submit_transaction(std::move(t));
@@ -832,7 +863,7 @@ TEST_F(tm_single_device_test_t, mutate_lba_conflict)
   });
 }
 
-TEST_F(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
+TEST_P(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   constexpr size_t NUM = 500;
@@ -845,7 +876,8 @@ TEST_F(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
 	auto extent = alloc_extent(
 	  t,
 	  laddr_t(i * SIZE),
-	  SIZE);
+	  SIZE,
+	  for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       }
       submit_transaction(std::move(t));
     }
@@ -864,7 +896,7 @@ TEST_F(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
   });
 }
 
-TEST_F(tm_single_device_test_t, create_remove_same_transaction)
+TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -875,7 +907,8 @@ TEST_F(tm_single_device_test_t, create_remove_same_transaction)
 	t,
 	ADDR,
 	SIZE,
-	'a');
+	'a',
+	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       dec_ref(t, ADDR);
@@ -885,7 +918,8 @@ TEST_F(tm_single_device_test_t, create_remove_same_transaction)
 	t,
 	ADDR,
 	SIZE,
-	'a');
+	'a',
+	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
 
       submit_transaction(std::move(t));
       check();
@@ -895,7 +929,7 @@ TEST_F(tm_single_device_test_t, create_remove_same_transaction)
   });
 }
 
-TEST_F(tm_single_device_test_t, split_merge_read_same_transaction)
+TEST_P(tm_single_device_test_t, split_merge_read_same_transaction)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -905,7 +939,8 @@ TEST_F(tm_single_device_test_t, split_merge_read_same_transaction)
 	auto extent = alloc_extent(
 	  t,
 	  laddr_t(i * SIZE),
-	  SIZE);
+	  SIZE,
+	  for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       }
       check_mappings(t);
       submit_transaction(std::move(t));
@@ -925,7 +960,7 @@ TEST_F(tm_single_device_test_t, split_merge_read_same_transaction)
   });
 }
 
-TEST_F(tm_single_device_test_t, inc_dec_ref)
+TEST_P(tm_single_device_test_t, inc_dec_ref)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -936,7 +971,8 @@ TEST_F(tm_single_device_test_t, inc_dec_ref)
 	t,
 	ADDR,
 	SIZE,
-	'a');
+	'a',
+	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -972,7 +1008,7 @@ TEST_F(tm_single_device_test_t, inc_dec_ref)
   });
 }
 
-TEST_F(tm_single_device_test_t, cause_lba_split)
+TEST_P(tm_single_device_test_t, cause_lba_split)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -982,7 +1018,8 @@ TEST_F(tm_single_device_test_t, cause_lba_split)
 	t,
 	i * SIZE,
 	SIZE,
-	(char)(i & 0xFF));
+	(char)(i & 0xFF),
+	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       ASSERT_EQ(i * SIZE, extent->get_laddr());
       submit_transaction(std::move(t));
     }
@@ -990,7 +1027,7 @@ TEST_F(tm_single_device_test_t, cause_lba_split)
   });
 }
 
-TEST_F(tm_single_device_test_t, random_writes)
+TEST_P(tm_single_device_test_t, random_writes)
 {
   constexpr size_t TOTAL = 4<<20;
   constexpr size_t BSIZE = 4<<10;
@@ -1002,7 +1039,8 @@ TEST_F(tm_single_device_test_t, random_writes)
       auto extent = alloc_extent(
 	t,
 	i * BSIZE,
-	BSIZE);
+	BSIZE,
+	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
       ASSERT_EQ(i * BSIZE, extent->get_laddr());
       submit_transaction(std::move(t));
     }
@@ -1020,7 +1058,8 @@ TEST_F(tm_single_device_test_t, random_writes)
 	  auto padding = alloc_extent(
 	    t,
 	    TOTAL + (k * PADDING_SIZE),
-	    PADDING_SIZE);
+	    PADDING_SIZE,
+	    for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
 	  dec_ref(t, padding->get_laddr());
 	}
 	submit_transaction(std::move(t));
@@ -1033,7 +1072,7 @@ TEST_F(tm_single_device_test_t, random_writes)
   });
 }
 
-TEST_F(tm_single_device_test_t, find_hole_assert_trigger)
+TEST_P(tm_single_device_test_t, find_hole_assert_trigger)
 {
   constexpr unsigned max = 10;
   constexpr size_t BSIZE = 4<<10;
@@ -1048,12 +1087,30 @@ TEST_F(tm_single_device_test_t, find_hole_assert_trigger)
   });
 }
 
-TEST_F(tm_single_device_test_t, random_writes_concurrent)
+TEST_P(tm_single_device_test_t, random_writes_concurrent)
 {
   test_random_writes_concurrent();
 }
 
-TEST_F(tm_multi_device_test_t, random_writes_concurrent)
+TEST_P(tm_multi_device_test_t, random_writes_concurrent)
 {
   test_random_writes_concurrent();
 }
+
+INSTANTIATE_TEST_SUITE_P(
+  transaction_manager_test,
+  tm_single_device_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+  transaction_manager_test,
+  tm_multi_device_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);

@@ -634,7 +634,7 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 
 TransactionManager::~TransactionManager() {}
 
-TransactionManagerRef make_transaction_manager(bool detailed)
+TransactionManagerRef make_transaction_manager(bool detailed, bool cbjournal)
 {
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
@@ -647,7 +647,13 @@ TransactionManagerRef make_transaction_manager(bool detailed)
     *backref_manager,
     *cache,
     detailed);
-  auto journal = journal::make_segmented(*segment_cleaner);
+  JournalRef journal;
+  if (!cbjournal) {
+    journal = journal::make_segmented(*segment_cleaner);
+  } else {
+    journal = journal::make_circularbounded(
+      nullptr, "");
+  }
   epm->init_ool_writers(
       *segment_cleaner,
       segment_cleaner->get_ool_segment_seq_allocator());

@@ -217,7 +217,12 @@ struct FixedKVInternalNode
     LOG_PREFIX(FixedKVInternalNode::resolve_relative_addrs);
     for (auto i: *this) {
       if (i->get_val().is_relative()) {
-	auto updated = base.add_relative(i->get_val());
+	paddr_t updated;
+	if (base.get_addr_type() == addr_types_t::SEGMENT) {
+	  updated = base.add_relative(i->get_val());
+	} else {
+	  updated = base.add_offset(i->get_val().as_seg_paddr().get_segment_off());
+	}
 	SUBTRACE(seastore_fixedkv_tree, "{} -> {}", i->get_val(), updated);
 	i->set_val(updated);
       }
