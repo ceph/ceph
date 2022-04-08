@@ -199,6 +199,9 @@ BuildRequires:	gcc-toolset-11-gcc-c++
 %if 0%{?suse_version}
 BuildRequires:	gcc11-c++
 %else
+%if 0%{?suse_version}
+BuildRequires:	gcc11-c++
+%else
 BuildRequires:	gcc-c++
 %endif
 %endif
