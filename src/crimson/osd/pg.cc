@@ -810,17 +810,20 @@ PG::do_osd_ops(
   ObjectContextRef obc,
   std::vector<OSDOp>& ops,
   const OpInfo &op_info,
-  const do_osd_ops_params_t& msg_params,
+  const do_osd_ops_params_t &&msg_params,
   do_osd_ops_success_func_t success_func,
   do_osd_ops_failure_func_t failure_func)
 {
-  return do_osd_ops_execute<void>(
-    seastar::make_lw_shared<OpsExecuter>(
-      Ref<PG>{this}, std::move(obc), op_info, msg_params),
-    ops,
-    std::as_const(op_info),
-    std::move(success_func),
-    std::move(failure_func));
+  return seastar::do_with(std::move(msg_params), [=, &ops, &op_info]
+    (auto &msg_params) {
+    return do_osd_ops_execute<void>(
+      seastar::make_lw_shared<OpsExecuter>(
+        Ref<PG>{this}, std::move(obc), op_info, msg_params),
+      ops,
+      std::as_const(op_info),
+      std::move(success_func),
+      std::move(failure_func));
+  });
 }
 
 PG::interruptible_future<MURef<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
