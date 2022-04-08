@@ -586,6 +586,9 @@ void SegmentCleaner::update_journal_tail_target(
   journal_seq_t alloc_replay_from)
 {
   LOG_PREFIX(SegmentCleaner::update_journal_tail_target);
+  if (dirty_replay_from.offset.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
+    return;
+  }
   if (dirty_extents_replay_from == JOURNAL_SEQ_NULL
       || dirty_replay_from > dirty_extents_replay_from) {
     DEBUG("dirty_extents_replay_from={} => {}",

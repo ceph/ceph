@@ -132,7 +132,7 @@ read_ertr::future<> PosixNVMeDevice::read(
     });
 }
 
-seastar::future<> PosixNVMeDevice::close() {
+Device::close_ertr::future<> PosixNVMeDevice::close() {
   logger().debug(" close ");
   return device.close().then([this]() {
     return seastar::do_for_each(io_device, [](auto target_device) {
@@ -254,8 +254,8 @@ read_ertr::future<> TestMemory::read(
   return read_ertr::now();
 }
 
-seastar::future<> TestMemory::close() {
+Device::close_ertr::future<> TestMemory::close() {
   logger().debug(" close ");
-  return seastar::now();
+  return close_ertr::now();
 }
 }

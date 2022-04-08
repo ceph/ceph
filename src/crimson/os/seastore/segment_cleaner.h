@@ -773,6 +773,8 @@ public:
     time_point last_modified = time_point(),
     time_point last_rewritten = time_point(),
     bool init_scan = false) {
+    if (addr.get_addr_type() != addr_types_t::SEGMENT)
+      return;
     auto& seg_addr = addr.as_seg_paddr();
 
     if (!init_scan && !init_complete)
@@ -810,6 +812,8 @@ public:
     extent_len_t len,
     const bool force = false) {
     if (!init_complete && !force)
+      return;
+    if (addr.get_addr_type() != addr_types_t::SEGMENT)
       return;
 
     ceph_assert(stats.used_bytes >= len);

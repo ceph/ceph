@@ -39,7 +39,11 @@ void LBALeafNode::resolve_relative_addrs(paddr_t base)
   for (auto i: *this) {
     if (i->get_val().paddr.is_relative()) {
       auto val = i->get_val();
-      val.paddr = base.add_relative(val.paddr);
+      if (base.get_addr_type() == addr_types_t::SEGMENT) {
+	val.paddr = base.add_relative(val.paddr);
+      } else {
+	val.paddr = base.add_offset(val.paddr.as_seg_paddr().get_segment_off());
+      }
       TRACE("{} -> {}", i->get_val().paddr, val.paddr);
       i->set_val(val);
     }

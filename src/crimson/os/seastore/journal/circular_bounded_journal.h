@@ -301,6 +301,9 @@ public:
   size_t get_block_size() const {
     return header.block_size;
   }
+  void add_device(NVMeBlockDevice* dev) {
+    device = dev;
+  }
 private:
   cbj_header_t header;
   NVMeBlockDevice* device;

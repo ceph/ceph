@@ -46,7 +46,8 @@ CircularBoundedJournal::mkfs(mkfs_config_t& config)
   ).safe_then([this, config, FNAME]() mutable -> mkfs_ret {
     rbm_abs_addr start_addr = convert_paddr_to_abs_addr(
       config.start);
-    assert(config.block_size == device->get_block_size());
+    assert(static_cast<seastore_off_t>(config.block_size) ==
+      device->get_block_size());
     ceph::bufferlist bl;
     CircularBoundedJournal::cbj_header_t head;
     head.magic = CBJOURNAL_MAGIC;
@@ -82,16 +83,14 @@ CircularBoundedJournal::mkfs(mkfs_config_t& config)
     }).safe_then([]() {
       return mkfs_ertr::now();
     });
-  }).handle_error(
-    mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error _open_device in CircularBoundedJournal::mkfs"
-  }).finally([this] {
+  }).safe_then([this]() {
     if (device) {
-      return device->close();
-    } else {
-      return seastar::now();
+      return device->close(
+      ).safe_then([]() {
+	return mkfs_ertr::now();
+      });
     }
+    return mkfs_ertr::now();
   });
 }
 
@@ -431,6 +430,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 		auto& delta = p.second;
 		return d_handler(locator,
 		  delta,
+		  locator.write_result.start_seq,
 		  seastar::lowres_system_clock::time_point(
 		    seastar::lowres_system_clock::duration(commit_time))
 		  );

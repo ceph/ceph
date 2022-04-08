@@ -294,13 +294,14 @@ public:
   alloc_extent_ret<T> alloc_extent(
     Transaction &t,
     laddr_t laddr_hint,
-    extent_len_t len) {
+    extent_len_t len,
+    placement_hint_t hint = placement_hint_t::HOT) {
     placement_hint_t placement_hint;
     if constexpr (T::TYPE == extent_types_t::OBJECT_DATA_BLOCK ||
                   T::TYPE == extent_types_t::COLL_BLOCK) {
       placement_hint = placement_hint_t::COLD;
     } else {
-      placement_hint = placement_hint_t::HOT;
+      placement_hint = hint;
     }
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
@@ -542,10 +543,11 @@ public:
              dev->get_device_id(), is_primary);
     epm->add_device(dev, is_primary);
 
-    ceph_assert(dev->get_device_type() == device_type_t::SEGMENTED);
-    auto sm = dynamic_cast<SegmentManager*>(dev);
-    ceph_assert(sm != nullptr);
-    sm_group.add_segment_manager(sm);
+    if (dev->get_device_type() == device_type_t::SEGMENTED) {
+      auto sm = dynamic_cast<SegmentManager*>(dev);
+      ceph_assert(sm != nullptr);
+      sm_group.add_segment_manager(sm);
+    }
   }
 
   ~TransactionManager();
@@ -583,9 +585,12 @@ public:
   auto get_cache() {
     return cache.get();
   }
+  auto get_journal() {
+    return journal.get();
+  }
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
-TransactionManagerRef make_transaction_manager(bool detailed);
+TransactionManagerRef make_transaction_manager(bool detailed, bool cbjournal = false);
 
 }
