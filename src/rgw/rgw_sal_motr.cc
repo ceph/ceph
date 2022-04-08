@@ -3493,7 +3493,30 @@ int MotrStore::list_users(const DoutPrefixProvider* dpp, const std::string& meta
                         std::string& marker, int max_entries, void *&handle,
                         bool* truncated, std::list<std::string>& users)
 {
-    return 0;
+  int rc;
+  if (max_entries <= 0 or max_entries > 1000) {
+    max_entries = 1000; 
+  }
+  vector<string> keys(max_entries + 1);
+  vector<bufferlist> vals(max_entries + 1);
+
+  keys[0] = marker;
+  rc = next_query_by_name(RGW_MOTR_USERS_IDX_NAME, keys, vals);
+  if (rc < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: NEXT query failed. " << rc << dendl;
+    return rc;
+  }
+  if (!(keys.back()).empty()) {
+    *truncated = true;
+    marker = keys.back(); 
+  }
+  for (int i = 0; i < int(keys.size()) - 1; i++) {
+    if (keys[i].empty()) {
+      break;
+    }
+    users.push_back(keys[i]);
+  }
+  return rc;
 }
 
 int MotrStore::open_idx(struct m0_uint128 *id, bool create, struct m0_idx *idx)
