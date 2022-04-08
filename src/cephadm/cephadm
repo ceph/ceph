@@ -2618,6 +2618,9 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             if daemon_type != 'crash' and should_log_to_journald(ctx):
                 journald_sock_dir = '/run/systemd/journal'
                 mounts[journald_sock_dir] = journald_sock_dir
+            localtime_dir = '/etc/localtime'
+            if os.path.exists(localtime_dir):
+                mounts[localtime_dir] = '/etc/localtime:z'
 
     if daemon_type in Ceph.daemons and daemon_id:
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
