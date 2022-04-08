@@ -1226,6 +1226,7 @@ int DB::Object::get_obj_state(const DoutPrefixProvider *dpp,
   /* XXX: For now use state->shadow_obj to store ObjectID string */
   s->shadow_obj = params.op.obj.obj_id;
 
+  *state = new RGWObjState();
   **state = *s;
 
   if (follow_olh && params.op.obj.state.obj.key.instance.empty()) {
