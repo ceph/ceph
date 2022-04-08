@@ -527,6 +527,8 @@ struct rgw_cls_obj_remove_op {
     decode(keep_attr_prefixes, bl);
     DECODE_FINISH(bl);
   }
+   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_obj_remove_op*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_remove_op)
 
@@ -544,6 +546,9 @@ struct rgw_cls_obj_store_pg_ver_op {
     decode(attr, bl);
     DECODE_FINISH(bl);
   }
+   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_obj_store_pg_ver_op*>& ls);
+
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_store_pg_ver_op)
 
@@ -566,6 +571,9 @@ struct rgw_cls_obj_check_attrs_prefix {
     decode(fail_if_exist, bl);
     DECODE_FINISH(bl);
   }
+   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_obj_check_attrs_prefix*>& ls);
+
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_check_attrs_prefix)
 
@@ -595,6 +603,8 @@ struct rgw_cls_obj_check_mtime {
     }
     DECODE_FINISH(bl);
   }
+   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_obj_check_mtime*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_check_mtime)
 
@@ -619,6 +629,8 @@ struct rgw_cls_usage_log_add_op {
     }
     DECODE_FINISH(bl);
   }
+   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_usage_log_add_op*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_usage_log_add_op)
 
@@ -643,6 +655,8 @@ struct rgw_cls_bi_get_op {
     type = (BIIndexType)c;
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_bi_get_op*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_get_op)
 
@@ -662,6 +676,9 @@ struct rgw_cls_bi_get_ret {
     decode(entry, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_bi_get_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_get_ret)
 
@@ -681,6 +698,8 @@ struct rgw_cls_bi_put_op {
     decode(entry, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_bi_put_op*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_put_op)
 
@@ -706,6 +725,9 @@ struct rgw_cls_bi_list_op {
     decode(marker, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_bi_list_op*>& ls);
+
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_list_op)
 
@@ -728,6 +750,9 @@ struct rgw_cls_bi_list_ret {
     decode(is_truncated, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_bi_list_ret*>& ls);
+
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_list_ret)
 
@@ -763,6 +788,8 @@ struct rgw_cls_usage_log_read_op {
     }
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_usage_log_read_op*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_usage_log_read_op)
 
@@ -786,6 +813,8 @@ struct rgw_cls_usage_log_read_ret {
     decode(next_iter, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_usage_log_read_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_usage_log_read_ret)
 
@@ -814,6 +843,8 @@ struct rgw_cls_usage_log_trim_op {
     }
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_usage_log_trim_op*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_usage_log_trim_op)
 
@@ -1036,6 +1067,8 @@ struct cls_rgw_lc_get_next_entry_op {
     decode(marker, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_rgw_lc_get_next_entry_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_op)
 
@@ -1061,7 +1094,8 @@ struct cls_rgw_lc_get_next_entry_ret {
     }
     DECODE_FINISH(bl);
   }
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_rgw_lc_get_next_entry_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_ret)
 
@@ -1081,6 +1115,8 @@ struct cls_rgw_lc_get_entry_op {
     decode(marker, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_rgw_lc_get_entry_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_entry_op)
 
@@ -1144,6 +1180,8 @@ struct cls_rgw_lc_rm_entry_op {
     }
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(std::list<cls_rgw_lc_rm_entry_op*>& o);
+  void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_rm_entry_op)
 
@@ -1168,6 +1206,8 @@ struct cls_rgw_lc_set_entry_op {
     }
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(std::list<cls_rgw_lc_set_entry_op*>& o);
+  void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_set_entry_op)
 
@@ -1188,7 +1228,8 @@ struct cls_rgw_lc_put_head_op {
     decode(head, bl);
     DECODE_FINISH(bl);
   }
-
+  static void generate_test_instances(std::list<cls_rgw_lc_put_head_op*>& o);
+  void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_put_head_op)
 
@@ -1208,6 +1249,8 @@ struct cls_rgw_lc_get_head_ret {
     decode(head, bl);
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(std::list<cls_rgw_lc_get_head_ret*>& o);
+  void dump(ceph::Formatter *f) const;
 
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_head_ret)
@@ -1233,6 +1276,8 @@ struct cls_rgw_lc_list_entries_op {
     decode(max_entries, bl);
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(std::list<cls_rgw_lc_list_entries_op*>& o);
+  void dump(ceph::Formatter *f) const;
 
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_op)
@@ -1278,6 +1323,8 @@ cls_rgw_lc_list_entries_ret(uint8_t compat_v = 3)
     }
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(std::list<cls_rgw_lc_list_entries_ret*>& o);
+  void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_ret)
 
