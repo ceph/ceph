@@ -72,7 +72,8 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
   return -1ULL;
 }
 
-uint64_t AvlAllocator::_pick_block_fits(uint64_t size,
+uint64_t AvlAllocator::_pick_block_fits(uint64_t *cursor,
+                                        uint64_t size,
 					uint64_t align)
 {
   // instead of searching from cursor, just pick the smallest range which fits
@@ -82,6 +83,7 @@ uint64_t AvlAllocator::_pick_block_fits(uint64_t size,
   for (auto rs = rs_start; rs != range_size_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
+      *cursor = offset + size;
       return offset;
     }
   }
@@ -255,6 +257,11 @@ int AvlAllocator::_allocate(
 
   const int free_pct = num_free * 100 / device_size;
   uint64_t start = 0;
+
+  uint64_t align = size & -size;
+  ceph_assert(align != 0);
+  uint64_t* cursor = &lbas[cbits(align) - 1];
+
   // If we're running low on space, find a range by size by looking up in the size
   // sorted tree (best-fit), instead of searching in the area pointed by cursor
   if (force_range_size_alloc ||
@@ -269,15 +276,12 @@ int AvlAllocator::_allocate(
      * not guarantee that other allocations sizes may exist in the same
      * region.
      */
-    uint64_t align = size & -size;
-    ceph_assert(align != 0);
-    uint64_t* cursor = &lbas[cbits(align) - 1];
     start = _pick_block_after(cursor, size, unit);
     dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
   }
   if (start == -1ULL) {
     do {
-      start = _pick_block_fits(size, unit);
+      start = _pick_block_fits(cursor, size, unit);
       dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
       if (start != uint64_t(-1ULL)) {
         break;

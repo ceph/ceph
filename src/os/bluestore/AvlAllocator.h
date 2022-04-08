@@ -99,6 +99,7 @@ private:
     uint64_t align);
   // pick a range with exactly the same size or larger
   uint64_t _pick_block_fits(
+    uint64_t *cursor,
     uint64_t size,
     uint64_t align);
   int _allocate(
