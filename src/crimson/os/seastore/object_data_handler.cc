@@ -177,7 +177,10 @@ split_ret split_pin_left(context_t ctx, LBAPinRef &pin, laddr_t offset)
       (zero_extent_len == 0
        ? std::nullopt
        : std::make_optional(extent_to_write_t(pin_offset, zero_extent_len))),
-      bufferptr(ceph::buffer::create(zero_prepend_len, 0))
+      (zero_prepend_len == 0
+       ? std::nullopt
+       : std::make_optional(
+	 bufferptr(ceph::buffer::create(zero_prepend_len, 0))))
     );
   } else {
     // Data, return up to offset to prepend
@@ -213,7 +216,10 @@ split_ret split_pin_right(context_t ctx, LBAPinRef &pin, laddr_t end)
       (zero_extent_len == 0
        ? std::nullopt
        : std::make_optional(extent_to_write_t(aligned_end, zero_extent_len))),
-      bufferptr(ceph::buffer::create(zero_suffix_len, 0))
+      (zero_suffix_len == 0
+       ? std::nullopt
+       : std::make_optional(
+	 bufferptr(ceph::buffer::create(zero_suffix_len, 0))))
     );
   } else {
     return read_pin(ctx, pin->duplicate()
