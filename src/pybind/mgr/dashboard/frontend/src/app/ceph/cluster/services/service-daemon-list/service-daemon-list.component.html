@@ -63,7 +63,8 @@
     </li>
   </ul>
   <ng-template #noEventsAvailable>
-    <div *ngIf="events?.length === 0">
+    <div *ngIf="events?.length === 0"
+         class="list-group-item">
       <span>No data available</span>
     </div>
   </ng-template>
@@ -87,3 +88,15 @@
     </cd-table-actions>
   </cd-table>
 </ng-template>
+
+<ng-template #cpuTpl
+             let-row="row">
+  <cd-usage-bar [total]="total"
+                [calculatePerc]="false"
+                [used]="row.cpu_percentage"
+                [isBinary]="false"
+                [warningThreshold]="warningThreshold"
+                [errorThreshold]="errorThreshold">
+  </cd-usage-bar>
+</ng-template>
+
