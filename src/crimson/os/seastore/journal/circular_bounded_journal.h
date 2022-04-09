@@ -120,8 +120,8 @@ public:
   using read_record_ret = read_record_ertr::future<
 	std::optional<std::pair<record_group_header_t, bufferlist>>
 	>;
-  using read_super_ertr = read_ertr;
-  using read_super_ret = read_super_ertr::future<
+  using read_header_ertr = read_ertr;
+  using read_header_ret = read_header_ertr::future<
 	std::optional<std::pair<cbj_header_t, bufferlist>>
 	>;
   /*
@@ -134,16 +134,16 @@ public:
    */
   read_record_ret read_record(paddr_t offset);
   /*
-   * read_super
+   * read_header
    *
-   * read super block from given absolute address
+   * read header block from given absolute address
    *
    * @param absolute address
    *
    */
-  read_super_ret read_super(rbm_abs_addr start);
+  read_header_ret read_header(rbm_abs_addr start);
 
-  ceph::bufferlist encode_super();
+  ceph::bufferlist encode_header();
 
   using mkfs_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -269,7 +269,7 @@ public:
     set_applied_to(new_applied_to + len);
   }
 
-  write_ertr::future<> write_super();
+  write_ertr::future<> write_header();
 
   read_record_ret return_record(record_group_header_t& header, bufferlist bl);
 

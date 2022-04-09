@@ -66,7 +66,7 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
     DEBUG(
       "initialize header block in CircularBoundedJournal, length {}",
       bl.length());
-    return device_write_bl(start_addr, bl
+    return write_header(
     ).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
@@ -98,7 +98,7 @@ CircularBoundedJournal::_open_device(const std::string path)
   );
 }
 
-ceph::bufferlist CircularBoundedJournal::encode_super()
+ceph::bufferlist CircularBoundedJournal::encode_header()
 {
   bufferlist bl;
   encode(header, bl);
@@ -112,14 +112,14 @@ CircularBoundedJournal::open_for_write_ret CircularBoundedJournal::open_for_writ
 
 CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
 {
-  return write_super(
+  return write_header(
   ).safe_then([this]() -> close_ertr::future<> {
     init = false;
     return device->close();
   }).handle_error(
     open_for_write_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error write_super"
+      "Invalid error write_header"
     }
   );
 }
@@ -141,15 +141,15 @@ CircularBoundedJournal::open_for_write(rbm_abs_addr start)
   }
   return _open_device(path
   ).safe_then([this, start, FNAME]() {
-    return read_super(start
+    return read_header(start
     ).handle_error(
       open_for_write_ertr::pass_further{},
       crimson::ct_error::assert_all{
-	"Invalid error read_super"
+	"Invalid error read_header"
     }).safe_then([this, FNAME](auto p) mutable {
       auto &[head, bl] = *p;
       header = head;
-      DEBUG("super : {}", header);
+      DEBUG("header : {}", header);
       paddr_t paddr = convert_abs_addr_to_paddr(
 	get_written_to(),
 	header.device_id);
@@ -324,16 +324,16 @@ CircularBoundedJournal::write_ertr::future<> CircularBoundedJournal::device_writ
   });
 }
 
-CircularBoundedJournal::read_super_ret
-CircularBoundedJournal::read_super(rbm_abs_addr start)
+CircularBoundedJournal::read_header_ret
+CircularBoundedJournal::read_header(rbm_abs_addr start)
 {
-  LOG_PREFIX(CircularBoundedJournal::read_super);
+  LOG_PREFIX(CircularBoundedJournal::read_header);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(
 			device->get_block_size()));
   return device->read(start, bptr
   ).safe_then([start, bptr, FNAME]() mutable
-    -> read_super_ret {
-    DEBUG("read_super: reading {}", start);
+    -> read_header_ret {
+    DEBUG("read_header: reading {}", start);
     bufferlist bl;
     bl.append(bptr);
     auto bp = bl.cbegin();
@@ -341,11 +341,11 @@ CircularBoundedJournal::read_super(rbm_abs_addr start)
     try {
       decode(cbj_header, bp);
     } catch (ceph::buffer::error &e) {
-      ERROR("read_super: unable to read super block");
+      ERROR("read_header: unable to read header block");
       return crimson::ct_error::enoent::make();
     }
-    return read_super_ret(
-      read_super_ertr::ready_future_marker{},
+    return read_header_ret(
+      read_header_ertr::ready_future_marker{},
       std::make_pair(cbj_header, bl)
     );
   });
@@ -562,14 +562,14 @@ CircularBoundedJournal::read_record_ret CircularBoundedJournal::read_record(padd
 }
 
 CircularBoundedJournal::write_ertr::future<>
-CircularBoundedJournal::write_super()
+CircularBoundedJournal::write_header()
 {
-  LOG_PREFIX(CircularBoundedJournal::write_super);
+  LOG_PREFIX(CircularBoundedJournal::write_header);
   ceph::bufferlist bl;
   try {
-    bl = encode_super();
+    bl = encode_header();
   } catch (ceph::buffer::error &e) {
-    DEBUG("unable to encode super block from underlying deivce");
+    DEBUG("unable to encode header block from underlying deivce");
     return crimson::ct_error::input_output_error::make();
   }
   DEBUG(
