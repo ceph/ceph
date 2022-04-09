@@ -276,7 +276,7 @@ class SnapSchedClient(CephfsClient):
                     time = datetime.now(timezone.utc)
                     with open_filesystem(self, fs_name) as fs_handle:
                         snap_ts = time.strftime(SNAPSHOT_TS_FORMAT)
-                        snap_name = f'{path}/.snap/{SNAPSHOT_PREFIX}-{snap_ts}'
+                        snap_name = f'{path}/.snap/{SNAPSHOT_PREFIX}-{snap_ts}UTC'
                         fs_handle.mkdir(snap_name, 0o755)
                     log.info(f'created scheduled snapshot of {path}')
                     log.debug(f'created scheduled snapshot {snap_name}')
@@ -308,7 +308,7 @@ class SnapSchedClient(CephfsClient):
                         if dir_.d_name.decode('utf-8').startswith(f'{SNAPSHOT_PREFIX}-'):
                             log.debug(f'add {dir_.d_name} to pruning')
                             ts = datetime.strptime(
-                                dir_.d_name.decode('utf-8').lstrip(f'{SNAPSHOT_PREFIX}-'),
+                                dir_.d_name.decode('utf-8').lstrip(f'{SNAPSHOT_PREFIX}-')[:19],
                                 SNAPSHOT_TS_FORMAT)
                             prune_candidates.add((dir_, ts))
                         else:
