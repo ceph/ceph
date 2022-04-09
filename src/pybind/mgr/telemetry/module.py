@@ -28,6 +28,7 @@ ALL_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
 LICENSE = 'sharing-1-0'
 LICENSE_NAME = 'Community Data License Agreement - Sharing - Version 1.0'
 LICENSE_URL = 'https://cdla.io/sharing-1-0/'
+NO_SALT_CNT = 0
 
 # Latest revision of the telemetry report.  Bump this each time we make
 # *any* change.
@@ -406,6 +407,28 @@ class Module(MgrModule):
             'cluster_changed': sorted(list(cluster)),
             'active_changed': sorted(list(active)),
         }
+
+    def anonymize_entity_name(self, entity_name:str) -> str:
+        if '.' not in entity_name:
+            self.log.debug(f"Cannot split entity name ({entity_name}), no '.' is found")
+            return entity_name
+
+        (etype, eid) = entity_name.split('.', 1)
+        m = hashlib.sha1()
+        salt = ''
+        if self.salt is not None:
+            salt = self.salt
+        # avoid asserting that salt exists
+        if not self.salt:
+            # do not set self.salt to a temp value
+            salt = f"no_salt_found_{NO_SALT_CNT}"
+            NO_SALT_CNT += 1
+            self.log.debug(f"No salt found, created a temp one: {salt}")
+        m.update(salt.encode('utf-8'))
+        m.update(eid.encode('utf-8'))
+        m.update(salt.encode('utf-8'))
+
+        return  etype + '.' + m.hexdigest()
 
     def get_heap_stats(self) -> Dict[str, dict]:
         # Initialize result dict
