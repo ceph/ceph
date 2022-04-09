@@ -377,12 +377,12 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
   });
 }
 
-TEST_F(cbjournal_test_t, update_super)
+TEST_F(cbjournal_test_t, update_header)
 {
   run_async([this] {
     mkfs();
     open();
-    auto [header, _buf] = *(cbj->read_super(0).unsafe_get0());
+    auto [header, _buf] = *(cbj->read_header(0).unsafe_get0());
     record_t rec {
      { generate_extent(1), generate_extent(2) },
      { generate_delta(20), generate_delta(21) }
@@ -391,15 +391,15 @@ TEST_F(cbjournal_test_t, update_super)
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
 
-    cbj->write_super().unsafe_get0();
-    auto [update_header, update_buf] = *(cbj->read_super(0).unsafe_get0());
+    cbj->write_header().unsafe_get0();
+    auto [update_header, update_buf] = *(cbj->read_header(0).unsafe_get0());
 
     ASSERT_EQ(header.size, update_header.size);
     ASSERT_EQ(header.used_size + record_total_size, update_header.used_size);
 
     update_applied_to(entries.front().addr, record_total_size);
-    cbj->write_super().unsafe_get0();
-    auto [update_header2, update_buf2] = *(cbj->read_super(0).unsafe_get0());
+    cbj->write_header().unsafe_get0();
+    auto [update_header2, update_buf2] = *(cbj->read_header(0).unsafe_get0());
 
     ASSERT_EQ(header.used_size, update_header2.used_size);
     ASSERT_EQ(header.written_to + record_total_size, update_header2.written_to);
