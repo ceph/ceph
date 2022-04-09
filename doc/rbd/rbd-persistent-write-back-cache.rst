@@ -74,15 +74,29 @@ users may use the command ``rbd status``.  ::
         rbd status {pool-name}/{image-name}
 
 The status of the cache is shown, including present, clean, cache size and the
-location. Currently the status is updated only at the time the cache is opened
-and closed and therefore may appear to be out of date (e.g. show that the cache
-is clean when it is actually dirty).
+location as well as some basic metrics.
 
 For example::
 
         $ rbd status rbd/foo
-        Watchers: none
-        Image cache state: {"present":"true","empty":"false","clean":"true","cache_type":"ssd","pwl_host":"sceph9","pwl_path":"/tmp/rbd-pwl.rbd.abcdef123456.pool","pwl_size":1073741824}
+        Watchers:
+                watcher=10.10.0.102:0/1061883624 client.25496 cookie=140338056493088
+        Persistent cache state:
+                host: sceph9
+                path: /mnt/nvme0/rbd-pwl.rbd.101e5824ad9a.pool
+                size: 1 GiB
+                mode: ssd
+                stats_timestamp: Sun Apr 10 13:26:32 2022
+                present: true   empty: false    clean: false
+                allocated: 509 MiB
+                cached: 501 MiB
+                dirty: 338 MiB
+                free: 515 MiB
+                hits_full: 1450 / 61%
+                hits_partial: 0 / 0%
+                misses: 924
+                hit_bytes: 192 MiB / 66%
+                miss_bytes: 97 MiB
 
 Discard Cache
 -------------
