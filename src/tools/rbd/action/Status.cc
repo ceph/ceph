@@ -3,6 +3,7 @@
 
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "json_spirit/json_spirit.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
@@ -103,13 +104,82 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
     }
   }
 
-  std::string image_cache_str;
+  struct {
+    // decoded
+    std::string host;
+    std::string path;
+    uint64_t size;
+    std::string mode;
+    std::string stats_timestamp;
+    bool present;
+    bool empty;
+    bool clean;
+    uint64_t allocated_bytes;
+    uint64_t cached_bytes;
+    uint64_t dirty_bytes;
+    uint64_t free_bytes;
+    uint64_t hits_full;
+    uint64_t hits_partial;
+    uint64_t misses;
+    uint64_t hit_bytes;
+    uint64_t miss_bytes;
+
+    // calculated
+    uint64_t total_read_ops;
+    uint64_t total_read_bytes;
+    int hits_full_percent;
+    int hits_partial_percent;
+    int hit_bytes_percent;
+  } cache_state;
+  std::string cache_str;
   if (features & RBD_FEATURE_DIRTY_CACHE) {
-    r = image.metadata_get(IMAGE_CACHE_STATE, &image_cache_str);
+    r = image.metadata_get(IMAGE_CACHE_STATE, &cache_str);
     if (r < 0) {
-      std::cerr << "rbd: getting image cache state failed: " << cpp_strerror(r)
+      std::cerr << "rbd: getting persistent cache state failed: " << cpp_strerror(r)
                 << std::endl;
       // not fatal
+    }
+    json_spirit::mValue json_root;
+    if (!json_spirit::read(cache_str.c_str(), json_root)) {
+      std::cerr << "rbd: parsing persistent cache state failed" << std::endl;
+      cache_str.clear();
+    } else {
+      try {
+        auto& o = json_root.get_obj();
+        cache_state.host = o["host"].get_str();
+        cache_state.path = o["path"].get_str();
+        cache_state.size = o["size"].get_uint64();
+        cache_state.mode = o["mode"].get_str();
+        time_t stats_timestamp_sec = o["stats_timestamp"].get_uint64();
+        cache_state.stats_timestamp = ctime(&stats_timestamp_sec);
+        cache_state.stats_timestamp.pop_back();
+        cache_state.present = o["present"].get_bool();
+        cache_state.empty = o["empty"].get_bool();
+        cache_state.clean = o["clean"].get_bool();
+        cache_state.allocated_bytes = o["allocated_bytes"].get_uint64();
+        cache_state.cached_bytes = o["cached_bytes"].get_uint64();
+        cache_state.dirty_bytes = o["dirty_bytes"].get_uint64();
+        cache_state.free_bytes = o["free_bytes"].get_uint64();
+        cache_state.hits_full = o["hits_full"].get_uint64();
+        cache_state.hits_partial = o["hits_partial"].get_uint64();
+        cache_state.misses = o["misses"].get_uint64();
+        cache_state.hit_bytes = o["hit_bytes"].get_uint64();
+        cache_state.miss_bytes = o["miss_bytes"].get_uint64();
+      } catch (std::runtime_error &e) {
+        std::cerr << "rbd: parsing persistent cache state failed: " << e.what()
+                  << std::endl;
+        cache_str.clear();
+      }
+      cache_state.total_read_ops = cache_state.hits_full +
+          cache_state.hits_partial + cache_state.misses;
+      cache_state.total_read_bytes = cache_state.hit_bytes +
+          cache_state.miss_bytes;
+      cache_state.hits_full_percent = utils::get_percentage(
+          cache_state.hits_full, cache_state.total_read_ops);
+      cache_state.hits_partial_percent = utils::get_percentage(
+          cache_state.hits_partial, cache_state.total_read_ops);
+      cache_state.hit_bytes_percent = utils::get_percentage(
+          cache_state.hit_bytes, cache_state.total_read_bytes);
     }
   }
 
@@ -146,8 +216,29 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       f->dump_string("state_description", migration_status.state_description);
       f->close_section(); // migration
     }
-    if (!image_cache_str.empty()) {
-      f->dump_string("image_cache_state", image_cache_str);
+    if (!cache_str.empty()) {
+      f->open_object_section("persistent_cache");
+      f->dump_string("host", cache_state.host);
+      f->dump_string("path", cache_state.path);
+      f->dump_unsigned("size", cache_state.size);
+      f->dump_string("mode", cache_state.mode);
+      f->dump_string("stats_timestamp", cache_state.stats_timestamp);
+      f->dump_bool("present", cache_state.present);
+      f->dump_bool("empty", cache_state.empty);
+      f->dump_bool("clean", cache_state.clean);
+      f->dump_unsigned("allocated_bytes", cache_state.allocated_bytes);
+      f->dump_unsigned("cached_bytes", cache_state.cached_bytes);
+      f->dump_unsigned("dirty_bytes", cache_state.dirty_bytes);
+      f->dump_unsigned("free_bytes", cache_state.free_bytes);
+      f->dump_unsigned("hits_full", cache_state.hits_full);
+      f->dump_int("hits_full_percent", cache_state.hits_full_percent);
+      f->dump_unsigned("hits_partial", cache_state.hits_partial);
+      f->dump_int("hits_partial_percent", cache_state.hits_partial_percent);
+      f->dump_unsigned("misses", cache_state.misses);
+      f->dump_unsigned("hit_bytes", cache_state.hit_bytes);
+      f->dump_int("hit_bytes_percent", cache_state.hit_bytes_percent);
+      f->dump_unsigned("miss_bytes", cache_state.miss_bytes);
+      f->close_section(); // persistent_cache
     }
   } else {
     if (watchers.size()) {
@@ -188,9 +279,33 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       }
       std::cout << std::endl;
     }
-
-    if (!image_cache_str.empty()) {
-        std::cout << "Image cache state: " << image_cache_str << std::endl;
+    if (!cache_str.empty()) {
+      std::cout << "Persistent cache state:" << std::endl;
+      std::cout << "\thost: " << cache_state.host << std::endl;
+      std::cout << "\tpath: " << cache_state.path << std::endl;
+      std::cout << "\tsize: " << byte_u_t(cache_state.size) << std::endl;
+      std::cout << "\tmode: " << cache_state.mode << std::endl;
+      std::cout << "\tstats_timestamp: " << cache_state.stats_timestamp
+                << std::endl;
+      std::cout << "\tpresent: " << (cache_state.present ? "true" : "false")
+                << "\tempty: " << (cache_state.empty ? "true" : "false")
+                << "\tclean: " << (cache_state.clean ? "true" : "false")
+                << std::endl;
+      std::cout << "\tallocated: " << byte_u_t(cache_state.allocated_bytes)
+                << std::endl;
+      std::cout << "\tcached: " << byte_u_t(cache_state.cached_bytes)
+                << std::endl;
+      std::cout << "\tdirty: " << byte_u_t(cache_state.dirty_bytes) << std::endl;
+      std::cout << "\tfree: " << byte_u_t(cache_state.free_bytes) << std::endl;
+      std::cout << "\thits_full: " << cache_state.hits_full << " / "
+                << cache_state.hits_full_percent << "%" << std::endl;
+      std::cout << "\thits_partial: " << cache_state.hits_partial << " / "
+                << cache_state.hits_partial_percent << "%" << std::endl;
+      std::cout << "\tmisses: " << cache_state.misses << std::endl;
+      std::cout << "\thit_bytes: " << byte_u_t(cache_state.hit_bytes) << " / "
+                << cache_state.hit_bytes_percent << "%" << std::endl;
+      std::cout << "\tmiss_bytes: " << byte_u_t(cache_state.miss_bytes)
+                << std::endl;
     }
   }
 
