@@ -80,6 +80,15 @@ class YAMLFormatter(Protocol):
         ...  # pragma: no cover
 
 
+class ReturnValueProvider(Protocol):
+    def mgr_return_value(self) -> int:
+        """Return an integer value to provide the Ceph MGR with a error code
+        for the MGR's response tuple. Zero means success. Return an negative
+        errno otherwise.
+        """
+        ...  # pragma: no cover
+
+
 # The _is_name_of_protocol_type functions below are here because the production
 # builds of the ceph manager are lower than python 3.8 and do not have
 # typing_extensions available in the resulting images. This means that
@@ -104,6 +113,11 @@ def _is_json_data_provider(obj: JSONDataProvider) -> bool:
 def _is_yaml_data_provider(obj: YAMLDataProvider) -> bool:
     """Return true if obj is usable as a YAMLDataProvider."""
     return callable(getattr(obj, 'to_yaml', None))
+
+
+def _is_return_value_provider(obj: ReturnValueProvider) -> bool:
+    """Return true if obj is usable as a YAMLDataProvider."""
+    return callable(getattr(obj, 'mgr_return_value', None))
 
 
 class ObjectFormatAdapter:
@@ -167,3 +181,24 @@ class ObjectFormatAdapter:
     def format_yaml(self) -> str:
         """Return a YAML formatted string representing the input object."""
         return yaml.safe_dump(self._fetch_yaml_data())
+
+
+class ReturnValueAdapter:
+    """A return-value adapter for an object.
+    Given an input object, this type will attempt to get a mgr return value
+    from the object if provides a `mgr_return_value` function.
+    If not it returns a default return value, typically 0.
+    """
+
+    def __init__(
+        self,
+        obj: Any,
+        default: int = 0,
+    ) -> None:
+        self.obj = obj
+        self.default_return_value = default
+
+    def mgr_return_value(self) -> int:
+        if _is_return_value_provider(self.obj):
+            return int(self.obj.mgr_return_value())
+        return self.default_return_value
