@@ -39,7 +39,7 @@ CircularBoundedJournal::CircularBoundedJournal(NVMeBlockDevice* device,
   : device(device), path(path) {}
 
 CircularBoundedJournal::mkfs_ret
-CircularBoundedJournal::mkfs(mkfs_config_t& config)
+CircularBoundedJournal::mkfs(const mkfs_config_t& config)
 {
   LOG_PREFIX(CircularBoundedJournal::mkfs);
   return _open_device(path

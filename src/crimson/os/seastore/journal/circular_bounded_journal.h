@@ -159,7 +159,7 @@ public:
    * @param mkfs_config_t
    *
    */
-  mkfs_ret mkfs(mkfs_config_t& config);
+  mkfs_ret mkfs(const mkfs_config_t& config);
 
 
   /**
