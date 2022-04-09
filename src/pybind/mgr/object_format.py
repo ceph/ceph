@@ -2,15 +2,21 @@
 # requested output formats such as JSON, YAML, etc.
 
 import enum
+import errno
 import json
 import sys
 
+from functools import wraps
 from typing import (
     Any,
+    Callable,
     Dict,
     Iterable,
+    List,
     Optional,
     TYPE_CHECKING,
+    Tuple,
+    Union,
 )
 
 import yaml
@@ -26,6 +32,8 @@ else:
     # fallback type that is acceptable to older python on prod. builds
     class Protocol:  # type: ignore
         pass
+
+from mgr_module import HandlerFuncType
 
 
 DEFAULT_JSON_INDENT: int = 2
@@ -43,6 +51,12 @@ class Format(str, enum.Enum):
 # SimpleData is a type alias for Any unless we can determine the
 # exact set of subtypes we want to support. But it is explicit!
 SimpleData = Any
+
+
+ObjectResponseFuncType = Union[
+    Callable[..., Dict[Any, Any]],
+    Callable[..., List[Any]],
+]
 
 
 class SimpleDataProvider(Protocol):
@@ -219,3 +233,115 @@ class ReturnValueAdapter:
         if _is_return_value_provider(self.obj):
             return int(self.obj.mgr_return_value())
         return self.default_return_value
+
+
+class ErrorResponseBase(Exception):
+    """An exception that can directly be converted to a mgr reponse."""
+
+    def format_response(self) -> Tuple[int, str, str]:
+        raise NotImplementedError()
+
+
+class UnknownFormat(ErrorResponseBase):
+    """Raised if the format name is unexpected.
+    This can help distinguish typos from formats that are known but
+    not implemented.
+    """
+
+    def __init__(self, format_name: str) -> None:
+        self.format_name = format_name
+
+    def format_response(self) -> Tuple[int, str, str]:
+        return -errno.EINVAL, "", f"Unknown format name: {self.format_name}"
+
+
+class UnsupportedFormat(ErrorResponseBase):
+    """Raised if the format name does not correspond to any valid
+    conversion functions.
+    """
+
+    def __init__(self, format_name: str) -> None:
+        self.format_name = format_name
+
+    def format_response(self) -> Tuple[int, str, str]:
+        return -errno.EINVAL, "", f"Unsupported format: {self.format_name}"
+
+
+def _get_requested_format(f: ObjectResponseFuncType, kw: Dict[str, Any]) -> str:
+    # todo: leave 'format' in kw dict iff its part of f's signature
+    return kw.pop("format", None)
+
+
+class Responder:
+    """A decorator type intended to assist in converting Python return types
+    into valid responses for the Ceph MGR.
+
+    A function that returns a Python object will have the object converted into
+    a return value and formatted response body, based on the `format` argument
+    passed to the mgr.
+
+    The Responder object is callable and is expected to be used as a decorator.
+    """
+
+    def __init__(
+        self, formatter: Optional[Callable[..., CommonFormatter]] = None
+    ) -> None:
+        self.formatter = formatter
+        self.default_format = "json"
+
+    def _formatter(self, obj: Any) -> CommonFormatter:
+        """Return the formatter/format-adapter for the object."""
+        if self.formatter is not None:
+            return self.formatter(obj)
+        return ObjectFormatAdapter(obj)
+
+    def _retval_provider(self, obj: Any) -> ReturnValueProvider:
+        """Return a ReturnValueProvider for the given object."""
+        return ReturnValueAdapter(obj)
+
+    def _get_format_func(
+        self, obj: Any, format_req: Optional[str] = None
+    ) -> Callable:
+        formatter = self._formatter(obj)
+        if format_req is None:
+            format_req = self.default_format
+        if format_req not in formatter.valid_formats():
+            raise UnknownFormat(format_req)
+        req = str(format_req).replace("-", "_")
+        ffunc = getattr(formatter, f"format_{req}", None)
+        if ffunc is None:
+            raise UnsupportedFormat(format_req)
+        return ffunc
+
+    def _dry_run(self, format_req: Optional[str] = None) -> None:
+        """Raise an exception if the format_req is not supported."""
+        # call with an empty dict to see if format_req is valid and supported
+        self._get_format_func({}, format_req)
+
+    def _formatted(self, obj: Any, format_req: Optional[str] = None) -> str:
+        """Return the object formatted/serialized."""
+        ffunc = self._get_format_func(obj, format_req)
+        return ffunc()
+
+    def _return_value(self, obj: Any) -> int:
+        """Return a mgr return-value for the given object (usually zero)."""
+        return self._retval_provider(obj).mgr_return_value()
+
+    def __call__(self, f: ObjectResponseFuncType) -> HandlerFuncType:
+        """Wrap a python function so that the original function's return value
+        becomes the source for an automatically formatted mgr response.
+        """
+
+        @wraps(f)
+        def _format_response(*args: Any, **kwargs: Any) -> Tuple[int, str, str]:
+            format_req = _get_requested_format(f, kwargs)
+            try:
+                self._dry_run(format_req)
+                robj = f(*args, **kwargs)
+                body = self._formatted(robj, format_req)
+                retval = self._return_value(robj)
+            except ErrorResponseBase as e:
+                return e.format_response()
+            return retval, body, ""
+
+        return _format_response
