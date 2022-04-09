@@ -50,23 +50,14 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
       device->get_block_size());
     ceph::bufferlist bl;
     CircularBoundedJournal::cbj_header_t head;
-    head.magic = CBJOURNAL_MAGIC;
-    head.uuid = uuid_d(); // TODO
     head.block_size = config.block_size;
     rbm_abs_addr end_addr = convert_paddr_to_abs_addr(
       config.end);
     head.size = end_addr - start_addr
       - device->get_block_size();
-    head.used_size = 0;
-    head.error = 0;
     head.start_offset = device->get_block_size();
-    head.last_committed_record_base = 0;
     head.written_to = head.start_offset;
     head.applied_to = head.start_offset;
-    head.flag = 0;
-    head.csum_type = 0;
-    head.csum = 0;
-    head.cur_segment_seq = 0;
     head.start = start_addr;
     head.end = end_addr;
     head.device_id = config.device_id;

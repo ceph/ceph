@@ -185,25 +185,25 @@ public:
    */
 
   struct cbj_header_t {
-    uint64_t magic;
+    uint64_t magic = CBJOURNAL_MAGIC;
     uuid_d uuid;
-    uint64_t block_size; // aligned with block_size
-    uint64_t size;   // max length of journal
-    uint64_t used_size;  // current used_size of journal
-    uint32_t error;      // reserved
+    uint64_t block_size = 0; // aligned with block_size
+    uint64_t size = 0;   // max length of journal
+    uint64_t used_size = 0;  // current used_size of journal
+    uint32_t error = 0;      // reserved
 
-    rbm_abs_addr start_offset;      // start offset of CircularBoundedJournal
-    rbm_abs_addr last_committed_record_base;
-    rbm_abs_addr written_to;
-    rbm_abs_addr applied_to;
+    rbm_abs_addr start_offset = 0;      // start offset of CircularBoundedJournal
+    rbm_abs_addr last_committed_record_base = 0;
+    rbm_abs_addr written_to = 0;
+    rbm_abs_addr applied_to = 0;
 
-    uint64_t flag;       // represent features (reserved)
-    uint8_t csum_type;   // type of checksum algoritghm used in cbj_header_t
-    uint64_t csum;       // checksum of entire cbj_header_t
-    uint32_t cur_segment_seq;
+    uint64_t flag = 0;       // represent features (reserved)
+    uint8_t csum_type = 0;   // type of checksum algoritghm used in cbj_header_t
+    uint64_t csum = 0;       // checksum of entire cbj_header_t
+    uint32_t cur_segment_seq = 0;
 
-    rbm_abs_addr start; // start address of the device
-    rbm_abs_addr end;   // start address of the device
+    rbm_abs_addr start = 0; // start address of the device
+    rbm_abs_addr end = 0;   // start address of the device
     device_id_t device_id;
 
     DENC(cbj_header_t, v, p) {
