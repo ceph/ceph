@@ -128,3 +128,12 @@ def test_return_value(obj: Any, ret: int):
     # a ReturnValueAdapter instance meets the ReturnValueProvider protocol.
     assert object_format._is_return_value_provider(rva)
     assert rva.mgr_return_value() == ret
+
+
+def test_valid_formats():
+    ofa = object_format.ObjectFormatAdapter({"fred": "wilma"})
+    vf = ofa.valid_formats()
+    assert "json" in vf
+    assert "yaml" in vf
+    assert "xml" in vf
+    assert "plain" in vf

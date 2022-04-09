@@ -8,6 +8,7 @@ import sys
 from typing import (
     Any,
     Dict,
+    Iterable,
     Optional,
     TYPE_CHECKING,
 )
@@ -30,7 +31,7 @@ else:
 DEFAULT_JSON_INDENT: int = 2
 
 
-class Format(enum.Enum):
+class Format(str, enum.Enum):
     plain = "plain"
     json = "json"
     json_pretty = "json-pretty"
@@ -86,6 +87,16 @@ class ReturnValueProvider(Protocol):
         for the MGR's response tuple. Zero means success. Return an negative
         errno otherwise.
         """
+        ...  # pragma: no cover
+
+
+class CommonFormatter(Protocol):
+    """A protocol that indicates the type is a formatter for multiple
+    possible formats.
+    """
+
+    def valid_formats(self) -> Iterable[str]:
+        """Return the names of known valid formats."""
         ...  # pragma: no cover
 
 
@@ -181,6 +192,12 @@ class ObjectFormatAdapter:
     def format_yaml(self) -> str:
         """Return a YAML formatted string representing the input object."""
         return yaml.safe_dump(self._fetch_yaml_data())
+
+    format_json_pretty = format_json
+
+    def valid_formats(self) -> Iterable[str]:
+        """Return valid format names."""
+        return set(str(v) for v in Format.__members__)
 
 
 class ReturnValueAdapter:
