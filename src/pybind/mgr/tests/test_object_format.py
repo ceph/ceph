@@ -103,3 +103,28 @@ def test_format_yaml(obj: Any, compatible: bool, yaml_val: str):
         ).format_yaml()
         == yaml_val
     )
+
+
+class Retty:
+    def __init__(self, v) -> None:
+        self.value = v
+
+    def mgr_return_value(self) -> int:
+        return self.value
+
+
+@pytest.mark.parametrize(
+    "obj, ret",
+    [
+        ({}, 0),
+        ({"fish": "sticks"}, 0),
+        (-55, 0),
+        (Retty(0), 0),
+        (Retty(-55), -55),
+    ],
+)
+def test_return_value(obj: Any, ret: int):
+    rva = object_format.ReturnValueAdapter(obj)
+    # a ReturnValueAdapter instance meets the ReturnValueProvider protocol.
+    assert object_format._is_return_value_provider(rva)
+    assert rva.mgr_return_value() == ret
