@@ -5,3 +5,41 @@
   defaults to "/var/log/ceph/ops-log-$cluster-$name.log".
 * The SPDK backend for BlueStore is now able to connect to an NVMeoF target.
   Please note that this is not an officially supported feature.
+* RGW's pubsub interface now returns boolean fields using bool. Before this change,
+  `/topics/<topic-name>` returns "stored_secret" and "persistent" using a string
+  of "true" or "false" with quotes around them. After this change, these fields
+  are returned without quotes so they can be decoded as boolean values in JSON.
+  The same applies to the `is_truncated` field returned by `/subscriptions/<sub-name>`.
+* RGW's response of `Action=GetTopicAttributes&TopicArn=<topic-arn>` REST API now
+  returns `HasStoredSecret` and `Persistent` as boolean in the JSON string
+  encoded in `Attributes/EndPoint`.
+* All boolean fields previously rendered as string by `rgw-admin` command when
+  the JSON format is used are now rendered as boolean. If your scripts/tools
+  relies on this behavior, please update them accordingly. The impacted field names
+  are:
+  * absolute
+  * add
+  * admin
+  * appendable
+  * bucket_key_enabled
+  * delete_marker
+  * exists
+  * has_bucket_info
+  * high_precision_time
+  * index
+  * is_master
+  * is_prefix
+  * is_truncated
+  * linked
+  * log_meta
+  * log_op
+  * pending_removal
+  * read_only
+  * retain_head_object
+  * rule_exist
+  * start_with_full_sync
+  * sync_from_all
+  * syncstopped
+  * system
+  * truncated
+  * user_stats_sync
