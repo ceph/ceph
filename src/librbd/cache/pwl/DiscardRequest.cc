@@ -72,7 +72,13 @@ void DiscardRequest<I>::delete_image_cache_file() {
   if (m_cache_state->present &&
       !m_cache_state->host.compare(ceph_get_short_hostname()) &&
       fs::exists(m_cache_state->path)) {
-    fs::remove(m_cache_state->path);
+    std::error_code ec;
+    fs::remove(m_cache_state->path, ec);
+    if (ec) {
+      lderr(cct) << "failed to remove persistent cache file: " << ec.message()
+                 << dendl;
+      // not fatal
+    }
   }
 
   remove_image_cache_state();
