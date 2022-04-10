@@ -377,3 +377,78 @@ settings to ensure that all IOs are issued through SPDK.::
 
 Otherwise, the current implementation will populate the SPDK map files with
 kernel file system symbols and will use the kernel driver to issue DB/WAL IO.
+
+Minimum Allocation Size
+========================
+
+There is a configured minimum amount of storage that BlueStore will allocate on
+an OSD.  In practice, this is the least amount of capacity that a RADOS object
+can consume.  The value of :confval:`bluestore_min_alloc_size` is derived from the
+value of :confval:`bluestore_min_alloc_size_hdd` or :confval:`bluestore_min_alloc_size_ssd`
+depending on the OSD's ``rotational`` attribute.  This means that when an OSD
+is created on an HDD, BlueStore will be initialized with the current value
+of :confval:`bluestore_min_alloc_size_hdd`, and SSD OSDs (including NVMe devices)
+with the value of :confval:`bluestore_min_alloc_size_ssd`.
+
+Note that this BlueStore attribute takes effect *only* at OSD creation; if
+changed later, a given OSD's behavior will not change unless / until it is
+destroyed and redeployed.
+
+Through the Mimic release, the default values were 64KB and 16KB for rotational
+(HDD) and non-rotational (SSD) media respectively.  Octopus and later releases
+default to a value of 4KB for all media types.
+
+This change was driven by the space amplification experienced by Ceph RADOS
+GateWay (RGW) deployments that host large numbers of relatively small files
+(S3/Swift objects).
+
+For example, when an RGW client stores a 1KB S3 object, it is written to a
+single RADOS object.  With the default :confval:`min_alloc_size` value, 4KB of
+underlying drive space is allocated.  This means that roughly
+(4KB - 1KB) == 3KB is allocated but never used, which corresponds to 300%
+overhead or 25% efficiency. Similarly, a 5KB user object will be stored
+as one 4KB and one 1KB RADOS object, again stranding 4KB of device capcity,
+though in this case the overhead is a much smaller percentage.  Think of this
+in terms of the remainder from a modulus operation. The overhead *percentage*
+thus decreases rapidly as user object size increases.
+
+An easily missed additional subtlety is that this
+takes place for *each* replica.  So when using the default three copies of
+data (3R), a 1KB S3 object actually consumes roughly 9KB of storage device
+capacity.  If erasure coding (EC) is used instead of replication, the
+amplification may be even higher: for a ``k=4,m=2`` pool, our 1KB S3 object
+will allocate (6 * 4KB) = 24KB of device capacity.
+
+When an RGW bucket pool contains many relatively large user objects, the effect
+of this phenomenon is often negligible, but should be considered for deployments
+that expect a signficiant fraction of relatively small objects.
+
+The 4KB default value aligns well with conventional HDD and SSD devices.  Some
+new coarse-IU (Indirection Unit) QLC SSDs however perform and wear best
+when :confval:`bluestore_min_alloc_size_ssd`
+is set at OSD creation to match the device's IU:. 8KB, 16KB, or even 64KB.
+These novel storage drives allow one to achieve read performance competitive
+with conventional TLC SSDs and write performance faster than HDDs, with
+high density and lower cost than TLC SSDs.
+
+Note that when creating OSDs on these devices, one must carefully apply the
+non-default value only to appropriate devices, and not to conventional SSD and
+HDD devices.  This may be done through careful ordering of OSD creation, custom
+OSD device classes, and especially by the use of central configuration _masks_.
+
+Quincy and later releases add
+the :confval:`bluestore_use_optimal_io_size_for_min_alloc_size`
+option that enables automatic discovery of the appropriate value as each OSD is
+created.  Note that the use of ``bcache``, ``OpenCAS``, ``dmcrypt``,
+``ATA over Ethernet``, `iSCSI`, or other device layering / abstraction
+technologies may confound the determination of appropriate values. We suggest
+inspecting such OSDs at startup via logs and admin sockets to ensure that
+behavior is appropriate.  Note that this also may not work as desired with
+older kernels.  You can check for this by examining the presence and value
+of ``/sys/block/<drive>/queue/optimal_io_size``.
+
+.. confval:: bluestore_min_alloc_size
+.. confval:: bluestore_min_alloc_size_hdd
+.. confval:: bluestore_min_alloc_size_ssd
+.. confval:: bluestore_use_optimal_io_size_for_min_alloc_size
+
