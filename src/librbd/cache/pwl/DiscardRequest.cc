@@ -117,10 +117,6 @@ void DiscardRequest<I>::remove_feature_bit() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  if (!(m_image_ctx.features &&RBD_FEATURE_DIRTY_CACHE)) {
-    finish();
-    return;
-  }
   uint64_t new_features = m_image_ctx.features & ~RBD_FEATURE_DIRTY_CACHE;
   uint64_t features_mask = RBD_FEATURE_DIRTY_CACHE;
   ldout(cct, 10) << "old_features=" << m_image_ctx.features
