@@ -196,7 +196,10 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete) {
   }
   ASSERT_TRUE(left > 0);
   ASSERT_EQ(-ENOTCONN, notify_err);
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  int rados_watch_check_err = rados_watch_check(ioctx, handle);
+  // We may hit ENOENT due to socket failure injection and a forced reconnect
+  EXPECT_TRUE(rados_watch_check_err == -ENOTCONN || rados_watch_check_err == -ENOENT)
+    << "Where rados_watch_check_err = " << rados_watch_check_err;
   ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &comp));
   rados_aio_unwatch(ioctx, handle, comp);
   ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
@@ -505,7 +508,10 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
   ASSERT_GT(left, 0);
   rados_conf_set(cluster, "objecter_inject_no_watch_ping", "false");
   ASSERT_EQ(-ENOTCONN, notify_err);
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  int rados_watch_check_err = rados_watch_check(ioctx, handle);
+  // We may hit ENOENT due to socket failure injection and a forced reconnect
+  EXPECT_TRUE(rados_watch_check_err == -ENOTCONN || rados_watch_check_err == -ENOENT)
+    << "Where rados_watch_check_err = " << rados_watch_check_err;
 
   // a subsequent notify should not reach us
   char *reply_buf = nullptr;
@@ -525,7 +531,10 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
     ASSERT_EQ(0u, missed_map.size());
   }
   ASSERT_EQ(0u, notify_cookies.size());
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  rados_watch_check_err = rados_watch_check(ioctx, handle);
+  // We may hit ENOENT due to socket failure injection and a forced reconnect
+  EXPECT_TRUE(rados_watch_check_err == -ENOTCONN || rados_watch_check_err == -ENOENT)
+    << "Where rados_watch_check_err = " << rados_watch_check_err;
   rados_buffer_free(reply_buf);
 
   // re-watch
