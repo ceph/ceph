@@ -276,6 +276,11 @@ if(WITH_QAT)
   set(HAVE_QATDRV $(QatDrv_FOUND))
 endif()
 
+option(WITH_IPP "Enable IPP crypto" ON)
+if(WITH_IPP)
+  find_package(IPPCrypto REQUIRED)
+endif(WITH_IPP)
+
 option(WITH_QATZIP "Enable QATZIP" OFF)
 if(WITH_QATZIP)
   find_package(qatzip REQUIRED)

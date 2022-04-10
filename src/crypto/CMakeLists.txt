@@ -10,3 +10,7 @@ endif()
 if(WITH_QAT)
   add_subdirectory(qat)
 endif()
+
+if(WITH_IPP)
+  add_subdirectory(ipp)
+endif()
