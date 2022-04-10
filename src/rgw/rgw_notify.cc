@@ -936,7 +936,7 @@ int publish_commit(rgw::sal::Object* obj,
   return 0;
 }
 
-extern int publish_abort(reservation_t& res) {
+int publish_abort(reservation_t& res) {
   for (auto& topic : res.topics) {
     if (!topic.cfg.dest.persistent ||
 	topic.res_id == cls_2pc_reservation::NO_ID) {
@@ -962,7 +962,7 @@ extern int publish_abort(reservation_t& res) {
 
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,
-			     req_state* _s,
+			     const req_state* _s,
 			     rgw::sal::Object* _object,
 			     rgw::sal::Object* _src_object,
 			     const std::string* _object_name) :
@@ -982,9 +982,9 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::Object* _object,
 			     rgw::sal::Object* _src_object,
 			     rgw::sal::Bucket* _bucket,
-			     std::string& _user_id,
-			     std::string& _user_tenant,
-			     std::string& _req_id,
+			     const std::string& _user_id,
+			     const std::string& _user_tenant,
+			     const std::string& _req_id,
 			     optional_yield y) :
     dpp(_dpp), store(_store), s(nullptr), size(0) /* XXX */,
     object(_object), src_object(_src_object), bucket(_bucket),
