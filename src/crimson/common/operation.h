@@ -486,8 +486,9 @@ class OperationRegistryT : public OperationRegistryI {
 
 protected:
   void do_register(Operation *op) final {
-    registries[op->get_type()].push_back(*op);
-    op->set_id(++op_id_counters[op->get_type()]);
+    const auto op_type = op->get_type();
+    registries[op_type].push_back(*op);
+    op->set_id(++op_id_counters[op_type]);
   }
 
   bool registries_empty() const final {
