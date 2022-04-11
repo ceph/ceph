@@ -57,7 +57,7 @@ def find_associated_devices(osd_id, osd_fsid):
         raise SystemExit('Unexpected error, terminating')
 
     devices = set(ensure_associated_lvs(lvs, lv_tags))
-    return [(Device(path), type) for path, type in devices if path]
+    return [(Device(path), device_type) for path, device_type in devices if path]
 
 
 def ensure_associated_lvs(lvs, lv_tags):
@@ -83,16 +83,16 @@ def ensure_associated_lvs(lvs, lv_tags):
         # a physical device. Do this for each type (journal,db,wal) regardless
         # if they have been processed in the previous LV, so that bad devices
         # with the same ID can be caught
-        for ceph_lvs, type in backing_devices:
+        for ceph_lvs, device_type in backing_devices:
 
             if ceph_lvs:
-                verified_devices.extend([(_lv.lv_path, type) for _lv in ceph_lvs])
+                verified_devices.extend([(_lv.lv_path, device_type) for _lv in ceph_lvs])
                 continue
 
             # must be a disk partition, by querying blkid by the uuid we are
             # ensuring that the device path is always correct
             try:
-                device_uuid = lv.tags['ceph.{}_uuid'.format(type)]
+                device_uuid = lv.tags['ceph.{}_uuid'.format(device_type)]
             except KeyError:
                 # Bluestore will not have ceph.journal_uuid, and Filestore
                 # will not not have ceph.db_uuid
@@ -103,7 +103,7 @@ def ensure_associated_lvs(lvs, lv_tags):
                 # if the osd_device is not found by the partuuid, then it is
                 # not possible to ensure this device exists anymore, so skip it
                 continue
-            verified_devices.append((osd_device, type))
+            verified_devices.append((osd_device, device_type))
 
     return verified_devices
 
@@ -112,12 +112,12 @@ class VolumeTagTracker(object):
     def __init__(self, devices, target_lv):
         self.target_lv = target_lv
         self.data_device = self.db_device = self.wal_device = None
-        for device, type in devices:
-            if type == 'block':
+        for device, device_type in devices:
+            if device_type == 'block':
                 self.data_device = device
-            elif type == 'db':
+            elif device_type == 'db':
                 self.db_device = device
-            elif type == 'wal':
+            elif device_type == 'wal':
                 self.wal_device = device
         if not self.data_device:
             mlogger.error('Data device not found')
@@ -174,13 +174,13 @@ class VolumeTagTracker(object):
         remaining_devices = [self.data_device, self.db_device, self.wal_device]
 
         outdated_tags = []
-        for device, type in source_devices:
-            if type == "block" or type == target_type:
+        for device, device_type in source_devices:
+            if device_type == "block" or device_type == target_type:
                 continue
             remaining_devices.remove(device)
             if device.is_lv:
-                outdated_tags.append("ceph.{}_uuid".format(type))
-                outdated_tags.append("ceph.{}_device".format(type))
+                outdated_tags.append("ceph.{}_uuid".format(device_type))
+                outdated_tags.append("ceph.{}_device".format(device_type))
                 device.lv_api.clear_tags()
         if len(outdated_tags) > 0:
             for d in remaining_devices:
@@ -195,13 +195,13 @@ class VolumeTagTracker(object):
             remaining_devices.append(self.wal_device)
 
         outdated_tags = []
-        for device, type in source_devices:
-            if type == "block":
+        for device, device_type in source_devices:
+            if device_type == "block":
                 continue
             remaining_devices.remove(device)
             if device.is_lv:
-                outdated_tags.append("ceph.{}_uuid".format(type))
-                outdated_tags.append("ceph.{}_device".format(type))
+                outdated_tags.append("ceph.{}_uuid".format(device_type))
+                outdated_tags.append("ceph.{}_device".format(device_type))
                 device.lv_api.clear_tags()
 
         new_tags = {}
@@ -259,19 +259,19 @@ class Migrate(object):
 
     def get_source_devices(self, devices, target_type=""):
         ret = []
-        for device, type in devices:
-            if type == target_type:
+        for device, device_type in devices:
+            if device_type == target_type:
                 continue
-            if type == 'block':
+            if device_type == 'block':
                 if 'data' not in self.args.from_:
                     continue
-            elif type == 'db':
+            elif device_type == 'db':
                 if 'db' not in self.args.from_:
                     continue
-            elif type == 'wal':
+            elif device_type == 'wal':
                 if 'wal' not in self.args.from_:
                     continue
-            ret.append([device, type])
+            ret.append([device, device_type])
         if ret == []:
             mlogger.error('Source device list is empty')
             raise SystemExit(
@@ -286,24 +286,24 @@ class Migrate(object):
     #  requires explicit allocation via new-db/new-wal command.detects which
     def get_target_type_by_source(self, devices):
         ret = None
-        for device, type in devices:
-            if type == 'db':
+        for device, device_type in devices:
+            if device_type == 'db':
                 return 'db'
-            elif type == 'wal':
+            elif device_type == 'wal':
                 ret = 'wal'
         return ret
 
-    def get_filename_by_type(self, type):
+    def get_filename_by_type(self, device_type):
         filename = 'block'
-        if type == 'db' or type == 'wal':
-            filename += '.' + type
+        if device_type == 'db' or device_type == 'wal':
+            filename += '.' + device_type
         return filename
 
     def get_source_args(self, osd_path, devices):
         ret = []
-        for device, type in devices:
+        for device, device_type in devices:
             ret = ret + ["--devs-source", os.path.join(
-                osd_path, self.get_filename_by_type(type))]
+                osd_path, self.get_filename_by_type(device_type))]
         return ret
 
     @decorators.needs_root
