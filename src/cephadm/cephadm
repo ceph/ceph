@@ -304,6 +304,10 @@ class Error(Exception):
 class TimeoutExpired(Error):
     pass
 
+
+class UnauthorizedRegistryError(Error):
+    pass
+
 ##################################
 
 
@@ -4320,7 +4324,12 @@ def command_version(ctx):
 def command_pull(ctx):
     # type: (CephadmContext) -> int
 
-    _pull_image(ctx, ctx.image, ctx.insecure)
+    try:
+        _pull_image(ctx, ctx.image, ctx.insecure)
+    except UnauthorizedRegistryError:
+        err_str = 'Failed to pull container image. Check that host(s) are logged into the registry'
+        logger.debug(f'Pulling image for `command_pull` failed: {err_str}')
+        raise Error(err_str)
     return command_inspect_image(ctx)
 
 
@@ -4347,6 +4356,9 @@ def _pull_image(ctx, image, insecure=False):
         out, err, ret = call(ctx, cmd)
         if not ret:
             return
+
+        if 'unauthorized' in err:
+            raise UnauthorizedRegistryError()
 
         if not any(pattern in err for pattern in ignorelist):
             raise Error('Failed command: %s' % cmd_str)
@@ -5164,7 +5176,12 @@ def command_bootstrap(ctx):
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.image)
 
     if not ctx.skip_pull:
-        _pull_image(ctx, ctx.image)
+        try:
+            _pull_image(ctx, ctx.image)
+        except UnauthorizedRegistryError:
+            err_str = 'Failed to pull container image. Check that correct registry credentials are provided in bootstrap by --registry-url, --registry-username, --registry-password, or supply --registry-json with credentials'
+            logger.debug(f'Pulling image for bootstrap on {hostname} failed: {err_str}')
+            raise Error(err_str)
 
     image_ver = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run().strip()
     logger.info(f'Ceph version: {image_ver}')
@@ -6164,7 +6181,12 @@ def command_adopt(ctx):
     # type: (CephadmContext) -> None
 
     if not ctx.skip_pull:
-        _pull_image(ctx, ctx.image)
+        try:
+            _pull_image(ctx, ctx.image)
+        except UnauthorizedRegistryError:
+            err_str = 'Failed to pull container image. Host may not be logged into container registry. Try `cephadm registry-login --registry-url <url> --registry-username <username> --registry-password <password>` or supply login info via a json file with `cephadm registry-login --registry-json <file>`'
+            logger.debug(f'Pulling image for `command_adopt` failed: {err_str}')
+            raise Error(err_str)
 
     (daemon_type, daemon_id) = ctx.name.split('.', 1)
 
