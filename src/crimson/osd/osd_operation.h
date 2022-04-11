@@ -186,10 +186,11 @@ protected:
 /**
  * Maintains a set of lists of all active ops.
  */
-using OSDOperationRegistry = OperationRegistryT<
+struct OSDOperationRegistry : OperationRegistryT<
   static_cast<size_t>(OperationTypeCode::last_op)
-  >;
-
+> {
+  size_t dump_client_requests(ceph::Formatter* f) const;
+};
 /**
  * Throttles set of currently running operations
  *

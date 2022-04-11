@@ -123,6 +123,16 @@ make_exception_blocking_future(Exception&& e) {
     seastar::make_exception_future<V>(e));
 }
 
+namespace detail {
+void dump_time_event(const char* name,
+		     const utime_t& timestamp,
+		     ceph::Formatter* f);
+void dump_blocking_event(const char* name,
+			 const utime_t& timestamp,
+			 const Blocker* blocker,
+			 ceph::Formatter* f);
+} // namespace detail
+
 /**
  * Provides an interface for dumping diagnostic information about
  * why a particular op is not making progress.
@@ -214,9 +224,12 @@ struct TimeEvent : Event<T> {
     void handle(T&, const Operation&) override {
       timestamp = ceph_clock_now();
     }
-  private:
     utime_t timestamp;
   } internal_backend;
+
+  void dump(ceph::Formatter *f) const {
+    detail::dump_time_event(typeid(T).name(), internal_backend.timestamp, f);
+  }
 };
 
 
@@ -304,6 +317,13 @@ public:
 
       const OpT& op;
     };
+
+    void dump(ceph::Formatter *f) const {
+      detail::dump_blocking_event(typeid(T).name(),
+				  internal_backend.timestamp,
+				  internal_backend.blocker,
+				  f);
+    }
   };
 
   virtual ~BlockerT() = default;
