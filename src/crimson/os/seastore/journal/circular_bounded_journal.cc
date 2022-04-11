@@ -366,16 +366,27 @@ Journal::replay_ret CircularBoundedJournal::replay(
     return seastar::do_with(
       rbm_abs_addr(get_applied_to()),
       std::move(delta_handler),
-      [this, FNAME](auto &cursor_addr, auto &d_handler) {
+      segment_seq_t(),
+      [this, FNAME](auto &cursor_addr, auto &d_handler, auto &last_seq) {
       return crimson::repeat(
-	[this, &cursor_addr, &d_handler, FNAME]() mutable
+	[this, &cursor_addr, &d_handler, &last_seq, FNAME]() mutable
 	-> replay_ertr::future<seastar::stop_iteration> {
 	paddr_t cursor_paddr = convert_abs_addr_to_paddr(
 	  cursor_addr,
 	  header.device_id);
 	return read_record(cursor_paddr
-	).safe_then([this, &cursor_addr, &d_handler, FNAME](auto ret) {
+	).safe_then([this, &cursor_addr, &d_handler, &last_seq, FNAME](auto ret) {
+	  if (!ret.has_value()) {
+	    DEBUG("no more records");
+	    return replay_ertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::yes);
+	  }
 	  auto [r_header, bl] = *ret;
+	  if (last_seq > r_header.committed_to.segment_seq) {
+	    DEBUG("found invalide record. stop replaying");
+	    return replay_ertr::make_ready_future<
+	      seastar::stop_iteration>(seastar::stop_iteration::yes);
+	  }
 	  bufferlist mdbuf;
 	  mdbuf.substr_of(bl, 0, r_header.mdlength);
 	  paddr_t record_block_base = paddr_t::make_blk_paddr(
@@ -394,7 +405,10 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	    r_header.committed_to,
 	    (seastore_off_t)bl.length()
 	  };
+	  set_last_committed_record_base(cursor_addr);
 	  cursor_addr += bl.length();
+	  set_written_to(cursor_addr);
+	  last_seq = r_header.committed_to.segment_seq;
 	  return seastar::do_with(
 	    std::move(*maybe_record_deltas_list),
 	    [write_result,
@@ -433,10 +447,6 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	      if (get_written_to() +
 		  ceph::encoded_sizeof_bounded<record_group_header_t>() > header.end) {
 		cursor_addr = get_start_addr();
-	      }
-	      if (cursor_addr == get_written_to()) {
-		return replay_ertr::make_ready_future<
-		  seastar::stop_iteration>(seastar::stop_iteration::yes);
 	      }
 	      return replay_ertr::make_ready_future<
 		seastar::stop_iteration>(seastar::stop_iteration::no);

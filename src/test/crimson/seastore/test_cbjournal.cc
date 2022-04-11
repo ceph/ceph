@@ -257,6 +257,12 @@ struct cbjournal_test_t : public seastar_test_suite_t
   void update_applied_to(rbm_abs_addr addr, uint32_t len) {
     cbj->update_applied_to(addr, len);
   }
+  void set_last_committed_record_base(rbm_abs_addr addr) {
+    cbj->set_last_committed_record_base(addr);
+  }
+  void set_written_to(rbm_abs_addr addr) {
+    cbj->set_written_to(addr);
+  }
 };
 
 TEST_F(cbjournal_test_t, submit_one_record)
@@ -440,5 +446,35 @@ TEST_F(cbjournal_test_t, replay)
        });
     ASSERT_EQ(avail - record_total_size, get_available_size());
     replay();
+  });
+}
+
+TEST_F(cbjournal_test_t, replay_after_reset)
+{
+  run_async([this] {
+    mkfs();
+    open();
+    record_t rec {
+     { generate_extent(1), generate_extent(2) },
+     { generate_delta(20), generate_delta(21) }
+     };
+    auto r_size = record_group_size_t(rec.size, block_size);
+    auto record_total_size = r_size.get_encoded_length();
+    submit_record(std::move(rec));
+    while (record_total_size <= get_available_size()) {
+    submit_record(
+      record_t {
+       { generate_extent(1), generate_extent(2) },
+       { generate_delta(20), generate_delta(21) }
+       });
+    }
+    auto old_written_to = get_written_to();
+    auto old_last_committed_record_base = get_last_committed_record_base();
+    set_written_to(4096);
+    set_last_committed_record_base(4096);
+    replay();
+    ASSERT_EQ(old_written_to, get_written_to());
+    ASSERT_EQ(old_last_committed_record_base,
+      get_last_committed_record_base());
   });
 }
