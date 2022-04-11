@@ -1226,6 +1226,7 @@ int DB::Object::get_obj_state(const DoutPrefixProvider *dpp,
   /* XXX: For now use state->shadow_obj to store ObjectID string */
   s->shadow_obj = params.op.obj.obj_id;
 
+  *state = &obj_state;
   **state = *s;
 
   if (follow_olh && params.op.obj.state.obj.key.instance.empty()) {
@@ -1249,8 +1250,7 @@ int DB::Object::get_state(const DoutPrefixProvider *dpp, RGWObjState **pstate, b
 
 int DB::Object::Read::get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& dest)
 {
-  RGWObjState base_state;
-  RGWObjState *state = &base_state;
+  RGWObjState *state;
   int r = source->get_state(dpp, &state, true);
   if (r < 0)
     return r;
@@ -1271,8 +1271,7 @@ int DB::Object::Read::prepare(const DoutPrefixProvider *dpp)
 
   map<string, bufferlist>::iterator iter;
 
-  RGWObjState base_state;
-  RGWObjState *astate = &base_state;
+  RGWObjState *astate;
 
   /* XXX Read obj_id too */
   int r = source->get_state(dpp, &astate, true);
@@ -1360,8 +1359,7 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   bufferlist read_bl;
   uint64_t max_chunk_size = store->get_max_chunk_size();
 
-  RGWObjState base_state;
-  RGWObjState *astate = &base_state;
+  RGWObjState *astate;
   int r = source->get_state(dpp, &astate, true);
   if (r < 0)
     return r;
@@ -1497,8 +1495,7 @@ int DB::Object::iterate_obj(const DoutPrefixProvider *dpp,
 {
   DB *store = get_store();
   uint64_t len;
-  RGWObjState base_state;
-  RGWObjState *astate = &base_state;
+  RGWObjState *astate;
 
   int r = get_state(dpp, &astate, true);
   if (r < 0) {
@@ -1752,8 +1749,7 @@ int DB::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, 
 int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
   int ret = 0;
   DB *store = target->get_store();
-  RGWObjState base_state;
-  RGWObjState *astate = &base_state;
+  RGWObjState *astate;
 
   int r = target->get_state(dpp, &astate, true);
   if (r < 0)
