@@ -1224,7 +1224,14 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   if (!stamp.is_zero() && !pg_sum_old.stats.sum.is_zero()) {
     utime_t delta_t;
     delta_t = inc.stamp;
-    delta_t -= stamp;
+    if(inc.stamp > stamp)
+    {
+      delta_t -= stamp;
+    }
+    else
+    {
+      delta_t = utime_t(1, 0); // 1s. avoid receive message in the future
+    }
     // calculate a delta, and average over the last 2 deltas.
     pool_stat_t d = pg_sum;
     d.stats.sub(pg_sum_old.stats);
