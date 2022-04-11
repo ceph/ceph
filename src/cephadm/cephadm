@@ -209,7 +209,9 @@ class Docker(ContainerEngine):
 CONTAINER_PREFERENCE = (Podman, Docker)  # prefer podman to docker
 
 
-# Log and console output config
+# During normal cephadm operations (cephadm ls, gather-facts, etc ) we use:
+# stdout: for JSON output only
+# stderr: for error, debug, info, etc
 logging_config = {
     'version': 1,
     'disable_existing_loggers': True,
@@ -234,6 +236,56 @@ logging_config = {
         '': {
             'level': 'DEBUG',
             'handlers': ['console', 'log_file'],
+        }
+    }
+}
+
+
+class ExcludeErrorsFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Only lets through log messages with log level below WARNING ."""
+        return record.levelno < logging.WARNING
+
+
+# During bootstrap operation we use:
+# stdout: for debug and info
+# stderr: for errors and warnings
+bootstrap_logging_config = {
+    'version': 1,
+    'filters': {
+        'exclude_errors': {
+            '()': ExcludeErrorsFilter
+        }
+    },
+    'disable_existing_loggers': True,
+    'formatters': {
+        'cephadm': {
+            'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
+        },
+    },
+    'handlers': {
+        'console_stdout': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'filters': ['exclude_errors'],
+            'stream': sys.stdout
+        },
+        'console_stderr': {
+            'level': 'WARNING',
+            'class': 'logging.StreamHandler',
+            'stream': sys.stderr
+        },
+        'log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.WatchedFileHandler',
+            'formatter': 'cephadm',
+            'filename': '%s/cephadm.log' % LOG_DIR,
+        }
+    },
+    'loggers': {
+        '': {
+            'level': 'DEBUG',
+            'handlers': ['console_stdout', 'console_stderr', 'log_file'],
         }
     }
 }
@@ -8703,7 +8755,11 @@ def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
     global logger
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
-    dictConfig(logging_config)
+    if 'bootstrap' in args:
+        dictConfig(bootstrap_logging_config)
+    else:
+        dictConfig(logging_config)
+
     logger = logging.getLogger()
 
     if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
