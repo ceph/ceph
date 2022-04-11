@@ -567,11 +567,11 @@ namespace rgw::sal {
 
   int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
   {
-    RGWObjState* astate = nullptr;
+    RGWObjState tmpstate;
+    RGWObjState* astate = &tmpstate;
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
     int ret = op_target.get_obj_state(dpp, get_bucket()->get_info(), get_obj(), follow_olh, &astate);
     if (ret < 0) {
-      delete astate;
       return ret;
     }
 
@@ -581,10 +581,7 @@ namespace rgw::sal {
     bool prefetch_data = state.prefetch_data;
 
     state = *astate;
-    delete astate;
-
     *pstate = &state;
-
 
     state.obj = obj;
     state.is_atomic = is_atomic;
