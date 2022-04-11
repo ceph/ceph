@@ -583,7 +583,7 @@ class NewVolume(object):
         try:
             tag_tracker.update_tags_when_lv_create(self.create_type)
 
-            stdout, stderr, exit_code = process.call([
+            command = [
                 'ceph-bluestore-tool',
                 '--path',
                 osd_path,
@@ -591,7 +591,13 @@ class NewVolume(object):
                 target_lv.lv_path,
                 '--command',
                 'bluefs-bdev-new-{}'.format(self.create_type)
-            ])
+            ]
+
+            if self.create_type == 'db':
+                command.extend(['--bluestore-block-db-size',
+                                target_lv.lv_size])
+
+            stdout, stderr, exit_code = process.call(command)
             if exit_code != 0:
                 mlogger.error(
                     'failed to attach new volume, error code:{}'.format(

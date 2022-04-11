@@ -599,6 +599,7 @@ class TestNew(object):
         self.mock_volume = api.Volume(lv_name='target_volume1', lv_uuid='y',
                                       vg_name='vg',
                                       lv_path='/dev/VolGroup/target_volume',
+                                      lv_size=123,
                                       lv_tags='')
         monkeypatch.setattr(api, 'get_lv_by_fullname',
             self.mock_get_lv_by_fullname)
@@ -658,7 +659,8 @@ class TestNew(object):
             'ceph-bluestore-tool',
             '--path', '/var/lib/ceph/osd/ceph_cluster-1',
             '--dev-target', '/dev/VolGroup/target_volume',
-            '--command', 'bluefs-bdev-new-db']
+            '--command', 'bluefs-bdev-new-db',
+            '--bluestore-block-db-size', 123]
 
     def test_newdb_active_systemd(self, is_root, monkeypatch, capsys):
         source_tags = \
@@ -755,6 +757,7 @@ class TestNew(object):
         self.mock_volume = api.Volume(lv_name='target_volume1', lv_uuid='y',
                                       vg_name='vg',
                                       lv_path='/dev/VolGroup/target_volume',
+                                      lv_size=123,
                                       lv_tags='')
         monkeypatch.setattr(api, 'get_lv_by_fullname',
             self.mock_get_lv_by_fullname)
@@ -812,7 +815,8 @@ class TestNew(object):
             'ceph-bluestore-tool',
             '--path', '/var/lib/ceph/osd/ceph_cluster-1',
             '--dev-target', '/dev/VolGroup/target_volume',
-            '--command', 'bluefs-bdev-new-db']
+            '--command', 'bluefs-bdev-new-db',
+            '--bluestore-block-db-size', 123]
 
     @patch('os.getuid')
     def test_newwal(self, m_getuid, monkeypatch, capsys):
