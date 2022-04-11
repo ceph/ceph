@@ -24,8 +24,8 @@ void Operation::dump(ceph::Formatter* f) const
   for (auto &blocker : blockers) {
     blocker->dump(f);
   }
-#endif
   f->close_section();
+#endif
   f->close_section();
 }
 
