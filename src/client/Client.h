@@ -353,7 +353,7 @@ public:
    * If @a cb returns a negative error code, stop and return that.
    */
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
-		   unsigned want=0, unsigned flags=AT_NO_ATTR_SYNC,
+		   unsigned want=0, unsigned flags=AT_STATX_DONT_SYNC,
 		   bool getref=false);
 
   struct dirent * readdir(dir_result_t *d);
