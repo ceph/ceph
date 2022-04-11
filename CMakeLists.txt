@@ -276,7 +276,7 @@ if(WITH_QAT)
   set(HAVE_QATDRV $(QatDrv_FOUND))
 endif()
 
-option(WITH_IPP "Enable IPP crypto" ON)
+option(WITH_IPP "Enable IPP crypto" OFF)
 if(WITH_IPP)
   find_package(IPPCrypto REQUIRED)
 endif(WITH_IPP)
