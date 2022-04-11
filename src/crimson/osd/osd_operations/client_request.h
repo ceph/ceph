@@ -106,9 +106,14 @@ private:
 
 public:
   std::tuple<
+    StartEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
-    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    CompletionEvent
   > tracking_events;
+
+  friend class LttngBackend;
+  friend class HistoricBackend;
 };
 
 }

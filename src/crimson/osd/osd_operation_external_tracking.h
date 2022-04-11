@@ -14,9 +14,14 @@ namespace crimson::osd {
 
 // Just the boilerplate currently. Implementing
 struct LttngBackend
-  : ClientRequest::ConnectionPipeline::AwaitMap::BlockingEvent::Backend,
-    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent::Backend
+  : ClientRequest::StartEvent::Backend,
+    ClientRequest::ConnectionPipeline::AwaitMap::BlockingEvent::Backend,
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent::Backend,
+    ClientRequest::CompletionEvent::Backend
 {
+  void handle(ClientRequest::StartEvent&,
+              const Operation&) override {}
+
   void handle(ClientRequest::ConnectionPipeline::AwaitMap::BlockingEvent& ev,
               const Operation& op,
               const ClientRequest::ConnectionPipeline::AwaitMap& blocker) override {
@@ -26,6 +31,9 @@ struct LttngBackend
               const Operation&,
               const OSD_OSDMapGate::OSDMapBlocker&) override {
   }
+
+  void handle(ClientRequest::CompletionEvent&,
+              const Operation&) override {}
 };
 
 } // namespace crimson::osd

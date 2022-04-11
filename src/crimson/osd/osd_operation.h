@@ -148,6 +148,9 @@ class TrackableOperationT : public OperationT<T> {
 protected:
   using OperationT<T>::OperationT;
 
+  struct StartEvent : TimeEvent<StartEvent> {};
+  struct CompletionEvent : TimeEvent<CompletionEvent> {};
+
   template <class EventT, class... Args>
   void track_event(Args&&... args) {
     // the idea is to have a visitor-like interface that allows to double

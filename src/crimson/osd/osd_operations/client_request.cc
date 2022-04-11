@@ -78,6 +78,7 @@ seastar::future<> ClientRequest::start()
 {
   logger().debug("{}: start", *this);
 
+  track_event<StartEvent>();
   return seastar::repeat([this, opref=IRef{this}]() mutable {
       logger().debug("{}: in repeat", *this);
       return enter_stage(cp().await_map).then([this]() {
@@ -146,6 +147,8 @@ seastar::future<> ClientRequest::start()
           }
 	}, pgref);
       });
+    }).then([this] {
+      track_event<CompletionEvent>();
     });
 }
 
