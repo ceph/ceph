@@ -134,9 +134,16 @@ protected:
 
   TMTestState() : EphemeralTestState(1) {}
 
+  TMTestState(std::size_t num_devices) : EphemeralTestState(num_devices) {}
+
   virtual void _init() override {
     tm = make_transaction_manager(true);
     tm->add_device(segment_manager.get(), true);
+    if (get_num_devices() > 1) {
+      for (auto &sec_sm : secondary_segment_managers) {
+        tm->add_device(sec_sm.get(), false);
+      }
+    }
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
   }
