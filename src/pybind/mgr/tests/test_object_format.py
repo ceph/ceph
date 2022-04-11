@@ -1,3 +1,4 @@
+import errno
 from typing import (
     Any,
     Dict,
@@ -390,3 +391,32 @@ class DecoDemo:
 def test_cli_command_responder(prefix, args, response):
     dd = DecoDemo()
     assert CLICommand.COMMANDS[prefix].call(dd, args, None) == response
+
+
+def test_error_response():
+    e1 = object_format.ErrorResponse("nope")
+    assert e1.format_response() == (-22, "", "nope")
+    assert e1.return_value == -22
+    assert e1.errno == 22
+    assert "ErrorResponse" in repr(e1)
+    assert "nope" in repr(e1)
+    assert e1.mgr_return_value() == -22
+
+    try:
+        open("/this/is_/extremely_/unlikely/_to/exist.txt")
+    except Exception as e:
+        e2 = object_format.ErrorResponse.wrap(e)
+    r = e2.format_response()
+    assert r[0] == -errno.ENOENT
+    assert r[1] == ""
+    assert "No such file or directory" in r[2]
+    assert "ErrorResponse" in repr(e2)
+    assert "No such file or directory" in repr(e2)
+    assert r[0] == e2.mgr_return_value()
+
+    e3 = object_format.ErrorResponse.wrap(RuntimeError("blat"))
+    r = e3.format_response()
+    assert r[0] == -errno.EINVAL
+    assert r[1] == ""
+    assert "blat" in r[2]
+    assert r[0] == e3.mgr_return_value()
