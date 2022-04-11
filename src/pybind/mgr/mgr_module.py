@@ -346,8 +346,8 @@ class CLICommand(object):
 
     KNOWN_ARGS = '_', 'self', 'mgr', 'inbuf', 'return'
 
-    @staticmethod
-    def load_func_metadata(f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
+    @classmethod
+    def _load_func_metadata(cls: Any, f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
         desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
         arg_spec = full_argspec.annotations
@@ -357,7 +357,7 @@ class CLICommand(object):
         args = []
         positional = True
         for index, arg in enumerate(full_argspec.args):
-            if arg in CLICommand.KNOWN_ARGS:
+            if arg in cls.KNOWN_ARGS:
                 continue
             if arg == '_end_positional_':
                 positional = False
@@ -381,7 +381,7 @@ class CLICommand(object):
 
     def store_func_metadata(self, f: HandlerFuncType) -> None:
         self.desc, self.arg_spec, self.first_default, self.args = \
-            self.load_func_metadata(f)
+            self._load_func_metadata(f)
 
     def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
