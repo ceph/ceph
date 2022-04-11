@@ -503,7 +503,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 SegmentCleaner::mount_ret SegmentCleaner::mount()
 {
   const auto& sms = sm_group->get_segment_managers();
-  logger().debug(
+  logger().info(
     "SegmentCleaner::mount: {} segment managers", sms.size());
   init_complete = false;
   stats = {};
@@ -526,7 +526,7 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   metrics.clear();
   register_metrics();
 
-  logger().debug("SegmentCleaner::mount: {} segments", segments.size());
+  logger().info("SegmentCleaner::mount: {} segments", segments.size());
   return seastar::do_with(
     std::vector<std::pair<segment_id_t, segment_header_t>>(),
     [this](auto& segment_set) {
@@ -538,7 +538,7 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
 	return sm_group->read_segment_header(
 	  segment_id
 	).safe_then([segment_id, this, &segment_set](auto header) {
-	  logger().debug(
+	  logger().info(
 	    "SegmentCleaner::mount: segment_id={} -- {}",
 	    segment_id, header);
 	  auto s_type = header.get_type();
