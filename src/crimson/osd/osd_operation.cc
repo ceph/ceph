@@ -3,8 +3,27 @@
 
 #include "osd_operation.h"
 #include "common/Formatter.h"
+#include "crimson/common/log.h"
+#include "crimson/osd/osd_operations/client_request.h"
+
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+}
 
 namespace crimson::osd {
+
+size_t OSDOperationRegistry::dump_client_requests(ceph::Formatter* f) const
+{
+  const auto& client_registry =
+    get_registry<static_cast<size_t>(ClientRequest::type)>();
+  logger().warn("{} num_ops={}", __func__, std::size(client_registry));
+  for (const auto& op : client_registry) {
+    op.dump(f);
+  }
+  return std::size(client_registry);
+}
 
 OperationThrottler::OperationThrottler(ConfigProxy &conf)
   : scheduler(crimson::osd::scheduler::make_scheduler(conf))

@@ -67,4 +67,31 @@ void AggregateBlocker::dump_detail(ceph::Formatter *f) const
   f->close_section();
 }
 
+namespace detail {
+void dump_time_event(const char* name,
+		     const utime_t& timestamp,
+		     ceph::Formatter* f)
+{
+  assert(f);
+  f->open_object_section("time_event");
+  f->dump_string("name", name);
+  f->dump_stream("initiated_at") << timestamp;
+  f->close_section();
 }
+
+void dump_blocking_event(const char* name,
+			 const utime_t& timestamp,
+			 const Blocker* const blocker,
+			 ceph::Formatter* f)
+{
+  assert(f);
+  f->open_object_section("blocking_event");
+  f->dump_string("name", name);
+  f->dump_stream("initiated_at") << timestamp;
+  if (blocker) {
+    blocker->dump(f);
+  }
+  f->close_section();
+}
+} // namespace detail
+} // namespace crimson
