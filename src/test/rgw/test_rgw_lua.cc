@@ -593,46 +593,9 @@ TEST(TestRGWLua, NotAllowedInLib)
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
   ASSERT_NE(rc, 0);
 }
-#include <sys/socket.h>
-#include <stdlib.h>
-
-bool unix_socket_client_ended_ok = false;
-
-void unix_socket_client(const std::string& path) {
-  int fd;
-  // create the socket
-  if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-    std::cout << "unix socket error: " << errno << std::endl;
-    return;
-  }
-  // set the path
-  struct sockaddr_un addr;
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path)-1);
-
-	// let the socket be created by the "rgw" side
-	std::this_thread::sleep_for(std::chrono::seconds(2));
-	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		std::cout << "unix socket connect error: " << errno << std::endl;
-		return;
- 	}
-
-  char buff[256];
-	int rc;
- 	while((rc=read(fd, buff, sizeof(buff))) > 0) {
-		std::cout << std::string(buff, rc);
-    unix_socket_client_ended_ok = true;
-  }
-}
 
 TEST(TestRGWLua, OpsLog)
 {
-	const std::string unix_socket_path = "./aSocket.sock";
-	unlink(unix_socket_path.c_str());
-
-	std::thread unix_socket_thread(unix_socket_client, unix_socket_path);
-
   const std::string script = R"(
 		if Request.Response.HTTPStatusCode == 200 then
 			assert(Request.Response.Message == "Life is great")
@@ -644,8 +607,12 @@ TEST(TestRGWLua, OpsLog)
 
   auto store = std::unique_ptr<sal::RadosStore>(new sal::RadosStore);
   store->setRados(new RGWRados);
-  auto olog = std::unique_ptr<OpsLogSocket>(new OpsLogSocket(cct, 1024));
-  ASSERT_TRUE(olog->init(unix_socket_path));
+
+  struct MockOpsLogSink : OpsLogSink {
+    bool logged = false;
+    int log(req_state*, rgw_log_entry&) override { logged = true; return 0; }
+  };
+  MockOpsLogSink olog;
 
   DEFINE_REQ_STATE;
   s.err.http_ret = 200;
@@ -669,16 +636,13 @@ TEST(TestRGWLua, OpsLog)
   s.auth.identity = std::unique_ptr<rgw::auth::Identity>(
                         new FakeIdentity());
 
-  auto rc = lua::request::execute(store.get(), nullptr, olog.get(), &s, "put_obj", script);
+  auto rc = lua::request::execute(store.get(), nullptr, &olog, &s, "put_obj", script);
   EXPECT_EQ(rc, 0);
+  EXPECT_FALSE(olog.logged); // don't log http_ret=200
  
 	s.err.http_ret = 400;
-  rc = lua::request::execute(store.get(), nullptr, olog.get(), &s, "put_obj", script);
+  rc = lua::request::execute(store.get(), nullptr, &olog, &s, "put_obj", script);
   EXPECT_EQ(rc, 0);
-
-	// give the socket client time to read
-	std::this_thread::sleep_for(std::chrono::seconds(5));
-	unix_socket_thread.detach(); // read is stuck there, so we cannot join
-  EXPECT_TRUE(unix_socket_client_ended_ok);
+  EXPECT_TRUE(olog.logged);
 }
 
