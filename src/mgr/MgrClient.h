@@ -94,6 +94,7 @@ protected:
   bool service_daemon = false;
   bool daemon_dirty_status = false;
   bool task_dirty_status = false;
+  bool need_metadata_update = true;
   std::string service_name, daemon_name;
   std::map<std::string,std::string> daemon_metadata;
   std::map<std::string,std::string> daemon_status;
@@ -102,6 +103,7 @@ protected:
 
   void reconnect();
   void _send_open();
+  void _send_update();
 
   // In pre-luminous clusters, the ceph-mgr service is absent or optional,
   // so we must not block in start_command waiting for it.
@@ -157,6 +159,10 @@ public:
     ceph::buffer::list *outbl, std::string *outs,
     Context *onfinish);
 
+  int update_daemon_metadata(
+    const std::string& service,
+    const std::string& name,
+    const std::map<std::string,std::string>& metadata);
   int service_daemon_register(
     const std::string& service,
     const std::string& name,

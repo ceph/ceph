@@ -36,6 +36,7 @@
 
 class MMgrReport;
 class MMgrOpen;
+class MMgrUpdate;
 class MMgrClose;
 class MMonMgrReport;
 class MCommand;
@@ -275,6 +276,7 @@ public:
 
   void fetch_missing_metadata(const DaemonKey& key, const entity_addr_t& addr);
   bool handle_open(const ceph::ref_t<MMgrOpen>& m);
+  bool handle_update(const ceph::ref_t<MMgrUpdate>& m);
   bool handle_close(const ceph::ref_t<MMgrClose>& m);
   bool handle_report(const ceph::ref_t<MMgrReport>& m);
   bool handle_command(const ceph::ref_t<MCommand>& m);
