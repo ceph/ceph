@@ -281,11 +281,7 @@ class RbdService(object):
                 data_pool_name = None
             stat['data_pool'] = data_pool_name
 
-            try:
-                stat['parent'] = img.get_parent_image_spec()
-            except rbd.ImageNotFound:
-                # no parent image
-                stat['parent'] = None
+            stat['parent'] = cls._rbd_image_stat_parent(img)
 
             # snapshots
             stat['snapshots'] = []
@@ -329,6 +325,16 @@ class RbdService(object):
             stat['configuration'] = RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).list()
 
             return stat
+
+    @classmethod
+    def _rbd_image_stat_parent(cls, img):
+        stat_parent = None
+        try:
+            stat_parent = img.get_parent_image_spec()
+        except rbd.ImageNotFound:
+            # no parent image
+            stat_parent = None
+        return stat_parent
 
     @classmethod
     def _rbd_image_refs(cls, ioctx):
