@@ -7903,8 +7903,8 @@ unsigned Client::statx_to_mask(unsigned int flags, unsigned int want)
 {
   unsigned mask = 0;
 
-  /* if AT_STATX_DONT_SYNC is set, then we don't need any -- just use what's in cache */
-  if (flags & AT_STATX_DONT_SYNC)
+  /* The AT_STATX_FORCE_SYNC is always in higher priority than AT_STATX_DONT_SYNC. */
+  if ((flags & AT_STATX_SYNC_TYPE) == AT_STATX_DONT_SYNC)
     goto out;
 
   /* Always set PIN to distinguish from AT_STATX_DONT_SYNC case */
