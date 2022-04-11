@@ -153,6 +153,7 @@ CircularBoundedJournal::open_for_write(rbm_abs_addr start)
       paddr_t paddr = convert_abs_addr_to_paddr(
 	get_written_to(),
 	header.device_id);
+      header.size = header.end - header.start - get_block_size();
       init = true;
       return open_for_write_ret(
 	open_for_write_ertr::ready_future_marker{},
@@ -360,9 +361,6 @@ Journal::replay_ret CircularBoundedJournal::replay(
   LOG_PREFIX(CircularBoundedJournal::replay);
   auto fut = open_for_write(CBJOURNAL_START_ADDRESS);
   return fut.safe_then([this, FNAME, delta_handler=std::move(delta_handler)] (auto addr) {
-    if (get_used_size() == 0) {
-      return replay_ertr::now();
-    }
     return seastar::do_with(
       rbm_abs_addr(get_applied_to()),
       std::move(delta_handler),
@@ -409,6 +407,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	  cursor_addr += bl.length();
 	  set_written_to(cursor_addr);
 	  last_seq = r_header.committed_to.segment_seq;
+	  set_used_size(get_used_size() + bl.length());
 	  return seastar::do_with(
 	    std::move(*maybe_record_deltas_list),
 	    [write_result,

@@ -211,8 +211,6 @@ public:
       denc(v.magic, p);
       denc(v.uuid, p);
       denc(v.block_size, p);
-      denc(v.size, p);
-      denc(v.used_size, p);
       denc(v.error, p);
 
       denc(v.start_offset, p);
