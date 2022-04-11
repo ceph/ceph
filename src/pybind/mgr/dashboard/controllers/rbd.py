@@ -165,17 +165,17 @@ class Rbd(RESTController):
                 # check disabled features
                 _sort_features(curr_features, enable=False)
                 for feature in curr_features:
-                    if feature not in features and feature in self.ALLOW_DISABLE_FEATURES:
-                        if feature not in format_bitmask(image.features()):
-                            continue
+                    if (feature not in features
+                       and feature in self.ALLOW_DISABLE_FEATURES
+                       and feature in format_bitmask(image.features())):
                         f_bitmask = format_features([feature])
                         image.update_features(f_bitmask, False)
                 # check enabled features
                 _sort_features(features)
                 for feature in features:
-                    if feature not in curr_features and feature in self.ALLOW_ENABLE_FEATURES:
-                        if feature in format_bitmask(image.features()):
-                            continue
+                    if (feature not in curr_features
+                       and feature in self.ALLOW_ENABLE_FEATURES
+                       and feature not in format_bitmask(image.features())):
                         f_bitmask = format_features([feature])
                         image.update_features(f_bitmask, True)
 
