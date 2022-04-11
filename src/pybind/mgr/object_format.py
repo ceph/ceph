@@ -16,6 +16,8 @@ from typing import (
     Optional,
     TYPE_CHECKING,
     Tuple,
+    Type,
+    TypeVar,
     Union,
 )
 
@@ -265,6 +267,45 @@ class UnsupportedFormat(ErrorResponseBase):
 
     def format_response(self) -> Tuple[int, str, str]:
         return -errno.EINVAL, "", f"Unsupported format: {self.format_name}"
+
+
+class ErrorResponse(ErrorResponseBase):
+    """General exception convertible to a mgr response."""
+
+    E = TypeVar("E", bound="ErrorResponse")
+
+    def __init__(self, status: str, return_value: Optional[int] = None) -> None:
+        self.return_value = (
+            return_value if return_value is not None else -errno.EINVAL
+        )
+        self.status = status
+
+    def format_response(self) -> Tuple[int, str, str]:
+        return (self.return_value, "", self.status)
+
+    def mgr_return_value(self) -> int:
+        return self.return_value
+
+    @property
+    def errno(self) -> int:
+        rv = self.return_value
+        return -rv if rv < 0 else rv
+
+    def __repr__(self) -> str:
+        return f"ErrorResponse({self.status!r}, {self.return_value!r})"
+
+    @classmethod
+    def wrap(
+        cls: Type[E], exc: Exception, return_value: Optional[int] = None
+    ) -> E:
+        if return_value is None:
+            try:
+                return_value = -int(getattr(exc, "errno"))
+            except (AttributeError, ValueError):
+                pass
+        err = cls(str(exc), return_value=return_value)
+        setattr(err, "__cause__", exc)
+        return err
 
 
 def _get_requested_format(f: ObjectResponseFuncType, kw: Dict[str, Any]) -> str:
