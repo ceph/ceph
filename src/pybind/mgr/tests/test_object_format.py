@@ -9,6 +9,7 @@ from typing import (
 
 import pytest
 
+from mgr_module import CLICommand
 import object_format
 
 
@@ -215,3 +216,177 @@ def test_responder_decorator_custom(
         return value
 
     assert orf_value(format=format) == result
+
+
+class FancyDemoAdapter(PhonyMultiYAMLFormatAdapter):
+    """This adapter demonstrates adding formatting for other formats
+    like xml and plain text.
+    """
+    def format_xml(self) -> str:
+        name = self.obj.get("name")
+        size = self.obj.get("size")
+        return f'<object name="{name}" size="{size}" />'
+
+    def format_plain(self) -> str:
+        name = self.obj.get("name")
+        size = self.obj.get("size")
+        es = 'es' if size != 1 else ''
+        return f"{size} box{es} of {name}"
+
+
+class DecoDemo:
+    """Class to stand in for a mgr module, used to test CLICommand integration."""
+
+    @CLICommand("alpha one", perm="rw")
+    @object_format.Responder()
+    def alpha_one(self, name: str = "default") -> Dict[str, str]:
+        return {
+            "alpha": "one",
+            "name": name,
+            "weight": 300,
+        }
+
+    @CLICommand("beta two", perm="r")
+    @object_format.Responder()
+    def beta_two(
+        self, name: str = "default", format: Optional[str] = None
+    ) -> Dict[str, str]:
+        return {
+            "beta": "two",
+            "name": name,
+            "weight": 72,
+        }
+
+    @CLICommand("gamma three", perm="rw")
+    @object_format.Responder(FancyDemoAdapter)
+    def gamma_three(self, size: int = 0) -> Dict[str, Any]:
+        return {"name": "funnystuff", "size": size}
+
+
+@pytest.mark.parametrize(
+    "prefix, args, response",
+    [
+        (
+            "alpha one",
+            {"name": "moonbase"},
+            (
+                0,
+                '{\n  "alpha": "one",\n  "name": "moonbase",\n  "weight": 300\n}',
+                "",
+            ),
+        ),
+        # ---
+        (
+            "alpha one",
+            {"name": "moonbase2", "format": "yaml"},
+            (
+                0,
+                "alpha: one\nname: moonbase2\nweight: 300\n",
+                "",
+            ),
+        ),
+        # ---
+        (
+            "alpha one",
+            {"name": "moonbase2", "format": "chocolate"},
+            (
+                -22,
+                "",
+                "Unknown format name: chocolate",
+            ),
+        ),
+        # ---
+        (
+            "beta two",
+            {"name": "blocker"},
+            (
+                0,
+                '{\n  "beta": "two",\n  "name": "blocker",\n  "weight": 72\n}',
+                "",
+            ),
+        ),
+        # ---
+        (
+            "beta two",
+            {"name": "test", "format": "yaml"},
+            (
+                0,
+                "beta: two\nname: test\nweight: 72\n",
+                "",
+            ),
+        ),
+        # ---
+        (
+            "beta two",
+            {"name": "test", "format": "plain"},
+            (
+                -22,
+                "",
+                "Unsupported format: plain",
+            ),
+        ),
+        # ---
+        (
+            "gamma three",
+            {},
+            (
+                0,
+                '{\n  "name": "funnystuff",\n  "size": 0\n}',
+                "",
+            ),
+        ),
+        # ---
+        (
+            "gamma three",
+            {"size": 1, "format": "json"},
+            (
+                0,
+                '{\n  "name": "funnystuff",\n  "size": 1\n}',
+                "",
+            ),
+        ),
+        # ---
+        (
+            "gamma three",
+            {"size": 1, "format": "plain"},
+            (
+                0,
+                "1 box of funnystuff",
+                "",
+            ),
+        ),
+        # ---
+        (
+            "gamma three",
+            {"size": 2, "format": "plain"},
+            (
+                0,
+                "2 boxes of funnystuff",
+                "",
+            ),
+        ),
+        # ---
+        (
+            "gamma three",
+            {"size": 2, "format": "xml"},
+            (
+                0,
+                '<object name="funnystuff" size="2" />',
+                "",
+            ),
+        ),
+        # ---
+        (
+            "gamma three",
+            {"size": 2, "format": "toml"},
+            (
+                -22,
+                "",
+                "Unknown format name: toml",
+            ),
+        ),
+    ],
+)
+def test_cli_command_responder(prefix, args, response):
+    dd = DecoDemo()
+    assert CLICommand.COMMANDS[prefix].call(dd, args, None) == response
