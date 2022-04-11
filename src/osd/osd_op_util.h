@@ -47,6 +47,7 @@ public:
 
   bool check_rmw(int flag) const ;
   bool may_read() const;
+  bool may_read_data() const;
   bool may_write() const;
   bool may_cache() const;
   bool rwordered_forced() const;
@@ -70,6 +71,7 @@ public:
   void set_skip_promote();
   void set_force_rwordered();
   void set_returnvec();
+  void set_read_data();
 
   int set_from_op(
     const MOSDOp *m,
