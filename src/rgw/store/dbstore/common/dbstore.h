@@ -1743,7 +1743,7 @@ class DB {
       RGWBucketInfo bucket_info;
       rgw_obj obj;
 
-      RGWObjState *state;
+      RGWObjState obj_state;
       std::string obj_id;
 
       bool versioning_disabled;
@@ -1753,7 +1753,7 @@ class DB {
       public:
       Object(DB *_store, const RGWBucketInfo& _bucket_info, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
       obj(_obj),
-      state(NULL), versioning_disabled(false),
+      versioning_disabled(false),
       bs_initialized(false) {}
 
       Object(DB *_store, const RGWBucketInfo& _bucket_info, const rgw_obj& _obj, const std::string& _obj_id) : store(_store), bucket_info(_bucket_info), obj(_obj), obj_id(_obj_id) {}
