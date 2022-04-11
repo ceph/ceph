@@ -3450,6 +3450,12 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
     if (osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *p)) {
       return -EBUSY;
     }
+    if (is_unreadable_object(clone_oid)) {
+      dout(10) << __func__ << ": " << clone_oid
+	       << " is unreadable. Need to wait for recovery" << dendl;
+      wait_for_unreadable_object(clone_oid, op);
+      return -EAGAIN;
+    }
     ObjectContextRef clone_obc = get_object_context(clone_oid, false);
     if (!clone_obc) {
       break;
