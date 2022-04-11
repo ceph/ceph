@@ -25,7 +25,7 @@ std::ostream& operator<<(std::ostream& out, const device_config_t& conf)
       << ", secondary(";
   for (const auto& [k, v] : conf.secondary_devices) {
     out << device_id_printer_t{k}
-        << ": " << v;
+        << ": " << v << ", ";
   }
   return out << "))";
 }
