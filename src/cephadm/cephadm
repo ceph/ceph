@@ -1935,7 +1935,7 @@ def infer_fsid(func: FuncT) -> FuncT:
             logger.info('Inferring fsid %s' % fsids[0])
             ctx.fsid = fsids[0]
         else:
-            raise Error('Cannot infer an fsid, one must be specified: %s' % fsids)
+            raise Error('Cannot infer an fsid, one must be specified (using --fsid): %s' % fsids)
         return func(ctx)
 
     return cast(FuncT, _infer_fsid)
@@ -5338,12 +5338,15 @@ def command_bootstrap(ctx):
     # Notify the Dashboard to show the 'Expand cluster' page on first log in.
     cli(['config-key', 'set', 'mgr/dashboard/cluster/status', 'INSTALLED'])
 
-    logger.info('You can access the Ceph CLI with:\n\n'
+    logger.info('You can access the Ceph CLI as following in case of multi-cluster or non-default config:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
                     sys.argv[0],
                     fsid,
                     ctx.output_config,
                     ctx.output_keyring))
+
+    logger.info('Or, if you are only running a single cluster on this host:\n\n\tsudo %s shell \n' % (sys.argv[0]))
+
     logger.info('Please consider enabling telemetry to help improve Ceph:\n\n'
                 '\tceph telemetry on\n\n'
                 'For more information see:\n\n'
