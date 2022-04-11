@@ -1,4 +1,11 @@
-from typing import Any, Dict, Type, TypeVar
+from typing import (
+    Any,
+    Dict,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+)
 
 import pytest
 
@@ -137,3 +144,74 @@ def test_valid_formats():
     assert "yaml" in vf
     assert "xml" in vf
     assert "plain" in vf
+
+
+def test_error_response_exceptions():
+    err = object_format.ErrorResponseBase()
+    with pytest.raises(NotImplementedError):
+        err.format_response()
+
+    err = object_format.UnsupportedFormat("cheese")
+    assert err.format_response() == (-22, "", "Unsupported format: cheese")
+
+    err = object_format.UnknownFormat("chocolate")
+    assert err.format_response() == (-22, "", "Unknown format name: chocolate")
+
+
+@pytest.mark.parametrize(
+    "value, format, result",
+    [
+        ({}, None, (0, "{}", "")),
+        ({"blat": True}, "json", (0, '{\n  "blat": true\n}', "")),
+        ({"blat": True}, "yaml", (0, "blat: true\n", "")),
+        ({"blat": True}, "toml", (-22, "", "Unknown format name: toml")),
+        ({"blat": True}, "xml", (-22, "", "Unsupported format: xml")),
+        (
+            JSONer("hoop", "303"),
+            "yaml",
+            (0, "name: hoop\nvalue: '303'\nversion: 1\n", ""),
+        ),
+    ],
+)
+def test_responder_decorator_default(
+    value: Any, format: Optional[str], result: Tuple[int, str, str]
+) -> None:
+    @object_format.Responder()
+    def orf_value(format: Optional[str] = None):
+        return value
+
+    assert orf_value(format=format) == result
+
+
+class PhonyMultiYAMLFormatAdapter(object_format.ObjectFormatAdapter):
+    """This adapter puts a yaml document/directive separator line
+    before all output. It doesn't actully support multiple documents.
+    """
+    def format_yaml(self):
+        yml = super().format_yaml()
+        return "---\n{}".format(yml)
+
+
+@pytest.mark.parametrize(
+    "value, format, result",
+    [
+        ({}, None, (0, "{}", "")),
+        ({"blat": True}, "json", (0, '{\n  "blat": true\n}', "")),
+        ({"blat": True}, "yaml", (0, "---\nblat: true\n", "")),
+        ({"blat": True}, "toml", (-22, "", "Unknown format name: toml")),
+        ({"blat": True}, "xml", (-22, "", "Unsupported format: xml")),
+        (
+            JSONer("hoop", "303"),
+            "yaml",
+            (0, "---\nname: hoop\nvalue: '303'\nversion: 1\n", ""),
+        ),
+    ],
+)
+def test_responder_decorator_custom(
+    value: Any, format: Optional[str], result: Tuple[int, str, str]
+) -> None:
+    @object_format.Responder(PhonyMultiYAMLFormatAdapter)
+    def orf_value(format: Optional[str] = None):
+        return value
+
+    assert orf_value(format=format) == result
