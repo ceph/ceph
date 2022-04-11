@@ -875,7 +875,11 @@ protected:
      * to get the second.
      */
     if (write_ordered && ctx->op->may_read()) {
-      ctx->lock_type = RWState::RWEXCL;
+      if (ctx->op->may_read_data()) {
+        ctx->lock_type = RWState::RWEXCL;
+      } else {
+        ctx->lock_type = RWState::RWWRITE;
+      }
     } else if (write_ordered) {
       ctx->lock_type = RWState::RWWRITE;
     } else {
