@@ -278,7 +278,11 @@ class Responder:
 
     A function that returns a Python object will have the object converted into
     a return value and formatted response body, based on the `format` argument
-    passed to the mgr.
+    passed to the mgr. When used from the ceph cli tool the `--format=[name]`
+    argument is mapped to a `format` keyword argument. The decorated function
+    may provide a `format` argument (type str). If the decorated function does
+    not provide a `format` argument itself, the Responder decorator will
+    implicitly add one to the MGR's "CLI arguments" handling stack.
 
     The Responder object is callable and is expected to be used as a decorator.
     """
@@ -344,4 +348,8 @@ class Responder:
                 return e.format_response()
             return retval, body, ""
 
+        # set the extra args on our wrapper function. this will be consumed by
+        # the CLICommand decorator and added to the set of optional arguments
+        # on the ceph cli/api
+        setattr(_format_response, "extra_args", {"format": str})
         return _format_response
