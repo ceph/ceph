@@ -4,6 +4,7 @@
 #pragma once
 
 #include <random>
+#include <boost/iterator/counting_iterator.hpp>
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/cache.h"
@@ -21,8 +22,16 @@ using namespace crimson::os::seastore;
 class EphemeralTestState {
 protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
+  std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
 
-  EphemeralTestState() = default;
+  EphemeralTestState(std::size_t num_segment_managers) {
+    assert(num_segment_managers > 0);
+    secondary_segment_managers.resize(num_segment_managers - 1);
+  }
+
+  std::size_t get_num_devices() const {
+    return secondary_segment_managers.size() + 1;
+  }
 
   virtual void _init() = 0;
   void init() {
@@ -41,23 +50,54 @@ protected:
   void restart() {
     _teardown().get0();
     destroy();
-    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
+    segment_manager->remount();
+    for (auto &sec_sm : secondary_segment_managers) {
+      sec_sm->remount();
+    }
     init();
     _mount().handle_error(crimson::ct_error::assert_all{}).get0();
   }
 
   seastar::future<> tm_setup() {
     segment_manager = segment_manager::create_test_ephemeral();
-    init();
+    for (auto &sec_sm : secondary_segment_managers) {
+      sec_sm = segment_manager::create_test_ephemeral();
+    }
     return segment_manager->init(
     ).safe_then([this] {
+      return crimson::do_for_each(
+        secondary_segment_managers.begin(),
+        secondary_segment_managers.end(),
+        [](auto &sec_sm)
+      {
+        return sec_sm->init();
+      });
+    }).safe_then([this] {
+      return segment_manager->mkfs(
+        segment_manager::get_ephemeral_device_config(0, get_num_devices()));
+    }).safe_then([this] {
+      return seastar::do_with(std::size_t(0), [this](auto &cnt) {
+        return crimson::do_for_each(
+          secondary_segment_managers.begin(),
+          secondary_segment_managers.end(),
+          [this, &cnt](auto &sec_sm)
+        {
+          ++cnt;
+          return sec_sm->mkfs(
+            segment_manager::get_ephemeral_device_config(cnt, get_num_devices()));
+        });
+      });
+    }).safe_then([this] {
+      init();
       return _mkfs();
     }).safe_then([this] {
       return _teardown();
     }).safe_then([this] {
       destroy();
-      static_cast<segment_manager::EphemeralSegmentManager*>(
-	&*segment_manager)->remount();
+      segment_manager->remount();
+      for (auto &sec_sm : secondary_segment_managers) {
+        sec_sm->remount();
+      }
       init();
       return _mount();
     }).handle_error(crimson::ct_error::assert_all{});
@@ -66,6 +106,9 @@ protected:
   seastar::future<> tm_teardown() {
     return _teardown().then([this] {
       segment_manager.reset();
+      for (auto &sec_sm : secondary_segment_managers) {
+        sec_sm.reset();
+      }
     });
   }
 };
@@ -89,7 +132,7 @@ protected:
   LBAManager *lba_manager;
   SegmentCleaner *segment_cleaner;
 
-  TMTestState() : EphemeralTestState() {}
+  TMTestState() : EphemeralTestState(1) {}
 
   virtual void _init() override {
     tm = make_transaction_manager(true);
@@ -258,7 +301,7 @@ class SeaStoreTestState : public EphemeralTestState {
 protected:
   std::unique_ptr<SeaStore> seastore;
 
-  SeaStoreTestState() : EphemeralTestState() {}
+  SeaStoreTestState() : EphemeralTestState(1) {}
 
   virtual void _init() final {
     seastore = get_seastore(

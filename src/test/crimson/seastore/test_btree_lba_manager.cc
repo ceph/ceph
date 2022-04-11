@@ -99,19 +99,22 @@ struct btree_test_base :
   virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
   seastar::future<> set_up_fut() final {
     segment_manager = segment_manager::create_test_ephemeral();
-    sms.reset(new SegmentManagerGroup());
-    journal = journal::make_segmented(*this);
-    epm.reset(new ExtentPlacementManager());
-    cache.reset(new Cache(*epm));
-
-    block_size = segment_manager->get_block_size();
-    next = segment_id_t{segment_manager->get_device_id(), 0};
-    sms->add_segment_manager(segment_manager.get());
-    epm->add_device(segment_manager.get(), true);
-    journal->set_write_pipeline(&pipeline);
-
     return segment_manager->init(
     ).safe_then([this] {
+      return segment_manager->mkfs(
+        segment_manager::get_ephemeral_device_config(0, 1));
+    }).safe_then([this] {
+      sms.reset(new SegmentManagerGroup());
+      journal = journal::make_segmented(*this);
+      epm.reset(new ExtentPlacementManager());
+      cache.reset(new Cache(*epm));
+
+      block_size = segment_manager->get_block_size();
+      next = segment_id_t{segment_manager->get_device_id(), 0};
+      sms->add_segment_manager(segment_manager.get());
+      epm->add_device(segment_manager.get(), true);
+      journal->set_write_pipeline(&pipeline);
+
       return journal->open_for_write().discard_result();
     }).safe_then([this] {
       return epm->open();
