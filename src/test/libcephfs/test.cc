@@ -470,7 +470,7 @@ TEST(LibCephFS, DirLs) {
     struct dirent rdent;
     struct ceph_statx stx;
     int len = ceph_readdirplus_r(cmount, ls_dir, &rdent, &stx,
-				 CEPH_STATX_SIZE, AT_NO_ATTR_SYNC, NULL);
+				 CEPH_STATX_SIZE, AT_STATX_DONT_SYNC, NULL);
     if (len == 0)
       break;
     ASSERT_EQ(len, 1);
@@ -1811,13 +1811,13 @@ TEST(LibCephFS, LazyStatx) {
 
   /*
    * Now sleep, do a chmod on the first client and the see whether we get a
-   * different ctime with a statx that uses AT_NO_ATTR_SYNC
+   * different ctime with a statx that uses AT_STATX_DONT_SYNC
    */
   sleep(1);
   stx.stx_mode = 0644;
   ASSERT_EQ(ceph_ll_setattr(cmount1, file1, &stx, CEPH_SETATTR_MODE, perms1), 0);
 
-  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, perms2), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_STATX_DONT_SYNC, perms2), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_CTIME);
   ASSERT_TRUE(stx.stx_ctime.tv_sec == old_ctime.tv_sec &&
 	      stx.stx_ctime.tv_nsec == old_ctime.tv_nsec);
