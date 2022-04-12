@@ -212,8 +212,6 @@ private:
   /* Throttle writes concurrently allocating & replicating */
   unsigned int m_free_lanes = pwl::MAX_CONCURRENT_WRITES;
 
-  /* Initialized from config, then set false during shutdown */
-  std::atomic<bool> m_periodic_stats_enabled = {false};
   SafeTimer *m_timer = nullptr; /* Used with m_timer_lock */
   mutable ceph::mutex *m_timer_lock = nullptr; /* Used with and by m_timer */
   Context *m_timer_ctx = nullptr;

@@ -830,13 +830,6 @@ options:
   - disabled
   - rwl
   - ssd
-- name: rbd_persistent_cache_log_periodic_stats
-  type: bool
-  level: advanced
-  desc: emit periodic perf stats to debug log
-  default: false
-  services:
-  - rbd
 - name: rbd_persistent_cache_size
   type: uint
   level: advanced
