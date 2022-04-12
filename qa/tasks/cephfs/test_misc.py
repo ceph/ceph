@@ -8,6 +8,7 @@ import platform
 import time
 import json
 import logging
+import os
 
 log = logging.getLogger(__name__)
 
@@ -234,6 +235,36 @@ class TestMisc(CephFSTestCase):
         self.assertEqual(lsflags["allow_snaps"], False)
         self.assertEqual(lsflags["allow_multimds_snaps"], True)
         self.assertEqual(lsflags["allow_standby_replay"], True)
+
+    def test_filesystem_sync_stuck_for_around_5s(self):
+        """
+        To check whether the fsync will be stuck to wait for the mdlog to be
+        flushed for at most 5 seconds.
+        """
+
+        dir_path = "fsync_do_not_wait_mdlog_testdir"
+        self.mount_a.run_shell(["mkdir", dir_path])
+
+        # run create/delete directories and test the sync time duration
+        for i in range(300):
+            for j in range(5):
+                self.mount_a.run_shell(["mkdir", os.path.join(dir_path, f"{i}_{j}")])
+            start = time.time()
+            self.mount_a.run_shell(["sync"])
+            duration = time.time() - start
+            log.info(f"mkdir i = {i}, duration = {duration}")
+            self.assertLess(duration, 4)
+
+            for j in range(5):
+                self.mount_a.run_shell(["rm", "-rf", os.path.join(dir_path, f"{i}_{j}")])
+            start = time.time()
+            self.mount_a.run_shell(["sync"])
+            duration = time.time() - start
+            log.info(f"rmdir i = {i}, duration = {duration}")
+            self.assertLess(duration, 4)
+
+        self.mount_a.run_shell(["rm", "-rf", dir_path])
+
 
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
