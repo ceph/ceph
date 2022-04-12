@@ -107,7 +107,7 @@ def load_local_dashboards():
             '../../../../monitoring/ceph-mixin/dashboards_out/'
         ))
     else:
-        path = '/etc/grafana/dashboards/ceph-dashboard'
+        path = '/etc/grafana/provisioing/dashboards/ceph-dashboard'
     dashboards = dict()
     for item in [p for p in os.listdir(path) if p.endswith('.json')]:
         db_path = os.path.join(path, item)
