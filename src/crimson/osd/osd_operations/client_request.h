@@ -10,6 +10,8 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
 #include "crimson/osd/osd_operations/common/pg_pipeline.h"
+#include "crimson/osd/pg_activation_blocker.h"
+#include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDOp.h"
 
@@ -109,6 +111,17 @@ public:
     StartEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    ConnectionPipeline::GetPG::BlockingEvent,
+    PGMap::PGCreationBlockingEvent,
+    PGPipeline::AwaitMap::BlockingEvent,
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    PGPipeline::WaitForActive::BlockingEvent,
+    PGActivationBlocker::BlockingEvent,
+    PGPipeline::RecoverMissing::BlockingEvent,
+    PGPipeline::GetOBC::BlockingEvent,
+    PGPipeline::Process::BlockingEvent,
+    PGPipeline::WaitRepop::BlockingEvent,
+    PGPipeline::SendReply::BlockingEvent,
     CompletionEvent
   > tracking_events;
 
