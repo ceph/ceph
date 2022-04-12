@@ -237,7 +237,9 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
       return reply_op_error(pg, -EAGAIN);
     }
   }
-
+  if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
+    return reply_op_error(pg, -EINVAL);
+  }
   if (m->get_oid().name.size()
     > crimson::common::local_conf()->osd_max_object_name_len) {
     return reply_op_error(pg, -ENAMETOOLONG);
