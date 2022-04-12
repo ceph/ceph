@@ -8955,19 +8955,18 @@ next:
       return -ret;
     }
 
-    ret = sync.read_sync_status(dpp());
-    if (ret < 0) {
-      cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
+    auto sync_status = sync.read_sync_status(dpp());
+    if (!sync_status) {
+      cerr << "ERROR: sync.read_sync_status() returned error="
+	   << sync_status.error() << std::endl;
       return -ret;
     }
 
-    map<int, rgw_bucket_shard_sync_info>& sync_status = sync.get_sync_status();
-
-    encode_json("sync_status", sync_status, formatter.get());
+    encode_json("sync_status", *sync_status, formatter.get());
     formatter->flush(cout);
   }
 
- if (opt_cmd == OPT::BUCKET_SYNC_RUN) {
+  if (opt_cmd == OPT::BUCKET_SYNC_RUN) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
