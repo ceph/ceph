@@ -3413,8 +3413,7 @@ RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RadosSt
                                                                                    http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
                                                                                    source_zone(_source_zone), source_bucket(_source_bucket),
                                                                                    conn(NULL), error_logger(NULL),
-                                                                                   dest_bucket(_dest_bucket),
-                                                                                   num_shards(0)
+                                                                                   dest_bucket(_dest_bucket)
 {
 }
 
