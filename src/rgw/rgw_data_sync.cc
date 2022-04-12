@@ -5414,18 +5414,13 @@ int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  rgw_zone_id last_zone;
-
   for (auto& pipe : pipes) {
     auto& szone = pipe.source.zone;
 
-    if (last_zone != szone) {
-      conn = store->svc()->zone->get_zone_conn(szone);
-      if (!conn) {
-        ldpp_dout(this, 0) << "connection object to zone " << szone << " does not exist" << dendl;
-        return -EINVAL;
-      }
-      last_zone = szone;
+    auto conn = store->svc()->zone->get_zone_conn(szone);
+    if (!conn) {
+      ldpp_dout(this, 0) << "connection object to zone " << szone << " does not exist" << dendl;
+      return -EINVAL;
     }
 
     rgw_bucket_index_marker_info remote_info;
