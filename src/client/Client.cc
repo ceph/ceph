@@ -2357,6 +2357,17 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
 	mount_cond.notify_all();
       else
 	connect_mds_targets(from);
+
+      if (cct->_conf.get_val<bool>("client_reconnect_stale") && !last_unsafe_reqs[from].empty()) {
+        ldout(cct, 10) << "replay unsafe request before do anything" << dendl;
+        while (!last_unsafe_reqs[from].empty()) {
+          auto req = last_unsafe_reqs[from].front();
+          mds_requests[req->get_tid()] = req->get();
+          session->unsafe_requests.push_back(&req->unsafe_item);
+        }
+        ceph_assert(last_unsafe_reqs[from].empty());
+        resend_unsafe_requests(session.get(), true);
+      }
       signal_context_list(session->waiting_for_open);
       break;
     }
@@ -3190,12 +3201,14 @@ void Client::kick_requests(MetaSession *session)
   }
 }
 
-void Client::resend_unsafe_requests(MetaSession *session)
+void Client::resend_unsafe_requests(MetaSession *session, bool is_inherit)
 {
   for (xlist<MetaRequest*>::iterator iter = session->unsafe_requests.begin();
        !iter.end();
        ++iter)
     send_request(*iter, session);
+
+  if (is_inherit) return;
 
   // also re-send old requests when MDS enters reconnect stage. So that MDS can
   // process completed requests in clientreplay stage.
@@ -3252,6 +3265,15 @@ void Client::kick_requests_closed(MetaSession *session)
       if (req->got_unsafe) {
 	lderr(cct) << __func__ << " removing unsafe request " << req->get_tid() << dendl;
 	req->unsafe_item.remove_myself();
+        if (cct->_conf.get_val<bool>("client_reconnect_stale")) {
+          auto target_mds = req->mds;
+          if (last_unsafe_reqs.find(target_mds) == last_unsafe_reqs.end()) {
+            last_unsafe_reqs[target_mds] = xlist<MetaRequest*>{};
+          }
+          ldout(cct, 10) << __func__ << " reserve unsafe request " << req->get_tid() << " for mds." << target_mds << dendl;
+          last_unsafe_reqs[target_mds].push_back(&req->unsafe_item);
+          continue;
+        }
 	if (is_dir_operation(req)) {
 	  Inode *dir = req->inode();
 	  ceph_assert(dir);

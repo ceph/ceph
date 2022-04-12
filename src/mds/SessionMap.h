@@ -177,15 +177,19 @@ public:
       if (!info.prealloc_inos.contains(ino))
         return 0;
       if (delegated_inos.contains(ino)) {
-	delegated_inos.erase(ino);
+        delegated_inos.erase(ino);
       } else if (free_prealloc_inos.contains(ino)) {
-	free_prealloc_inos.erase(ino);
+        free_prealloc_inos.erase(ino);
       } else {
-	ceph_assert(0);
+        ceph_assert(0);
       }
-    } else if (!free_prealloc_inos.empty()) {
-      ino = free_prealloc_inos.range_start();
-      free_prealloc_inos.erase(ino);
+    } else {
+      if (!free_prealloc_inos.empty()) {
+        ino = free_prealloc_inos.range_start();
+        free_prealloc_inos.erase(ino);
+      } else {
+        return 0;
+      }
     }
     return ino;
   }

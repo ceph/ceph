@@ -855,7 +855,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       ceph_assert(session->is_closing() || session->is_killing() ||
 	  session->is_opening()); // re-open closing session
       session->info.prealloc_inos.subtract(inos_to_free);
-      mds->inotable->apply_release_ids(inos_to_free);
+      if (session->is_killing())
+        mds->inotable->apply_reserve_ids(inos_to_free);
+      else
+        mds->inotable->apply_release_ids(inos_to_free);
       ceph_assert(mds->inotable->get_version() == piv);
     }
     session->free_prealloc_inos = session->info.prealloc_inos;
@@ -1372,12 +1375,16 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   inos_to_free.insert(session->pending_prealloc_inos);
   inos_to_free.insert(session->free_prealloc_inos);
   if (inos_to_free.size()) {
-    mds->inotable->project_release_ids(inos_to_free);
+    if (state == Session::STATE_KILLING)
+      mds->inotable->project_reserve_ids(inos_to_free);
+    else
+      mds->inotable->project_release_ids(inos_to_free);
     piv = mds->inotable->get_projected_version();
   } else
     piv = 0;
   
-  auto le = new ESession(session->info.inst, false, pv, inos_to_free, piv, session->delegated_inos);
+  bool is_killed = state == Session::STATE_KILLING;
+  auto le = new ESession(session->info.inst, false, pv, inos_to_free, piv, session->delegated_inos, is_killed);
   auto fin = new C_MDS_session_finish(this, session, sseq, false, pv, inos_to_free, piv,
 				      session->delegated_inos, mdlog->get_current_segment(), on_safe);
   mdlog->start_submit_entry(le, fin);
@@ -1729,7 +1736,7 @@ void Server::reconnect_tick()
 		      << " seconds during MDS startup";
 
     // make _session_logged() purge orphan objects of lost async/unsafe requests
-    session->delegated_inos.swap(session->free_prealloc_inos);
+    // session->delegated_inos.swap(session->free_prealloc_inos);
 
     if (g_conf()->mds_session_blocklist_on_timeout) {
       CachedStackStringStream css;
@@ -1940,7 +1947,6 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
     mdr->pin(dn);
 
   early_reply(mdr, in, dn);
-  
   mdr->committing = true;
   submit_mdlog_entry(le, fin, mdr, __func__);
   
@@ -3308,14 +3314,21 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   // To simplify the code, we disallow using/refilling session's prealloc_ino
   // while session is opening.
   bool allow_prealloc_inos = mdr->session->is_open();
+  bool used_prealloc = false;
 
   // assign ino
-  if (allow_prealloc_inos && (mdr->used_prealloc_ino = _inode->ino = mdr->session->take_ino(useino))) {
-    mds->sessionmap.mark_projected(mdr->session);
-    dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
-	     << " (" << mdr->session->info.prealloc_inos.size() << " left)"
-	     << dendl;
-  } else {
+  if (allow_prealloc_inos) {
+    auto prealloc_ino = mdr->session->take_ino(useino);
+    if (prealloc_ino) {
+      mdr->used_prealloc_ino = _inode->ino = prealloc_ino;
+      mds->sessionmap.mark_projected(mdr->session);
+      used_prealloc = true;
+      dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
+               << " (" << mdr->session->info.prealloc_inos.size() << " left)"
+               << dendl;
+    }
+  }
+  if (!used_prealloc) {
     mdr->alloc_ino = 
       _inode->ino = mds->inotable->project_alloc_id(useino);
     dout(10) << "prepare_new_inode alloc " << mdr->alloc_ino << dendl;

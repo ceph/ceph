@@ -34,18 +34,20 @@ class ESession : public LogEvent {
   // Client metadata stored during open
   client_metadata_t client_metadata;
 
+  bool killed;
+
  public:
-  ESession() : LogEvent(EVENT_SESSION), open(false) { }
+  ESession() : LogEvent(EVENT_SESSION), open(false), killed(false) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
-	   const client_metadata_t& cm) :
+	   const client_metadata_t& cm, bool k = false) :
     LogEvent(EVENT_SESSION),
     client_inst(inst), open(o), cmapv(v), inotablev(0),
-    client_metadata(cm) { }
+    client_metadata(cm), killed(k) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
 	   const interval_set<inodeno_t>& to_free, version_t iv,
-	   const interval_set<inodeno_t>& to_purge) :
+	   const interval_set<inodeno_t>& to_purge, bool k = false) :
     LogEvent(EVENT_SESSION), client_inst(inst), open(o), cmapv(v),
-    inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge) {}
+    inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge), killed(k) {}
 
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;

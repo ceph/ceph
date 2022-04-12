@@ -26,6 +26,9 @@
 
 void InoTable::reset_state()
 {
+  recycle.clear();
+  projected_recycle = recycle;
+
   // use generic range. FIXME THIS IS CRAP
   free.clear();
   //#ifdef __LP64__
@@ -45,22 +48,45 @@ inodeno_t InoTable::project_alloc_id(inodeno_t id)
 {
   dout(10) << "project_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
   ceph_assert(is_active());
-  if (!id)
+  if (!id) {
     id = projected_free.range_start();
-  projected_free.erase(id);
+    projected_free.erase(id);
+  } else {
+    auto it = projected_free.lower_bound(id);
+    if (it != projected_free.end() && it.get_start() == id) {
+      dout(10) << __func__ << " " << id << " to projected_free " << projected_free << dendl;
+      projected_free.erase(id);
+    } else {
+      dout(10) << __func__ << " " << id << " to projected_recycle " << projected_recycle << dendl;
+      projected_recycle.erase(id);
+    }
+  }
   ++projected_version;
   return id;
 }
 void InoTable::apply_alloc_id(inodeno_t id)
 {
-  dout(10) << "apply_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
-  free.erase(id);
+  if (recycle.size() != projected_recycle.size() && recycle.contains(id)) {
+    dout(10) << "apply_alloc_id " << id << " to " << projected_recycle << "/" << recycle << dendl;
+    recycle.erase(id);
+  } else {
+    dout(10) << "apply_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
+    free.erase(id);
+  }
   ++version;
 }
 
 void InoTable::project_alloc_ids(interval_set<inodeno_t>& ids, int want) 
 {
   ceph_assert(is_active());
+
+  if (projected_free.size() < want && !projected_recycle.empty()) {
+    dout(10) << "project_alloc_ids insert back recycle " << projected_recycle << "/" << recycle << " to " << projected_free << "/" << free << dendl;
+    projected_free.insert(projected_recycle);
+    projected_recycle.clear();
+    need_recycle = true;
+  }
+
   while (want > 0) {
     inodeno_t start = projected_free.range_start();
     inodeno_t end = projected_free.end_after(start);
@@ -77,10 +103,41 @@ void InoTable::project_alloc_ids(interval_set<inodeno_t>& ids, int want)
 void InoTable::apply_alloc_ids(interval_set<inodeno_t>& ids)
 {
   dout(10) << "apply_alloc_ids " << ids << " to " << projected_free << "/" << free << dendl;
-  free.subtract(ids);
+  if (need_recycle) {
+    interval_set<inodeno_t> s;
+    s.intersection_of(recycle, projected_free);
+    if (!s.empty()) {
+      recycle.subtract(s);
+      free.insert(s);
+    }
+    s.clear();
+    s.intersection_of(ids, free);
+    if (!s.empty()) {
+      free.subtract(s);
+    }
+    s.clear();
+    s.intersection_of(ids, recycle);
+    if (!s.empty()) {
+      recycle.subtract(s);
+    }
+    need_recycle = false;
+  } else {
+    free.subtract(ids);
+  }
   ++version;
 }
-
+void InoTable::project_reserve_ids(const interval_set<inodeno_t>& ids)
+{
+  dout(10) << "project_reserve_ids " << ids << " to " << projected_recycle << "/" << recycle << dendl;
+  projected_recycle.insert(ids);
+  ++projected_version;
+}
+void InoTable::apply_reserve_ids(const interval_set<inodeno_t>& ids)
+{
+  dout(10) << "apply_reserve_ids " << ids << " to " << projected_recycle << "/" << recycle << dendl;
+  recycle.insert(ids);
+  ++version;
+}
 
 void InoTable::project_release_ids(const interval_set<inodeno_t>& ids) 
 {
@@ -88,7 +145,7 @@ void InoTable::project_release_ids(const interval_set<inodeno_t>& ids)
   projected_free.insert(ids);
   ++projected_version;
 }
-void InoTable::apply_release_ids(const interval_set<inodeno_t>& ids) 
+void InoTable::apply_release_ids(const interval_set<inodeno_t>& ids)
 {
   dout(10) << "apply_release_ids " << ids << " to " << projected_free << "/" << free << dendl;
   free.insert(ids);
@@ -128,6 +185,7 @@ void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids)
 
   projected_version = ++version;
 }
+
 void InoTable::replay_release_ids(interval_set<inodeno_t>& ids) 
 {
   dout(10) << "replay_release_ids " << ids << dendl;
@@ -136,6 +194,13 @@ void InoTable::replay_release_ids(interval_set<inodeno_t>& ids)
   projected_version = ++version;
 }
 
+void InoTable::replay_reserve_ids(interval_set<inodeno_t>& ids)
+{
+  dout(10) << "replay_reserve_ids " << ids << dendl;
+  recycle.insert(ids);
+  projected_recycle.insert(ids);
+  projected_version = ++version;
+}
 
 void InoTable::replay_reset()
 {
@@ -174,6 +239,24 @@ void InoTable::dump(Formatter *f) const
 
   f->open_array_section("free");
   for (interval_set<inodeno_t>::const_iterator i = free.begin(); i != free.end(); ++i) {
+    f->open_object_section("range");
+    f->dump_int("start", (*i).first);
+    f->dump_int("len", (*i).second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("projected_recycle");
+  for (interval_set<inodeno_t>::const_iterator i = projected_recycle.begin(); i != projected_recycle.end(); ++i) {
+    f->open_object_section("range");
+    f->dump_int("start", (*i).first);
+    f->dump_int("len", (*i).second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("recycle");
+  for (interval_set<inodeno_t>::const_iterator i = recycle.begin(); i != recycle.end(); ++i) {
     f->open_object_section("range");
     f->dump_int("start", (*i).first);
     f->dump_int("len", (*i).second);

@@ -928,7 +928,7 @@ protected:
   void _kick_stale_sessions();
   void handle_client_session(const MConstRef<MClientSession>& m);
   void send_reconnect(MetaSession *s);
-  void resend_unsafe_requests(MetaSession *s);
+  void resend_unsafe_requests(MetaSession *s, bool is_inherit = false);
   void wait_unsafe_requests();
 
   void dump_mds_requests(Formatter *f);
@@ -1551,6 +1551,7 @@ private:
   ceph_tid_t last_tid = 0;
   ceph_tid_t oldest_tid = 0; // oldest incomplete mds request, excluding setfilelock requests
   map<ceph_tid_t, MetaRequest*> mds_requests;
+  unordered_map<mds_rank_t, xlist<MetaRequest*>> last_unsafe_reqs;
 
   // cap flushing
   ceph_tid_t last_flush_tid = 1;

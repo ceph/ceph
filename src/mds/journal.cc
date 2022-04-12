@@ -1598,7 +1598,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
 	if (used_preallocated_ino) {
 	  if (!session->info.prealloc_inos.empty()) {
-	    inodeno_t ino = session->take_ino(used_preallocated_ino);
+	    auto ino = session->take_ino(used_preallocated_ino);
 	    session->info.prealloc_inos.erase(ino);
 	    ceph_assert(ino == used_preallocated_ino);
 	  }
@@ -1834,7 +1834,10 @@ void ESession::replay(MDSRank *mds)
       dout(10) << "ESession.replay inotable " << mds->inotable->get_version()
 	       << " < " << inotablev << " " << (open ? "add":"remove") << dendl;
       ceph_assert(!open);  // for now
-      mds->inotable->replay_release_ids(inos_to_free);
+      if (killed)
+        mds->inotable->replay_reserve_ids(inos_to_free);
+      else
+        mds->inotable->replay_release_ids(inos_to_free);
       ceph_assert(mds->inotable->get_version() == inotablev);
     }
   }
@@ -1853,12 +1856,13 @@ void ESession::encode(bufferlist &bl, uint64_t features) const
   encode(inotablev, bl);
   encode(client_metadata, bl);
   encode(inos_to_purge, bl);
+  encode(killed, bl);
   ENCODE_FINISH(bl);
 }
 
 void ESession::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(client_inst, bl);
@@ -1874,7 +1878,9 @@ void ESession::decode(bufferlist::const_iterator &bl)
   if (struct_v >= 6){
     decode(inos_to_purge, bl);
   }
-    
+  if (struct_v >= 7) {
+    decode(killed, bl);
+  }
   DECODE_FINISH(bl);
 }
 

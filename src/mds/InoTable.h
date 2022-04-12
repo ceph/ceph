@@ -32,12 +32,15 @@ class InoTable : public MDSTable {
   void project_alloc_ids(interval_set<inodeno_t>& inos, int want);
   void apply_alloc_ids(interval_set<inodeno_t>& inos);
 
+  void project_reserve_ids(const interval_set<inodeno_t>& inos);
+  void apply_reserve_ids(const interval_set<inodeno_t>& inos);
   void project_release_ids(const interval_set<inodeno_t>& inos);
   void apply_release_ids(const interval_set<inodeno_t>& inos);
 
   void replay_alloc_id(inodeno_t ino);
   void replay_alloc_ids(interval_set<inodeno_t>& inos);
   void replay_release_ids(interval_set<inodeno_t>& inos);
+  void replay_reserve_ids(interval_set<inodeno_t>& inos);
   void replay_reset();
   bool repair(inodeno_t id);
   bool is_marked_free(inodeno_t id) const;
@@ -47,14 +50,18 @@ class InoTable : public MDSTable {
 
   void reset_state() override;
   void encode_state(bufferlist& bl) const override {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     encode(free, bl);
+    encode(recycle, bl);
     ENCODE_FINISH(bl);
   }
   void decode_state(bufferlist::const_iterator& bl) override {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     decode(free, bl);
     projected_free = free;
+    if (struct_v >= 3)
+      decode(recycle, bl);
+    projected_recycle = recycle;
     DECODE_FINISH(bl);
   }
 
@@ -98,6 +105,10 @@ class InoTable : public MDSTable {
  private:
   interval_set<inodeno_t> free;   // unused ids
   interval_set<inodeno_t> projected_free;
+  interval_set<inodeno_t> recycle; // long term reserved for killed sessions
+  interval_set<inodeno_t> projected_recycle;
+
+  bool need_recycle = false;
 };
 WRITE_CLASS_ENCODER(InoTable)
 
