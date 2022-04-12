@@ -492,7 +492,7 @@ static bool is_offset_and_length_valid(
   }
 }
 
-PGBackend::interruptible_future<> PGBackend::write(
+PGBackend::write_iertr::future<> PGBackend::write(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& txn,
@@ -503,6 +503,14 @@ PGBackend::interruptible_future<> PGBackend::write(
   uint64_t offset = op.extent.offset;
   uint64_t length = op.extent.length;
   bufferlist buf = osd_op.indata;
+  if (op.extent.length != osd_op.indata.length()) {
+    return crimson::ct_error::invarg::make();
+  }
+
+  if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
+    return crimson::ct_error::file_too_large::make();
+  }
+
   if (auto seq = os.oi.truncate_seq;
       seq != 0 && op.extent.truncate_seq < seq) {
     // old write, arrived after trimtrunc
@@ -587,7 +595,7 @@ PGBackend::interruptible_future<> PGBackend::write_same(
   return seastar::now();
 }
 
-PGBackend::interruptible_future<> PGBackend::writefull(
+PGBackend::write_iertr::future<> PGBackend::writefull(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -596,7 +604,10 @@ PGBackend::interruptible_future<> PGBackend::writefull(
 {
   const ceph_osd_op& op = osd_op.op;
   if (op.extent.length != osd_op.indata.length()) {
-    throw crimson::osd::invalid_argument();
+    return crimson::ct_error::invarg::make();
+  }
+  if (!is_offset_and_length_valid(op.extent.offset, op.extent.length)) {
+    return crimson::ct_error::file_too_large::make();
   }
 
   const bool existing = maybe_create_new_object(os, txn, delta_stats);

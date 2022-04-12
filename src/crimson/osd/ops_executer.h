@@ -47,7 +47,8 @@ class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
     crimson::ct_error::permission_denied,
     crimson::ct_error::operation_not_supported,
     crimson::ct_error::input_output_error,
-    crimson::ct_error::value_too_large>;
+    crimson::ct_error::value_too_large,
+    crimson::ct_error::file_too_large>;
   using read_errorator = PGBackend::read_errorator;
   using write_ertr = PGBackend::write_ertr;
   using get_attr_errorator = PGBackend::get_attr_errorator;
