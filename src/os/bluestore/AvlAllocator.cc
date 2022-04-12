@@ -417,7 +417,6 @@ void AvlAllocator::_dump() const
       << std::dec
       << dendl;
   }
-
   ldout(cct, 0) << __func__ << " range_size_tree: " << dendl;
   for (auto& rs : range_size_tree) {
     ldout(cct, 0) << std::hex
@@ -427,7 +426,15 @@ void AvlAllocator::_dump() const
   }
 }
 
-void AvlAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+void AvlAllocator::foreach(
+  std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  std::lock_guard l(lock);
+  _foreach(notify);
+}
+
+void AvlAllocator::_foreach(
+  std::function<void(uint64_t offset, uint64_t length)> notify) const
 {
   for (auto& rs : range_tree) {
     notify(rs.start, rs.end - rs.start);
