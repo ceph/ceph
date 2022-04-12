@@ -1052,6 +1052,65 @@ TEST(BlueFS, broken_unlink_fsync_seq) {
   fs.umount();
 }
 
+TEST(BlueFS, truncate_fsync) {
+  uint64_t bdev_size = 128 * 1048576;
+  uint64_t block_size = 4096;
+  uint64_t reserved = 1048576;
+  TempBdev bdev{bdev_size};
+  uuid_d fsid;
+  const char* DIR_NAME="dir";
+  const char* FILE_NAME="file1";
+
+  size_t sizes[] = {3, 1024, 4096, 1024 * 4096};
+  for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+    const size_t content_size= sizes[i];
+    const size_t read_size = p2roundup(content_size, size_t(block_size));
+    const std::string content(content_size, 'x');
+    {
+      BlueFS fs(g_ceph_context);
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, reserved));
+      ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+      ASSERT_EQ(0, fs.mount());
+      ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+      {
+        BlueFS::FileWriter *h;
+        ASSERT_EQ(0, fs.mkdir("dir"));
+        ASSERT_EQ(0, fs.open_for_write(DIR_NAME, FILE_NAME, &h, false));
+        h->append(content.c_str(), content.length());
+        fs.fsync(h);
+        fs.close_writer(h);
+      }
+      {
+        BlueFS::FileReader *h;
+        ASSERT_EQ(0, fs.open_for_read(DIR_NAME, FILE_NAME, &h));
+        bufferlist bl;
+        ASSERT_EQ(content.length(), fs.read(h, 0, read_size, &bl, NULL));
+        ASSERT_EQ(0, strncmp(content.c_str(), bl.c_str(), content.length()));
+        delete h;
+      }
+      {
+        BlueFS::FileWriter *h;
+        ASSERT_EQ(0, fs.open_for_write(DIR_NAME, FILE_NAME, &h, true));
+        fs.truncate(h, 0);
+        fs.fsync(h);
+        fs.close_writer(h);
+      }
+    }
+    {
+      //this was broken due to https://tracker.ceph.com/issues/55307
+      BlueFS fs(g_ceph_context);
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false, reserved));
+      ASSERT_EQ(0, fs.mount());
+      BlueFS::FileReader *h;
+      ASSERT_EQ(0, fs.open_for_read(DIR_NAME, FILE_NAME, &h));
+      bufferlist bl;
+      ASSERT_EQ(0, fs.read(h, 0, read_size, &bl, NULL));
+      delete h;
+      fs.umount();
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   map<string,string> defaults = {
