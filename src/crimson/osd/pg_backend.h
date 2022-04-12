@@ -124,7 +124,14 @@ public:
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
       write_ertr>;
-  interruptible_future<> create(
+  using create_ertr = crimson::errorator<
+    crimson::ct_error::invarg,
+    crimson::ct_error::eexist>;
+  using create_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      create_ertr>;
+  create_iertr::future<> create(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
