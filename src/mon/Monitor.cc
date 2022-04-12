@@ -5419,15 +5419,22 @@ int Monitor::load_metadata()
 
 int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
 {
+  dout(10) << "get_mon_metadata: mon." << mon << dendl;
   ceph_assert(f);
   if (!mon_metadata.count(mon)) {
     err << "mon." << mon << " not found";
     return -EINVAL;
   }
   const Metadata& m = mon_metadata[mon];
+  std::string output = "metadata:\n";
   for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
     f->dump_string(p->first.c_str(), p->second);
+    output += p->first.c_str();
+    output += ": ";
+    output += p->second;
+    output += "\n";
   }
+  dout(10) << output << dendl;
   return 0;
 }
 

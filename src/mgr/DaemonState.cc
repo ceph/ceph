@@ -166,6 +166,7 @@ void DeviceState::print(ostream& out) const
 
 void DaemonState::set_metadata(const std::map<std::string,std::string>& m)
 {
+  dout(10) << "is called" << dendl;
   devices.clear();
   devices_bypath.clear();
   metadata = m;
@@ -191,6 +192,8 @@ void DaemonState::set_metadata(const std::map<std::string,std::string>& m)
       });
   }
   if (auto found = m.find("hostname"); found != m.end()) {
+    dout(10) << "cur hostname: " << hostname << dendl;
+    dout(10) << "new hostname: " << found->second << dendl;
     hostname = found->second;
   }
 }
@@ -361,6 +364,7 @@ void DaemonStateIndex::rm(const DaemonKey &key)
 
 void DaemonStateIndex::_rm(const DaemonKey &key)
 {
+  dout(10) << "_rm " << key << dendl;
   if (all.count(key)) {
     _erase(key);
   }

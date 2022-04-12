@@ -78,6 +78,7 @@ Mgr::~Mgr()
 
 void MetadataUpdate::finish(int r)
 {
+  dout(10) << " is called for " << key << dendl;
   daemon_state.clear_updating(key);
   if (r == 0) {
     if (key.type == "mds" || key.type == "osd" ||
@@ -86,21 +87,23 @@ void MetadataUpdate::finish(int r)
       bool read_ok = json_spirit::read(
           outbl.to_str(), json_result);
       if (!read_ok) {
-        dout(1) << "mon returned invalid JSON for " << key << dendl;
+        dout(4) << "mon returned invalid JSON for " << key << dendl;
         return;
       }
       if (json_result.type() != json_spirit::obj_type) {
-        dout(1) << "mon returned valid JSON " << key
+        dout(4) << "mon returned valid JSON " << key
 		<< " but not an object: '" << outbl.to_str() << "'" << dendl;
         return;
       }
       dout(4) << "mon returned valid metadata JSON for " << key << dendl;
-
+      
       json_spirit::mObject daemon_meta = json_result.get_obj();
-
+      if (key.type == "mon") {
+        dout(10) << json_spirit::write(daemon_meta, json_spirit::pretty_print) << dendl;
+      }
       // Skip daemon who doesn't have hostname yet
       if (daemon_meta.count("hostname") == 0) {
-        dout(1) << "Skipping incomplete metadata entry for " << key << dendl;
+        dout(4) << "Skipping incomplete metadata entry for " << key << dendl;
         return;
       }
 
@@ -110,16 +113,23 @@ void MetadataUpdate::finish(int r)
           daemon_meta[i.first] = i.second;
         }
       }
-
+      if (key.type == "mon") {
+        dout(10) << json_spirit::write(daemon_meta, json_spirit::pretty_print) << dendl;
+      }
       if (daemon_state.exists(key)) {
+        dout(10) << key << " exist in daemon_state" << dendl;
         DaemonStatePtr state = daemon_state.get(key);
 	map<string,string> m;
 	{
 	  std::lock_guard l(state->lock);
+    dout(10) << "daemon_meta.hostname: " << daemon_meta.at("hostname").get_str() << dendl;
+    dout(10) << "state->hostname: " << state->hostname << dendl;
 	  state->hostname = daemon_meta.at("hostname").get_str();
+    dout(10) << "state->hostname is replaced " << dendl;
 
 	  if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
 	    daemon_meta.erase("name");
+
 	  } else if (key.type == "osd") {
 	    daemon_meta.erase("id");
 	  }
@@ -130,9 +140,13 @@ void MetadataUpdate::finish(int r)
 	}
 	daemon_state.update_metadata(state, m);
       } else {
+        dout(10) << key << " doesn't exist in daemon_state" << dendl;
         auto state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
+        dout(10) << "daemon_meta.hostname: " << daemon_meta.at("hostname").get_str() << dendl;
+        dout(10) << "state->hostname: " << state->hostname << dendl;
         state->hostname = daemon_meta.at("hostname").get_str();
+        dout(10) << "state->hostname is replaced " << dendl;
 
         if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
           daemon_meta.erase("name");
@@ -153,7 +167,7 @@ void MetadataUpdate::finish(int r)
       ceph_abort();
     }
   } else {
-    dout(1) << "mon failed to return metadata for " << key
+    dout(4) << "mon failed to return metadata for " << key
 	    << ": " << cpp_strerror(r) << dendl;
   }
 }
@@ -595,8 +609,10 @@ void Mgr::handle_mon_map()
   for (const auto& name : names_exist) {
     const auto k = DaemonKey{"mon", name};
     if (daemon_state.is_updating(k)) {
+      dout(10) << "skipping " << k << " still updating" << dendl;
       continue;
     }
+    dout(10) << "notify_updating() is called" << dendl;
     auto c = new MetadataUpdate(daemon_state, k);
     constexpr std::string_view cmd = R"({{"prefix": "mon metadata", "id": "{}"}})";
     monc->start_mon_command({fmt::format(cmd, name)}, {},

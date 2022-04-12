@@ -802,6 +802,25 @@ void Elector::notify_rank_removed(int rank_removed)
      * ourselves if not.
    */
   dout(10) << "rank_removed: " << rank_removed << dendl;
+  std::string output = "meta_data:\n";
+  map<int, Metadata> meta_data = mon->mon_metadata;
+  for (map<int, Metadata>::iterator it = meta_data.begin();
+       it != meta_data.end(); ++it) {
+    output += "mon.";
+    output += std::to_string(it->first);
+    output += "\n";
+    const Metadata& m = it->second;
+      for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
+        std::string key = p->first.c_str();
+        if (key == "addrs" || key == "device_ids"  || key == "hostname"){
+          output += key;
+          output += ": ";
+          output += p->second;
+          output += "\n";
+        }
+      }
+  }
+  dout(10) << output << dendl;
   print_live_pinging();
   print_dead_pinging();
   dout(10) << "ranks_size(): " << ranks_size() << dendl;

@@ -28,6 +28,13 @@
 #include "messages/MMgrReport.h"
 #include "DaemonKey.h"
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mgr
+#undef dout_prefix
+#define dout_prefix *_dout << "mgr " << __func__ << " "
+
+using std::string;
+using std::stringstream;
 namespace ceph {
   class Formatter;
 }
@@ -225,9 +232,11 @@ private:
   void _erase(const DaemonKey& dmk);
   
   ceph::ref_t<DeviceState> _get_or_create_device(const std::string& dev) {
+    dout(10) << "is called on: " << dev << dendl;
     auto em = devices.try_emplace(dev, nullptr);
     auto& d = em.first->second;
     if (em.second) {
+      dout(10) << "em.second exist, d =  " << dev << dendl;
       d = ceph::make_ref<DeviceState>(dev);
     }
     return d;
@@ -331,15 +340,35 @@ public:
     }
   }
 
+  void print_updating() {
+    std::string output = "update:";
+    for (DaemonKey const& key : updating) {
+      output += " ";
+      output += std::string(key.type);
+      output += ".";
+      output += std::string(key.name);
+    }
+    dout(10) << output << dendl;
+  }
+
   void notify_updating(const DaemonKey &k) {
+    dout(10) << "is called" << dendl;
     std::unique_lock l{lock};
+    print_updating();
+    dout(10) << "inserting " << k << " to update" << dendl;
     updating.insert(k);
+    print_updating();
   }
   void clear_updating(const DaemonKey &k) {
+    dout(10) << "is called" << dendl;
     std::unique_lock l{lock};
+    print_updating();
+    dout(10) << "erasing " << k << " from update " << dendl;
     updating.erase(k);
+    print_updating();
   }
   bool is_updating(const DaemonKey &k) {
+    dout(10) << "is called" << dendl;
     std::shared_lock l{lock};
     return updating.count(k) > 0;
   }
@@ -347,6 +376,13 @@ public:
   void update_metadata(DaemonStatePtr state,
 		       const std::map<std::string,std::string>& meta) {
     // remove and re-insert in case the device metadata changed
+    dout(10) << " is called for " << state->key << dendl;
+    dout(10) << "meta: " << dendl;
+    for (const auto &[key, val] : meta) {
+      if (key == "addrs" || key == "device_ids" || key == "device_paths" || key == "device" ) {
+        dout(10) << key << ": " << val << dendl;
+      }
+    }
     std::unique_lock l{lock};
     _rm(state->key);
     {
