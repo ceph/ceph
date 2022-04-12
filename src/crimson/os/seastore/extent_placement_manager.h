@@ -86,7 +86,7 @@ private:
 class ExtentPlacementManager {
 public:
   ExtentPlacementManager() {
-    devices_by_id.resize(DEVICE_ID_MAX, nullptr);
+    devices_by_id.resize(DEVICE_ID_GLOBAL_MAX, nullptr);
   }
 
   void init_ool_writers(SegmentProvider &sp, SegmentSeqAllocator &ssa) {
@@ -214,7 +214,7 @@ public:
       });
     }).safe_then([this] {
       devices_by_id.clear();
-      devices_by_id.resize(DEVICE_ID_MAX, nullptr);
+      devices_by_id.resize(DEVICE_ID_GLOBAL_MAX, nullptr);
       primary_device = nullptr;
     });
   }
