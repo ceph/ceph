@@ -3405,26 +3405,6 @@ RGWCoroutine *RGWRemoteBucketManager::read_sync_status_cr(int num, rgw_bucket_sh
   return new RGWReadBucketPipeSyncStatusCoroutine(&sc, sync_pairs[num], sync_status, nullptr, full_status.incremental_gen);
 }
 
-RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* _store,
-                                                               std::optional<rgw_zone_id> _source_zone,
-                                                               std::optional<rgw_bucket> _source_bucket,
-                                                               const rgw_bucket& _dest_bucket) : store(_store),
-                                                                                   cr_mgr(_store->ctx(), _store->getRados()->get_cr_registry()),
-                                                                                   http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
-                                                                                   source_zone(_source_zone), source_bucket(_source_bucket),
-                                                                                   conn(NULL), error_logger(NULL),
-                                                                                   dest_bucket(_dest_bucket)
-{
-}
-
-RGWBucketPipeSyncStatusManager::~RGWBucketPipeSyncStatusManager()
-{
-  for (vector<RGWRemoteBucketManager *>::iterator iter = source_mgrs.begin(); iter != source_mgrs.end(); ++iter) {
-    delete *iter;
-  }
-  delete error_logger;
-}
-
 CephContext *RGWBucketPipeSyncStatusManager::get_cct() const
 {
   return store->ctx();
@@ -5413,14 +5393,12 @@ int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
-
   sync_module.reset(new RGWDefaultSyncModuleInstance());
   auto async_rados = store->svc()->rados->get_async_processor();
 
   sync_env.init(this, store->ctx(), store,
                 store->svc(), async_rados, &http_manager,
-                error_logger, store->getRados()->get_sync_tracer(),
+                error_logger.get(), store->getRados()->get_sync_tracer(),
                 sync_module, nullptr);
 
   rgw_sync_pipe_info_set pipes;
@@ -5463,11 +5441,10 @@ int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
       return r;
     }
     const int num_shards = remote_markers.get().size();
-    source_mgrs.push_back(new RGWRemoteBucketManager(this, &sync_env,
-						     szone, conn,
-						     pipe.source.get_bucket_info(),
-						     num_shards,
-						     pipe.target.get_bucket()));
+    source_mgrs.emplace_back(this, &sync_env, szone, conn,
+			     pipe.source.get_bucket_info(),
+			     num_shards,
+			     pipe.target.get_bucket());
   }
 
   return 0;
@@ -5484,7 +5461,7 @@ int RGWBucketPipeSyncStatusManager::init_sync_status(const DoutPrefixProvider *d
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
     objvs.emplace_back();
     infos.emplace_back();
-    stack->call(mgr->init_sync_status_cr(objvs.back(), infos.back()));
+    stack->call(mgr.init_sync_status_cr(objvs.back(), infos.back()));
 
     stacks.push_back(stack);
   }
@@ -5498,8 +5475,8 @@ int RGWBucketPipeSyncStatusManager::read_sync_status(const DoutPrefixProvider *d
 
   for (auto& mgr : source_mgrs) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
-    for (int i = 0; i < mgr->num_pipes(); ++i) {
-      stack->call(mgr->read_sync_status_cr(i, &sync_status[i]));
+    for (int i = 0; i < mgr.num_pipes(); ++i) {
+      stack->call(mgr.read_sync_status_cr(i, &sync_status[i]));
     }
 
     stacks.push_back(stack);
@@ -5521,8 +5498,8 @@ int RGWBucketPipeSyncStatusManager::run(const DoutPrefixProvider *dpp)
 
   for (auto& mgr : source_mgrs) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
-    for (int i = 0; i < mgr->num_pipes(); ++i) {
-      stack->call(mgr->run_sync_cr(i));
+    for (int i = 0; i < mgr.num_pipes(); ++i) {
+      stack->call(mgr.run_sync_cr(i));
     }
 
     stacks.push_back(stack);
