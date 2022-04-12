@@ -720,7 +720,6 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
   std::optional<rgw_zone_id> source_zone;
   std::optional<rgw_bucket> source_bucket;
 
-  RGWRESTConn* conn = nullptr;
   std::unique_ptr<RGWSyncErrorLogger> error_logger =
     std::make_unique<RGWSyncErrorLogger>(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
 					 ERROR_LOGGER_SHARDS);
