@@ -98,12 +98,6 @@ Dashboard
 
 RADOS
 ~~~~~
-* the "kvs" Ceph object class is not packaged anymore. The "kvs" Ceph
-  object class offers a distributed flat b-tree key-value store that
-  is implemented on top of the librados objects omap. Because there
-  are no existing internal users of this object class, it is not
-  packaged anymore.
-
 * OSD: Ceph now uses `mclock_scheduler` for BlueStore OSDs as its default
   `osd_op_queue` to provide QoS. The 'mclock_scheduler' is not supported
   for Filestore OSDs. Therefore, the default 'osd_op_queue' is set to `wpq`
@@ -129,6 +123,21 @@ RADOS
   For more details about autoscaling, see:
   https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
 
+* OSD: Support for on-wire compression for osd-osd communication, `off` by
+  default.
+
+  For more details about compression modes, see:
+  https://docs.ceph.com/en/quincy/rados/configuration/msgr2/#compression-modes
+
+* OSD: Concise reporting of slow operations in the cluster log. The old
+  and more verbose logging behavior can be regained by setting
+  `osd_aggregated_slow_ops_logging` to false.
+
+* the "kvs" Ceph object class is not packaged anymore. The "kvs" Ceph
+  object class offers a distributed flat b-tree key-value store that
+  is implemented on top of the librados objects omap. Because there
+  are no existing internal users of this object class, it is not
+  packaged anymore.
 
 RBD block storage
 ~~~~~~~~~~~~~~~~~
