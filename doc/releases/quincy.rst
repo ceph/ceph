@@ -119,25 +119,14 @@ RADOS
   is fixed, users are advised to avoid using the 'custom' profile or use the
   workaround mentioned in the tracker.
 
-* MGR: The pg_autoscaler has a new 'scale-down' profile, which provides more
-  performance from the start for new pools. However, the module still uses
-  the old behavior by default, which is now called the 'scale-up' profile.
-  For more detail, see:
-
-  https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
-
 * MGR: The pg_autoscaler can now be turned `on` and `off` globally
-  with the `noautoscale` flag. By default this flag is unset and
-  the default pg_autoscale mode remains the same.
-  For more detail, see:
+  with the `noautoscale` flag. By default, it is set to `on`, but this flag
+  can come in handy to prevent rebalancing triggered by autoscaling, during
+  cluster upgrade and maintenance. Pools can now be created with the `--bulk`
+  flag, which allows the autoscaler to allocate more PGs to such pools. This
+  can be useful to get better out of the box performance for data-heavy pools.
 
-  https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
-
-* MON/MGR: Pools can now be created with the `--bulk` flag. Any pools created
-  with `bulk` will use a profile of the `pg_autoscaler` that provides more
-  performance from the start. However, pools that were created without the
-  `--bulk` flag use the old behavior by default. For more detail, see:
-
+  For more details about autoscaling, see:
   https://docs.ceph.com/en/quincy/rados/operations/placement-groups/
 
 
