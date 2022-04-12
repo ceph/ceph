@@ -695,8 +695,6 @@ public:
   int num_pipes() {
     return sync_pairs.size();
   }
-
-  void wakeup();
 };
 
 class BucketIndexShardsManager;
@@ -728,13 +726,7 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
 
   std::vector<RGWRemoteBucketManager *> source_mgrs;
 
-  std::string source_status_oid;
-  std::string source_shard_status_oid_prefix;
-
   std::map<int, rgw_bucket_shard_sync_info> sync_status;
-  rgw_raw_obj status_obj;
-
-  int num_shards;
 
 public:
   RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* _store,
