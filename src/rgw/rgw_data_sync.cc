@@ -5469,8 +5469,11 @@ int RGWBucketPipeSyncStatusManager::init_sync_status(const DoutPrefixProvider *d
   return cr_mgr.run(dpp, stacks);
 }
 
-int RGWBucketPipeSyncStatusManager::read_sync_status(const DoutPrefixProvider *dpp)
+tl::expected<std::map<int, rgw_bucket_shard_sync_info>, int>
+RGWBucketPipeSyncStatusManager::read_sync_status(
+  const DoutPrefixProvider *dpp)
 {
+  std::map<int, rgw_bucket_shard_sync_info> sync_status;
   list<RGWCoroutinesStack *> stacks;
 
   for (auto& mgr : source_mgrs) {
@@ -5485,11 +5488,11 @@ int RGWBucketPipeSyncStatusManager::read_sync_status(const DoutPrefixProvider *d
   int ret = cr_mgr.run(dpp, stacks);
   if (ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to read sync status for "
-        << bucket_str{dest_bucket} << dendl;
-    return ret;
+		       << bucket_str{dest_bucket} << dendl;
+    return tl::unexpected(ret);
   }
 
-  return 0;
+  return sync_status;
 }
 
 int RGWBucketPipeSyncStatusManager::run(const DoutPrefixProvider *dpp)

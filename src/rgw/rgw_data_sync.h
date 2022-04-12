@@ -730,8 +730,6 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
 
   std::vector<RGWRemoteBucketManager> source_mgrs;
 
-  std::map<int, rgw_bucket_shard_sync_info> sync_status;
-
 public:
   RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* store,
 				 std::optional<rgw_zone_id> source_zone,
@@ -742,9 +740,6 @@ public:
   ~RGWBucketPipeSyncStatusManager() = default;
 
   int init(const DoutPrefixProvider *dpp);
-
-  std::map<int, rgw_bucket_shard_sync_info>& get_sync_status() { return sync_status; }
-  int init_sync_status(const DoutPrefixProvider *dpp);
 
   static std::string full_status_oid(const rgw_zone_id& source_zone,
 				     const rgw_bucket& source_bucket,
@@ -762,7 +757,9 @@ public:
   unsigned get_subsys() const override;
   std::ostream& gen_prefix(std::ostream& out) const override;
 
-  int read_sync_status(const DoutPrefixProvider *dpp);
+  int init_sync_status(const DoutPrefixProvider *dpp);
+  tl::expected<std::map<int, rgw_bucket_shard_sync_info>, int> read_sync_status(
+    const DoutPrefixProvider *dpp);
   int run(const DoutPrefixProvider *dpp);
 };
 
