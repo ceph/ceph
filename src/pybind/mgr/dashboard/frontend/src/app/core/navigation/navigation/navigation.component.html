@@ -97,7 +97,7 @@
            class="nav-link dropdown-toggle"
            [attr.aria-expanded]="displayedSubMenu == 'cluster'"
            aria-controls="collapseBasic">
-          <ng-container i18n>Cluster</ng-container>
+          <span i18n>Cluster</span>
         </a>
         <ul class="list-unstyled"
             [ngbCollapse]="displayedSubMenu !== 'cluster'">
@@ -108,10 +108,10 @@
                routerLink="/hosts">Hosts</a>
           </li>
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_inventory"
+              class="tc_submenuitem tc_submenuitem_cluster_services"
               *ngIf="permissions.hosts.read">
             <a i18n
-               routerLink="/inventory">Physical Disks</a>
+               routerLink="/services/">Services</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_cluster_monitor"
@@ -120,22 +120,16 @@
                routerLink="/monitor/">Monitors</a>
           </li>
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_services"
+              class="tc_submenuitem tc_submenuitem_cluster_inventory"
               *ngIf="permissions.hosts.read">
             <a i18n
-               routerLink="/services/">Services</a>
+               routerLink="/inventory/">Physical Disks</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_osds"
               *ngIf="permissions.osd.read">
             <a i18n
                routerLink="/osd">OSDs</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_configuration"
-              *ngIf="permissions.configOpt.read">
-            <a i18n
-               routerLink="/configuration">Configuration</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_crush"
@@ -150,6 +144,12 @@
                routerLink="/mgr-modules">Manager Modules</a>
           </li>
           <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_configuration"
+              *ngIf="permissions.configOpt.read">
+            <a i18n
+               routerLink="/configuration">Configuration</a>
+          </li>
+          <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_log"
               *ngIf="permissions.log.read">
             <a i18n
@@ -159,7 +159,7 @@
               class="tc_submenuitem tc_submenuitem_monitoring"
               *ngIf="permissions.prometheus.read">
             <a routerLink="/monitoring">
-              <ng-container i18n>Monitoring</ng-container>
+              <ng-container i18n>Alerts</ng-container>
               <small *ngIf="prometheusAlertService.activeAlerts > 0"
                      class="badge badge-danger">{{ prometheusAlertService.activeAlerts }}</small>
             </a>
@@ -186,7 +186,7 @@
            [attr.aria-expanded]="displayedSubMenu == 'block'"
            aria-controls="collapseBasic"
            [ngStyle]="blockHealthColor()">
-          <ng-container i18n>Block</ng-container>
+          <span i18n>Block</span>
         </a>
 
         <ul class="list-unstyled"
@@ -195,14 +195,14 @@
               class="tc_submenuitem tc_submenuitem_block_images"
               *ngIf="permissions.rbdImage.read && enabledFeature.rbd">
             <a i18n
-               routerLink="/block/rbd">Images</a>
+               routerLink="/block/rbd">RBD</a>
           </li>
 
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_block_mirroring"
               *ngIf="permissions.rbdMirroring.read && enabledFeature.mirroring">
             <a routerLink="/block/mirroring">
-              <ng-container i18n>Mirroring</ng-container>
+              <span i18n>Mirroring</span>
               <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
                      class="badge badge-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
               <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
@@ -219,22 +219,30 @@
         </ul>
       </li>
 
-      <!-- NFS -->
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_nfs"
-          *ngIf="permissions.nfs.read && enabledFeature.nfs">
-        <a i18n
-           class="nav-link"
-           routerLink="/nfs">NFS</a>
-      </li>
-
       <!-- Filesystem -->
       <li routerLinkActive="active"
-          class="nav-item tc_menuitem_cephfs"
-          *ngIf="permissions.cephfs.read && enabledFeature.cephfs">
-        <a i18n
-           class="nav-link"
-           routerLink="/cephfs">File Systems</a>
+          class="nav-item tc_menuitem_filesystem">
+        <a class="nav-link dropdown-toggle"
+           (click)="toggleSubMenu('filesystem')"
+           [attr.aria-expanded]="displayedSubMenu == 'filesystem'"
+           aria-controls="collapseBasic">
+          <span i18n>File System</span>
+        </a>
+        <ul class="list-unstyled"
+            [ngbCollapse]="displayedSubMenu !== 'filesystem'">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_menuitem_cephfs"
+              *ngIf="permissions.cephfs.read && enabledFeature.cephfs">
+            <a i18n
+               routerLink="/cephfs">CephFS</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_menuitem_filesystem"
+              *ngIf="permissions.nfs.read && enabledFeature.nfs">
+            <a i18n
+               routerLink="/nfs">NFS</a>
+          </li>
+        </ul>
       </li>
 
       <!-- Object Gateway -->
@@ -245,14 +253,14 @@
            (click)="toggleSubMenu('rgw')"
            [attr.aria-expanded]="displayedSubMenu == 'rgw'"
            aria-controls="collapseBasic">
-          <ng-container i18n>Object Gateway</ng-container>
+          <span i18n>Object Storage</span>
         </a>
         <ul class="list-unstyled"
             [ngbCollapse]="displayedSubMenu !== 'rgw'">
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_daemons">
             <a i18n
-               routerLink="/rgw/daemon">Daemons</a>
+               routerLink="/rgw/daemon">Gateways</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_users">
