@@ -821,7 +821,7 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
     });
 }
 
-PGBackend::interruptible_future<> PGBackend::setxattr(
+PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -829,13 +829,13 @@ PGBackend::interruptible_future<> PGBackend::setxattr(
 {
   if (local_conf()->osd_max_attr_size > 0 &&
       osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
-    throw crimson::osd::make_error(-EFBIG);
+    return crimson::ct_error::file_too_large::make();
   }
 
   const auto max_name_len = std::min<uint64_t>(
     store->get_max_attr_name_length(), local_conf()->osd_max_attr_name_len);
   if (osd_op.op.xattr.name_len > max_name_len) {
-    throw crimson::osd::make_error(-ENAMETOOLONG);
+    return crimson::ct_error::enametoolong::make();
   }
 
   maybe_create_new_object(os, txn, delta_stats);

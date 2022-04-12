@@ -194,7 +194,14 @@ public:
   interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>> list_objects(
     const hobject_t& start,
     uint64_t limit) const;
-  interruptible_future<> setxattr(
+  using setxattr_errorator = crimson::errorator<
+    crimson::ct_error::file_too_large,
+    crimson::ct_error::enametoolong>;
+  using setxattr_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      setxattr_errorator>;
+  setxattr_ierrorator::future<> setxattr(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,

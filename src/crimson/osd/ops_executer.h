@@ -43,6 +43,7 @@ class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
     crimson::ct_error::invarg,
     crimson::ct_error::erange,
     crimson::ct_error::ecanceled,
+    crimson::ct_error::enametoolong,
     crimson::ct_error::permission_denied,
     crimson::ct_error::operation_not_supported,
     crimson::ct_error::input_output_error,
