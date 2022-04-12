@@ -1615,9 +1615,9 @@ Options
 
 	Make less verbose.
 
-.. option:: -f {json,json-pretty,xml,xml-pretty,plain}, --format
+.. option:: -f {json,json-pretty,xml,xml-pretty,plain,yaml}, --format
 
-	Format of output.
+	Format of output. Note: yaml is only valid for orch commands. 
 
 .. option:: --connect-timeout CLUSTER_TIMEOUT
 
