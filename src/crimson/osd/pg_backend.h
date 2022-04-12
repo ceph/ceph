@@ -118,7 +118,8 @@ public:
 
   // TODO: switch the entire write family to errorator.
   using write_ertr = crimson::errorator<
-    crimson::ct_error::file_too_large>;
+    crimson::ct_error::file_too_large,
+    crimson::ct_error::invarg>;
   using write_iertr =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -141,7 +142,7 @@ public:
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
-  interruptible_future<> write(
+  write_iertr::future<> write(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -153,7 +154,7 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
-  interruptible_future<> writefull(
+  write_iertr::future<> writefull(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
