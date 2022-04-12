@@ -1145,6 +1145,7 @@ namespace ct_error {
   using ecanceled = ct_error_code<std::errc::operation_canceled>;
   using einprogress = ct_error_code<std::errc::operation_in_progress>;
   using enametoolong = ct_error_code<std::errc::filename_too_long>;
+  using eexist = ct_error_code<std::errc::file_exists>;
 
   struct pass_further_all {
     template <class ErrorT>

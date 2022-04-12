@@ -40,6 +40,7 @@ class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
   using call_errorator = crimson::errorator<
     crimson::stateful_ec,
     crimson::ct_error::enoent,
+    crimson::ct_error::eexist,
     crimson::ct_error::invarg,
     crimson::ct_error::erange,
     crimson::ct_error::ecanceled,

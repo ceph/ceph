@@ -732,7 +732,7 @@ PGBackend::write_iertr::future<> PGBackend::zero(
   return write_ertr::now();
 }
 
-PGBackend::interruptible_future<> PGBackend::create(
+PGBackend::create_iertr::future<> PGBackend::create(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
@@ -741,7 +741,7 @@ PGBackend::interruptible_future<> PGBackend::create(
   if (os.exists && !os.oi.is_whiteout() &&
       (osd_op.op.flags & CEPH_OSD_OP_FLAG_EXCL)) {
     // this is an exclusive create
-    throw crimson::osd::make_error(-EEXIST);
+    return crimson::ct_error::eexist::make();
   }
 
   if (osd_op.indata.length()) {
@@ -751,7 +751,7 @@ PGBackend::interruptible_future<> PGBackend::create(
       std::string category;
       decode(category, p);
     } catch (buffer::error&) {
-      throw crimson::osd::invalid_argument();
+      return crimson::ct_error::invarg::make();
     }
   }
   maybe_create_new_object(os, txn, delta_stats);
