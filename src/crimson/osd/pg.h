@@ -592,7 +592,7 @@ private:
     ObjectContextRef obc,
     std::vector<OSDOp>& ops,
     const OpInfo &op_info,
-    const do_osd_ops_params_t& params,
+    const do_osd_ops_params_t &&params,
     do_osd_ops_success_func_t success_func,
     do_osd_ops_failure_func_t failure_func);
   template <class Ret, class SuccessFunc, class FailureFunc>
