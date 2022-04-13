@@ -1,9 +1,9 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2016 Mirantis, Inc.
+  * Copyright (C) 2022 Intel Corporation
  *
- * Author: Adam Kupczyk <akupczykd@mirantis.com>
+ * Author: Hui Han <hui.han@intel.com>
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -21,8 +21,7 @@
 
 const char *__ceph_plugin_version()
 {
-   //return CEPH_GIT_NICE_VER;
-   return "14.2.22";
+   return CEPH_GIT_NICE_VER;
 }
 
 int __ceph_plugin_init(CephContext *cct,
