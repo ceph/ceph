@@ -19,6 +19,7 @@ class PG;
 using osd_id_t = int;
 
 class CompoundPeeringRequest : public TrackableOperationT<CompoundPeeringRequest> {
+  friend class LttngBackendCompoundPeering;
 public:
   static constexpr OperationTypeCode type =
     OperationTypeCode::compound_peering_request;
@@ -53,6 +54,12 @@ public:
   void print(std::ostream &) const final;
   void dump_detail(Formatter *f) const final;
   seastar::future<> start();
+
+  std::tuple<
+    StartEvent,
+    SubOpBlocker::BlockingEvent,
+    CompletionEvent
+  > tracking_events;
 };
 
 }

@@ -6,6 +6,7 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/osd_operations/client_request.h"
+#include "crimson/osd/osd_operations/compound_peering_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
@@ -104,6 +105,24 @@ struct LttngBackend
               const Operation&) override {}
 };
 
+struct LttngBackendCompoundPeering
+  : CompoundPeeringRequest::StartEvent::Backend,
+    CompoundPeeringRequest::SubOpBlocker::BlockingEvent::Backend,
+    CompoundPeeringRequest::CompletionEvent::Backend
+{
+  void handle(CompoundPeeringRequest::StartEvent&,
+              const Operation&) override {}
+
+  void handle(CompoundPeeringRequest::SubOpBlocker::BlockingEvent& ev,
+              const Operation& op,
+              const CompoundPeeringRequest::SubOpBlocker& blocker) override {
+  }
+
+  void handle(CompoundPeeringRequest::CompletionEvent&,
+              const Operation&) override {}
+};
+
+
 } // namespace crimson::osd
 
 namespace crimson {
@@ -133,6 +152,13 @@ template <>
 struct EventBackendRegistry<osd::RecoverySubRequest> {
   static std::tuple<> get_backends() {
     return {/* no extenral backends */};
+  }
+};
+
+template <>
+struct EventBackendRegistry<osd::CompoundPeeringRequest> {
+  static std::tuple<osd::LttngBackendCompoundPeering> get_backends() {
+    return { {} };
   }
 };
 
