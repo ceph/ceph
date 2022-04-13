@@ -331,11 +331,18 @@ struct RGWDataSyncEnv {
 };
 
 struct RGWDataSyncCtx {
-  CephContext *cct{nullptr};
   RGWDataSyncEnv *env{nullptr};
+  CephContext *cct{nullptr};
 
   RGWRESTConn *conn{nullptr};
   rgw_zone_id source_zone;
+
+  RGWDataSyncCtx() = default;
+
+  RGWDataSyncCtx(RGWDataSyncEnv* env,
+		 RGWRESTConn* conn,
+		 const rgw_zone_id& source_zone)
+    : env(env), cct(env->cct), conn(conn), source_zone(source_zone) {}
 
   void init(RGWDataSyncEnv *_env,
             RGWRESTConn *_conn,
@@ -728,17 +735,35 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
   rgw_bucket dest_bucket;
 
   std::vector<RGWRemoteBucketManager> source_mgrs;
+  struct source {
+    RGWDataSyncCtx sc;
+    RGWBucketInfo info;
+    rgw_bucket dest;
+    RGWBucketSyncFlowManager::pipe_handler handler;
 
-public:
+    source(RGWDataSyncEnv* env, const rgw_zone_id& zone, RGWRESTConn* conn,
+	   const RGWBucketInfo& info, const rgw_bucket& dest,
+	   const RGWBucketSyncFlowManager::pipe_handler& handler)
+      : sc(env, conn, zone), info(info), dest(dest), handler(handler) {}
+  };
+  std::vector<source> sources;
+
+  int do_init(const DoutPrefixProvider *dpp);
   RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* store,
 				 std::optional<rgw_zone_id> source_zone,
 				 std::optional<rgw_bucket> source_bucket,
 				 const rgw_bucket& dest_bucket)
     : store(store), source_zone(source_zone), source_bucket(source_bucket),
       dest_bucket(dest_bucket) {}
+
+public:
+  static tl::expected<std::unique_ptr<RGWBucketPipeSyncStatusManager>, int>
+  construct(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store,
+	    std::optional<rgw_zone_id> source_zone,
+	    std::optional<rgw_bucket> source_bucket,
+	    const rgw_bucket& dest_bucket);
   ~RGWBucketPipeSyncStatusManager() = default;
 
-  int init(const DoutPrefixProvider *dpp);
 
   static std::string full_status_oid(const rgw_zone_id& source_zone,
 				     const rgw_bucket& source_bucket,
