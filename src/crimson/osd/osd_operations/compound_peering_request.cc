@@ -125,6 +125,7 @@ void CompoundPeeringRequest::dump_detail(Formatter *f) const
 seastar::future<> CompoundPeeringRequest::start()
 {
   logger().info("{}: starting", *this);
+  track_event<StartEvent>();
   auto state = seastar::make_lw_shared<compound_state>();
   auto blocker = std::make_unique<SubOpBlocker>(
     [&] {
@@ -146,6 +147,7 @@ seastar::future<> CompoundPeeringRequest::start()
       logger().info("{}: sub events complete", *this);
       return osd.get_shard_services().dispatch_context_messages(std::move(ctx));
     }).then([this, ref=std::move(ref)] {
+      track_event<CompletionEvent>();
       logger().info("{}: complete", *this);
     });
   });
