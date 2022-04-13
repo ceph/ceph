@@ -1,18 +1,20 @@
 Testing - unit tests
 ====================
 
-Ceph has two types of tests: unit tests (also called `make check`_ tests) and
-integration tests. Strictly speaking, the `make check`_ tests are not "unit
-tests", but rather tests that can be run easily on a single build machine
-after compiling Ceph from source, whereas integration tests require packages
-and multi-machine clusters to run.
+Ceph has two types of tests: unit tests (also called :ref:`make
+check<make-check>` tests) and integration tests. Strictly speaking, the
+:ref:`make check<make-check>` tests are not "unit tests", but rather tests that
+can be run easily on a single build machine after compiling Ceph from source,
+whereas integration tests require packages and multi-machine clusters to run.
+
+.. _make-check:
 
 What does "make check" mean?
 ----------------------------
 
 After compiling Ceph, the code can be run through a battery of tests covering
 various aspects of Ceph. For historical reasons, this battery of tests is
-often referred to as `make check`_ even though the actual command used to run
+often referred to as :ref:`make check<make-check>` even though the actual command used to run
 the tests is now ``ctest``. For inclusion in this battery of tests, a test
 must:
 
@@ -55,8 +57,8 @@ Unit testing of CLI tools
 Some of the CLI tools are tested using special files ending with the extension
 ``.t`` and stored under ``./src/test/cli``. These tests are run using a tool
 called `cram`_ via a shell script ``./src/test/run-cli-tests``.  `cram`_ tests
-that are not suitable for `make check`_ may also be run by teuthology using
-the `cram task`_.
+that are not suitable for :ref:`make check<make-check>` may also be run by
+teuthology using the `cram task`_.
 
 .. _`cram`: https://bitheap.org/cram/
 .. _`cram task`: https://github.com/ceph/ceph/blob/master/qa/tasks/cram.py
@@ -120,5 +122,4 @@ Unit test caveats
    linked against something else. This enables tools like valgrind to be used
    in the tests.
 
-.. _make check:
 .. _teuthology framework: https://github.com/ceph/teuthology

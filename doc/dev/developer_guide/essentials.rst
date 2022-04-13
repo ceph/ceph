@@ -89,6 +89,8 @@ click on `New issue`_.
 .. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
 .. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
 
+.. _mailing-list-subscribe:
+
 Mailing list
 ------------
 
@@ -129,6 +131,7 @@ There are also `other Ceph-related mailing lists`_.
 
 .. _`other Ceph-related mailing lists`: https://ceph.com/irc/
 
+.. _irc:
 
 IRC
 ---
@@ -224,6 +227,8 @@ Kubernetes/Rook development cluster
 -----------------------------------
 
 See :ref:`kubernetes-dev`
+
+.. _backporting:
 
 Backporting
 -----------
