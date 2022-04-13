@@ -65,7 +65,7 @@ DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
 LOGROTATE_DIR = '/etc/logrotate.d'
-SYSCTL_DIR = '/usr/lib/sysctl.d'
+SYSCTL_DIR = '/etc/sysctl.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
@@ -3438,6 +3438,47 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
         call_throws(ctx, ['sysctl', '--system'])
 
 
+def migrate_sysctl_dir(ctx: CephadmContext, fsid: str) -> None:
+    """
+    Cephadm once used '/usr/lib/sysctl.d' for storing sysctl configuration.
+    This moves it to '/etc/sysctl.d'.
+    """
+    deprecated_location: str = '/usr/lib/sysctl.d'
+    deprecated_confs: List[str] = glob(f'{deprecated_location}/90-ceph-{fsid}-*.conf')
+    if not deprecated_confs:
+        return
+
+    file_count: int = len(deprecated_confs)
+    logger.info(f'Found sysctl {file_count} files in deprecated location {deprecated_location}. Starting Migration.')
+    for conf in deprecated_confs:
+        try:
+            shutil.move(conf, ctx.sysctl_dir)
+            file_count -= 1
+        except shutil.Error as err:
+            if str(err).endswith('already exists'):
+                logger.warning(f'Destination file already exists. Deleting {conf}.')
+                try:
+                    os.unlink(conf)
+                    file_count -= 1
+                except OSError as del_err:
+                    logger.warning(f'Could not remove {conf}: {del_err}.')
+            else:
+                logger.warning(f'Could not move {conf} from {deprecated_location} to {ctx.sysctl_dir}: {err}')
+
+    # Log successful migration
+    if file_count == 0:
+        logger.info(f'Successfully migrated sysctl config to {ctx.sysctl_dir}.')
+        return
+
+    # Log partially successful / unsuccessful migration
+    files_processed: int = len(deprecated_confs)
+    if file_count < files_processed:
+        status: str = f'partially successful (failed {file_count}/{files_processed})'
+    elif file_count == files_processed:
+        status = 'unsuccessful'
+    logger.warning(f'Migration of sysctl configuration {status}. You may want to perform a migration manually.')
+
+
 def install_base_units(ctx, fsid):
     # type: (CephadmContext, str) -> None
     """
@@ -5458,6 +5499,9 @@ def command_deploy(ctx):
     else:
         logger.info('%s daemon %s ...' % ('Deploy', ctx.name))
 
+    # Migrate sysctl conf files from /usr/lib to /etc
+    migrate_sysctl_dir(ctx, ctx.fsid)
+
     # Get and check ports explicitly required to be opened
     daemon_ports = []  # type: List[int]
 
@@ -6736,9 +6780,11 @@ def command_rm_cluster(ctx):
                 os.remove(fname)
 
     # rm sysctl settings
-    sysctl_dir = Path(ctx.sysctl_dir)
-    for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
-        p.unlink()
+    sysctl_dirs: List[Path] = [Path(ctx.sysctl_dir), Path('/usr/lib/sysctl.d')]
+
+    for sysctl_dir in sysctl_dirs:
+        for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
+            p.unlink()
 
     # cleanup remaining ceph directories
     ceph_dirs = [f'/run/ceph/{ctx.fsid}', f'/tmp/var/lib/ceph/{ctx.fsid}', f'/var/run/ceph/{ctx.fsid}']
