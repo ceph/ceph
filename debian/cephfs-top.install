@@ -1,2 +1,3 @@
+#! /usr/bin/dh-exec
 usr/bin/cephfs-top
-usr/lib/python3*/dist-packages/cephfs_top-*.egg-info
+usr/lib/python3*/site-packages/cephfs_top-*.egg-info /usr/lib/python3/dist-packages/
