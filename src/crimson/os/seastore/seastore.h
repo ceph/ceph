@@ -339,6 +339,10 @@ private:
     uint64_t offset, size_t len,
     ceph::bufferlist &&bl,
     uint32_t fadvise_flags);
+  tm_ret _zero(
+    internal_context_t &ctx,
+    OnodeRef &onode,
+    objaddr_t offset, extent_len_t len);
   tm_ret _omap_set_values(
     internal_context_t &ctx,
     OnodeRef &onode,
