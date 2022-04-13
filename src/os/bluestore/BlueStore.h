@@ -2460,7 +2460,8 @@ private:
         return (2 > onode_num) ? 2 : onode_num;
       }
       double get_bytes_per_onode() const {
-        return (double)_get_used_bytes() / (double)_get_num_onodes();
+        return std::max((double)_get_used_bytes(), 1.0) /
+	  (double)_get_num_onodes();
       }
     };
     std::shared_ptr<MetaCache> meta_cache;
