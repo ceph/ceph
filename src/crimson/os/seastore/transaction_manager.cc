@@ -6,7 +6,6 @@
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/journal.h"
 
 /*
@@ -23,20 +22,17 @@ SET_SUBSYS(seastore_tm);
 namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(
-  SegmentManager &_segment_manager,
   SegmentCleanerRef _segment_cleaner,
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
-  ExtentPlacementManagerRef&& epm,
-  ExtentReader& scanner)
-  : segment_manager(_segment_manager),
-    segment_cleaner(std::move(_segment_cleaner)),
+  ExtentPlacementManagerRef &&epm)
+  : segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
-    scanner(scanner)
+    sm_group(*segment_cleaner->get_segment_manager_group())
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -47,8 +43,6 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
   return segment_cleaner->mount(
-    segment_manager.get_device_id(),
-    scanner.get_segment_managers()
   ).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this](auto addr) {
@@ -88,8 +82,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   INFO("enter");
   cache->init();
   return segment_cleaner->mount(
-    segment_manager.get_device_id(),
-    scanner.get_segment_managers()
   ).safe_then([this] {
     return journal->replay(
       [this](const auto &offsets, const auto &e, auto last_modified) {
@@ -161,10 +153,10 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
     cache->dump_contents();
     return journal->close();
   }).safe_then([this] {
-    scanner.reset();
     return epm->close();
-  }).safe_then([FNAME] {
+  }).safe_then([FNAME, this] {
     INFO("completed");
+    sm_group.reset();
     return seastar::now();
   });
 }
@@ -342,16 +334,7 @@ TransactionManager::submit_transaction_direct(
       lba_manager->complete_transaction(tref);
       segment_cleaner->update_journal_tail_target(
 	cache->get_oldest_dirty_from().value_or(start_seq));
-      auto to_release = tref.get_segment_to_release();
-      if (to_release != NULL_SEG_ID) {
-        SUBDEBUGT(seastore_t, "releasing segment {}", tref, to_release);
-	return segment_manager.release(to_release
-	).safe_then([this, to_release] {
-	  segment_cleaner->mark_segment_released(to_release);
-	});
-      } else {
-	return SegmentManager::release_ertr::now();
-      }
+      return segment_cleaner->maybe_release_segment(tref);
     }).safe_then([FNAME, &tref] {
       SUBTRACET(seastore_t, "completed", tref);
       return tref.get_handle().complete();
@@ -555,29 +538,27 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 
 TransactionManager::~TransactionManager() {}
 
-TransactionManagerRef make_transaction_manager(
-    SegmentManager& sm,
-    bool detailed)
+TransactionManagerRef make_transaction_manager(bool detailed)
 {
-  auto scanner = std::make_unique<ExtentReader>();
-  auto& scanner_ref = *scanner.get();
+  auto sms = std::make_unique<SegmentManagerGroup>();
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
     SegmentCleaner::config_t::get_default(),
-    std::move(scanner),
+    std::move(sms),
     detailed);
-  auto journal = journal::make_segmented(sm, scanner_ref, *segment_cleaner);
+  auto journal = journal::make_segmented(*segment_cleaner);
   auto epm = std::make_unique<ExtentPlacementManager>();
-  auto cache = std::make_unique<Cache>(scanner_ref, *epm);
-  auto lba_manager = lba_manager::create_lba_manager(sm, *cache);
+  epm->init_ool_writers(
+      *segment_cleaner,
+      segment_cleaner->get_ool_segment_seq_allocator());
+  auto cache = std::make_unique<Cache>(*epm);
+  auto lba_manager = lba_manager::create_lba_manager(*cache);
 
   return std::make_unique<TransactionManager>(
-    sm,
     std::move(segment_cleaner),
     std::move(journal),
     std::move(cache),
     std::move(lba_manager),
-    std::move(epm),
-    scanner_ref);
+    std::move(epm));
 }
 
 }

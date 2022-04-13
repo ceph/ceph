@@ -84,7 +84,7 @@ struct fltree_onode_manager_test_t
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
     return TMTestState::_mkfs(
     ).safe_then([this] {
-      tm->add_segment_manager(segment_manager.get());
+      tm->add_device(segment_manager.get(), true);
       return tm->mount(
       ).safe_then([this] {
 	return repeat_eagain([this] {

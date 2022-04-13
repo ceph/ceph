@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab expandtab
 
-#include "crimson/os/seastore/extent_reader.h"
+#include "crimson/os/seastore/segment_manager_group.h"
 
 #include "crimson/os/seastore/logging.h"
 
@@ -9,23 +9,23 @@ SET_SUBSYS(seastore_journal);
 
 namespace crimson::os::seastore {
 
-ExtentReader::read_segment_tail_ret
-ExtentReader::read_segment_tail(segment_id_t segment)
+SegmentManagerGroup::read_segment_tail_ret
+SegmentManagerGroup::read_segment_tail(segment_id_t segment)
 {
+  assert(has_device(segment.device_id()));
   auto& segment_manager = *segment_managers[segment.device_id()];
   return segment_manager.read(
     paddr_t::make_seg_paddr(
       segment,
-      segment_manager.get_segment_size() -
-        segment_manager.get_rounded_tail_length()),
-    segment_manager.get_rounded_tail_length()
+      segment_manager.get_segment_size() - get_rounded_tail_length()),
+    get_rounded_tail_length()
   ).handle_error(
     read_segment_header_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error in ExtentReader::read_segment_tail"
+      "Invalid error in SegmentManagerGroup::read_segment_tail"
     }
   ).safe_then([=, &segment_manager](bufferptr bptr) -> read_segment_tail_ret {
-    LOG_PREFIX(ExtentReader::read_segment_tail);
+    LOG_PREFIX(SegmentManagerGroup::read_segment_tail);
     DEBUG("segment {} bptr size {}", segment, bptr.length());
 
     segment_tail_t tail;
@@ -51,20 +51,21 @@ ExtentReader::read_segment_tail(segment_id_t segment)
   });
 }
 
-ExtentReader::read_segment_header_ret
-ExtentReader::read_segment_header(segment_id_t segment)
+SegmentManagerGroup::read_segment_header_ret
+SegmentManagerGroup::read_segment_header(segment_id_t segment)
 {
+  assert(has_device(segment.device_id()));
   auto& segment_manager = *segment_managers[segment.device_id()];
   return segment_manager.read(
     paddr_t::make_seg_paddr(segment, 0),
-    segment_manager.get_block_size()
+    get_rounded_header_length()
   ).handle_error(
     read_segment_header_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error in ExtentReader::read_segment_header"
+      "Invalid error in SegmentManagerGroup::read_segment_header"
     }
   ).safe_then([=, &segment_manager](bufferptr bptr) -> read_segment_header_ret {
-    LOG_PREFIX(ExtentReader::read_segment_header);
+    LOG_PREFIX(SegmentManagerGroup::read_segment_header);
     DEBUG("segment {} bptr size {}", segment, bptr.length());
 
     segment_header_t header;
@@ -90,7 +91,8 @@ ExtentReader::read_segment_header(segment_id_t segment)
   });
 }
 
-ExtentReader::scan_extents_ret ExtentReader::scan_extents(
+SegmentManagerGroup::scan_extents_ret
+SegmentManagerGroup::scan_extents(
   scan_extents_cursor &cursor,
   extent_len_t bytes_to_read)
 {
@@ -100,7 +102,7 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
   ).handle_error(
     scan_extents_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error in ExtentReader::scan_extents"
+      "Invalid error in SegmentManagerGroup::scan_extents"
     }
   ).safe_then([bytes_to_read, extents, &cursor, this](auto segment_header) {
     auto segment_nonce = segment_header.segment_nonce;
@@ -110,7 +112,7 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
         const record_group_header_t& header,
         const bufferlist& mdbuf) mutable -> scan_valid_records_ertr::future<>
       {
-        LOG_PREFIX(ExtentReader::scan_extents);
+        LOG_PREFIX(SegmentManagerGroup::scan_extents);
         DEBUG("decoding {} records", header.records);
         auto maybe_record_extent_infos = try_decode_extent_infos(header, mdbuf);
         if (!maybe_record_extent_infos) {
@@ -151,13 +153,15 @@ ExtentReader::scan_extents_ret ExtentReader::scan_extents(
   });
 }
 
-ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
+SegmentManagerGroup::scan_valid_records_ret
+SegmentManagerGroup::scan_valid_records(
   scan_valid_records_cursor &cursor,
   segment_nonce_t nonce,
   size_t budget,
   found_record_handler_t &handler)
 {
-  LOG_PREFIX(ExtentReader::scan_valid_records);
+  LOG_PREFIX(SegmentManagerGroup::scan_valid_records);
+  assert(has_device(cursor.get_segment_id().device_id()));
   auto& segment_manager =
     *segment_managers[cursor.get_segment_id().device_id()];
   if (cursor.get_segment_offset() == 0) {
@@ -251,13 +255,14 @@ ExtentReader::scan_valid_records_ret ExtentReader::scan_valid_records(
     });
 }
 
-ExtentReader::read_validate_record_metadata_ret
-ExtentReader::read_validate_record_metadata(
+SegmentManagerGroup::read_validate_record_metadata_ret
+SegmentManagerGroup::read_validate_record_metadata(
   paddr_t start,
   segment_nonce_t nonce)
 {
-  LOG_PREFIX(ExtentReader::read_validate_record_metadata);
+  LOG_PREFIX(SegmentManagerGroup::read_validate_record_metadata);
   auto& seg_addr = start.as_seg_paddr();
+  assert(has_device(seg_addr.get_segment_id().device_id()));
   auto& segment_manager = *segment_managers[seg_addr.get_segment_id().device_id()];
   auto block_size = segment_manager.get_block_size();
   auto segment_size = static_cast<int64_t>(segment_manager.get_segment_size());
@@ -327,12 +332,13 @@ ExtentReader::read_validate_record_metadata(
   });
 }
 
-ExtentReader::read_validate_data_ret
-ExtentReader::read_validate_data(
+SegmentManagerGroup::read_validate_data_ret
+SegmentManagerGroup::read_validate_data(
   paddr_t record_base,
   const record_group_header_t &header)
 {
-  LOG_PREFIX(ExtentReader::read_validate_data);
+  LOG_PREFIX(SegmentManagerGroup::read_validate_data);
+  assert(has_device(record_base.get_device_id()));
   auto& segment_manager = *segment_managers[record_base.get_device_id()];
   auto data_addr = record_base.add_offset(header.mdlength);
   TRACE("reading record group data blocks {}~{}", data_addr, header.dlength);
@@ -346,13 +352,13 @@ ExtentReader::read_validate_data(
   });
 }
 
-ExtentReader::consume_record_group_ertr::future<>
-ExtentReader::consume_next_records(
+SegmentManagerGroup::consume_record_group_ertr::future<>
+SegmentManagerGroup::consume_next_records(
   scan_valid_records_cursor& cursor,
   found_record_handler_t& handler,
   std::size_t& budget_used)
 {
-  LOG_PREFIX(ExtentReader::consume_next_records);
+  LOG_PREFIX(SegmentManagerGroup::consume_next_records);
   auto& next = cursor.pending_record_groups.front();
   auto total_length = next.header.dlength + next.header.mdlength;
   budget_used += total_length;
@@ -377,6 +383,51 @@ ExtentReader::consume_next_records(
     if (cursor.is_complete()) {
       INFO("complete at {}, no more record group", cursor);
     }
+  });
+}
+
+SegmentManagerGroup::find_journal_segment_headers_ret
+SegmentManagerGroup::find_journal_segment_headers()
+{
+  return seastar::do_with(
+    get_segment_managers(),
+    find_journal_segment_headers_ret_bare{},
+    [this](auto &sms, auto& ret) -> find_journal_segment_headers_ret
+  {
+    return crimson::do_for_each(sms,
+      [this, &ret](SegmentManager *sm)
+    {
+      LOG_PREFIX(SegmentManagerGroup::find_journal_segment_headers);
+      auto device_id = sm->get_device_id();
+      auto num_segments = sm->get_num_segments();
+      INFO("processing {} with {} segments",
+           device_id_printer_t{device_id}, num_segments);
+      return crimson::do_for_each(
+        boost::counting_iterator<device_segment_id_t>(0),
+        boost::counting_iterator<device_segment_id_t>(num_segments),
+        [this, &ret, device_id](device_segment_id_t d_segment_id)
+      {
+        segment_id_t segment_id{device_id, d_segment_id};
+        return read_segment_header(segment_id
+        ).safe_then([segment_id, &ret](auto &&header) {
+          if (header.get_type() == segment_type_t::JOURNAL) {
+            ret.emplace_back(std::make_pair(segment_id, std::move(header)));
+          }
+        }).handle_error(
+          crimson::ct_error::enoent::handle([](auto) {
+            return find_journal_segment_headers_ertr::now();
+          }),
+          crimson::ct_error::enodata::handle([](auto) {
+            return find_journal_segment_headers_ertr::now();
+          }),
+          crimson::ct_error::input_output_error::pass_further{}
+        );
+      });
+    }).safe_then([&ret]() mutable {
+      return find_journal_segment_headers_ret{
+        find_journal_segment_headers_ertr::ready_future_marker{},
+        std::move(ret)};
+    });
   });
 }
 
