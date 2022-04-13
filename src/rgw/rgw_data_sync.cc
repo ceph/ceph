@@ -5385,7 +5385,7 @@ RGWCoroutine *RGWRemoteBucketManager::run_sync_cr(int num)
                               sync_env->sync_tracer->root_node, nullptr);
 }
 
-int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
+int RGWBucketPipeSyncStatusManager::do_init(const DoutPrefixProvider *dpp)
 {
   int ret = http_manager.start();
   if (ret < 0) {
@@ -5440,9 +5440,31 @@ int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
 			     pipe.source.get_bucket_info(),
 			     num_shards,
 			     pipe.target.get_bucket());
+    sources.emplace_back(&sync_env, szone, conn,
+			 pipe.source.get_bucket_info(),
+			 pipe.target.get_bucket(),
+			 pipe.handler);
   }
 
   return 0;
+}
+
+tl::expected<std::unique_ptr<RGWBucketPipeSyncStatusManager>, int>
+RGWBucketPipeSyncStatusManager::construct(
+  const DoutPrefixProvider* dpp,
+  rgw::sal::RadosStore* store,
+  std::optional<rgw_zone_id> source_zone,
+  std::optional<rgw_bucket> source_bucket,
+  const rgw_bucket& dest_bucket)
+{
+  std::unique_ptr<RGWBucketPipeSyncStatusManager> self{
+    new RGWBucketPipeSyncStatusManager(store, source_zone, source_bucket,
+				       dest_bucket)};
+  auto r = self->do_init(dpp);
+  if (r < 0) {
+    return tl::unexpected(r);
+  }
+  return self;
 }
 
 int RGWBucketPipeSyncStatusManager::init_sync_status(const DoutPrefixProvider *dpp)
