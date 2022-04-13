@@ -75,6 +75,18 @@ seastar::future<> BackgroundRecovery::start()
   });
 }
 
+UrgentRecovery::UrgentRecovery(
+    const hobject_t& soid,
+    const eversion_t& need,
+    Ref<PG> pg,
+    ShardServices& ss,
+    epoch_t epoch_started)
+  : BackgroundRecovery{pg, ss, epoch_started,
+                       crimson::osd::scheduler::scheduler_class_t::immediate},
+    soid{soid}, need(need)
+{
+}
+
 UrgentRecovery::interruptible_future<bool>
 UrgentRecovery::do_recovery()
 {
