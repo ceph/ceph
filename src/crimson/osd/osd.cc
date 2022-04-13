@@ -1436,6 +1436,12 @@ blocking_future<Ref<PG>> OSD::wait_for_pg(
   return pg_map.wait_for_pg(pgid).first;
 }
 
+seastar::future<Ref<PG>> OSD::wait_for_pg(
+  PGMap::PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
+{
+  return pg_map.wait_for_pg(std::move(trigger), pgid).first;
+}
+
 Ref<PG> OSD::get_pg(spg_t pgid)
 {
   return pg_map.get_pg(pgid);
