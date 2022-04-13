@@ -339,7 +339,7 @@ still write a new object to a ``degraded`` placement group if it is ``active``.
 If an OSD is ``down`` and the ``degraded`` condition persists, Ceph may mark the
 ``down`` OSD as ``out`` of the cluster and remap the data from the ``down`` OSD
 to another OSD. The time between being marked ``down`` and being marked ``out``
-is controlled by ``mon osd down out interval``, which is set to ``600`` seconds
+is controlled by ``mon_osd_down_out_interval``, which is set to ``600`` seconds
 by default.
 
 A placement group can also be ``degraded``, because Ceph cannot find one or more
@@ -366,13 +366,13 @@ the fault is resolved.
 
 Ceph provides a number of settings to balance the resource contention between
 new service requests and the need to recover data objects and restore the
-placement groups to the current state. The ``osd recovery delay start`` setting
+placement groups to the current state. The ``osd_recovery_delay_start`` setting
 allows an OSD to restart, re-peer and even process some replay requests before
-starting the recovery process.  The ``osd
-recovery thread timeout`` sets a thread timeout, because multiple OSDs may fail,
-restart and re-peer at staggered rates. The ``osd recovery max active`` setting
+starting the recovery process.  The ``osd_recovery_thread_timeout``
+sets a thread timeout, because multiple OSDs may fail,
+restart and re-peer at staggered rates. The ``osd_recovery_max_active`` setting
 limits the  number of recovery requests an OSD will entertain simultaneously to
-prevent the OSD from failing to serve . The ``osd recovery max chunk`` setting
+prevent the OSD from failing to serve . The ``osd_recovery_max_chunk`` setting
 limits the size of the recovered data chunks to prevent network congestion.
 
 
@@ -401,12 +401,12 @@ backfill can proceed.
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
 ``osd_max_backfills`` sets the maximum number of concurrent backfills to and from
-an OSD to 1. The ``backfill full ratio`` enables an OSD to refuse a
+an OSD to 1. The ``backfill_full_ratio`` enables an OSD to refuse a
 backfill request if the OSD is approaching its full ratio (90%, by default) and
 change with ``ceph osd set-backfillfull-ratio`` command.
-If an OSD refuses a backfill request, the ``osd backfill retry interval``
+If an OSD refuses a backfill request, the ``osd_backfill_retry_interval``
 enables an OSD to retry the request (after 30 seconds, by default). OSDs can
-also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan
+also set ``osd_backfill_scan_min`` and ``osd_backfill_scan_max`` to manage scan
 intervals (64 and 512, by default).
 
 
@@ -453,7 +453,7 @@ include:
   are waiting for an OSD with the most up-to-date data to come back ``up``.
 - **Stale**: Placement groups are in an unknown state, because the OSDs that 
   host them have not reported to the monitor cluster in a while (configured 
-  by ``mon osd report timeout``).
+  by ``mon_osd_report_timeout``).
 
 To identify stuck placement groups, execute the following:: 
 
