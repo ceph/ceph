@@ -26,8 +26,8 @@ const fillAuth = () => {
 };
 
 Cypress.Commands.add('login', () => {
-  const username = Cypress.env('LOGIN_USER') || 'admin';
-  const password = Cypress.env('LOGIN_PWD') || 'admin';
+  const username = Cypress.env('LOGIN_USER');
+  const password = Cypress.env('LOGIN_PWD');
 
   if (auth === undefined) {
     cy.request({
