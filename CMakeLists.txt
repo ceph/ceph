@@ -20,6 +20,12 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
+if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  set(default_build_type "Debug")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+endif()
+
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
   FIND_PACKAGE(Threads)
