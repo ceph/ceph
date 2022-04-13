@@ -37,6 +37,20 @@ std::pair<blocking_future<Ref<PG>>, bool> PGMap::wait_for_pg(spg_t pgid)
   }
 }
 
+std::pair<seastar::future<Ref<PG>>, bool>
+PGMap::wait_for_pg(PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
+{
+  if (auto pg = get_pg(pgid)) {
+    return make_pair(seastar::make_ready_future<Ref<PG>>(pg), true);
+  } else {
+    auto &state = pgs_creating.emplace(pgid, pgid).first->second;
+    return make_pair(
+      // TODO: add to blocker Trigger-taking make_blocking_future
+      trigger.maybe_record_blocking(state.promise.get_shared_future(), state),
+      state.creating);
+  }
+}
+
 Ref<PG> PGMap::get_pg(spg_t pgid)
 {
   if (auto pg = pgs.find(pgid); pg != pgs.end()) {
