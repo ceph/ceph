@@ -5470,15 +5470,20 @@ RGWBucketPipeSyncStatusManager::construct(
 int RGWBucketPipeSyncStatusManager::init_sync_status(const DoutPrefixProvider *dpp)
 {
   list<RGWCoroutinesStack *> stacks;
-  // pass an empty objv tracker to each so that the version gets incremented
-  std::list<RGWObjVersionTracker> objvs;
-  std::list<rgw_bucket_index_marker_info> infos;
+  std::vector<rgw_raw_obj> full_status_objs;
+  std::vector<rgw_bucket_sync_status> full_status;
 
-  for (auto& mgr : source_mgrs) {
+  for (auto& source : sources) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
-    objvs.emplace_back();
-    infos.emplace_back();
-    stack->call(mgr.init_sync_status_cr(objvs.back(), infos.back()));
+    full_status_objs.emplace_back(
+      sync_env.svc->zone->get_zone_params().log_pool,
+      full_status_oid(source.sc.source_zone, source.info.bucket, source.dest));
+
+    full_status.emplace_back();
+
+    stack->call(new RGWSimpleRadosWriteCR<rgw_bucket_sync_status>(
+		  dpp, source.sc.env->async_rados, source.sc.env->svc->sysobj,
+		  full_status_objs.back(), full_status.back()));
 
     stacks.push_back(stack);
   }
