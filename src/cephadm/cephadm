@@ -7884,6 +7884,17 @@ class HostFacts():
                 continue
             for iface in os.listdir(nic_path):
 
+                if os.path.exists(os.path.join(nic_path, iface, 'bridge')):
+                    nic_type = 'bridge'
+                elif os.path.exists(os.path.join(nic_path, iface, 'bonding')):
+                    nic_type = 'bonding'
+                else:
+                    logger.info(os.path.join(nic_path, iface, 'type'))
+                    nic_type = hw_lookup.get(read_file([os.path.join(nic_path, iface, 'type')]), 'Unknown')
+
+                if nic_type == 'loopback':  # skip loopback devices
+                    continue
+
                 lower_devs_list = [os.path.basename(link.replace('lower_', '')) for link in glob(os.path.join(nic_path, iface, 'lower_*'))]
                 upper_devs_list = [os.path.basename(link.replace('upper_', '')) for link in glob(os.path.join(nic_path, iface, 'upper_*'))]
 
@@ -7901,13 +7912,6 @@ class HostFacts():
                     #
                     # Either way, we show a -1 when speed isn't available
                     speed = -1
-
-                if os.path.exists(os.path.join(nic_path, iface, 'bridge')):
-                    nic_type = 'bridge'
-                elif os.path.exists(os.path.join(nic_path, iface, 'bonding')):
-                    nic_type = 'bonding'
-                else:
-                    nic_type = hw_lookup.get(read_file([os.path.join(nic_path, iface, 'type')]), 'Unknown')
 
                 dev_link = os.path.join(nic_path, iface, 'device')
                 if os.path.exists(dev_link):
