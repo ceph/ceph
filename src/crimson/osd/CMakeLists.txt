@@ -28,6 +28,7 @@ add_executable(crimson-osd
   scheduler/scheduler.cc
   scheduler/mclock_scheduler.cc
   osdmap_gate.cc
+  pg_activation_blocker.cc
   pg_map.cc
   pg_interval_interrupt_condition.cc
   objclass.cc

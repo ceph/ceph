@@ -31,6 +31,7 @@
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
+#include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/recovery_backend.h"
@@ -721,23 +722,7 @@ private:
   // continuations here.
   bool stopping = false;
 
-  class WaitForActiveBlocker : public BlockerT<WaitForActiveBlocker> {
-    PG *pg;
-
-    const spg_t pgid;
-    seastar::shared_promise<> p;
-
-  protected:
-    void dump_detail(Formatter *f) const;
-
-  public:
-    static constexpr const char *type_name = "WaitForActiveBlocker";
-
-    WaitForActiveBlocker(PG *pg) : pg(pg) {}
-    void on_active();
-    blocking_future<> wait();
-    seastar::future<> stop();
-  } wait_for_active_blocker;
+  PGActivationBlocker wait_for_active_blocker;
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
   friend class ClientRequest;
