@@ -1,5 +1,140 @@
 # object_format.py provides types and functions for working with
 # requested output formats such as JSON, YAML, etc.
+"""tools for writing formatting-friendly mgr module functions
+
+Currently, the ceph mgr code in python is most commonly written by adding mgr
+modules and corresponding classes and then adding methods to those classes that
+are decorated using `@CLICommand` from  `mgr_module.py`.  These methods (that
+will be called endpoints subsequently) then implement the logic that is
+executed when the mgr receives a command from a client.  These endpoints are
+currently responsible for forming a response tuple of (int, str, str) where the
+int represents a return value (error code) and the first string the "body" of
+the response. The mgr supports a generic `format` parameter (`--format` on the
+ceph cli) that each endpoint must then explicitly handle. At the time of this
+writing, many endpoints do not handle alternate formats and are each
+implementing formatting/serialization of values in various different ways.
+
+The `object_format` module aims to make the process of writing endpoint
+functions easier, more consistent, and (hopefully) better documented.  At the
+highest level, the module provides a new decorator `Responder` that must be
+placed below the `CLICommand` decorator (so that it decorates the endpoint
+before `CLICommand`). This decorator helps automatically convert Python objects
+to response tuples expected by the manager, while handling the `format`
+parameter automatically.
+
+In addition to the decorator the module provides a few other types and methods
+that intended to interoperate with the decorator and make small customizations
+and error handling easier.
+
+== Using Responder ==
+
+The simple and intended way to use the decorator is as follows:
+    @CLICommand("command name", perm="r")
+    Responder()
+    def create_something(self, name: str) -> Dict[str, str]:
+        ...  # implementation
+        return {"name": name, "id": new_id}
+
+In this case the `create_something` method return a python dict,
+and does not return a response tuple directly. Instead, the
+dict is converted to either JSON or YAML depending on what the
+client requested. Assuming no exception is raised by the
+implementation then the response code is always zero (success).
+
+The object_format module provides an exception type `ErrorResponse`
+that assists in returning "clean" error conditions to the client.
+Extending the previous example to use this exception:
+    @CLICommand("command name", perm="r")
+    Responder()
+    def create_something(self, name: str) -> Dict[str, str]:
+        try:
+           ...  # implementation
+           return {"name": name, "id": new_id}
+        except KeyError as kerr:
+           # explicitly set the return value to ENOENT for KeyError
+           raise ErrorResponse.wrap(kerr, return_value=-errno.ENOENT)
+        except (BusinessLogcError, OSError) as err:
+           # return value is based on err when possible
+           raise ErrorResponse.wrap(err)
+
+Most uses of ErrorResponse are expected to use the `wrap` classmethod,
+as it will aid in the handling of an existing exception but `ErrorResponse`
+can be used directly too.
+
+== Customizing Response Formatting ==
+
+The `Responder` is built using two additional mid-layer types. The
+`ObjectFormatAdapter` and the `ReturnValueAdapter` by default. These types
+implement the `CommonFormatter` protocol and `ReturnValueProvider` protocols
+respectively. Most cases will not need to customize the `ReturnValueAdapter` as
+returning zero on success is expected.  However, if there's a need to return a
+non-zero error code outside of an exception, you can add the `mgr_return_value`
+function to the returned type of the endpoint function - causing it to meet the
+`ReturnValueProvider` protocol. Whatever integer that function returns will
+then be used in the response tuple.
+
+The `ObjectFormatAdapter` can operate in two modes. By default, any type
+returned from the endpoint function will be checked for a `to_simplified`
+method (the type matches the SimpleDataProvider` protocol) and if it exists
+the method will be called and the result serialized. Example:
+    class CoolStuff:
+       def __init__(self, temperature: int, quantity: int) -> None:
+           self.temperature = temperature
+           self.quantity = quantity
+      def to_simplified(self) -> Dict[str, int]:
+         return {"temp": self.temperature, "qty": self.quantity}
+
+    @CLICommand("command name", perm="r")
+    Responder()
+    def create_something_cool(self) -> CoolStuff:
+       cool_stuff: CoolStuff = self._make_cool_stuff()  # implementation
+       return cool_stuff
+
+In order to serialize the result, the object returned from the wrapped
+function must provide the `to_simplified` method (or the compatibility methods,
+see below) or already be a "simplified type". Valid types include lists and
+dicts that contain other lists and dicts and ints, strs, bools -- basic objects
+that can be directly converted to json (via json.dumps) without any additional
+conversions. The `to_simplified` method must always return such types.
+
+To be compatible with many existing types in the ceph mgr codebase one can pass
+`compatible=True` to the `ObjectFormatAdapter`. If the type provides a
+`to_json` and/or `to_yaml` method that returns basic python types (dict, list,
+str, etc...) but *not* already serialized JSON or YAML this flag can be
+enabled. Note that Responder takes as an argument any callable that returns a
+`CommonFormatter`. In this example below we enable the flag using
+`functools.partial`:
+    class MyExistingClass:
+      def to_json(self) -> Dict[str, Any]:
+         return {"name": self.name, "height": self.height}
+
+    @CLICommand("command name", perm="r")
+    Responder(functools.partial(ObjectFormatAdapter, compatible=True))
+    def create_an_item(self) -> MyExistingClass:
+       item: MyExistingClass = self._new_item()  # implementation
+       return item
+
+
+For cases that need to return xml or plain text formatted responses one can
+create a new class that matches the `CommonFormatter` protocol (provides a
+valid_formats method) and one or more `format_x` method where x is the name of
+a format ("json", "yaml", "xml", "plain", etc...).
+    class MyCustomFormatAdapter:
+       def __init__(self, obj_to_format: Any) -> None:
+           ...
+       def valid_formats(self) -> Iterable[str]:
+           ...
+       def format_json(self) -> str:
+           ...
+       def format_xml(self) -> str:
+           ...
+
+
+Of course, the Responder itself can be used as a base class and aspects of the
+Responder altered for specific use cases. Inheriting from `Responder` and
+customizing it is an exercise left for those brave enough to read the code in
+`object_format.py` :-).
+"""
 
 import enum
 import errno
