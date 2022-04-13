@@ -39,8 +39,8 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
   auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
+    *cursor = offset + size;
     if (offset + size <= rs->end) {
-      *cursor = offset + size;
       return offset;
     }
     if (max_search_count > 0 && ++search_count > max_search_count) {
@@ -51,6 +51,7 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
       return -1ULL;
     }
   }
+
   if (*cursor == 0) {
     // If we already started from beginning, don't bother with searching from beginning
     return -1ULL;
@@ -58,8 +59,8 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
   // If we reached end, start from beginning till cursor.
   for (auto rs = range_tree.begin(); rs != rs_start; ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
+    *cursor = offset + size;
     if (offset + size <= rs->end) {
-      *cursor = offset + size;
       return offset;
     }
     if (max_search_count > 0 && ++search_count > max_search_count) {
