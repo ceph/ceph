@@ -1,7 +1,7 @@
 What is a mempool?
 ------------------
 A memory pool is a method for accounting the consumption of memory of
-a set of containers.
+Memory pools (mempools) show the details of memory consumption of C++ classes and containers, which can then be used to assess memory leaks, and other insights around memory usage with low overhead.
 Each memory pool tracks the number of bytes and items it contains.
 Memory pools are statically declared and serves the purpose of identifying
 memory related checks in BlueStore.
