@@ -23,6 +23,24 @@ public:
   static constexpr OperationTypeCode type =
     OperationTypeCode::compound_peering_request;
 
+  struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
+    static constexpr const char * type_name = "CompoundOpBlocker";
+
+    std::vector<crimson::OperationRef> subops;
+    SubOpBlocker(std::vector<crimson::OperationRef> &&subops)
+      : subops(subops) {}
+
+    virtual void dump_detail(Formatter *f) const {
+      f->open_array_section("dependent_operations");
+      {
+        for (auto &i : subops) {
+          i->dump_brief(f);
+        }
+      }
+      f->close_section();
+    }
+  };
+
 private:
   OSD &osd;
   crimson::net::ConnectionRef conn;
