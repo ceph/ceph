@@ -21,7 +21,6 @@ struct ephemeral_config_t {
   size_t block_size = 0;
   size_t segment_size = 0;
   magic_t magic = 0;
-  device_type_t dtype = device_type_t::NONE;
   device_id_t id = 0;
 };
 
@@ -30,7 +29,6 @@ constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
   4 << 10,
   8 << 20,
   0xabcd,
-  device_type_t::SEGMENTED,
   0
 };
 
@@ -99,7 +97,7 @@ public:
     return mount_ertr::now();
   }
 
-  mkfs_ret mkfs(segment_manager_config_t) {
+  mkfs_ret mkfs(device_config_t) {
     return mkfs_ertr::now();
   }
 
@@ -129,10 +127,6 @@ public:
 
   secondary_device_set_t& get_secondary_devices() final {
     return sec_device_set;
-  }
-
-  device_spec_t get_device_spec() const final {
-    return {config.magic, config.dtype, config.id};
   }
 
   magic_t get_magic() const final {

@@ -196,7 +196,7 @@ SegmentStateTracker::read_in(
 static
 block_sm_superblock_t make_superblock(
   device_id_t device_id,
-  segment_manager_config_t sm_config,
+  device_config_t sm_config,
   const seastar::stat_data &data)
 {
   LOG_PREFIX(block_make_superblock);
@@ -517,7 +517,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
 }
 
 BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
-  segment_manager_config_t sm_config)
+  device_config_t sm_config)
 {
   LOG_PREFIX(BlockSegmentManager::mkfs);
   set_device_id(sm_config.device_id);

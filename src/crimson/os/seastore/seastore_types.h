@@ -62,8 +62,10 @@ constexpr uint16_t DEVICE_ID_LEN_BITS = 8;
 // segment ids without a device id encapsulated
 using device_segment_id_t = uint32_t;
 
-constexpr device_id_t DEVICE_ID_MAX = 
-  (std::numeric_limits<device_id_t>::max() >>
+constexpr device_id_t DEVICE_ID_GLOBAL_MAX =
+  std::numeric_limits<device_id_t>::max();
+constexpr device_id_t DEVICE_ID_MAX = // the max value regardless of addrs_type_t prefix
+  (DEVICE_ID_GLOBAL_MAX >>
    (std::numeric_limits<device_id_t>::digits - DEVICE_ID_LEN_BITS + 1));
 constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX;
 constexpr device_id_t DEVICE_ID_RECORD_RELATIVE = DEVICE_ID_MAX - 1;
