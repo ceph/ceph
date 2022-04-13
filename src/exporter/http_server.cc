@@ -83,7 +83,7 @@ private:
     void process_request()
     {
         response_.version(request_.version());
-        response_.keep_alive(false);
+        response_.keep_alive(request_.keep_alive());
 
         switch(request_.method())
         {
