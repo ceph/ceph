@@ -6,14 +6,8 @@ import mock
 import os
 import pytest
 import socket
-import sys
-import time
-import threading
 import unittest
-
 from textwrap import dedent
-
-from typing import List, Optional
 
 from .fixtures import (
     cephadm_fs,
@@ -107,7 +101,7 @@ class TestCephAdm(object):
             ('::', socket.AF_INET6),
         ):
             try:
-                cd.check_ip_port(ctx, address, 9100)
+                cd.check_ip_port(ctx, cd.EndPoint(address, 9100))
             except:
                 assert False
             else:
@@ -138,7 +132,7 @@ class TestCephAdm(object):
                 mock_socket_obj.bind.side_effect = side_effect
                 _socket.return_value = mock_socket_obj
                 try:
-                    cd.check_ip_port(ctx, address, 9100)
+                    cd.check_ip_port(ctx, cd.EndPoint(address, 9100))
                 except Exception as e:
                     assert isinstance(e, expected_exception)
                 else:
@@ -1950,6 +1944,8 @@ class TestSNMPGateway:
                 c = cd.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
             assert str(e.value) == 'not a valid snmp version: V1'
 
+class TestNetworkValidation:
+
     def test_ipv4_subnet(self):
         rc, v, msg = cd.check_subnet('192.168.1.0/24')
         assert rc == 0 and v[0] == 4
@@ -1981,3 +1977,40 @@ class TestSNMPGateway:
     def test_subnet_mask_junk(self):
         rc, v, msg = cd.check_subnet('wah')
         assert rc == 1 and msg
+
+    def test_ip_in_subnet(self):
+        # valid ip and only one valid subnet
+        rc = cd.ip_in_subnets('192.168.100.1', '192.168.100.0/24')
+        assert rc is True
+
+        # valid ip and valid subnets list without spaces
+        rc = cd.ip_in_subnets('192.168.100.1', '192.168.100.0/24,10.90.90.0/24')
+        assert rc is True
+
+        # valid ip and valid subnets list with spaces
+        rc = cd.ip_in_subnets('10.90.90.2', '192.168.1.0/24, 192.168.100.0/24, 10.90.90.0/24')
+        assert rc is True
+
+        # valid ip that doesn't belong to any subnet
+        rc = cd.ip_in_subnets('192.168.100.2', '192.168.50.0/24, 10.90.90.0/24')
+        assert rc is False
+
+        # valid ip that doesn't belong to the subnet (only 14 hosts)
+        rc = cd.ip_in_subnets('192.168.100.20', '192.168.100.0/28')
+        assert rc is False
+
+        # valid ip and valid IPV6 network
+        rc = cd.ip_in_subnets('fe80::5054:ff:fef4:873a', 'fe80::/64')
+        assert rc is True
+
+        # valid ip and that doesn't belong to IPV6 network
+        rc = cd.ip_in_subnets('fe80::5054:ff:fef4:873a', '2001:db8:85a3::/64')
+        assert rc is False
+
+        # invalid IPv4 and valid subnets list
+        with pytest.raises(Exception):
+            rc = cd.ip_in_sublets('10.90.200.', '192.168.1.0/24, 192.168.100.0/24, 10.90.90.0/24')
+
+        # invalid IPv6 and valid subnets list
+        with pytest.raises(Exception):
+            rc = cd.ip_in_sublets('fe80:2030:31:24', 'fe80::/64')
