@@ -106,6 +106,19 @@ cached_stdin = None
 ##################################
 
 
+class EndPoint:
+    """EndPoint representing an ip:port format"""
+    def __init__(self, ip: str, port: int) -> None:
+        self.ip = ip
+        self.port = port
+
+    def __str__(self) -> str:
+        return f'{self.ip}:{self.port}'
+
+    def __repr__(self) -> str:
+        return f'{self.ip}:{self.port}'
+
+
 class BaseConfig:
 
     def __init__(self) -> None:
@@ -1287,16 +1300,17 @@ def port_in_use(ctx, port_num):
     ))
 
 
-def check_ip_port(ctx, ip, port):
-    # type: (CephadmContext, str, int) -> None
+def check_ip_port(ctx, ep):
+    # type: (CephadmContext, EndPoint) -> None
     if not ctx.skip_ping_check:
-        logger.info('Verifying IP %s port %d ...' % (ip, port))
-        if is_ipv6(ip):
+        logger.info(f'Verifying IP {ep.ip} port {ep.port} ...')
+        if is_ipv6(ep.ip):
             s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-            ip = unwrap_ipv6(ip)
+            ip = unwrap_ipv6(ep.ip)
         else:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        attempt_bind(ctx, s, ip, port)
+            ip = ep.ip
+        attempt_bind(ctx, s, ip, ep.port)
 
 ##################################
 
@@ -4532,94 +4546,183 @@ def is_ipv6(address):
         return False
 
 
-def prepare_mon_addresses(
-    ctx: CephadmContext
-) -> Tuple[str, bool, Optional[str]]:
+def ip_in_subnets(ip_addr: str, subnets: str) -> bool:
+    """Determine if the ip_addr belongs to any of the subnets list."""
+    subnet_list = [x.strip() for x in subnets.split(',')]
+    for subnet in subnet_list:
+        if ipaddress.ip_address(ip_addr) in ipaddress.ip_network(subnet):
+            return True
+    return False
+
+
+def parse_mon_addrv(addrv_arg: str) -> List[EndPoint]:
+    """Parse mon-addrv param into a list of mon end points."""
     r = re.compile(r':(\d+)$')
-    base_ip = ''
+    addrv_args = []
+    addr_arg = addrv_arg
+    if addr_arg[0] != '[' or addr_arg[-1] != ']':
+        raise Error(f'--mon-addrv value {addr_arg} must use square backets')
+
+    for addr in addr_arg[1: -1].split(','):
+        hasport = r.findall(addr)
+        if not hasport:
+            raise Error(f'--mon-addrv value {addr_arg} must include port number')
+        port_str = hasport[0]
+        addr = re.sub(r'^v\d+:', '', addr)  # strip off v1: or v2: prefix
+        base_ip = addr[0:-(len(port_str)) - 1]
+        addrv_args.append(EndPoint(base_ip, int(port_str)))
+
+    return addrv_args
+
+
+def parse_mon_ip(mon_ip: str) -> List[EndPoint]:
+    """Parse mon-ip param into a list of mon end points."""
+    r = re.compile(r':(\d+)$')
+    addrv_args = []
+    hasport = r.findall(mon_ip)
+    if hasport:
+        port_str = hasport[0]
+        base_ip = mon_ip[0:-(len(port_str)) - 1]
+        addrv_args.append(EndPoint(base_ip, int(port_str)))
+    else:
+        # No port provided: use fixed ports for ceph monitor
+        addrv_args.append(EndPoint(mon_ip, 3300))
+        addrv_args.append(EndPoint(mon_ip, 6789))
+
+    return addrv_args
+
+
+def build_addrv_params(addrv: List[EndPoint]) -> str:
+    """Convert mon end-points (ip:port) into the format: [v[1|2]:ip:port1]"""
+    if len(addrv) > 2:
+        raise Error('Detected a local mon-addrv list with more than 2 entries.')
+    port_to_ver: Dict[int, str] = {6789: 'v1', 3300: 'v2'}
+    addr_arg_list: List[str] = []
+    for ep in addrv:
+        if ep.port in port_to_ver:
+            ver = port_to_ver[ep.port]
+        else:
+            ver = 'v2'  # default mon protocol version if port is not provided
+            logger.warning(f'Using msgr2 protocol for unrecognized port {ep}')
+        addr_arg_list.append(f'{ver}:{ep.ip}:{ep.port}')
+
+    addr_arg = '[{0}]'.format(','.join(addr_arg_list))
+    return addr_arg
+
+
+def get_public_net_from_cfg(ctx: CephadmContext) -> Optional[str]:
+    """Get mon public network from configuration file."""
+    cp = read_config(ctx.config)
+    if not cp.has_option('global', 'public_network'):
+        return None
+
+    # Ensure all public CIDR networks are valid
+    public_network = cp.get('global', 'public_network')
+    rc, _, err_msg = check_subnet(public_network)
+    if rc:
+        raise Error(f'Invalid public_network {public_network} parameter: {err_msg}')
+
+    # Ensure all public CIDR networks are configured locally
+    configured_subnets = set([x.strip() for x in public_network.split(',')])
+    local_subnets = set([x[0] for x in list_networks(ctx).items()])
+    valid_public_net = False
+    for net in configured_subnets:
+        if net in local_subnets:
+            valid_public_net = True
+        else:
+            logger.warning(f'The public CIDR network {net} (from -c conf file) is not configured locally.')
+    if not valid_public_net:
+        raise Error(f'None of the public CIDR network(s) {configured_subnets} (from -c conf file) is configured locally.')
+
+    # Ensure public_network is compatible with the provided mon-ip (or mon-addrv)
+    if ctx.mon_ip:
+        if not ip_in_subnets(ctx.mon_ip, public_network):
+            raise Error(f'The provided --mon-ip {ctx.mon_ip} does not belong to any public_network(s) {public_network}')
+    elif ctx.mon_addrv:
+        addrv_args = parse_mon_addrv(ctx.mon_addrv)
+        for addrv in addrv_args:
+            if not ip_in_subnets(addrv.ip, public_network):
+                raise Error(f'The provided --mon-addrv {addrv.ip} ip does not belong to any public_network(s) {public_network}')
+
+    logger.debug(f'Using mon public network from configuration file {public_network}')
+    return public_network
+
+
+def infer_mon_network(ctx: CephadmContext, mon_eps: List[EndPoint]) -> Optional[str]:
+    """Infer mon public network from local network."""
+    # Make sure IP is configured locally, and then figure out the CIDR network
+    mon_networks = []
+    for net, ifaces in list_networks(ctx).items():
+        # build local_ips list for the specified network
+        local_ips: List[str] = []
+        for _, ls in ifaces.items():
+            local_ips.extend([ipaddress.ip_address(ip) for ip in ls])
+
+        # check if any of mon ips belong to this net
+        for mon_ep in mon_eps:
+            try:
+                if ipaddress.ip_address(unwrap_ipv6(mon_ep.ip)) in local_ips:
+                    mon_networks.append(net)
+                    logger.info(f'Mon IP `{mon_ep.ip}` is in CIDR network `{net}`')
+            except ValueError as e:
+                logger.warning(f'Cannot infer CIDR network for mon IP `{mon_ep.ip}` : {e}')
+
+    if not mon_networks:
+        raise Error('Cannot infer CIDR network. Pass --skip-mon-network to configure it later')
+    else:
+        logger.debug(f'Inferred mon public CIDR from local network configuration {mon_networks}')
+
+    mon_networks = list(set(mon_networks))  # remove duplicates
+    return ','.join(mon_networks)
+
+
+def prepare_mon_addresses(ctx: CephadmContext) -> Tuple[str, bool, Optional[str]]:
+    """Get mon public network configuration."""
     ipv6 = False
+    addrv_args: List[EndPoint] = []
+    mon_addrv: str = ''  # i.e: [v2:192.168.100.1:3300,v1:192.168.100.1:6789]
 
     if ctx.mon_ip:
         ipv6 = is_ipv6(ctx.mon_ip)
         if ipv6:
             ctx.mon_ip = wrap_ipv6(ctx.mon_ip)
-        hasport = r.findall(ctx.mon_ip)
-        if hasport:
-            port_str = hasport[0]
-            port = int(port_str)
-            if port == 6789:
-                addr_arg = '[v1:%s]' % ctx.mon_ip
-            elif port == 3300:
-                addr_arg = '[v2:%s]' % ctx.mon_ip
-            else:
-                logger.warning('Using msgr2 protocol for unrecognized port %d' %
-                               port)
-                addr_arg = '[v2:%s]' % ctx.mon_ip
-            base_ip = ctx.mon_ip[0:-(len(port_str)) - 1]
-            check_ip_port(ctx, base_ip, port)
-        else:
-            base_ip = ctx.mon_ip
-            addr_arg = '[v2:%s:3300,v1:%s:6789]' % (ctx.mon_ip, ctx.mon_ip)
-            check_ip_port(ctx, ctx.mon_ip, 3300)
-            check_ip_port(ctx, ctx.mon_ip, 6789)
+        addrv_args = parse_mon_ip(ctx.mon_ip)
+        mon_addrv = build_addrv_params(addrv_args)
     elif ctx.mon_addrv:
-        addr_arg = ctx.mon_addrv
-        if addr_arg[0] != '[' or addr_arg[-1] != ']':
-            raise Error('--mon-addrv value %s must use square backets' %
-                        addr_arg)
-        ipv6 = addr_arg.count('[') > 1
-        for addr in addr_arg[1: -1].split(','):
-            hasport = r.findall(addr)
-            if not hasport:
-                raise Error('--mon-addrv value %s must include port number' %
-                            addr_arg)
-            port_str = hasport[0]
-            port = int(port_str)
-            # strip off v1: or v2: prefix
-            addr = re.sub(r'^v\d+:', '', addr)
-            base_ip = addr[0:-(len(port_str)) - 1]
-            check_ip_port(ctx, base_ip, port)
+        ipv6 = ctx.mon_addrv.count('[') > 1
+        addrv_args = parse_mon_addrv(ctx.mon_addrv)
+        mon_addrv = ctx.mon_addrv
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
-    logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
 
+    if addrv_args:
+        for end_point in addrv_args:
+            check_ip_port(ctx, end_point)
+
+    logger.debug(f'Base mon IP(s) is {addrv_args}, mon addrv is {mon_addrv}')
     mon_network = None
-    cp = read_config(ctx.config)
-    if cp.has_option('global', 'public_network'):
-        mon_network = cp.get('global', 'public_network')
+    if not ctx.skip_mon_network:
+        mon_network = get_public_net_from_cfg(ctx) or infer_mon_network(ctx, addrv_args)
 
-    if mon_network is None and not ctx.skip_mon_network:
-        # make sure IP is configured locally, and then figure out the
-        # CIDR network
-        errmsg = f'Cannot infer CIDR network for mon IP `{base_ip}`'
-        for net, ifaces in list_networks(ctx).items():
-            ips: List[str] = []
-            for iface, ls in ifaces.items():
-                ips.extend(ls)
-            try:
-                if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
-                        [ipaddress.ip_address(ip) for ip in ips]:
-                    mon_network = net
-                    logger.info(f'Mon IP `{base_ip}` is in CIDR network `{mon_network}`')
-                    break
-            except ValueError as e:
-                logger.warning(f'{errmsg}: {e}')
-        if not mon_network:
-            raise Error(f'{errmsg}: pass --skip-mon-network to configure it later')
-
-    return (addr_arg, ipv6, mon_network)
+    return (mon_addrv, ipv6, mon_network)
 
 
 def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
-    ipv6_cluster_network = False
     # the cluster network may not exist on this node, so all we can do is
     # validate that the address given is valid ipv4 or ipv6 subnet
+    ipv6_cluster_network = False
     cp = read_config(ctx.config)
     cluster_network = ctx.cluster_network
     if cluster_network is None and cp.has_option('global', 'cluster_network'):
         cluster_network = cp.get('global', 'cluster_network')
 
     if cluster_network:
+        cluser_nets = set([x.strip() for x in cluster_network.split(',')])
+        local_subnets = set([x[0] for x in list_networks(ctx).items()])
+        for net in cluser_nets:
+            if net not in local_subnets:
+                logger.warning(f'The cluster CIDR network {net} is not configured locally.')
+
         rc, versions, err_msg = check_subnet(cluster_network)
         if rc:
             raise Error(f'Invalid --cluster-network parameter: {err_msg}')
@@ -4890,6 +4993,9 @@ def prepare_ssh(
         args = ['orch', 'host', 'add', host]
         if ctx.mon_ip:
             args.append(unwrap_ipv6(ctx.mon_ip))
+        elif ctx.mon_addrv:
+            addrv_args = parse_mon_addrv(ctx.mon_addrv)
+            args.append(unwrap_ipv6(addrv_args[0].ip))
         cli(args)
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
@@ -8467,10 +8573,11 @@ def _get_parser():
         '--mon-id',
         required=False,
         help='mon id (default: local hostname)')
-    parser_bootstrap.add_argument(
+    group = parser_bootstrap.add_mutually_exclusive_group()
+    group.add_argument(
         '--mon-addrv',
         help='mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])')
-    parser_bootstrap.add_argument(
+    group.add_argument(
         '--mon-ip',
         help='mon IP')
     parser_bootstrap.add_argument(
