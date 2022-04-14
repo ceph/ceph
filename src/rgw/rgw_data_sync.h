@@ -756,6 +756,9 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
     : store(store), source_zone(source_zone), source_bucket(source_bucket),
       dest_bucket(dest_bucket) {}
 
+  int remote_info(const DoutPrefixProvider *dpp, source& s,
+		  uint64_t* oldest_gen, uint64_t* latest_gen,
+		  uint64_t* num_shards);
 public:
   static tl::expected<std::unique_ptr<RGWBucketPipeSyncStatusManager>, int>
   construct(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store,
