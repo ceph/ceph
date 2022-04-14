@@ -70,6 +70,16 @@ General
 
   https://docs.ceph.com/en/quincy/mgr/progress/
 
+Cephadm
+-------
+
+* SNMP Support
+* Colocation of Daemons (mgr, mds, rgw)
+* osd memory autotuning
+* Integration with new NFS mgr module
+* Ability to zap osds as they are removed
+* cephadm agent for increased performance/scalability
+
 Dashboard
 ~~~~~~~~~
 * Day 1: the new "Cluster Expansion Wizard" will guide users through post-install steps:
