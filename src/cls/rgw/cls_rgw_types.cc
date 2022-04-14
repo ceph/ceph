@@ -404,6 +404,24 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
 
   return account;
 }
+void rgw_cls_bi_entry::generate_test_instances(list<rgw_cls_bi_entry*>& o)
+{
+  using ceph::encode;
+  rgw_cls_bi_entry *m = new rgw_cls_bi_entry;
+  rgw_bucket_olh_entry entry;
+  entry.delete_marker = true;
+  entry.epoch = 1234;
+  entry.tag = "tag";
+  entry.key.name = "key.name";
+  entry.key.instance = "key.instance";
+  entry.exists = true;
+  entry.pending_removal = true;
+  m->type = BIIndexType::OLH;
+  m->idx = "idx";
+  encode(entry,m->data);
+  o.push_back(m);
+  o.push_back(new rgw_cls_bi_entry);
+}
 
 void rgw_bucket_olh_entry::dump(Formatter *f) const
 {
@@ -425,6 +443,20 @@ void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("tag", tag, obj);
   JSONDecoder::decode_json("exists", exists, obj);
   JSONDecoder::decode_json("pending_removal", pending_removal, obj);
+}
+
+void rgw_bucket_olh_entry::generate_test_instances(list<rgw_bucket_olh_entry*>& o)
+{
+  rgw_bucket_olh_entry *entry = new rgw_bucket_olh_entry;
+  entry->delete_marker = true;
+  entry->epoch = 1234;
+  entry->tag = "tag";
+  entry->key.name = "key.name";
+  entry->key.instance = "key.instance";
+  entry->exists = true;
+  entry->pending_removal = true;
+  o.push_back(entry);
+  o.push_back(new rgw_bucket_olh_entry);
 }
 
 void rgw_bucket_olh_log_entry::generate_test_instances(list<rgw_bucket_olh_log_entry*>& o)
@@ -655,6 +687,58 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->close_section();
 }
 
+void rgw_usage_data::generate_test_instances(list<rgw_usage_data*>& o)
+{
+  rgw_usage_data *s = new rgw_usage_data;
+  s->bytes_sent = 1024;
+  s->bytes_received = 1024;
+  s->ops = 2;
+  s->successful_ops = 1;
+  o.push_back(s);
+  o.push_back(new rgw_usage_data);
+}
+
+void rgw_usage_data::dump(Formatter *f) const
+{
+  f->dump_int("bytes_sent", bytes_sent);
+  f->dump_int("bytes_received", bytes_received);
+  f->dump_int("ops", ops);
+  f->dump_int("successful_ops", successful_ops);
+}
+
+void rgw_usage_log_info::generate_test_instances(list<rgw_usage_log_info*>& o)
+{
+  rgw_usage_log_info *s = new rgw_usage_log_info;
+  std::string owner = "owner";
+  std::string payer = "payer";
+  std::string bucket = "bucket";
+
+  rgw_usage_log_entry r(owner, payer, bucket);
+  s->entries.push_back(r);
+  o.push_back(s);
+  o.push_back(new rgw_usage_log_info);
+}
+
+void rgw_usage_log_info::dump(Formatter *f) const
+{
+  encode_json("entries", entries, f);
+}
+
+void rgw_user_bucket::generate_test_instances(list<rgw_user_bucket*>& o)
+{
+  rgw_user_bucket *s = new rgw_user_bucket;
+  s->user = "user";
+  s->bucket = "bucket";
+  o.push_back(s);
+  o.push_back(new rgw_user_bucket);
+}
+
+void rgw_user_bucket::dump(Formatter *f) const
+{
+  f->dump_string("user", user);
+  f->dump_string("bucket", bucket);
+}
+
 void rgw_usage_log_entry::dump(Formatter *f) const
 {
   f->dump_string("owner", owner.to_str());
@@ -746,7 +830,7 @@ void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 }
 
 void cls_rgw_bucket_instance_entry::generate_test_instances(
-  list<cls_rgw_bucket_instance_entry*>& ls)
+list<cls_rgw_bucket_instance_entry*>& ls)
 {
   ls.push_back(new cls_rgw_bucket_instance_entry);
   ls.push_back(new cls_rgw_bucket_instance_entry);
@@ -761,8 +845,14 @@ void cls_rgw_lc_entry::dump(Formatter *f) const
   encode_json("status", status, f);
 }
 
-void generate_test_instances(list<cls_rgw_lc_entry*>& ls)
+void cls_rgw_lc_entry::generate_test_instances(list<cls_rgw_lc_entry*>& o)
 {
+  cls_rgw_lc_entry *s = new cls_rgw_lc_entry;
+  s->bucket = "bucket";
+  s->start_time = 10;
+  s->status = 1;
+  o.push_back(s);
+  o.push_back(new cls_rgw_lc_entry);
 }
 
 void cls_rgw_lc_obj_head::dump(Formatter *f) const 
