@@ -2773,34 +2773,6 @@ public:
   }
 };
 
-RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
-                                               RGWDataSyncEnv *_sync_env,
-                                               const rgw_zone_id& _source_zone,
-                                               RGWRESTConn *_conn,
-                                               const RGWBucketInfo& source_bucket_info,
-					       const int num_shards,
-                                               const rgw_bucket& dest_bucket)
-  : dpp(_dpp), sync_env(_sync_env), conn(_conn), source_zone(_source_zone),
-    full_status_obj(sync_env->svc->zone->get_zone_params().log_pool,
-                    RGWBucketPipeSyncStatusManager::full_status_oid(source_zone,
-                                                                    source_bucket_info.bucket,
-                                                                    dest_bucket)),
-    source_bucket_info(source_bucket_info)
-{
-  sync_pairs.resize(num_shards);
-
-  for (int cur_shard = 0; cur_shard < num_shards; ++cur_shard) {
-    auto& sync_pair = sync_pairs[cur_shard];
-
-    sync_pair.source_bs.bucket = source_bucket_info.bucket;
-    sync_pair.dest_bucket = dest_bucket;
-
-    sync_pair.source_bs.shard_id = cur_shard;
-  }
-
-  sc.init(sync_env, conn, source_zone);
-}
-
 #define BUCKET_SYNC_ATTR_PREFIX RGW_ATTR_PREFIX "bucket-sync."
 
 template <class T>
@@ -3214,14 +3186,6 @@ public:
   }
 };
 
-RGWCoroutine *RGWRemoteBucketManager::init_sync_status_cr(RGWObjVersionTracker& objv, rgw_bucket_index_marker_info& info)
-{
-  constexpr bool check_compat = false;
-  return new InitBucketFullSyncStatusCR(&sc, sync_pairs[0], full_status_obj,
-                                        full_status, objv, source_bucket_info,
-					check_compat, info);
-}
-
 #define OMAP_READ_MAX_ENTRIES 10
 class RGWReadRecoveringBucketShardsCoroutine : public RGWCoroutine {
   RGWDataSyncCtx *sc;
@@ -3394,15 +3358,6 @@ int RGWRemoteDataLog::read_shard_status(const DoutPrefixProvider *dpp, int shard
   ret = crs.run(dpp, stacks);
   http_manager.stop();
   return ret;
-}
-
-RGWCoroutine *RGWRemoteBucketManager::read_sync_status_cr(int num, rgw_bucket_shard_sync_info *sync_status)
-{
-  if ((size_t)num >= sync_pairs.size()) {
-    return nullptr;
-  }
-
-  return new RGWReadBucketPipeSyncStatusCoroutine(&sc, sync_pairs[num], sync_status, nullptr, full_status.incremental_gen);
 }
 
 CephContext *RGWBucketPipeSyncStatusManager::get_cct() const
@@ -5374,17 +5329,6 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
   return 0;
 }
 
-RGWCoroutine *RGWRemoteBucketManager::run_sync_cr(int num)
-{
-  if ((size_t)num >= sync_pairs.size()) {
-    return nullptr;
-  }
-
-  constexpr std::optional<uint64_t> gen; // sync current gen
-  return sync_bucket_shard_cr(&sc, nullptr, sync_pairs[num], gen,
-                              sync_env->sync_tracer->root_node, nullptr);
-}
-
 int RGWBucketPipeSyncStatusManager::do_init(const DoutPrefixProvider *dpp)
 {
   int ret = http_manager.start();
@@ -5427,24 +5371,6 @@ int RGWBucketPipeSyncStatusManager::do_init(const DoutPrefixProvider *dpp)
       ldpp_dout(this, 0) << "connection object to zone " << szone << " does not exist" << dendl;
       return -EINVAL;
     }
-
-    rgw_bucket_index_marker_info remote_info;
-    BucketIndexShardsManager remote_markers;
-    auto r = rgw_read_remote_bilog_info(dpp, conn, pipe.source.get_bucket_info().bucket,
-					remote_info, remote_markers,
-					null_yield);
-
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ << ":" << __LINE__
-			<< " rgw_read_remote_bilog_info: r="
-			<< r << dendl;
-      return r;
-    }
-    const int num_shards = remote_markers.get().size();
-    source_mgrs.emplace_back(this, &sync_env, szone, conn,
-			     pipe.source.get_bucket_info(),
-			     num_shards,
-			     pipe.target.get_bucket());
     sources.emplace_back(&sync_env, szone, conn,
 			 pipe.source.get_bucket_info(),
 			 pipe.target.get_bucket(),
