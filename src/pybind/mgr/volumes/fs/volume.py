@@ -804,6 +804,25 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def resize_subvolume_group(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        groupname  = kwargs['group_name']
+        newsize    = kwargs['new_size']
+        noshrink   = kwargs['no_shrink']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                        nsize, usedbytes = group.resize(newsize, noshrink)
+                        ret = 0, json.dumps(
+                            [{'bytes_used': usedbytes},{'bytes_quota': nsize},
+                             {'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}],
+                            indent=4, sort_keys=True), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     def getpath_subvolume_group(self, **kwargs):
         volname    = kwargs['vol_name']
         groupname  = kwargs['group_name']
