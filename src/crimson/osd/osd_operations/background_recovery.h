@@ -9,8 +9,6 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/common/type_helpers.h"
 
-#include "messages/MOSDOp.h"
-
 namespace crimson::osd {
 class PG;
 class ShardServices;
@@ -85,9 +83,9 @@ private:
 class BackfillRecovery final : public BackgroundRecovery {
 public:
   class BackfillRecoveryPipeline {
-    OrderedExclusivePhase process = {
-      "BackfillRecovery::PGPipeline::process"
-    };
+    struct Process : OrderedExclusivePhaseT<Process> {
+      static constexpr auto type_name = "BackfillRecovery::PGPipeline::process";
+    } process;
     friend class BackfillRecovery;
     friend class PeeringEvent;
   };
