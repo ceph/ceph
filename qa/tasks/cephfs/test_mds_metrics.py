@@ -402,16 +402,17 @@ class TestMDSMetrics(CephFSTestCase):
         # validate
         valid, metrics = self._get_metrics(self.verify_mds_metrics(
             active_mds_count=1, client_count=TestMDSMetrics.CLIENTS_REQUIRED), 30)
-        log.debug("metrics={0}".format(metrics))
+        log.debug(f'metrics={metrics}')
         self.assertTrue(valid)
 
-        global_metrics = metrics['global_metrics']
+        #mount_a and mount_b are the clients mounted for TestMDSMetrics. So get their
+        #entries from the global_metrics.
+        client_a_name = f'client.{self.mount_a.get_global_id()}'
+        client_b_name = f'client.{self.mount_b.get_global_id()}'
 
-        #TestMDSMetrics.CLIENTS_REQUIRED clients are mounted here. So they should be
-        #the first two entries in the global_metrics and won't be culled later on.
-        gm_keys_list = list(global_metrics.keys())
-        client1_metrics = global_metrics[gm_keys_list[0]]
-        client2_metrics = global_metrics[gm_keys_list[1]]
+        global_metrics = metrics['global_metrics']
+        client_a_metrics = global_metrics[client_a_name]
+        client_b_metrics = global_metrics[client_b_name]
 
         #fail rank0 mds
         self.fs.rank_fail(rank=0)
@@ -435,16 +436,16 @@ class TestMDSMetrics(CephFSTestCase):
         try:
             valid, metrics_new = self._get_metrics(self.verify_mds_metrics(
                 active_mds_count=1, client_count=TestMDSMetrics.CLIENTS_REQUIRED), 30)
-            log.debug("metrics={0}".format(metrics_new))
+            log.debug(f'metrics={metrics_new}')
             self.assertTrue(valid)
 
             global_metrics = metrics_new['global_metrics']
-            client1_metrics_new = global_metrics[gm_keys_list[0]]
-            client2_metrics_new = global_metrics[gm_keys_list[1]]
+            client_a_metrics_new = global_metrics[client_a_name]
+            client_b_metrics_new = global_metrics[client_b_name]
 
             #the metrics should be different for the test to succeed.
-            self.assertNotEqual(client1_metrics, client1_metrics_new)
-            self.assertNotEqual(client2_metrics, client2_metrics_new)
+            self.assertNotEqual(client_a_metrics, client_a_metrics_new)
+            self.assertNotEqual(client_b_metrics, client_b_metrics_new)
         except MaxWhileTries:
             raise RuntimeError("Failed to fetch `ceph fs perf stats` metrics")
         finally:
