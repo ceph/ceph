@@ -116,6 +116,40 @@ class Group(GroupTemplate):
                 'bytes_used': int(usedbytes),
                 'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}
 
+    def resize(self, newsize, noshrink):
+        try:
+            newsize = int(newsize)
+            if newsize <= 0:
+                raise VolumeException(-errno.EINVAL, "Invalid subvolume group size")
+        except ValueError:
+            newsize = newsize.lower()
+            if not (newsize == "inf" or newsize == "infinite"):
+                raise (VolumeException(-errno.EINVAL, "invalid size option '{0}'".format(newsize)))
+            newsize = 0
+            noshrink = False
+
+        try:
+            maxbytes = int(self.fs.getxattr(self.path, 'ceph.quota.max_bytes').decode('utf-8'))
+        except cephfs.NoData:
+            maxbytes = 0
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        group_stat = self.fs.stat(self.path)
+        if newsize > 0 and newsize < group_stat.st_size:
+            if noshrink:
+                raise VolumeException(-errno.EINVAL, "Can't resize the subvolume group. The new size"
+                                      " '{0}' would be lesser than the current used size '{1}'"
+                                      .format(newsize, group_stat.st_size))
+
+        if not newsize == maxbytes:
+            try:
+                self.fs.setxattr(self.path, 'ceph.quota.max_bytes', str(newsize).encode('utf-8'), 0)
+            except cephfs.Error as e:
+                raise (VolumeException(-e.args[0],
+                                       "Cannot set new size for the subvolume group. '{0}'".format(e.args[1])))
+        return newsize, group_stat.st_size
+
 def set_group_attrs(fs, path, attrs):
     # set subvolume group attrs
     # set size

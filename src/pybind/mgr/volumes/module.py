@@ -103,6 +103,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
+            'cmd': 'fs subvolumegroup resize '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=new_size,type=CephString,req=true '
+                   'name=no_shrink,type=CephBool,req=false ',
+            'desc': "Resize a CephFS subvolume group",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolume ls '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
@@ -548,6 +557,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.subvolumegroup_info(vol_name=cmd['vol_name'],
                                            group_name=cmd['group_name'])
 
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_resize(self, inbuf, cmd):
+        return self.vc.resize_subvolume_group(vol_name=cmd['vol_name'],
+                                              group_name=cmd['group_name'],
+                                              new_size=cmd['new_size'],
+                                              no_shrink=cmd.get('no_shrink', False))
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])
