@@ -13,14 +13,17 @@ import threading
 import time
 from typing import TYPE_CHECKING, Optional
 
+from .services.custom_banner import get_login_banner_mgr, \
+    set_login_banner_mgr, unset_login_banner_mgr
+
 if TYPE_CHECKING:
     if sys.version_info >= (3, 8):
         from typing import Literal
     else:
         from typing_extensions import Literal
 
-from mgr_module import CLIWriteCommand, HandleCommandResult, MgrModule, \
-    MgrStandbyModule, NotifyType, Option, _get_localized_key
+from mgr_module import CLIReadCommand, CLIWriteCommand, HandleCommandResult, \
+    MgrModule, MgrStandbyModule, NotifyType, Option, _get_localized_key
 from mgr_util import ServerConfigException, build_url, \
     create_self_signed_cert, get_default_addr, verify_tls_files
 
@@ -416,6 +419,30 @@ class Module(MgrModule, CherryPyConfig):
             return -errno.EINVAL, '', str(error)
 
         return 0, 'RGW credentials configured', ''
+
+    @CLIWriteCommand("dashboard set-login-banner")
+    def set_login_banner(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+        item_label = 'login banner file'
+        if inbuf is None:
+            return HandleCommandResult(
+                -errno.EINVAL,
+                stderr=f'Please specify the {item_label} with "-i" option'
+            )
+        set_login_banner_mgr(inbuf, mgr_id)
+        return HandleCommandResult(stdout=f'{item_label} added')
+
+    @CLIReadCommand("dashboard get-login-banner")
+    def get_login_banner(self):
+        banner_text = get_login_banner_mgr()
+        if banner_text is None:
+            return HandleCommandResult(stdout='No login banner set')
+        else:
+            return HandleCommandResult(stdout=banner_text)
+
+    @CLIWriteCommand("dashboard unset-login-banner")
+    def unset_login_banner(self):
+        unset_login_banner_mgr()
+        return HandleCommandResult(stdout='Login banner removed')
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
