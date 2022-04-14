@@ -86,6 +86,7 @@ struct DBOpObjectInfo {
   bufferlist head_data;
   std::string min_marker;
   std::string max_marker;
+  std::string prefix;
   std::list<rgw_bucket_dir_entry> list_entries;
   /* XXX: Maybe use std::vector instead of std::list */
 };
@@ -279,6 +280,7 @@ struct DBOpObjectPrepareInfo {
   static constexpr const char* head_data = ":head_data";
   static constexpr const char* min_marker = ":min_marker";
   static constexpr const char* max_marker = ":max_marker";
+  static constexpr const char* prefix = ":prefix";
   /* Below used to update mp_parts obj name
    * from meta object to src object on completion */
   static constexpr const char* new_obj_name = ":new_obj_name";
@@ -1083,7 +1085,7 @@ class ListBucketObjectsOp: virtual public DBOp {
       ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
       TailPlacementRuleName, TailPlacementStorageClass, \
       ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, HeadData from '{}' \
-      where BucketName = {} and ObjName > {} ORDER BY ObjName ASC LIMIT {}";
+      where BucketName = {} and ObjName >= {} and ObjName LIKE {} ORDER BY ObjName ASC LIMIT {}";
   public:
     virtual ~ListBucketObjectsOp() {}
 
@@ -1093,6 +1095,7 @@ class ListBucketObjectsOp: virtual public DBOp {
           params.object_table,
           params.op.bucket.bucket_name,
           params.op.obj.min_marker,
+          params.op.obj.prefix,
           params.op.list_max_count);
     }
 };
