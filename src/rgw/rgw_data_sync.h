@@ -669,42 +669,6 @@ struct rgw_bucket_index_marker_info {
 };
 
 
-class RGWRemoteBucketManager {
-  const DoutPrefixProvider *dpp;
-
-  RGWDataSyncEnv *sync_env;
-
-  RGWRESTConn *conn{nullptr};
-  rgw_zone_id source_zone;
-
-  rgw_raw_obj full_status_obj;
-  std::vector<rgw_bucket_sync_pair_info> sync_pairs;
-
-  RGWDataSyncCtx sc;
-  rgw_bucket_sync_status full_status;
-  const RGWBucketInfo source_bucket_info;
-  rgw_bucket_shard_sync_info shard_status;
-
-  RGWBucketSyncCR *sync_cr{nullptr};
-
-
-public:
-  RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
-			 RGWDataSyncEnv *_sync_env,
-			 const rgw_zone_id& _source_zone, RGWRESTConn *_conn,
-			 const RGWBucketInfo& source_bucket_info,
-			 const int num_shards,
-			 const rgw_bucket& dest_bucket);
-
-  RGWCoroutine *read_sync_status_cr(int num, rgw_bucket_shard_sync_info *sync_status);
-  RGWCoroutine *init_sync_status_cr(RGWObjVersionTracker& objv_tracker, rgw_bucket_index_marker_info& info);
-  RGWCoroutine *run_sync_cr(int num);
-
-  int num_pipes() {
-    return sync_pairs.size();
-  }
-};
-
 class BucketIndexShardsManager;
 
 int rgw_read_remote_bilog_info(const DoutPrefixProvider *dpp,
@@ -734,7 +698,6 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
 
   rgw_bucket dest_bucket;
 
-  std::vector<RGWRemoteBucketManager> source_mgrs;
   struct source {
     RGWDataSyncCtx sc;
     RGWBucketInfo info;
