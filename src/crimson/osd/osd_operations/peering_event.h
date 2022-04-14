@@ -6,7 +6,9 @@
 #include <iostream>
 #include <seastar/core/future.hh>
 
+#include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osd_operations/background_recovery.h"
 #include "osd/osd_types.h"
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
@@ -21,17 +23,17 @@ class OSD;
 class ShardServices;
 class PG;
 
-class PeeringEvent : public TrackableOperationT<PeeringEvent> {
+class PeeringEvent : public PhasedOperationT<PeeringEvent> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 
   class PGPipeline {
-    OrderedExclusivePhase await_map = {
-      "PeeringEvent::PGPipeline::await_map"
-    };
-    OrderedExclusivePhase process = {
-      "PeeringEvent::PGPipeline::process"
-    };
+    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
+      static constexpr auto type_name = "PeeringEvent::PGPipeline::await_map";
+    } await_map;
+    struct Process : OrderedExclusivePhaseT<Process> {
+      static constexpr auto type_name = "PeeringEvent::PGPipeline::process";
+    } process;
     friend class PeeringEvent;
     friend class PGAdvanceMap;
   };
@@ -88,6 +90,23 @@ public:
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
   seastar::future<> start();
+
+  std::tuple<
+    StartEvent,
+    PGPipeline::AwaitMap::BlockingEvent,
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    PGPipeline::Process::BlockingEvent,
+    BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
+#if 0
+    PGPipeline::WaitForActive::BlockingEvent,
+    PGActivationBlocker::BlockingEvent,
+    PGPipeline::RecoverMissing::BlockingEvent,
+    PGPipeline::GetOBC::BlockingEvent,
+    PGPipeline::WaitRepop::BlockingEvent,
+    PGPipeline::SendReply::BlockingEvent,
+#endif
+    CompletionEvent
+  > tracking_events;
 };
 
 class RemotePeeringEvent : public PeeringEvent {
@@ -102,18 +121,21 @@ protected:
 
 public:
   class OSDPipeline {
-    OrderedExclusivePhase await_active = {
-      "PeeringRequest::OSDPipeline::await_active"
-    };
+    struct AwaitActive : OrderedExclusivePhaseT<AwaitActive> {
+      static constexpr auto type_name =
+	"PeeringRequest::OSDPipeline::await_active";
+    } await_active;
     friend class RemotePeeringEvent;
   };
   class ConnectionPipeline {
-    OrderedExclusivePhase await_map = {
-      "PeeringRequest::ConnectionPipeline::await_map"
-    };
-    OrderedExclusivePhase get_pg = {
-      "PeeringRequest::ConnectionPipeline::get_pg"
-    };
+    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
+      static constexpr auto type_name =
+	"PeeringRequest::ConnectionPipeline::await_map";
+    } await_map;
+    struct GetPG : OrderedExclusivePhaseT<GetPG> {
+      static constexpr auto type_name =
+	"PeeringRequest::ConnectionPipeline::get_pg";
+    } get_pg;
     friend class RemotePeeringEvent;
   };
 
@@ -124,6 +146,11 @@ public:
     conn(conn)
   {}
 
+  std::tuple<
+    OSDPipeline::AwaitActive::BlockingEvent,
+    ConnectionPipeline::AwaitMap::BlockingEvent,
+    ConnectionPipeline::GetPG::BlockingEvent
+  > tracking_events;
 private:
   ConnectionPipeline &cp();
   OSDPipeline &op();
