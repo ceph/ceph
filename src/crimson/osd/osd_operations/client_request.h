@@ -47,6 +47,7 @@ public:
     } send_reply;
     friend class ClientRequest;
     friend class LttngBackend;
+    friend class HistoricBackend;
   };
 
   using ordering_hook_t = boost::intrusive::list_member_hook<>;

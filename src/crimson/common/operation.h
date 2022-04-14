@@ -352,6 +352,7 @@ class OperationRegistryI {
 protected:
   virtual void do_register(Operation *op) = 0;
   virtual bool registries_empty() const = 0;
+  virtual void do_stop() = 0;
 
 public:
   using op_list = boost::intrusive::list<
@@ -367,6 +368,7 @@ public:
   }
 
   seastar::future<> stop() {
+    do_stop();
     shutdown_timer.set_callback([this] {
       if (registries_empty()) {
 	shutdown.set_value();
@@ -409,6 +411,13 @@ protected:
 public:
   template <size_t REGISTRY_INDEX>
   const op_list& get_registry() const {
+    static_assert(
+      REGISTRY_INDEX < std::tuple_size<decltype(registries)>::value);
+    return registries[REGISTRY_INDEX];
+  }
+
+  template <size_t REGISTRY_INDEX>
+  op_list& get_registry() {
     static_assert(
       REGISTRY_INDEX < std::tuple_size<decltype(registries)>::value);
     return registries[REGISTRY_INDEX];
