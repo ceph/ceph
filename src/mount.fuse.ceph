@@ -28,6 +28,7 @@ id=myuser,conf=/etc/ceph/foo.conf  /mnt/ceph   fuse.ceph   defaults   0 0
 import sys
 import argparse
 import errno
+import platform
 from subprocess import Popen
 
 def ceph_options(mntops):
@@ -74,7 +75,10 @@ def main(arguments):
     mount_cmd.communicate()
 
     if (mount_cmd.returncode != 0):
-        if (mount_cmd.returncode != errno.EBUSY):
+        if (platform.system() == "Linux"):
+            if (mount_cmd.returncode != errno.EBUSY):
+                print("Mount failed with status code: {}".format(mount_cmd.returncode))
+        else:
             print("Mount failed with status code: {}".format(mount_cmd.returncode))
 
 if __name__ == '__main__':
