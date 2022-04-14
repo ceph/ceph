@@ -380,6 +380,7 @@ static const char *_key_decode_prefix(const char *p, ghobject_t *oid)
   return p;
 }
 
+
 #define ENCODED_KEY_PREFIX_LEN (1 + 8 + 4)
 
 static int _get_key_object(const char *p, ghobject_t *oid)
@@ -5568,7 +5569,10 @@ void BlueStore::_close_bdev()
   bdev = NULL;
 }
 
-int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_restore)
+int BlueStore::_open_fm(KeyValueDB::Transaction t,
+                        bool read_only,
+                        bool db_avail,
+                        bool fm_restore)
 {
   int r;
 
@@ -5579,19 +5583,20 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_resto
   // fm restore must pass in a valid transaction
   ceph_assert(!fm_restore || (t != nullptr));
 
+  // when function is called in repair mode (to_repair=true) we skip db->open()/create()
+  bool can_have_null_fm = !is_db_rotational() &&
+                          !read_only &&
+                          db_avail &&
+                          cct->_conf->bluestore_allocation_from_file &&
+                          !bdev->is_smr();
+
   // When allocation-info is stored in a single file we set freelist_type to "null"
-  bool set_null_freemap = false;
-  if (freelist_type == "null") {
-    // use BitmapFreelistManager with the null option to stop allocations from going to RocksDB
-    // we will store the allocation info in a single file during umount()
-    freelist_type = "bitmap";
-    set_null_freemap = true;
+  if (can_have_null_fm) {
+    freelist_type = "null";
+    need_to_destage_allocation_file = true;
   }
   fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
   ceph_assert(fm);
-  if (set_null_freemap) {
-    fm->set_null_manager();
-  }
   if (t) {
     // create mode. initialize freespace
     dout(20) << __func__ << " initializing freespace" << dendl;
@@ -5605,16 +5610,11 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_resto
     ceph_assert(cct->_conf->bdev_block_size <= min_alloc_size);
 
     uint64_t alloc_size = min_alloc_size;
-#ifdef HAVE_LIBZBD
-    if (bdev->is_smr()) {
-      if (freelist_type != "zoned") {
-	derr << "SMR device but freelist_type = " << freelist_type << " (not zoned)"
-	     << dendl;
-	return -EINVAL;
-      }
-    } else
-#endif
-    if (freelist_type == "zoned") {
+    if (bdev->is_smr() && freelist_type != "zoned") {
+      derr << "SMR device but freelist_type = " << freelist_type << " (not zoned)"
+           << dendl;
+      return -EINVAL;
+    } else if (!bdev->is_smr() && freelist_type == "zoned") {
       derr << "non-SMR device (or SMR support not built-in) but freelist_type = zoned"
 	   << dendl;
       return -EINVAL;
@@ -5683,12 +5683,15 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_resto
     r = _write_out_fm_meta(0);
     ceph_assert(r == 0);
   } else {
+    if (can_have_null_fm) {
+      commit_to_null_manager();
+    }
     r = fm->init(db, read_only,
       [&](const std::string& key, std::string* result) {
         return read_meta(key, result);
     });
     if (r < 0) {
-      derr << __func__ << " freelist init failed: " << cpp_strerror(r) << dendl;
+      derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
       delete fm;
       fm = NULL;
       return r;
@@ -5912,21 +5915,33 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
 
 void BlueStore::_post_init_alloc(const std::map<uint64_t, uint64_t>& zone_adjustments)
 {
+  int r = 0;
 #ifdef HAVE_LIBZBD
-  assert(bdev->is_smr());
-  dout(1) << __func__ << " adjusting freelist based on device write pointers" << dendl;
-  auto f = dynamic_cast<ZonedFreelistManager*>(fm);
-  ceph_assert(f);
-  KeyValueDB::Transaction t = db->get_transaction();
-  for (auto& i : zone_adjustments) {
-    // allocate AND release since this gap is now dead space
-    // note that the offset is imprecise, but only need to select the zone
-    f->allocate(i.first, i.second, t);
-    f->release(i.first, i.second, t);
-  }
-  int r = db->submit_transaction_sync(t);
-  ceph_assert(r == 0);
+  if (bdev->is_smr()) {
+    if (zone_adjustments.empty()) {
+      return;
+    }
+    dout(1) << __func__ << " adjusting freelist based on device write pointers" << dendl;
+    auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+    ceph_assert(f);
+    KeyValueDB::Transaction t = db->get_transaction();
+    for (auto& i : zone_adjustments) {
+      // allocate AND release since this gap is now dead space
+      // note that the offset is imprecise, but only need to select the zone
+      f->allocate(i.first, i.second, t);
+      f->release(i.first, i.second, t);
+    }
+    r = db->submit_transaction_sync(t);
+  } else
 #endif
+  if (fm->is_null_manager()) {
+    // Now that we load the allocation map we need to invalidate the file as new allocation won't be reflected
+    // Changes to the allocation map (alloc/release) are not updated inline and will only be stored on umount()
+    // This means that we should not use the existing file on failure case (unplanned shutdown) and must resort
+    //  to recovery from RocksDB::ONodes
+    r = invalidate_allocation_file_on_bluefs();
+  }
+  ceph_assert(r >= 0);
 }
 
 void BlueStore::_close_alloc()
@@ -6372,7 +6387,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
     goto out_db;
   }
 
-  r = _open_fm(nullptr, true);
+  r = _open_fm(nullptr, true, false);
   if (r < 0)
     goto out_db;
 
@@ -6392,8 +6407,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
     goto out_alloc;
   }
 
-  if (!read_only && !zone_adjustments.empty()) {
-    // for SMR devices that have freelist mismatch with device write pointers
+  if (!read_only) {
     _post_init_alloc(zone_adjustments);
   }
 
@@ -6697,8 +6711,7 @@ void BlueStore::_close_db()
   dout(10) << __func__ << ":read_only=" << db_was_opened_read_only << " fm=" << fm << " destage_alloc_file=" << need_to_destage_allocation_file << dendl;
   _close_db_leave_bluefs();
 
-  if (need_to_destage_allocation_file) {
-    ceph_assert(fm && fm->is_null_manager());
+  if (!db_was_opened_read_only && fm && fm->is_null_manager() && need_to_destage_allocation_file) {
     int ret = store_allocator(alloc);
     if (ret != 0) {
       derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
@@ -7120,7 +7133,7 @@ int BlueStore::mkfs()
 
   {
     KeyValueDB::Transaction t = db->get_transaction();
-    r = _open_fm(t, true);
+    r = _open_fm(t, false, true);
     if (r < 0)
       goto out_close_db;
     {
@@ -18335,7 +18348,7 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
 {
   // mark that allocation-file was invalidated and we should destage a new copy whne closing db
   need_to_destage_allocation_file = true;
-  dout(10) << "need_to_destage_allocation_file was set" << dendl;
+  dout(10) << __func__ << " need_to_destage_allocation_file was set" << dendl;
 
   BlueFS::FileWriter *p_handle = nullptr;
   if (!bluefs->dir_exists(allocator_dir)) {
@@ -18346,7 +18359,7 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
 
   int ret = bluefs->stat(allocator_dir, allocator_file, nullptr, nullptr);
   if (ret != 0) {
-    dout(5) << "allocator_file(" << allocator_file << ") doesn't exist" << dendl;
+    dout(5) << __func__ << " allocator_file(" << allocator_file << ") doesn't exist" << dendl;
     // nothing to do -> return
     return 0;
   }
@@ -18354,14 +18367,16 @@ int BlueStore::invalidate_allocation_file_on_bluefs()
 
   ret = bluefs->open_for_write(allocator_dir, allocator_file, &p_handle, true);
   if (ret != 0) {
-    derr << "Failed open_for_write with error-code " << ret << dendl;
+    derr << __func__ << "::NCB:: Failed open_for_write with error-code "
+         << ret << dendl;
     return -1;
   }
 
   dout(5) << "invalidate using bluefs->truncate(p_handle, 0)" << dendl;
   ret = bluefs->truncate(p_handle, 0);
   if (ret != 0) {
-    derr << "Failed truncate with error-code " << ret << dendl;
+    derr << __func__ << "::NCB:: Failed truncaste with error-code "
+         << ret << dendl;
     bluefs->close_writer(p_handle);
     return -1;
   }
@@ -19322,7 +19337,7 @@ int BlueStore::reset_fm_for_restore()
   KeyValueDB::Transaction t = db->get_transaction();
   // call _open_fm() with fm_restore set to TRUE
   // this will mark the full device space as allocated (and not just the reserved space)
-  _open_fm(t, true, true);
+  _open_fm(t, true, true, true);
   if (fm == nullptr) {
     derr << "Failed _open_fm()" << dendl;
     return -1;
@@ -19437,7 +19452,7 @@ int BlueStore::push_allocation_to_rocksdb()
 #endif // CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
 
 //-------------------------------------------------------------------------------------
-static int commit_freelist_type(KeyValueDB *db, const std::string& freelist_type, CephContext *cct, const std::string &path)
+int BlueStore::commit_freelist_type()
 {
   // When freelist_type to "bitmap" we will store allocation in RocksDB
   // When allocation-info is stored in a single file we set freelist_type to "null"
@@ -19462,14 +19477,14 @@ static int commit_freelist_type(KeyValueDB *db, const std::string& freelist_type
 //-------------------------------------------------------------------------------------
 int BlueStore::commit_to_null_manager()
 {
-  dout(5) << "Set FreelistManager to NULL FM..." << dendl;
+  dout(5) << __func__ << " Set FreelistManager to NULL FM..." << dendl;
   fm->set_null_manager();
   freelist_type = "null";
 #if 1
-  return commit_freelist_type(db, freelist_type, cct, path);
+  return commit_freelist_type();
 #else
   // should check how long this step take on a big configuration as deletes are expensive
-  if (commit_freelist_type(db, freelist_type, cct, path) == 0) {
+  if (commit_freelist_type() == 0) {
     // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
     clear_allocation_objects_from_rocksdb(db, cct, path);
   }
@@ -19483,7 +19498,7 @@ int BlueStore::commit_to_real_manager()
   dout(5) << "Set FreelistManager to Real FM..." << dendl;
   ceph_assert(!fm->is_null_manager());
   freelist_type = "bitmap";
-  int ret = commit_freelist_type(db, freelist_type, cct, path);
+  int ret = commit_freelist_type();
   if (ret == 0) {
     //remove the allocation_file
     invalidate_allocation_file_on_bluefs();

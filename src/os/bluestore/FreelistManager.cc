@@ -17,8 +17,14 @@ FreelistManager *FreelistManager::create(
   // op is per prefix, has to done pre-db-open, and we don't know the
   // freelist type until after we open the db.
   ceph_assert(prefix == "B");
-  if (type == "bitmap")
+  if (type == "bitmap") {
     return new BitmapFreelistManager(cct, "B", "b");
+  } else if (type == "null") {
+    // use BitmapFreelistManager with the null option to stop allocations from going to RocksDB
+    auto *fm = new BitmapFreelistManager(cct, "B", "b");
+    fm->set_null_manager();
+    return fm;
+  }
 
 #ifdef HAVE_LIBZBD
   // With zoned drives there is only one FreelistManager implementation that we
