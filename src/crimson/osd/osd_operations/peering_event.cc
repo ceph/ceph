@@ -9,6 +9,7 @@
 #include "common/Formatter.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_connection_priv.h"
 
@@ -70,19 +71,20 @@ seastar::future<> PeeringEvent::start()
     }
     return interruptor::with_interruption([this, pg] {
       logger().debug("{}: pg present", *this);
-      return with_blocking_future_interruptible<interruptor::condition>(
-        handle.enter(pp(*pg).await_map)
+      return enter_stage<interruptor>(
+        pp(*pg).await_map
       ).then_interruptible([this, pg] {
-        return with_blocking_future_interruptible<interruptor::condition>(
-          pg->osdmap_gate.wait_for_map(evt.get_epoch_sent()));
+        return with_blocking_event<PG_OSDMapGate::OSDMapBlocker::BlockingEvent>(
+        [this, pg] (auto&& trigger) {
+          return pg->osdmap_gate.wait_for_map(std::move(trigger),
+                                              evt.get_epoch_sent());
+	});
       }).then_interruptible([this, pg](auto) {
-        return with_blocking_future_interruptible<interruptor::condition>(
-          handle.enter(pp(*pg).process));
+        return enter_stage<interruptor>(pp(*pg).process);
       }).then_interruptible([this, pg] {
         // TODO: likely we should synchronize also with the pg log-based
         // recovery.
-        return with_blocking_future_interruptible<interruptor::condition>(
-          handle.enter(BackfillRecovery::bp(*pg).process));
+        return enter_stage<interruptor>(BackfillRecovery::bp(*pg).process);
       }).then_interruptible([this, pg] {
         pg->do_peering_event(evt, ctx);
         handle.exit();
@@ -176,12 +178,11 @@ seastar::future<> RemotePeeringEvent::complete_rctx_no_pg()
 
 seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
 {
-  return with_blocking_future(
-    handle.enter(op().await_active)
-  ).then([this] {
+#if 0
+  return enter_stage<>(op().await_active).then([this] {
     return osd.state.when_active();
   }).then([this] {
-    return with_blocking_future(handle.enter(cp().await_map));
+    return enter_stage<>(cp().await_map);
   }).then([this] {
     return with_blocking_future(
       osd.osdmap_gate.wait_for_map(evt.get_epoch_sent()));
@@ -193,6 +194,9 @@ seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
       osd.get_or_create_pg(
 	pgid, evt.get_epoch_sent(), std::move(evt.create_info)));
   });
+#else
+  return seastar::make_ready_future<Ref<PG>>(nullptr);
+#endif
 }
 
 seastar::future<Ref<PG>> LocalPeeringEvent::get_pg() {
