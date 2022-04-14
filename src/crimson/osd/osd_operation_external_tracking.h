@@ -162,4 +162,11 @@ struct EventBackendRegistry<osd::CompoundPeeringRequest> {
   }
 };
 
+template <>
+struct EventBackendRegistry<osd::BackfillRecovery> {
+  static std::tuple<> get_backends() {
+    return {};
+  }
+};
+
 } // namespace crimson

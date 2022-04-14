@@ -13,11 +13,12 @@ namespace crimson::osd {
 class PG;
 class ShardServices;
 
-class BackgroundRecovery : public TrackableOperationT<BackgroundRecovery> {
+template <class T>
+class BackgroundRecoveryT : public PhasedOperationT<T> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::background_recovery;
 
-  BackgroundRecovery(
+  BackgroundRecoveryT(
     Ref<PG> pg,
     ShardServices &ss,
     epoch_t epoch_started,
@@ -40,7 +41,8 @@ private:
       scheduler_class
     };
   }
-  virtual interruptible_future<bool> do_recovery() = 0;
+  using do_recovery_ret_t = typename PhasedOperationT<T>::template interruptible_future<bool>;
+  virtual do_recovery_ret_t do_recovery() = 0;
   ShardServices &ss;
   const crimson::osd::scheduler::scheduler_class_t scheduler_class;
 };
@@ -51,7 +53,7 @@ private:
 /// @c UrgentRecovery is not throttled by the scheduler. and it
 /// utilizes @c RecoveryBackend directly to recover the unreadable
 /// object.
-class UrgentRecovery final : public BackgroundRecovery {
+class UrgentRecovery final : public BackgroundRecoveryT<UrgentRecovery> {
 public:
   UrgentRecovery(
     const hobject_t& soid,
@@ -68,7 +70,7 @@ private:
   const eversion_t need;
 };
 
-class PglogBasedRecovery final : public BackgroundRecovery {
+class PglogBasedRecovery final : public BackgroundRecoveryT<PglogBasedRecovery> {
 public:
   PglogBasedRecovery(
     Ref<PG> pg,
@@ -80,7 +82,7 @@ private:
   interruptible_future<bool> do_recovery() override;
 };
 
-class BackfillRecovery final : public BackgroundRecovery {
+class BackfillRecovery final : public BackgroundRecoveryT<BackfillRecovery> {
 public:
   class BackfillRecoveryPipeline {
     struct Process : OrderedExclusivePhaseT<Process> {
@@ -99,6 +101,10 @@ public:
 
   static BackfillRecoveryPipeline &bp(PG &pg);
 
+  std::tuple<
+    BackfillRecoveryPipeline::Process::BlockingEvent
+  > tracking_events;
+
 private:
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
   PipelineHandle handle;
@@ -111,7 +117,7 @@ BackfillRecovery::BackfillRecovery(
   ShardServices &ss,
   const epoch_t epoch_started,
   const EventT& evt)
-  : BackgroundRecovery(
+  : BackgroundRecoveryT(
       std::move(pg),
       ss,
       epoch_started,
