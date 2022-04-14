@@ -5586,12 +5586,37 @@ int RGWBucketPipeSyncStatusManager::run(const DoutPrefixProvider *dpp)
 {
   list<RGWCoroutinesStack *> stacks;
 
-  for (auto& mgr : source_mgrs) {
-    RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
-    for (int i = 0; i < mgr.num_pipes(); ++i) {
-      stack->call(mgr.run_sync_cr(i));
-    }
+  struct bk {
+    std::vector<rgw_bucket_sync_pair_info> pairs;
+    uint64_t latest_gen;
+  };
+  std::vector<bk> bookkeeping;
 
+  for (auto& s : sources) {
+    auto stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
+    uint64_t num_shards, latest_gen;
+    auto ret = remote_info(dpp, s, nullptr, &latest_gen, &num_shards);
+    if (!ret) {
+      ldpp_dout(this, 5) << "Unable to get remote info: "
+			 << ret << dendl;
+      return ret;
+    }
+    bookkeeping.emplace_back();
+    auto& cur = bookkeeping.back();
+    cur.latest_gen = latest_gen;
+    cur.pairs.resize(num_shards);
+    for (auto shard = 0u; shard < num_shards; ++shard) {
+      auto& pair = cur.pairs[shard];
+      pair.handler = s.handler;
+      pair.source_bs.bucket = s.info.bucket;
+      pair.dest_bucket = s.dest;
+      pair.source_bs.shard_id = shard;
+      stack->call(sync_bucket_shard_cr(&s.sc, nullptr, pair,
+				       cur.latest_gen,
+				       sync_env.sync_tracer->root_node,
+				       nullptr));
+
+    }
     stacks.push_back(stack);
   }
 
