@@ -98,6 +98,7 @@ Dashboard
 
 RADOS
 ~~~~~
+
 * OSD: Ceph now uses `mclock_scheduler` for BlueStore OSDs as its default
   `osd_op_queue` to provide QoS. The 'mclock_scheduler' is not supported
   for Filestore OSDs. Therefore, the default 'osd_op_queue' is set to `wpq`
@@ -142,7 +143,27 @@ RADOS
 RBD block storage
 ~~~~~~~~~~~~~~~~~
 
-## TODO
+* rbd-nbd: `rbd device attach` and `rbd device detach` commands added,
+  these allow for safe reattach after `rbd-nbd` daemon is restarted since
+  Linux kernel 5.14.
+
+* rbd-nbd: `notrim` map option added to support thick-provisioned images,
+  similar to krbd.
+
+* Large stabilization effort for client-side persistent caching on SSD
+  devices, also available in 16.2.8. For details on usage, see:
+
+  https://docs.ceph.com/en/quincy/rbd/rbd-persistent-write-log-cache/
+
+* Several bug fixes in diff calculation when using fast-diff image
+  feature + whole object (inexact) mode. In some rare cases these
+  long-standing issues could cause an incorrect `rbd export`. Also
+  fixed in 15.2.16 and 16.2.8.
+
+* Fix for a potential performance degradation when running Windows VMs
+  on krbd. For details, see `rxbounce` map option description:
+
+  https://docs.ceph.com/en/quincy/man/8/rbd/#kernel-rbd-krbd-options
 
 RGW object storage
 ~~~~~~~~~~~~~~~~~~
