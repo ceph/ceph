@@ -4,6 +4,7 @@ from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
 from textwrap import dedent
+from threading import Thread
 import errno
 import platform
 import time
@@ -292,6 +293,71 @@ class TestMisc(CephFSTestCase):
 
         dir_path = "file_sync_do_not_wait_mdlog_testdir"
         self._test_sync_stuck_for_around_5s(dir_path, True)
+
+    def test_file_filesystem_sync_crash(self):
+        """
+        To check whether the kernel crashes when doing the file/filesystem sync.
+        """
+
+        stop_thread = False
+        dir_path = "file_filesystem_sync_crash_testdir"
+        self.mount_a.run_shell(["mkdir", dir_path])
+
+        def mkdir_rmdir_thread(mount, path):
+            #global stop_thread
+
+            log.info(" mkdir_rmdir_thread starting...")
+            num = 0
+            while not stop_thread:
+                n = num
+                m = num
+                for __ in range(10):
+                    mount.run_shell(["mkdir", os.path.join(path, f"{n}")])
+                    n += 1
+                for __ in range(10):
+                    mount.run_shell(["rm", "-rf", os.path.join(path, f"{m}")])
+                    m += 1
+                num += 10
+            log.info(" mkdir_rmdir_thread stopped")
+
+        def filesystem_sync_thread(mount, path):
+            #global stop_thread
+
+            log.info(" filesystem_sync_thread starting...")
+            while not stop_thread:
+                mount.run_shell(["sync"])
+            log.info(" filesystem_sync_thread stopped")
+
+        def file_sync_thread(mount, path):
+            #global stop_thread
+
+            log.info(" file_sync_thread starting...")
+            pyscript = dedent("""
+                    import os
+
+                    path = "{path}"
+                    dfd = os.open(path, os.O_DIRECTORY)
+                    os.fsync(dfd)
+                    os.close(dfd)
+                """.format(path=path))
+
+            while not stop_thread:
+                mount.run_shell(['python3', '-c', pyscript])
+            log.info(" file_sync_thread stopped")
+
+        td1 = Thread(target=mkdir_rmdir_thread, args=(self.mount_a, dir_path,))
+        td2 = Thread(target=filesystem_sync_thread, args=(self.mount_a, dir_path,))
+        td3 = Thread(target=file_sync_thread, args=(self.mount_a, dir_path,))
+
+        td1.start()
+        td2.start()
+        td3.start()
+        time.sleep(1200) # run 20 minutes
+        stop_thread = True
+        td1.join()
+        td2.join()
+        td3.join()
+        self.mount_a.run_shell(["rm", "-rf", dir_path])
 
 
 class TestCacheDrop(CephFSTestCase):
