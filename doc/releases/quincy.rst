@@ -105,7 +105,7 @@ RADOS
   for Filestore OSDs and is enforced even if the user attempts to change it.
   For more details on configuring mclock see,
 
-  https://docs.ceph.com/en/latest/rados/configuration/mclock-config-ref/
+  https://docs.ceph.com/en/quincy/rados/configuration/mclock-config-ref/
 
   An outstanding issue exists during runtime where the mclock config options
   related to reservation, weight and limit cannot be modified after switching
