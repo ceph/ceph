@@ -2582,7 +2582,10 @@ private:
 	       bool read_only = false);
   void _close_db();
   void _close_db_leave_bluefs();
-  int _open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_restore = false);
+  int _open_fm(KeyValueDB::Transaction t,
+               bool read_only,
+               bool db_avail,
+               bool fm_restore = false);
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
   int _create_alloc();
@@ -3740,6 +3743,7 @@ private:
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
   void read_allocation_from_single_onode(SimpleBitmap *smbmp, BlueStore::OnodeRef& onode_ref, read_alloc_stats_t&  stats);
   void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
+  int  commit_freelist_type();
   int  commit_to_null_manager();
   int  commit_to_real_manager();
   int  db_cleanup(int ret);
