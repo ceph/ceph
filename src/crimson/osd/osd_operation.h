@@ -43,6 +43,7 @@ enum class OperationTypeCode {
   background_recovery,
   background_recovery_sub,
   internal_client_request,
+  historic_client_request,
   last_op
 };
 
@@ -56,6 +57,7 @@ static constexpr const char* const OP_NAMES[] = {
   "background_recovery",
   "background_recovery_sub",
   "internal_client_request",
+  "historic_client_request",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
@@ -77,6 +79,7 @@ template <typename T>
 struct OperationT : InterruptibleOperation {
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
+  using ICRef = boost::intrusive_ptr<const T>;
 
   unsigned get_type() const final {
     return static_cast<unsigned>(T::type);
@@ -167,7 +170,10 @@ protected:
 struct OSDOperationRegistry : OperationRegistryT<
   static_cast<size_t>(OperationTypeCode::last_op)
 > {
+  void do_stop() override;
   size_t dump_client_requests(ceph::Formatter* f) const;
+  size_t dump_historic_client_requests(ceph::Formatter* f) const;
+
 };
 /**
  * Throttles set of currently running operations
