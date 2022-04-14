@@ -32,6 +32,9 @@ receivers:
   webhook_configs:
 {% for url in dashboard_urls %}
   - url: '{{ url }}/api/prometheus_receiver'
+    http_config:
+      tls_config:
+        insecure_skip_verify: true
 {% endfor %}
 {% if snmp_gateway_urls %}
 - name: 'snmp-gateway'
