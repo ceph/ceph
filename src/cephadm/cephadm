@@ -5908,19 +5908,19 @@ def command_ceph_volume(ctx):
 
 @infer_fsid
 def command_unit(ctx):
-    # type: (CephadmContext) -> None
+    # type: (CephadmContext) -> int
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
     unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
-    call_throws(ctx, [
-        'systemctl',
-        ctx.command,
-        unit_name],
+    _, _, code = call(
+        ctx,
+        ['systemctl', ctx.command, unit_name],
         verbosity=CallVerbosity.VERBOSE,
         desc=''
     )
+    return code
 
 ##################################
 
