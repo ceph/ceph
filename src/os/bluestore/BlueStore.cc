@@ -11001,10 +11001,13 @@ int BlueStore::_onode_omap_get(
   o->flush();
   {
     const string& prefix = o->get_omap_prefix();
-    KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
     o->get_omap_header(&head);
     o->get_omap_tail(&tail);
+    auto bounds = KeyValueDB::IteratorBounds();
+    bounds.lower_bound = head;
+    bounds.upper_bound = tail;
+    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, std::move(bounds));
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() == head) {
@@ -11086,10 +11089,13 @@ int BlueStore::omap_get_keys(
   o->flush();
   {
     const string& prefix = o->get_omap_prefix();
-    KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
     o->get_omap_key(string(), &head);
     o->get_omap_tail(&tail);
+    auto bounds = KeyValueDB::IteratorBounds();
+    bounds.lower_bound = head;
+    bounds.upper_bound = tail;
+    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, std::move(bounds));
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() >= tail) {
@@ -11274,7 +11280,15 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   }
   o->flush();
   dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
-  KeyValueDB::Iterator it = db->get_iterator(o->get_omap_prefix());
+  auto bounds = KeyValueDB::IteratorBounds();
+  if (o->onode.has_omap()) {
+    std::string lower_bound, upper_bound;
+    o->get_omap_key(string(), &lower_bound);
+    o->get_omap_tail(&upper_bound);
+    bounds.lower_bound = std::move(lower_bound);
+    bounds.upper_bound = std::move(upper_bound);
+  }
+  KeyValueDB::Iterator it = db->get_iterator(o->get_omap_prefix(), 0, std::move(bounds));
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
 }
 
@@ -15540,10 +15554,13 @@ int BlueStore::_clone(TransContext *txc,
       newo->onode.set_omap_flags(per_pool_omap == OMAP_BULK);
     }
     const string& prefix = newo->get_omap_prefix();
-    KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
     oldo->get_omap_header(&head);
     oldo->get_omap_tail(&tail);
+    auto bounds = KeyValueDB::IteratorBounds();
+    bounds.lower_bound = head;
+    bounds.upper_bound = tail;
+    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, std::move(bounds));
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() >= tail) {
