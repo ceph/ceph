@@ -64,6 +64,14 @@ namespace rocksdb{
 
 extern rocksdb::Logger *create_rocksdb_ceph_logger();
 
+inline rocksdb::Slice make_slice(const std::optional<std::string>& bound) {
+  if (bound) {
+    return {*bound};
+  } else {
+    return {};
+  }
+}
+
 /**
  * Uses RocksDB to implement the KeyValueDB interface
  */
@@ -83,6 +91,7 @@ class RocksDBStore : public KeyValueDB {
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
   friend class ShardMergeIteratorImpl;
+  friend class CFIteratorImpl;
   friend class WholeMergeIteratorImpl;
   /*
    *  See RocksDB's definition of a column family(CF) and how to use it.
@@ -119,8 +128,11 @@ private:
   void add_column_family(const std::string& cf_name, uint32_t hash_l, uint32_t hash_h,
 			 size_t shard_idx, rocksdb::ColumnFamilyHandle *handle);
   bool is_column_family(const std::string& prefix);
+  std::string_view get_key_hash_view(const prefix_shards& shards, const char* key, const size_t keylen);
+  rocksdb::ColumnFamilyHandle *get_key_cf(const prefix_shards& shards, const char* key, const size_t keylen);
   rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const std::string& key);
   rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const char* key, size_t keylen);
+  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const IteratorBounds& bounds);
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int install_cf_mergeop(const std::string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
@@ -341,9 +353,29 @@ public:
     public KeyValueDB::WholeSpaceIteratorImpl {
   protected:
     rocksdb::Iterator *dbiter;
+    const KeyValueDB::IteratorBounds bounds;
+    const rocksdb::Slice iterate_lower_bound;
+    const rocksdb::Slice iterate_upper_bound;
   public:
-    explicit RocksDBWholeSpaceIteratorImpl(rocksdb::Iterator *iter) :
-      dbiter(iter) { }
+    explicit RocksDBWholeSpaceIteratorImpl(const RocksDBStore* db,
+                                           rocksdb::ColumnFamilyHandle* cf,
+                                           const KeyValueDB::IteratorOpts opts,
+                                           KeyValueDB::IteratorBounds bounds_) :
+      bounds(std::move(bounds_)),
+      iterate_lower_bound(make_slice(bounds.lower_bound)),
+      iterate_upper_bound(make_slice(bounds.upper_bound))
+      {
+        rocksdb::ReadOptions options = rocksdb::ReadOptions();
+        if (opts & ITERATOR_NOCACHE)
+          options.fill_cache=false;
+        if (bounds.lower_bound) {
+          options.iterate_lower_bound = &iterate_lower_bound;
+        }
+        if (bounds.upper_bound) {
+          options.iterate_upper_bound = &iterate_upper_bound;
+        }
+        dbiter = db->db->NewIterator(options, cf);
+    }
     //virtual ~RocksDBWholeSpaceIteratorImpl() { }
     ~RocksDBWholeSpaceIteratorImpl() override;
 
@@ -366,7 +398,7 @@ public:
     size_t value_size() override;
   };
 
-  Iterator get_iterator(const std::string& prefix, IteratorOpts opts = 0) override;
+  Iterator get_iterator(const std::string& prefix, IteratorOpts opts = 0, IteratorBounds = IteratorBounds()) override;
 private:
   /// this iterator spans single cf
   rocksdb::Iterator* new_shard_iterator(rocksdb::ColumnFamilyHandle* cf);
@@ -499,7 +531,7 @@ err:
     return nullptr;
   }
 
-  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0, IteratorBounds bounds = IteratorBounds()) override;
 private:
   WholeSpaceIterator get_default_cf_iterator();
 
