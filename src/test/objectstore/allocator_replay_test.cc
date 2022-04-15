@@ -536,7 +536,7 @@ int check_duplicates(char* fname)
 
 int main(int argc, char **argv)
 {
-  vector<const char*> args;
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -720,7 +720,8 @@ int main(int argc, char **argv)
               std::cout << "Duration (ns): " << (ceph::mono_clock::now() - t0).count()
                         << " want/unit/max/hint (hex): " << std::hex
                         << want << "/" << unit << "/" << max << "/" << hint
-                        << std::dec << std::endl;
+                        << std::dec << " res fragments " << extents.size()
+                        << std::endl;
 
               /* Do not release. */
               //alloc->release(extents);
