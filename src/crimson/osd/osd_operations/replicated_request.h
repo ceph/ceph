@@ -4,7 +4,9 @@
 #pragma once
 
 #include "crimson/net/Connection.h"
+#include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
 
 class MOSDRepOp;
@@ -21,21 +23,23 @@ class PG;
 class RepRequest final : public PhasedOperationT<RepRequest> {
 public:
   class ConnectionPipeline {
-    OrderedExclusivePhase await_map = {
-      "RepRequest::ConnectionPipeline::await_map"
-    };
-    OrderedExclusivePhase get_pg = {
-      "RepRequest::ConnectionPipeline::get_pg"
-    };
+    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
+      static constexpr auto type_name =
+	"RepRequest::ConnectionPipeline::await_map";
+    } await_map;
+    struct GetPG : OrderedExclusivePhaseT<GetPG> {
+      static constexpr auto type_name =
+	"RepRequest::ConnectionPipeline::get_pg";
+    } get_pg;
     friend RepRequest;
   };
   class PGPipeline {
-    OrderedExclusivePhase await_map = {
-      "RepRequest::PGPipeline::await_map"
-    };
-    OrderedExclusivePhase process = {
-      "RepRequest::PGPipeline::process"
-    };
+    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
+      static constexpr auto type_name = "RepRequest::PGPipeline::await_map";
+    } await_map;
+    struct Process : OrderedExclusivePhaseT<Process> {
+      static constexpr auto type_name = "RepRequest::PGPipeline::process";
+    } process;
     friend RepRequest;
   };
   static constexpr OperationTypeCode type = OperationTypeCode::replicated_request;
@@ -44,6 +48,13 @@ public:
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
   seastar::future<> start();
+
+  std::tuple<
+    ConnectionPipeline::AwaitMap::BlockingEvent,
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    ConnectionPipeline::GetPG::BlockingEvent,
+    PGMap::PGCreationBlockingEvent
+  > tracking_events;
 
 private:
   ConnectionPipeline &cp();
