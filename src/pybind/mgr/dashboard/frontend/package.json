@@ -99,6 +99,7 @@
     "ng-block-ui": "3.0.2",
     "ng-click-outside": "7.0.0",
     "ng2-charts": "2.4.2",
+    "ngx-cookie-service": "13.2.0",
     "ngx-pipe-function": "1.0.0",
     "ngx-toastr": "14.1.4",
     "rxjs": "6.6.3",
