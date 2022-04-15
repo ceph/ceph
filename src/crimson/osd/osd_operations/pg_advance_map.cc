@@ -1,8 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "crimson/osd/osd_operations/pg_advance_map.h"
-
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <seastar/core/future.hh>
 
@@ -10,6 +8,9 @@
 #include "common/Formatter.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
+#include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
+#include "osd/PeeringState.h"
 
 namespace {
   seastar::logger& logger() {
@@ -56,9 +57,9 @@ seastar::future<> PGAdvanceMap::start()
   logger().debug("{}: start", *this);
 
   IRef ref = this;
-  return with_blocking_future(
-    handle.enter(pg->peering_request_pg_pipeline.process))
-  .then([this] {
+  return enter_stage<>(
+    pg->peering_request_pg_pipeline.process
+  ).then([this] {
     if (do_init) {
       pg->handle_initialize(rctx);
       pg->handle_activate_map(rctx);
