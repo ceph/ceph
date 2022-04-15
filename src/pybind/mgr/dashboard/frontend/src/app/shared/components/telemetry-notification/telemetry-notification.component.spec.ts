@@ -98,7 +98,6 @@ describe('TelemetryActivationNotificationComponent', () => {
     fixture.detectChanges();
     component.onDismissed();
     expect(notificationService.show).toHaveBeenCalled();
-    // expect(localStorage.getItem('telemetry_notification_hidden')).toBe('true');
     expect(cookieService.get('telemetry_notification_hidden')).toBe('true');
   });
 

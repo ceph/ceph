@@ -51,13 +51,10 @@ export class TelemetryNotificationComponent implements OnInit, OnDestroy {
     const myDate: Date = new Date();
     myDate.setHours( myDate.getHours() + 1 );
     return this.cookieService.get('telemetry_notification_hidden') === 'true';
-    // localStorage.getItem('telemetry_notification_hidden') === 'true';
-    
   }
 
   onDismissed(): void {
     this.telemetryNotificationService.setVisibility(false);
-    // localStorage.setItem('telemetry_notification_hidden', 'true');
     this.cookieService.set('telemetry_notification_hidden', 'true', 365);
     this.notificationService.show(
       NotificationType.success,
