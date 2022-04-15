@@ -559,6 +559,10 @@ int take_min_status(
   std::vector<BucketTrimInstanceCR::StatusShards>::const_iterator last,
   std::vector<std::string> *status) {
   for (auto peer = first; peer != last; ++peer) {
+    // Peers on later generations don't get a say in the matter
+    if (peer->generation > min_generation) {
+      continue;
+    }
     if (peer->shards.size() != status->size()) {
       // all peers must agree on the number of shards
       return -EINVAL;
@@ -567,14 +571,6 @@ int take_min_status(
     auto m = status->begin();
     for (auto& shard : peer->shards) {
       auto& marker = *m++;
-      // Peers on later generations don't get a say in the matter
-      if (peer->generation > min_generation) {
-	continue;
-      }
-      // if no sync has started, we can safely trim everything
-      if (shard.state == rgw_bucket_shard_sync_info::StateInit) {
-	continue;
-      }
       // always take the first marker, or any later marker that's smaller
       if (peer == first || marker > shard.inc_marker.position) {
 	marker = std::move(shard.inc_marker.position);
