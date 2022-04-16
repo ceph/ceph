@@ -21,6 +21,6 @@
   "retries": 1,
   "env": {
     "LOGIN_USER": "admin",
-    "LOGIN_PASSWORD": "admin"
+    "LOGIN_PWD": "admin"
   }
 }
