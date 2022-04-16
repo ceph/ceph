@@ -1,4 +1,5 @@
 import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
+import { Event, Router, NavigationEnd } from '@angular/router';
 
 import * as _ from 'lodash';
 import { Subscription } from 'rxjs';
@@ -46,7 +47,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private featureToggles: FeatureTogglesService,
     private telemetryNotificationService: TelemetryNotificationService,
     public prometheusAlertService: PrometheusAlertService,
-    private motdNotificationService: MotdNotificationService
+    private motdNotificationService: MotdNotificationService,
+    private router: Router
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -78,10 +80,39 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.showTopNotification('motdNotificationEnabled', _.isPlainObject(motd));
       })
     );
+    this.router.events.subscribe((event: Event) => {
+      if (event instanceof NavigationEnd) {
+        this.setDisplayedSubMenu();
+      }
+    });
   }
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
+  }
+
+  setDisplayedSubMenu(): void {
+    if (
+      this.router.url.startsWith('/hosts') || this.router.url.startsWith('/inventory')
+      || this.router.url.startsWith('/monitor') || this.router.url.startsWith('/services')
+      || this.router.url.startsWith('/osd') || this.router.url.startsWith('/configuration')
+      || this.router.url.startsWith('/crush-map') || this.router.url.startsWith('/mgr-modules')
+      || this.router.url.startsWith('/logs') || this.router.url.startsWith('/monitoring')
+    ) {
+      this.displayedSubMenu = 'cluster';
+    }
+    if (
+      this.router.url.startsWith('/block/rbd/') || this.router.url.startsWith('/block/mirroring')
+      || this.router.url.startsWith('/block/iscsi')
+    ) {
+      this.displayedSubMenu = 'block';
+    }
+    if (
+      this.router.url.startsWith('/rgw/daemon') || this.router.url.startsWith('/rgw/user')
+      || this.router.url.startsWith('/rgw/bucket')
+    ) {
+      this.displayedSubMenu = 'rgw';
+    }
   }
 
   blockHealthColor() {
