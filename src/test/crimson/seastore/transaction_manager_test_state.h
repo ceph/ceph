@@ -71,7 +71,7 @@ protected:
 };
 
 auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
-  auto tm = make_transaction_manager(*sm, true);
+  auto tm = make_transaction_manager(true);
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     "",
@@ -92,8 +92,8 @@ protected:
   TMTestState() : EphemeralTestState() {}
 
   virtual void _init() override {
-    tm = make_transaction_manager(*segment_manager, true);
-    tm->add_segment_manager(segment_manager.get());
+    tm = make_transaction_manager(true);
+    tm->add_device(segment_manager.get(), true);
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
   }
@@ -182,7 +182,7 @@ public:
     return mount_ertr::now(); // we handle this above
   }
 
-  mkfs_ret mkfs(segment_manager_config_t c) final {
+  mkfs_ret mkfs(device_config_t c) final {
     return mkfs_ertr::now(); // we handle this above
   }
 
@@ -192,10 +192,6 @@ public:
 
   secondary_device_set_t& get_secondary_devices() final {
     return sm.get_secondary_devices();
-  }
-
-  device_spec_t get_device_spec() const final {
-    return sm.get_device_spec();
   }
 
   magic_t get_magic() const final {

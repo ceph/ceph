@@ -19,7 +19,6 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/cache.h"
-#include "crimson/os/seastore/segment_manager.h"
 
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 #include "crimson/os/seastore/btree/btree_range_pin.h"
@@ -51,9 +50,7 @@ using BtreeLBAPin = BtreeNodePin<laddr_t>;
  */
 class BtreeLBAManager : public LBAManager {
 public:
-  BtreeLBAManager(
-    SegmentManager &segment_manager,
-    Cache &cache);
+  BtreeLBAManager(Cache &cache);
 
   mkfs_ret mkfs(
     Transaction &t) final;
@@ -138,7 +135,6 @@ public:
 
   ~BtreeLBAManager();
 private:
-  SegmentManager &segment_manager;
   Cache &cache;
 
   btree_pin_set_t<laddr_t> pin_set;
