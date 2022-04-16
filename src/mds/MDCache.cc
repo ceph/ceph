@@ -3765,13 +3765,13 @@ void MDCache::trim_unlinked_inodes()
       q.push_back(in);
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
   for (auto& in : q) {
     remove_inode_recursive(in);
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 }
@@ -5417,7 +5417,7 @@ bool MDCache::process_imported_caps()
     } else {
       open_ino(p.first, (int64_t)-1, fin, false);
     }
-    if (!(cap_imports_num_opening % 1000))
+    if (!(cap_imports_num_opening % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -5603,7 +5603,7 @@ void MDCache::choose_lock_states_and_reconnect_caps()
       rejoin_pending_snaprealms.insert(in);
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 }
@@ -5772,7 +5772,7 @@ void MDCache::export_remaining_imported_caps()
       }
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -6246,7 +6246,7 @@ void MDCache::reissue_all_caps()
 	n += mds->locker->issue_caps(in);
     }
 
-    if ((count % 1000) + n >= 1000)
+    if ((count % mds->heartbeat_reset_grace()) + n >= mds->heartbeat_reset_grace())
       mds->heartbeat_reset();
     count += n;
   }
@@ -6367,7 +6367,7 @@ void MDCache::identify_files_to_recover()
       rejoin_check_q.push_back(in);
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 }
@@ -6379,13 +6379,13 @@ void MDCache::start_files_to_recover()
     if (in->filelock.get_state() == LOCK_XLOCKSNAP)
       mds->locker->issue_caps(in);
     mds->locker->check_inode_max_size(in);
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
   rejoin_check_q.clear();
   for (CInode *in : rejoin_recover_q) {
     mds->locker->file_recover(&in->filelock);
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
   if (!rejoin_recover_q.empty()) {
@@ -12457,7 +12457,7 @@ void MDCache::force_readonly()
     CInode *in = p.second;
     if (in->is_head())
       mds->locker->eval(in, CEPH_CAP_LOCKS);
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
