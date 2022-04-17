@@ -24,15 +24,15 @@ class ObjectStoreTool : public RadosDump
       : RadosDump(file_fd, dry_run)
     {}
 
-    int dump_export(Formatter *formatter);
+    int dump_export(Formatter *formatter, const std::string &dump_data_dir);
     int do_import(ObjectStore *store, OSDSuperblock& sb, bool force,
 		  std::string pgidstr);
     int do_export(CephContext *cct, ObjectStore *fs, coll_t coll, spg_t pgid,
           pg_info_t &info, epoch_t map_epoch, __u8 struct_ver,
           const OSDSuperblock& superblock,
           PastIntervals &past_intervals);
-    int dump_object(Formatter *formatter,
-				bufferlist &bl);
+    int dump_object(Formatter *formatter, bufferlist &bl,
+                    const std::string &dump_data_dir = "");
     int get_object(
       ObjectStore *store, OSDriver& driver, SnapMapper& mapper, coll_t coll,
       bufferlist &bl, OSDMap &curmap, bool *skipped_objects);
