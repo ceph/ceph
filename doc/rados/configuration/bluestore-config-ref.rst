@@ -357,14 +357,19 @@ The device selector always has the form of ``DDDD:BB:DD.FF`` or ``DDDD.BB.DD.FF`
 
 and then set::
 
-  bluestore_block_path = spdk:0000:01:00.0
+  bluestore_block_path = "spdk:trtype:PCIe traddr:0000:01:00.0"
 
 Where ``0000:01:00.0`` is the device selector found in the output of ``lspci``
 command above.
 
+You may also specify a remote NVMeoF target over the TCP transport as in the
+following example::
+
+  bluestore_block_path = "spdk:trtype:TCP traddr:10.67.110.197 trsvcid:4420 subnqn:nqn.2019-02.io.spdk:cnode1"
+
 To run multiple SPDK instances per node, you must specify the
 amount of dpdk memory in MB that each instance will use, to make sure each
-instance uses its own dpdk memory
+instance uses its own DPDK memory.
 
 In most cases, a single device can be used for data, DB, and WAL.  We describe
 this strategy as *colocating* these components. Be sure to enter the below
