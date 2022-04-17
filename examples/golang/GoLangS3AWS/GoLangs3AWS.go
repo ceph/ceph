@@ -17,13 +17,16 @@ var (
 )
 
 const (
-	BUCKET_NAME = "cephDonkey"
-	REGION      = "default"
+	BUCKET_NAME = "cephbucket"
+	REGION      = "us-west-2"
 )
 
 func init() {
 	s3session = s3.New(session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(REGION),
+		Region:           aws.String(REGION), /*Credentials: credentials.NewStaticCredentials("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==", ""),*/
+		Endpoint:         aws.String("http://localhost:8000"),
+		DisableSSL:       aws.Bool(true),
+		S3ForcePathStyle: aws.Bool(true),
 	})))
 }
 
@@ -38,12 +41,12 @@ func listBuckets() (resp *s3.ListBucketsOutput) {
 
 func createBucket() (resp *s3.CreateBucketOutput) {
 	resp, err := s3session.CreateBucket(&s3.CreateBucketInput{
-		// ACL: aws.String(s3.BucketCannedACLPrivate),
-		// ACL: aws.String(s3.BucketCannedACLPublicRead),
+		//ACL: aws.String(s3.BucketCannedACLPrivate),
+		//ACL: aws.String(s3.BucketCannedACLPublicRead),
 		Bucket: aws.String(BUCKET_NAME),
-		CreateBucketConfiguration: &s3.CreateBucketConfiguration{
+		/* CreateBucketConfiguration: &s3.CreateBucketConfiguration{
 			LocationConstraint: aws.String(REGION),
-		},
+		},*/
 	})
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
@@ -114,24 +117,46 @@ func getObject(filename string) {
 	}
 }
 
+func deleteObject(filename string) (resp *s3.DeleteObjectOutput) {
+	fmt.Println("Deleting: ", filename)
+	resp, err := s3session.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: aws.String(BUCKET_NAME),
+		Key:    aws.String(filename),
+	})
+
+	if err != nil {
+		panic(err)
+	}
+	return resp
+}
+
 func main() {
-	folder := "files"
+	fmt.Println("Hello World")
+	//uploadObject("img.jpg)
+	//fmt.Println(listObjects())
+	/*	os.Setenv("AWS_ACCESS_KEY_ID", ACCESSKEYID)
+		os.Setenv("AWS_SECRET_ACCESS_KEY", SECRETACCESSKEY)*/
+	/*	folder := "files"
 
-	files, _ := ioutil.ReadDir(folder)
-	fmt.Println(files)
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		} else {
-			uploadObject(folder + "/" + file.Name())
+		files, _ := ioutil.ReadDir(folder)
+		fmt.Println(files)
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			} else {
+				uploadObject(folder + "/" + file.Name())
+			}
+		}*/
+	fmt.Println(listObjects())
+	deleteObject("img.jpg")
+	fmt.Println(listObjects())
+	///	getObject("img.jpg")
+	//	fmt.Println(listBuckets())
+
+	/*	for _, object := range listObjects().Contents {
+			getObject(*object.Key)
 		}
-	}
 
-	fmt.Println(listObjects())
-
-	for _, object := range listObjects().Contents {
-		getObject(*object.Key)
-	}
-
-	fmt.Println(listObjects())
+		fmt.Println(listObjects())
+	*/
 }
