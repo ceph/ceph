@@ -23,5 +23,5 @@ class TestACLs(XFSTestsDev):
 
         self.mount_a.client_remote.run(args=['sudo', './check',
             'generic/099'], cwd=self.repo_path, stdout=BytesIO(),
-            stderr=BytesIO(), timeout=30, check_status=True,
+            stderr=BytesIO(), timeout=30, check_status=True, omit_sudo=False,
             label='running tests for ACLs from xfstests-dev')
