@@ -6,10 +6,9 @@ LGPL2.1.  See file COPYING.
 from datetime import datetime, timezone
 import json
 import logging
-from os import environ
 import re
 import sqlite3
-from typing import Tuple, Any
+from typing import Tuple, Any, List
 
 log = logging.getLogger(__name__)
 
@@ -30,12 +29,12 @@ except AttributeError:
     log.info(('Couldn\'t find datetime.fromisoformat, falling back to '
               f'static timestamp parsing ({SNAP_DB_TS_FORMAT}'))
 
-    def ts_parser(ts):
+    def ts_parser(date_string):  # type: ignore
         try:
-            date = datetime.strptime(ts, SNAP_DB_TS_FORMAT)
+            date = datetime.strptime(date_string, SNAP_DB_TS_FORMAT)
             return date
         except ValueError:
-            msg = f'''The date string {ts} does not match the required format
+            msg = f'''The date string {date_string} does not match the required format
             {SNAP_DB_TS_FORMAT}. For more flexibel date parsing upgrade to
             python3.7 or install
             https://github.com/movermeyer/backports.datetime_fromisoformat'''
@@ -221,7 +220,7 @@ class Schedule(object):
             data += (start,)
         with db:
             c = db.execute(query, data)
-        return [cls._from_db_row(row, fs) for row in c.fetchall()]
+            return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     @classmethod
     def list_schedules(cls, path, db, fs, recursive):
@@ -232,7 +231,15 @@ class Schedule(object):
             else:
                 c = db.execute(cls.PROTO_GET_SCHEDULES + ' path = ?',
                                (f'{path}',))
-        return [cls._from_db_row(row, fs) for row in c.fetchall()]
+            return [cls._from_db_row(row, fs) for row in c.fetchall()]
+
+    @classmethod
+    def list_all_schedules(cls,
+                           db: sqlite3.Connection,
+                           fs: str) -> List['Schedule']:
+        with db:
+            c = db.execute(cls.PROTO_GET_SCHEDULES + " path LIKE '%'")
+            return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     INSERT_SCHEDULE = '''INSERT INTO
         schedules(path, subvol, retention, rel_path)
