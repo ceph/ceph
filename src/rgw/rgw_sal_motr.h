@@ -487,6 +487,20 @@ class MotrOIDCProvider : public RGWOIDCProvider {
   }
 };
 
+// Used to accumulate remaining write IO chunks of multipart write,
+// in order to make Motr write IO aligned with the parity group size.
+// E.g., for part obj of size of 5.5MB (i.e. object lid=0xb), when the 
+// chunk size is 4MB, MotrObject::write_mobj() will collect each 4MB chunk
+// until the end of data from client. So, in this case, two chunks of 4MB
+// and 1.5MB will be added to 'AccumulateIOCtxt::accumulated_buffer_list'.
+// When both the chucks are read completely, Motr write IO is performed.
+struct AccumulateIOCtxt{
+  // Accumulate buffer from socket until we have data of optimal block size 
+  std::vector<bufferlist> accumulated_buffer_list;
+  uint64_t start_offset = 0;
+  uint64_t total_bufer_sz = 0;
+};
+
 class MotrObject : public Object {
   private:
     MotrStore *store;
@@ -503,6 +517,11 @@ class MotrObject : public Object {
     uint64_t part_off;
     uint64_t part_size;
     uint64_t part_num;
+    // Object size as available from Content-Length header
+    uint64_t expected_obj_size = 0;
+    // Total Number of bytes processed so far
+    uint64_t processed_bytes = 0;
+    struct AccumulateIOCtxt io_ctxt = {};
 
   public:
 
@@ -673,6 +692,7 @@ class MotrObject : public Object {
     void set_category(RGWObjCategory _category) {category = _category;}
     int get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir_entry& ent);
     int update_version_entries(const DoutPrefixProvider *dpp);
+    uint64_t get_processed_bytes() { return processed_bytes; }
 };
 
 // A placeholder locking class for multipart upload.
@@ -748,6 +768,8 @@ protected:
   const std::string part_num_str;
   std::unique_ptr<MotrObject> part_obj;
   uint64_t actual_part_size = 0;
+  // Part object size available from Content-Length header
+  uint64_t expected_part_size = 0;
 
 public:
   MotrMultipartWriter(const DoutPrefixProvider *dpp,
@@ -760,6 +782,11 @@ public:
 				  Writer(dpp, y), store(_store), head_obj(std::move(_head_obj)),
 				  part_num(_part_num), part_num_str(part_num_str)
   {
+    struct req_state *s = static_cast<struct req_state *>(obj_ctx.get_private());
+    if (s) {
+      // Save the part's size available from Content-Length header
+      expected_part_size = s->content_length;
+    }
   }
   ~MotrMultipartWriter() = default;
 

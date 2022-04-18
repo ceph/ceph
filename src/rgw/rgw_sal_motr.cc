@@ -1682,6 +1682,7 @@ int MotrObject::create_mobj(const DoutPrefixProvider *dpp, uint64_t sz)
     ldpp_dout(dpp, 0) <<__func__<< "ERROR: m0_ufid_next() failed: " << rc << dendl;
     return rc;
   }
+  expected_obj_size = sz;
 
   char fid_str[M0_FID_STR_LEN];
   snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&meta.oid));
@@ -1827,7 +1828,7 @@ void MotrObject::close_mobj()
   delete mobj; mobj = nullptr;
 }
 
-int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& data, uint64_t offset)
+int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer, uint64_t offset)
 {
   int rc;
   unsigned bs, left;
@@ -1836,26 +1837,60 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& data, uin
   struct m0_bufvec buf;
   struct m0_bufvec attr;
   struct m0_indexvec ext;
-
+  bufferlist data = std::move(in_buffer);
   left = data.length();
   if (left == 0)
     return 0;
+
+  processed_bytes += left;
+
+  bs = this->get_optimal_bs(left);
+  ldpp_dout(dpp, 20) <<__func__<< ": left=" << left << " bs=" << bs << dendl;
+  if (left < bs) {
+    // Determine if there are any further chunks/bytes from socket to be processed
+    int64_t remaining_bytes = expected_obj_size - processed_bytes;
+    if (remaining_bytes > 0) {
+      // Append current buffer to the list of accumulated buffers
+      ldpp_dout(dpp, 20) <<__func__<< " More data (" <<  remaining_bytes << " bytes) in-flight. Accumulating buffer..." << dendl;
+      io_ctxt.accumulated_buffer_list.push_back(std::move(data));
+      if (io_ctxt.start_offset == 0)
+        io_ctxt.start_offset = offset;
+      io_ctxt.total_bufer_sz += left;
+      return 0;
+    } else {
+      // Append last buffer
+      io_ctxt.accumulated_buffer_list.push_back(std::move(data));
+      io_ctxt.total_bufer_sz += left;
+    }
+  }
 
   rc = m0_bufvec_empty_alloc(&buf, 1) ?:
        m0_bufvec_alloc(&attr, 1, 1) ?:
        m0_indexvec_alloc(&ext, 1);
   if (rc != 0)
     goto out;
-
-  bs = this->get_optimal_bs(left);
-  ldpp_dout(dpp, 20) <<__func__<< ": left=" << left << " bs=" << bs << dendl;
+  
+  if (io_ctxt.accumulated_buffer_list.size() > 0) {
+    // We have IO buffers accumulated. Transform it into single buffer.
+    data.clear();
+    for(auto &buffer: io_ctxt.accumulated_buffer_list) {
+      data.claim_append(std::move(buffer));
+    }
+    offset = io_ctxt.start_offset;
+    left = data.length();
+    bs = this->get_optimal_bs(left);
+    ldpp_dout(dpp, 20) <<__func__<< ": Accumulated left=" << left << " bs=" << bs << dendl;
+    io_ctxt.accumulated_buffer_list.clear();
+  } else {
+    // No accumulated buffers.
+  }
 
   start = data.c_str();
-
   for (p = start; left > 0; left -= bs, p += bs, offset += bs) {
     if (left < bs)
       bs = this->get_optimal_bs(left);
     if (left < bs) {
+      ldpp_dout(dpp, 20) <<__func__<< " Padding [" << (bs - left) << "] bytes" << dendl;
       data.append_zero(bs - left);
       left = bs;
       p = data.c_str();
@@ -3053,7 +3088,8 @@ int MotrMultipartWriter::prepare(optional_yield y)
 
   // s3 client may retry uploading part, so the part may have already
   // been created.
-  int rc = part_obj->create_mobj(dpp, store->cctx->_conf->rgw_max_chunk_size);
+  ldpp_dout(dpp, 20) << "Creating object for size =" << expected_part_size << dendl;
+  int rc = part_obj->create_mobj(dpp, expected_part_size);
   if (rc == -EEXIST) {
     rc = part_obj->open_mobj(dpp);
     if (rc < 0)
@@ -3066,7 +3102,7 @@ int MotrMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
   int rc = part_obj->write_mobj(dpp, std::move(data), offset);
   if (rc == 0) {
-    actual_part_size += data.length();
+    actual_part_size = part_obj->get_processed_bytes();
     ldpp_dout(dpp, 20) << " write_mobj(): actual_part_size=" << actual_part_size << dendl;
   }
   return rc;
