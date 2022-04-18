@@ -38,3 +38,7 @@ class TestACLs(XFSTestsDev):
         stdout, stderr = proc.stdout.getvalue(), proc.stderr.getvalue()
         log.info(f'Command stdout -\n{stdout}')
         log.info(f'Command stderr -\n{stderr}')
+
+        self.assertEqual(proc.returncode, 0)
+        success_line = 'Passed all 1 tests'
+        self.assertIn(success_line, stdout)
