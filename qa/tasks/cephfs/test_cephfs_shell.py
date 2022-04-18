@@ -322,7 +322,7 @@ class TestGetAndPut(TestCephFSShell):
         o = self.mount_a.stat('dump4')
         log.info("mount_a output:\n{}".format(o))
 
-        o = self.get_cephfs_shell_cmd_output("get dump4 .")
+        o = self.get_cephfs_shell_cmd_output("get dump4 ./dump4")
         log.info("cephfs-shell output:\n{}".format(o))
 
         o = self.get_cephfs_shell_cmd_output("!cat dump4")
