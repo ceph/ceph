@@ -287,10 +287,8 @@ class PrometheusService(CephadmService):
             # append the brackets when building the final scrape endpoint
             if '[' in p_result.netloc and ']' in p_result.netloc:
                 mgr_scrape_list.append(f"[{p_result.hostname}]:{port}")
-                mgr_scrape_list.append(f"[{p_result.hostname}]:{exporter_port}")
             else:
                 mgr_scrape_list.append(f"{p_result.hostname}:{port}")
-                mgr_scrape_list.append(f"{p_result.hostname}:{exporter_port}")
 
         # scan all mgrs to generate deps and to get standbys too.
         # assume that they are all on the same port as the active mgr.
@@ -317,6 +315,12 @@ class PrometheusService(CephadmService):
                 'hostname': dd.hostname,
                 'url': build_url(host=addr, port=port).lstrip('/')
             })
+        
+        # scrape ceph exporters
+        for dd in self.mgr.cache.get_daemons_by_service('exporter'):
+            assert dd.hostname is not None
+            addr = self._inventory_get_fqdn(dd.hostname)
+            mgr_scrape_list.append(build_url(host=addr, port=exporter_port).lstrip('/'))
 
         # scrape alert managers
         alertmgr_targets = []
