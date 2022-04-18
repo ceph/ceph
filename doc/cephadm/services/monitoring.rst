@@ -391,6 +391,26 @@ Run ``reconfig`` on the service to update its configuration:
 
   ceph orch reconfig alertmanager
 
+Turn on Certificate Validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you are using certificates for alertmanager and want to make sure
+these certs are verified, you should set the "secure" option to
+true in your alertmanager spec (this defaults to false).
+
+.. code-block:: yaml
+
+    service_type: alertmanager
+    spec:
+      secure: true
+
+If you already had alertmanager daemons running before applying the spec
+you must reconfigure them to update their configuration
+
+.. prompt:: bash #
+
+  ceph orch reconfig alertmanager
+
 Further Reading
 ---------------
 
