@@ -260,10 +260,10 @@ class ExcludeErrorsFilter(logging.Filter):
         return record.levelno < logging.WARNING
 
 
-# During bootstrap operation we use:
+# When cephadm is used as standard binary (bootstrap, rm-cluster, etc) we use:
 # stdout: for debug and info
 # stderr: for errors and warnings
-bootstrap_logging_config = {
+interactive_logging_config = {
     'version': 1,
     'filters': {
         'exclude_errors': {
@@ -8937,8 +8937,9 @@ def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
     global logger
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
-    if 'bootstrap' in args:
-        dictConfig(bootstrap_logging_config)
+    operations = ['bootstrap', 'rm-cluster']
+    if any(op in args for op in operations):
+        dictConfig(interactive_logging_config)
     else:
         dictConfig(logging_config)
 
