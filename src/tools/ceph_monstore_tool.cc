@@ -959,7 +959,7 @@ int main(int argc, char **argv) {
         } else if (map_type == "osdmap") {
           OSDMap osdmap;
           osdmap.decode(bl);
-          osdmap.print(ss);
+          osdmap.print(cct.get(), ss);
         } else if (map_type == "mdsmap") {
           FSMap fs_map;
           fs_map.decode(bl);

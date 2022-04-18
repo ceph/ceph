@@ -820,7 +820,7 @@ skip_upmap:
       print_formatter->close_section();
       print_formatter->flush(cout);
     } else {
-      osdmap.print(cout);
+      osdmap.print(cct.get(), cout);
     }
   }
 
