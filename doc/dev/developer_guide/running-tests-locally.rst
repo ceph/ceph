@@ -103,9 +103,10 @@ vstart_runner.py can take the following options -
           to ``/etc/fuse.conf``.
 
 .. note:: If using the kernel client, the user must have the ability to run
-          commands with passwordless sudo access. A failure on the kernel
-          client may crash the host, so it's recommended to use this
-          functionality within a virtual machine.
+          commands with passwordless sudo access.
+
+.. note:: A failure on the kernel client may crash the host, so it's
+          recommended to use this functionality within a virtual machine.
 
 Internal working of vstart_runner.py -
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
