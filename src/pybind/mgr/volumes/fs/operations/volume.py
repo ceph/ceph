@@ -1,6 +1,6 @@
 import errno
 import logging
-import sys
+import os
 
 from typing import List
 
@@ -12,10 +12,10 @@ from .lock import GlobalLock
 from ..exception import VolumeException
 from ..fs_util import create_pool, remove_pool, create_filesystem, \
     remove_filesystem, create_mds, volume_exists
+from .trash import Trash
 from mgr_util import open_filesystem, CephfsConnectionException
 
 log = logging.getLogger(__name__)
-
 
 def gen_pool_names(volname):
     """
@@ -54,6 +54,22 @@ def get_pool_names(mgr, volname):
     metadata_pool = pools[metadata_pool_id]
     data_pools = [pools[id] for id in data_pool_ids]
     return metadata_pool, data_pools
+
+def get_pool_ids(mgr, volname):
+    """
+    return metadata and data pools (list) id of volume as a tuple
+    """
+    fs_map = mgr.get("fs_map")
+    metadata_pool_id = None
+    data_pool_ids = [] # type: List[int]
+    for f in fs_map['filesystems']:
+        if volname == f['mdsmap']['fs_name']:
+            metadata_pool_id = f['mdsmap']['metadata_pool']
+            data_pool_ids = f['mdsmap']['data_pools']
+            break
+    if metadata_pool_id is None:
+        return None, None
+    return metadata_pool_id, data_pool_ids
 
 def create_volume(mgr, volname, placement):
     """
@@ -130,6 +146,20 @@ def list_volumes(mgr):
     for f in fs_map['filesystems']:
         result.append({'name': f['mdsmap']['fs_name']})
     return result
+
+
+def get_pending_subvol_deletions_count(path):
+    """
+    Get the number of pending subvolumes deletions.
+    """
+    trashdir = os.path.join(path, Trash.GROUP_NAME)
+    try:
+        num_pending_subvol_del = len(os.listdir(trashdir))
+    except OSError as e:
+        if e.errno == errno.ENOENT:
+            num_pending_subvol_del = 0
+
+    return {'pending_subvolume_deletions': num_pending_subvol_del}
 
 
 @contextmanager
