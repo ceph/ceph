@@ -250,6 +250,9 @@ class TestMonitoring:
 
                 global:
                   resolve_timeout: 5m
+                  http_config:
+                    tls_config:
+                      insecure_skip_verify: true
 
                 route:
                   receiver: 'default'

@@ -122,6 +122,10 @@ class AlertmanagerService(CephadmService):
         default_webhook_urls: List[str] = []
 
         spec = cast(AlertManagerSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        try:
+            secure = spec.secure
+        except AttributeError:
+            secure = False
         user_data = spec.user_data
         if 'default_webhook_urls' in user_data and isinstance(
                 user_data['default_webhook_urls'], list):
@@ -166,6 +170,7 @@ class AlertmanagerService(CephadmService):
             'dashboard_urls': dashboard_urls,
             'default_webhook_urls': default_webhook_urls,
             'snmp_gateway_urls': snmp_gateway_urls,
+            'secure': secure,
         }
         yml = self.mgr.template.render('services/alertmanager/alertmanager.yml.j2', context)
 
