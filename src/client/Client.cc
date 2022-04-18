@@ -2539,6 +2539,36 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
   MetaRequest *request = mds_requests[tid];
   ceph_assert(request);
 
+  /*
+   * The type of 'num_fwd' in ceph 'MClientRequestForward'
+   * is 'int32_t', while in 'ceph_mds_request_head' the
+   * type is '__u8'. So in case the request bounces between
+   * MDSes exceeding 256 times, the client will get stuck.
+   *
+   * In this case it's ususally a bug in MDS and continue
+   * bouncing the request makes no sense.
+   *
+   * In future this could be fixed in ceph code, so avoid
+   * using the hardcode here.
+   */
+  int max_fwd = sizeof(((struct ceph_mds_request_head*)0)->num_fwd);
+  max_fwd = 1 << (max_fwd * CHAR_BIT) - 1;
+  auto num_fwd = fwd->get_num_fwd();
+  if (num_fwd <= request->num_fwd || num_fwd >= max_fwd) {
+    if (request->num_fwd >= max_fwd || num_fwd >= max_fwd) {
+      request->abort(-EMULTIHOP);
+      request->caller_cond->notify_all();
+      ldout(cct, 1) << __func__ << " tid " << tid << " seq overflow"
+                    << ", abort it" << dendl;
+    } else {
+      ldout(cct, 10) << __func__ << " tid " << tid
+                     << " old fwd seq " << fwd->get_num_fwd()
+                     << " <= req fwd " << request->num_fwd
+                     << ", ignore it" << dendl;
+    }
+    return;
+  }
+
   // reset retry counter
   request->retry_attempt = 0;
 
@@ -2552,7 +2582,7 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
   
   request->mds = -1;
   request->item.remove_myself();
-  request->num_fwd = fwd->get_num_fwd();
+  request->num_fwd = num_fwd;
   request->resend_mds = fwd->get_dest_mds();
   request->caller_cond->notify_all();
 }
@@ -4907,10 +4937,20 @@ void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
 SnapRealm *Client::get_snap_realm(inodeno_t r)
 {
   SnapRealm *realm = snap_realms[r];
-  if (!realm)
+
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << ", nref was "
+                 << (realm ? realm->nref : 0) << dendl;
+  if (!realm) {
     snap_realms[r] = realm = new SnapRealm(r);
-  ldout(cct, 20) << __func__ << " " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
+
+    // Do not release the global snaprealm until unmounting.
+    if (r == CEPH_INO_GLOBAL_SNAPREALM)
+      realm->nref++;
+  }
+
   realm->nref++;
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << ", nref now is "
+                 << realm->nref << dendl;
   return realm;
 }
 
@@ -6597,6 +6637,13 @@ void Client::_unmount(bool abort)
   upkeep_cond.notify_one();
 
   _close_sessions();
+
+  // release the global snapshot realm
+  SnapRealm *global_realm = snap_realms[CEPH_INO_GLOBAL_SNAPREALM];
+  if (global_realm) {
+    ceph_assert(global_realm->nref == 1);
+    put_snap_realm(global_realm);
+  }
 
   mref_writer.update_state(CLIENT_UNMOUNTED);
 
