@@ -950,8 +950,16 @@ void PGLog::_write_log_and_missing(
       (*km)["rollback_info_trimmed_to"]);
   }
 
-  if (!to_remove.empty())
-    t.omap_rmkeys(coll, log_oid, to_remove);
+  if (!to_remove.empty()) {
+#if 0
+    int counter = 0;
+    for (auto& key : to_remove) {
+      t.omap_single_rmkey(coll, log_oid, key);
+    }
+#else
+    t.__omap_single_rmkeys(coll, log_oid, to_remove);
+#endif
+  }
 }
 
 void PGLog::rebuild_missing_set_with_deletes(

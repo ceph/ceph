@@ -131,7 +131,7 @@ public:
     OP_COLL_RMATTR =  25,  // cid, attrname
     OP_COLL_SETATTRS = 26,  // cid, attrset
     OP_COLL_MOVE =    8,   // newcid, oldcid, oid
-
+    OP_OMAP_SINGLE_RMKEYS = 27,  // cid, keyset
     OP_RMATTRS =      28,  // cid, oid
     OP_COLL_RENAME =       29,  // cid, newcid
 
@@ -415,6 +415,7 @@ public:
     case OP_OMAP_CLEAR:
     case OP_OMAP_SETKEYS:
     case OP_OMAP_RMKEYS:
+    case OP_OMAP_SINGLE_RMKEYS:
     case OP_OMAP_RMKEYRANGE:
     case OP_OMAP_SETHEADER:
     case OP_WRITE:
@@ -1115,6 +1116,21 @@ public:
     data.ops = data.ops + 1;
   }
 
+  /// Remove keys single from oid omap (keys must be added only once and never be updated/merged)
+  void __omap_single_rmkeys(
+    const coll_t &cid,             ///< [in] Collection containing oid
+    const ghobject_t &oid,  ///< [in] Object from which to remove the omap
+    const std::set<std::string> &keys ///< [in] Keys to clear
+			  ) {
+    using ceph::encode;
+    Op* _op = _get_next_op();
+    _op->op = OP_OMAP_SINGLE_RMKEYS;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    encode(keys, data_bl);
+    data.ops = data.ops + 1;
+  }
+
   /// Remove keys from oid omap
   void omap_rmkeys(
     const coll_t &cid,             ///< [in] Collection containing oid
@@ -1127,6 +1143,22 @@ public:
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
     encode(keys, data_bl);
+    data.ops = data.ops + 1;
+  }
+
+  /// Remove single key from oid omap (key must be added only once and never be updated/merged)
+  void omap_single_rmkey(
+    const coll_t &cid,             ///< [in] Collection containing oid
+    const ghobject_t &oid,  ///< [in] Object from which to remove the omap
+    const std::string& key ///< [in] Keys to clear
+			 ) {
+    Op* _op = _get_next_op();
+    _op->op = OP_OMAP_SINGLE_RMKEYS;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    using ceph::encode;
+    encode((uint32_t)1, data_bl);
+    encode(key, data_bl);
     data.ops = data.ops + 1;
   }
 

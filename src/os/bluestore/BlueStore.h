@@ -3519,6 +3519,10 @@ private:
 		      CollectionRef& c,
 		      OnodeRef& o,
 		      ceph::buffer::list& header);
+  int _omap_single_rmkeys(TransContext *txc,
+			  CollectionRef& c,
+			  OnodeRef& o,
+			  bufferlist& bl);
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef& o,

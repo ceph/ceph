@@ -14370,6 +14370,13 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	r = _omap_setkeys(txc, c, o, aset_bl);
       }
       break;
+    case Transaction::OP_OMAP_SINGLE_RMKEYS:
+      {
+	bufferlist keys_bl;
+        i.decode_keyset_bl(&keys_bl);
+	r = _omap_single_rmkeys(txc, c, o, keys_bl);
+      }
+      break;
     case Transaction::OP_OMAP_RMKEYS:
       {
 	bufferlist keys_bl;
@@ -14419,6 +14426,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 			    op->op == Transaction::OP_SETATTRS ||
 			    op->op == Transaction::OP_RMATTR ||
 			    op->op == Transaction::OP_OMAP_SETKEYS ||
+			    op->op == Transaction::OP_OMAP_SINGLE_RMKEYS ||
 			    op->op == Transaction::OP_OMAP_RMKEYS ||
 			    op->op == Transaction::OP_OMAP_RMKEYRANGE ||
 			    op->op == Transaction::OP_OMAP_SETHEADER))
@@ -16515,6 +16523,41 @@ int BlueStore::_omap_setheader(TransContext *txc,
   txc->t->set(prefix, key, bl);
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  return r;
+}
+
+int BlueStore::_omap_single_rmkeys(TransContext *txc,
+				   CollectionRef& c,
+				   OnodeRef& o,
+				   bufferlist& bl)
+{
+  dout(1) << "SNGL_RMV(5-IN)::" << __func__ << "::cid=" << c->cid << ", oid=" << o->oid << dendl;
+  int    r = 0;
+  auto   p = bl.cbegin();
+  __u32  num;
+  string final_key;
+
+  if (!o->onode.has_omap()) {
+    goto out;
+  }
+  {
+    const string& prefix = o->get_omap_prefix();
+    o->get_omap_key(string(), &final_key);
+    size_t base_key_len = final_key.size();
+    decode(num, p);
+    while (num--) {
+      string key;
+      decode(key, p);
+      final_key.resize(base_key_len); // keep prefix
+      final_key += key;
+      dout(10) << "[" << num << "]SNGL_RMV(5-Loop)::" << __func__ << dendl;
+      txc->t->rm_single_key(prefix, final_key);
+    }
+  }
+  txc->note_modified_object(o);
+
+ out:
+  dout(10) << "SNGL_RMV(5-OUT)::" << __func__ << "::cid=" << c->cid << ", oid=" << o->oid << ", ret_code=" << r << dendl;
   return r;
 }
 

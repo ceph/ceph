@@ -1660,7 +1660,8 @@ void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
 {
   auto cf = db->get_cf_handle(prefix, k);
   if (cf) {
-    bat.SingleDelete(cf, k);
+    //bat.SingleDelete(cf, k);
+    bat.SingleDelete(cf, rocksdb::Slice(k));
   } else {
     bat.SingleDelete(db->default_cf, combine_strings(prefix, k));
   }
