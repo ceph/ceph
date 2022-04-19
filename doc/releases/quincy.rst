@@ -29,7 +29,9 @@ General
   might want to install `ceph-mgr-rook` separately.
 
 * The ``device_health_metrics`` pool has been renamed ``.mgr``. It is now
-  used as a common store for all ``ceph-mgr`` modules.
+  used as a common store for all ``ceph-mgr`` modules. After upgrading to
+  Quincy, the ``device_health_metrics`` pool will be renamed to ``.mgr``
+  on existing clusters.
 
 * The ``ceph pg dump`` command now prints three additional columns:
   `LAST_SCRUB_DURATION` shows the duration (in seconds) of the last completed
@@ -44,7 +46,8 @@ General
   is not set to the appropriate release after a cluster upgrade.
 
 * LevelDB support has been removed. ``WITH_LEVELDB`` is no longer a supported
-  build option.
+  build option. Users *should* migrate their monitors and OSDs to RocksDB
+  before upgrading to Quincy.
 
 * Cephadm: ``osd_memory_target_autotune`` is enabled by default, which sets
   ``mgr/cephadm/autotune_memory_target_ratio`` to ``0.7`` of total RAM. This
@@ -126,7 +129,7 @@ RADOS
 
 * MGR: The pg_autoscaler can now be turned `on` and `off` globally
   with the `noautoscale` flag. By default, it is set to `on`, but this flag
-  can come in handy to prevent rebalancing triggered by autoscaling, during
+  can come in handy to prevent rebalancing triggered by autoscaling during
   cluster upgrade and maintenance. Pools can now be created with the `--bulk`
   flag, which allows the autoscaler to allocate more PGs to such pools. This
   can be useful to get better out of the box performance for data-heavy pools.
@@ -227,8 +230,12 @@ CephFS distributed file system
 Upgrading from Octopus or Pacific
 ----------------------------------
 
+Quincy does not support LevelDB. Please migrate your OSDs and monitors
+to RocksDB before upgrading to Quincy.
+
 Before starting, make sure your cluster is stable and healthy (no down or
-recovering OSDs).  (This is optional, but recommended.)
+recovering OSDs).  (This is optional, but recommended.) You can disable
+the autoscaler for all pools during the upgrade using the noautoscale flag.
 
 .. note::
 
@@ -385,10 +392,14 @@ Upgrading non-cephadm clusters
 Post-upgrade
 ~~~~~~~~~~~~
 
-#. Verify the cluster is healthy with ``ceph health``.
+#. Verify the cluster is healthy with ``ceph health``. If your cluster is
+   running Filestore, a deprecation warning is expected. This warning can
+   be temporarily muted using the following command::
+
+     ceph health mute OSD_FILESTORE
 
 #. If you are upgrading from Mimic, or did not already do so when you
-   upgraded to Nautlius, we recommened you enable the new :ref:`v2
+   upgraded to Nautilus, we recommened you enable the new :ref:`v2
    network protocol <msgr2>`, issue the following command::
 
      ceph mon enable-msgr2
