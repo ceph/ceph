@@ -185,24 +185,16 @@ private:
  */
 class SegmentProvider {
 public:
-  virtual segment_id_t get_segment(
-      segment_seq_t seq, segment_type_t type) = 0;
-
-  virtual void close_segment(segment_id_t) {}
-
   virtual journal_seq_t get_journal_tail_target() const = 0;
 
+  virtual const segment_info_t& get_seg_info(segment_id_t id) const = 0;
+
+  virtual segment_id_t allocate_segment(
+      segment_seq_t seq, segment_type_t type) = 0;
+
+  virtual void close_segment(segment_id_t) = 0;
+
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
-
-  virtual segment_seq_t get_seq(segment_id_t id) { return 0; }
-
-  virtual segment_type_t get_type(segment_id_t id) = 0;
-
-  virtual seastar::lowres_system_clock::time_point get_last_modified(
-    segment_id_t id) const = 0;
-
-  virtual seastar::lowres_system_clock::time_point get_last_rewritten(
-    segment_id_t id) const = 0;
 
   virtual void update_segment_avail_bytes(paddr_t offset) = 0;
 
@@ -612,16 +604,31 @@ public:
   using mount_ret = mount_ertr::future<>;
   mount_ret mount();
 
-  segment_id_t get_segment(
-      segment_seq_t seq, segment_type_t type) final;
-
-  void close_segment(segment_id_t segment) final;
-
+  /*
+   * SegmentProvider interfaces
+   */
   journal_seq_t get_journal_tail_target() const final {
     return journal_tail_target;
   }
 
+  const segment_info_t& get_seg_info(segment_id_t id) const final {
+    return segments[id];
+  }
+
+  segment_id_t allocate_segment(
+      segment_seq_t seq, segment_type_t type) final;
+
+  void close_segment(segment_id_t segment) final;
+
   void update_journal_tail_committed(journal_seq_t committed) final;
+
+  void update_segment_avail_bytes(paddr_t offset) final {
+    segments.update_written_to(offset);
+  }
+
+  SegmentManagerGroup* get_segment_manager_group() final {
+    return sm_group.get();
+  }
 
   void update_journal_tail_target(journal_seq_t target);
 
@@ -636,22 +643,6 @@ public:
     journal_head = head;
     segments.update_written_to(head.offset);
     gc_process.maybe_wake_on_space_used();
-  }
-
-  void update_segment_avail_bytes(paddr_t offset) final {
-    segments.update_written_to(offset);
-  }
-
-  segment_seq_t get_seq(segment_id_t id) final {
-    return segments[id].seq;
-  }
-
-  segment_type_t get_type(segment_id_t id) final {
-    return segments[id].type;
-  }
-
-  SegmentManagerGroup* get_segment_manager_group() final {
-    return sm_group.get();
   }
 
   using release_ertr = SegmentManagerGroup::release_ertr;
@@ -692,16 +683,6 @@ public:
 
     gc_process.maybe_wake_on_space_used();
     assert(ret > 0);
-  }
-
-  seastar::lowres_system_clock::time_point get_last_modified(
-    segment_id_t id) const final {
-    return segments[id].last_modified;
-  }
-
-  seastar::lowres_system_clock::time_point get_last_rewritten(
-    segment_id_t id) const final {
-    return segments[id].last_rewritten;
   }
 
   void mark_space_free(
