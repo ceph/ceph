@@ -1707,6 +1707,7 @@ void PGMap::dump_pg_stats_plain(
     tab.define_column("SNAPTRIMQ_LEN", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("LAST_SCRUB_DURATION", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("SCRUB_SCHEDULING", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("OBJECTS_SCRUBBED", TextTable::LEFT, TextTable::RIGHT);
   }
 
   for (auto i = pg_stats.begin();
@@ -1750,6 +1751,7 @@ void PGMap::dump_pg_stats_plain(
           << st.snaptrimq_len
           << st.last_scrub_duration
           << st.dump_scrub_schedule()
+          << st.objects_scrubbed
           << TextTable::endrow;
     }
   }
