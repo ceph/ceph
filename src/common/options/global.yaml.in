@@ -4974,6 +4974,14 @@ options:
   desc: Remove allocation info from RocksDB and store the info in a new allocation file
   default: true
   with_legacy: true
+- name: bluestore_debug_inject_allocation_from_file_failure
+  type: float
+  level: dev
+  desc: Enables random error injections when restoring allocation map from file.
+  long_desc: Specifies error injection probability for restoring allocation map from file
+    hence causing full recovery. Intended primarily for testing.
+  default: 0
+  with_legacy: true
 - name: bluestore_fsck_on_umount_deep
   type: bool
   level: dev
