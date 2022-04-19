@@ -22,6 +22,8 @@
 
 #include <boost/container/flat_set.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_real.hpp>
 
 #include "include/cpp-btree/btree_set.h"
 
@@ -10050,7 +10052,7 @@ void BlueStore::inject_stray_shared_blob_key(uint64_t sbid)
   string key;
   get_shared_blob_key(sbid, &key);
   bluestore_shared_blob_t persistent(sbid);
-  persistent.ref_map.get(0xdead0000, 0x1000);
+  persistent.ref_map.get(0xdead0000, min_alloc_size);
   bufferlist bl;
   encode(persistent, bl);
   dout(20) << __func__ << " sbid " << sbid
@@ -18613,6 +18615,14 @@ int calc_allocator_image_trailer_size()
 //-----------------------------------------------------------------------------------
 int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes)
 {
+  if (cct->_conf->bluestore_debug_inject_allocation_from_file_failure > 0) {
+     boost::mt11213b rng(time(NULL));
+    boost::uniform_real<> ur(0, 1);
+    if (ur(rng) < cct->_conf->bluestore_debug_inject_allocation_from_file_failure) {
+      derr << __func__ << " failure injected." << dendl;
+      return -1;
+    }
+  }
   utime_t start_time = ceph_clock_now();
   BlueFS::FileReader *p_temp_handle = nullptr;
   int ret = bluefs->open_for_read(allocator_dir, allocator_file, &p_temp_handle, false);
