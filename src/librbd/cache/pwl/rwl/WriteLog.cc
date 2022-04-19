@@ -116,6 +116,10 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
     m_log_entries.push_back(log_entry);
     ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
   }
+  if (m_cache_state->empty && !m_log_entries.empty()) {
+    m_cache_state->empty = false;
+    this->update_image_cache_state();
+  }
 }
 
 /*
@@ -248,8 +252,6 @@ void WriteLog<I>::remove_pool_file() {
         lderr(m_image_ctx.cct) << "failed to remove empty pool \"" << this->m_log_pool_name << "\": "
           << pmemobj_errormsg() << dendl;
       } else {
-        m_cache_state->clean = true;
-        m_cache_state->empty = true;
         m_cache_state->present = false;
       }
   } else {
@@ -322,7 +324,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish, pwl::DeferredContexts &lat
     } TX_FINALLY {
     } TX_END;
   } else {
-    m_cache_state->present = true;
+    ceph_assert(m_cache_state->present);
     /* Open existing pool */
     if ((m_log_pool =
          pmemobj_open(this->m_log_pool_name.c_str(),
@@ -552,6 +554,10 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
       ceph_assert(this->m_first_valid_entry == initial_first_valid_entry);
       this->m_first_valid_entry = first_valid_entry;
       this->m_free_log_entries += retiring_entries.size();
+      if (!m_cache_state->empty && m_log_entries.empty()) {
+        m_cache_state->empty = true;
+        this->update_image_cache_state();
+      }
       for (auto &entry: retiring_entries) {
         if (entry->write_bytes()) {
           ceph_assert(this->m_bytes_cached >= entry->write_bytes());
