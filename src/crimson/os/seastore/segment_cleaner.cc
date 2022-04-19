@@ -452,11 +452,11 @@ void SegmentCleaner::register_metrics()
   });
 }
 
-segment_id_t SegmentCleaner::get_segment(
+segment_id_t SegmentCleaner::allocate_segment(
     segment_seq_t seq,
     segment_type_t type)
 {
-  LOG_PREFIX(SegmentCleaner::get_segment);
+  LOG_PREFIX(SegmentCleaner::allocate_segment);
   assert(seq != NULL_SEG_SEQ);
   for (auto it = segments.begin();
        it != segments.end();
