@@ -3456,6 +3456,20 @@ options:
   - rados
   - dbstore
   - motr
+- name: dbstore_db_dir
+  type: str
+  level: advanced
+  desc: path for the directory for storing the db backend store data
+  default: /var/run/ceph
+  services:
+  - rgw
+- name: dbstore_db_name_prefix
+  type: str
+  level: advanced
+  desc: prefix to the file names created by db backend store
+  default: dbstore
+  services:
+  - rgw
 - name: motr_profile_fid
   type: str
   level: advanced
