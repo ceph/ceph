@@ -1097,17 +1097,17 @@ TEST(Blob, legacy_decode)
 
     uint64_t sbid, sbid2;
     Bres.decode(
-      coll.get(),
       p,
       1, /*struct_v*/
       &sbid,
-      true);
+      true,
+      coll.get());
     Bres2.decode(
-      coll.get(),
       p2,
       2, /*struct_v*/
       &sbid2,
-      true);
+      true,
+      coll.get());
 
     ASSERT_EQ(0xff0u + 1u, Bres.get_blob_use_tracker().get_referenced_bytes());
     ASSERT_EQ(0xff0u + 1u, Bres2.get_blob_use_tracker().get_referenced_bytes());
@@ -1125,7 +1125,8 @@ TEST(ExtentMap, seek_lextent)
 
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
+  BlueStore::ExtentMap em(&onode,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
   BlueStore::BlobRef br(new BlueStore::Blob);
   br->shared_blob = new BlueStore::SharedBlob(coll.get());
 
@@ -1177,7 +1178,8 @@ TEST(ExtentMap, has_any_lextents)
     g_ceph_context, "lru", NULL);
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
+  BlueStore::ExtentMap em(&onode,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
   BlueStore::BlobRef b(new BlueStore::Blob);
   b->shared_blob = new BlueStore::SharedBlob(coll.get());
 
@@ -1236,7 +1238,8 @@ TEST(ExtentMap, compress_extent_map)
   
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
+  BlueStore::ExtentMap em(&onode,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
   BlueStore::BlobRef b1(new BlueStore::Blob);
   BlueStore::BlobRef b2(new BlueStore::Blob);
   BlueStore::BlobRef b3(new BlueStore::Blob);
@@ -1303,7 +1306,8 @@ TEST(GarbageCollector, BasicTest)
   BlueStore store(g_ceph_context, "", 4096);
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
+  BlueStore::ExtentMap em(&onode,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
   BlueStore::old_extent_map_t old_extents;
 
@@ -1392,7 +1396,8 @@ TEST(GarbageCollector, BasicTest)
     BlueStore store(g_ceph_context, "", 0x10000);
     auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
     BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-    BlueStore::ExtentMap em(&onode);
+    BlueStore::ExtentMap em(&onode,
+      g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
     BlueStore::old_extent_map_t old_extents;
     BlueStore::GarbageCollector gc(g_ceph_context);
@@ -1519,7 +1524,8 @@ TEST(GarbageCollector, BasicTest)
     BlueStore store(g_ceph_context, "", 0x10000);
     auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
     BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-    BlueStore::ExtentMap em(&onode);
+    BlueStore::ExtentMap em(&onode,
+      g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
     BlueStore::old_extent_map_t old_extents;
     BlueStore::GarbageCollector gc(g_ceph_context);
