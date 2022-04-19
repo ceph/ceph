@@ -4,7 +4,7 @@ from logging import getLogger
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 
-logger = getLogger(__name__)
+log = getLogger(__name__)
 
 
 # TODO: add code to run non-ACL tests too.
