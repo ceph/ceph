@@ -731,13 +731,13 @@ Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Daemon for mirroring CephFS snapshots between Ceph clusters.
 
 %package -n ceph-exporter
-Summary:	Ceph daemon for collecting perf counters
+Summary: Daemon for exposing perf counters as Prometheus metrics
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 %description -n ceph-exporter
-Daemon for collecting perf counters.
+Daemon for exposing perf counters as Prometheus metrics
 
 %package -n rbd-fuse
 Summary:	Ceph fuse-based client
