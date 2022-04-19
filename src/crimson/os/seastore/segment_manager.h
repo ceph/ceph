@@ -29,14 +29,8 @@ struct block_sm_superblock_t {
   uint64_t tracker_offset = 0;
   uint64_t first_segment_offset = 0;
 
-  bool major_dev = false;
-  magic_t magic = 0;
-  device_type_t dtype = device_type_t::NONE;
-  device_id_t device_id = DEVICE_ID_NULL;
+  device_config_t config;
 
-  seastore_meta_t meta;
-
-  secondary_device_set_t secondary_devices;
   DENC(block_sm_superblock_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.size, p);
@@ -45,14 +39,7 @@ struct block_sm_superblock_t {
     denc(v.segments, p);
     denc(v.tracker_offset, p);
     denc(v.first_segment_offset, p);
-    denc(v.meta, p);
-    denc(v.major_dev, p);
-    denc(v.magic, p);
-    denc(v.dtype, p);
-    denc(v.device_id, p);
-    if (v.major_dev) {
-      denc(v.secondary_devices, p);
-    }
+    denc(v.config, p);
     DENC_FINISH(p);
   }
 
@@ -67,11 +54,14 @@ struct block_sm_superblock_t {
                 tracker_offset % block_size == 0);
     ceph_assert(first_segment_offset > tracker_offset &&
                 first_segment_offset % block_size == 0);
-    ceph_assert(magic != 0);
-    ceph_assert(dtype == device_type_t::SEGMENTED);
-    ceph_assert(device_id <= DEVICE_ID_MAX_VALID);
-    for (const auto& [k, v] : secondary_devices) {
-      ceph_assert(k != device_id);
+    ceph_assert(config.spec.magic != 0);
+    ceph_assert(config.spec.dtype == device_type_t::SEGMENTED);
+    ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
+    if (!config.major_dev) {
+      ceph_assert(config.secondary_devices.size() == 0);
+    }
+    for (const auto& [k, v] : config.secondary_devices) {
+      ceph_assert(k != config.spec.id);
       ceph_assert(k <= DEVICE_ID_MAX_VALID);
       ceph_assert(k == v.id);
       ceph_assert(v.magic != 0);
