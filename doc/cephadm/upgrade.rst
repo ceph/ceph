@@ -188,3 +188,100 @@ you need. For example, the following command upgrades to a development build:
   ceph orch upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
 
 For more information about available container images, see :ref:`containers`.
+
+Staggered Upgrade
+=================
+
+Some users may prefer to upgrade components in phases rather than all at once.
+The upgrade command, starting in 16.2.10 and 17.2.1 allows parameters
+to limit which daemons are upgraded by a single upgrade command. The options in
+include ``daemon_types``, ``services``, ``hosts`` and ``limit``. ``daemon_types``
+takes a comma-separated list of daemon types and will only upgrade daemons of those
+types. ``services`` is mutually exclusive with ``daemon_types``, only takes services
+of one type at a time (e.g. can't provide an OSD and RGW service at the same time), and
+will only upgrade daemons belonging to those services. ``hosts`` can be combined
+with ``daemon_types`` or ``services`` or provided on its own. The ``hosts`` parameter
+follows the same format as the command line options for :ref:`orchestrator-cli-placement-spec`.
+``limit`` takes an integer > 0 and provides a numerical limit on the number of
+daemons cephadm will upgrade. ``limit`` can be combined with any of the other
+parameters. For example, if you specify to upgrade daemons of type osd on host
+Host1 with ``limit`` set to 3, cephadm will upgrade (up to) 3 osd daemons on
+Host1.
+
+Example: specifying daemon types and hosts:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image <image-name> --daemon-types mgr,mon --hosts host1,host2
+
+Example: specifying services and using limit:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image <image-name> --services rgw.example1,rgw.example2 --limit 2
+
+.. note::
+
+   Cephadm strictly enforces an order to the upgrade of daemons that is still present
+   in staggered upgrade scenarios. The current upgrade ordering is
+   ``mgr -> mon -> crash -> osd -> mds -> rgw -> rbd-mirror -> cephfs-mirror -> iscsi -> nfs``.
+   If you specify parameters that would upgrade daemons out of order, the upgrade
+   command will block and note which daemons will be missed if you proceed.
+
+.. note::
+
+  Upgrade commands with limiting parameters will validate the options before beginning the
+  upgrade, which may require pulling the new container image. Do not be surprised
+  if the upgrade start command takes a while to return when limiting parameters are provided.
+
+.. note::
+
+   In staggered upgrade scenarios (when a limiting parameter is provided) monitoring
+   stack daemons including Prometheus and node-exporter are refreshed after the Manager
+   daemons have been upgraded. Do not be surprised if Manager upgrades thus take longer
+   than expected. Note that the versions of monitoring stack daemons may not change between
+   Ceph releases, in which case they are only redeployed.
+
+Upgrading to a version that supports staggered upgrade from one that doesn't
+----------------------------------------------------------------------------
+
+While upgrading from a version that already supports staggered upgrades the process
+simply requires providing the necessary arguments. However, if you wish to upgrade
+to a version that supports staggered upgrade from one that does not, there is a
+workaround. It requires first manually upgrading the Manager daemons and then passing
+the limiting parameters as usual.
+
+.. warning::
+  Make sure you have multiple running mgr daemons before attempting this procedure.
+
+To start with, determine which Manager is your active one and which are standby. This
+can be done in a variety of ways such as looking at the ``ceph -s`` output. Then,
+manually upgrade each standby mgr daemon with:
+
+.. prompt:: bash #
+
+  ceph orch daemon redeploy mgr.example1.abcdef --image <new-image-name>
+
+.. note::
+
+   If you are on a very early version of cephadm (early Octopus) the ``orch daemon redeploy``
+   command may not have the ``--image`` flag. In that case, you must manually set the
+   Manager container image ``ceph config set mgr container_image <new-image-name>`` and then
+   redeploy the Manager ``ceph orch daemon redeploy mgr.example1.abcdef``
+
+At this point, a Manager fail over should allow us to have the active Manager be one
+running the new version.
+
+.. prompt:: bash #
+
+  ceph mgr fail
+
+Verify the active Manager is now one running the new version. To complete the Manager
+upgrading:
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image <new-image-name> --daemon-types mgr
+
+You should now have all your Manager daemons on the new version and be able to
+specify the limiting parameters for the rest of the upgrade.
