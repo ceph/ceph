@@ -36,6 +36,14 @@ private:
   OSD& osd;
   crimson::net::ConnectionRef conn;
   Ref<MOSDFastDispatchOp> m;
+
+public:
+  std::tuple<
+    StartEvent,
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    PGMap::PGCreationBlockingEvent,
+    CompletionEvent
+  > tracking_events;
 };
 
 }

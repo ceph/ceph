@@ -10,16 +10,32 @@ namespace {
   }
 }
 
+namespace crimson {
+  template <>
+  struct EventBackendRegistry<osd::RecoverySubRequest> {
+    static std::tuple<> get_backends() {
+      return {};
+    }
+  };
+}
+
 namespace crimson::osd {
 
 seastar::future<> RecoverySubRequest::start() {
   logger().debug("{}: start", *this);
 
+  track_event<StartEvent>();
   IRef opref = this;
-  return with_blocking_future(
-      osd.osdmap_gate.wait_for_map(m->get_min_epoch()))
-  .then([this] (epoch_t epoch) {
-    return with_blocking_future(osd.wait_for_pg(m->get_spg()));
+  using OSDMapBlockingEvent =
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent;
+  return with_blocking_event<OSDMapBlockingEvent>(
+    [this] (auto&& trigger) {
+    return osd.osdmap_gate.wait_for_map(std::move(trigger), m->get_min_epoch());
+  }).then([this] (epoch_t epoch) {
+    return with_blocking_event<PGMap::PGCreationBlockingEvent>(
+    [this] (auto&& trigger) {
+      return osd.wait_for_pg(std::move(trigger), m->get_spg());
+    });
   }).then([this, opref=std::move(opref)] (Ref<PG> pgref) {
     return interruptor::with_interruption([this, opref, pgref] {
       return seastar::do_with(std::move(pgref), std::move(opref),
@@ -27,6 +43,8 @@ seastar::future<> RecoverySubRequest::start() {
 	return pgref->get_recovery_backend()->handle_recovery_op(m);
       });
     }, [](std::exception_ptr) { return seastar::now(); }, pgref);
+  }).then([this] {
+    track_event<CompletionEvent>();
   });
 }
 
