@@ -118,12 +118,20 @@ public:
 
   // TODO: switch the entire write family to errorator.
   using write_ertr = crimson::errorator<
-    crimson::ct_error::file_too_large>;
+    crimson::ct_error::file_too_large,
+    crimson::ct_error::invarg>;
   using write_iertr =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
       write_ertr>;
-  interruptible_future<> create(
+  using create_ertr = crimson::errorator<
+    crimson::ct_error::invarg,
+    crimson::ct_error::eexist>;
+  using create_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      create_ertr>;
+  create_iertr::future<> create(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -141,7 +149,7 @@ public:
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
-  interruptible_future<> write(
+  write_iertr::future<> write(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -153,7 +161,7 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
-  interruptible_future<> writefull(
+  write_iertr::future<> writefull(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
@@ -194,7 +202,14 @@ public:
   interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>> list_objects(
     const hobject_t& start,
     uint64_t limit) const;
-  interruptible_future<> setxattr(
+  using setxattr_errorator = crimson::errorator<
+    crimson::ct_error::file_too_large,
+    crimson::ct_error::enametoolong>;
+  using setxattr_ierrorator =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      setxattr_errorator>;
+  setxattr_ierrorator::future<> setxattr(
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
