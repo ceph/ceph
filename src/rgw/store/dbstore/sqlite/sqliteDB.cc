@@ -2325,6 +2325,9 @@ int SQLListBucketObjects::Bind(const DoutPrefixProvider *dpp, struct DBOpParams 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.min_marker, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.min_marker.c_str(), sdb);
 
+  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.prefix, sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.prefix.c_str(), sdb);
+
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.list_max_count, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.list_max_count, sdb);
 
