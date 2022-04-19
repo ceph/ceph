@@ -14,7 +14,8 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
-#define OMAP_BLOCK_SIZE 4096
+#define OMAP_INNER_BLOCK_SIZE 4096
+#define OMAP_LEAF_BLOCK_SIZE 8192
 
 namespace crimson::os::seastore {
 
