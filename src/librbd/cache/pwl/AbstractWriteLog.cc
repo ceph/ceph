@@ -1418,7 +1418,7 @@ void AbstractWriteLog<I>::dispatch_deferred_writes(void)
       if (allocated_req && front_req && allocated) {
         /* Push dispatch of the first allocated req to a wq */
         m_work_queue.queue(new LambdaContext(
-          [this, allocated_req](int r) {
+          [allocated_req](int r) {
             allocated_req->dispatch();
           }), 0);
         allocated_req = nullptr;
@@ -1901,7 +1901,7 @@ void AbstractWriteLog<I>::new_sync_point(DeferredContexts &later) {
     /* This sync point will acquire no more sub-ops. Activation needs
      * to acquire m_lock, so defer to later*/
     later.add(new LambdaContext(
-      [this, old_sync_point](int r) {
+      [old_sync_point](int r) {
         old_sync_point->prior_persisted_gather_activate();
       }));
   }
@@ -1958,7 +1958,7 @@ void AbstractWriteLog<I>::flush_new_sync_point(C_FlushRequestT *flush_req,
    * now has its finisher. If the sub is already complete, activation will
    * complete the Gather. The finisher will acquire m_lock, so we'll activate
    * this when we release m_lock.*/
-  later.add(new LambdaContext([this, to_append](int r) {
+  later.add(new LambdaContext([to_append](int r) {
     to_append->persist_gather_activate();
   }));
 
