@@ -315,7 +315,7 @@ class PrometheusService(CephadmService):
                 'hostname': dd.hostname,
                 'url': build_url(host=addr, port=port).lstrip('/')
             })
-        
+
         # scrape ceph exporters
         for dd in self.mgr.cache.get_daemons_by_service('exporter'):
             assert dd.hostname is not None
