@@ -234,12 +234,7 @@ block_sm_superblock_t make_superblock(
     segments,
     tracker_off,
     first_seg_off,
-    sm_config.major_dev,
-    sm_config.magic,
-    sm_config.dtype,
-    sm_config.device_id,
-    sm_config.meta,
-    std::move(sm_config.secondary_devices)
+    std::move(sm_config)
   };
 }
 
@@ -486,7 +481,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
     auto sd = p.second;
     return read_superblock(device, sd);
   }).safe_then([=](auto sb) {
-    set_device_id(sb.device_id);
+    set_device_id(sb.config.spec.id);
     INFO("D{} read {}", get_device_id(), sb);
     sb.validate();
     superblock = sb;
@@ -520,7 +515,7 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
   device_config_t sm_config)
 {
   LOG_PREFIX(BlockSegmentManager::mkfs);
-  set_device_id(sm_config.device_id);
+  set_device_id(sm_config.spec.id);
   INFO("D{} path={}, {}", get_device_id(), device_path, sm_config);
   return seastar::do_with(
     seastar::file{},

@@ -147,7 +147,7 @@ private:
   );
 
   static inline device_id_t internal_to_device(internal_segment_id_t id) {
-    return (static_cast<device_id_t>(id) & SM_ID_MASK) >> segment_bits;
+    return static_cast<device_id_t>((id & SM_ID_MASK) >> segment_bits);
   }
 
   constexpr static inline device_segment_id_t internal_to_segment(

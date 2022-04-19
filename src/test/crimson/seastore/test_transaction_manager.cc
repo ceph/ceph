@@ -58,8 +58,8 @@ struct transaction_manager_test_t :
   std::random_device rd;
   std::mt19937 gen;
 
-  transaction_manager_test_t()
-    : gen(rd()) {
+  transaction_manager_test_t(std::size_t num_devices)
+    : TMTestState(num_devices), gen(rd()) {
   }
 
   laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
@@ -605,9 +605,81 @@ struct transaction_manager_test_t :
       }
     );
   }
+
+  void test_random_writes_concurrent() {
+    constexpr unsigned WRITE_STREAMS = 256;
+
+    constexpr size_t TOTAL = 4<<20;
+    constexpr size_t BSIZE = 4<<10;
+    constexpr size_t BLOCKS = TOTAL / BSIZE;
+    run_async([this] {
+      std::for_each(
+        boost::make_counting_iterator(0u),
+        boost::make_counting_iterator(WRITE_STREAMS),
+        [&](auto idx) {
+          for (unsigned i = idx; i < BLOCKS; i += WRITE_STREAMS) {
+            while (true) {
+              auto t = create_transaction();
+              auto extent = alloc_extent(
+                t,
+                i * BSIZE,
+                BSIZE);
+              ASSERT_EQ(i * BSIZE, extent->get_laddr());
+              if (try_submit_transaction(std::move(t)))
+                break;
+            }
+          }
+        });
+
+      int writes = 0;
+      unsigned failures = 0;
+      seastar::parallel_for_each(
+        boost::make_counting_iterator(0u),
+        boost::make_counting_iterator(WRITE_STREAMS),
+        [&](auto) {
+          return seastar::async([&] {
+            while (writes < 300) {
+              auto t = create_transaction();
+              auto ext = try_get_extent(
+                t,
+                get_random_laddr(BSIZE, TOTAL),
+                BSIZE);
+              if (!ext){
+                failures++;
+                continue;
+              }
+              auto mut = mutate_extent(t, ext);
+              auto success = try_submit_transaction(std::move(t));
+              writes += success;
+              failures += !success;
+            }
+          });
+        }).get0();
+      replay();
+      logger().info("random_writes_concurrent: checking");
+      check();
+      logger().info(
+        "random_writes_concurrent: {} suceeded, {} failed",
+        writes,
+        failures
+      );
+    });
+  }
 };
 
-TEST_F(transaction_manager_test_t, basic)
+struct tm_single_device_test_t :
+  public transaction_manager_test_t {
+
+  tm_single_device_test_t() : transaction_manager_test_t(1) {}
+};
+
+struct tm_multi_device_test_t :
+  public transaction_manager_test_t {
+
+  tm_multi_device_test_t() : transaction_manager_test_t(3) {}
+};
+
+TEST_F(tm_single_device_test_t, basic)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -628,7 +700,7 @@ TEST_F(transaction_manager_test_t, basic)
   });
 }
 
-TEST_F(transaction_manager_test_t, mutate)
+TEST_F(tm_single_device_test_t, mutate)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -666,7 +738,7 @@ TEST_F(transaction_manager_test_t, mutate)
   });
 }
 
-TEST_F(transaction_manager_test_t, allocate_lba_conflict)
+TEST_F(tm_single_device_test_t, allocate_lba_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -699,7 +771,7 @@ TEST_F(transaction_manager_test_t, allocate_lba_conflict)
   });
 }
 
-TEST_F(transaction_manager_test_t, mutate_lba_conflict)
+TEST_F(tm_single_device_test_t, mutate_lba_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -738,7 +810,7 @@ TEST_F(transaction_manager_test_t, mutate_lba_conflict)
   });
 }
 
-TEST_F(transaction_manager_test_t, concurrent_mutate_lba_no_conflict)
+TEST_F(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   constexpr size_t NUM = 500;
@@ -770,7 +842,7 @@ TEST_F(transaction_manager_test_t, concurrent_mutate_lba_no_conflict)
   });
 }
 
-TEST_F(transaction_manager_test_t, create_remove_same_transaction)
+TEST_F(tm_single_device_test_t, create_remove_same_transaction)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -801,7 +873,7 @@ TEST_F(transaction_manager_test_t, create_remove_same_transaction)
   });
 }
 
-TEST_F(transaction_manager_test_t, split_merge_read_same_transaction)
+TEST_F(tm_single_device_test_t, split_merge_read_same_transaction)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -831,7 +903,7 @@ TEST_F(transaction_manager_test_t, split_merge_read_same_transaction)
   });
 }
 
-TEST_F(transaction_manager_test_t, inc_dec_ref)
+TEST_F(tm_single_device_test_t, inc_dec_ref)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -878,7 +950,7 @@ TEST_F(transaction_manager_test_t, inc_dec_ref)
   });
 }
 
-TEST_F(transaction_manager_test_t, cause_lba_split)
+TEST_F(tm_single_device_test_t, cause_lba_split)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -896,7 +968,7 @@ TEST_F(transaction_manager_test_t, cause_lba_split)
   });
 }
 
-TEST_F(transaction_manager_test_t, random_writes)
+TEST_F(tm_single_device_test_t, random_writes)
 {
   constexpr size_t TOTAL = 4<<20;
   constexpr size_t BSIZE = 4<<10;
@@ -939,68 +1011,7 @@ TEST_F(transaction_manager_test_t, random_writes)
   });
 }
 
-TEST_F(transaction_manager_test_t, random_writes_concurrent)
-{
-  constexpr unsigned WRITE_STREAMS = 256;
-
-  constexpr size_t TOTAL = 4<<20;
-  constexpr size_t BSIZE = 4<<10;
-  constexpr size_t BLOCKS = TOTAL / BSIZE;
-  run_async([this] {
-    std::for_each(
-      boost::make_counting_iterator(0u),
-      boost::make_counting_iterator(WRITE_STREAMS),
-      [&](auto idx) {
-	for (unsigned i = idx; i < BLOCKS; i += WRITE_STREAMS) {
-	  while (true) {
-	    auto t = create_transaction();
-	    auto extent = alloc_extent(
-	      t,
-	      i * BSIZE,
-	      BSIZE);
-	    ASSERT_EQ(i * BSIZE, extent->get_laddr());
-	    if (try_submit_transaction(std::move(t)))
-	      break;
-	  }
-	}
-      });
-
-    int writes = 0;
-    unsigned failures = 0;
-    seastar::parallel_for_each(
-      boost::make_counting_iterator(0u),
-      boost::make_counting_iterator(WRITE_STREAMS),
-      [&](auto) {
-        return seastar::async([&] {
-          while (writes < 300) {
-            auto t = create_transaction();
-            auto ext = try_get_extent(
-              t,
-              get_random_laddr(BSIZE, TOTAL),
-              BSIZE);
-            if (!ext){
-              failures++;
-              continue;
-            }
-	    auto mut = mutate_extent(t, ext);
-	    auto success = try_submit_transaction(std::move(t));
-	    writes += success;
-	    failures += !success;
-	  }
-	});
-      }).get0();
-    replay();
-    logger().info("random_writes_concurrent: checking");
-    check();
-    logger().info(
-      "random_writes_concurrent: {} suceeded, {} failed",
-      writes,
-      failures
-    );
-  });
-}
-
-TEST_F(transaction_manager_test_t, find_hole_assert_trigger)
+TEST_F(tm_single_device_test_t, find_hole_assert_trigger)
 {
   constexpr unsigned max = 10;
   constexpr size_t BSIZE = 4<<10;
@@ -1013,6 +1024,14 @@ TEST_F(transaction_manager_test_t, find_hole_assert_trigger)
         return allocate_sequentially(BSIZE, num);
     });
   });
-
 }
 
+TEST_F(tm_single_device_test_t, random_writes_concurrent)
+{
+  test_random_writes_concurrent();
+}
+
+TEST_F(tm_multi_device_test_t, random_writes_concurrent)
+{
+  test_random_writes_concurrent();
+}
