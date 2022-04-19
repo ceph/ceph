@@ -10655,6 +10655,8 @@ int main(int argc, char **argv) {
   // set small cache sizes so we see trimming during Synthetic tests
   g_ceph_context->_conf.set_val_or_die("bluestore_cache_size_hdd", "4000000");
   g_ceph_context->_conf.set_val_or_die("bluestore_cache_size_ssd", "4000000");
+  g_ceph_context->_conf.set_val_or_die(
+    "bluestore_debug_inject_allocation_from_file_failure", "0.67"); 
 
   // very short *_max prealloc so that we fall back to async submits
   g_ceph_context->_conf.set_val_or_die("bluestore_blobid_prealloc", "10");
