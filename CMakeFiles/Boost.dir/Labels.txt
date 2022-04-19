@@ -1,0 +1,13 @@
+# Target labels
+ Boost
+# Source files and their labels
+/home/sh3ll/ceph/ceph/CMakeFiles/Boost
+/home/sh3ll/ceph/ceph/CMakeFiles/Boost.rule
+/home/sh3ll/ceph/ceph/CMakeFiles/Boost-complete.rule
+/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-install.rule
+/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-mkdir.rule
+/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-download.rule
+/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-update.rule
+/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-patch.rule
+/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-configure.rule
+/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-build.rule

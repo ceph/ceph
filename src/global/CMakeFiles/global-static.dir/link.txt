@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libglobal-static.a  CMakeFiles/libglobal_objs.dir/global_init.cc.o CMakeFiles/libglobal_objs.dir/pidfile.cc.o CMakeFiles/libglobal_objs.dir/signal_handler.cc.o
+/usr/bin/ranlib ../../lib/libglobal-static.a

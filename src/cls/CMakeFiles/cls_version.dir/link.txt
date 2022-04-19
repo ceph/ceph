@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_version.so.1 -o ../../lib/libcls_version.so.1.0.0 CMakeFiles/cls_version.dir/version/cls_version.cc.o 

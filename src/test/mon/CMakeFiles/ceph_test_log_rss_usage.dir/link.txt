@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/ceph_test_log_rss_usage.dir/test_log_rss_usage.cc.o  -o ../../../bin/ceph_test_log_rss_usage 

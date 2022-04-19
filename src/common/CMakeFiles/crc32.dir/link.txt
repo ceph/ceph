@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcrc32.a  CMakeFiles/crc32.dir/crc32c.cc.o CMakeFiles/crc32.dir/crc32c_intel_baseline.c.o CMakeFiles/crc32.dir/sctp_crc32.c.o CMakeFiles/crc32.dir/crc32c_intel_fast.c.o CMakeFiles/crc32.dir/__/isa-l/crc/crc32_iscsi_00.asm.o CMakeFiles/crc32.dir/crc32c_intel_fast_zero_asm.s.o
+/usr/bin/ranlib ../../lib/libcrc32.a

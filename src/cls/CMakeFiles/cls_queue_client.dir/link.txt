@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_queue_client.a  CMakeFiles/cls_queue_client.dir/queue/cls_queue_client.cc.o
+/usr/bin/ranlib ../../lib/libcls_queue_client.a

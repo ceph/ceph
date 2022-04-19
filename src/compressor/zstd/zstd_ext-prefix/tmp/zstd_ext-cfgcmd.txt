@@ -1,0 +1,1 @@
+cmd='/usr/bin/cmake;-DCMAKE_CXX_COMPILER=/usr/bin/c++;-DCMAKE_C_COMPILER=/usr/bin/cc;-DCMAKE_C_FLAGS=-fPIC -Wno-unused-variable -O3;-DCMAKE_AR=/usr/bin/ar;-DCMAKE_POSITION_INDEPENDENT_CODE=ON;-GUnix Makefiles;<SOURCE_DIR><SOURCE_SUBDIR>'

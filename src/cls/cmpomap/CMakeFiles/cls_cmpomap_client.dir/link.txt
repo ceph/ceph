@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/libcls_cmpomap_client.a  CMakeFiles/cls_cmpomap_client.dir/client.cc.o
+/usr/bin/ranlib ../../../lib/libcls_cmpomap_client.a

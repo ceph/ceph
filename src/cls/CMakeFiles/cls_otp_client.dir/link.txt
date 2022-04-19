@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_otp_client.a  CMakeFiles/cls_otp_client.dir/otp/cls_otp_client.cc.o CMakeFiles/cls_otp_client.dir/otp/cls_otp_types.cc.o
+/usr/bin/ranlib ../../lib/libcls_otp_client.a

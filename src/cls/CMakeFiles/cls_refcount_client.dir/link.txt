@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_refcount_client.a  CMakeFiles/cls_refcount_client.dir/refcount/cls_refcount_client.cc.o CMakeFiles/cls_refcount_client.dir/refcount/cls_refcount_ops.cc.o
+/usr/bin/ranlib ../../lib/libcls_refcount_client.a

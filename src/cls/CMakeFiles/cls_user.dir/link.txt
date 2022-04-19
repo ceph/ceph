@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_user.so.1 -o ../../lib/libcls_user.so.1.0.0 CMakeFiles/cls_user.dir/user/cls_user.cc.o 

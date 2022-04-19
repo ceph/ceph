@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_numops_client.a  CMakeFiles/cls_numops_client.dir/numops/cls_numops_client.cc.o
+/usr/bin/ranlib ../../lib/libcls_numops_client.a

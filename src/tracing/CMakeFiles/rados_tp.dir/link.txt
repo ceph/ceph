@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -Og -g3 -gdwarf-4 -g  -shared -Wl,-soname,librados_tp.so.2 -o ../../lib/librados_tp.so.2.0.0 CMakeFiles/rados_tp.dir/librados.c.o  /usr/lib/x86_64-linux-gnu/liblttng-ust.so -ldl -ldl 

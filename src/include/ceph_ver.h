@@ -1,0 +1,10 @@
+#ifndef CEPH_VERSION_H
+#define CEPH_VERSION_H
+
+#define CEPH_GIT_VER 01b57c1f6335dfbf48682e6fad3d177070cf99f4
+#define CEPH_GIT_NICE_VER "17.0.0-11348-g01b57c1f633"
+#define CEPH_RELEASE 17
+#define CEPH_RELEASE_NAME "quincy"
+#define CEPH_RELEASE_TYPE "dev"
+
+#endif

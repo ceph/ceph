@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libceph_lz4.so.2 -o ../../../lib/libceph_lz4.so.2.0.0 CMakeFiles/ceph_lz4.dir/CompressionPluginLZ4.cc.o  /usr/lib/x86_64-linux-gnu/liblz4.so ../../../lib/libcompressor.a 

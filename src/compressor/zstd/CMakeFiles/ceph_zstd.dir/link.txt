@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libceph_zstd.so.2 -o ../../../lib/libceph_zstd.so.2.0.0 CMakeFiles/ceph_zstd.dir/CompressionPluginZstd.cc.o  libzstd/lib/libzstd.a 

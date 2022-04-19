@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_queue.so.1 -o ../../lib/libcls_queue.so.1.0.0 CMakeFiles/cls_queue.dir/queue/cls_queue.cc.o CMakeFiles/cls_queue.dir/queue/cls_queue_src.cc.o CMakeFiles/cls_queue.dir/__/common/ceph_json.cc.o 

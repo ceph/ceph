@@ -1,0 +1,13 @@
+# Target labels
+ liburing_ext
+# Source files and their labels
+/home/sh3ll/ceph/ceph/src/blk/CMakeFiles/liburing_ext
+/home/sh3ll/ceph/ceph/src/blk/CMakeFiles/liburing_ext.rule
+/home/sh3ll/ceph/ceph/src/blk/CMakeFiles/liburing_ext-complete.rule
+/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-install.rule
+/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-mkdir.rule
+/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-download.rule
+/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-update.rule
+/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-patch.rule
+/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-configure.rule
+/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-build.rule

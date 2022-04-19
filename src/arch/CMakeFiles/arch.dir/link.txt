@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libarch.a  CMakeFiles/arch.dir/probe.cc.o CMakeFiles/arch.dir/intel.c.o
+/usr/bin/ranlib ../../lib/libarch.a

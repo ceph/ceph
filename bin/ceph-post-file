@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+set -e
+
+# If these files exist, assume we are a source install.
+if [[ -f ../share/known_hosts_drop.ceph.com && -f ../share/id_rsa_drop.ceph.com ]]
+    then # running from source install
+       known_hosts=../share/known_hosts_drop.ceph.com
+       ssh_key=../share/id_rsa_drop.ceph.com
+    else # running from a pkg install
+       known_hosts=/usr/local/share/ceph/known_hosts_drop.ceph.com
+       ssh_key=/usr/local/share/ceph/id_rsa_drop.ceph.com
+fi
+
+function usage() {
+    echo "Usage: $0 [options] file1 [dir2 ...]
+
+Easily upload files or directories to ceph.com for analysis by Ceph
+developers.
+
+Each invocation uploads files or directories to a separate directory
+with a unique tag.  That tag can be passed to a developer or
+referenced in a bug report (http://tracker.ceph.com/).  Once the
+upload completes, the directory is marked non-readable and
+non-writeable to prevent access or modification by other users.
+
+WARNING:
+  Basic measures are taken to make posted data be visible only to
+  developers with access to ceph.com infrastructure. However, users
+  should think twice and/or take appropriate precautions before
+  posting potentially sensitive data (for example, logs or data
+  directories that contain Ceph secrets).
+
+Options:
+  -d|--description <desc>    Description for this post
+                               [Default: none]
+  -u|--user <user>           User identifier
+                               [Default: \`whoami\`@\`hostname -f\`]
+  -r|--remote <user@host>    Remote to upload to
+                               [Default: postfile@drop.ceph.com]
+  -k|--known_hosts <path>    known_hosts file
+                               [Default: /usr/share/ceph/known_hosts_drop.ceph.com]
+  -i <path>         Ssh identity file
+                      [Default: /usr/share/ceph/id_rsa_drop.ceph.com]
+  -h|--help         Show this usage information
+"
+}
+
+if [ -z "$*" ]; then
+    usage
+    exit 1
+fi
+
+description=""
+user="`whoami`@`hostname -f`"
+remote="postfile@drop.ceph.com"
+
+if [ `uname` = FreeBSD ]; then
+  GETOPT=/usr/local/bin/getopt
+else
+  GETOPT=getopt
+fi
+
+ARGS=$(${GETOPT} -n "ceph-post-file" -o 'd:u:hk:i:r:' -l "description:,user:,help,known-hosts:,remote:" -- "$@")
+eval set -- $ARGS
+
+while true; do
+	echo "args: $@"
+	case $1 in
+	    -d | --description)
+		description="$2"
+		shift
+		shift
+		;;
+	    -u | --user)
+		user="$2"
+		shift
+		shift
+		;;
+	    -h | --help)
+		usage
+		exit 0
+		;;
+	    -k | --known-hosts)
+		known_hosts="$2"
+		shift
+		shift
+		;;
+	    -i)
+		ssh_key="$2"
+		shift
+		shift
+		;;
+	    -r | --remote)
+		remote="$2"
+		shift
+		shift
+		;;
+	    --)
+		shift
+		break
+		;;
+	esac
+done
+
+# this id should be shared
+id=`uuidgen`
+echo "$0: upload tag $id"
+
+# this is secret goop we add to the directory so that $id is not
+# enough to find the data using the shared user; only ceph developers
+# who have access to the server and can read the post directory can
+# find the uploaded data.
+nonce=`uuidgen`
+
+# stick the user info in the dir too
+dir="${id}_${user}_${nonce}"
+
+t1=$(mktemp) || exit
+t2=$(mktemp) || exit
+t3=$(mktemp) || exit
+t4=$(mktemp) || exit
+trap "rm -f -- '$t1' '$t2' '$t3' '$t4'" EXIT
+cat > $t1 <<EOF
+mkdir post/$dir
+cd post/$dir
+EOF
+
+echo "$0: user: $user"
+cat > $t3 <<EOF
+$user
+EOF
+echo put $t3 user >> $t1
+
+if [ -n "$description" ]; then
+    echo "$0: description: $description"
+    cat > $t2 <<EOF
+$description
+EOF
+    echo put $t2 description >> $t1
+fi
+
+while [ -n "$*" ]; do
+    if [ -d "$1" ]; then
+	echo $0: will upload directory $1
+	bn=`basename "$1"`
+	cat >> $t1 <<EOF
+mkdir $bn
+put -r $1
+EOF
+    else
+	echo $0: will upload file $1
+	cat >> $t1 <<EOF
+put $1
+EOF
+    fi
+    shift
+done
+
+# no UserKnownHostsFile so that we don't try to record the IP hash key
+# GlobalKnownHostsFile so that we are verifying that this is the real drop.ceph.com
+# IdentitiesOnly=yes forces sftp to ignore any keys offered by ssh-agent
+
+cp "$ssh_key" "$t4"
+cp "${ssh_key}.pub" "$t4.pub"
+
+sftp -o "IdentityFile=$t4" \
+    -C \
+    -oCheckHostIP=no \
+    -oGlobalKnownHostsFile=$known_hosts \
+    -oBatchMode=no \
+    -oIdentitiesOnly=yes \
+    -b $t1 -- $remote
+
+echo "$0: copy the upload id below to share with a dev:
+
+ceph-post-file: $id
+"

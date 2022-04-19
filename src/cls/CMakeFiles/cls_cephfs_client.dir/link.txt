@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_cephfs_client.a  CMakeFiles/cls_cephfs_client.dir/cephfs/cls_cephfs_client.cc.o
+/usr/bin/ranlib ../../lib/libcls_cephfs_client.a

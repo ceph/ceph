@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/CMakeFiles/rocksdb_ext"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/CMakeFiles/rocksdb_ext.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/CMakeFiles/rocksdb_ext-complete.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-install.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-mkdir.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-download.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-update.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-patch.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-configure.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-build.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"rocksdb_ext"
+		],
+		"name" : "rocksdb_ext"
+	}
+}

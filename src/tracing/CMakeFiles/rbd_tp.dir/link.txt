@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -Og -g3 -gdwarf-4 -g  -shared -Wl,-soname,librbd_tp.so.1 -o ../../lib/librbd_tp.so.1.0.0 CMakeFiles/rbd_tp.dir/librbd.c.o  /usr/lib/x86_64-linux-gnu/liblttng-ust.so -ldl -ldl 

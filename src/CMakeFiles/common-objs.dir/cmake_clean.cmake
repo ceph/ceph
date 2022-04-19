@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/common-objs.dir/ceph_ver.c.o"
+  "CMakeFiles/common-objs.dir/common/error_code.cc.o"
+  "CMakeFiles/common-objs.dir/common/tracer.cc.o"
+  "CMakeFiles/common-objs.dir/global/global_context.cc.o"
+  "CMakeFiles/common-objs.dir/librbd/Features.cc.o"
+  "CMakeFiles/common-objs.dir/librbd/io/IoOperations.cc.o"
+  "CMakeFiles/common-objs.dir/log/Log.cc.o"
+  "CMakeFiles/common-objs.dir/mds/FSMap.cc.o"
+  "CMakeFiles/common-objs.dir/mds/FSMapUser.cc.o"
+  "CMakeFiles/common-objs.dir/mds/MDSMap.cc.o"
+  "CMakeFiles/common-objs.dir/mds/cephfs_features.cc.o"
+  "CMakeFiles/common-objs.dir/mds/flock.cc.o"
+  "CMakeFiles/common-objs.dir/mds/inode_backtrace.cc.o"
+  "CMakeFiles/common-objs.dir/mds/mdstypes.cc.o"
+  "CMakeFiles/common-objs.dir/mgr/MgrClient.cc.o"
+  "CMakeFiles/common-objs.dir/mgr/ServiceMap.cc.o"
+  "CMakeFiles/common-objs.dir/mon/MonCap.cc.o"
+  "CMakeFiles/common-objs.dir/mon/MonClient.cc.o"
+  "CMakeFiles/common-objs.dir/mon/MonMap.cc.o"
+  "CMakeFiles/common-objs.dir/mon/MonSub.cc.o"
+  "CMakeFiles/common-objs.dir/mon/PGMap.cc.o"
+  "CMakeFiles/common-objs.dir/mon/error_code.cc.o"
+  "CMakeFiles/common-objs.dir/osd/ClassHandler.cc.o"
+  "CMakeFiles/common-objs.dir/osd/ECMsgTypes.cc.o"
+  "CMakeFiles/common-objs.dir/osd/HitSet.cc.o"
+  "CMakeFiles/common-objs.dir/osd/OSDMap.cc.o"
+  "CMakeFiles/common-objs.dir/osd/OSDMapMapping.cc.o"
+  "CMakeFiles/common-objs.dir/osd/OpRequest.cc.o"
+  "CMakeFiles/common-objs.dir/osd/PGPeeringEvent.cc.o"
+  "CMakeFiles/common-objs.dir/osd/error_code.cc.o"
+  "CMakeFiles/common-objs.dir/osd/osd_op_util.cc.o"
+  "CMakeFiles/common-objs.dir/osd/osd_types.cc.o"
+  "CMakeFiles/common-objs.dir/osdc/Objecter.cc.o"
+  "CMakeFiles/common-objs.dir/osdc/Striper.cc.o"
+  "CMakeFiles/common-objs.dir/osdc/error_code.cc.o"
+  "CMakeFiles/common-objs.dir/xxHash/xxhash.c.o"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang C CXX)
+  include(CMakeFiles/common-objs.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

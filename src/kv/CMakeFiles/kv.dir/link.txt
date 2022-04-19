@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libkv.a  CMakeFiles/kv.dir/KeyValueDB.cc.o CMakeFiles/kv.dir/MemDB.cc.o CMakeFiles/kv.dir/RocksDBStore.cc.o CMakeFiles/kv.dir/KeyValueHistogram.cc.o CMakeFiles/kv.dir/rocksdb_cache/ShardedCache.cc.o CMakeFiles/kv.dir/rocksdb_cache/BinnedLRUCache.cc.o ../common/CMakeFiles/common_prioritycache_obj.dir/PriorityCache.cc.o
+/usr/bin/ranlib ../../lib/libkv.a

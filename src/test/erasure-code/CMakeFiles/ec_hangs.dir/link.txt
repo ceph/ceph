@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libec_hangs.so -o ../../../lib/libec_hangs.so CMakeFiles/ec_hangs.dir/ErasureCodePluginHangs.cc.o  -lpthread -ldl /usr/lib/x86_64-linux-gnu/librt.so -lresolv 

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../../lib/libdbstore_lib.a  CMakeFiles/dbstore_lib.dir/common/dbstore.cc.o
+/usr/bin/ranlib ../../../../lib/libdbstore_lib.a

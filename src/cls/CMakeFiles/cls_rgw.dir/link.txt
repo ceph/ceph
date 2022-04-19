@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_rgw.so.1 -o ../../lib/libcls_rgw.so.1.0.0 CMakeFiles/cls_rgw.dir/rgw/cls_rgw.cc.o CMakeFiles/cls_rgw.dir/rgw/cls_rgw_ops.cc.o CMakeFiles/cls_rgw.dir/rgw/cls_rgw_types.cc.o CMakeFiles/cls_rgw.dir/__/common/ceph_json.cc.o  ../../lib/libjson_spirit.a ../../lib/libcommon_utf8.a 

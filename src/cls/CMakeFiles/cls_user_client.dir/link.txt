@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_user_client.a  CMakeFiles/cls_user_client.dir/user/cls_user_client.cc.o CMakeFiles/cls_user_client.dir/user/cls_user_types.cc.o CMakeFiles/cls_user_client.dir/user/cls_user_ops.cc.o
+/usr/bin/ranlib ../../lib/libcls_user_client.a

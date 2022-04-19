@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libclient.a  CMakeFiles/client.dir/Client.cc.o CMakeFiles/client.dir/Dentry.cc.o CMakeFiles/client.dir/Fh.cc.o CMakeFiles/client.dir/Inode.cc.o CMakeFiles/client.dir/MetaRequest.cc.o CMakeFiles/client.dir/ClientSnapRealm.cc.o CMakeFiles/client.dir/MetaSession.cc.o CMakeFiles/client.dir/Trace.cc.o CMakeFiles/client.dir/posix_acl.cc.o CMakeFiles/client.dir/Delegation.cc.o
+/usr/bin/ranlib ../../lib/libclient.a

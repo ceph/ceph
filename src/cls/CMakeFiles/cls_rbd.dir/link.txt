@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_rbd.so.1 -o ../../lib/libcls_rbd.so.1.0.0 CMakeFiles/cls_rbd.dir/rbd/cls_rbd.cc.o CMakeFiles/cls_rbd.dir/rbd/cls_rbd_types.cc.o 

@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/unittest_mgr_ttlcache.dir/test_ttlcache.cc.o  -o ../../../bin/unittest_mgr_ttlcache  ../../../lib/libgmock_maind.a ../../../lib/libgmockd.a ../../../lib/libgtestd.a -lpthread -ldl /usr/lib/x86_64-linux-gnu/libpython3.8.so -ldl -lpthread 

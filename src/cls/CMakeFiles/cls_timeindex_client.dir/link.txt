@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_timeindex_client.a  CMakeFiles/cls_timeindex_client.dir/timeindex/cls_timeindex_types.cc.o CMakeFiles/cls_timeindex_client.dir/timeindex/cls_timeindex_client.cc.o
+/usr/bin/ranlib ../../lib/libcls_timeindex_client.a

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libjournal.a  CMakeFiles/journal.dir/Entry.cc.o CMakeFiles/journal.dir/Future.cc.o CMakeFiles/journal.dir/FutureImpl.cc.o CMakeFiles/journal.dir/Journaler.cc.o CMakeFiles/journal.dir/JournalMetadata.cc.o CMakeFiles/journal.dir/JournalPlayer.cc.o CMakeFiles/journal.dir/JournalRecorder.cc.o CMakeFiles/journal.dir/JournalTrimmer.cc.o CMakeFiles/journal.dir/ObjectPlayer.cc.o CMakeFiles/journal.dir/ObjectRecorder.cc.o CMakeFiles/journal.dir/Utils.cc.o
+/usr/bin/ranlib ../../lib/libjournal.a

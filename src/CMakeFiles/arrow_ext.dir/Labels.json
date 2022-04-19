@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/CMakeFiles/arrow_ext"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/CMakeFiles/arrow_ext.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/CMakeFiles/arrow_ext-complete.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/arrow_ext-prefix/src/arrow_ext-stamp/arrow_ext-install.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/arrow_ext-prefix/src/arrow_ext-stamp/arrow_ext-mkdir.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/arrow_ext-prefix/src/arrow_ext-stamp/arrow_ext-download.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/arrow_ext-prefix/src/arrow_ext-stamp/arrow_ext-update.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/arrow_ext-prefix/src/arrow_ext-stamp/arrow_ext-patch.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/arrow_ext-prefix/src/arrow_ext-stamp/arrow_ext-configure.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/arrow_ext-prefix/src/arrow_ext-stamp/arrow_ext-build.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"arrow_ext"
+		],
+		"name" : "arrow_ext"
+	}
+}

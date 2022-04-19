@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/unittest_convenience.dir/test_convenience.cc.o  -o ../../../bin/unittest_convenience  ../../../lib/libgmock_maind.a ../../../lib/libgmockd.a ../../../lib/libgtestd.a -lpthread -ldl -lpthread 

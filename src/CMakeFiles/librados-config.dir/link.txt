@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/librados-config.dir/librados-config.cc.o  -o ../bin/librados-config  -Wl,-rpath,/home/sh3ll/ceph/ceph/lib: ../lib/librados.so.2.0.0 ../boost/lib/libboost_program_options.a ../boost/lib/libboost_program_options.a -Wl,-rpath-link,/home/sh3ll/ceph/ceph/lib 

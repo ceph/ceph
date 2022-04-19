@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libceph_crypto_openssl.so -o ../../../lib/libceph_crypto_openssl.so CMakeFiles/ceph_crypto_openssl.dir/openssl_crypto_accel.cc.o CMakeFiles/ceph_crypto_openssl.dir/openssl_crypto_plugin.cc.o  /usr/lib/x86_64-linux-gnu/libcrypto.so 

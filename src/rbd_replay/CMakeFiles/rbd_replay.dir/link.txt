@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/librbd_replay.a  CMakeFiles/rbd_replay.dir/actions.cc.o CMakeFiles/rbd_replay.dir/BufferReader.cc.o CMakeFiles/rbd_replay.dir/ImageNameMap.cc.o CMakeFiles/rbd_replay.dir/PendingIO.cc.o CMakeFiles/rbd_replay.dir/rbd_loc.cc.o CMakeFiles/rbd_replay.dir/Replayer.cc.o
+/usr/bin/ranlib ../../lib/librbd_replay.a

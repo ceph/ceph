@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_journal.so.1 -o ../../lib/libcls_journal.so.1.0.0 CMakeFiles/cls_journal.dir/journal/cls_journal.cc.o CMakeFiles/cls_journal.dir/journal/cls_journal_types.cc.o 

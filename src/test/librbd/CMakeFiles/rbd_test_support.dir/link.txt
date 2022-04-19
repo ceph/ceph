@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/librbd_test_support.a  CMakeFiles/rbd_test_support.dir/test_support.cc.o
+/usr/bin/ranlib ../../../lib/librbd_test_support.a

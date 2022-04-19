@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libec_fail_to_register.so -o ../../../lib/libec_fail_to_register.so CMakeFiles/ec_fail_to_register.dir/ErasureCodePluginFailToRegister.cc.o  -lpthread -ldl /usr/lib/x86_64-linux-gnu/librt.so -lresolv 

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_rbd_client.a  CMakeFiles/cls_rbd_client.dir/rbd/cls_rbd_client.cc.o CMakeFiles/cls_rbd_client.dir/rbd/cls_rbd_types.cc.o
+/usr/bin/ranlib ../../lib/libcls_rbd_client.a

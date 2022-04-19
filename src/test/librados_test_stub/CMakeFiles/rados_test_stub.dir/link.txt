@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/librados_test_stub.a  CMakeFiles/rados_test_stub.dir/LibradosTestStub.cc.o CMakeFiles/rados_test_stub.dir/NeoradosTestStub.cc.o CMakeFiles/rados_test_stub.dir/TestClassHandler.cc.o CMakeFiles/rados_test_stub.dir/TestIoCtxImpl.cc.o CMakeFiles/rados_test_stub.dir/TestMemCluster.cc.o CMakeFiles/rados_test_stub.dir/TestMemIoCtxImpl.cc.o CMakeFiles/rados_test_stub.dir/TestMemRadosClient.cc.o CMakeFiles/rados_test_stub.dir/TestRadosClient.cc.o CMakeFiles/rados_test_stub.dir/TestWatchNotify.cc.o
+/usr/bin/ranlib ../../../lib/librados_test_stub.a

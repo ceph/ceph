@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_cas_internal.a  CMakeFiles/cls_cas_internal.dir/cas/cls_cas_internal.cc.o
+/usr/bin/ranlib ../../lib/libcls_cas_internal.a

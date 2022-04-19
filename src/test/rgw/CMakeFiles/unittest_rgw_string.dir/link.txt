@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/unittest_rgw_string.dir/test_rgw_string.cc.o  -o ../../../bin/unittest_rgw_string  ../../../lib/libgmock_maind.a ../../../lib/libgmockd.a ../../../lib/libgtestd.a -lpthread -ldl -lpthread 

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/librbd_test_mock.a  CMakeFiles/rbd_test_mock.dir/mock/MockImageCtx.cc.o CMakeFiles/rbd_test_mock.dir/mock/MockJournal.cc.o
+/usr/bin/ranlib ../../../lib/librbd_test_mock.a

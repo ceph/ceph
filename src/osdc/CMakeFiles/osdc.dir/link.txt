@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libosdc.a  CMakeFiles/osdc.dir/Filer.cc.o CMakeFiles/osdc.dir/ObjectCacher.cc.o CMakeFiles/osdc.dir/Objecter.cc.o CMakeFiles/osdc.dir/error_code.cc.o CMakeFiles/osdc.dir/Striper.cc.o
+/usr/bin/ranlib ../../lib/libosdc.a

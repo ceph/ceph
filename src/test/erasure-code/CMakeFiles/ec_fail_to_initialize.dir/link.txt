@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libec_fail_to_initialize.so -o ../../../lib/libec_fail_to_initialize.so CMakeFiles/ec_fail_to_initialize.dir/ErasureCodePluginFailToInitialize.cc.o  -lpthread -ldl /usr/lib/x86_64-linux-gnu/librt.so -lresolv 

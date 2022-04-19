@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/libradostest.a  CMakeFiles/radostest.dir/test_common.cc.o CMakeFiles/radostest.dir/TestCase.cc.o CMakeFiles/radostest.dir/test.cc.o CMakeFiles/radostest_shared.dir/test_shared.cc.o
+/usr/bin/ranlib ../../../lib/libradostest.a

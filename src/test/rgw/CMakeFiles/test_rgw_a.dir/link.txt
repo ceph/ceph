@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/libtest_rgw_a.a  CMakeFiles/test_rgw_a.dir/test_rgw_common.cc.o
+/usr/bin/ranlib ../../../lib/libtest_rgw_a.a

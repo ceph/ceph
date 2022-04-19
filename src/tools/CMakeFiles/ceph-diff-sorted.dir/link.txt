@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/ceph-diff-sorted.dir/ceph-diff-sorted.cc.o  -o ../../bin/ceph-diff-sorted 

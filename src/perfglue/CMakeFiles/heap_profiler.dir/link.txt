@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libheap_profiler.a  CMakeFiles/heap_profiler.dir/heap_profiler.cc.o
+/usr/bin/ranlib ../../lib/libheap_profiler.a

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_log_client.a  CMakeFiles/cls_log_client.dir/log/cls_log_client.cc.o
+/usr/bin/ranlib ../../lib/libcls_log_client.a

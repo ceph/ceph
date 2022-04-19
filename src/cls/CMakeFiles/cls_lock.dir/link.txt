@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_lock.so.1 -o ../../lib/libcls_lock.so.1.0.0 CMakeFiles/cls_lock.dir/lock/cls_lock.cc.o 

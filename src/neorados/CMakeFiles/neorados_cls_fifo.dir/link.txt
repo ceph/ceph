@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libneorados_cls_fifo.a  CMakeFiles/neorados_cls_fifo.dir/cls/fifo.cc.o
+/usr/bin/ranlib ../../lib/libneorados_cls_fifo.a

@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_timeindex.so.1 -o ../../lib/libcls_timeindex.so.1.0.0 CMakeFiles/cls_timeindex.dir/timeindex/cls_timeindex.cc.o 

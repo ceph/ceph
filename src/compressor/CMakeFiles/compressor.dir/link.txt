@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcompressor.a  CMakeFiles/compressor_objs.dir/Compressor.cc.o
+/usr/bin/ranlib ../../lib/libcompressor.a

@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -Og -g3 -gdwarf-4 -g  -shared -Wl,-soname,libosd_tp.so.1 -o ../../lib/libosd_tp.so.1.0.0 CMakeFiles/osd_tp.dir/oprequest.c.o CMakeFiles/osd_tp.dir/osd.c.o CMakeFiles/osd_tp.dir/pg.c.o  /usr/lib/x86_64-linux-gnu/liblttng-ust.so -ldl -ldl 

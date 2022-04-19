@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_cas.so.1 -o ../../lib/libcls_cas.so.1.0.0 CMakeFiles/cls_cas.dir/cas/cls_cas.cc.o  ../../lib/libcls_cas_internal.a 

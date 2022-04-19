@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/unittest_intarith.dir/test_intarith.cc.o  -o ../../bin/unittest_intarith  ../../lib/libgmock_maind.a ../../lib/libgmockd.a ../../lib/libgtestd.a -lpthread -ldl -lpthread 

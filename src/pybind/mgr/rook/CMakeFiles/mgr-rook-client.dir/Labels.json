@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/CMakeFiles/mgr-rook-client"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/CMakeFiles/mgr-rook-client.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/CMakeFiles/mgr-rook-client-complete.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-install.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-mkdir.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-download.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-update.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-patch.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-configure.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-build.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"mgr-rook-client"
+		],
+		"name" : "mgr-rook-client"
+	}
+}

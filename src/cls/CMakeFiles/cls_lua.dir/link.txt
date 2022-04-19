@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_lua.so.1 -o ../../lib/libcls_lua.so.1.0.0 CMakeFiles/cls_lua.dir/lua/cls_lua.cc.o CMakeFiles/cls_lua.dir/lua/lua_bufferlist.cc.o  /usr/lib/x86_64-linux-gnu/liblua5.3.so -lm ../../lib/libjson_spirit.a ../../lib/libcommon_utf8.a 

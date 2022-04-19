@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_test_remote_reads.so.1 -o ../../lib/libcls_test_remote_reads.so.1.0.0 CMakeFiles/cls_test_remote_reads.dir/test_remote_reads/cls_test_remote_reads.cc.o 

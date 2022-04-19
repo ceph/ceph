@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/ceph_test_mon_memory_target.dir/test_mon_memory_target.cc.o  -o ../../../bin/ceph_test_mon_memory_target  ../../../boost/lib/libboost_system.a -lpthread 

@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libec_missing_version.so -o ../../../lib/libec_missing_version.so CMakeFiles/ec_missing_version.dir/ErasureCodePluginMissingVersion.cc.o  -lpthread -ldl /usr/lib/x86_64-linux-gnu/librt.so -lresolv 

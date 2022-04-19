@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/libneoradostest-support.a  CMakeFiles/neoradostest-support.dir/common_tests.cc.o
+/usr/bin/ranlib ../../../lib/libneoradostest-support.a

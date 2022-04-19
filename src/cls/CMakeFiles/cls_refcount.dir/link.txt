@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_refcount.so.1 -o ../../lib/libcls_refcount.so.1.0.0 CMakeFiles/cls_refcount.dir/refcount/cls_refcount.cc.o CMakeFiles/cls_refcount.dir/refcount/cls_refcount_ops.cc.o CMakeFiles/cls_refcount.dir/__/common/ceph_json.cc.o  ../../lib/libjson_spirit.a ../../lib/libcommon_utf8.a 

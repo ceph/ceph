@@ -1,0 +1,13 @@
+# Target labels
+ rocksdb_ext
+# Source files and their labels
+/home/sh3ll/ceph/ceph/src/CMakeFiles/rocksdb_ext
+/home/sh3ll/ceph/ceph/src/CMakeFiles/rocksdb_ext.rule
+/home/sh3ll/ceph/ceph/src/CMakeFiles/rocksdb_ext-complete.rule
+/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-install.rule
+/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-mkdir.rule
+/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-download.rule
+/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-update.rule
+/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-patch.rule
+/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-configure.rule
+/home/sh3ll/ceph/ceph/src/rocksdb_ext-prefix/src/rocksdb_ext-stamp/rocksdb_ext-build.rule

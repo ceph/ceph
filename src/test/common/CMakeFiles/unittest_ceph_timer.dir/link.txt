@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/unittest_ceph_timer.dir/test_ceph_timer.cc.o  -o ../../../bin/unittest_ceph_timer  ../../../lib/libgmock_maind.a ../../../lib/libgmockd.a ../../../lib/libgtestd.a -lpthread -ldl -lpthread 

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/librbd_replay_types.a  CMakeFiles/rbd_replay_types.dir/ActionTypes.cc.o
+/usr/bin/ranlib ../../lib/librbd_replay_types.a

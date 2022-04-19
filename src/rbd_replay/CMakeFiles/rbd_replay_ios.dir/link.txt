@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/librbd_replay_ios.a  CMakeFiles/rbd_replay_ios.dir/ios.cc.o
+/usr/bin/ranlib ../../lib/librbd_replay_ios.a

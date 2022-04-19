@@ -1,0 +1,13 @@
+# Target labels
+ mgr-rook-client
+# Source files and their labels
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/CMakeFiles/mgr-rook-client
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/CMakeFiles/mgr-rook-client.rule
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/CMakeFiles/mgr-rook-client-complete.rule
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-install.rule
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-mkdir.rule
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-download.rule
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-update.rule
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-patch.rule
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-configure.rule
+/home/sh3ll/ceph/ceph/src/pybind/mgr/rook/mgr-rook-client-prefix/src/mgr-rook-client-stamp/mgr-rook-client-build.rule

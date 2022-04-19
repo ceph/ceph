@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/liblibneorados.a  CMakeFiles/neorados_api_obj.dir/RADOS.cc.o CMakeFiles/neorados_objs.dir/RADOSImpl.cc.o
+/usr/bin/ranlib ../../lib/liblibneorados.a

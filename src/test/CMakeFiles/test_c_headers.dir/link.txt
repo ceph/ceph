@@ -1,0 +1,1 @@
+/usr/bin/cc -Og -g3 -gdwarf-4 -g   -rdynamic -pie CMakeFiles/test_c_headers.dir/test_c_headers.c.o  -o ../../bin/test_c_headers  -Wl,-rpath,/home/sh3ll/ceph/ceph/lib ../../lib/librados.so.2.0.0 ../../lib/libcephfs.so.2.0.0 -Wl,-rpath-link,/home/sh3ll/ceph/ceph/lib 

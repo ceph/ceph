@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/unittest_static_ptr.dir/test_static_ptr.cc.o  -o ../../../bin/unittest_static_ptr  ../../../lib/libgmock_maind.a ../../../lib/libgmockd.a ../../../lib/libgtestd.a -lpthread -ldl -lpthread 

@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -Og -g  -shared -Wl,-soname,libcls_log.so.1 -o ../../lib/libcls_log.so.1.0.0 CMakeFiles/cls_log.dir/log/cls_log.cc.o 

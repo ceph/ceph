@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../../../lib/libsqlite_db.a  CMakeFiles/sqlite_db.dir/sqliteDB.cc.o
+/usr/bin/ranlib ../../../../../lib/libsqlite_db.a

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../../lib/libkafka_stub.a  CMakeFiles/kafka_stub.dir/kafka_stub.cc.o
+/usr/bin/ranlib ../../../lib/libkafka_stub.a

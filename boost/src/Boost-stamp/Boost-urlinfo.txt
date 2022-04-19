@@ -1,0 +1,3 @@
+repository='external project URL'
+module='https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.tar.bz2 https://downloads.sourceforge.net/project/boost/boost/1.75.0/boost_1_75_0.tar.bz2 https://download.ceph.com/qa/boost_1_75_0.tar.bz2'
+tag='SHA256=953db31e016db7bb207f11432bef7df100516eeb746843fa0486a222e3fd49cb'

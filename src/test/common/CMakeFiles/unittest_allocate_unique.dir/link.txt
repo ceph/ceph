@@ -1,0 +1,1 @@
+/usr/bin/c++  -Og -g   -rdynamic -pie CMakeFiles/unittest_allocate_unique.dir/test_allocate_unique.cc.o  -o ../../../bin/unittest_allocate_unique  ../../../lib/libgmock_maind.a ../../../lib/libgmockd.a ../../../lib/libgtestd.a -lpthread -ldl -lpthread 

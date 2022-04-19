@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcpu_profiler.a  CMakeFiles/cpu_profiler.dir/disabled_stubs.cc.o
+/usr/bin/ranlib ../../lib/libcpu_profiler.a

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/librbd_types.a  CMakeFiles/rbd_types.dir/journal/Types.cc.o CMakeFiles/rbd_types.dir/mirroring_watcher/Types.cc.o CMakeFiles/rbd_types.dir/trash_watcher/Types.cc.o CMakeFiles/rbd_types.dir/watcher/Types.cc.o CMakeFiles/rbd_types.dir/WatchNotifyTypes.cc.o
+/usr/bin/ranlib ../../lib/librbd_types.a

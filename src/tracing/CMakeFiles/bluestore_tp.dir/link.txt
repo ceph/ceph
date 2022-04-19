@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -Og -g3 -gdwarf-4 -g  -shared -Wl,-soname,libbluestore_tp.so.1 -o ../../lib/libbluestore_tp.so.1.0.0 CMakeFiles/bluestore_tp.dir/bluestore.c.o  /usr/lib/x86_64-linux-gnu/liblttng-ust.so -ldl -ldl 

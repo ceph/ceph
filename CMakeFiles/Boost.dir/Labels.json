@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/sh3ll/ceph/ceph/CMakeFiles/Boost"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/CMakeFiles/Boost.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/CMakeFiles/Boost-complete.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-install.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-mkdir.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-download.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-update.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-patch.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-configure.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/boost/src/Boost-stamp/Boost-build.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"Boost"
+		],
+		"name" : "Boost"
+	}
+}

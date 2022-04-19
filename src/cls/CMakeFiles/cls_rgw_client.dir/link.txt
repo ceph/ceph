@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_rgw_client.a  CMakeFiles/cls_rgw_client.dir/rgw/cls_rgw_client.cc.o CMakeFiles/cls_rgw_client.dir/rgw/cls_rgw_types.cc.o CMakeFiles/cls_rgw_client.dir/rgw/cls_rgw_ops.cc.o
+/usr/bin/ranlib ../../lib/libcls_rgw_client.a

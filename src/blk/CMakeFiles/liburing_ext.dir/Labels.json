@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/CMakeFiles/liburing_ext"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/CMakeFiles/liburing_ext.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/CMakeFiles/liburing_ext-complete.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-install.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-mkdir.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-download.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-update.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-patch.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-configure.rule"
+		},
+		{
+			"file" : "/home/sh3ll/ceph/ceph/src/blk/liburing_ext-prefix/src/liburing_ext-stamp/liburing_ext-build.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"liburing_ext"
+		],
+		"name" : "liburing_ext"
+	}
+}

@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../lib/libcls_lock_client.a  CMakeFiles/cls_lock_client.dir/lock/cls_lock_client.cc.o CMakeFiles/cls_lock_client.dir/lock/cls_lock_types.cc.o CMakeFiles/cls_lock_client.dir/lock/cls_lock_ops.cc.o
+/usr/bin/ranlib ../../lib/libcls_lock_client.a
