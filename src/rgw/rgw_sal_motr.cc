@@ -1024,9 +1024,13 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
       map<string, bool> *common_prefixes,
       bool *is_truncated)
 {
-  int rc;
-  vector<string> key_vec(max_uploads);
-  vector<bufferlist> val_vec(max_uploads);
+  int rc = 0;
+  if( max_uploads <= 0 )
+	return rc;
+  int upl = max_uploads;
+  upl++;
+  vector<string> key_vec(upl);
+  vector<bufferlist> val_vec(upl);
   string tenant_bkt_name = get_bucket_name(this->get_tenant(), this->get_name());
 
   string bucket_multipart_iname =
@@ -1049,6 +1053,11 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
     if (bl.length() == 0)
       break;
 
+    if((marker != "") && (ocount == 0))
+    {
+        ocount++;
+        continue;
+    }
     rgw_bucket_dir_entry ent;
     auto iter = bl.cbegin();
     ent.decode(iter);
@@ -1065,7 +1074,7 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
     uploads.push_back(this->get_multipart_upload(key.name));
     last_obj_key = key;
     ocount++;
-    if (ocount == max_uploads) {
+    if (ocount == upl) {
       *is_truncated = true;
       break;
     }
