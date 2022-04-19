@@ -930,7 +930,7 @@ class CephExporter(object):
                  fsid,
                  daemon_id,
                  image=DEFAULT_IMAGE):
-        # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
+        # type: (CephadmContext, str, Union[int, str], str) -> None
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
@@ -938,9 +938,8 @@ class CephExporter(object):
 
     @classmethod
     def init(cls, ctx, fsid, daemon_id):
-        # type: (CephadmContext, str, Union[int, str]) -> CephIscsi
-        return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+        # type: (CephadmContext, str, Union[int, str]) -> CephExporter
+        return cls(ctx, fsid, daemon_id, get_parm(ctx.config_json), ctx.image)
 
     @staticmethod
     def get_container_mounts():
@@ -5823,7 +5822,7 @@ def command_deploy(ctx):
                       config=config, keyring=keyring,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
-    
+
     elif daemon_type == CephExporter.daemon_type:
         if not ctx.reconfig and not redeploy and not daemon_ports:
             daemon_ports = list(CephExporter.port_map.values())
