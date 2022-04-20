@@ -302,7 +302,7 @@ class TestVolumesHelper(CephFSTestCase):
         # flip ownership to nobody. assumption: nobody's id is 65534
         self.mount_a.run_shell(["chown", "-h", "65534:65534", sym_path2], sudo=True, omit_sudo=False)
 
-    def _wait_for_trash_empty(self, timeout=30):
+    def _wait_for_trash_empty(self, timeout=60):
         # XXX: construct the trash dir path (note that there is no mgr
         # [sub]volume interface for this).
         trashdir = os.path.join("./", "volumes", "_deleting")
@@ -911,6 +911,174 @@ class TestSubvolumeGroups(TestVolumesHelper):
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_group_quota_mds_path_restriction_to_group_path(self):
+        """
+        Tests subvolumegroup quota enforcement with mds path restriction set to group.
+        For quota to be enforced, read permission needs to be provided to the parent
+        of the directory on which quota is set. Please see the tracker comment [1]
+        [1] https://tracker.ceph.com/issues/55090#note-8
+        """
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        # Create auth_id
+        authid = "client.guest1"
+        user = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "get-or-create", authid,
+            "mds", "allow rw path=/volumes",
+            "mgr", "allow rw",
+            "osd", "allow rw tag cephfs *=*",
+            "mon", "allow r",
+            "--format=json-pretty"
+            ))
+
+        # Prepare guest_mount with new authid
+        guest_mount = self.mount_b
+        guest_mount.umount_wait()
+
+        # configure credentials for guest client
+        self._configure_guest_auth(guest_mount, "guest1", user[0]["key"])
+
+        # mount the subvolume
+        mount_path = os.path.join("/", subvolpath)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+
+        # create 99 files of 1MB
+        guest_mount.run_shell_payload("mkdir -p dir1")
+        for i in range(99):
+            filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+            guest_mount.write_n_mb(os.path.join("dir1", filename), self.DEFAULT_FILE_SIZE)
+        try:
+            # write two files of 1MB file to exceed the quota
+            guest_mount.run_shell_payload("mkdir -p dir2")
+            for i in range(2):
+                filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+                guest_mount.write_n_mb(os.path.join("dir2", filename), self.DEFAULT_FILE_SIZE)
+            # For quota to be enforced
+            time.sleep(60)
+            # create 400 files of 1MB to exceed quota
+            for i in range(400):
+                filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+                guest_mount.write_n_mb(os.path.join("dir2", filename), self.DEFAULT_FILE_SIZE)
+                # Sometimes quota enforcement takes time.
+                if i == 200:
+                    time.sleep(60)
+        except CommandFailedError:
+            pass
+        else:
+            self.fail(f"expected filling subvolume {subvolname} with 400 files of size 1MB to fail")
+
+        # clean up
+        guest_mount.umount_wait()
+
+        # Delete the subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_group_quota_mds_path_restriction_to_subvolume_path(self):
+        """
+        Tests subvolumegroup quota enforcement with mds path restriction set to subvolume path
+        The quota should not be enforced because of the fourth limitation mentioned at
+        https://docs.ceph.com/en/latest/cephfs/quota/#limitations
+        """
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create group with 100MB quota
+        group = self._generate_random_group_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group,
+                     "--size", str(osize), "--mode=777")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume under the group
+        subvolname = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolname,
+                     "--group_name", group, "--mode=777")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
+        self.assertNotEqual(subvolpath, None)
+
+        mount_path = os.path.join("/", subvolpath)
+
+        # Create auth_id
+        authid = "client.guest1"
+        user = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "get-or-create", authid,
+            "mds", f"allow rw path={mount_path}",
+            "mgr", "allow rw",
+            "osd", "allow rw tag cephfs *=*",
+            "mon", "allow r",
+            "--format=json-pretty"
+            ))
+
+        # Prepare guest_mount with new authid
+        guest_mount = self.mount_b
+        guest_mount.umount_wait()
+
+        # configure credentials for guest client
+        self._configure_guest_auth(guest_mount, "guest1", user[0]["key"])
+
+        # mount the subvolume
+        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+
+        # create 99 files of 1MB to exceed quota
+        guest_mount.run_shell_payload("mkdir -p dir1")
+        for i in range(99):
+            filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+            guest_mount.write_n_mb(os.path.join("dir1", filename), self.DEFAULT_FILE_SIZE)
+        try:
+            # write two files of 1MB file to exceed the quota
+            guest_mount.run_shell_payload("mkdir -p dir2")
+            for i in range(2):
+                filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+                guest_mount.write_n_mb(os.path.join("dir2", filename), self.DEFAULT_FILE_SIZE)
+            # For quota to be enforced
+            time.sleep(60)
+            # create 400 files of 1MB to exceed quota
+            for i in range(400):
+                filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+                guest_mount.write_n_mb(os.path.join("dir2", filename), self.DEFAULT_FILE_SIZE)
+                # Sometimes quota enforcement takes time.
+                if i == 200:
+                    time.sleep(60)
+        except CommandFailedError:
+            self.fail(f"Quota should not be enforced, expected filling subvolume {subvolname} with 400 files of size 1MB to succeed")
+
+        # clean up
+        guest_mount.umount_wait()
+
+        # Delete the subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_subvolume_group_quota_exceeded_subvolume_removal(self):
         """
