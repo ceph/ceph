@@ -334,9 +334,9 @@ Upgrading non-cephadm clusters
 
 #. Upgrade all CephFS MDS daemons. For each CephFS file system,
 
-   #. Disable standby_replay:
+   #. Disable standby_replay::
 
-   # ceph fs set <fs_name> allow_standby_replay false
+	# ceph fs set <fs_name> allow_standby_replay false
 
    #. Reduce the number of ranks to 1.  (Make note of the original
       number of MDS daemons first if you plan to restore it later.)::
@@ -399,7 +399,7 @@ Post-upgrade
      ceph health mute OSD_FILESTORE
 
 #. If you are upgrading from Mimic, or did not already do so when you
-   upgraded to Nautilus, we recommened you enable the new :ref:`v2
+   upgraded to Nautilus, we recommend you enable the new :ref:`v2
    network protocol <msgr2>`, issue the following command::
 
      ceph mon enable-msgr2
