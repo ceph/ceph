@@ -2079,16 +2079,21 @@ TEST_P(OSDMapTest, BUG_51842) {
     }
 }
 
-const string OSDMapTest::range_addrs[] = {"198.51.100.0/22", "2001:db8::/48", "3001:db8::/72"};
+const string OSDMapTest::range_addrs[] = {"198.51.100.0/22", "2001:db8::/48",
+  "3001:db8::/72", "4001:db8::/30"};
 const string OSDMapTest::ip_addrs[] = {"198.51.100.14", "198.51.100.0", "198.51.103.255",
   "2001:db8:0:0:0:0:0:0", "2001:db8:0:0:0:0001:ffff:ffff",
   "2001:db8:0:ffff:ffff:ffff:ffff:ffff",
   "3001:db8:0:0:0:0:0:0", "3001:db8:0:0:0:0001:ffff:ffff",
-  "3001:db8:0:0:00ff:ffff:ffff:ffff", };
+  "3001:db8:0:0:00ff:ffff:ffff:ffff",
+  "4001:db8::", "4001:db8:0:0:0:0001:ffff:ffff",
+  "4001:dbb:ffff:ffff:ffff:ffff:ffff:ffff"
+};
 const string OSDMapTest::unblocked_ip_addrs[] = { "0.0.0.0", "1.1.1.1", "192.168.1.1",
   "198.51.99.255", "198.51.104.0",
   "2001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "2001:db8:0001::",
-  "3001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "3001:db8:0:0:0100::"
+  "3001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "3001:db8:0:0:0100::",
+  "4001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "4001:dbc::"
 };
 
 TEST_F(OSDMapTest, blocklisting_ips) {
