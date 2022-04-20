@@ -240,6 +240,11 @@ public:
     spg_t pgid,
     epoch_t epoch,
     std::unique_ptr<PGCreateInfo> info);
+  seastar::future<Ref<PG>> get_or_create_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&&,
+    spg_t pgid,
+    epoch_t epoch,
+    std::unique_ptr<PGCreateInfo> info);
   blocking_future<Ref<PG>> wait_for_pg(
     spg_t pgid);
   seastar::future<Ref<PG>> wait_for_pg(
