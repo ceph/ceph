@@ -33,6 +33,11 @@
 #include "common/debug.h"
 #include "common/blkdev.h"
 
+#if defined(HAVE_LIBDML)
+#include <dml/dml.hpp>
+using execution_path = dml::automatic;
+#endif
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -307,7 +312,14 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered, int write_hin
   while (len) {
     const char *data;
     uint32_t l = p.get_ptr_and_advance(len, &data);
+
+#if defined(HAVE_LIBDML)
+    // Take care of the persistency issue
+    auto result = dml::execute<execution_path>(dml::mem_move, dml::make_view(data, l), dml::make_view(addr + off1, l));
+    ceph_assert(result.status == dml::status_code::ok);
+#else
     pmem_memcpy_persist(addr + off1, data, l);
+#endif
     len -= l;
     off1 += l;
   }
@@ -333,7 +345,13 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   ceph_assert(is_valid_io(off, len));
 
   bufferptr p = buffer::create_small_page_aligned(len);
+
+#if defined(HAVE_LIBDML)
+  auto result = dml::execute<execution_path>(dml::mem_move, dml::make_view(addr + off, len), dml::make_view(p.c_str(), len));
+  ceph_assert(result.status == dml::status_code::ok);
+#else
   memcpy(p.c_str(), addr + off, len);
+#endif
 
   pbl->clear();
   pbl->push_back(std::move(p));
@@ -356,7 +374,13 @@ int PMEMDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   ceph_assert(is_valid_io(off, len));
 
+
+#if defined(HAVE_LIBDML)
+  auto result = dml::execute<execution_path>(dml::mem_move, dml::make_view(addr + off, len), dml::make_view(buf, len));
+  ceph_assert(result.status == dml::status_code::ok);
+#else
   memcpy(buf, addr + off, len);
+#endif
   return 0;
 }
 
