@@ -276,7 +276,8 @@ class SnapSchedClient(CephfsClient):
                     time = datetime.now(timezone.utc)
                     with open_filesystem(self, fs_name) as fs_handle:
                         snap_ts = time.strftime(SNAPSHOT_TS_FORMAT_TZ)
-                        snap_name = f'{path}/.snap/{SNAPSHOT_PREFIX}-{snap_ts}'
+                        snap_dir = self.mgr.rados.conf_get('client_snapdir')
+                        snap_name = f'{path}/{snap_dir}/{SNAPSHOT_PREFIX}-{snap_ts}'
                         fs_handle.mkdir(snap_name, 0o755)
                     log.info(f'created scheduled snapshot of {path}')
                     log.debug(f'created scheduled snapshot {snap_name}')
@@ -305,7 +306,8 @@ class SnapSchedClient(CephfsClient):
             prune_candidates = set()
             time = datetime.now(timezone.utc)
             with open_filesystem(self, sched.fs) as fs_handle:
-                with fs_handle.opendir(f'{path}/.snap') as d_handle:
+                snap_dir = self.mgr.rados.conf_get('client_snapdir')
+                with fs_handle.opendir(f'{path}/{snap_dir}') as d_handle:
                     dir_ = fs_handle.readdir(d_handle)
                     while dir_:
                         if dir_.d_name.decode('utf-8').startswith(f'{SNAPSHOT_PREFIX}-'):
@@ -320,7 +322,7 @@ class SnapSchedClient(CephfsClient):
                 for k in to_prune:
                     dirname = k[0].d_name.decode('utf-8')
                     log.debug(f'rmdir on {dirname}')
-                    fs_handle.rmdir(f'{path}/.snap/{dirname}')
+                    fs_handle.rmdir(f'{path}/{snap_dir}/{dirname}')
                 if to_prune:
                     sched.update_pruned(time, db, len(to_prune))
         except Exception:
