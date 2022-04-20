@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 [ $# -lt 2 ] && echo "usage: $0 <name> <command> [params...]" && exit 1
 
