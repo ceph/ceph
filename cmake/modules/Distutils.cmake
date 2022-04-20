@@ -6,7 +6,7 @@ include(CMakeParseArguments)
 # the building host happens to have a higher version of python3, that version
 # would be picked up instead by find_package(Python3). and that is not want we
 # expect.
-find_package(Python3 ${WITH_PYTHON3}
+find_package(Python3 ${WITH_PYTHON3} EXACT
   QUIET
   REQUIRED
   COMPONENTS Interpreter)
