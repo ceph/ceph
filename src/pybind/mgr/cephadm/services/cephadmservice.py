@@ -1013,7 +1013,7 @@ class CrashService(CephService):
 
 
 class CephExporterService(CephService):
-    TYPE = 'exporter'
+    TYPE = 'ceph-exporter'
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type

@@ -678,7 +678,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         suffix = daemon_type not in [
             'mon', 'crash',
-            'prometheus', 'node-exporter', 'grafana', 'alertmanager',
+            'ceph-exporter', 'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail'
         ]
         if forcename:
@@ -1333,7 +1333,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_haproxy
         elif daemon_type == 'keepalived':
             image = self.container_image_keepalived
-        elif daemon_type == CustomContainerService.TYPE or daemon_type == 'exporter':
+        elif daemon_type == CustomContainerService.TYPE or daemon_type == 'ceph-exporter':
             # The image can't be resolved, the necessary information
             # is only available when a container is deployed (given
             # via spec).
@@ -2322,7 +2322,7 @@ Then run the following:
             deps = [self.get_mgr_ip()]
         else:
             need = {
-                'prometheus': ['mgr', 'alertmanager', 'node-exporter', 'ingress'],
+                'prometheus': ['mgr', 'alertmanager', 'ceph-exporter', 'node-exporter', 'ingress'],
                 'grafana': ['prometheus'],
                 'alertmanager': ['mgr', 'alertmanager', 'snmp-gateway'],
             }
@@ -2505,7 +2505,7 @@ Then run the following:
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
                 'node-exporter': PlacementSpec(host_pattern='*'),
-                'exporter': PlacementSpec(host_pattern='*'),
+                'ceph-exporter': PlacementSpec(host_pattern='*'),
                 'loki': PlacementSpec(count=1),
                 'promtail': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
@@ -2616,7 +2616,7 @@ Then run the following:
         return self._apply(spec)
 
     @handle_orch_error
-    def apply_exporter(self, spec: ServiceSpec) -> str:
+    def apply_ceph_exporter(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

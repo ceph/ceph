@@ -304,8 +304,9 @@ class PrometheusService(CephadmService):
             })
 
         # scrape ceph exporters
-        for dd in self.mgr.cache.get_daemons_by_service('exporter'):
+        for dd in self.mgr.cache.get_daemons_by_service('ceph-exporter'):
             assert dd.hostname is not None
+            deps.append(dd.name())
             addr = self._inventory_get_fqdn(dd.hostname)
             mgr_scrape_list.append(build_url(host=addr, port=exporter_port).lstrip('/'))
 
