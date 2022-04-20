@@ -277,7 +277,7 @@ int process_request(rgw::sal::Store* const store,
 {
   int ret = client_io->init(g_ceph_context);
 
-  dout(1) << "====== starting new request req=" << hex << req << dec
+  dout(1) << "====== starting new request req=" << req->id
 	  << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
 
@@ -461,7 +461,7 @@ done:
   if (latency) {
     *latency = lat;
   }
-  dout(1) << "====== req done req=" << hex << req << dec
+  dout(1) << "====== req done req=" << req->id
 	  << " op status=" << op_ret
 	  << " http_status=" << s->err.http_ret
 	  << " latency=" << lat

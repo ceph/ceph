@@ -1098,6 +1098,10 @@ void MotrStore::finalize(void)
   m0_client_fini(this->instance, true);
 }
 
+uint64_t MotrStore::get_new_req_id() {
+  return ceph::util::generate_random_number<uint64_t>();
+}
+
 const RGWZoneGroup& MotrZone::get_zonegroup()
 {
   return *zonegroup;
