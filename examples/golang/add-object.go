@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -12,66 +13,74 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-const( id  = "AWS_ACCESS_KEY_ID"
- key = "AWS_SECRET_ACCESS_KEY")
+const (
+	id  = "AWS_ACCESS_KEY_ID"
+	key = "AWS_SECRET_ACCESS_KEY"
+)
 
-func main(){
+func main() {
 	endPoint := flag.String("EndPoint", "", "region of request")
 	accessId := flag.String("Access ID", "", "Access Id")
 	accessKey := flag.String("Access Key", "", "Access Key")
-	objectName := flag.String("Object Path", "", "Object Path")
+	ObjectName := flag.String("Object Path", "", "Object Path")
 	bucketName := flag.String("Bucket Name", "", "The name of the s3 bucket")
 	flag.Parse()
 	if flag.NFlag() < 4 {
-		log.Printf("Usage error: EndPoint, Access ID, Access Key, and Object Path not set.")
+		log.Fatalf("Usage error: EndPoint, Access ID, Access Key, and Object Path not set.")
 	}
-	// I want it to be a one way flow for the app user thats why I used flags for access key and Id instead of 
-	// the regular environment variable. 
-	err := os.Setenv(id, accessId)
+	// I want it to be a one way flow for the app user thats why I used flags for access key and Id instead of
+	// a direct environment variable.
+	setEnv(id, *accessId)
+	setEnv(key, *accessKey)
+
+	f, err := os.Open(*ObjectName)
 	if err != nil {
-		log.Fatalf(err.Error())
+		log.Fatal(err)
 	}
-	err = os.Setenv(key, accessKey)
+	defer f.Close()
+	file := bufio.NewReader(f)
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			aws.EndpointResolverWithOptionsFunc(
+				func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+					return aws.Endpoint{
+						URL: *endPoint,
+					}, nil
+				}))))
 	if err != nil {
-		log.Fatalf(err.Error())
+		log.Fatal("Error loading config ", err)
 	}
 
-	
-	//check if object, bucket, and endpoint is not empty. 
-	//A separate logic could be added to use a default bucket anme
-	// check the object flag name to figure out where it exists. An example of this: `.` `./` `../`
-	//find the object on the file system 
-	aws.
-	
-	cfg, err := config.LoadDefaultConfig(context.TODO(), 
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc()))
-	if err != nil {
-		log.Printf("Error loading config ", err)
-	}
 	params := s3.PutObjectInput{
 		Bucket: bucketName,
-		//key: key,
-		// contentType:
-		//contentlength
+		Key:    ObjectName,
+		Body:   file,
 	}
 
-	svc := createClient(cfg, params)
-	putObject(svc, &params)
-	
-	
+	svc := createClient(cfg)
+	putObject(svc, &params, ObjectName)
+
 }
 
-func createClient(config aws.Config) *s3.Client{
+func setEnv(id, accessValue string) {
+	err := os.Setenv(id, accessValue)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+}
+
+func createClient(config aws.Config) *s3.Client {
 	svc := s3.NewFromConfig(config)
-	svc.e
+
 	return svc
 }
 
-func putObject(svc *s3.Client, params *s3.PutObjectInput) error {
-	_, err := svc.PutObject(params)
+func putObject(svc *s3.Client, params *s3.PutObjectInput, ObjectName *string) error {
+	_, err := svc.PutObject(context.TODO(), params)
 	if err != nil {
 		log.Printf("Error uploading object to s3: %v", err)
 	}
-	fmt.Printf("Successfully uploaded object %v to bucket", objectName)
+	fmt.Printf("Successfully uploaded object %v to bucket", ObjectName)
 	return nil
 }
