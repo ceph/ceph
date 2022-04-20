@@ -383,23 +383,10 @@ class TestGetAndPut(TestCephFSShell):
         o = self.mount_a.stat('dump5')
         log.info("mount_a output:\n{}".format(o))
 
-        # get dump5 should fail
         o = self.get_cephfs_shell_cmd_output("get dump5")
         # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
-        o = self.mount_a.run_shell('stat dump5 || echo $?', cwd=None).stdout.\
-                getvalue().strip()
-        log.info("cephfs-shell output:\n{}".format(o))
-        l = o.split('\n')
-        try:
-            ret = int(l[1])
-            # verify that stat dump5 passes
-            # if ret == 1, then that implies the stat failed
-            # which implies that there was a problem with "get dump5"
-            assert(ret != 1)
-        except ValueError:
-            # we have a valid stat output; so this is good
-            # if the int() fails then that means there's a valid stat output
-            pass
+        # NOTE: following command must run successfully.
+        self.mount_a.run_shell('stat dump5', cwd=None)
 
     def test_get_to_console(self):
         """
