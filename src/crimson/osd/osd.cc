@@ -1430,6 +1430,25 @@ OSD::get_or_create_pg(
   }
 }
 
+seastar::future<Ref<PG>>
+OSD::get_or_create_pg(
+  PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
+  spg_t pgid,
+  epoch_t epoch,
+  std::unique_ptr<PGCreateInfo> info)
+{
+  if (info) {
+    auto [fut, creating] = pg_map.wait_for_pg(std::move(trigger), pgid);
+    if (!creating) {
+      pg_map.set_creating(pgid);
+      (void)handle_pg_create_info(std::move(info));
+    }
+    return std::move(fut);
+  } else {
+    return seastar::make_ready_future<Ref<PG>>(pg_map.get_pg(pgid));
+  }
+}
+
 blocking_future<Ref<PG>> OSD::wait_for_pg(
   spg_t pgid)
 {
