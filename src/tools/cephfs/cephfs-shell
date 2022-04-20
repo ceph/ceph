@@ -393,6 +393,7 @@ class CephFSShell(Cmd):
         self.umask = '2'
 
     def default(self, line):
+        self.exit_code = 127
         perror('Unrecognized command')
 
     def set_prompt(self):
