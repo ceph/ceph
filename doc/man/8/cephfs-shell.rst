@@ -104,7 +104,7 @@ Copy a file from Ceph File System to Local File System.
 
 Usage : 
 
-    get [options] <source_path> [target_path]
+    get [options] <source_path> <target_path>
 
 * source_path - remote file/directory path which is to be copied to local file system.
     * if `.` copies all the file/directories in the remote working directory.
