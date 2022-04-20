@@ -31,16 +31,9 @@ std::ostream& operator<<(std::ostream& out, const block_sm_superblock_t& sb)
       << ", segments=" << sb.segments
       << ", tracker_offset=" << sb.tracker_offset
       << ", first_segment_offset=" << sb.first_segment_offset
-      << ", major_dev=" << sb.major_dev
-      << ", magic=" << sb.magic
-      << ", device_type=" << sb.dtype
-      << ", device_id=" << std::to_string(sb.device_id)
-      << ", meta=" << sb.meta
-      << ", secondary(";
-  for (const auto& [k, v] : sb.secondary_devices) {
-    out << std::to_string(k) << ": " << v;
-  }
-  return out << "))";
+      << ", config=" << sb.config
+      << ")";
+  return out;
 }
 
 std::ostream& operator<<(std::ostream &out, Segment::segment_state_t s)
