@@ -21,7 +21,8 @@ namespace {
 
 namespace crimson::osd {
 
-void PeeringEvent::print(std::ostream &lhs) const
+template <class T>
+void PeeringEvent<T>::print(std::ostream &lhs) const
 {
   lhs << "PeeringEvent("
       << "from=" << from
@@ -32,7 +33,8 @@ void PeeringEvent::print(std::ostream &lhs) const
       << ")";
 }
 
-void PeeringEvent::dump_detail(Formatter *f) const
+template <class T>
+void PeeringEvent<T>::dump_detail(Formatter *f) const
 {
   f->open_object_section("PeeringEvent");
   f->dump_stream("from") << from;
@@ -44,17 +46,18 @@ void PeeringEvent::dump_detail(Formatter *f) const
 }
 
 
-PeeringEvent::PGPipeline &PeeringEvent::pp(PG &pg)
+template <class T>
+PGPeeringPipeline &PeeringEvent<T>::pp(PG &pg)
 {
   return pg.peering_request_pg_pipeline;
 }
 
-seastar::future<> PeeringEvent::start()
+template <class T>
+seastar::future<> PeeringEvent<T>::start()
 {
-
   logger().debug("{}: start", *this);
 
-  IRef ref = this;
+  typename T::IRef ref = static_cast<T*>(this);
   auto maybe_delay = seastar::now();
   if (delay) {
     maybe_delay = seastar::sleep(
@@ -69,27 +72,28 @@ seastar::future<> PeeringEvent::start()
       handle.exit();
       return complete_rctx_no_pg();
     }
+    using interruptor = typename T::interruptor;
     return interruptor::with_interruption([this, pg] {
       logger().debug("{}: pg present", *this);
-      return enter_stage<interruptor>(
+      return this->template enter_stage<interruptor>(
         pp(*pg).await_map
       ).then_interruptible([this, pg] {
-        return with_blocking_event<PG_OSDMapGate::OSDMapBlocker::BlockingEvent>(
+        return this->template with_blocking_event<PG_OSDMapGate::OSDMapBlocker::BlockingEvent>(
         [this, pg] (auto&& trigger) {
           return pg->osdmap_gate.wait_for_map(std::move(trigger),
                                               evt.get_epoch_sent());
 	});
       }).then_interruptible([this, pg](auto) {
-        return enter_stage<interruptor>(pp(*pg).process);
+        return this->template enter_stage<interruptor>(pp(*pg).process);
       }).then_interruptible([this, pg] {
         // TODO: likely we should synchronize also with the pg log-based
         // recovery.
-        return enter_stage<interruptor>(BackfillRecovery::bp(*pg).process);
+        return this->template enter_stage<interruptor>(BackfillRecovery::bp(*pg).process);
       }).then_interruptible([this, pg] {
         pg->do_peering_event(evt, ctx);
         handle.exit();
         return complete_rctx(pg);
-      }).then_interruptible([this, pg] () -> PeeringEvent::interruptible_future<> {
+      }).then_interruptible([this, pg] () -> typename T::template interruptible_future<> {
         if (!pg->get_need_up_thru()) {
           return seastar::now();
         }
@@ -108,12 +112,15 @@ seastar::future<> PeeringEvent::start()
   });
 }
 
-void PeeringEvent::on_pg_absent()
+template <class T>
+void PeeringEvent<T>::on_pg_absent()
 {
   logger().debug("{}: pg absent, dropping", *this);
 }
 
-PeeringEvent::interruptible_future<> PeeringEvent::complete_rctx(Ref<PG> pg)
+template <class T>
+typename PeeringEvent<T>::template interruptible_future<>
+PeeringEvent<T>::complete_rctx(Ref<PG> pg)
 {
   logger().debug("{}: submitting ctx", *this);
   return shard_services.dispatch_context(
@@ -154,7 +161,7 @@ void RemotePeeringEvent::on_pg_absent()
   }
 }
 
-PeeringEvent::interruptible_future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
+RemotePeeringEvent::interruptible_future<> RemotePeeringEvent::complete_rctx(Ref<PG> pg)
 {
   if (pg) {
     return PeeringEvent::complete_rctx(pg);
@@ -178,25 +185,30 @@ seastar::future<> RemotePeeringEvent::complete_rctx_no_pg()
 
 seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
 {
-#if 0
   return enter_stage<>(op().await_active).then([this] {
     return osd.state.when_active();
   }).then([this] {
     return enter_stage<>(cp().await_map);
   }).then([this] {
-    return with_blocking_future(
-      osd.osdmap_gate.wait_for_map(evt.get_epoch_sent()));
+    using OSDMapBlockingEvent =
+      OSD_OSDMapGate::OSDMapBlocker::BlockingEvent;
+    return with_blocking_event<OSDMapBlockingEvent>(
+      [this] (auto&& trigger) {
+      return osd.osdmap_gate.wait_for_map(std::move(trigger),
+		      			  evt.get_epoch_sent());
+    });
   }).then([this](auto epoch) {
     logger().debug("{}: got map {}", *this, epoch);
-    return with_blocking_future(handle.enter(cp().get_pg));
+    return enter_stage<>(cp().get_pg);
   }).then([this] {
-    return with_blocking_future(
-      osd.get_or_create_pg(
-	pgid, evt.get_epoch_sent(), std::move(evt.create_info)));
+    return with_blocking_event<PGMap::PGCreationBlockingEvent>(
+      [this] (auto&& trigger) {
+      return osd.get_or_create_pg(std::move(trigger),
+		      		  pgid,
+				  evt.get_epoch_sent(),
+				  std::move(evt.create_info));
+    });
   });
-#else
-  return seastar::make_ready_future<Ref<PG>>(nullptr);
-#endif
 }
 
 seastar::future<Ref<PG>> LocalPeeringEvent::get_pg() {
@@ -204,5 +216,8 @@ seastar::future<Ref<PG>> LocalPeeringEvent::get_pg() {
 }
 
 LocalPeeringEvent::~LocalPeeringEvent() {}
+
+template class PeeringEvent<RemotePeeringEvent>;
+template class PeeringEvent<LocalPeeringEvent>;
 
 }

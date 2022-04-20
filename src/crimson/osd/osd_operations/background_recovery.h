@@ -89,7 +89,10 @@ public:
       static constexpr auto type_name = "BackfillRecovery::PGPipeline::process";
     } process;
     friend class BackfillRecovery;
+    template <class T>
     friend class PeeringEvent;
+    friend class LocalPeeringEvent;
+    friend class RemotePeeringEvent;
   };
 
   template <class EventT>
