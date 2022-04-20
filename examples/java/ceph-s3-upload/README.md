@@ -14,3 +14,6 @@ aws --endpoint-url http://localhost:8000 s3 mb s3://sample-bucket
 4. Navigate through your file system into the ceph-s3-upload folder  using your terminal. Please ensure you see the pom.xml file when you type ```ls``` in the terminal.
 6. Run ``` mvn clean package ``` to install the required java packages on the system.
 7. Once successful, run ``` java -jar target/ceph-s3-upload-1.0-SNAPSHOT-jar-with-dependencies.jar sample-bucket ceph-s3-upload.txt ``` to test out java s3 object upload on ceph Radogw cluster.
+
+## Note
+If the Ceph cluster is not running no localhost, please substitute the appropriate IP in the aws command and the java file
