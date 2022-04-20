@@ -40,6 +40,12 @@ public:
   const uint64_t my_ec_pool = 1;
   const uint64_t my_rep_pool = 2;
 
+  // Blacklist testing lists
+  // I pulled the first two ranges and their start/end points from
+  // https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
+  static const string range_addrs[];
+  static const string ip_addrs[];
+  static const string unblocked_ip_addrs[];
 
   OSDMapTest() {}
 
@@ -2073,22 +2079,21 @@ TEST_P(OSDMapTest, BUG_51842) {
     }
 }
 
-TEST_F(OSDMapTest, blocklisting) {
+const string OSDMapTest::range_addrs[] = {"198.51.100.0/22", "2001:db8::/48", "3001:db8::/72"};
+const string OSDMapTest::ip_addrs[] = {"198.51.100.14", "198.51.100.0", "198.51.103.255",
+  "2001:db8:0:0:0:0:0:0", "2001:db8:0:0:0:0001:ffff:ffff",
+  "2001:db8:0:ffff:ffff:ffff:ffff:ffff",
+  "3001:db8:0:0:0:0:0:0", "3001:db8:0:0:0:0001:ffff:ffff",
+  "3001:db8:0:0:00ff:ffff:ffff:ffff", };
+const string OSDMapTest::unblocked_ip_addrs[] = { "0.0.0.0", "1.1.1.1", "192.168.1.1",
+  "198.51.99.255", "198.51.104.0",
+  "2001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "2001:db8:0001::",
+  "3001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "3001:db8:0:0:0100::"
+};
+
+TEST_F(OSDMapTest, blocklisting_ips) {
   set_up_map(6); //whatever
 
-  // I pulled the first two ranges and their start/end points from
-  // https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
-  string range_addrs[] = {"198.51.100.0/22", "2001:db8::/48", "3001:db8::/72"};
-  string ip_addrs[] = {"198.51.100.14", "198.51.100.0", "198.51.103.255",
-    "2001:db8:0:0:0:0:0:0", "2001:db8:0:0:0:0001:ffff:ffff",
-    "2001:db8:0:ffff:ffff:ffff:ffff:ffff",
-    "3001:db8:0:0:0:0:0:0", "3001:db8:0:0:0:0001:ffff:ffff",
-    "3001:db8:0:0:00ff:ffff:ffff:ffff", };
-  string unblocked_ip_addrs[] = { "0.0.0.0", "1.1.1.1", "192.168.1.1",
-    "198.51.99.255", "198.51.104.0",
-    "2001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "2001:db8:0001::",
-    "3001:db7:ffff:ffff:ffff:ffff:ffff:ffff", "3001:db8:0:0:0100::"
-  };
   OSDMap::Incremental new_blocklist_inc(osdmap.get_epoch() + 1);
   for (const auto& a : ip_addrs) {
     entity_addr_t addr;
@@ -2135,7 +2140,10 @@ TEST_F(OSDMapTest, blocklisting) {
     }
     EXPECT_FALSE(blocklisted);
   }
-  
+}
+
+TEST_F(OSDMapTest, blocklisting_ranges) {
+  set_up_map(6); //whatever
   OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
   for (const auto& a : range_addrs) {
     entity_addr_t addr;
