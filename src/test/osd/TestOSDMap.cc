@@ -2215,6 +2215,39 @@ TEST_F(OSDMapTest, blocklisting_ranges) {
   }
 }
 
+TEST_F(OSDMapTest, blocklisting_weirder) {
+  set_up_map(6); //whatever
+  OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
+  entity_addr_t baddr;
+  baddr.parse("2001:db8::/0");
+  baddr.type = entity_addr_t::TYPE_CIDR;
+  range_blocklist_inc.new_range_blocklist[baddr] = ceph_clock_now();
+  osdmap.apply_incremental(range_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   OSDMap,
   OSDMapTest,
