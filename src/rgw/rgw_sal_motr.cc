@@ -1937,7 +1937,8 @@ out:
 int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t end, RGWGetDataCB* cb)
 {
   int rc;
-  unsigned bs, actual, left, start, bloff, block_start_off;
+  unsigned bs;
+  int64_t actual, left, start, bloff, block_start_off;
   struct m0_op *op;
   struct m0_bufvec buf;
   struct m0_bufvec attr;
