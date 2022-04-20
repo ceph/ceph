@@ -416,6 +416,23 @@ class TestGetAndPut(TestCephFSShell):
         log.info("o_hash:{}".format(o_hash))
         assert(s_hash == o_hash)
 
+    def test_put_without_target_name(self):
+        """
+        put - should fail as the cmd expects both arguments are mandatory.
+        """
+        with self.assertRaises(CommandFailedError):
+            self.get_cephfs_shell_cmd_output("put -")
+
+    def test_put_validate_local_path(self):
+        """
+        This test is intended to make sure local_path is validated before
+        trying to put the file from local fs to cephfs and the command
+        put ./dumpXYZ dump8 would fail as dumpXYX doesn't exist.
+        """
+        with self.assertRaises(CommandFailedError):
+            o = self.get_cephfs_shell_cmd_output("put ./dumpXYZ dump8")
+            log.info("cephfs-shell output:\n{}".format(o))
+
 class TestSnapshots(TestCephFSShell):
     def test_snap(self):
         """
