@@ -452,3 +452,20 @@ of ``/sys/block/<drive>/queue/optimal_io_size``.
 .. confval:: bluestore_min_alloc_size_ssd
 .. confval:: bluestore_use_optimal_io_size_for_min_alloc_size
 
+DSA (Data Streaming Accelerator Usage)
+======================================
+
+If you want to use the DML library to drive DSA device for offloading
+read/write operations on Persist memory in Bluestore. You need to install
+`DML`_ and `idxd-config`_ library in your machine with SPR (Sapphire Rapids) CPU.
+
+.. _DML: https://github.com/intel/DML
+.. _idxd-config: https://github.com/intel/idxd-config
+
+After installing the DML software, you need to configure the shared
+work queues (WQs) with the following WQ configuration example via accel-config tool::
+
+$ accel-config config-wq --group-id=1 --mode=shared --wq-size=16 --threshold=15 --type=user --name="MyApp1" --priority=10 --block-on-fault=1 dsa0/wq0.1
+$ accel-config config-engine dsa0/engine0.1 --group-id=1
+$ accel-config enable-device dsa0
+$ accel-config enable-wq dsa0/wq0.1
