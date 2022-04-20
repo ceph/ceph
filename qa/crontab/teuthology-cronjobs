@@ -36,6 +36,11 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 0 8  * * 5 CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
 7 8  * * 6 CEPH_BRANCH=pacific; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
 
+
+## ********** windows tests on master branch - weekly
+00 03 * * 1 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s windows -k distro -e $CEPH_QA_EMAIL
+
+
 ## quincy branch runs - weekly
 ## suites rados and rbd use --subset arg and must be call with schedule_subset.sh
 ## see script in https://github.com/ceph/ceph/tree/master/qa/machine_types
