@@ -62,7 +62,7 @@ class ServiceType(enum.Enum):
     alertmanager = 'alertmanager'
     grafana = 'grafana'
     node_exporter = 'node-exporter'
-    exporter = 'exporter'
+    ceph_exporter = 'ceph-exporter'
     prometheus = 'prometheus'
     loki = 'loki'
     promtail = 'promtail'
@@ -823,7 +823,8 @@ Usage:
                 values.remove(v)
 
             for dev_type in ['data_devices', 'db_devices', 'wal_devices', 'journal_devices']:
-                drive_group_spec[dev_type] = DeviceSelection(paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
+                drive_group_spec[dev_type] = DeviceSelection(
+                    paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
 
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
