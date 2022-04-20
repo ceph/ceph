@@ -69,7 +69,7 @@ class PG : public boost::intrusive_ref_counter<
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
 
   ClientRequest::PGPipeline client_request_pg_pipeline;
-  PeeringEvent::PGPipeline peering_request_pg_pipeline;
+  PGPeeringPipeline peering_request_pg_pipeline;
   RepRequest::PGPipeline replicated_request_pg_pipeline;
 
   spg_t pgid;
@@ -728,6 +728,7 @@ private:
   friend class ClientRequest;
   friend struct CommonClientRequest;
   friend class PGAdvanceMap;
+  template <class T>
   friend class PeeringEvent;
   friend class RepRequest;
   friend class BackfillRecovery;

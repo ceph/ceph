@@ -45,7 +45,7 @@ public:
   seastar::future<> start();
 
   std::tuple<
-    PeeringEvent::PGPipeline::Process::BlockingEvent
+    PGPeeringPipeline::Process::BlockingEvent
   > tracking_events;
 };
 

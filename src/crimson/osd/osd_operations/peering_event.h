@@ -23,24 +23,28 @@ class OSD;
 class ShardServices;
 class PG;
 
-class PeeringEvent : public PhasedOperationT<PeeringEvent> {
-public:
-  static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
-
-  class PGPipeline {
+  class PGPeeringPipeline {
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "PeeringEvent::PGPipeline::await_map";
     } await_map;
     struct Process : OrderedExclusivePhaseT<Process> {
       static constexpr auto type_name = "PeeringEvent::PGPipeline::process";
     } process;
+    template <class T>
     friend class PeeringEvent;
+    friend class LocalPeeringEvent;
+    friend class RemotePeeringEvent;
     friend class PGAdvanceMap;
   };
 
+template <class T>
+class PeeringEvent : public PhasedOperationT<T> {
+public:
+  static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
+
 protected:
   PipelineHandle handle;
-  PGPipeline &pp(PG &pg);
+  PGPeeringPipeline &pp(PG &pg);
 
   ShardServices &shard_services;
   PeeringCtx ctx;
@@ -62,7 +66,10 @@ protected:
   }
 
   virtual void on_pg_absent();
-  virtual PeeringEvent::interruptible_future<> complete_rctx(Ref<PG>);
+
+  virtual typename PeeringEvent::template interruptible_future<>
+  complete_rctx(Ref<PG>);
+
   virtual seastar::future<> complete_rctx_no_pg() { return seastar::now();}
   virtual seastar::future<Ref<PG>> get_pg() = 0;
 
@@ -90,26 +97,9 @@ public:
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
   seastar::future<> start();
-
-  std::tuple<
-    StartEvent,
-    PGPipeline::AwaitMap::BlockingEvent,
-    PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
-    PGPipeline::Process::BlockingEvent,
-    BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
-#if 0
-    PGPipeline::WaitForActive::BlockingEvent,
-    PGActivationBlocker::BlockingEvent,
-    PGPipeline::RecoverMissing::BlockingEvent,
-    PGPipeline::GetOBC::BlockingEvent,
-    PGPipeline::WaitRepop::BlockingEvent,
-    PGPipeline::SendReply::BlockingEvent,
-#endif
-    CompletionEvent
-  > tracking_events;
 };
 
-class RemotePeeringEvent : public PeeringEvent {
+class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
 protected:
   OSD &osd;
   crimson::net::ConnectionRef conn;
@@ -146,17 +136,38 @@ public:
     conn(conn)
   {}
 
+#if 0
   std::tuple<
-    OSDPipeline::AwaitActive::BlockingEvent,
+  > tracking_events;
+#endif
+
+  std::tuple<
+    StartEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
-    ConnectionPipeline::GetPG::BlockingEvent
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    ConnectionPipeline::GetPG::BlockingEvent,
+    PGMap::PGCreationBlockingEvent,
+    PGPeeringPipeline::AwaitMap::BlockingEvent,
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    PGPeeringPipeline::Process::BlockingEvent,
+    BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
+    OSDPipeline::AwaitActive::BlockingEvent,
+#if 0
+    PGPipeline::WaitForActive::BlockingEvent,
+    PGActivationBlocker::BlockingEvent,
+    PGPipeline::RecoverMissing::BlockingEvent,
+    PGPipeline::GetOBC::BlockingEvent,
+    PGPipeline::WaitRepop::BlockingEvent,
+    PGPipeline::SendReply::BlockingEvent,
+#endif
+    CompletionEvent
   > tracking_events;
 private:
   ConnectionPipeline &cp();
   OSDPipeline &op();
 };
 
-class LocalPeeringEvent final : public PeeringEvent {
+class LocalPeeringEvent final : public PeeringEvent<LocalPeeringEvent> {
 protected:
   seastar::future<Ref<PG>> get_pg() final;
 
@@ -170,6 +181,23 @@ public:
   {}
 
   virtual ~LocalPeeringEvent();
+
+  std::tuple<
+    StartEvent,
+    PGPeeringPipeline::AwaitMap::BlockingEvent,
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    PGPeeringPipeline::Process::BlockingEvent,
+    BackfillRecovery::BackfillRecoveryPipeline::Process::BlockingEvent,
+#if 0
+    PGPipeline::WaitForActive::BlockingEvent,
+    PGActivationBlocker::BlockingEvent,
+    PGPipeline::RecoverMissing::BlockingEvent,
+    PGPipeline::GetOBC::BlockingEvent,
+    PGPipeline::WaitRepop::BlockingEvent,
+    PGPipeline::SendReply::BlockingEvent,
+#endif
+    CompletionEvent
+  > tracking_events;
 };
 
 
