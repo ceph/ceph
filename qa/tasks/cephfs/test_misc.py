@@ -4,6 +4,7 @@ from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
 import errno
+import platform
 import time
 import json
 import logging
@@ -30,6 +31,9 @@ class TestMisc(CephFSTestCase):
         p.wait()
 
     def test_fuse_mount_on_already_mounted_path(self):
+        if platform.system() != "Linux":
+            self.skipTest("Require Linux platform")
+
         if not isinstance(self.mount_a, FuseMount):
             self.skipTest("Require FUSE client")
 

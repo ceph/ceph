@@ -18267,7 +18267,7 @@ int BlueStore::copy_allocator(Allocator* src_alloc, Allocator* dest_alloc, uint6
   auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
     (*p_num_entries)++;
   };
-  src_alloc->dump(count_entries);
+  src_alloc->foreach(count_entries);
 
   dout(5) << "count num_entries=" << *p_num_entries << dendl;
 
@@ -18293,7 +18293,7 @@ int BlueStore::copy_allocator(Allocator* src_alloc, Allocator* dest_alloc, uint6
       derr << "zero length extent!!! offset=" << extent_offset << ", index=" << idx << dendl;
     }
   };
-  src_alloc->dump(copy_entries);
+  src_alloc->foreach(copy_entries);
 
   dout(5) << "copy num_entries=" << idx << dendl;
   if (idx > *p_num_entries) {
@@ -18400,7 +18400,7 @@ int BlueStore::store_allocator(Allocator* src_allocator)
       p_curr = buffer; // recycle the buffer
     }
   };
-  allocator->dump(iterated_allocation);
+  allocator->foreach(iterated_allocation);
   // if got null extent -> fail the operation
   if (ret != 0) {
     derr << "Illegal extent, fail store operation" << dendl;
@@ -19001,8 +19001,8 @@ int BlueStore::compare_allocators(Allocator* alloc1, Allocator* alloc2, uint64_t
     }
   };
 
-  alloc1->dump(iterated_mapper1);
-  alloc2->dump(iterated_mapper2);
+  alloc1->foreach(iterated_mapper1);
+  alloc2->foreach(iterated_mapper2);
 
   qsort(arr1.get(), std::min(idx1, extent_count), sizeof(extent_t), cmpfunc);
   qsort(arr2.get(), std::min(idx2, extent_count), sizeof(extent_t), cmpfunc);
@@ -19098,7 +19098,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
     auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
       stats.insert_count++;
     };
-    allocator->dump(count_entries);
+    allocator->foreach(count_entries);
     ret = compare_allocators(allocator.get(), alloc, stats.insert_count, memory_target);
     if (ret == 0) {
       dout(5) << "Allocator drive - file integrity check OK" << dendl;
@@ -19164,7 +19164,7 @@ void BlueStore::copy_allocator_content_to_fm(Allocator *allocator, FreelistManag
       txn = db->get_transaction();
     }
   };
-  allocator->dump(iterated_insert);
+  allocator->foreach(iterated_insert);
   if (idx % max_txn != 0) {
     db->submit_transaction_sync(txn);
   }
@@ -19238,7 +19238,7 @@ int BlueStore::verify_rocksdb_allocations(Allocator *allocator)
   auto count_entries = [&](uint64_t extent_offset, uint64_t extent_length) {
     insert_count++;
   };
-  temp_allocator->dump(count_entries);
+  temp_allocator->foreach(count_entries);
   uint64_t memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
   int ret = compare_allocators(allocator, temp_allocator, insert_count, memory_target);
 

@@ -12,6 +12,12 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
+  quincy:
+    target_eol: 2024-06-01
+    releases:
+      - version: 17.2.0
+        released: 2022-04-19
+
   pacific:
     target_eol: 2023-06-01
     releases:

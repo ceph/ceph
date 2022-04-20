@@ -20,6 +20,12 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
+if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  set(default_build_type "Debug")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+endif()
+
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
   FIND_PACKAGE(Threads)
@@ -157,6 +163,7 @@ if(LINUX)
 elseif(FREEBSD)
   set(HAVE_UDEV OFF)
   set(HAVE_LIBAIO OFF)
+  set(HAVE_LIBDML OFF)
   set(HAVE_BLKID OFF)
   set(HAVE_KEYUTILS OFF)
 else()
@@ -204,6 +211,11 @@ if(WITH_BLUESTORE)
   elseif(FREEBSD)
     # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
     set(HAVE_POSIXAIO ON)
+  endif()
+
+  if(LINUX)
+    find_package(dml)
+    set(HAVE_LIBDML ${DML_FOUND})
   endif()
 endif()
 

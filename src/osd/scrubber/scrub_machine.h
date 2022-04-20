@@ -152,12 +152,12 @@ struct NotActive : sc::state<NotActive, ScrubMachine> {
   explicit NotActive(my_context ctx);
 
   using reactions = mpl::list<sc::custom_reaction<StartScrub>,
-			      // a scrubbing that was initiated at recovery completion,
-			      // and requires no resource reservations:
-			      sc::transition<AfterRepairScrub, ReservingReplicas>,
+			      // a scrubbing that was initiated at recovery completion
+			      sc::custom_reaction<AfterRepairScrub>,
 			      sc::transition<StartReplica, ReplicaWaitUpdates>,
 			      sc::transition<StartReplicaNoWait, ActiveReplica>>;
   sc::result react(const StartScrub&);
+  sc::result react(const AfterRepairScrub&);
 };
 
 struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine> {

@@ -22,15 +22,6 @@ seastar::logger &logger(){
 
 namespace crimson::os::seastore {
 
-std::ostream& operator<<(std::ostream& out, const device_spec_t& ds)
-{
-  return out << "device_spec("
-             << "magic=" << ds.magic
-             << ", device_type=" << ds.dtype
-             << ", device_id=" << std::to_string(ds.id)
-             << ")";
-}
-
 std::ostream& operator<<(std::ostream& out, const block_sm_superblock_t& sb)
 {
   out << "superblock("
@@ -40,31 +31,9 @@ std::ostream& operator<<(std::ostream& out, const block_sm_superblock_t& sb)
       << ", segments=" << sb.segments
       << ", tracker_offset=" << sb.tracker_offset
       << ", first_segment_offset=" << sb.first_segment_offset
-      << ", major_dev=" << sb.major_dev
-      << ", magic=" << sb.magic
-      << ", device_type=" << sb.dtype
-      << ", device_id=" << std::to_string(sb.device_id)
-      << ", meta=" << sb.meta
-      << ", secondary(";
-  for (const auto& [k, v] : sb.secondary_devices) {
-    out << std::to_string(k) << ": " << v;
-  }
-  return out << "))";
-}
-
-std::ostream& operator<<(std::ostream& out, const segment_manager_config_t& conf)
-{
-  out << "sm_config_t("
-      << "major_dev=" << conf.major_dev
-      << ", magic=" << conf.magic
-      << ", device_type=" << conf.dtype
-      << ", device_id=" << std::to_string(conf.device_id)
-      << ", meta=" << conf.meta
-      << ", secondary(";
-  for (const auto& [k, v] : conf.secondary_devices) {
-    out << std::to_string(k) << ": " << v;
-  }
-  return out << "))";
+      << ", config=" << sb.config
+      << ")";
+  return out;
 }
 
 std::ostream& operator<<(std::ostream &out, Segment::segment_state_t s)

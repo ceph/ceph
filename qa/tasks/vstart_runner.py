@@ -1242,7 +1242,8 @@ def launch_individually(overall_suite):
     if result.wasSuccessful():
         log.info('')
         log.info('-'*70)
-        log.info(f'Ran {no_of_tests_execed} tests in {time_elapsed}s')
+        log.info(f'Ran {no_of_tests_execed} tests successfully in '
+                 f'{time_elapsed}s')
         if no_of_tests_failed > 0:
             log.info(f'{no_of_tests_failed} tests failed')
         log.info('')

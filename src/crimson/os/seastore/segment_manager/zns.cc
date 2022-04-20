@@ -303,7 +303,7 @@ ZNSSegmentManager::mount_ret ZNSSegmentManager::mount()
 }
 
 ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
-  segment_manager_config_t config)
+  device_config_t config)
 {
   logger().error("ZNSSegmentManager::mkfs: starting");
   return seastar::do_with(
@@ -542,15 +542,6 @@ device_id_t ZNSSegmentManager::get_device_id() const
 secondary_device_set_t& ZNSSegmentManager::get_secondary_devices()
 {
   return metadata.secondary_devices;
-};
-
-device_spec_t ZNSSegmentManager::get_device_spec() const
-{
-  auto spec = device_spec_t();
-  spec.magic = metadata.magic;
-  spec.dtype = metadata.dtype;
-  spec.id = metadata.device_id;
-  return spec;
 };
 
 magic_t ZNSSegmentManager::get_magic() const

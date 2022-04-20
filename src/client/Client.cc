@@ -2539,6 +2539,36 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
   MetaRequest *request = mds_requests[tid];
   ceph_assert(request);
 
+  /*
+   * The type of 'num_fwd' in ceph 'MClientRequestForward'
+   * is 'int32_t', while in 'ceph_mds_request_head' the
+   * type is '__u8'. So in case the request bounces between
+   * MDSes exceeding 256 times, the client will get stuck.
+   *
+   * In this case it's ususally a bug in MDS and continue
+   * bouncing the request makes no sense.
+   *
+   * In future this could be fixed in ceph code, so avoid
+   * using the hardcode here.
+   */
+  int max_fwd = sizeof(((struct ceph_mds_request_head*)0)->num_fwd);
+  max_fwd = 1 << (max_fwd * CHAR_BIT) - 1;
+  auto num_fwd = fwd->get_num_fwd();
+  if (num_fwd <= request->num_fwd || num_fwd >= max_fwd) {
+    if (request->num_fwd >= max_fwd || num_fwd >= max_fwd) {
+      request->abort(-EMULTIHOP);
+      request->caller_cond->notify_all();
+      ldout(cct, 1) << __func__ << " tid " << tid << " seq overflow"
+                    << ", abort it" << dendl;
+    } else {
+      ldout(cct, 10) << __func__ << " tid " << tid
+                     << " old fwd seq " << fwd->get_num_fwd()
+                     << " <= req fwd " << request->num_fwd
+                     << ", ignore it" << dendl;
+    }
+    return;
+  }
+
   // reset retry counter
   request->retry_attempt = 0;
 
@@ -2552,7 +2582,7 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
   
   request->mds = -1;
   request->item.remove_myself();
-  request->num_fwd = fwd->get_num_fwd();
+  request->num_fwd = num_fwd;
   request->resend_mds = fwd->get_dest_mds();
   request->caller_cond->notify_all();
 }
@@ -4907,10 +4937,20 @@ void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
 SnapRealm *Client::get_snap_realm(inodeno_t r)
 {
   SnapRealm *realm = snap_realms[r];
-  if (!realm)
+
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << ", nref was "
+                 << (realm ? realm->nref : 0) << dendl;
+  if (!realm) {
     snap_realms[r] = realm = new SnapRealm(r);
-  ldout(cct, 20) << __func__ << " " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
+
+    // Do not release the global snaprealm until unmounting.
+    if (r == CEPH_INO_GLOBAL_SNAPREALM)
+      realm->nref++;
+  }
+
   realm->nref++;
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << ", nref now is "
+                 << realm->nref << dendl;
   return realm;
 }
 
@@ -6598,6 +6638,13 @@ void Client::_unmount(bool abort)
 
   _close_sessions();
 
+  // release the global snapshot realm
+  SnapRealm *global_realm = snap_realms[CEPH_INO_GLOBAL_SNAPREALM];
+  if (global_realm) {
+    ceph_assert(global_realm->nref == 1);
+    put_snap_realm(global_realm);
+  }
+
   mref_writer.update_state(CLIENT_UNMOUNTED);
 
   ldout(cct, 2) << "unmounted." << dendl;
@@ -7019,26 +7066,15 @@ relookup:
   return r;
 }
 
-int Client::get_or_create(Inode *dir, const char* name,
-			  Dentry **pdn, bool expect_null)
+Dentry *Client::get_or_create(Inode *dir, const char* name)
 {
   // lookup
   ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
   dir->open_dir();
-  if (dir->dir->dentries.count(name)) {
-    Dentry *dn = dir->dir->dentries[name];
-    if (_dentry_valid(dn)) {
-      if (expect_null)
-        return -CEPHFS_EEXIST;
-    }
-    *pdn = dn;
-  } else {
-    // otherwise link up a new one
-    *pdn = link(dir->dir, name, NULL, NULL);
-  }
-
-  // success
-  return 0;
+  if (dir->dir->dentries.count(name))
+    return dir->dir->dentries[name];
+  else // otherwise link up a new one
+    return link(dir->dir, name, NULL, NULL);
 }
 
 int Client::walk(std::string_view path, walk_dentry_result* wdr, const UserPerm& perms, bool followsym)
@@ -13396,16 +13432,15 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 
   bufferlist xattrs_bl;
   int res = _posix_acl_create(dir, &mode, xattrs_bl, perms);
-  if (res < 0)
-    goto fail;
+  if (res < 0) {
+    put_request(req);
+    return res;
+  }
   req->head.args.mknod.mode = mode;
   if (xattrs_bl.length() > 0)
     req->set_data(xattrs_bl);
 
-  Dentry *de;
-  res = get_or_create(dir, name, &de);
-  if (res < 0)
-    goto fail;
+  Dentry *de = get_or_create(dir, name);
   req->set_dentry(de);
 
   res = make_request(req, perms, inp);
@@ -13413,10 +13448,6 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   trim_cache();
 
   ldout(cct, 8) << "mknod(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
-  return res;
-
- fail:
-  put_request(req);
   return res;
 }
 
@@ -13556,16 +13587,15 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   mode |= S_IFREG;
   bufferlist xattrs_bl;
   int res = _posix_acl_create(dir, &mode, xattrs_bl, perms);
-  if (res < 0)
-    goto fail;
+  if (res < 0) {
+    put_request(req);
+    return res;
+  }
   req->head.args.open.mode = mode;
   if (xattrs_bl.length() > 0)
     req->set_data(xattrs_bl);
 
-  Dentry *de;
-  res = get_or_create(dir, name, &de);
-  if (res < 0)
-    goto fail;
+  Dentry *de = get_or_create(dir, name);
   req->set_dentry(de);
 
   res = make_request(req, perms, inp, created);
@@ -13587,10 +13617,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 		<< ' ' << stripe_count
 		<< ' ' << object_size
 		<<") = " << res << dendl;
-  return res;
-
- fail:
-  put_request(req);
   return res;
 }
 
@@ -13628,8 +13654,10 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   mode |= S_IFDIR;
   bufferlist bl;
   int res = _posix_acl_create(dir, &mode, bl, perm);
-  if (res < 0)
-    goto fail;
+  if (res < 0) {
+    put_request(req);
+    return res;
+  }
   req->head.args.mkdir.mode = mode;
   if (is_snap_op) {
     SnapPayload payload;
@@ -13644,12 +13672,9 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
     req->set_data(bl);
   }
 
-  Dentry *de;
-  res = get_or_create(dir, name, &de);
-  if (res < 0)
-    goto fail;
+  Dentry *de = get_or_create(dir, name);
   req->set_dentry(de);
-  
+
   ldout(cct, 10) << "_mkdir: making request" << dendl;
   res = make_request(req, perm, inp);
   ldout(cct, 10) << "_mkdir result is " << res << dendl;
@@ -13657,10 +13682,6 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   trim_cache();
 
   ldout(cct, 8) << "_mkdir(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
-  return res;
-
- fail:
-  put_request(req);
   return res;
 }
 
@@ -13769,21 +13790,14 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  Dentry *de;
-  int res = get_or_create(dir, name, &de);
-  if (res < 0)
-    goto fail;
+  Dentry *de = get_or_create(dir, name);
   req->set_dentry(de);
 
-  res = make_request(req, perms, inp);
+  int res = make_request(req, perms, inp);
 
   trim_cache();
   ldout(cct, 8) << "_symlink(\"" << path << "\", \"" << target << "\") = " <<
     res << dendl;
-  return res;
-
- fail:
-  put_request(req);
   return res;
 }
 
@@ -13881,18 +13895,16 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
 
   InodeRef otherin;
   Inode *in;
-  Dentry *de;
-
-  int res = get_or_create(dir, name, &de);
-  if (res < 0)
-    goto fail;
+  Dentry *de = get_or_create(dir, name);
   req->set_dentry(de);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  res = _lookup(dir, name, 0, &otherin, perm);
-  if (res < 0)
-    goto fail;
+  int res = _lookup(dir, name, 0, &otherin, perm);
+  if (res < 0) {
+    put_request(req);
+    return res;
+  }
 
   in = otherin.get();
   req->set_other_inode(in);
@@ -13905,10 +13917,6 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
 
   trim_cache();
   ldout(cct, 8) << "unlink(" << path << ") = " << res << dendl;
-  return res;
-
- fail:
-  put_request(req);
   return res;
 }
 
@@ -13943,7 +13951,7 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
   if (dir->snapid != CEPH_NOSNAP && dir->snapid != CEPH_SNAPDIR) {
     return -CEPHFS_EROFS;
   }
-  
+
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP : CEPH_MDS_OP_RMDIR;
   MetaRequest *req = new MetaRequest(op);
   filepath path;
@@ -13958,18 +13966,17 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
 
   InodeRef in;
 
-  Dentry *de;
-  int res = get_or_create(dir, name, &de);
-  if (res < 0)
-    goto fail;
-  if (op == CEPH_MDS_OP_RMDIR) 
+  Dentry *de = get_or_create(dir, name);
+  if (op == CEPH_MDS_OP_RMDIR)
     req->set_dentry(de);
   else
     de->get();
 
-  res = _lookup(dir, name, 0, &in, perms);
-  if (res < 0)
-    goto fail;
+  int res = _lookup(dir, name, 0, &in, perms);
+  if (res < 0) {
+    put_request(req);
+    return res;
+  }
 
   if (op == CEPH_MDS_OP_RMSNAP) {
     unlink(de, true, true);
@@ -13981,10 +13988,6 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
 
   trim_cache();
   ldout(cct, 8) << "rmdir(" << path << ") = " << res << dendl;
-  return res;
-
- fail:
-  put_request(req);
   return res;
 }
 
@@ -14052,15 +14055,10 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   req->set_filepath2(from);
   req->set_alternate_name(std::move(alternate_name));
 
-  Dentry *oldde;
-  int res = get_or_create(fromdir, fromname, &oldde);
-  if (res < 0)
-    goto fail;
-  Dentry *de;
-  res = get_or_create(todir, toname, &de);
-  if (res < 0)
-    goto fail;
+  Dentry *oldde = get_or_create(fromdir, fromname);
+  Dentry *de = get_or_create(todir, toname);
 
+  int res;
   if (op == CEPH_MDS_OP_RENAME) {
     req->set_old_dentry(oldde);
     req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
@@ -14180,21 +14178,14 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
   req->inode_drop = CEPH_CAP_FILE_SHARED;
   req->inode_unless = CEPH_CAP_FILE_EXCL;
 
-  Dentry *de;
-  int res = get_or_create(dir, newname, &de);
-  if (res < 0)
-    goto fail;
+  Dentry *de = get_or_create(dir, newname);
   req->set_dentry(de);
-  
-  res = make_request(req, perm, inp);
+
+  int res = make_request(req, perm, inp);
   ldout(cct, 10) << "link result is " << res << dendl;
 
   trim_cache();
   ldout(cct, 8) << "link(" << existing << ", " << path << ") = " << res << dendl;
-  return res;
-
- fail:
-  put_request(req);
   return res;
 }
 

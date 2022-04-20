@@ -53,7 +53,8 @@ public:
   void release(const PExtentVector& release_set);
 
   virtual void dump() = 0;
-  virtual void dump(std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
+  virtual void foreach(
+    std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;

@@ -62,6 +62,7 @@ public:
 private:
   template <typename FuncT>
   interruptible_future<> with_sequencer(FuncT&& func);
+  auto reply_op_error(Ref<PG>& pg, int err);
 
   enum class seq_mode_t {
     IN_ORDER,

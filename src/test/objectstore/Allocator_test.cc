@@ -388,7 +388,7 @@ TEST_P(AllocTest, test_dump_fragmentation_score)
       ceph_assert(len > 0);
       free_sum += len;
     };
-    alloc->dump(iterated_allocation);
+    alloc->foreach(iterated_allocation);
     EXPECT_GT(1, alloc->get_fragmentation_score());
     EXPECT_EQ(capacity, free_sum + allocated_cnt);
   }

@@ -979,6 +979,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return 0, "value unchanged", ""
 
         self._validate_and_set_ssh_val('ssh_user', user, current_user)
+        current_ssh_config = self._get_ssh_config()
+        new_ssh_config = re.sub(r"(\s{2}User\s)(.*)", r"\1" + user, current_ssh_config.stdout)
+        self._set_ssh_config(new_ssh_config)
 
         msg = 'ssh user set to %s' % user
         if user != 'root':
