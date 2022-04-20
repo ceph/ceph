@@ -6,8 +6,9 @@
  */
 
 #include "common/hobject_fmt.h"
-#include "osd/osd_types.h"
 #include "include/types_fmt.h"
+#include "osd/osd_types.h"
+#include <fmt/chrono.h>
 
 template <>
 struct fmt::formatter<osd_reqid_t> {
@@ -131,4 +132,213 @@ struct fmt::formatter<spg_t> {
       return fmt::format_to(ctx.out(), "{}s{}>", spg.pgid, spg.shard.id);
     }
   }
+};
+
+template <>
+struct fmt::formatter<pg_history_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const pg_history_t& pgh, FormatContext& ctx)
+  {
+    fmt::format_to(ctx.out(),
+		   "ec={}/{} lis/c={}/{} les/c/f={}/{}/{} sis={}",
+		   pgh.epoch_created,
+		   pgh.epoch_pool_created,
+		   pgh.last_interval_started,
+		   pgh.last_interval_clean,
+		   pgh.last_epoch_started,
+		   pgh.last_epoch_clean,
+		   pgh.last_epoch_marked_full,
+		   pgh.same_interval_since);
+
+    if (pgh.prior_readable_until_ub != ceph::timespan::zero()) {
+      return fmt::format_to(ctx.out(),
+			    " pruub={}",
+			    pgh.prior_readable_until_ub);
+    } else {
+      return ctx.out();
+    }
+  }
+};
+
+template <>
+struct fmt::formatter<pg_info_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const pg_info_t& pgi, FormatContext& ctx)
+  {
+    fmt::format_to(ctx.out(), "{}({}", pgi.pgid, (pgi.dne() ? " DNE" : ""));
+    if (pgi.is_empty()) {
+      fmt::format_to(ctx.out(), " empty");
+    } else {
+      fmt::format_to(ctx.out(), " v {}", pgi.last_update);
+      if (pgi.last_complete != pgi.last_update) {
+	fmt::format_to(ctx.out(), " lc {}", pgi.last_complete);
+      }
+      fmt::format_to(ctx.out(), " ({},{}]", pgi.log_tail, pgi.last_update);
+    }
+    if (pgi.is_incomplete()) {
+      fmt::format_to(ctx.out(), " lb {}", pgi.last_backfill);
+    }
+    fmt::format_to(ctx.out(),
+		   " local-lis/les={}/{}",
+		   pgi.last_interval_started,
+		   pgi.last_epoch_started);
+    return fmt::format_to(ctx.out(),
+			  " n={} {})",
+			  pgi.stats.stats.sum.num_objects,
+			  pgi.history);
+  }
+};
+
+// snaps and snap-sets
+
+template <typename T, template <typename, typename, typename...> class C>
+struct fmt::formatter<interval_set<T, C>> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const interval_set<T, C>& inter, FormatContext& ctx)
+  {
+    bool first = true;
+    fmt::format_to(ctx.out(), "[");
+    for (const auto& [start, len] : inter) {
+      fmt::format_to(ctx.out(), "{}{}~{}", (first ? "" : ","), start, len);
+      first = false;
+    }
+    return fmt::format_to(ctx.out(), "]");
+  }
+};
+
+template <>
+struct fmt::formatter<SnapSet> {
+  template <typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    auto it = ctx.begin();
+    if (it != ctx.end() && *it == 'D') {
+      verbose = true;
+      ++it;
+    }
+    return it;
+  }
+
+  template <typename FormatContext>
+  auto format(const SnapSet& snps, FormatContext& ctx)
+  {
+    if (verbose) {
+      // similar to SnapSet::dump()
+      fmt::format_to(ctx.out(),
+		     "snaps{{{}: clns ({}): ",
+		     snps.seq,
+		     snps.clones.size());
+      for (auto cln : snps.clones) {
+
+	fmt::format_to(ctx.out(), "[{}: sz:", cln);
+
+	auto cs = snps.clone_size.find(cln);
+	if (cs != snps.clone_size.end()) {
+	  fmt::format_to(ctx.out(), "{} ", cs->second);
+	} else {
+	  fmt::format_to(ctx.out(), "??");
+	}
+
+	auto co = snps.clone_overlap.find(cln);
+	if (co != snps.clone_overlap.end()) {
+	  fmt::format_to(ctx.out(), "olp:{} ", co->second);
+	} else {
+	  fmt::format_to(ctx.out(), "olp:?? ");
+	}
+
+	auto cln_snps = snps.clone_snaps.find(cln);
+	if (cln_snps != snps.clone_snaps.end()) {
+	  fmt::format_to(ctx.out(), "cl-snps:{} ]", cln_snps->second);
+	} else {
+	  fmt::format_to(ctx.out(), "cl-snps:?? ]");
+	}
+      }
+
+      return fmt::format_to(ctx.out(), "}}");
+
+    } else {
+      return fmt::format_to(ctx.out(),
+			    "{}={}:{}",
+			    snps.seq,
+			    snps.snaps,
+			    snps.clone_snaps);
+    }
+  }
+
+  bool verbose{false};
+};
+
+template <>
+struct fmt::formatter<ScrubMap::object> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  ///\todo: consider passing the 'D" flag to control snapset dump
+  template <typename FormatContext>
+  auto format(const ScrubMap::object& so, FormatContext& ctx)
+  {
+    fmt::format_to(ctx.out(),
+		   "so{{ sz:{} dd:{} od:{} ",
+		   so.size,
+		   so.digest,
+		   so.digest_present);
+
+    // note the special handling of (1) OI_ATTR and (2) non-printables
+    for (auto [k, v] : so.attrs) {
+      std::string bkstr{v.raw_c_str(), v.raw_length()};
+      if (k == std::string{OI_ATTR}) {
+	/// \todo consider parsing the OI args here. Maybe add a specific format
+	/// specifier
+	fmt::format_to(ctx.out(), "{{{}:<<OI_ATTR>>({})}} ", k, bkstr.length());
+      } else if (k == std::string{SS_ATTR}) {
+	bufferlist bl;
+	bl.push_back(v);
+	SnapSet sns{bl};
+	fmt::format_to(ctx.out(), "{{{}:{:D}}} ", k, sns);
+      } else {
+	fmt::format_to(ctx.out(), "{{{}:{}({})}} ", k, bkstr, bkstr.length());
+      }
+    }
+
+    return fmt::format_to(ctx.out(), "}}");
+  }
+};
+
+template <>
+struct fmt::formatter<ScrubMap> {
+  template <typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    auto it = ctx.begin();
+    if (it != ctx.end() && *it == 'D') {
+      debug_log = true;	 // list the objects
+      ++it;
+    }
+    return it;
+  }
+
+  template <typename FormatContext>
+  auto format(const ScrubMap& smap, FormatContext& ctx)
+  {
+    fmt::format_to(ctx.out(),
+		   "smap{{ valid:{} incr-since:{} #:{}",
+		   smap.valid_through,
+		   smap.incr_since,
+		   smap.objects.size());
+    if (debug_log) {
+      fmt::format_to(ctx.out(), " objects:");
+      for (const auto& [ho, so] : smap.objects) {
+	fmt::format_to(ctx.out(), "\n\th.o<{}>:<{}> ", ho, so);
+      }
+      fmt::format_to(ctx.out(), "\n");
+    }
+    return fmt::format_to(ctx.out(), "}}");
+  }
+
+  bool debug_log{false};
 };
