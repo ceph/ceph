@@ -73,6 +73,11 @@ General
 
   https://docs.ceph.com/en/quincy/mgr/progress/
 
+* https://tracker.ceph.com/issues/55383 is a known issue -
+  ``mon_cluster_log_to_journald`` needs to be set to false, when
+  ``mon_cluster_log_to_file`` is set to true to continue to log cluster
+  log messages to file, after log rotation.
+
 Cephadm
 -------
 
