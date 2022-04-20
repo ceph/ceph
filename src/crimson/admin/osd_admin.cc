@@ -197,8 +197,8 @@ public:
 template std::unique_ptr<AdminSocketHook> make_asok_hook<AssertAlwaysHook>();
 
 /**
-* A Seastar admin hook: fetching the values of configured metrics
-*/
+ * A Seastar admin hook: fetching the values of configured metrics
+ */
 class DumpMetricsHook : public AdminSocketHook {
 public:
   DumpMetricsHook() :
