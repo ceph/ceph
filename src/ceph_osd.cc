@@ -676,6 +676,10 @@ flushjournal_out:
     forker.exit(1);
   }
 
+  if (global_init_preload_extblkdev(g_ceph_context) < 0) {
+    forker.exit(1);
+  }
+
   osdptr = new OSD(g_ceph_context,
 		   std::move(store),
 		   whoami,

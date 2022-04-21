@@ -439,6 +439,16 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: extblkdev_dir
+  type: str
+  level: advanced
+  desc: directory where extended block device plugins can be found
+  default: @CEPH_INSTALL_FULL_PKGLIBDIR@/extblkdev
+  services:
+  - osd
+  flags:
+  - startup
+  with_legacy: true
 - name: log_file
   type: str
   level: basic
@@ -2556,6 +2566,16 @@ options:
   default: @osd_erasure_code_plugins@
   services:
   - mon
+  - osd
+  flags:
+  - startup
+  with_legacy: true
+- name: osd_extblkdev_plugins
+  type: str
+  level: advanced
+  desc: extended block device plugins to load, provide compression feedback at runtime
+  default: vdo
+  services:
   - osd
   flags:
   - startup

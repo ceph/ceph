@@ -1496,6 +1496,8 @@ rm -rf %{_vpath_builddir}
 %dir %{_libdir}/ceph
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
+%dir %{_libdir}/ceph/extblkdev
+%{_libdir}/ceph/extblkdev/libebd_*.so*
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
 %{_unitdir}/ceph-crash.service

@@ -242,7 +242,24 @@ int KernelDevice::open(const string& p)
       support_discard = blkdev_buffered.support_discard();
       optimal_io_size = blkdev_buffered.get_optimal_io_size();
       this->devname = devname;
-      _detect_vdo();
+      // check if any extended block device plugin recognizes this device
+      // detect_vdo has moved into the VDO plugin
+      ceph::ExtBlkDevPluginRegistry& reg=ceph::ExtBlkDevPluginRegistry::instance();
+      std::stringstream ss;
+      std::string plg_name;
+      int rc=reg.detect_device(devname, ebd_impl, plg_name, &ss);
+      if (rc == 0) {
+	dout(1) << __func__ << " using plugin " << plg_name << ", " <<  "volume " << ebd_impl->get_devname()
+		<< " maps to " << devname << dendl;
+	if(ss.str().length()>1){
+	  dout(1) << __func__ << " " << ss.str() << dendl;
+	}
+      } else {
+	dout(20) << __func__ << " no plugin volume maps to " << devname << dendl;
+	if(ss.str().length()>1){
+	  dout(20) << __func__ << " " << ss.str() << dendl;
+	}
+      }
     }
   }
 
@@ -335,11 +352,10 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   } else {
     (*pm)[prefix + "type"] = "ssd";
   }
-  if (vdo_fd >= 0) {
-    (*pm)[prefix + "vdo"] = "true";
-    uint64_t total, avail;
-    get_vdo_utilization(vdo_fd, &total, &avail);
-    (*pm)[prefix + "vdo_physical_size"] = stringify(total);
+  // if compression device detected, collect meta data for device
+  // VDO specific meta data has moved into VDO plugin
+  if (ebd_impl!=NULL) {
+    ebd_impl->collect_metadata(prefix, pm);
   }
 
   {
@@ -421,10 +437,18 @@ void KernelDevice::_detect_vdo()
 
 bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
 {
-  if (vdo_fd < 0) {
-    return false;
+  // use compression driver plugin to determine physical size and availability
+  // VDO specific get_thin_utilization has moved into VDO plugin
+  if(ebd_impl != NULL) {
+    std::stringstream ss;
+    int rc=ebd_impl->get_thin_utilization(total, avail, &ss);
+    if(ss.str().length()>1){
+      dout(1) << __func__ << " " << ss.str() << dendl;
+    }
+    if(rc==0)
+      return true;
   }
-  return get_vdo_utilization(vdo_fd, total, avail);
+  return false;
 }
 
 int KernelDevice::choose_fd(bool buffered, int write_hint) const

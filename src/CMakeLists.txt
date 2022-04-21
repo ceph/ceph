@@ -438,6 +438,7 @@ add_subdirectory(common)
 add_subdirectory(crush)
 add_subdirectory(msg)
 add_subdirectory(arch)
+add_subdirectory(extblkdev)
 
 set(ceph_common_objs
   $<TARGET_OBJECTS:common-auth-objs>
@@ -449,6 +450,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
+  $<TARGET_OBJECTS:common_ebd_objs>
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
   json_spirit erasure_code arch crc32
@@ -664,7 +666,7 @@ set(ceph_osd_srcs
   ceph_osd.cc)
 
 add_executable(ceph-osd ${ceph_osd_srcs})
-add_dependencies(ceph-osd erasure_code_plugins)
+add_dependencies(ceph-osd erasure_code_plugins extblkdev_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${BLKID_LIBRARIES})
 if(WITH_FUSE)

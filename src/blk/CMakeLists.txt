@@ -65,3 +65,6 @@ if(WITH_LIBURING)
   endif()
   target_link_libraries(blk PRIVATE uring::uring)
 endif()
+
+# always link common with blk library, common contains device code for plugins
+add_dependencies(blk common)

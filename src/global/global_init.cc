@@ -22,6 +22,7 @@
 #include "common/signal.h"
 #include "common/version.h"
 #include "erasure-code/ErasureCodePlugin.h"
+#include "extblkdev/ExtBlkDevPlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "global/pidfile.h"
@@ -626,6 +627,23 @@ int global_init_preload_erasure_code(const CephContext *cct)
   int r = ceph::ErasureCodePluginRegistry::instance().preload(
     plugins,
     conf.get_val<std::string>("erasure_code_dir"),
+    &ss);
+  if (r)
+    derr << ss.str() << dendl;
+  else
+    dout(0) << ss.str() << dendl;
+  return r;
+}
+
+int global_init_preload_extblkdev(const CephContext *cct)
+{
+  const auto& conf = cct->_conf;
+  string plugins = conf.get_val<std::string>("osd_extblkdev_plugins");
+
+  std::stringstream ss;
+  int r = ceph::ExtBlkDevPluginRegistry::instance().preload(
+    plugins,
+    conf.get_val<std::string>("extblkdev_dir"),
     &ss);
   if (r)
     derr << ss.str() << dendl;

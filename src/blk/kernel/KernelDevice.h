@@ -24,6 +24,7 @@
 
 #include "aio/aio.h"
 #include "BlockDevice.h"
+#include "extblkdev/ExtBlkDevPlugin.h"
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
 
@@ -37,6 +38,8 @@ private:
 
   int vdo_fd = -1;      ///< fd for vdo sysfs directory
   std::string vdo_name;
+
+  ExtBlkDevInterfaceRef ebd_impl;  // structure for retrieving compression state from extended block device
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
 

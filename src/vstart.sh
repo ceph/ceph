@@ -684,6 +684,7 @@ prepare_conf() {
         mon osd backfillfull ratio = .99
         mon_max_pg_per_osd = ${MON_MAX_PG_PER_OSD:-1000}
         erasure code dir = $EC_PATH
+        extblkdev dir = $EC_PATH
         plugin dir = $CEPH_LIB
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR

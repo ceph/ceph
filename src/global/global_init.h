@@ -94,6 +94,12 @@ int global_init_shutdown_stderr(CephContext *cct);
  */
 int global_init_preload_erasure_code(const CephContext *cct);
 
+/*
+ * Preload the extblkdev libraries to detect early issues with
+ * configuration.
+ */
+int global_init_preload_extblkdev(const CephContext *cct);
+
 /**
  * print daemon startup banner/warning
  */

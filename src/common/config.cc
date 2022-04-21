@@ -485,7 +485,7 @@ void md_config_t::parse_env(unsigned entity_type,
     _set_val(values, tracker, s, *find_option("keyring"), CONF_ENV, &err);
   }
   if (auto dir = getenv("CEPH_LIB"); dir) {
-    for (auto name : { "erasure_code_dir", "plugin_dir", "osd_class_dir" }) {
+    for (auto name : { "erasure_code_dir", "extblkdev_dir", "plugin_dir", "osd_class_dir" }) {
     std::string err;
       const Option *o = find_option(name);
       ceph_assert(o);
