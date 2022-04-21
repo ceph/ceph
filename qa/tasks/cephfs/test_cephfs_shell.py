@@ -336,7 +336,9 @@ class TestGetAndPut(TestCephFSShell):
         self.mount_a.run_shell_payload(f"rm -rf {tempdir}")
 
         self.run_cephfs_shell_cmd('get ' + tempdirname)
-        pwd = self.get_cephfs_shell_cmd_output('!pwd')
+        # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
+        pwd = self.mount_a.run_shell('pwd', cwd=None).stdout.getvalue().\
+            strip()
         for file_ in files:
             if file_ == tempdirname:
                self.mount_a.run_shell_payload(f"stat {path.join(pwd, file_)}")
@@ -359,7 +361,9 @@ class TestGetAndPut(TestCephFSShell):
         o = self.get_cephfs_shell_cmd_output("get dump4 .")
         log.info("cephfs-shell output:\n{}".format(o))
 
-        o = self.get_cephfs_shell_cmd_output("!cat dump4")
+        # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
+        o = self.mount_a.run_shell('cat dump4', cwd=None).stdout.getvalue().\
+            strip()
         o_hash = crypt.crypt(o, '.A')
 
         # s_hash must be equal to o_hash
@@ -379,21 +383,10 @@ class TestGetAndPut(TestCephFSShell):
         o = self.mount_a.stat('dump5')
         log.info("mount_a output:\n{}".format(o))
 
-        # get dump5 should fail
         o = self.get_cephfs_shell_cmd_output("get dump5")
-        o = self.get_cephfs_shell_cmd_output("!stat dump5 || echo $?")
-        log.info("cephfs-shell output:\n{}".format(o))
-        l = o.split('\n')
-        try:
-            ret = int(l[1])
-            # verify that stat dump5 passes
-            # if ret == 1, then that implies the stat failed
-            # which implies that there was a problem with "get dump5"
-            assert(ret != 1)
-        except ValueError:
-            # we have a valid stat output; so this is good
-            # if the int() fails then that means there's a valid stat output
-            pass
+        # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
+        # NOTE: following command must run successfully.
+        self.mount_a.run_shell('stat dump5', cwd=None)
 
     def test_get_to_console(self):
         """
