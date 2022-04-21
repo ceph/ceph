@@ -1044,3 +1044,14 @@ def test_ganesha_validate_squash():
     _validate_squash("root")
     with pytest.raises(NFSInvalidOperation):
         _validate_squash("toot")
+
+
+def test_ganesha_validate_access_type():
+    """Check error handling of internal validation function for access type value."""
+    from nfs.ganesha_conf import _validate_access_type
+    from nfs.exception import NFSInvalidOperation
+
+    for ok in ("rw", "ro", "none"):
+        _validate_access_type(ok)
+    with pytest.raises(NFSInvalidOperation):
+        _validate_access_type("any")
