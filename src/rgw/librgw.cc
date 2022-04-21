@@ -25,7 +25,6 @@
 
 #include "include/str_list.h"
 #include "include/stringify.h"
-#include "global/global_init.h"
 #include "global/signal_handler.h"
 #include "common/config.h"
 #include "common/errno.h"
@@ -502,10 +501,10 @@ namespace rgw {
       { "log_file", "/var/log/radosgw/$cluster-$name.log" }
     };
 
-    cct = global_init(&defaults, args,
-		      CEPH_ENTITY_TYPE_CLIENT,
-		      CODE_ENVIRONMENT_DAEMON,
-		      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+    cct = rgw_global_init(&defaults, args,
+			  CEPH_ENTITY_TYPE_CLIENT,
+			  CODE_ENVIRONMENT_DAEMON,
+			  CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
     ceph::mutex mutex = ceph::make_mutex("main");
     SafeTimer init_timer(g_ceph_context, mutex);

@@ -1908,7 +1908,7 @@ namespace rgw::sal {
 
   int DBStore::get_config_key_val(string name, bufferlist *bl)
   {
-    return 0;
+    return -ENOTSUP;
   }
 
   int DBStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void** phandle)
