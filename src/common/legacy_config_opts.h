@@ -768,6 +768,7 @@ OPTION(osd_failsafe_full_ratio, OPT_FLOAT) // what % full makes an OSD "full" (f
 OPTION(osd_fast_shutdown, OPT_BOOL)
 OPTION(osd_fast_shutdown_notify_mon, OPT_BOOL) // tell mon the OSD is shutting down on osd_fast_shutdown
 OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL) // immediately mark OSDs as down once they refuse to accept connections
+OPTION(osd_rocksdb_iterator_bounds_enabled, OPT_BOOL) // whether omap iterator bounds are applied to rocksdb iterator ReadOptions
 
 OPTION(osd_pg_object_context_cache_count, OPT_INT)
 OPTION(osd_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
