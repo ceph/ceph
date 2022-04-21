@@ -19,6 +19,7 @@
 #include "rgw_arn.h"
 #include "rgw_data_sync.h"
 
+#include "global/global_init.h"
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
 #include "common/errno.h"
@@ -2968,4 +2969,27 @@ int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *buck
   }
 
   return 0;
+}
+
+boost::intrusive_ptr<CephContext>
+rgw_global_init(const std::map<std::string,std::string> *defaults,
+		    std::vector < const char* >& args,
+		    uint32_t module_type, code_environment_t code_env,
+		    int flags)
+{
+  // Load the config from the files, but not the mon
+  global_pre_init(defaults, args, module_type, code_env, flags);
+
+  // Get the store backend
+  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+
+  cerr << "config_store: " << config_store << std::endl;
+  if ((config_store == "dbstore") ||
+      (config_store == "motr")) {
+    // These stores don't use the mon
+    flags |= CINIT_FLAG_NO_MON_CONFIG;
+  }
+
+  // Finish global init, indicating we already ran pre-init
+  return global_init(defaults, args, module_type, code_env, flags, false);
 }
