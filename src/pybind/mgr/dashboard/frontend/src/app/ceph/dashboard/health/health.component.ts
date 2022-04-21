@@ -65,16 +65,20 @@ export class HealthComponent implements OnInit, OnDestroy {
   latencyChartConfig = {
     chartType: 'bar',
     colors: [
-      {
-        backgroundColor: 'rgba(0, 255, 0, 0.4)',
-      }
+      { backgroundColor: 'rgb(116, 164, 174)', }
     ],
     options: {
       events: [''],
       scales: {
-        xAxes: [{ stacked: true }],
+        xAxes: [{ 
+          stacked: true,
+          scaleLabel: {
+            display: true,
+            labelString: 'n-th percentile',
+          },
+        }],
         yAxes: [{
-          stacked: false,
+          stacked: true,
           ticks: {
             beginAtZero: true,
           },
@@ -284,30 +288,56 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   prepareLatency(chart: Record<string, any>, data: Record<string, any>) {
     const perf_stats = data.perf_stat.osd_perf;
-    let commit_latencies: Array<number> = [];
     let apply_latencies: Array<number> = [];
-    let osds: Array<string> = [];
 
     perf_stats.map((osd_stat: any) => {
-      osds.push(`osd.${osd_stat.osd}`)
-      commit_latencies.push(osd_stat.commit_latency_ms)
       apply_latencies.push(osd_stat.apply_latency_ms)
     })
-  
-    chart.labels = osds;
-    
-    chart.dataset[0] = {  
-      label: "apply latency (ms)",
-      data: apply_latencies,
-      order: 2,
-      backgroundColor: 'rgba(0, 255, 0, 0.4)'
-    };
-    chart.dataset[1] = {  
-      label: `commit latency (ms)`,
-      data: commit_latencies,
-      order: 1,
-      backgroundColor: 'rgba(0,0,255, 0.4)',
-     };
+
+    apply_latencies = _.sortBy(apply_latencies);
+
+    let latency_count = apply_latencies.length;
+
+    if (latency_count < 5) {
+      let fifth_percentile: number = Math.floor(0.05 * latency_count);
+      let median_percentile: number = Math.floor(0.5 * latency_count);
+      let ninty_fifth_percentile: number = Math.floor(0.95 * latency_count);
+
+      let data = [
+        apply_latencies[fifth_percentile],
+        apply_latencies[median_percentile],
+        apply_latencies[ninty_fifth_percentile],
+      ]
+
+      chart.labels = ["5%", "50%", "95%"];
+      chart.dataset[0] = {  
+        label: "apply latency (ms)",
+        data: data,
+        backgroundColor: 'rgb(116, 164, 174)',
+      };
+
+    } else {
+      let zero_percentile: number = 0;
+      let hundred_percentile: number = latency_count - 1;
+      let median_percentile: number = Math.floor(0.5 * latency_count);
+      let fifth_percentile: number = Math.ceil(0.05 * latency_count);
+      let ninty_fifth_percentile: number = Math.floor(0.95 * latency_count) - 1;
+
+      let data = [
+        apply_latencies[zero_percentile],
+        apply_latencies[fifth_percentile],
+        apply_latencies[median_percentile],
+        apply_latencies[ninty_fifth_percentile],
+        apply_latencies[hundred_percentile],
+      ]
+
+      chart.labels = ["0%", "5%", "50%", "95%", "100%"];
+      chart.dataset[0] = {  
+        label: "apply latency (ms)",
+        data: data,
+        backgroundColor: 'rgb(116, 164, 174)'
+      };
+    }
   }
 
   isClientReadWriteChartShowable() {
