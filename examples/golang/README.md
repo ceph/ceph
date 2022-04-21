@@ -8,18 +8,20 @@ To understand it further, build the app:
 
 Then run the built binary with the value for the flags.
 
+Make sure you have created an object bucket on your ceph cluster
+
 You need to use this flags while running the built binary:
 
-    object Name: Provide an object file path
-    bucket name: Provide the upload bucket path `example`
-    endpoint: Provide ceph rgw endpoint for cluster
-    accessId: Provide your ceph cluster rgw access id
-    accessKey: Provide your ceph cluster rgw access key
+    objectPath: Provide an object file path
+    bucketName: Provide the upload bucket path `example`
+    endpoint: Provide Ceph rgw endpoint for cluster
+    accessId: Provide your Ceph cluster rgw access id
+    accessKey: Provide your Ceph cluster rgw access key
 
 **Example:**
 
-    $./add-object --endpoint <"value"> --accessId <"value"> --accesskey <"value> \
-    --objectName <./ceph.png> --bucketName <"value">
+    $./add-object --endpoint https://localhost:8888 --accessId "jlsdjfladfjs" --accessKey "lkasdljsdfjdf2345ajkhfahdfad3423lksdjf" \
+    --objectName ./ceph.png --bucketName s3://foo
 
 **NOTE:** 
 

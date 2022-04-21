@@ -19,11 +19,11 @@ const (
 )
 
 func main() {
-	endPoint := flag.String("EndPoint", "", "region of request")
-	accessId := flag.String("Access ID", "", "Access Id")
-	accessKey := flag.String("Access Key", "", "Access Key")
-	ObjectName := flag.String("Object Path", "", "Object Path")
-	bucketName := flag.String("Bucket Name", "", "The name of the s3 bucket")
+	endPoint := flag.String("endpoint", "", "region of request")
+	accessId := flag.String("accessId", "", "Access Id")
+	accessKey := flag.String("accessKey", "", "Access Key")
+	ObjectName := flag.String("objectPath", "", "Object Path")
+	bucketName := flag.String("bucketName", "", "The name of the s3 bucket")
 	flag.Parse()
 	if flag.NFlag() < 4 {
 		log.Fatalf("Usage error: EndPoint, Access ID, Access Key, and Object Path not set.")
@@ -53,8 +53,8 @@ func main() {
 	}
 
 	params := s3.PutObjectInput{
-		Bucket: bucketName,
-		Key:    ObjectName,
+		Bucket: aws.String(*bucketName),
+		Key:    aws.String(*ObjectName),
 		Body:   file,
 	}
 
@@ -76,11 +76,10 @@ func createClient(config aws.Config) *s3.Client {
 	return svc
 }
 
-func putObject(svc *s3.Client, params *s3.PutObjectInput, ObjectName *string) error {
+func putObject(svc *s3.Client, params *s3.PutObjectInput, ObjectName *string) {
 	_, err := svc.PutObject(context.TODO(), params)
 	if err != nil {
 		log.Printf("Error uploading object to s3: %v", err)
 	}
 	fmt.Printf("Successfully uploaded object %v to bucket", ObjectName)
-	return nil
 }
