@@ -671,21 +671,18 @@ rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& pref
     return nullptr;
   }
   auto iter = cf_handles.find(prefix);
-  if (iter == cf_handles.end() || iter->second.hash_l != 0) {
+  ceph_assert(iter != cf_handles.end());
+  ceph_assert(iter->second.handles.size() != 1);
+  if (iter->second.hash_l != 0) {
     return nullptr;
+  }
+  auto lower_bound_hash_str = get_key_hash_view(iter->second, bounds.lower_bound->data(), bounds.lower_bound->size());
+  auto upper_bound_hash_str = get_key_hash_view(iter->second, bounds.upper_bound->data(), bounds.upper_bound->size());
+  if (lower_bound_hash_str == upper_bound_hash_str) {
+    auto key = *bounds.lower_bound;
+    return get_key_cf(iter->second, key.data(), key.size());
   } else {
-    if (iter->second.handles.size() == 1) {
-      return iter->second.handles[0];
-    } else {
-      auto lower_bound_hash_str = get_key_hash_view(iter->second, bounds.lower_bound->data(), bounds.lower_bound->size());
-      auto upper_bound_hash_str = get_key_hash_view(iter->second, bounds.upper_bound->data(), bounds.upper_bound->size());
-      if (lower_bound_hash_str == upper_bound_hash_str) {
-        auto key = *bounds.lower_bound;
-        return get_key_cf(iter->second, key.data(), key.size());
-      } else {
-        return nullptr;
-      }
-    }
+    return nullptr;
   }
 }
 
