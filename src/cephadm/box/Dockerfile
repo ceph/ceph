@@ -1,32 +1,61 @@
-# https://developers.redhat.com/blog/2014/05/05/running-systemd-within-docker-container/
-FROM centos:8 as centos-systemd
-ENV container docker
+# stable/Dockerfile
+#
+# Build a Podman container image from the latest
+# stable version of Podman on the Fedoras Updates System.
+# https://bodhi.fedoraproject.org/updates/?search=podman
+# This image can be used to create a secured container
+# that runs safely with privileges within the container.
+#
+FROM fedora:34
+
 ENV CEPHADM_PATH=/usr/local/sbin/cephadm
+# Don't include container-selinux and remove
+# directories used by yum that are just taking
+# up space.
+RUN dnf -y update; rpm --restore shadow-utils 2>/dev/null; \
+yum -y install strace podman fuse-overlayfs --exclude container-selinux; \
+rm -rf /var/cache /var/log/dnf* /var/log/yum.*
 
-# Centos met EOL and the content of the CentOS 8 repos has been moved to vault.centos.org
-RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-Linux-*
-RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=https://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*
+RUN dnf install which firewalld chrony procps systemd openssh openssh-server openssh-clients sshpass lvm2 -y
 
-RUN dnf -y install chrony firewalld lvm2 \
-  openssh-server openssh-clients python3 \
-  yum-utils sudo which && dnf clean all
+ADD https://raw.githubusercontent.com/containers/podman/main/contrib/podmanimage/stable/containers.conf /etc/containers/containers.conf
+ADD https://raw.githubusercontent.com/containers/podman/main/contrib/podmanimage/stable/podman-containers.conf /root/.config/containers/containers.conf
 
-RUN systemctl enable chronyd firewalld sshd
+RUN mkdir -p /root/.local/share/containers; # chown podman:podman -R /home/podman
 
+# Note VOLUME options must always happen after the chown call above
+# RUN commands can not modify existing volumes
+VOLUME /var/lib/containers
+VOLUME /root/.local/share/containers
 
-FROM centos-systemd as centos-systemd-docker
-# To cache cephadm images
-RUN yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-RUN dnf -y install docker-ce && \
-    dnf clean all && systemctl enable docker
+# chmod containers.conf and adjust storage.conf to enable Fuse storage.
+RUN chmod 644 /etc/containers/containers.conf; sed -i -e 's|^#mount_program|mount_program|g' -e '/additionalimage.*/a "/var/lib/shared",' -e 's|^mountopt[[:space:]]*=.*$|mountopt = "nodev,fsync=0"|g' /etc/containers/storage.conf
+RUN mkdir -p /var/lib/shared/overlay-images /var/lib/shared/overlay-layers /var/lib/shared/vfs-images /var/lib/shared/vfs-layers; touch /var/lib/shared/overlay-images/images.lock; touch /var/lib/shared/overlay-layers/layers.lock; touch /var/lib/shared/vfs-images/images.lock; touch /var/lib/shared/vfs-layers/layers.lock
 
-# ssh utilities
-RUN dnf install epel-release -y && dnf makecache && dnf install sshpass -y
+RUN echo 'root:root' | chpasswd
+
+RUN dnf install -y adjtimex # adjtimex syscall doesn't exist in fedora 35+ therefore we have to install it manually
+                    # so chronyd works
+RUN dnf -y install hostname iproute udev
+ENV _CONTAINERS_USERNS_CONFIGURED=""
+
+RUN useradd podman; \
+echo podman:0:5000 > /etc/subuid; \
+echo podman:0:5000 > /etc/subgid; \
+echo root:0:65535 > /etc/subuid; \
+echo root:0:65535 > /etc/subgid;
+
+VOLUME /home/podman/.local/share/containers
+
+ADD https://raw.githubusercontent.com/containers/libpod/master/contrib/podmanimage/stable/containers.conf /etc/containers/containers.conf
+ADD https://raw.githubusercontent.com/containers/libpod/master/contrib/podmanimage/stable/podman-containers.conf /home/podman/.config/containers/containers.conf
+
+RUN chown podman:podman -R /home/podman
+
+RUN echo 'podman:podman' | chpasswd
+RUN touch /.box_container # empty file to check if inside a container
 
 EXPOSE 8443
 EXPOSE 22
 
-FROM centos-systemd-docker
-WORKDIR /root
-
-CMD [ "/usr/sbin/init" ]
+ENTRYPOINT ["/usr/sbin/init"]

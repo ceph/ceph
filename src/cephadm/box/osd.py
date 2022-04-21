@@ -21,26 +21,27 @@ def remove_loop_img() -> None:
         os.remove(loop_image)
 
 
-@ensure_outside_container
+
 def create_loopback_devices(osds: int) -> None:
+
     assert osds
     size = (5 * osds) + 1
     print(f'Using {size}GB of data to store osds')
-    avail_loop = run_shell_command('sudo losetup -f')
+    # loop_dev = run_shell_command('sudo losetup -f')
+    loop_dev = '/dev/loop111'
+    run_shell_command(f'sudo rm -f {loop_dev}')
+    run_shell_command(f'sudo mknod -m 0777 {loop_dev} b 7 111')
 
-    # create loop if we cannot find it
-    if not os.path.exists(avail_loop):
-        num_loops = int(run_shell_command("lsmod | grep loop | awk '{print $3}'"))
-        num_loops += 1
-        run_shell_command(f'mknod {avail_loop} b 7 {num_loops}')
+    # cleanup last call
+    cleanup()
 
-    if os.path.ismount(avail_loop):
-        os.umount(avail_loop)
+    if os.path.ismount(loop_dev):
+        os.umount(loop_dev)
 
     loop_devices = json.loads(run_shell_command('losetup -l -J', expect_error=True))
     for dev in loop_devices['loopdevices']:
-        if dev['name'] == avail_loop:
-            run_shell_command(f'sudo losetup -d {avail_loop}')
+        if dev['name'] == loop_dev:
+            run_shell_command(f'sudo losetup -d {loop_dev}')
 
     if not os.path.exists('./loop-images'):
         os.mkdir('loop-images')
@@ -49,18 +50,20 @@ def create_loopback_devices(osds: int) -> None:
 
     loop_image = Config.get('loop_img')
     run_shell_command(f'sudo dd if=/dev/zero of={loop_image} bs=1 count=0 seek={size}G')
-    run_shell_command(f'sudo losetup {avail_loop} {loop_image}')
+    run_shell_command(f'sudo losetup {loop_dev} {loop_image}')
 
-    # cleanup last call
-    cleanup()
 
-    run_shell_command(f'sudo pvcreate {avail_loop} ')
-    run_shell_command(f'sudo vgcreate vg1 {avail_loop}')
+    run_shell_command(f'sudo pvcreate {loop_dev} ')
+    run_shell_command(f'sudo vgcreate vg1 {loop_dev}')
 
-    p = int(100 / osds)
+    p = int(100 / osds) # FIXME: 100 osds is the maximum because of lvcreate pct (it doesn't seem to work with lots more decimals)
     for i in range(osds):
         run_shell_command('sudo vgchange --refresh')
         run_shell_command(f'sudo lvcreate -l {p}%VG --name lv{i} vg1')
+
+    # FIXME: use /dev/vg1/lv* links as it is less hacky (there could be unrelated dm devices)
+    run_shell_command(f'sudo chmod 777 /dev/dm-*')
+    return loop_dev
 
 
 def get_lvm_osd_data(data: str) -> Dict[str, str]:
@@ -109,24 +112,23 @@ def deploy_osds_in_vg(vg: str):
     makes another process to run on the background
     """
     if inside_container():
-        lvs = json.loads(run_shell_command('lvs --reportformat json'))
+        print('xd')
+    else:
+        lvs = json.loads(run_shell_command('sudo lvs --reportformat json'))
         # distribute osds per host
         hosts = get_orch_hosts()
         host_index = 0
+        verbose = '-v' if Config.get('verbose') else ''
         for lv in lvs['report'][0]['lv']:
             if lv['vg_name'] == vg:
                 deployed = False
                 while not deployed:
-                    deployed = deploy_osd(
-                        f'{vg}/{lv["lv_name"]}', hosts[host_index]['hostname']
+                    hostname = hosts[host_index]['hostname']
+                    deployed = run_dc_shell_command(
+                        f'/cephadm/box/box.py -v osd deploy --data /dev/{vg}/{lv["lv_name"]} --hostname {hostname}', 1, 'seed'
                     )
+                    deployed = 'created osd' in deployed.lower() 
                 host_index = (host_index + 1) % len(hosts)
-    else:
-        verbose = '-v' if Config.get('verbose') else ''
-        print('Redirecting deploy osd in vg to inside container')
-        run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} osd deploy --vg {vg}', 1, 'seed'
-        )
 
 
 class Osd(Target):
