@@ -1016,6 +1016,7 @@ COMMAND("osd new "
         "Reads secrets from JSON file via `-i <file>` (see man page).",
         "osd", "rw")
 COMMAND("osd blocklist "
+	"name=range,type=CephString,goodchars=[range],req=false "
 	"name=blocklistop,type=CephChoices,strings=add|rm "
 	"name=addr,type=CephEntityAddr "
 	"name=expire,type=CephFloat,range=0.0,req=false",

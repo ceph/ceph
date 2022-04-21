@@ -576,7 +576,6 @@ void Client::_pre_init()
 
   objecter_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
-  objecter->enable_blocklist_events();
 
   objectcacher->start();
 }
@@ -2745,36 +2744,15 @@ void Client::_handle_full_flag(int64_t pool)
 
 void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 {
-  std::set<entity_addr_t> new_blocklists;
-
   std::scoped_lock cl(client_lock);
-  objecter->consume_blocklist_events(&new_blocklists);
 
   const auto myaddrs = messenger->get_myaddrs();
-  bool new_blocklist = false;
-  bool prenautilus = objecter->with_osdmap(
+  bool new_blocklist = objecter->with_osdmap(
     [&](const OSDMap& o) {
-      return o.require_osd_release < ceph_release_t::nautilus;
+      return o.is_blocklisted(myaddrs);
     });
-  if (!blocklisted) {
-    for (auto a : myaddrs.v) {
-      // blocklist entries are always TYPE_ANY for nautilus+
-      a.set_type(entity_addr_t::TYPE_ANY);
-      if (new_blocklists.count(a)) {
-	new_blocklist = true;
-	break;
-      }
-      if (prenautilus) {
-	// ...except pre-nautilus, they were TYPE_LEGACY
-	a.set_type(entity_addr_t::TYPE_LEGACY);
-	if (new_blocklists.count(a)) {
-	  new_blocklist = true;
-	  break;
-	}
-      }
-    }
-  }
-  if (new_blocklist) {
+  
+  if (new_blocklist && !blocklisted) {
     auto epoch = objecter->with_osdmap([](const OSDMap &o){
         return o.get_epoch();
         });
