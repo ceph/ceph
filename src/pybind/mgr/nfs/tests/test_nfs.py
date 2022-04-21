@@ -1034,3 +1034,13 @@ NFS_CORE_PARAM {
 )
 def test_normalize_path(path, expected):
     assert normalize_path(path) == expected
+
+
+def test_ganesha_validate_squash():
+    """Check error handling of internal validation function for squash value."""
+    from nfs.ganesha_conf import _validate_squash
+    from nfs.exception import NFSInvalidOperation
+
+    _validate_squash("root")
+    with pytest.raises(NFSInvalidOperation):
+        _validate_squash("toot")
