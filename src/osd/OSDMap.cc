@@ -1398,7 +1398,11 @@ void OSDMap::range_bits::parse(const entity_addr_t& addr) {
     ipv6 = true;
   } else if (addr.is_ipv4()) {
     bits.ipv4.ip_32_bits = ntohl(addr.in4_addr().sin_addr.s_addr);
-    bits.ipv4.mask = UINT32_MAX << (32-addr.get_nonce());
+    if (addr.get_nonce() > 0) {
+      bits.ipv4.mask = UINT32_MAX << (32-addr.get_nonce());
+    } else {
+      bits.ipv4.mask = 0;
+    }
   } else {
     // uh...
   }
