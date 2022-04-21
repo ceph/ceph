@@ -5451,7 +5451,7 @@ def command_bootstrap(ctx):
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
-    if ctx.output_config == '/etc/ceph/ceph.conf' and not ctx.skip_admin_label:
+    if ctx.output_config == '/etc/ceph/ceph.conf' and not ctx.skip_admin_label and not ctx.no_minimize_config:
         logger.info('Enabling client.admin keyring and conf on hosts with "admin" label')
         try:
             cli(['orch', 'client-keyring', 'set', 'client.admin', 'label:_admin'])
