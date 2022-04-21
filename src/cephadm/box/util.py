@@ -4,6 +4,16 @@ import subprocess
 import sys
 from typing import Any, Callable, Dict
 
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 class Config:
     args = {
@@ -74,9 +84,13 @@ def ensure_inside_container(func) -> bool:
     return wrapper
 
 
+def colored(msg, color: Colors):
+    return color + msg + Colors.ENDC
+
 def run_shell_command(command: str, expect_error=False) -> str:
     if Config.get('verbose'):
-        print(f'Running command: {command}')
+        print(f'{colored("Running command", Colors.HEADER)}: {colored(command, Colors.OKBLUE)}')
+
     process = subprocess.Popen(
         command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
@@ -107,6 +121,20 @@ def run_shell_command(command: str, expect_error=False) -> str:
     return out
 
 
+def run_dc_shell_commands(index, box_type, commands: str, expect_error=False) -> str:
+    for command in commands.split('\n'):
+        command = command.strip()
+        if not command:
+            continue
+        run_dc_shell_command(command.strip(), index, box_type, expect_error=expect_error)
+
+def run_shell_commands(commands: str, expect_error=False) -> str:
+    for command in commands.split('\n'):
+        command = command.strip()
+        if not command:
+            continue
+        run_shell_command(command, expect_error=expect_error)
+
 @ensure_inside_container
 def run_cephadm_shell_command(command: str, expect_error=False) -> str:
     config = Config.get('config')
@@ -123,15 +151,18 @@ def run_cephadm_shell_command(command: str, expect_error=False) -> str:
 def run_dc_shell_command(
     command: str, index: int, box_type: str, expect_error=False
 ) -> str:
+    container_id = get_container_id(f'{box_type}_{index}')
+    print(container_id)
     out = run_shell_command(
-        f'docker-compose exec --index={index} {box_type} {command}', expect_error
+        f'podman exec -it {container_id} {command}', expect_error
     )
     return out
 
-
 def inside_container() -> bool:
-    return os.path.exists('/.dockerenv')
+    return os.path.exists('/.box_container')
 
+def get_container_id(container_name: str):
+    return run_shell_command("podman ps | \grep " + container_name + " | awk '{ print $1 }'")
 
 @ensure_outside_container
 def get_boxes_container_info(with_seed: bool = False) -> Dict[str, Any]:
@@ -139,7 +170,7 @@ def get_boxes_container_info(with_seed: bool = False) -> Dict[str, Any]:
     IP = 0
     CONTAINER_NAME = 1
     HOSTNAME = 2
-    ips_query = "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} %tab% {{.Name}} %tab% {{.Config.Hostname}}' $(docker ps -aq) | sed 's#%tab%#\t#g' | sed 's#/##g' | sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n"
+    ips_query = "podman inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} %tab% {{.Name}} %tab% {{.Config.Hostname}}' $(podman ps -aq) | sed 's#%tab%#\t#g' | sed 's#/##g' | sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n"
     out = run_shell_command(ips_query)
     # FIXME: if things get more complex a class representing a container info might be useful,
     # for now representing data this way is faster.
@@ -157,6 +188,12 @@ def get_boxes_container_info(with_seed: bool = False) -> Dict[str, Any]:
 
 
 def get_orch_hosts():
-    orch_host_ls_out = run_cephadm_shell_command('ceph orch host ls --format json')
+    if inside_container():
+        orch_host_ls_out = run_cephadm_shell_command('ceph orch host ls --format json')
+    else:
+        orch_host_ls_out = run_dc_shell_command('cephadm shell --keyring /etc/ceph/ceph.keyring --config /etc/ceph/ceph.conf -- ceph orch host ls --format json', 1, 'seed')
+        sp = orch_host_ls_out.split('\n')
+        orch_host_ls_out  = sp[len(sp) - 1]
+        print('xd', orch_host_ls_out)
     hosts = json.loads(orch_host_ls_out)
     return hosts

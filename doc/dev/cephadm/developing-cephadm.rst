@@ -228,15 +228,15 @@ When completed, you'll see::
 
 Then you can reload your Dashboard browser tab.
 
-Cephadm DiD (Docker in Docker) box development environment
-==========================================================
+Cephadm box container (Podman inside Podman) development environment
+====================================================================
 
 As kcli has a long startup time, we created an alternative which is faster using
-Docker inside Docker. This approach has its downsides too as we have to
+Podman inside Podman. This approach has its downsides too as we have to
 simulate the creation of osds and addition of devices with loopback devices.
 
-Cephadm's DiD environment is a command which requires little to setup. The setup
-requires you to get the required docker images for what we call boxes and ceph.
+Cephadm's box environment is a command which requires little to setup. The setup
+requires you to get the required podman images for what we call boxes and ceph.
 A box is the first layer of docker containers which can be either a seed or a
 host. A seed is the main box which holds cephadm and where you bootstrap the
 cluster. On the other hand, you have hosts with an ssh server setup so you can
@@ -250,7 +250,7 @@ seed box, requires the ceph image.
 Requirements
 ------------
 
-* `docker-compose <https://docs.docker.com/compose/install/>`_
+* `podman-compose <https://github.com/containers/podman-compose>`_
 * lvm
 
 Setup
@@ -259,46 +259,46 @@ Setup
 In order to setup Cephadm's box run::
 
   cd src/cephadm/box
-  sudo ln -sf "$PWD"/box.py /usr/bin/box
-  sudo box -v cluster setup
+  ./box.py -v cluster setup
 
-.. note:: It is recommended to run box with verbose (-v).
+.. note:: It is recommended to run box with verbose (-v) as it will show the output of
+					shell commands being run.
 
-After getting all needed images we can create a simple cluster without osds and hosts with::
+After getting all needed images we can create a simple cluster without OSDs and hosts with::
 
-  sudo box -v cluster start
+  ./box.py -v cluster start
 
-If you want to deploy the cluster with more osds and hosts::
+If you want to deploy the cluster with more OSDs and hosts::
   # 3 osds and 3 hosts by default
   sudo box -v cluster start --extended
   # explicitly change number of hosts and osds
   sudo box -v cluster start --extended --osds 5 --hosts 5
 
-Without the extended option, explicitly adding either more hosts or osds won't change the state
+.. warning:: OSDs are still not supported in the box implementation with podman. It is
+						 work in progress.
+
+
+Without the extended option, explicitly adding either more hosts or OSDs won't change the state
 of the cluster.
 
 .. note:: Cluster start will try to setup even if cluster setup was not called.
-.. note:: Osds are created with loopback devices and hence, sudo is needed to
-   create loopback devices capable of holding osds.
+.. note:: OSDs are created with loopback devices and hence, sudo is needed to
+   create loopback devices capable of holding OSDs.
 .. note::  Each osd will require 5GiB of space.
 
-After bootstrapping the cluster you can go inside the seed box in which you'll be
+After bootstraping the cluster you can go inside the seed box in which you'll be
 able to run cephadm commands::
 
-  box -v cluster sh
+  ./box.py -v cluster sh
   [root@8d52a7860245] cephadm --help
   ...
 
 
-If you want to navigate to the dashboard you can find the ip address after running::
-  docker ps
-  docker inspect <container-id> | grep IPAddress
-
-The address will be https://$IPADDRESS:8443
+If you want to navigate to the dashboard enter https://localhost:8443 on you browser.
 
 You can also find the hostname and ip of each box container with::
 
-  sudo box cluster list
+  ./box.py cluster list
 
 and you'll see something like::
 
@@ -310,15 +310,15 @@ and you'll see something like::
 
 To remove the cluster and clean up run::
 
-  box cluster down
+  ./box.py cluster down
  
 If you just want to clean up the last cluster created run::
 
-  box cluster cleanup
+  ./box.py cluster cleanup
 
 To check all available commands run::
 
-  box --help
+  ./box.py --help
 
 
 Known issues
@@ -331,19 +331,20 @@ Known issues
 
 * Docker containers run with the --privileged flag enabled which has been seen
   to make some computers log out.
-
-* Sometimes when starting a cluster the osds won't get deployed because cephadm
-  takes a while to update the state. If this happens wait and call::
-
-    box -v osd deploy --vg vg1
+* If SELinux is not disabled you'll probably see unexpected behaviour. For example:
+	if not all permissions of Ceph repo files are set to your user it will probably
+	fail starting with podman-compose.
+* If running a command it fails to run a podman command because it couldn't find the
+	container, you can debug by running the same podman-compose .. up command displayed
+	with the flag -v.
 
 Road map
 ------------
 
-* Run containers without --privileged 
+* Create osds with ceph-volume raw.
 * Enable ceph-volume to mark loopback devices as a valid block device in
   the inventory.
-* Make DiD ready to run dashboard CI tests (including cluster expansion).
+* Make the box ready to run dashboard CI tests (including cluster expansion).
 
 Note regarding network calls from CLI handlers
 ==============================================

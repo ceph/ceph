@@ -12,24 +12,24 @@ from util import (
 )
 
 
-def _setup_ssh(container_index):
+def _setup_ssh(container_type, container_index):
     if inside_container():
         if not os.path.exists('/root/.ssh/known_hosts'):
-            run_shell_command('ssh-keygen -A')
+            run_shell_command('ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N ""')
 
         run_shell_command('echo "root:root" | chpasswd')
         with open('/etc/ssh/sshd_config', 'a+') as f:
             f.write('PermitRootLogin yes\n')
             f.write('PasswordAuthentication yes\n')
             f.flush()
-        run_shell_command('/usr/sbin/sshd')
+        run_shell_command('systemctl restart sshd')
     else:
         print('Redirecting to _setup_ssh to container')
         verbose = '-v' if Config.get('verbose') else ''
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} host setup_ssh {container_index}',
+            f'/cephadm/box/box.py {verbose} host setup_ssh {container_type} {container_index}',
             container_index,
-            'hosts',
+            container_type,
         )
 
 
@@ -47,7 +47,7 @@ def _add_hosts(ips: Union[List[str], str], hostnames: Union[List[str], str]):
         hostnames = ' '.join(hostnames)
         hostnames = f'{hostnames}'
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} host add_hosts 1 --ips {ips} --hostnames {hostnames}',
+            f'/cephadm/box/box.py {verbose} host add_hosts seed 1 --ips {ips} --hostnames {hostnames}',
             1,
             'seed',
         )
@@ -73,7 +73,7 @@ def _copy_cluster_ssh_key(ips: Union[List[str], str]):
         ips = f'{ips}'
         # assume we only have one seed
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} host copy_cluster_ssh_key 1 --ips {ips}',
+            f'/cephadm/box/box.py {verbose} host copy_cluster_ssh_key seed 1 --ips {ips}',
             1,
             'seed',
         )
@@ -86,7 +86,10 @@ class Host(Target):
     def set_args(self):
         self.parser.add_argument('action', choices=Host.actions)
         self.parser.add_argument(
-            'host_container_index', type=str, help='box_host_{index}'
+            'container_type', type=str, help='box_{type}_{index}'
+        )
+        self.parser.add_argument(
+            'container_index', type=str, help='box_{type}_{index}'
         )
         self.parser.add_argument('--ips', nargs='*', help='List of host ips')
         self.parser.add_argument(
@@ -94,7 +97,7 @@ class Host(Target):
         )
 
     def setup_ssh(self):
-        _setup_ssh(Config.get('host_container_index'))
+        _setup_ssh(Config.get('container_type') ,Config.get('container_index'))
 
     def add_hosts(self):
         ips = Config.get('ips')
