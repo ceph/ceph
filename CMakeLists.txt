@@ -212,11 +212,6 @@ if(WITH_BLUESTORE)
     # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
     set(HAVE_POSIXAIO ON)
   endif()
-
-  if(LINUX)
-    find_package(dml)
-    set(HAVE_LIBDML ${DML_FOUND})
-  endif()
 endif()
 
 # libcryptsetup is only available on linux
@@ -243,6 +238,10 @@ CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system libur
 
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
+if(WITH_BLUESTORE_PMEM)
+  find_package(dml)
+  set(HAVE_LIBDML ${DML_FOUND})
+endif()
 
 CMAKE_DEPENDENT_OPTION(WITH_RBD_MIGRATION_FORMAT_QCOW_V1
   "Enable librbd QCOW v1 migration format support" ON
