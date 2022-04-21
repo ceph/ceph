@@ -37,6 +37,15 @@ def _validate_squash(squash: str) -> None:
         )
 
 
+def _validate_access_type(access_type: str) -> None:
+    valid_access_types = ['rw', 'ro', 'none']
+    if not isinstance(access_type, str) or access_type.lower() not in valid_access_types:
+        raise NFSInvalidOperation(
+            f'{access_type} is invalid, valid access type are'
+            f'{valid_access_types}'
+        )
+
+
 class RawBlock():
     def __init__(self, block_name: str, blocks: List['RawBlock'] = [], values: Dict[str, Any] = {}):
         if not values:  # workaround mutable default argument
@@ -440,15 +449,6 @@ class Export:
             'clients': [client.to_dict() for client in self.clients]
         }
 
-    @staticmethod
-    def validate_access_type(access_type: str) -> None:
-        valid_access_types = ['rw', 'ro', 'none']
-        if not isinstance(access_type, str) or access_type.lower() not in valid_access_types:
-            raise NFSInvalidOperation(
-                f'{access_type} is invalid, valid access type are'
-                f'{valid_access_types}'
-            )
-
     def validate(self, mgr: 'Module') -> None:
         if not isabs(self.pseudo) or self.pseudo == "/":
             raise NFSInvalidOperation(
@@ -457,7 +457,7 @@ class Export:
             )
 
         _validate_squash(self.squash)
-        self.validate_access_type(self.access_type)
+        _validate_access_type(self.access_type)
 
         if not isinstance(self.security_label, bool):
             raise NFSInvalidOperation('security_label must be a boolean value')
@@ -475,7 +475,7 @@ class Export:
             if client.squash:
                 _validate_squash(client.squash)
             if client.access_type:
-                self.validate_access_type(client.access_type)
+                _validate_access_type(client.access_type)
 
         if self.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             fs = cast(CephFSFSAL, self.fsal)
