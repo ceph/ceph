@@ -2215,7 +2215,7 @@ TEST_F(OSDMapTest, blocklisting_ranges) {
   }
 }
 
-TEST_F(OSDMapTest, blocklisting_weirder) {
+TEST_F(OSDMapTest, blocklisting_everything) {
   set_up_map(6); //whatever
   OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
   entity_addr_t baddr;
@@ -2240,6 +2240,38 @@ TEST_F(OSDMapTest, blocklisting_weirder) {
     addr.parse(a);
     addr.set_type(entity_addr_t::TYPE_LEGACY);
     if (addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+
+  OSDMap::Incremental swap_blocklist_inc(osdmap.get_epoch()+1);
+  swap_blocklist_inc.old_range_blocklist.push_back(baddr);
+
+  entity_addr_t caddr;
+  caddr.parse("1.1.1.1/0");
+  caddr.type = entity_addr_t::TYPE_CIDR;
+  swap_blocklist_inc.new_range_blocklist[caddr] = ceph_clock_now();
+  osdmap.apply_incremental(swap_blocklist_inc);
+
+  for (const auto& a: ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (!addr.is_ipv4()) continue;
+    bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
+    if (!blocklisted) {
+      cout << "erroneously not  blocklisted " << addr << std::endl;
+    }
+    ASSERT_TRUE(blocklisted);
+  }
+  for (const auto& a: unblocked_ip_addrs) {
+    entity_addr_t addr;
+    addr.parse(a);
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (!addr.is_ipv4()) continue;
     bool blocklisted = osdmap.is_blocklisted(addr, g_ceph_context);
     if (!blocklisted) {
       cout << "erroneously not  blocklisted " << addr << std::endl;
