@@ -11,10 +11,7 @@ if TYPE_CHECKING:
 
 
 def _indentation(depth: int, size: int = 4) -> str:
-    conf_str = ""
-    for _ in range(0, depth * size):
-        conf_str += " "
-    return conf_str
+    return " " * (depth * size)
 
 
 class RawBlock():
