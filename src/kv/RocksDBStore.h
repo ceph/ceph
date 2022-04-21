@@ -368,11 +368,13 @@ public:
         rocksdb::ReadOptions options = rocksdb::ReadOptions();
         if (opts & ITERATOR_NOCACHE)
           options.fill_cache=false;
-        if (bounds.lower_bound) {
-          options.iterate_lower_bound = &iterate_lower_bound;
-        }
-        if (bounds.upper_bound) {
-          options.iterate_upper_bound = &iterate_upper_bound;
+        if (db->cct->_conf->osd_rocksdb_iterator_bounds_enabled) {
+          if (bounds.lower_bound) {
+            options.iterate_lower_bound = &iterate_lower_bound;
+          }
+          if (bounds.upper_bound) {
+            options.iterate_upper_bound = &iterate_upper_bound;
+          }
         }
         dbiter = db->db->NewIterator(options, cf);
     }
