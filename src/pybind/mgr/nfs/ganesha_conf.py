@@ -25,6 +25,18 @@ def _format_val(block_name: str, key: str, val: str) -> str:
     return '"{}"'.format(val)
 
 
+def _validate_squash(squash: str) -> None:
+    valid_squash_ls = [
+        "root", "root_squash", "rootsquash", "rootid", "root_id_squash",
+        "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
+        "allanonymous", "no_root_squash", "none", "noidsquash",
+    ]
+    if squash.lower() not in valid_squash_ls:
+        raise NFSInvalidOperation(
+            f"squash {squash} not in valid list {valid_squash_ls}"
+        )
+
+
 class RawBlock():
     def __init__(self, block_name: str, blocks: List['RawBlock'] = [], values: Dict[str, Any] = {}):
         if not values:  # workaround mutable default argument
@@ -437,18 +449,6 @@ class Export:
                 f'{valid_access_types}'
             )
 
-    @staticmethod
-    def validate_squash(squash: str) -> None:
-        valid_squash_ls = [
-            "root", "root_squash", "rootsquash", "rootid", "root_id_squash",
-            "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
-            "allanonymous", "no_root_squash", "none", "noidsquash",
-        ]
-        if squash.lower() not in valid_squash_ls:
-            raise NFSInvalidOperation(
-                f"squash {squash} not in valid list {valid_squash_ls}"
-            )
-
     def validate(self, mgr: 'Module') -> None:
         if not isabs(self.pseudo) or self.pseudo == "/":
             raise NFSInvalidOperation(
@@ -456,7 +456,7 @@ class Export:
                 "path and it cannot be just '/'."
             )
 
-        self.validate_squash(self.squash)
+        _validate_squash(self.squash)
         self.validate_access_type(self.access_type)
 
         if not isinstance(self.security_label, bool):
@@ -473,7 +473,7 @@ class Export:
 
         for client in self.clients:
             if client.squash:
-                self.validate_squash(client.squash)
+                _validate_squash(client.squash)
             if client.access_type:
                 self.validate_access_type(client.access_type)
 
