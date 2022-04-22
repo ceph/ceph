@@ -97,6 +97,43 @@ The CephX IDs authorized to <vol_name> need to be reauthorized to <new_vol_name>
 on-going operations of the clients using these IDs may be disrupted. Mirroring is
 expected to be disabled on the volume.
 
+Fetch the information of a CephFS volume using::
+
+    $ ceph fs volume info vol_name
+    {
+        "mon_addrs": [
+            "192.168.1.7:40977"
+        ],
+        "pending_subvolume_deletions": 0,
+        "pools": {
+            "data": [
+                {
+                    "avail": 106288709632,
+                    "name": "cephfs.vol_name.data",
+                    "used": 4096
+                }
+            ],
+            "metadata": [
+                {
+                    "avail": 106288709632,
+                    "name": "cephfs.vol_name.meta",
+                    "used": 155648
+                }
+            ]
+        },
+        "used_size": 0
+    }
+
+The output format is json and contains fields as follows.
+
+* pools: Attributes of data and metadata pools
+        * avail: The amount of free space available in bytes
+        * used: The amount of storage consumed in bytes
+        * name: Name of the pool
+* mon_addrs: List of monitor addresses
+* used_size: Current used size of the CephFS volume in bytes
+* pending_subvolume_deletions: Number of subvolumes pending deletion
+
 FS Subvolume groups
 -------------------
 
