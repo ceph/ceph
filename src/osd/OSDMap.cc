@@ -648,7 +648,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 9; // if bumping this, be aware of stretch_mode target_v 10!
+    uint8_t target_v = 9; // if bumping this, be aware of range_blocklist 11
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -656,6 +656,10 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (change_stretch_mode) {
       target_v = std::max((uint8_t)10, target_v);
+    }
+    if (!new_range_blocklist.empty() ||
+	!old_range_blocklist.empty()) {
+      target_v = std::max((uint8_t)11, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -705,6 +709,10 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
       encode(new_recovering_stretch_mode, bl);
       encode(new_stretch_mode_bucket, bl);
       encode(stretch_mode_enabled, bl);
+    }
+    if (target_v >= 11) {
+      encode(new_range_blocklist, bl, features);
+      encode(old_range_blocklist, bl, features);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -980,7 +988,10 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
       decode(new_stretch_mode_bucket, bl);
       decode(stretch_mode_enabled, bl);
     }
-
+    if (struct_v >= 11) {
+      decode(new_range_blocklist, bl);
+      decode(old_range_blocklist, bl);
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -1226,6 +1237,17 @@ void OSDMap::Incremental::dump(Formatter *f) const
   for (const auto &blist : old_blocklist)
     f->dump_stream("addr") << blist;
   f->close_section();
+  f->open_array_section("new_range_blocklist");
+  for (const auto &blist : new_range_blocklist) {
+    stringstream ss;
+    ss << blist.first;
+    f->dump_stream(ss.str().c_str()) << blist.second;
+  }
+  f->close_section();
+  f->open_array_section("old_range_blocklist");
+  for (const auto &blist : old_range_blocklist)
+    f->dump_stream("addr") << blist;
+  f->close_section();
 
   f->open_array_section("new_xinfo");
   for (const auto &xinfo : new_xinfo) {
@@ -1336,9 +1358,76 @@ void OSDMap::set_epoch(epoch_t e)
     pool.second.last_change = e;
 }
 
-bool OSDMap::is_blocklisted(const entity_addr_t& orig) const
+OSDMap::range_bits::range_bits() : ipv6(false) {
+  memset(&bits, 0, sizeof(bits));
+}
+
+OSDMap::range_bits::range_bits(const entity_addr_t& addr) : ipv6(false) {
+  memset(&bits, 0, sizeof(bits));
+  parse(addr);
+}
+
+void OSDMap::range_bits::get_ipv6_bytes(unsigned const char *addr,
+					uint64_t *upper, uint64_t *lower)
 {
-  if (blocklist.empty()) {
+  *upper = ((uint64_t)(ntohl(*(uint32_t*)(addr)))) << 32 |
+    ((uint64_t)(ntohl(*(uint32_t*)(&addr[4]))));
+  *lower = ((uint64_t)(ntohl(*(uint32_t*)(&addr[8])))) << 32 |
+    ((uint64_t)(ntohl(*(uint32_t*)(&addr[12]))));
+}
+
+void OSDMap::range_bits::parse(const entity_addr_t& addr) {
+  // parse it into meaningful data
+  if (addr.is_ipv6()) {
+    get_ipv6_bytes(addr.in6_addr().sin6_addr.s6_addr,
+		   &bits.ipv6.upper_64_bits, &bits.ipv6.lower_64_bits);
+    int32_t lower_shift = std::min(128-
+				   static_cast<int32_t>(addr.get_nonce()), 64);
+    int32_t upper_shift = std::max(64- //(128-b.first.get_nonce())-64
+				   static_cast<int32_t>(addr.get_nonce()), 0); 
+
+    auto get_mask = [](int32_t shift) -> uint64_t {
+      if (shift >= 0 && shift < 64) {
+	return UINT64_MAX << shift;
+      }
+      return 0;
+    };
+
+    bits.ipv6.lower_mask = get_mask(lower_shift);
+    bits.ipv6.upper_mask = get_mask(upper_shift);
+    ipv6 = true;
+  } else if (addr.is_ipv4()) {
+    bits.ipv4.ip_32_bits = ntohl(addr.in4_addr().sin_addr.s_addr);
+    if (addr.get_nonce() > 0) {
+      bits.ipv4.mask = UINT32_MAX << (32-addr.get_nonce());
+    } else {
+      bits.ipv4.mask = 0;
+    }
+  } else {
+    // uh...
+  }
+}
+
+bool OSDMap::range_bits::matches(const entity_addr_t& addr) const {
+  if (addr.is_ipv4() && !ipv6) {
+    return ((ntohl(addr.in4_addr().sin_addr.s_addr) & bits.ipv4.mask) ==
+	    (bits.ipv4.ip_32_bits & bits.ipv4.mask));
+  } else if (addr.is_ipv6() && ipv6) {
+    uint64_t upper_64, lower_64;
+    get_ipv6_bytes(addr.in6_addr().sin6_addr.s6_addr, &upper_64, &lower_64);
+    return (((upper_64 & bits.ipv6.upper_mask) ==
+	     (bits.ipv6.upper_64_bits & bits.ipv6.upper_mask)) &&
+	    ((lower_64 & bits.ipv6.lower_mask) ==
+	     (bits.ipv6.lower_64_bits & bits.ipv6.lower_mask)));
+  }
+  return false;
+}
+
+bool OSDMap::is_blocklisted(const entity_addr_t& orig, CephContext *cct) const
+{
+  if (cct) ldout(cct, 25) << "is_blocklisted: " << orig << dendl;
+  if (blocklist.empty() && range_blocklist.empty()) {
+    if (cct) ldout(cct, 30) << "not blocklisted: " << orig << dendl;
     return false;
   }
 
@@ -1353,6 +1442,7 @@ bool OSDMap::is_blocklisted(const entity_addr_t& orig) const
 
   // this specific instance?
   if (blocklist.count(a)) {
+    if (cct) ldout(cct, 20) << "blocklist contains " << a << dendl;
     return true;
   }
 
@@ -1361,20 +1451,31 @@ bool OSDMap::is_blocklisted(const entity_addr_t& orig) const
     a.set_port(0);
     a.set_nonce(0);
     if (blocklist.count(a)) {
+      if (cct) ldout(cct, 20) << "blocklist contains " << a << dendl;
       return true;
     }
   }
 
+  // is it in a blocklisted range?
+  for (const auto& i : calculated_ranges) {
+    bool blocked = i.second.matches(a);
+    if (blocked) {
+      if (cct) ldout(cct, 20) << "range_blocklist contains " << a << dendl;
+      return true;
+    }
+  }
+
+  if (cct) ldout(cct, 25) << "not blocklisted: " << orig << dendl;
   return false;
 }
 
-bool OSDMap::is_blocklisted(const entity_addrvec_t& av) const
+bool OSDMap::is_blocklisted(const entity_addrvec_t& av, CephContext *cct) const
 {
-  if (blocklist.empty())
+  if (blocklist.empty() && range_blocklist.empty())
     return false;
 
   for (auto& a : av.v) {
-    if (is_blocklisted(a)) {
+    if (is_blocklisted(a, cct)) {
       return true;
     }
   }
@@ -1382,15 +1483,22 @@ bool OSDMap::is_blocklisted(const entity_addrvec_t& av) const
   return false;
 }
 
-void OSDMap::get_blocklist(list<pair<entity_addr_t,utime_t> > *bl) const
+void OSDMap::get_blocklist(list<pair<entity_addr_t,utime_t> > *bl,
+			   std::list<std::pair<entity_addr_t,utime_t> > *rl) const
 {
    std::copy(blocklist.begin(), blocklist.end(), std::back_inserter(*bl));
+   std::copy(range_blocklist.begin(), range_blocklist.end(),
+	     std::back_inserter(*rl));
 }
 
-void OSDMap::get_blocklist(std::set<entity_addr_t> *bl) const
+void OSDMap::get_blocklist(std::set<entity_addr_t> *bl,
+			   std::set<entity_addr_t> *rl) const
 {
   for (const auto &i : blocklist) {
     bl->insert(i.first);
+  }
+  for (const auto &i : range_blocklist) {
+    rl->insert(i.first);
   }
 }
 
@@ -2287,6 +2395,16 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (const auto &addr : inc.old_blocklist)
     blocklist.erase(addr);
 
+  for (const auto& addr_p : inc.new_range_blocklist) {
+    range_blocklist.insert(addr_p);
+    calculated_ranges.emplace(addr_p.first, addr_p.first);
+    new_blocklist_entries = true;
+  }
+  for (const auto &addr : inc.old_range_blocklist) {
+    calculated_ranges.erase(addr);
+    range_blocklist.erase(addr);
+  }
+
   for (auto& i : inc.new_crush_node_flags) {
     if (i.second) {
       crush_node_flags[i.first] = i.second;
@@ -3037,7 +3155,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 9; // when bumping this, be aware of stretch_mode target_v 10!
+    uint8_t target_v = 9; // when bumping this, be aware of range blocklist
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3047,6 +3165,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (stretch_mode_enabled) {
       target_v = std::max((uint8_t)10, target_v);
+    }
+    if (!range_blocklist.empty()) {
+      target_v = std::max((uint8_t)11, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3102,6 +3223,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       encode(degraded_stretch_mode, bl);
       encode(recovering_stretch_mode, bl);
       encode(stretch_mode_bucket, bl);
+    }
+    if (target_v >= 11) {
+      ::encode(range_blocklist, bl, features);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3442,6 +3566,13 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
       recovering_stretch_mode = 0;
       stretch_mode_bucket = 0;
     }
+    if (struct_v >= 11) {
+      decode(range_blocklist, bl);
+      calculated_ranges.clear();
+      for (const auto& i : range_blocklist) {
+	calculated_ranges.emplace(i.first, i.first);
+      }
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -3649,6 +3780,13 @@ void OSDMap::dump(Formatter *f) const
 
   f->open_object_section("blocklist");
   for (const auto &addr : blocklist) {
+    stringstream ss;
+    ss << addr.first;
+    f->dump_stream(ss.str().c_str()) << addr.second;
+  }
+  f->close_section();
+  f->open_object_section("range_blocklist");
+  for (const auto &addr : range_blocklist) {
     stringstream ss;
     ss << addr.first;
     f->dump_stream(ss.str().c_str()) << addr.second;
@@ -3918,6 +4056,8 @@ void OSDMap::print(ostream& out) const
 
   for (const auto &addr : blocklist)
     out << "blocklist " << addr.first << " expires " << addr.second << "\n";
+  for (const auto &addr : range_blocklist)
+    out << "range blocklist " << addr.first << " expires " << addr.second << "\n";
 }
 
 class OSDTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {
