@@ -55,6 +55,7 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/simple_bitmap.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/bluestore_types.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStoreSlowFastCoDel.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/fastbmap_allocator_impl.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/FreelistManager.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/HybridAllocator.cc
