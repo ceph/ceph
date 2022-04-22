@@ -364,6 +364,27 @@ def configure(ctx, config):
         if lc_debug_interval:
             s3tests_conf['s3 main']['lc_debug_interval'] = lc_debug_interval
 
+        client_rgw_config = ctx.rgw.config.get(client)
+        if client_rgw_config:
+            cloudtier_config = client_rgw_config.get('cloudtier')
+            if cloudtier_config:
+                cloudtier_user = client_rgw_config.get('cloudtier_user')
+                cloud_client = cloudtier_config.get('cloud_client')
+                endpoint = ctx.rgw.role_endpoints.get(cloud_client)
+                s3tests_conf['s3 cloud']['host'] = endpoint.dns_name
+                s3tests_conf['s3 cloud']['port'] = endpoint.port
+                s3tests_conf['s3 cloud']['access_key'] = cloudtier_user.get('cloud_access_key')
+                s3tests_conf['s3 cloud']['secret_key'] = cloudtier_user.get('cloud_secret')
+                s3tests_conf['s3 cloud']['cloud_storage_class'] = cloudtier_config.get('cloud_storage_class')
+                s3tests_conf['s3 cloud']['storage_class'] = cloudtier_config.get('cloud_regular_storage_class')
+                s3tests_conf['s3 cloud']['retain_head_object'] = cloudtier_config.get('cloud_retain_head_object')
+                cloud_target_path = cloudtier_config.get('cloud_target_path')
+                cloud_target_storage_class = cloudtier_config.get('cloud_target_storage_class')
+                if (cloud_target_path != None):
+                    s3tests_conf['s3 cloud']['target_path'] = cloud_target_path
+                if (cloud_target_storage_class != None):
+                    s3tests_conf['s3 cloud']['target_storage_class'] = cloud_target_storage_class
+
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
@@ -553,6 +574,16 @@ def task(ctx, config):
               sts_tests: True
               rgw_server: client.0
 
+    To run any cloud-transition tests don't forget to set a config variable named 'cloudtier_tests' to 'True' as follows::
+
+        tasks:
+        - ceph:
+        - rgw: [client.0 client.1]
+        - s3tests:
+            client.0:
+              cloudtier_tests: True
+              rgw_server: client.0
+
     """
     assert hasattr(ctx, 'rgw'), 's3tests must run after the rgw task'
     assert config is None or isinstance(config, list) \
@@ -582,6 +613,10 @@ def task(ctx, config):
             ctx.sts_variable = True
         else:
             ctx.sts_variable = False
+        if 'cloudtier_tests' in client_config:
+            ctx.cloudtier_variable = True
+        else:
+            ctx.cloudtier_variable = False
         #This will be the structure of config file when you want to run webidentity_test (sts-test)
         if ctx.sts_variable and "TOKEN" in os.environ:
             for client in clients:
@@ -629,6 +664,28 @@ def task(ctx, config):
                         }
                     ) 
 
+        elif ctx.cloudtier_variable:
+            #This will be the structure of config file when you want to run normal s3-tests
+            for client in clients:
+                endpoint = ctx.rgw.role_endpoints.get(client)
+                assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
+
+                s3tests_conf[client] = ConfigObj(
+                    indent_type='',
+                    infile={
+                        'DEFAULT':
+                            {
+                            'port'      : endpoint.port,
+                            'is_secure' : endpoint.cert is not None,
+                            'api_name'  : 'default',
+                            },
+                        'fixtures'   : {},
+                        's3 main'    : {},
+                        's3 alt'     : {},
+                        's3 tenant'  : {},
+                        's3 cloud'   : {},
+                        }
+                    ) 
         else:
             #This will be the structure of config file when you want to run normal s3-tests
             for client in clients:

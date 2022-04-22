@@ -201,6 +201,59 @@ def start_rgw(ctx, config, clients):
                 exit_on_first_error=False
                 )
 
+        cloudtier_config = client_config.get('cloudtier')
+        if cloudtier_config is not None:
+            log.info('client %s - cloudtier config is -----------------%s ', client, cloudtier_config)
+            # configuring cloudtier
+
+            cloud_client = cloudtier_config.get('cloud_client')
+            cloud_storage_class = cloudtier_config.get('cloud_storage_class')
+            cloud_target_path = cloudtier_config.get('cloud_target_path')
+            cloud_target_storage_class = cloudtier_config.get('cloud_target_storage_class')
+            cloud_regular_storage_class = cloudtier_config.get('cloud_regular_storage_class')
+            cloud_retain_head_object = cloudtier_config.get('cloud_retain_head_object')
+
+            cloudtier_user = client_config.get('cloudtier_user')
+            cloud_access_key = cloudtier_user.get('cloud_access_key')
+            cloud_secret = cloudtier_user.get('cloud_secret')
+
+            # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+            # issue a 'radosgw-admin user list' command to trigger this
+            rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+
+            endpoint = ctx.rgw.role_endpoints[cloud_client]
+
+            # create cloudtier storage class
+            tier_config_params = "endpoint=" + endpoint.url() + \
+                       ",access_key=" + cloud_access_key + \
+                        ",secret=" + cloud_secret + \
+                        ",retain_head_object=" + cloud_retain_head_object
+
+            if (cloud_target_path != None):
+                tier_config_params += ",target_path=" + cloud_target_path
+            if (cloud_target_storage_class != None):
+                tier_config_params += ",target_storage_class=" + cloud_target_storage_class
+
+            log.info('Configuring cloud-s3 tier storage class type = %s', cloud_storage_class)
+
+            rgwadmin(ctx, client,
+                  cmd=['zonegroup', 'placement', 'add',
+                        '--rgw-zone', 'default',
+                        '--placement-id', 'default-placement',
+                        '--storage-class', cloud_storage_class,
+                        '--tier-type', 'cloud-s3',
+                        '--tier-config', tier_config_params],
+                  check_status=True)
+
+            ## create cloudtier user with the access keys given on the cloud client
+            rgwadmin(ctx, cloud_client,
+                  cmd=['user', 'create', '--uid', 'cloud-tier-user',
+                    '--display-name', 'CLOUD TIER USER',
+                    '--access-key', cloud_access_key,
+                    '--secret', cloud_secret,
+                    '--caps', 'user-policy=*'],
+                    check_status=True)
+
         run_cmd = list(cmd_prefix)
         run_cmd.extend(rgw_cmd)
 
@@ -213,7 +266,7 @@ def start_rgw(ctx, config, clients):
             stdin=run.PIPE,
             wait=False,
             )
-
+     
     # XXX: add_daemon() doesn't let us wait until radosgw finishes startup
     for client in clients:
         endpoint = ctx.rgw.role_endpoints[client]
