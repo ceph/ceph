@@ -1,0 +1,9 @@
+meta:
+- desc: |
+   run ceph mon daemon version check on prometheus metrics
+first-half-tasks:
+- workunit:
+    clients:
+      client.0:
+        - mgr/test_prometheus_metrics.sh
+- print: "**** done end prometheus-metrics.yaml"
