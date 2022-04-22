@@ -34,7 +34,7 @@ private:
   tcp::socket socket_;
   beast::flat_buffer buffer_{8192};
   http::request<http::dynamic_body> request_;
-  http::response<http::dynamic_body> response_;
+  http::response<http::string_body> response_;
 
   net::steady_timer deadline_{socket_.get_executor(), std::chrono::seconds(60)};
 
@@ -64,11 +64,11 @@ private:
     default:
       // We return responses indicating an error if
       // we do not recognize the request method.
-      response_.result(http::status::bad_request);
+      response_.result(http::status::method_not_allowed);
       response_.set(http::field::content_type, "text/plain");
-      beast::ostream(response_.body())
-          << "Invalid request-method '" << std::string(request_.method_string())
-          << "'";
+      std::string body("Invalid request-method '" +
+                       std::string(request_.method_string()) + "'");
+      response_.body() = body;
       break;
     }
 
@@ -79,24 +79,23 @@ private:
   void create_response() {
     if (request_.target() == "/") {
       response_.set(http::field::content_type, "text/html; charset=utf-8");
-      beast::ostream(response_.body())
-          << "<html>\n"
-          << "<head><title>Ceph Exporter</title></head>\n"
-          << "<body>\n"
-          << "<h1>Ceph Exporter</h1>\n"
-
-          << "<p><a href='/metrics'>Metrics</a></p>"
-          << "</body>\n"
-          << "</html>\n";
+      std::string body("<html>\n"
+                       "<head><title>Ceph Exporter</title></head>\n"
+                       "<body>\n"
+                       "<h1>Ceph Exporter</h1>\n"
+                       "<p><a href='/metrics'>Metrics</a></p>"
+                       "</body>\n"
+                       "</html>\n");
+      response_.body() = body;
     } else if (request_.target() == "/metrics") {
       response_.set(http::field::content_type, "text/plain; charset=utf-8");
       DaemonMetricCollector &collector = collector_instance();
       std::string metrics = collector.get_metrics();
-      beast::ostream(response_.body()) << metrics << std::endl;
+      response_.body() = metrics;
     } else {
-      response_.result(http::status::not_found);
+      response_.result(http::status::method_not_allowed);
       response_.set(http::field::content_type, "text/plain");
-      beast::ostream(response_.body()) << "File not found\r\n";
+      response_.body() = "File not found \n";
     }
   }
 
@@ -104,7 +103,7 @@ private:
   void write_response() {
     auto self = shared_from_this();
 
-    response_.content_length(response_.body().size());
+    response_.prepare_payload();
 
     http::async_write(socket_, response_,
                       [self](beast::error_code ec, std::size_t) {
