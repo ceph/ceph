@@ -197,8 +197,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         flexGrow: 1
       },
       {
-        name: $localize`Services`,
-        prop: 'services',
+        name: $localize`Daemons`,
+        prop: 'daemons',
         flexGrow: 2,
         cellTemplate: this.servicesTpl
       },
