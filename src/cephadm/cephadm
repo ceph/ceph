@@ -2088,7 +2088,7 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
                             [container_path, 'images',
                              '--filter', 'label=ceph=True',
                              '--filter', 'dangling=false',
-                             '--format', '{{.Repository}}@{{.Digest}}|{{.Id}}|{{.Tag}}|{{.CreatedAt}}'])
+                             '--format', '{{.Repository}}@{{.Digest}}|{{.ID}}|{{.Tag}}|{{.CreatedAt}}'])
 
     container_info = None
     daemon_name = ctx.name if ('name' in ctx and ctx.name and '.' in ctx.name) else None
@@ -2102,10 +2102,10 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
     for image in out.splitlines():
         if image and not image.isspace():
             (digest, image_id, tag, created_date) = image.lstrip().split('|')
-            if container_info is not None and container_info.image_id != image_id:
+            if container_info is not None and image_id not in container_info.image_id:
                 continue
             if digest and not digest.endswith('@'):
-                logger.info(f"Using ceph image with id '{image_id[:12]}' and tag '{tag}' created on {created_date}\n{digest}")
+                logger.info(f"Using ceph image with id '{image_id}' and tag '{tag}' created on {created_date}\n{digest}")
                 return digest
     return None
 
