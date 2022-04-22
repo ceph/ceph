@@ -17,6 +17,7 @@ const auto UPLOAD_ID = "upload_id";
 const auto TYPE = "type";
 const auto REQUEST = "request";
 const auto MULTIPART = "multipart_upload ";
+const auto UPLOAD_CHECKSUM = "upload_checksum";
 
 #ifdef HAVE_JAEGER
 extern thread_local tracing::Tracer tracer;
