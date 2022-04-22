@@ -2126,6 +2126,9 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   mds->logger->inc(l_mds_reply);
   utime_t lat = ceph_clock_now() - req->get_recv_stamp();
   mds->logger->tinc(l_mds_reply_latency, lat);
+  if (lat >= g_conf()->mds_op_complaint_time) {
+    mds->logger->inc(l_mds_slow_reply);
+  }
   if (client_inst.name.is_client()) {
     mds->sessionmap.hit_session(mdr->session);
   }
@@ -2184,6 +2187,9 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
+    if (lat >= g_conf()->mds_op_complaint_time) {
+      mds->logger->inc(l_mds_slow_reply);
+    }
     if (session && client_inst.name.is_client()) {
       mds->sessionmap.hit_session(session);
     }
