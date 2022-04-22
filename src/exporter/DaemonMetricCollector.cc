@@ -14,14 +14,14 @@ using json_object = boost::json::object;
 using json_value = boost::json::value;
 using json_array = boost::json::array;
 
-const char *DaemonMetricCollector::SOCKETDIR = "/var/run/ceph/";
+const char *DaemonMetricCollector::SOCKETDIR = "/tmp/ceph-asok.u6a3XT";
 
-void DaemonMetricCollector::request_loop(boost::asio::deadline_timer &timer) {
+void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
   timer.async_wait([&](const boost::system::error_code &e) {
     std::cerr << e << std::endl;
     update_sockets();
     dump_asok_metrics();
-    timer.expires_from_now(boost::posix_time::seconds(stats_period));
+    timer.expires_from_now(std::chrono::seconds(stats_period));
     request_loop(timer);
   });
 }
@@ -30,8 +30,9 @@ void DaemonMetricCollector::main() {
   // TODO: let's do 5 for now and expose this to change in the future
   stats_period = 5;
   boost::asio::io_service io;
-  boost::asio::deadline_timer timer(io,
-                                    boost::posix_time::seconds(stats_period));
+  // boost::asio::deadline_timer timer(io,
+  //                                   boost::posix_time::seconds(stats_period));
+  boost::asio::steady_timer timer{io, std::chrono::seconds(stats_period)};
   request_loop(timer);
   io.run();
 }
@@ -70,36 +71,37 @@ bool is_hyphen(char ch) { return ch == '-'; }
 
 void DaemonMetricCollector::dump_asok_metrics() {
   std::stringstream ss;
-  for (auto client : clients) {
-    AdminSocketClient &sock_client = client.second;
-    std::string daemon_name = client.first;
+  for (auto &[daemon_name, sock_client] : clients) {
     std::string perf_dump_response = asok_request(sock_client, "perf dump");
-    if (perf_dump_response.size() > 0) {
-      json_object dump = boost::json::parse(perf_dump_response).as_object();
-      std::string perf_schema_response =
-          asok_request(sock_client, "perf schema");
-      json_object schema = boost::json::parse(perf_schema_response).as_object();
-      for (auto perf : schema) {
-        std::string perf_group = perf.key().to_string();
-        json_object perf_group_object = perf.value().as_object();
-        for (auto perf_counter : perf_group_object) {
-          std::string perf_name = perf_counter.key().to_string();
-          json_object perf_info = perf_counter.value().as_object();
-          if (perf_info["priority"].as_int64() <
-              PerfCountersBuilder::PRIO_USEFUL) {
-            continue;
-          }
-          std::string name = "ceph_" + perf_group + "_" + perf_name;
-          std::replace_if(name.begin(), name.end(), is_hyphen, '_');
-
-          // FIXME: test this, based on mgr_module perfpath_to_path_labels
-          auto labels_and_name = get_labels_and_metric_name(daemon_name, name);
-          std::string labels = labels_and_name.first;
-          name = labels_and_name.second;
-
-          json_value perf_values = dump[perf_group].as_object()[perf_name];
-          dump_asok_metric(ss, perf_info, perf_values, name, labels);
+    if (perf_dump_response.size() == 0) {
+      continue;
+    }
+    std::string perf_schema_response = asok_request(sock_client, "perf schema");
+    if (perf_schema_response.size() == 0) {
+      continue;
+    }
+    json_object dump = boost::json::parse(perf_dump_response).as_object();
+    json_object schema = boost::json::parse(perf_schema_response).as_object();
+    for (auto &perf : schema) {
+      std::string perf_group = perf.key().to_string();
+      json_object perf_group_object = perf.value().as_object();
+      for (auto &perf_counter : perf_group_object) {
+        std::string perf_name = perf_counter.key().to_string();
+        json_object perf_info = perf_counter.value().as_object();
+        if (perf_info["priority"].as_int64() <
+            PerfCountersBuilder::PRIO_USEFUL) {
+          continue;
         }
+        std::string name = "ceph_" + perf_group + "_" + perf_name;
+        std::replace_if(name.begin(), name.end(), is_hyphen, '_');
+
+        // FIXME: test this, based on mgr_module perfpath_to_path_labels
+        auto labels_and_name = get_labels_and_metric_name(daemon_name, name);
+        std::string labels = labels_and_name.first;
+        name = labels_and_name.second;
+
+        json_value perf_values = dump[perf_group].as_object()[perf_name];
+        dump_asok_metric(ss, perf_info, perf_values, name, labels);
       }
     }
   }
@@ -110,7 +112,10 @@ std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
                                                 std::string command) {
   std::string request("{\"prefix\": \"" + command + "\"}");
   std::string response;
-  asok.do_request(request, &response);
+  std::string err = asok.do_request(request, &response);
+  if (err.length() > 0) {
+    return "";
+  }
   return response;
 }
 
@@ -175,11 +180,11 @@ void DaemonMetricCollector::dump_asok_metric(std::stringstream &ss,
   }
 }
 void DaemonMetricCollector::update_sockets() {
+  clients.clear();
   for (const auto &entry :
-       std::filesystem::recursive_directory_iterator(SOCKETDIR)) {
+       std::filesystem::directory_iterator(SOCKETDIR)) {
     if (entry.path().extension() == ".asok") {
       std::string daemon_socket_name = entry.path().filename().string();
-      // remove .asok
       std::string daemon_name =
           daemon_socket_name.substr(0, daemon_socket_name.size() - 5);
       if (clients.find(daemon_name) == clients.end() &&
@@ -191,11 +196,7 @@ void DaemonMetricCollector::update_sockets() {
   }
 }
 
-DaemonMetricCollector *_collector_instance = nullptr;
-
 DaemonMetricCollector &collector_instance() {
-  if (_collector_instance == nullptr) {
-    _collector_instance = new DaemonMetricCollector();
-  }
-  return *_collector_instance;
+  static DaemonMetricCollector instance;
+  return instance;
 }

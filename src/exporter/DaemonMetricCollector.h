@@ -23,7 +23,7 @@ private:
   std::string metrics;
   int stats_period; // time to wait before sending requests again
   void update_sockets();
-  void request_loop(boost::asio::deadline_timer &timer);
+  void request_loop(boost::asio::steady_timer &timer);
 
   void dump_asok_metrics();
   void dump_asok_metric(std::stringstream &ss, boost::json::object perf_info,
