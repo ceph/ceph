@@ -1,0 +1,31 @@
+tasks:
+- install:
+- ceph:
+- s3tests:
+    client.0:
+      force-repo: https://github.com/soumyakoduri/s3-tests.git
+      git_remote: https://github.com/soumyakoduri/
+      force-branch: cloudtier_tests
+      rgw_server: client.0
+      storage classes: LUKEWARM, FROZEN
+      extra_attrs: ["cloud_transition"]
+      lc_debug_interval: 10
+      cloudtier_tests: True
+- rgw:
+    storage classes: LUKEWARM, FROZEN
+    client.0:
+      port: 8000
+      cloudtier:
+        # cloudtier storage class params
+        cloud_storage_class: CLOUDTIER
+        cloud_client: client.1
+        cloud_regular_storage_class: LUKEWARM
+        cloud_target_storage_class: FROZEN
+        cloud_retain_head_object: "true"
+        cloud_target_path: "teuthology"
+      cloudtier_user:
+        # cloud-user creds to be created on cloud-client
+        cloud_secret: "abcefgh"
+        cloud_access_key: "12345678"
+    client.1:
+      port: 8001
