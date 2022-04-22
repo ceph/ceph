@@ -339,6 +339,44 @@ private:
   }
 };
 
+template <class T>
+struct AggregateBlockingEvent {
+  struct TriggerI {
+    template <class FutureT>
+    decltype(auto) maybe_record_blocking(FutureT&& fut,
+		    			 const typename T::Blocker& blocker) {
+      // AggregateBlockingEvent is supposed to be used on relatively cold
+      // paths (recovery), so we don't need to worry about the dynamic
+      // polymothps / dynamic memory's overhead.
+      return create_part_trigger()->maybe_record_blocking(
+	std::move(fut), blocker);
+    }
+
+    virtual std::unique_ptr<typename T::TriggerI> create_part_trigger() = 0;
+    virtual ~TriggerI() = default;
+  };
+
+  template <class OpT>
+  struct Trigger : TriggerI {
+    Trigger(AggregateBlockingEvent& event, const OpT& op)
+      : event(event), op(op) {}
+
+    std::unique_ptr<typename T::TriggerI> create_part_trigger() override {
+      return std::make_unique<typename T::template Trigger<OpT>>(
+	event.events.emplace_back(), op);
+    }
+
+  private:
+    AggregateBlockingEvent& event;
+    const OpT& op;
+  };
+
+private:
+  std::vector<T> events;
+  template <class OpT>
+  friend class Trigger;
+};
+
 class AggregateBlocker : public BlockerT<AggregateBlocker> {
   std::vector<Blocker*> parent_blockers;
 public:
