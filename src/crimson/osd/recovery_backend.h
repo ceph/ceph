@@ -25,7 +25,7 @@ namespace crimson::osd{
 class PGBackend;
 
 class RecoveryBackend {
-protected:
+public:
   class WaitForObjectRecovery;
 public:
   template <typename T = void>
@@ -119,6 +119,7 @@ protected:
     object_stat_sum_t stat;
   };
 
+public:
   class WaitForObjectRecovery : public crimson::BlockerT<WaitForObjectRecovery> {
     seastar::shared_promise<> readable, recovered, pulled;
     std::map<pg_shard_t, seastar::shared_promise<>> pushes;
@@ -138,11 +139,8 @@ protected:
     seastar::future<> wait_for_recovered() {
       return recovered.get_shared_future();
     }
-    template <typename InterruptCond>
-    crimson::blocking_interruptible_future<InterruptCond>
-    wait_for_recovered_blocking() {
-      return make_blocking_interruptible_future<InterruptCond>(
-	  recovered.get_shared_future());
+    seastar::future<> wait_for_recovered(BlockingEvent::TriggerI& trigger) {
+      return trigger.maybe_record_blocking(recovered.get_shared_future(), *this);
     }
     seastar::future<> wait_for_pull() {
       return pulled.get_shared_future();
@@ -178,6 +176,9 @@ protected:
     void dump_detail(Formatter* f) const {
     }
   };
+  using RecoveryBlockingEvent =
+    crimson::AggregateBlockingEvent<WaitForObjectRecovery::BlockingEvent>;
+protected:
   std::map<hobject_t, WaitForObjectRecovery> recovering;
   hobject_t get_temp_recovery_object(
     const hobject_t& target,

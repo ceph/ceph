@@ -7,6 +7,7 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/recovery_backend.h"
 #include "crimson/common/type_helpers.h"
 
 namespace crimson::osd {
@@ -63,6 +64,10 @@ public:
     epoch_t epoch_started);
   void print(std::ostream&) const final;
 
+  std::tuple<
+    RecoveryBackend::RecoveryBlockingEvent
+  > tracking_events;
+
 private:
   void dump_detail(Formatter* f) const final;
   interruptible_future<bool> do_recovery() override;
@@ -77,6 +82,10 @@ public:
     ShardServices &ss,
     epoch_t epoch_started,
     float delay = 0);
+
+  std::tuple<
+    RecoveryBackend::RecoveryBlockingEvent
+  > tracking_events;
 
 private:
   interruptible_future<bool> do_recovery() override;
