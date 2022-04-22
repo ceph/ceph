@@ -293,7 +293,29 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
 
 int MotrUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return 0;
+  int rc = 0;
+  if (not attrs.empty())
+    return rc;
+  
+  struct MotrUserInfo muinfo;
+  bufferlist bl;
+  if (store->get_user_cache()->get(dpp, info.user_id.to_str(), bl)) {
+    // Cache miss
+    rc = store->do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
+                                      M0_IC_GET, info.user_id.to_str(), bl);
+    ldpp_dout(dpp, 20) << __func__ << ": do_idx_op_by_name() = "  << rc << dendl;
+    if (rc < 0)
+        return rc;
+    // Put into cache.
+    store->get_user_cache()->put(dpp, info.user_id.to_str(), bl);
+  }
+  bufferlist& blr = bl;
+  auto iter = blr.cbegin();
+  muinfo.decode(iter);
+  attrs = muinfo.attrs;
+  ldpp_dout(dpp, 20) << __func__ << ": user attributes fetched successfully." << dendl;
+
+  return rc;
 }
 
 int MotrUser::read_stats(const DoutPrefixProvider *dpp,
