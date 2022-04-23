@@ -1433,7 +1433,7 @@ function test_mon_osd()
   expect_false "ceph osd blocklist add 1234.56.78.90/100"
 
   # test range blocklisting
-  bl=192.168.0.1/24
+  bl=192.168.0.1:0/24
   ceph osd blocklist range add $bl
   ceph osd blocklist ls | grep $bl
   ceph osd blocklist range rm $bl
