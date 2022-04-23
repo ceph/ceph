@@ -114,7 +114,7 @@ configuration file example uses the ``client.admin`` keyring.
 
 	[global]
 	# ... elided configuration
-	keyring=/path/to/keyring/ceph.client.admin.keyring
+	keyring = /path/to/keyring/ceph.client.admin.keyring
 
 
 Manage Pools

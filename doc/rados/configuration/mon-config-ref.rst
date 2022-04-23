@@ -207,13 +207,13 @@ these under ``[mon]`` or under the entry for a specific monitor.
 .. code-block:: ini
 
 	[global]
-		mon host = 10.0.0.2,10.0.0.3,10.0.0.4
+		mon_host = 10.0.0.2,10.0.0.3,10.0.0.4
 
 .. code-block:: ini
 
 	[mon.a]
 		host = hostname1
-		mon addr = 10.0.0.10:6789
+		mon_addr = 10.0.0.10:6789
 
 See the `Network Configuration Reference`_ for details.
 

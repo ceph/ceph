@@ -896,7 +896,7 @@ To make this warning go away, you have two options:
 2. You can make the warning go away without making any changes to CRUSH by
    adding the following option to your ceph.conf ``[mon]`` section::
 
-      mon warn on legacy crush tunables = false
+      mon_warn_on_legacy_crush_tunables = false
 
    For the change to take effect, you will need to restart the monitors, or
    apply the option to running monitors with::
