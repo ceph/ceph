@@ -40,7 +40,7 @@ SegmentAllocator::do_open()
     new_segment_seq,
     reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
     sizeof(meta.seastore_id.uuid));
-  auto new_segment_id = segment_provider.get_segment(new_segment_seq, type);
+  auto new_segment_id = segment_provider.allocate_segment(new_segment_seq, type);
   ceph_assert(new_segment_id != NULL_SEG_ID);
   return sm_group.open(new_segment_id
   ).handle_error(
@@ -106,7 +106,7 @@ SegmentAllocator::do_open()
       DEBUG("{} rolled new segment id={}",
             print_name, current_segment->get_segment_id());
       ceph_assert(new_journal_seq.segment_seq ==
-        segment_provider.get_seq(current_segment->get_segment_id()));
+        segment_provider.get_seg_info(current_segment->get_segment_id()).seq);
       return new_journal_seq;
     });
   });
@@ -147,7 +147,7 @@ SegmentAllocator::write(ceph::bufferlist to_write)
   auto write_length = to_write.length();
   auto write_start_offset = written_to;
   auto write_start_seq = journal_seq_t{
-    segment_provider.get_seq(current_segment->get_segment_id()),
+    segment_provider.get_seg_info(current_segment->get_segment_id()).seq,
     paddr_t::make_seg_paddr(
       current_segment->get_segment_id(), write_start_offset)
   };
@@ -208,8 +208,7 @@ SegmentAllocator::close_segment(bool is_rolling)
   if (is_rolling) {
     segment_provider.close_segment(close_segment_id);
   }
-  segment_seq_t cur_segment_seq =
-    segment_provider.get_seq(seg_to_close->get_segment_id());
+  auto close_seg_info = segment_provider.get_seg_info(close_segment_id);
   journal_seq_t cur_journal_tail;
   if (type == segment_type_t::JOURNAL) {
     cur_journal_tail = segment_provider.get_journal_tail_target();
@@ -217,21 +216,19 @@ SegmentAllocator::close_segment(bool is_rolling)
     cur_journal_tail = NO_DELTAS;
   }
   auto tail = segment_tail_t{
-    segment_provider.get_seq(close_segment_id),
+    close_seg_info.seq,
     close_segment_id,
     cur_journal_tail,
     current_segment_nonce,
     type,
-    segment_provider.get_last_modified(
-      close_segment_id).time_since_epoch().count(),
-    segment_provider.get_last_rewritten(
-      close_segment_id).time_since_epoch().count()};
+    close_seg_info.last_modified.time_since_epoch().count(),
+    close_seg_info.last_rewritten.time_since_epoch().count()};
   ceph::bufferlist bl;
   encode(tail, bl);
   INFO("{} close segment id={}, seq={}, written_to={}, nonce={}, journal_tail={}",
        print_name,
        close_segment_id,
-       cur_segment_seq,
+       close_seg_info.seq,
        written_to,
        current_segment_nonce,
        tail.journal_tail);
