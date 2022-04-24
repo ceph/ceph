@@ -691,6 +691,269 @@ void PGLog::write_log_and_missing(
     may_include_deletes_in_missing_dirty, nullptr);
 }
 
+
+
+#if 0
+//----------------------------------------------------------------------------------
+static void
+add_keys_to_remove(IDFreeList &ifl, set<string> &to_remove, set<eversion_t> &ver_set, set<string> *log_keys_debug) {
+  for (auto& t : ver_set) {
+    string key = t.get_key_name();
+    if (log_keys_debug) {
+      auto it = log_keys_debug->find(key);
+      ceph_assert(it != log_keys_debug->end());
+      log_keys_debug->erase(it);
+    }
+    lgeneric_subdout(ifl.m_cct, osd, 10) <<"::IFL::add key to-remove "<< key << dendl;
+    to_remove.emplace(std::move(key));
+  }
+  ver_set.clear();
+}
+
+//----------------------------------------------------------------------------------
+static void
+add_log_entry_to_km(
+  IDFreeList             &ifl,
+  map<string,bufferlist> *p_km,
+  pg_log_entry_t         &log_entry)
+{
+  bufferlist bl(sizeof(log_entry) * 2);
+  log_entry.encode_with_checksum(bl);
+
+  recycle_log_id_t recycle_id = ifl.assign_id(log_entry.get_key_name());
+  // TBD - Can I avoid dynamic allocation here and allocate string object on stack instead ???
+  (*p_km)[to_string(recycle_id)] = std::move(bl);
+}
+
+//----------------------------------------------------------------------------------
+static void
+add_log_dup_entry_to_km(
+  IDFreeList             &ifl,
+  map<string,bufferlist> *p_km,
+  const pg_log_dup_t     &log_dup_entry)
+{
+  bufferlist bl;
+  encode(log_dup_entry, bl);
+  recycle_log_id_t recycle_id = ifl.assign_id(log_dup_entry.get_key_name());
+  // TBD - Can I aboid dynamic allocation here and allocate string object on stack instead ???
+  (*p_km)["dup_" + to_string(recycle_id)] = std::move(bl);
+}
+
+//----------------------------------------------------------------------------------
+static void
+log_remove_key(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  IDFreeList               &ifl,
+  const std::string        &key)
+{
+  lgeneric_subdout(ifl.m_cct, osd, 10) << "IFL::(" << &ifl << ")" << __func__ << ": eversion=" << key << dendl;
+  if (ifl.release_id(key) != ifl.NULL_ID) {
+    // key belongs to the recycle_id DB and should not be removed from disk
+    lgeneric_subdout(ifl.m_cct, osd, 10) << "IFL::(" << &ifl << ")" << __func__ << "::New Format key > remove from RockDB!" << dendl;
+    return;
+  }
+  else {
+    lgeneric_subdout(ifl.m_cct, osd, 10) << "IFL::(" << &ifl << ")" << __func__ << "::Old Format key > remove from RockDB!" << dendl;
+  }
+  // if arrived here the key belongs to an entry in the old format -> remove it from disk
+  t.omap_rmkey(coll, log_oid, key);
+}
+
+//----------------------------------------------------------------------------------
+static void
+log_remove_dirty_to(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  IDFreeList               &ifl,
+  pg_log_t                 &log,
+  const eversion_t         &dirty_to,
+  set<string>              *to_remove)
+{
+  for (auto p = log.log.begin();
+       p != log.log.end() && p->version <= dirty_to;
+       ++p) {
+    if (to_remove != nullptr) {
+      to_remove->insert(p->get_key_name());
+    }
+    else {
+      log_remove_key(t, coll, log_oid, ifl, p->get_key_name());
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------
+static void
+dups_remove_dirty_to(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  IDFreeList               &ifl,
+  pg_log_t                 &log,
+  const eversion_t         &dirty_to,
+  set<string>              *to_remove)
+{
+  for (auto p = log.dups.begin();
+       p != log.dups.end() && p->version <= dirty_to;
+       ++p) {
+    if (to_remove != nullptr) {
+      to_remove->insert(p->get_key_name());
+    }
+    else {
+      log_remove_key(t, coll, log_oid, ifl, p->get_key_name());
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------
+static void
+log_remove_dirty_from(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  IDFreeList               &ifl,
+  pg_log_t                 &log,
+  const eversion_t         &dirty_from,
+  set<string>              *to_remove)
+{
+  for (auto p = log.log.rbegin();
+       p != log.log.rend() && p->version >= dirty_from;
+       ++p) {
+    if (to_remove != nullptr) {
+      to_remove->insert(p->get_key_name());
+    }
+    else {
+      log_remove_key(t, coll, log_oid, ifl, p->get_key_name());
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------
+static void
+dups_remove_dirty_from(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  IDFreeList               &ifl,
+  pg_log_t                 &log,
+  const eversion_t         &dirty_from,
+  set<string>              *to_remove)
+{
+  for (auto p = log.dups.rbegin();
+       p != log.dups.rend() && p->version >= dirty_from;
+       ++p) {
+    if (to_remove != nullptr) {
+      to_remove->insert(p->get_key_name());
+    }
+    else {
+      log_remove_key(t, coll, log_oid, ifl, p->get_key_name());
+    }
+  }
+}
+#else
+//----------------------------------------------------------------------------------
+static void
+log_remove_key(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  const std::string        &key)
+{
+  //t.omap_rmkey(coll, log_oid, key);
+  t.omap_single_rmkey(coll, log_oid, key);
+}
+
+//----------------------------------------------------------------------------------
+static void
+log_remove_dirty_to(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  pg_log_t                 &log,
+  const eversion_t         &dirty_to,
+  set<string>              *to_remove)
+{
+  for (auto p = log.log.begin();
+       p != log.log.end() && p->version <= dirty_to;
+       ++p) {
+    if (to_remove != nullptr) {
+      to_remove->insert(p->get_key_name());
+    }
+    else {
+      log_remove_key(t, coll, log_oid, p->get_key_name());
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------
+static void
+dups_remove_dirty_to(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  pg_log_t                 &log,
+  const eversion_t         &dirty_to,
+  set<string>              *to_remove)
+{
+  for (auto p = log.dups.begin();
+       p != log.dups.end() && p->version <= dirty_to;
+       ++p) {
+    if (to_remove != nullptr) {
+      to_remove->insert(p->get_key_name());
+    }
+    else {
+      log_remove_key(t, coll, log_oid, p->get_key_name());
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------
+static void
+log_remove_dirty_from(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  pg_log_t                 &log,
+  const eversion_t         &dirty_from,
+  set<string>              *to_remove)
+{
+  for (auto p = log.log.rbegin();
+       p != log.log.rend() && p->version >= dirty_from;
+       ++p) {
+    if (to_remove != nullptr) {
+      to_remove->insert(p->get_key_name());
+    }
+    else {
+      log_remove_key(t, coll, log_oid, p->get_key_name());
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------
+static void
+dups_remove_dirty_from(
+  ObjectStore::Transaction &t,
+  const coll_t             &coll,
+  const ghobject_t         &log_oid,
+  pg_log_t                 &log,
+  const eversion_t         &dirty_from,
+  set<string>              *to_remove)
+{
+  for (auto p = log.dups.rbegin();
+       p != log.dups.rend() && p->version >= dirty_from;
+       ++p) {
+    if (to_remove != nullptr) {
+      to_remove->insert(p->get_key_name());
+    }
+    else {
+      log_remove_key(t, coll, log_oid, p->get_key_name());
+    }
+  }
+}
+#endif
+
 // static
 void PGLog::_write_log_and_missing_wo_missing(
   ObjectStore::Transaction& t,
@@ -714,16 +977,24 @@ void PGLog::_write_log_and_missing_wo_missing(
   if (touch_log)
     t.touch(coll, log_oid);
   if (dirty_to != eversion_t()) {
+#ifdef NO_SINGLE_DELETE
     t.omap_rmkeyrange(
       coll, log_oid,
       eversion_t().get_key_name(), dirty_to.get_key_name());
+#else
+    log_remove_dirty_to(t, coll, log_oid, log, dirty_to, nullptr);
+#endif
     clear_up_to(log_keys_debug, dirty_to.get_key_name());
   }
   if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
     // dout(10) << "write_log_and_missing, clearing from " << dirty_from << dendl;
+#ifdef NO_SINGLE_DELETE
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from.get_key_name(), eversion_t::max().get_key_name());
+#else
+    log_remove_dirty_from(t, coll, log_oid, log, dirty_from, nullptr);
+#endif
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
@@ -759,19 +1030,27 @@ void PGLog::_write_log_and_missing_wo_missing(
   // process dups after log_keys_debug is filled, so dups do not
   // end up in that set
   if (dirty_to_dups != eversion_t()) {
+#ifdef NO_SINGLE_DELETE
     pg_log_dup_t min, dirty_to_dup;
     dirty_to_dup.version = dirty_to_dups;
     t.omap_rmkeyrange(
       coll, log_oid,
       min.get_key_name(), dirty_to_dup.get_key_name());
+#else
+    dups_remove_dirty_to(t, coll, log_oid, log, dirty_to_dups, nullptr);
+#endif
   }
   if (dirty_to_dups != eversion_t::max() && dirty_from_dups != eversion_t::max()) {
+#ifdef NO_SINGLE_DELETE
     pg_log_dup_t max, dirty_from_dup;
     max.version = eversion_t::max();
     dirty_from_dup.version = dirty_from_dups;
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from_dup.get_key_name(), max.get_key_name());
+#else
+    dups_remove_dirty_from(t, coll, log_oid, log, dirty_from_dups, nullptr);
+#endif
   }
 
   for (const auto& entry : log.dups) {
@@ -843,16 +1122,24 @@ void PGLog::_write_log_and_missing(
   if (touch_log)
     t.touch(coll, log_oid);
   if (dirty_to != eversion_t()) {
+#ifdef NO_SINGLE_DELETE
     t.omap_rmkeyrange(
       coll, log_oid,
       eversion_t().get_key_name(), dirty_to.get_key_name());
+#else
+    log_remove_dirty_to(t, coll, log_oid, log, dirty_to, &to_remove);
+#endif
     clear_up_to(log_keys_debug, dirty_to.get_key_name());
   }
   if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
     //   dout(10) << "write_log_and_missing, clearing from " << dirty_from << dendl;
+#ifdef NO_SINGLE_DELETE
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from.get_key_name(), eversion_t::max().get_key_name());
+#else
+    log_remove_dirty_from(t, coll, log_oid, log, dirty_from, &to_remove);
+#endif
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
@@ -888,19 +1175,27 @@ void PGLog::_write_log_and_missing(
   // process dups after log_keys_debug is filled, so dups do not
   // end up in that set
   if (dirty_to_dups != eversion_t()) {
+#ifdef NO_SINGLE_DELETE
     pg_log_dup_t min, dirty_to_dup;
     dirty_to_dup.version = dirty_to_dups;
     t.omap_rmkeyrange(
       coll, log_oid,
       min.get_key_name(), dirty_to_dup.get_key_name());
+#else
+    dups_remove_dirty_to(t, coll, log_oid, log, dirty_to_dups, &to_remove);
+#endif
   }
   if (dirty_to_dups != eversion_t::max() && dirty_from_dups != eversion_t::max()) {
+#ifdef NO_SINGLE_DELETE
     pg_log_dup_t max, dirty_from_dup;
     max.version = eversion_t::max();
     dirty_from_dup.version = dirty_from_dups;
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from_dup.get_key_name(), max.get_key_name());
+#else
+    dups_remove_dirty_from(t, coll, log_oid, log, dirty_from_dups, &to_remove);
+#endif
   }
 
   for (const auto& entry : log.dups) {
@@ -920,11 +1215,12 @@ void PGLog::_write_log_and_missing(
     encode(*p, bl);
     (*km)[p->get_key_name()] = std::move(bl);
   }
-
+#ifdef NO_SINGLE_DELETE
   if (clear_divergent_priors) {
     //dout(10) << "write_log_and_missing: writing divergent_priors" << dendl;
     to_remove.insert("divergent_priors");
   }
+#endif
   // since we encode individual missing items instead of a whole
   // missing set, we need another key to store this bit of state
   if (*may_include_deletes_in_missing_dirty) {
