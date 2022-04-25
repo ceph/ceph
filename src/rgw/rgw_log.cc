@@ -398,6 +398,7 @@ void* OpsLogFile::entry() {
     }
     cond.wait(lock);
   }
+  lock.unlock();
   flush();
   return NULL;
 }
