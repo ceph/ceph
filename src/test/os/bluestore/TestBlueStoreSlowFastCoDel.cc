@@ -186,6 +186,9 @@ public:
 };
 
 TEST_F(TestSlowFastCoDel, test1) {
+  #ifdef CEPH_DEBUG_MUTEX
+  GTEST_SKIP() << "WARNING: CEPH_DEBUG_MUTEX is defined, codel will not work";
+  #endif
   create_bluestore_slow_fast_codel();
   test_codel();
 }
