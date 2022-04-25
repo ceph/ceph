@@ -259,7 +259,7 @@ void PG::on_activate(interval_set<snapid_t>)
 
 void PG::on_activate_complete()
 {
-  wait_for_active_blocker.on_active();
+  wait_for_active_blocker.unblock();
 
   if (peering_state.needs_recovery()) {
     logger().info("{}: requesting recovery",
