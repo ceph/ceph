@@ -79,7 +79,7 @@ bool OpenSSLCryptoAccel::cbc_encrypt(unsigned char* out, const unsigned char* in
                              const unsigned char (&iv)[AES_256_IVSIZE],
                              const unsigned char (&key)[AES_256_KEYSIZE])
 {
-  if ((size % AES_256_IVSIZE) != 0) {
+  if (unlikely((size % AES_256_IVSIZE) != 0)) {
     return false;
   }
 
@@ -93,7 +93,7 @@ bool OpenSSLCryptoAccel::cbc_decrypt(unsigned char* out, const unsigned char* in
                              const unsigned char (&iv)[AES_256_IVSIZE],
                              const unsigned char (&key)[AES_256_KEYSIZE])
 {
-  if ((size % AES_256_IVSIZE) != 0) {
+  if (unlikely((size % AES_256_IVSIZE) != 0)) {
     return false;
   }
 

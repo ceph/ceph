@@ -31,6 +31,7 @@ public:
   ~CryptoPlugin()
   {}
   virtual int factory(CryptoAccelRef *cs,
-                      std::ostream *ss) = 0;
+                      std::ostream *ss,
+                      const size_t chunk_size) = 0;
 };
 #endif

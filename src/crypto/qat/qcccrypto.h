@@ -6,9 +6,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <thread>
+#include <mutex>
 #include <queue>
+#include <memory>
 extern "C" {
 #include "cpa.h"
+#include "cpa_cy_sym_dp.h"
+#include "cpa_cy_im.h"
 #include "lac/cpa_cy_sym.h"
 #include "lac/cpa_cy_im.h"
 #include "qae_mem.h"
@@ -18,6 +23,7 @@ extern "C" {
 }
 
 class QccCrypto {
+  size_t chunk_size;
 
   public:
     CpaCySymCipherDirection qcc_op_type;
@@ -25,12 +31,12 @@ class QccCrypto {
     QccCrypto() {};
     ~QccCrypto() {};
 
-    bool init();
+    bool init(const size_t chunk_size);
     bool destroy();
-    bool perform_op(unsigned char* out, const unsigned char* in, size_t size,
-        uint8_t *iv,
-        uint8_t *key,
-        CpaCySymCipherDirection op_type);
+    bool perform_op_batch(unsigned char* out, const unsigned char* in, size_t size,
+                          Cpa8U *iv,
+                          Cpa8U *key,
+                          CpaCySymCipherDirection op_type);
 
   private:
 
@@ -38,7 +44,7 @@ class QccCrypto {
     // To-Do: Needs to be expanded
     static const size_t AES_256_IV_LEN = 16;
     static const size_t AES_256_KEY_SIZE = 32;
-    static const size_t QCC_MAX_RETRIES = 5000;
+    static const size_t MAX_NUM_SYM_REQ_BATCH = 32;
 
     /*
      * Struct to hold an instance of QAT to handle the crypto operations. These
@@ -62,7 +68,6 @@ class QccCrypto {
      * single crypto or multi-buffer crypto.
      */
     struct QCCSESS {
-      CpaCySymSessionSetupData sess_stp_data;
       Cpa32U sess_ctx_sz;
       CpaCySymSessionCtx sess_ctx;
     } *qcc_sess;
@@ -76,32 +81,10 @@ class QccCrypto {
       // Op common  items
       bool is_mem_alloc;
       bool op_complete;
-      CpaStatus op_result;
-      CpaCySymOpData *sym_op_data;
-      Cpa32U buff_meta_size;
-      Cpa32U num_buffers;
-      Cpa32U buff_size;
-
-      //Src data items
-      Cpa8U *src_buff_meta;
-      CpaBufferList *src_buff_list;
-      CpaFlatBuffer *src_buff_flat;
-      Cpa8U *src_buff;
-      Cpa8U *iv_buff;
+      CpaCySymDpOpData *sym_op_data[MAX_NUM_SYM_REQ_BATCH];
+      Cpa8U *src_buff[MAX_NUM_SYM_REQ_BATCH];
+      Cpa8U *iv_buff[MAX_NUM_SYM_REQ_BATCH];
     } *qcc_op_mem;
-
-    //QAT HW polling thread input structure
-    struct qcc_thread_args {
-      QccCrypto* qccinstance;
-      int entry;
-    };
-
-
-    /*
-     * Function to handle the crypt operation. Will run while the main thread
-     * runs the polling function on the instance doing the op
-     */
-    void do_crypt(qcc_thread_args *thread_args);
 
     /*
      * Handle queue with free instances to handle op
@@ -109,6 +92,8 @@ class QccCrypto {
     std::queue<int> open_instances;
     int QccGetFreeInstance();
     void QccFreeInstance(int entry);
+    std::thread qat_poll_thread;
+    bool thread_stop{false};
 
     /*
      * Contiguous Memory Allocator and de-allocator. We are using the usdm
@@ -153,7 +138,6 @@ class QccCrypto {
     }
 
     std::atomic<bool> is_init = { false };
-    CpaStatus init_stat, stat;
 
     /*
      * Function to cleanup memory if constructor fails
@@ -166,11 +150,23 @@ class QccCrypto {
      * associated callbacks. For synchronous operation (like this one), QAT
      * library creates an internal callback for the operation.
      */
-    static void* crypt_thread(void* entry);
-    CpaStatus QccCyStartPoll(int entry);
-    void poll_instance(int entry);
+    void poll_instances(void);
 
-    pthread_t *cypollthreads;
-    static const size_t qcc_sleep_duration = 2;
+    bool symPerformOp(int avail_inst,
+                      CpaCySymSessionCtx sessionCtx,
+                      const Cpa8U *pSrc,
+                      Cpa8U *pDst,
+                      Cpa32U size,
+                      Cpa8U *pIv,
+                      Cpa32U ivLen);
+
+    CpaStatus initSession(CpaInstanceHandle cyInstHandle,
+                          CpaCySymSessionCtx *sessionCtx,
+                          Cpa8U *pCipherKey,
+                          CpaCySymCipherDirection cipherDirection);
+
+    CpaStatus updateSession(CpaCySymSessionCtx sessionCtx,
+                            Cpa8U *pCipherKey,
+                            CpaCySymCipherDirection cipherDirection);
 };
 #endif //QCCCRYPTO_H

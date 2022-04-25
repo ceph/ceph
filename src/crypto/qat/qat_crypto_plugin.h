@@ -29,11 +29,11 @@ public:
   {}
   ~QccCryptoPlugin()
   {}
-  virtual int factory(CryptoAccelRef *cs, std::ostream *ss)
+  virtual int factory(CryptoAccelRef *cs, std::ostream *ss, const size_t chunk_size)
   {
     std::lock_guard<std::mutex> l(qat_init);
     if (cryptoaccel == nullptr)
-      cryptoaccel = CryptoAccelRef(new QccCryptoAccel);
+      cryptoaccel = CryptoAccelRef(new QccCryptoAccel(chunk_size));
 
     *cs = cryptoaccel;
     return 0;

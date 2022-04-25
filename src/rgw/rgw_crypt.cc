@@ -288,7 +288,7 @@ mec_option::empty };
 }
 
 
-CryptoAccelRef get_crypto_accel(const DoutPrefixProvider* dpp, CephContext *cct)
+CryptoAccelRef get_crypto_accel(const DoutPrefixProvider* dpp, CephContext *cct, const size_t chunk_size)
 {
   CryptoAccelRef ca_impl = nullptr;
   stringstream ss;
@@ -300,7 +300,7 @@ CryptoAccelRef get_crypto_accel(const DoutPrefixProvider* dpp, CephContext *cct)
     ldpp_dout(dpp, -1) << __func__ << " cannot load crypto accelerator of type " << crypto_accel_type << dendl;
     return nullptr;
   }
-  int err = factory->factory(&ca_impl, &ss);
+  int err = factory->factory(&ca_impl, &ss, chunk_size);
   if (err) {
     ldpp_dout(dpp, -1) << __func__ << " factory return error " << err <<
         " with description: " << ss.str() << dendl;
@@ -448,27 +448,44 @@ public:
     CryptoAccelRef crypto_accel;
     if (! failed_to_get_crypto.load())
     {
-      crypto_accel = get_crypto_accel(this->dpp, cct);
+      crypto_accel = get_crypto_accel(this->dpp, cct, CHUNK_SIZE);
       if (!crypto_accel)
         failed_to_get_crypto = true;
     }
     bool result = true;
-    unsigned char iv[AES_256_IVSIZE];
-    for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
-      size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
-      prepare_iv(iv, stream_offset + offset);
-      if (crypto_accel != nullptr) {
+    static std::string accelerator = cct->_conf->plugin_crypto_accelerator;
+    if (accelerator == "crypto_qat" && crypto_accel != nullptr) {
+      // now, batch mode is only for QAT plugin
+      size_t iv_num = size / CHUNK_SIZE;
+      if (size % CHUNK_SIZE) ++iv_num;
+      auto iv = new unsigned char[iv_num][AES_256_IVSIZE];
+      for (size_t offset = 0, i = 0; offset < size; offset += CHUNK_SIZE, i++) {
+        prepare_iv(iv[i], stream_offset + offset);
+      }
         if (encrypt) {
-          result = crypto_accel->cbc_encrypt(out + offset, in + offset,
-                                             process_size, iv, key);
+          result = crypto_accel->cbc_encrypt_batch(out, in, size, iv, key);
         } else {
-          result = crypto_accel->cbc_decrypt(out + offset, in + offset,
-                                             process_size, iv, key);
+          result = crypto_accel->cbc_decrypt_batch(out, in, size, iv, key);
         }
-      } else {
-        result = cbc_transform(
-            out + offset, in + offset, process_size,
-            iv, key, encrypt);
+      delete[] iv;
+    } else {
+      unsigned char iv[AES_256_IVSIZE];
+      for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
+        size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
+        prepare_iv(iv, stream_offset + offset);
+        if (crypto_accel != nullptr) {
+          if (encrypt) {
+            result = crypto_accel->cbc_encrypt(out + offset, in + offset,
+                                              process_size, iv, key);
+          } else {
+            result = crypto_accel->cbc_decrypt(out + offset, in + offset,
+                                              process_size, iv, key);
+          }
+        } else {
+          result = cbc_transform(
+              out + offset, in + offset, process_size,
+              iv, key, encrypt);
+        }
       }
     }
     return result;
