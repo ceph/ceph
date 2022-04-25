@@ -29,7 +29,6 @@ if(WITH_BLUESTORE)
     bluestore/BlueStore.cc
     bluestore/simple_bitmap.cc
     bluestore/bluestore_types.cc
-    bluestore/BlueStoreSlowFastCoDel.cc
     bluestore/fastbmap_allocator_impl.cc
     bluestore/FreelistManager.cc
     bluestore/StupidAllocator.cc
