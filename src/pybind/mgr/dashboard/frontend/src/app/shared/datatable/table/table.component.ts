@@ -325,8 +325,12 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.userConfig.columns) {
       this.updateUserColumns();
     } else {
-      this.localColumns.forEach((c, i) => {
-        c.isHidden = this.userConfig.columns[i].isHidden;
+      this.userConfig.columns.forEach((col) => {
+        for (let i = 0; i < this.localColumns.length; i++) {
+          if (this.localColumns[i].prop === col.prop) {
+            this.localColumns[i].isHidden = col.isHidden;
+          }
+        }
       });
     }
   }
