@@ -425,6 +425,8 @@ ceph-coverage() {
         # We'll let sudo be a part of command even omit flag says otherwise in
         # cases of commands which can normally be ran only by root.
         last_arg = args[args.rfind(' ') + 1 : ]
+        # XXX: should sudo be omitted/allowed by default in cases similar to
+        # that of "exec sudo" as well?
         if 'sudo' in args:
             for x in ('passwd', 'chown'):
                 if x == first_arg or x == last_arg or f' {x} ' in args:
