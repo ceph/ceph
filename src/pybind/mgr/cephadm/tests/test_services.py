@@ -391,6 +391,7 @@ class TestMonitoring:
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
+                    with_service(cephadm_module, ServiceSpec('ceph-exporter')) as _, \
                     with_service(cephadm_module, MonitoringSpec('prometheus')) as _:
 
                 y = dedent("""
@@ -412,6 +413,11 @@ class TestMonitoring:
                     - targets: ['[1::4]:9100']
                       labels:
                         instance: 'test'
+
+                  - job_name: 'ceph-exporter'
+                    static_configs:
+                    - targets:
+                      - '[1::4]:9926'
 
                 """).lstrip()
 

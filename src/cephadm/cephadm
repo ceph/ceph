@@ -928,7 +928,7 @@ class CephExporter(object):
     def __init__(self,
                  ctx: CephadmContext,
                  fsid: str, daemon_id: Union[int, str],
-                 image=DEFAULT_IMAGE) -> None:
+                 image: str = DEFAULT_IMAGE) -> None:
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
