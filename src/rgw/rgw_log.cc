@@ -410,6 +410,7 @@ void OpsLogFile::start() {
 
 void OpsLogFile::stop() {
   {
+    std::unique_lock lock(log_mutex);
     cond_flush.notify_one();
     stopped = true;
   }
