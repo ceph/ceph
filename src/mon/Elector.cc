@@ -713,8 +713,10 @@ void Elector::notify_rank_removed(int rank_removed)
   peer_tracker.notify_rank_removed(rank_removed);
   /* we have to clean up the pinging state, which is annoying
      because it's not indexed anywhere (and adding indexing
-     would also be annoying). So what we do is start with the
-     remoed rank and examine the state of the surrounding ranks.
+     would also be annoying).
+     In the case where we are removing any rank that is not the
+     higest, we start with the removed rank and examine the state
+     of the surrounding ranks.
      Everybody who remains with larger rank gets a new rank one lower
      than before, and we have to figure out the remaining scheduled
      ping contexts. So, starting one past with the removed rank, we:
@@ -725,35 +727,46 @@ void Elector::notify_rank_removed(int rank_removed)
      * * start pinging it if we're not already
      * check if the next rank is in the same pinging set, and delete
      * ourselves if not.
+     In the case where we are removing the highest rank,
+     we erase the removed rank from all sets.
    */
-  for (unsigned i = rank_removed + 1; i <= paxos_size() ; ++i) {
-    if (live_pinging.count(i)) {
-      dead_pinging.erase(i-1);
-      if (!live_pinging.count(i-1)) {
-	begin_peer_ping(i-1);
+  if (rank_removed < paxos_size()) {
+    for (unsigned i = rank_removed + 1; i <= paxos_size() ; ++i) {
+      if (live_pinging.count(i)) {
+        dead_pinging.erase(i-1);
+        if (!live_pinging.count(i-1)) {
+	  begin_peer_ping(i-1);
+        }
+        if (!live_pinging.count(i+1)) {
+	  live_pinging.erase(i);
+        }
       }
-      if (!live_pinging.count(i+1)) {
-	live_pinging.erase(i);
+      else if (dead_pinging.count(i)) {
+        live_pinging.erase(i-1);
+        if (!dead_pinging.count(i-1)) {
+	  begin_dead_ping(i-1);
+        }
+        if (!dead_pinging.count(i+1)) {
+	  dead_pinging.erase(i);
+        }
+      } else {
+        // we aren't pinging rank i at all
+        if (i-1 == (unsigned)rank_removed) {
+	  // so we special case to make sure we
+	  // actually nuke the removed rank
+	  dead_pinging.erase(rank_removed);
+	  live_pinging.erase(rank_removed);
+        }
       }
-    }
-    else if (dead_pinging.count(i)) {
-      live_pinging.erase(i-1);
-      if (!dead_pinging.count(i-1)) {
-	begin_dead_ping(i-1);
-      }
-      if (!dead_pinging.count(i+1)) {
-	dead_pinging.erase(i);
-      }
-    } else {
-      // we aren't pinging rank i at all
-      if (i-1 == (unsigned)rank_removed) {
-	// so we special case to make sure we
-	// actually nuke the removed rank
-	dead_pinging.erase(rank_removed);
-	live_pinging.erase(rank_removed);
-      }
-    }
-  }
+     }
+   } else {
+     if (live_pinging.count(rank_removed)) {
+       live_pinging.erase(rank_removed);
+     }
+     if (dead_pinging.count(rank_removed)) {
+       dead_pinging.erase(rank_removed);
+     }
+   }
 }
 
 void Elector::notify_strategy_maybe_changed(int strategy)
