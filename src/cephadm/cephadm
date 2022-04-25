@@ -3350,8 +3350,12 @@ def deploy_daemon_units(
 
     # post-stop command(s)
     with open(data_dir + '/unit.stop.new', 'w') as f:
-        f.write('! ' + ' '.join(c.stop_cmd()) + '\n')
-        f.write('! ' + ' '.join(c.stop_cmd(old_cname=True)) + '\n')
+        # following generated script basically checks if the container exists
+        # before stopping it. Exit code will be success either if it doesn't
+        # exist or if it exists and is stopped successfully.
+        container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
+        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True))} \n')
+        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd())} \n')
 
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.stop.new',
@@ -3677,7 +3681,7 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
 ExecStart=/bin/bash {data_dir}/{fsid}/%i/unit.run
-ExecStop=-/bin/bash -c '{container_path} stop ceph-{fsid}-%i ; bash {data_dir}/{fsid}/%i/unit.stop'
+ExecStop=-/bin/bash -c 'bash {data_dir}/{fsid}/%i/unit.stop'
 ExecStopPost=-/bin/bash {data_dir}/{fsid}/%i/unit.poststop
 KillMode=none
 Restart=on-failure
@@ -3689,8 +3693,7 @@ StartLimitBurst=5
 {extra_args}
 [Install]
 WantedBy=ceph-{fsid}.target
-""".format(container_path=ctx.container_engine.path,
-           fsid=fsid,
+""".format(fsid=fsid,
            data_dir=ctx.data_dir,
            extra_args=extra_args,
            # if docker, we depend on docker.service
