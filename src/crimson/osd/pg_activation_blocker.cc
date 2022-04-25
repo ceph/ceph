@@ -11,7 +11,7 @@ void PGActivationBlocker::dump_detail(Formatter *f) const
   f->dump_stream("pgid") << pg->get_pgid();
 }
 
-void PGActivationBlocker::on_active()
+void PGActivationBlocker::unblock()
 {
   p.set_value();
   p = {};
