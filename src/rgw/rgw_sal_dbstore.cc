@@ -345,7 +345,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+  int DBBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
       optional_yield y, bool check_size_only)
   {
     /* Not Handled in the first pass as stats are also needed */
@@ -1786,7 +1786,7 @@ namespace rgw::sal {
     return;
   }
 
-  void DBStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
+  void DBStore::get_quota(RGWQuota& quota)
   {
     // XXX: Not handled for the first pass 
     return;

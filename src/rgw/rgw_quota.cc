@@ -904,12 +904,12 @@ public:
   int check_quota(const DoutPrefixProvider *dpp,
                   const rgw_user& user,
 		  rgw_bucket& bucket,
-		  RGWQuotaInfo& user_quota,
-		  RGWQuotaInfo& bucket_quota,
+      RGWQuota& quota,
+
 		  uint64_t num_objs,
 		  uint64_t size, optional_yield y) override {
 
-    if (!bucket_quota.enabled && !user_quota.enabled) {
+    if (!quota.bucket_quota.enabled && !quota.user_quota.enabled) {
       return 0;
     }
 
@@ -921,25 +921,35 @@ public:
      */
 
     const DoutPrefix dp(store->ctx(), dout_subsys, "rgw quota handler: ");
-    if (bucket_quota.enabled) {
+    if (quota.bucket_quota.enabled) {
       RGWStorageStats bucket_stats;
       int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, y, &dp);
       if (ret < 0) {
         return ret;
       }
+<<<<<<< HEAD
       ret = check_quota(dpp, "bucket", bucket_quota, bucket_stats, num_objs, size);
+=======
+      ldpp_dout(dpp, 1) << "QUOTA OP LOGGING #7: bucket stats cache get done, checking bucket quota" << dendl;
+      ret = check_quota(dpp, "bucket", quota.bucket_quota, bucket_stats, num_objs, size);
+>>>>>>> 87a11632b6c (user_quota and bucket_quota are updated)
       if (ret < 0) {
         return ret;
       }
     }
 
-    if (user_quota.enabled) {
+    if (quota.user_quota.enabled) {
       RGWStorageStats user_stats;
       int ret = user_stats_cache.get_stats(user, bucket, user_stats, y, &dp);
       if (ret < 0) {
         return ret;
       }
+<<<<<<< HEAD
       ret = check_quota(dpp, "user", user_quota, user_stats, num_objs, size);
+=======
+      ldpp_dout(dpp, 1) << "QUOTA OP LOGGING #8: user stats cache get done, checking user quota" << dendl;
+      ret = check_quota(dpp, "user", quota.user_quota, user_stats, num_objs, size);
+>>>>>>> 87a11632b6c (user_quota and bucket_quota are updated)
       if (ret < 0) {
         return ret;
       }
