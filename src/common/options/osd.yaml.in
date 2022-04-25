@@ -1278,3 +1278,9 @@ options:
   default: 1
   flags:
   - runtime
+- name: osd_rocksdb_iterator_bounds_enabled
+  desc: Whether omap iterator bounds are applied to rocksdb iterator ReadOptions
+  type: bool
+  level: dev
+  default: true
+  with_legacy: true
