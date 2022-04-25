@@ -30,6 +30,15 @@ scrape_configs:
 {% endfor %}
 {% endif %}
 
+{% if ceph_exporter_nodes %}
+  - job_name: 'ceph-exporter'
+    static_configs:
+    - targets:
+{% for node in ceph_exporter_nodes %}
+      - '{{ node }}'
+{% endfor %}
+{% endif %}
+
 {% if haproxy_targets %}
   - job_name: 'haproxy'
     static_configs:
