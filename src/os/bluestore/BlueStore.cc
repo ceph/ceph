@@ -5616,7 +5616,8 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
       derr << "SMR device but freelist_type = " << freelist_type << " (not zoned)"
            << dendl;
       return -EINVAL;
-    } else if (!bdev->is_smr() && freelist_type == "zoned") {
+    }
+    if (!bdev->is_smr() && freelist_type == "zoned") {
       derr << "non-SMR device (or SMR support not built-in) but freelist_type = zoned"
 	   << dendl;
       return -EINVAL;
@@ -15084,11 +15085,6 @@ void BlueStore::_do_write_small(
   }
 
   return;
-}
-
-bool BlueStore::has_null_fm()
-{
-  return fm->is_null_manager();
 }
 
 bool BlueStore::BigDeferredWriteContext::can_defer(
