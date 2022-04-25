@@ -30,7 +30,28 @@ using NVMeBlockDevice = nvme_device::NVMeBlockDevice;
 /**
  * CircularBoundedJournal
  *
- * TODO: move record from CircularBoundedJournal to RandomBlockManager
+ * 
+ * CircularBoundedJournal (CBJournal) is the journal that works like circular
+ * queue. With CBJournal, Seastore will append some of the records if the size
+ * of the record is small (most likely metadata), at which point the head
+ * (written_to) will be moved. Then, eventually, Seastore applies the records
+ * in CBjournal to RBM---the tail (applied_to) is advanced (TODO).
+ *
+ * - Commit time
+ * After submit_record is done, last_committed_record_base and written_to are
+ * increased (these are in-memory values)---last_committed_record_base indicates
+ * the last committed record and written_to represents where the new record
+ * will be appended. Note that applied_to is not changed here.
+ *
+ * - Replay time
+ * At replay time, CBJournal begins to replay records in CBjournal by reading
+ * records from applied_to. Then, CBJournal examines whether the records is valid
+ * one by one, at which point last_committed_record_base and written_to are
+ * recovered if the valid record is founded. Note that only applied_to is stored
+ * permanently when the apply work---applying the records in CBJournal to RBM---
+ * is done by CBJournal (TODO).
+ *
+ * TODO: apply records from CircularBoundedJournal to RandomBlockManager
  *
  */
 
@@ -192,9 +213,13 @@ public:
     uint64_t used_size = 0;  // current used_size of journal
     uint32_t error = 0;      // reserved
 
-    rbm_abs_addr start_offset = 0;      // start offset of CircularBoundedJournal
+    // start offset of CircularBoundedJournal in the device (start + header length)
+    rbm_abs_addr start_offset = 0;
+    // start address where last committed record is written
     rbm_abs_addr last_committed_record_base = 0;
+    // start address where the newest record will be written
     rbm_abs_addr written_to = 0;
+    // address to represent where last appllied record is written
     rbm_abs_addr applied_to = 0;
 
     uint64_t flag = 0;       // represent features (reserved)
@@ -202,8 +227,8 @@ public:
     uint64_t csum = 0;       // checksum of entire cbj_header_t
     uint32_t cur_segment_seq = 0;
 
-    rbm_abs_addr start = 0; // start address of the device
-    rbm_abs_addr end = 0;   // start address of the device
+    rbm_abs_addr start = 0; // start address of CircularBoundedJournal
+    rbm_abs_addr end = 0;   // start address of CircularBoundedJournal
     device_id_t device_id;
 
     DENC(cbj_header_t, v, p) {
@@ -237,8 +262,8 @@ public:
    *
    * | written to rbm |    written length to CircularBoundedJournal    | new write |
    * ----------------->----------------------------------->------------>
-   *                  ^      	            ^             ^
-   *            applied_to   last_committed_record_base   written_to
+   *                  ^      	                          ^            ^
+   *            applied_to              last_committed_record_base     written_to
    *
    */
 
