@@ -19,7 +19,8 @@ FreelistManager *FreelistManager::create(
   ceph_assert(prefix == "B");
   if (type == "bitmap") {
     return new BitmapFreelistManager(cct, "B", "b");
-  } else if (type == "null") {
+  }
+  if (type == "null") {
     // use BitmapFreelistManager with the null option to stop allocations from going to RocksDB
     auto *fm = new BitmapFreelistManager(cct, "B", "b");
     fm->set_null_manager();

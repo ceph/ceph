@@ -2123,7 +2123,6 @@ public:
     bool apply_defer();
   };
 
-  bool has_null_fm();
   // --------------------------------------------------------
   // members
 private:
