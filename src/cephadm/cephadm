@@ -533,7 +533,7 @@ class Monitoring(object):
         'prometheus': {
             'image': DEFAULT_PROMETHEUS_IMAGE,
             'cpus': '2',
-            'memory': '8GB',
+            'memory': '4GB',
             'args': [
                 '--config.file=/etc/prometheus/prometheus.yml',
                 '--storage.tsdb.path=/prometheus',
@@ -927,11 +927,9 @@ class CephExporter(object):
     }
 
     def __init__(self,
-                 ctx,
-                 fsid,
-                 daemon_id,
-                 image=DEFAULT_IMAGE):
-        # type: (CephadmContext, str, Union[int, str], str) -> None
+                 ctx: CephadmContext,
+                 fsid: str, daemon_id: Union[int, str],
+                 image=DEFAULT_IMAGE) -> None:
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
@@ -4518,8 +4516,7 @@ class AgentGatherer(Thread):
 
                 end_time = time.monotonic()
                 run_time = datetime.timedelta(seconds=(end_time - start_time))
-                self.recent_iteration_run_times[self.recent_iteration_index] = run_time.total_seconds(
-                )
+                self.recent_iteration_run_times[self.recent_iteration_index] = run_time.total_seconds()
                 self.recent_iteration_index = (self.recent_iteration_index + 1) % 3
                 run_time_average = sum(self.recent_iteration_run_times, 0.0) / \
                     len([t for t in self.recent_iteration_run_times if t])
