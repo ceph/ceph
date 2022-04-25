@@ -115,3 +115,11 @@ def handle_request_error(component):
                 raise DashboardException(
                     msg=content_message, component=component)
         raise DashboardException(e=e, component=component)
+
+
+@contextmanager
+def handle_error(component, http_status_code=None):
+    try:
+        yield
+    except Exception as e:  # pylint: disable=broad-except
+        raise DashboardException(e, component=component, http_status_code=http_status_code)

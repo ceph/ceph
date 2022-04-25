@@ -221,7 +221,7 @@ struct WriteLogCacheEntry {
   uint64_t write_data_pos = 0; /* SSD data offset */
   #endif
   union {
-    uint8_t flags;
+    uint8_t flags = 0;
     struct {
       uint8_t entry_valid :1; /* if 0, this entry is free */
       uint8_t sync_point :1;  /* No data. No write sequence number. Marks sync
@@ -236,9 +236,7 @@ struct WriteLogCacheEntry {
   uint32_t entry_index = 0; /* For debug consistency check. Can be removed if
                              * we need the space */
   WriteLogCacheEntry(uint64_t image_offset_bytes=0, uint64_t write_bytes=0)
-    : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes),
-      entry_valid(0), sync_point(0), sequenced(0), has_data(0), discard(0), writesame(0) {
-  }
+      : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes) {}
   BlockExtent block_extent();
   uint64_t get_offset_bytes();
   uint64_t get_write_bytes();

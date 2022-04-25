@@ -1150,7 +1150,7 @@ Request Parameters
 
 :Description: Generate a new key pair and add to the existing keyring.
 :Type: Boolean
-:Example: True [``True``]
+:Example: True [True]
 :Required: No
 
 

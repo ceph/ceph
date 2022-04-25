@@ -205,8 +205,9 @@ SegmentedJournal::replay_segment(
              */
             if (delta.paddr != P_ADDR_NULL) {
               auto& seg_addr = delta.paddr.as_seg_paddr();
-              auto delta_paddr_segment_seq = segment_provider.get_seq(seg_addr.get_segment_id());
-	      auto delta_paddr_segment_type = segment_provider.get_type(seg_addr.get_segment_id());
+              auto& seg_info = segment_provider.get_seg_info(seg_addr.get_segment_id());
+              auto delta_paddr_segment_seq = seg_info.seq;
+	      auto delta_paddr_segment_type = seg_info.type;
               if (s_type == segment_type_t::NULL_SEG ||
                   (delta_paddr_segment_seq != delta.ext_seq ||
 		   delta_paddr_segment_type != delta.seg_type)) {

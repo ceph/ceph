@@ -4601,6 +4601,15 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+  if ( cct->_conf->bluestore_codel) {
+    codel = std::make_unique<BlueStoreSlowFastCoDel>(
+            cct, [this](int64_t x) mutable {
+                this->throttle.reset_kv_throttle_max(x);
+            },
+            [this]() mutable {
+                return this->throttle.get_kv_throttle_current();
+            });
+  }
 }
 
 BlueStore::~BlueStore()
@@ -4666,6 +4675,17 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_warn_on_no_per_pool_omap",
     "bluestore_warn_on_no_per_pg_omap",
     "bluestore_max_defer_interval",
+    "bluestore_codel",
+    "bluestore_codel_slow_interval",
+    "bluestore_codel_fast_interval",
+    "bluestore_codel_initial_target_latency",
+    "bluestore_codel_min_target_latency",
+    "bluestore_codel_max_target_latency",
+    "bluestore_codel_throughput_latency_tradeoff",
+    "bluestore_codel_initial_budget_bytes",
+    "bluestore_codel_min_budget_bytes",
+    "bluestore_codel_budget_increment_bytes",
+    "bluestore_codel_regression_history_size",
     NULL
   };
   return KEYS;
@@ -4724,6 +4744,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("bluestore_throttle_deferred_bytes") ||
       changed.count("bluestore_throttle_trace_rate")) {
     throttle.reset_throttle(conf);
+    if (codel) {
+      codel->reset_bluestore_budget();
+    }
   }
   if (changed.count("bluestore_max_defer_interval")) {
     if (bdev) {
@@ -4735,6 +4758,21 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_memory_cache_min") ||
       changed.count("osd_memory_expected_fragmentation")) {
     _update_osd_memory_options();
+  }
+  if (changed.count("bluestore_codel") ||
+      changed.count("bluestore_codel_slow_interval") ||
+      changed.count("bluestore_codel_fast_interval") ||
+      changed.count("bluestore_codel_initial_target_latency") ||
+      changed.count("bluestore_codel_min_target_latency") ||
+      changed.count("bluestore_codel_max_target_latency") ||
+      changed.count("bluestore_codel_throughput_latency_tradeoff") ||
+      changed.count("bluestore_codel_initial_budget_bytes") ||
+      changed.count("bluestore_codel_min_budget_bytes") ||
+      changed.count("bluestore_codel_budget_increment_bytes") ||
+      changed.count("bluestore_codel_regression_history_size")) {
+    if (codel) {
+      codel->on_config_changed(cct);
+    }
   }
 }
 
@@ -12574,6 +12612,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 
     case TransContext::STATE_KV_DONE:
       throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_done_lat);
+      if (codel) {
+        codel->update_from_txc_info(txc->txc_state_proc_start, txc->bytes);
+      }
       if (txc->deferred_txn) {
 	txc->set_state(TransContext::STATE_DEFERRED_QUEUED);
 	_deferred_queue(txc);
@@ -14045,6 +14086,7 @@ int BlueStore::queue_transactions(
   logger->inc(l_bluestore_txc);
 
   // execute (start)
+  txc->txc_state_proc_start = mono_clock::now();
   _txc_state_proc(txc);
 
   if (bdev->is_smr()) {

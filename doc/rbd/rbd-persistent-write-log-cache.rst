@@ -45,8 +45,8 @@ Enable Cache
 
 To enable the PWL cache, set the following configuration settings::
 
-        rbd persistent cache mode = {cache-mode}
-        rbd plugins = pwl_cache
+        rbd_persistent_cache_mode = {cache-mode}
+        rbd_plugins = pwl_cache
 
 Value of {cache-mode} can be ``rwl``, ``ssd`` or ``disabled``. By default the
 cache is disabled.

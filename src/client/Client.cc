@@ -576,7 +576,6 @@ void Client::_pre_init()
 
   objecter_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
-  objecter->enable_blocklist_events();
 
   objectcacher->start();
 }
@@ -1729,6 +1728,12 @@ void Client::connect_mds_targets(mds_rank_t mds)
 	mdsmap->is_clientreplay_or_active_or_stopping(rank)) {
       ldout(cct, 10) << "check_mds_sessions opening mds." << mds
 		     << " export target mds." << rank << dendl;
+
+      auto session = _get_or_open_mds_session(rank);
+      if (session->state == MetaSession::STATE_OPENING ||
+          session->state == MetaSession::STATE_OPEN)
+        continue;
+
       _open_mds_session(rank);
     }
   }
@@ -2310,6 +2315,18 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
     {
+      if (session->state == MetaSession::STATE_OPEN) {
+        ldout(cct, 10) << "mds." << from << " already opened, ignore it"
+                       << dendl;
+        return;
+      }
+      /*
+       * The connection maybe broken and the session in client side
+       * has been reinitialized, need to update the seq anyway.
+       */
+      if (!session->seq && m->get_seq())
+        session->seq = m->get_seq();
+
       feature_bitset_t missing_features(CEPHFS_FEATURES_CLIENT_REQUIRED);
       missing_features -= m->supported_features;
       if (!missing_features.empty()) {
@@ -2539,6 +2556,36 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
   MetaRequest *request = mds_requests[tid];
   ceph_assert(request);
 
+  /*
+   * The type of 'num_fwd' in ceph 'MClientRequestForward'
+   * is 'int32_t', while in 'ceph_mds_request_head' the
+   * type is '__u8'. So in case the request bounces between
+   * MDSes exceeding 256 times, the client will get stuck.
+   *
+   * In this case it's ususally a bug in MDS and continue
+   * bouncing the request makes no sense.
+   *
+   * In future this could be fixed in ceph code, so avoid
+   * using the hardcode here.
+   */
+  int max_fwd = sizeof(((struct ceph_mds_request_head*)0)->num_fwd);
+  max_fwd = 1 << (max_fwd * CHAR_BIT) - 1;
+  auto num_fwd = fwd->get_num_fwd();
+  if (num_fwd <= request->num_fwd || num_fwd >= max_fwd) {
+    if (request->num_fwd >= max_fwd || num_fwd >= max_fwd) {
+      request->abort(-EMULTIHOP);
+      request->caller_cond->notify_all();
+      ldout(cct, 1) << __func__ << " tid " << tid << " seq overflow"
+                    << ", abort it" << dendl;
+    } else {
+      ldout(cct, 10) << __func__ << " tid " << tid
+                     << " old fwd seq " << fwd->get_num_fwd()
+                     << " <= req fwd " << request->num_fwd
+                     << ", ignore it" << dendl;
+    }
+    return;
+  }
+
   // reset retry counter
   request->retry_attempt = 0;
 
@@ -2552,7 +2599,7 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
   
   request->mds = -1;
   request->item.remove_myself();
-  request->num_fwd = fwd->get_num_fwd();
+  request->num_fwd = num_fwd;
   request->resend_mds = fwd->get_dest_mds();
   request->caller_cond->notify_all();
 }
@@ -2715,36 +2762,15 @@ void Client::_handle_full_flag(int64_t pool)
 
 void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 {
-  std::set<entity_addr_t> new_blocklists;
-
   std::scoped_lock cl(client_lock);
-  objecter->consume_blocklist_events(&new_blocklists);
 
   const auto myaddrs = messenger->get_myaddrs();
-  bool new_blocklist = false;
-  bool prenautilus = objecter->with_osdmap(
+  bool new_blocklist = objecter->with_osdmap(
     [&](const OSDMap& o) {
-      return o.require_osd_release < ceph_release_t::nautilus;
+      return o.is_blocklisted(myaddrs);
     });
-  if (!blocklisted) {
-    for (auto a : myaddrs.v) {
-      // blocklist entries are always TYPE_ANY for nautilus+
-      a.set_type(entity_addr_t::TYPE_ANY);
-      if (new_blocklists.count(a)) {
-	new_blocklist = true;
-	break;
-      }
-      if (prenautilus) {
-	// ...except pre-nautilus, they were TYPE_LEGACY
-	a.set_type(entity_addr_t::TYPE_LEGACY);
-	if (new_blocklists.count(a)) {
-	  new_blocklist = true;
-	  break;
-	}
-      }
-    }
-  }
-  if (new_blocklist) {
+  
+  if (new_blocklist && !blocklisted) {
     auto epoch = objecter->with_osdmap([](const OSDMap &o){
         return o.get_epoch();
         });
@@ -4907,10 +4933,20 @@ void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
 SnapRealm *Client::get_snap_realm(inodeno_t r)
 {
   SnapRealm *realm = snap_realms[r];
-  if (!realm)
+
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << ", nref was "
+                 << (realm ? realm->nref : 0) << dendl;
+  if (!realm) {
     snap_realms[r] = realm = new SnapRealm(r);
-  ldout(cct, 20) << __func__ << " " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
+
+    // Do not release the global snaprealm until unmounting.
+    if (r == CEPH_INO_GLOBAL_SNAPREALM)
+      realm->nref++;
+  }
+
   realm->nref++;
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << ", nref now is "
+                 << realm->nref << dendl;
   return realm;
 }
 
@@ -6597,6 +6633,13 @@ void Client::_unmount(bool abort)
   upkeep_cond.notify_one();
 
   _close_sessions();
+
+  // release the global snapshot realm
+  SnapRealm *global_realm = snap_realms[CEPH_INO_GLOBAL_SNAPREALM];
+  if (global_realm) {
+    ceph_assert(global_realm->nref == 1);
+    put_snap_realm(global_realm);
+  }
 
   mref_writer.update_state(CLIENT_UNMOUNTED);
 

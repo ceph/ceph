@@ -83,21 +83,23 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   std::map<segment_id_t, segment_seq_t> segment_seqs;
   std::map<segment_id_t, segment_type_t> segment_types;
 
+  mutable segment_info_t tmp_info;
+
   journal_test_t() = default;
 
-  seastar::lowres_system_clock::time_point get_last_modified(
-    segment_id_t id) const final {
-    return seastar::lowres_system_clock::time_point();
+  /*
+   * SegmentProvider interfaces
+   */
+  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+
+  const segment_info_t& get_seg_info(segment_id_t id) const final {
+    tmp_info = {};
+    tmp_info.seq = segment_seqs.at(id);
+    tmp_info.type = segment_types.at(id);
+    return tmp_info;
   }
 
-  seastar::lowres_system_clock::time_point get_last_rewritten(
-    segment_id_t id) const final {
-    return seastar::lowres_system_clock::time_point();
-  }
-
-  void update_segment_avail_bytes(paddr_t offset) final {}
-
-  segment_id_t get_segment(
+  segment_id_t allocate_segment(
     segment_seq_t seq,
     segment_type_t type
   ) final {
@@ -110,30 +112,27 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     return ret;
   }
 
-  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+  void close_segment(segment_id_t) final {}
 
   void update_journal_tail_committed(journal_seq_t paddr) final {}
 
+  void update_segment_avail_bytes(paddr_t offset) final {}
+
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
-
-  segment_seq_t get_seq(segment_id_t id) final {
-    return segment_seqs[id];
-  }
-
-  segment_type_t get_type(segment_id_t id) final {
-    return segment_types[id];
-  }
 
   seastar::future<> set_up_fut() final {
     segment_manager = segment_manager::create_test_ephemeral();
-    block_size = segment_manager->get_block_size();
-    sms.reset(new SegmentManagerGroup());
-    next = segment_id_t(segment_manager->get_device_id(), 0);
-    journal = journal::make_segmented(*this);
-    journal->set_write_pipeline(&pipeline);
-    sms->add_segment_manager(segment_manager.get());
     return segment_manager->init(
     ).safe_then([this] {
+      return segment_manager->mkfs(
+        segment_manager::get_ephemeral_device_config(0, 1));
+    }).safe_then([this] {
+      block_size = segment_manager->get_block_size();
+      sms.reset(new SegmentManagerGroup());
+      next = segment_id_t(segment_manager->get_device_id(), 0);
+      journal = journal::make_segmented(*this);
+      journal->set_write_pipeline(&pipeline);
+      sms->add_segment_manager(segment_manager.get());
       return journal->open_for_write();
     }).safe_then(
       [](auto){},

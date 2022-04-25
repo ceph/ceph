@@ -164,6 +164,8 @@ public:
   // -- file i/o --
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, MDRequestRef& mdr, SnapRealm *conrealm);
+  int get_allowed_caps(CInode *in, Capability *cap, int &all_allowed,
+                       int &loner_allowed, int &xlocker_allowed);
   int issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
@@ -212,7 +214,7 @@ protected:
 
   void scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut);
 
-  bool _need_flush_mdlog(CInode *in, int wanted_caps);
+  bool _need_flush_mdlog(CInode *in, int wanted_caps, bool lock_state_any=false);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(const cref_t<MClientCaps> &m);
   void _update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps> &m, CInode::mempool_inode *pi);

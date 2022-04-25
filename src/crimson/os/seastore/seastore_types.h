@@ -147,7 +147,7 @@ private:
   );
 
   static inline device_id_t internal_to_device(internal_segment_id_t id) {
-    return (static_cast<device_id_t>(id) & SM_ID_MASK) >> segment_bits;
+    return static_cast<device_id_t>((id & SM_ID_MASK) >> segment_bits);
   }
 
   constexpr static inline device_segment_id_t internal_to_segment(
@@ -244,9 +244,10 @@ public:
     // are not yet present
     device_to_segments.resize(DEVICE_ID_MAX_VALID);
   }
-  void add_device(device_id_t device, size_t segments, const T& init) {
-    assert(device <= DEVICE_ID_MAX_VALID);
-    assert(device_to_segments[device].size() == 0);
+  void add_device(device_id_t device, std::size_t segments, const T& init) {
+    ceph_assert(device <= DEVICE_ID_MAX_VALID);
+    ceph_assert(device_to_segments[device].size() == 0);
+    ceph_assert(segments > 0);
     device_to_segments[device].resize(segments, init);
     total_segments += segments;
   }
