@@ -466,7 +466,7 @@ class CephService(CephadmService):
             return AuthEntity(f'client.{self.TYPE}.{host}')
         elif self.TYPE == 'mon':
             return AuthEntity('mon.')
-        elif self.TYPE in ['mgr', 'osd', 'mds']:
+        elif self.TYPE in ['mgr', 'osd', 'mds', 'ceph-exporter']:
             return AuthEntity(f'{self.TYPE}.{daemon_id}')
         else:
             raise OrchestratorError("unknown daemon type")
