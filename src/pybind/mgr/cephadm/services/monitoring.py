@@ -317,11 +317,12 @@ class PrometheusService(CephadmService):
             })
 
         # scrape ceph exporters
+        ceph_exporter_nodes = []
         for dd in self.mgr.cache.get_daemons_by_service('ceph-exporter'):
             assert dd.hostname is not None
             deps.append(dd.name())
             addr = self._inventory_get_fqdn(dd.hostname)
-            mgr_scrape_list.append(build_url(host=addr, port=exporter_port).lstrip('/'))
+            ceph_exporter_nodes.append(build_url(host=addr, port=exporter_port).lstrip('/'))
 
         # scrape alert managers
         alertmgr_targets = []
@@ -352,6 +353,7 @@ class PrometheusService(CephadmService):
             'mgr_scrape_list': mgr_scrape_list,
             'haproxy_targets': haproxy_targets,
             'nodes': nodes,
+            'ceph_exporter_nodes': ceph_exporter_nodes
         }
         r = {
             'files': {
