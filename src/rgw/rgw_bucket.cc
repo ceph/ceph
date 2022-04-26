@@ -659,9 +659,6 @@ static int check_bad_index_multipart(rgw::sal::RadosStore* const rados_store,
     if (fix_index) {
       ret = store->remove_objs_from_index(dpp, bucket->get_info(),
 					  entries_to_unlink);
-for (const auto& entry : entries_to_unlink) {
-  ldpp_dout(dpp, 0) << "    ERIC: " << entry << dendl;
-}
       if (ret < 0) {
 	ldpp_dout(dpp, 0) <<
 	  "ERROR: remove_objs_from_index failed returning " <<
