@@ -335,31 +335,24 @@ class TestGetAndPut(TestCephFSShell):
 
     def test_get_without_target_name(self):
         """
-        Test that get passes with target name
+        Test that get should fail when there is no target name
         """
-        s = 'D' * 1024
-        o = self.get_cephfs_shell_cmd_output("put - dump5", stdin=s)
-        log.info("cephfs-shell output:\n{}".format(o))
-
+        s = 'Somedata'
         # put - dump5 should pass
-        o = self.mount_a.stat('dump5')
-        log.info("mount_a output:\n{}".format(o))
+        self.get_cephfs_shell_cmd_output("put - dump5", stdin=s)
 
-        # get dump5 should fail
-        o = self.get_cephfs_shell_cmd_output("get dump5")
-        o = self.get_cephfs_shell_cmd_output("!stat dump5 || echo $?")
-        log.info("cephfs-shell output:\n{}".format(o))
-        l = o.split('\n')
-        try:
-            ret = int(l[1])
-            # verify that stat dump5 passes
-            # if ret == 1, then that implies the stat failed
-            # which implies that there was a problem with "get dump5"
-            assert(ret != 1)
-        except ValueError:
-            # we have a valid stat output; so this is good
-            # if the int() fails then that means there's a valid stat output
-            pass
+        self.mount_a.stat('dump5')
+
+        # get dump5 should fail as there is no local_path mentioned
+        with self.assertRaises(CommandFailedError):
+            self.get_cephfs_shell_cmd_output("get dump5")
+
+        # stat dump would return non-zero exit code as get dump failed
+        # cwd=None because we want to run it at CWD, not at cephfs mntpt.
+        r = self.mount_a.run_shell('stat dump5', cwd=None,
+                                   check_status=False).returncode
+        self.assertEqual(r, 1)
+>>>>>>> 1e3fb3c8741 (qa: testcase test_get_without_target_name fixed)
 
     def test_get_doesnt_create_dir(self):
         # if get cmd is creating subdirs on its own then dump7 will be
