@@ -8974,7 +8974,6 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   SetVal(g_conf(), "bluestore_max_blob_size", 
     stringify(2 * offs_base).c_str());
   SetVal(g_conf(), "bluestore_extent_map_shard_max_size", "12000");
-  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_stats", "false");
 
   StartDeferred(0x10000);
 
@@ -9048,29 +9047,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   }
   ASSERT_EQ(bstore->fsck(false), 0);
 
-  //////////// verify invalid statfs ///////////
-  cerr << "fix invalid statfs" << std::endl;
-  store_statfs_t statfs0, statfs;
-  bstore->mount();
-  ASSERT_EQ(bstore->statfs(&statfs0), 0);
-  statfs = statfs0;
-  statfs.allocated += 0x10000;
-  statfs.data_stored += 0x10000;
-  ASSERT_FALSE(statfs0 == statfs);
-  bstore->inject_statfs("bluestore_statfs", statfs);
-  bstore->umount();
-
-  ASSERT_EQ(bstore->fsck(false), 2);
-  ASSERT_EQ(bstore->repair(false), 0);
-  ASSERT_EQ(bstore->fsck(false), 0);
-  ASSERT_EQ(bstore->mount(), 0);
-  ASSERT_EQ(bstore->statfs(&statfs), 0);
-  // adjust free/internal meta space to success in comparison
-  statfs0.available = statfs.available;
-  statfs0.internal_metadata = statfs.internal_metadata;
-  ASSERT_EQ(statfs0, statfs);
 
   ///////// undecodable shared blob key / stray shared blob records ///////
+  bstore->mount();
   cerr << "undecodable shared blob key" << std::endl;
   bstore->inject_broken_shared_blob_key("undec1",
 			    bufferlist());
@@ -9122,7 +9101,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     }
 
     bstore->umount();
-    ASSERT_EQ(bstore->fsck(false), 4);
+    // depending on statfs tracking we might meet or miss relevant error
+    // hence error count >= 3
+    ASSERT_GE(bstore->fsck(false), 3);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
@@ -9156,9 +9137,58 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     ASSERT_EQ(bstore->fsck(false), 0);
   }
 
-  cerr << "Completing" << std::endl;
+  //////////// verify invalid statfs ///////////
+  cerr << "fix invalid statfs" << std::endl;
+  SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_stats", "true");
+  SetVal(g_conf(),
+    "bluestore_debug_inject_allocation_from_file_failure", "1");
+  store_statfs_t statfs0;
+  store_statfs_t statfs;
   bstore->mount();
+  ASSERT_EQ(bstore->statfs(&statfs0), 0);
+  statfs = statfs0;
+  statfs.allocated += 0x10000;
+  statfs.data_stored += 0x10000;
+  ASSERT_FALSE(statfs0 == statfs);
+  // this enforces global stats usage
+  bstore->inject_statfs("bluestore_statfs", statfs);
+  bstore->umount();
 
+  ASSERT_GE(bstore->fsck(false), 1); // global stats mismatch might omitted when
+                                     // NCB restore is applied. Hence using >= for
+                                     // error count
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+  ASSERT_EQ(bstore->mount(), 0);
+  ASSERT_EQ(bstore->statfs(&statfs), 0);
+  // adjust free/internal meta space to success in comparison
+  statfs0.available = statfs.available;
+  statfs0.internal_metadata = statfs.internal_metadata;
+  ASSERT_EQ(statfs0, statfs);
+
+  SetVal(g_conf(),
+    "bluestore_debug_inject_allocation_from_file_failure", "0");
+  cerr << "fix invalid statfs2" << std::endl;
+  ASSERT_EQ(bstore->statfs(&statfs0), 0);
+  statfs = statfs0;
+  statfs.allocated += 0x20000;
+  statfs.data_stored += 0x20000;
+  ASSERT_FALSE(statfs0 == statfs);
+  // this enforces global stats usage
+  bstore->inject_statfs("bluestore_statfs", statfs);
+  bstore->umount();
+
+  ASSERT_EQ(bstore->fsck(false), 2);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+  ASSERT_EQ(bstore->mount(), 0);
+  ASSERT_EQ(bstore->statfs(&statfs), 0);
+  // adjust free/internal meta space to success in comparison
+  statfs0.available = statfs.available;
+  statfs0.internal_metadata = statfs.internal_metadata;
+  ASSERT_EQ(statfs0, statfs);
+
+  cerr << "Completing" << std::endl;
 }
 
 TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
@@ -9377,9 +9407,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
     // value
     size_t expected_error_count =
       has_null_manager ?
-      5: // 4 sb ref mismatch errors + 1 statfs mismatch
+      4: // 4 sb ref mismatch errors [+ 1 optional statfs, hence ASSERT_GE]
       7; // 4 sb ref mismatch errors + 1 statfs + 1 block leak + 1 non-free
-    ASSERT_EQ(bstore->fsck(false), expected_error_count);
+    ASSERT_GE(bstore->fsck(false), expected_error_count);
     // repair might report less errors than fsck above showed
     // as some errors, e.g. statfs mismatch, are implicitly fixed
     // before the detection during the previous repair steps...
@@ -10651,12 +10681,11 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.set_val_or_die("bluestore_debug_freelist", "true");
   g_ceph_context->_conf.set_val_or_die("bluestore_clone_cow", "true");
   g_ceph_context->_conf.set_val_or_die("bluestore_max_alloc_size", "196608");
-
   // set small cache sizes so we see trimming during Synthetic tests
   g_ceph_context->_conf.set_val_or_die("bluestore_cache_size_hdd", "4000000");
   g_ceph_context->_conf.set_val_or_die("bluestore_cache_size_ssd", "4000000");
   g_ceph_context->_conf.set_val_or_die(
-    "bluestore_debug_inject_allocation_from_file_failure", "0.67"); 
+  "bluestore_debug_inject_allocation_from_file_failure", "0.66");
 
   // very short *_max prealloc so that we fall back to async submits
   g_ceph_context->_conf.set_val_or_die("bluestore_blobid_prealloc", "10");
