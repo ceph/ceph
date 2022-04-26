@@ -98,3 +98,11 @@ def handle_orchestrator_error(component):
         yield
     except OrchestratorError as e:
         raise DashboardException(e, component=component)
+
+
+@contextmanager
+def handle_error(component, http_status_code=None):
+    try:
+        yield
+    except Exception as e:  # pylint: disable=broad-except
+        raise DashboardException(e, component=component, http_status_code=http_status_code)

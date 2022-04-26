@@ -2,9 +2,9 @@
 from __future__ import absolute_import
 
 from .. import mgr
-from ..exceptions import DashboardException
 from ..grafana import GrafanaRestClient, push_local_dashboards
 from ..security import Scope
+from ..services.exception import handle_error
 from ..settings import Settings
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     ReadPermission, UpdatePermission
@@ -33,6 +33,7 @@ class Grafana(BaseController):
 
     @Endpoint()
     @ReadPermission
+    @handle_error('grafana')
     def validation(self, params):
         grafana = GrafanaRestClient()
         method = 'GET'
@@ -43,14 +44,8 @@ class Grafana(BaseController):
 
     @Endpoint(method='POST')
     @UpdatePermission
+    @handle_error('grafana', 500)
     def dashboards(self):
         response = dict()
-        try:
-            response['success'] = push_local_dashboards()
-        except Exception as e:  # pylint: disable=broad-except
-            raise DashboardException(
-                msg=str(e),
-                component='grafana',
-                http_status_code=500,
-            )
+        response['success'] = push_local_dashboards()
         return response
