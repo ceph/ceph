@@ -557,6 +557,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
     if (objs_to_unlink.size() > listing_max_entries) {
       if (fix_index) {
+	// note: under rados this removes directly from rados index objects
 	int r = bucket->remove_objs_from_index(dpp, objs_to_unlink);
 	if (r < 0) {
 	  set_err_msg(err_msg, "ERROR: remove_obj_from_index() returned error: " +
@@ -572,6 +573,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   }
 
   if (fix_index) {
+    // note: under rados this removes directly from rados index objects
     int r = bucket->remove_objs_from_index(dpp, objs_to_unlink);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: remove_obj_from_index() returned error: " +

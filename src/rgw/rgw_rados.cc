@@ -9096,43 +9096,81 @@ int RGWRados::cls_obj_usage_log_clear(const DoutPrefixProvider *dpp, string& oid
 }
 
 
-int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list)
+// note: this removes entries from the rados bucket index objects
+// without going through CLS; this is known to be called from
+// "radosgw-admin unlink" and "radosgw-admin bucket check --fix"
+int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
+				     RGWBucketInfo& bucket_info,
+				     const std::list<rgw_obj_index_key>& entry_key_list)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
-  ldout_bitx(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket=" << bucket_info.bucket <<
-    " oid_list.size()=" << oid_list.size() << dendl_bitx;
-   ldout_bitx(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
+  ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket=" << bucket_info.bucket <<
+    " entry_key_list.size()=" << entry_key_list.size() << dendl_bitx;
+  ldout_bitx(bitx, dpp, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
+
+  const rgw::bucket_index_layout_generation& latest_layout = bucket_info.layout.current_index;
+  if (latest_layout.layout.type != rgw::BucketIndexType::Normal ||
+      latest_layout.layout.normal.hash_type != rgw::BucketHashType::Mod) {
+    ldout_bitx(bitx, dpp, 0) << "ERROR: " << __func__ << " index for bucket=" <<
+      bucket_info.bucket << " is not a normal modulo index" << dendl_bitx;
+    return -EINVAL;
+  }
+  const uint32_t num_shards = latest_layout.layout.normal.num_shards;
 
   RGWSI_RADOS::Pool index_pool;
-  string dir_oid;
-
-  uint8_t suggest_flag = (svc.zone->get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
-
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, &index_pool, &dir_oid);
-  if (r < 0)
+  std::map<int, std::string> index_oids;
+  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, &index_pool,
+					  &index_oids, nullptr);
+  if (r < 0) {
+    ldout_bitx(bitx, dpp, 0) << "ERROR: " << __func__ <<
+      " open_bucket_index returned " << r << dendl_bitx;
     return r;
-
-  bufferlist updates;
-
-  for (auto iter = oid_list.begin(); iter != oid_list.end(); ++iter) {
-    rgw_bucket_dir_entry entry;
-    entry.key = *iter;
-    ldout_bitx(bitx, cct, 5) << "INFO: " << __func__ <<
-      ": encoding removal of bucket=" << bucket_info.bucket <<
-      " entry=" << entry.key << " in updates" << dendl_bitx;
-    entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
-    updates.append(CEPH_RGW_REMOVE | suggest_flag);
-    encode(entry, updates);
   }
 
-  ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ <<
-    ": calling dir_suggest on shards of dir=" << bucket_info.bucket << dendl_bitx;
+  // split up removals by shard
+  std::map<int, std::set<std::string>> sharded_removals;
+  for (const auto& entry_key : entry_key_list) {
+    const rgw_obj_key obj_key(entry_key);
+    const uint32_t shard =
+      RGWSI_BucketIndex_RADOS::bucket_shard_index(obj_key, num_shards);
 
-  bufferlist out;
-  r = index_pool.ioctx().exec(dir_oid, RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates, out);
+    // entry_key already combines namespace and name, so we first have
+    // to break that apart before we can then combine with instance
+    std::string name;
+    std::string ns; // namespace
+    rgw_obj_key::parse_index_key(entry_key.name, &name, &ns);
+    rgw_obj_key full_key(name, entry_key.instance, ns);
+    std::string combined_key = full_key.get_oid();
 
-  ldout_bitx(bitx, cct, 10) <<
+    sharded_removals[shard].insert(combined_key);
+
+    ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
+      ": removal from bucket index, bucket=" << bucket_info.bucket <<
+      " key=" << combined_key << " designated for shard " << shard <<
+      dendl_bitx;
+  }
+
+  for (const auto& removals : sharded_removals) {
+    const int shard = removals.first;
+    const std::string& oid = index_oids[shard];
+
+    ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
+      ": removal from bucket index, bucket=" << bucket_info.bucket <<
+      ", shard=" << shard << ", oid=" << oid << ", num_keys=" <<
+      removals.second.size() << dendl_bitx;
+
+    r = index_pool.ioctx().omap_rm_keys(oid, removals.second);
+    if (r < 0) {
+      ldout_bitx(bitx, dpp, 0) << "ERROR: " << __func__ <<
+	": omap_rm_keys returned ret=" << r <<
+	dendl_bitx;
+      return r;
+    }
+  }
+
+  ldout_bitx(bitx, dpp, 5) <<
     "EXITING " << __func__ << " and returning " << r << dendl_bitx;
+
   return r;
 }
 
