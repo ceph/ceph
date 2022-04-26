@@ -67,6 +67,13 @@ LOCK_DIR = '/run/cephadm'
 LOGROTATE_DIR = '/etc/logrotate.d'
 SYSCTL_DIR = '/etc/sysctl.d'
 UNIT_DIR = '/etc/systemd/system'
+CEPH_CONF_DIR = 'config'
+CEPH_CONF = 'ceph.conf'
+CEPH_PUBKEY = 'ceph.pub'
+CEPH_KEYRING = 'ceph.client.admin.keyring'
+CEPH_DEFAULT_CONF = f'/etc/ceph/{CEPH_CONF}'
+CEPH_DEFAULT_KEYRING = f'/etc/ceph/{CEPH_KEYRING}'
+CEPH_DEFAULT_PUBKEY = f'/etc/ceph/{CEPH_PUBKEY}'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
 CONTAINER_INIT = True
@@ -75,8 +82,6 @@ CGROUPS_SPLIT_PODMAN_VERSION = (2, 1, 0)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 15
-SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
-SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 logger: logging.Logger = None  # type: ignore
@@ -675,7 +680,7 @@ class NFSGanesha(object):
     def get_container_envs():
         # type: () -> List[str]
         envs = [
-            'CEPH_CONF=%s' % ('/etc/ceph/ceph.conf')
+            'CEPH_CONF=%s' % (CEPH_DEFAULT_CONF)
         ]
         return envs
 
@@ -1957,39 +1962,54 @@ def infer_fsid(func: FuncT) -> FuncT:
 
 def infer_config(func: FuncT) -> FuncT:
     """
-    If we find a MON daemon, use the config from that container
+    Infer the clusater configuration using the followign priority order:
+     1- if the user has provided custom conf file (-c option) use it
+     2- otherwise if daemon --name has been provided use daemon conf
+     3- otherwise find the mon daemon conf file and use it (if v1)
+     4- otherwise if {ctx.data_dir}/{fsid}/{CEPH_CONF_DIR} dir exists use it
+     5- finally: fallback to the default file /etc/ceph/ceph.conf
     """
     @wraps(func)
     def _infer_config(ctx: CephadmContext) -> Any:
-        ctx.config = ctx.config if 'config' in ctx else None
-        if ctx.config:
-            logger.debug('Using specified config: %s' % ctx.config)
-            return func(ctx)
 
         def config_path(daemon_type: str, daemon_name: str) -> str:
             data_dir = get_data_dir(ctx.fsid, ctx.data_dir, daemon_type, daemon_name)
             return os.path.join(data_dir, 'config')
 
+        def get_mon_daemon_name(fsid: str) -> Optional[str]:
+            daemon_list = list_daemons(ctx, detail=False)
+            for daemon in daemon_list:
+                if (
+                    daemon.get('name', '').startswith('mon.')
+                    and daemon.get('fsid', '') == fsid
+                    and daemon.get('style', '') == 'cephadm:v1'
+                    and os.path.exists(config_path('mon', daemon['name'].split('.', 1)[1]))
+                ):
+                    return daemon['name']
+            return None
+
+        ctx.config = ctx.config if 'config' in ctx else None
+        #  check if user has provided conf by using -c option
+        if ctx.config and (ctx.config != CEPH_DEFAULT_CONF):
+            logger.debug(f'Using specified config: {ctx.config}')
+            return func(ctx)
+
         if 'fsid' in ctx and ctx.fsid:
-            name = ctx.name if 'name' in ctx else None
-            if not name:
-                daemon_list = list_daemons(ctx, detail=False)
-                for daemon in daemon_list:
-                    if (
-                        daemon.get('name', '').startswith('mon.')
-                        and daemon.get('fsid', '') == ctx.fsid
-                        and daemon.get('style', '') == 'cephadm:v1'
-                        and os.path.exists(config_path('mon', daemon['name'].split('.', 1)[1]))
-                    ):
-                        name = daemon['name']
-                        break
-            if name:
+            name = ctx.name if ('name' in ctx and ctx.name) else get_mon_daemon_name(ctx.fsid)
+            if name is not None:
+                # daemon name has been specified (or inffered from mon), let's use its conf
                 ctx.config = config_path(name.split('.', 1)[0], name.split('.', 1)[1])
+            else:
+                # no daemon, in case the cluster has a config dir then use it
+                ceph_conf = f'{ctx.data_dir}/{ctx.fsid}/{CEPH_CONF_DIR}/{CEPH_CONF}'
+                if os.path.exists(ceph_conf):
+                    ctx.config = ceph_conf
+
         if ctx.config:
-            logger.info('Inferring config %s' % ctx.config)
-        elif os.path.exists(SHELL_DEFAULT_CONF):
-            logger.debug('Using default config: %s' % SHELL_DEFAULT_CONF)
-            ctx.config = SHELL_DEFAULT_CONF
+            logger.info(f'Inferring config {ctx.config}')
+        elif os.path.exists(CEPH_DEFAULT_CONF):
+            logger.debug(f'Using default config {CEPH_DEFAULT_CONF}')
+            ctx.config = CEPH_DEFAULT_CONF
         return func(ctx)
 
     return cast(FuncT, _infer_config)
@@ -5241,7 +5261,7 @@ def parse_yaml_objs(f: Iterable[str]) -> List[Dict[str, str]]:
 
 def _distribute_ssh_keys(ctx: CephadmContext, host_spec: Dict[str, str], bootstrap_hostname: str) -> int:
     # copy ssh key to hosts in host spec (used for apply spec)
-    ssh_key = '/etc/ceph/ceph.pub'
+    ssh_key = CEPH_DEFAULT_PUBKEY
     if ctx.ssh_public_key:
         ssh_key = ctx.ssh_public_key.name
 
@@ -5259,17 +5279,35 @@ def _distribute_ssh_keys(ctx: CephadmContext, host_spec: Dict[str, str], bootstr
     return 0
 
 
+def save_cluster_config(ctx: CephadmContext, uid: int, gid: int, fsid: str) -> None:
+    """Save cluster configuration to the per fsid directory """
+    def copy_file(src: str, dst: str) -> None:
+        if src:
+            shutil.copyfile(src, dst)
+
+    conf_dir = f'{ctx.data_dir}/{fsid}/{CEPH_CONF_DIR}'
+    makedirs(conf_dir, uid, gid, DATA_DIR_MODE)
+    if os.path.exists(conf_dir):
+        logger.info(f'Saving cluster configuration to {conf_dir} directory')
+        copy_file(ctx.output_config, os.path.join(conf_dir, CEPH_CONF))
+        copy_file(ctx.output_keyring, os.path.join(conf_dir, CEPH_KEYRING))
+        # ctx.output_pub_ssh_key may not exist if user has provided custom ssh keys
+        if (os.path.exists(ctx.output_pub_ssh_key)):
+            copy_file(ctx.output_pub_ssh_key, os.path.join(conf_dir, CEPH_PUBKEY))
+    else:
+        logger.warning(f'Cannot create cluster configuration directory {conf_dir}')
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
 
     if not ctx.output_config:
-        ctx.output_config = os.path.join(ctx.output_dir, 'ceph.conf')
+        ctx.output_config = os.path.join(ctx.output_dir, CEPH_CONF)
     if not ctx.output_keyring:
-        ctx.output_keyring = os.path.join(ctx.output_dir,
-                                          'ceph.client.admin.keyring')
+        ctx.output_keyring = os.path.join(ctx.output_dir, CEPH_KEYRING)
     if not ctx.output_pub_ssh_key:
-        ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, 'ceph.pub')
+        ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, CEPH_PUBKEY)
 
     if ctx.fsid:
         data_dir_base = os.path.join(ctx.data_dir, ctx.fsid)
@@ -5451,7 +5489,7 @@ def command_bootstrap(ctx):
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
-    if ctx.output_config == '/etc/ceph/ceph.conf' and not ctx.skip_admin_label and not ctx.no_minimize_config:
+    if ctx.output_config == CEPH_DEFAULT_CONF and not ctx.skip_admin_label and not ctx.no_minimize_config:
         logger.info('Enabling client.admin keyring and conf on hosts with "admin" label')
         try:
             cli(['orch', 'client-keyring', 'set', 'client.admin', 'label:_admin'])
@@ -5477,6 +5515,8 @@ def command_bootstrap(ctx):
             logger.info(out)
         except Exception:
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
+
+    save_cluster_config(ctx, uid, gid, fsid)
 
     # enable autotune for osd_memory_target
     logger.info('Enabling autotune for osd_memory_target')
@@ -5761,11 +5801,16 @@ def command_shell(ctx):
     if daemon_id and not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    # use /etc/ceph files by default, if present.  we do this instead of
+    # in case a dedicated keyring for the specified fsid is found we us it.
+    # Otherwise, use /etc/ceph files by default, if present.  We do this instead of
     # making these defaults in the arg parser because we don't want an error
     # if they don't exist.
-    if not ctx.keyring and os.path.exists(SHELL_DEFAULT_KEYRING):
-        ctx.keyring = SHELL_DEFAULT_KEYRING
+    if not ctx.keyring:
+        keyring_file = f'{ctx.data_dir}/{ctx.fsid}/{CEPH_CONF_DIR}/{CEPH_KEYRING}'
+        if os.path.exists(keyring_file):
+            ctx.keyring = keyring_file
+        elif os.path.exists(CEPH_DEFAULT_KEYRING):
+            ctx.keyring = CEPH_DEFAULT_KEYRING
 
     container_args: List[str] = ['-i']
     mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
@@ -6898,7 +6943,7 @@ def command_rm_cluster(ctx):
         shutil.rmtree(dd, ignore_errors=True)
 
     # clean up config, keyring, and pub key files
-    files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
+    files = [CEPH_DEFAULT_CONF, CEPH_DEFAULT_PUBKEY, CEPH_DEFAULT_KEYRING]
     if os.path.exists(files[0]):
         valid_fsid = False
         with open(files[0]) as f:
@@ -7889,7 +7934,6 @@ class HostFacts():
                 elif os.path.exists(os.path.join(nic_path, iface, 'bonding')):
                     nic_type = 'bonding'
                 else:
-                    logger.info(os.path.join(nic_path, iface, 'type'))
                     nic_type = hw_lookup.get(read_file([os.path.join(nic_path, iface, 'type')]), 'Unknown')
 
                 if nic_type == 'loopback':  # skip loopback devices
