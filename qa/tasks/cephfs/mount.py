@@ -21,6 +21,10 @@ from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
+
+UMOUNT_TIMEOUT = 300
+
+
 class CephFSMount(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
@@ -452,7 +456,8 @@ class CephFSMount(object):
     def umount(self):
         raise NotImplementedError()
 
-    def umount_wait(self, force=False, require_clean=False, timeout=None):
+    def umount_wait(self, force=False, require_clean=False,
+                    timeout=UMOUNT_TIMEOUT):
         """
 
         :param force: Expect that the mount will not shutdown cleanly: kill
@@ -695,7 +700,7 @@ class CephFSMount(object):
         p.wait()
         return p.stdout.getvalue().strip()
 
-    def run_shell(self, args, timeout=900, **kwargs):
+    def run_shell(self, args, timeout=300, **kwargs):
         args = args.split() if isinstance(args, str) else args
         kwargs.pop('omit_sudo', False)
         sudo = kwargs.pop('sudo', False)
