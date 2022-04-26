@@ -39,8 +39,6 @@ class RGWZone;
 struct RGWZoneParams;
 
 extern void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id);
-
-extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const std::string& key,
                                        rgw_bucket* bucket, int *shard_id);
 

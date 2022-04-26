@@ -6,29 +6,10 @@
 #include "rgw_sal.h"
 #include "rgw_rados.h"
 
-#include "services/svc_zone.h"
-
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
-                         const string& _remote_id,
-                         const list<string>& remote_endpoints,
-                         std::optional<string> _api_name,
-                         HostStyle _host_style)
-  : cct(_cct),
-    endpoints(remote_endpoints.begin(), remote_endpoints.end()),
-    remote_id(_remote_id),
-    api_name(_api_name),
-    host_style(_host_style)
-{
-  if (zone_svc) {
-    key = zone_svc->get_zone_params().system_key;
-    self_zone_group = zone_svc->get_zonegroup().get_id();
-  }
-}
-
 RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
@@ -41,45 +22,26 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
     host_style(_host_style)
 {
   if (store) {
-    key = store->get_zone()->get_params().system_key;
+    key = store->get_zone()->get_system_key();
     self_zone_group = store->get_zone()->get_zonegroup().get_id();
   }
 }
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
+RGWRESTConn::RGWRESTConn(CephContext *_cct,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
                          RGWAccessKey _cred,
+                         std::string _zone_group,
                          std::optional<string> _api_name,
                          HostStyle _host_style)
   : cct(_cct),
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
-    key(std::move(_cred)),
+    key(_cred),
+    self_zone_group(_zone_group),
     remote_id(_remote_id),
     api_name(_api_name),
     host_style(_host_style)
 {
-  if (zone_svc) {
-    self_zone_group = zone_svc->get_zonegroup().get_id();
-  }
-}
-
-RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
-                         const string& _remote_id,
-                         const list<string>& remote_endpoints,
-                         RGWAccessKey _cred,
-                         std::optional<string> _api_name,
-                         HostStyle _host_style)
-  : cct(_cct),
-    endpoints(remote_endpoints.begin(), remote_endpoints.end()),
-    key(std::move(_cred)),
-    remote_id(_remote_id),
-    api_name(_api_name),
-    host_style(_host_style)
-{
-  if (store) {
-    self_zone_group = store->get_zone()->get_zonegroup().get_id();
-  }
 }
 
 RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
