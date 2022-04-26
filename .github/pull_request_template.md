@@ -17,8 +17,6 @@
       Signed-off-by: [Your Name] <[your email]>
 
     For examples, use "git log".
-
-  - The Signed-off-by line in every git commit is important; see <span class="x x-first x-last">[Submitting Patches to Ceph](https://github.com/ceph/ceph/blob/master/</span>SubmittingPatches.rst<span class="x x-first x-last">)</span>
 -->
 
 ## Contribution Guidelines
