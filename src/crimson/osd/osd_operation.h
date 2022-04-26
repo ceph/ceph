@@ -8,6 +8,11 @@
 #include "crimson/osd/scheduler/scheduler.h"
 #include "osd/osd_types.h"
 
+namespace crimson::os::seastore {
+  template<class OpT>
+  class OperationProxyT;
+}
+
 namespace crimson::osd {
 
 enum class OperationTypeCode {
@@ -188,6 +193,9 @@ protected:
   }
 
   PipelineHandle handle;
+
+  template <class OpT>
+  friend class crimson::os::seastore::OperationProxyT;
 };
 
 /**
