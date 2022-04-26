@@ -6168,6 +6168,12 @@ bool BlueStore::_use_rotational_settings()
   return bdev->is_rotational();
 }
 
+bool BlueStore::is_statfs_recoverable() const
+{
+  // abuse fm for now
+  return has_null_manager();
+}
+
 bool BlueStore::test_mount_in_use()
 {
   // most error conditions mean the mount is not in use (e.g., because
@@ -6770,8 +6776,47 @@ void BlueStore::_close_db()
   dout(10) << __func__ << ":read_only=" << db_was_opened_read_only
            << " fm=" << fm
            << " destage_alloc_file=" << need_to_destage_allocation_file
+           << " per_pool=" << per_pool_stat_collection
+           << " pool stats=" << osd_pools.size()
            << dendl;
   bool do_destage = !db_was_opened_read_only && need_to_destage_allocation_file;
+  if (do_destage && is_statfs_recoverable()) {
+    auto t = db->get_transaction();
+    store_statfs_t s;
+    if (per_pool_stat_collection) {
+      std::lock_guard l(vstatfs_lock);
+      for(auto &p : osd_pools) {
+        string key;
+        get_pool_stat_key(p.first, &key);
+        bufferlist bl;
+        if (!p.second.is_empty()) {
+          p.second.encode(bl);
+          p.second.publish(&s);
+          t->set(PREFIX_STAT, key, bl);
+          dout(10) << __func__ << "persisting: "
+                   << p.first << "->"  << s
+                   << dendl;
+        } else {
+          t->rmkey(PREFIX_STAT, key);
+          dout(10) << __func__ << "persisting: "
+                   << p.first << "-> <empty>"
+                   << dendl;
+        }
+      }
+    } else {
+      bufferlist bl;
+      {
+        std::lock_guard l(vstatfs_lock);
+        vstatfs.encode(bl);
+        vstatfs.publish(&s);
+      }
+      t->set(PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY, bl);
+      dout(10) << __func__ << "persisting: " << s << dendl;
+    }
+    int r = db->submit_transaction_sync(t);
+    dout(10) << __func__ << " statfs persisted." << dendl;
+    ceph_assert(r >= 0);
+  }
   _close_db_leave_bluefs();
 
   if (do_destage && fm && fm->is_null_manager()) {
@@ -6921,15 +6966,17 @@ void BlueStore::_open_statfs()
         st.decode(p);
         vstatfs += st;
 
-        dout(30) << __func__ << " pool " << pool_id
-		 << " statfs " << st << dendl;
+        dout(30) << __func__ << " pool " << std::hex << pool_id
+		 << " statfs(hex) " << st
+		 << std::dec << dendl;
       } catch (ceph::buffer::error& e) {
         derr << __func__ << " failed to decode pool stats, key:"
              << pretty_binary_string(it->key()) << dendl;
       }   
     }
   }
-  dout(30) << __func__ << " statfs " << vstatfs << dendl;
+  dout(30) << __func__ << " statfs " << std::hex
+           << vstatfs  << std::dec << dendl;
 
 }
 
@@ -7758,11 +7805,6 @@ int BlueStore::_mount()
     dout(1) << __func__ << " quick-fix on mount" << dendl;
     _fsck_on_open(FSCK_SHALLOW, true);
 
-    //reread statfs
-    //FIXME minor: replace with actual open/close?
-    _open_statfs();
-    _check_legacy_statfs_alert();
-
     //set again as hopefully it has been fixed
     if (was_per_pool_omap != OMAP_PER_PG) {
       _set_per_pool_omap();
@@ -7902,110 +7944,95 @@ int BlueStore::_fsck_check_extents(
   return errors;
 }
 
-void BlueStore::_fsck_check_pool_statfs(
-  BlueStore::per_pool_statfs& expected_pool_statfs,
+void BlueStore::_fsck_check_statfs(
+  const store_statfs_t& expected_statfs,
+  const per_pool_statfs& expected_pool_statfs,
   int64_t& errors,
   int64_t& warnings,
   BlueStoreRepairer* repairer)
 {
-  auto it = db->get_iterator(PREFIX_STAT, KeyValueDB::ITERATOR_NOCACHE);
-  if (it) {
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      string key = it->key();
-      if (key == BLUESTORE_GLOBAL_STATFS_KEY) {
+  string key;
+  store_statfs_t actual_statfs;
+  store_statfs_t s;
+  {
+    // make a copy
+    per_pool_statfs my_expected_pool_statfs(expected_pool_statfs);
+    auto op = osd_pools.begin();
+    while (op != osd_pools.end()) {
+      get_pool_stat_key(op->first, &key);
+      op->second.publish(&s);
+      auto it_expected = my_expected_pool_statfs.find(op->first);
+      if (it_expected == my_expected_pool_statfs.end()) {
+        auto op0 = op++;
+        if (op0->second.is_empty()) {
+          // It's OK to lack relevant empty statfs record
+          continue;
+        }
+        derr << __func__ << "::fsck error: " << std::hex
+             << "pool " << op0->first << " has got no statfs to match against: "
+             << s
+             << std::dec << dendl;
+        ++errors;
         if (repairer) {
-	  ++errors;
-	  repairer->remove_key(db, PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY);
-	  derr << "fsck error: " << "legacy statfs record found, removing"
-	       << dendl;
-	}
-	continue;
-      }
-      uint64_t pool_id;
-      if (get_key_pool_stat(key, &pool_id) < 0) {
-	derr << "fsck error: bad key " << key
-	     << "in statfs namespece" << dendl;
-	if (repairer) {
-	  repairer->remove_key(db, PREFIX_STAT, key);
-	}
-	++errors;
-	continue;
-      }
-
-      volatile_statfs vstatfs;
-      bufferlist bl = it->value();
-      auto blp = bl.cbegin();
-      try {
-	vstatfs.decode(blp);
-      } catch (ceph::buffer::error& e) {
-        derr << "fsck error: failed to decode Pool StatFS record"
-	     << pretty_binary_string(key) << dendl;
-        if (repairer) {
-	  dout(20) << __func__ << " undecodable Pool StatFS record, key:'"
-	           << pretty_binary_string(key)
-		   << "', removing" << dendl;
+          osd_pools.erase(op0);
           repairer->remove_key(db, PREFIX_STAT, key);
         }
-        ++errors;
-	vstatfs.reset();
-      }
-      auto stat_it = expected_pool_statfs.find(pool_id);
-      if (stat_it == expected_pool_statfs.end()) {
-        if (vstatfs.is_empty()) {
-          // we don't consider that as an error since empty pool statfs
-          // are left in DB for now
-	  dout(20) << "fsck inf: found empty stray Pool StatFS record for pool id 0x"
-	            << std::hex << pool_id << std::dec << dendl;
-	  if (repairer) {
-	    // but we need to increment error count in case of repair
-	    // to have proper counters at the end
-	    // (as repairer increments recovery counter anyway).
-	    ++errors;
-	  }
-        } else {
-	  derr << "fsck error: found stray Pool StatFS record for pool id 0x"
-	       << std::hex << pool_id << std::dec << dendl;
+      } else {
+        if (!(s == it_expected->second)) {
+          derr << "fsck error: actual " << s
+	       << " != expected " << it_expected->second
+	       << " for pool "
+	       << std::hex << op->first << std::dec << dendl;
 	  ++errors;
+	  if (repairer) {
+	    // repair in-memory in a hope this would be flushed properly on shutdown
+	    s = it_expected->second;
+	    op->second = it_expected->second;
+	    repairer->fix_statfs(db, key, it_expected->second);
+	  }
 	}
-	if (repairer) {
-	  repairer->remove_key(db, PREFIX_STAT, key);
-	}
-	continue;
+        actual_statfs.add(s);
+        my_expected_pool_statfs.erase(it_expected);
+        ++op;
       }
-      store_statfs_t statfs;
-      vstatfs.publish(&statfs);
-      if (!(stat_it->second == statfs)) {
-        derr << "fsck error: actual " << statfs
-	     << " != expected " << stat_it->second
-	     << " for pool "
-	     << std::hex << pool_id << std::dec << dendl;
-	if (repairer) {
-	  repairer->fix_statfs(db, key, stat_it->second);
-	}
-        ++errors;
+    }
+    // check stats that lack matching entities in osd_pools
+    for (auto &p : my_expected_pool_statfs) {
+      if (p.second.is_zero()) {
+        // It's OK to lack relevant empty statfs record
+        continue;
       }
-      expected_pool_statfs.erase(stat_it);
+      get_pool_stat_key(p.first, &key);
+      derr << __func__ << "::fsck error: " << std::hex
+           << "pool " << p.first << " has got no actual statfs: "
+           << std::dec << p.second
+           << dendl;
+      ++errors;
+      if (repairer) {
+	osd_pools[p.first] = p.second;
+        repairer->fix_statfs(db, key, p.second);
+        actual_statfs.add(p.second);
+      }
     }
-  } // if (it)
-  for (auto& s : expected_pool_statfs) {
-    if (s.second.is_zero()) {
-      // we might lack empty statfs recs in DB
-      continue;
-    }
-    derr << "fsck error: missing Pool StatFS record for pool "
-	 << std::hex << s.first << std::dec << dendl;
-    if (repairer) {
-      string key;
-      get_pool_stat_key(s.first, &key);
-      repairer->fix_statfs(db, key, s.second);
-    }
-    ++errors;
   }
-  if (!per_pool_stat_collection &&
-      repairer) {
-    // by virtue of running this method, we correct the top-level
-    // error of having global stats
-    repairer->inc_repaired();
+  // process global statfs
+  if (repairer) {
+    if (!per_pool_stat_collection) {
+      // by virtue of running this method, we correct the top-level
+      // error of having global stats
+      repairer->remove_key(db, PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY);
+      per_pool_stat_collection = true;
+    }
+    vstatfs = actual_statfs;
+    dout(20) << __func__ << " setting vstatfs to " << actual_statfs << dendl;
+  } else if (!per_pool_stat_collection) {
+    // check global stats only if fscking (not repairing) w/o per-pool stats
+    vstatfs.publish(&s);
+    if (!(s == expected_statfs)) {
+      derr << "fsck error: actual " << s
+           << " != expected " << expected_statfs << dendl;
+      ++errors;
+    }
   }
 }
 
@@ -8396,6 +8423,8 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
         if (!broken) {
           first_broken = it1->second;
           ++errors;
+          derr << "fsck error:" << " stray spanning blob found:" << it1->first
+               << dendl;
         }
         broken++;
         if (repairer) {
@@ -9212,7 +9241,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   mempool_dynamic_bitset used_blocks, bluefs_used_blocks;
   KeyValueDB::Iterator it;
-  store_statfs_t expected_store_statfs, actual_statfs;
+  store_statfs_t expected_store_statfs;
   per_pool_statfs expected_pool_statfs;
 
   sb_info_space_efficient_map_t sb_info;
@@ -9304,15 +9333,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     derr << "fsck " << w << ": store not yet converted to per-pg omap"
 	 << dendl;
   }
-
-  // get expected statfs; reset unaffected fields to be able to compare
-  // structs
-  statfs(&actual_statfs);
-  actual_statfs.total = 0;
-  actual_statfs.internally_reserved = 0;
-  actual_statfs.available = 0;
-  actual_statfs.internal_metadata = 0;
-  actual_statfs.omap_allocated = 0;
 
   if (g_conf()->bluestore_debug_fsck_abort) {
     dout(1) << __func__ << " debug abort" << dendl;
@@ -9462,8 +9482,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   sb_ref_mismatches = sb_ref_counts.count_non_zero();
   if (sb_ref_mismatches != 0) {
-    derr << "fsck error: shared blob references aren't matching, at least "
-      << sb_ref_mismatches << " found" << dendl;
+    derr << "fsck error:" << "*" << sb_ref_mismatches
+         << " shared blob references aren't matching, at least "
+         << sb_ref_mismatches << " found" << dendl;
     errors += sb_ref_mismatches;
   }
 
@@ -9750,23 +9771,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   sb_info.clear();
   sb_ref_counts.reset();
 
-  // check global stats only if fscking (not repairing) w/o per-pool stats
-  if (!per_pool_stat_collection &&
-      !repair &&
-      !(actual_statfs == expected_store_statfs)) {
-    derr << "fsck error: actual " << actual_statfs
-	 << " != expected " << expected_store_statfs << dendl;
-    if (repair) {
-      repairer.fix_statfs(db, BLUESTORE_GLOBAL_STATFS_KEY,
-			  expected_store_statfs);
-    }
-    ++errors;
-  }
-
   dout(1) << __func__ << " checking pool_statfs" << dendl;
-  _fsck_check_pool_statfs(expected_pool_statfs,
-			  errors, warnings, repair ? &repairer : nullptr);
-
+  _fsck_check_statfs(expected_store_statfs, expected_pool_statfs,
+    errors, warnings, repair ? &repairer : nullptr);
   if (depth != FSCK_SHALLOW) {
     dout(1) << __func__ << " checking for stray omap data " << dendl;
     it = db->get_iterator(PREFIX_OMAP, KeyValueDB::ITERATOR_NOCACHE);
@@ -12563,12 +12570,14 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
   logger->inc(l_bluestore_compressed_allocated, txc->statfs_delta.compressed_allocated());
   logger->inc(l_bluestore_compressed_original, txc->statfs_delta.compressed_original());
 
-  bufferlist bl;
-  txc->statfs_delta.encode(bl);
   if (per_pool_stat_collection) {
-    string key;
-    get_pool_stat_key(txc->osd_pool_id, &key);
-    txc->t->merge(PREFIX_STAT, key, bl);
+    if (!is_statfs_recoverable()) {
+      bufferlist bl;
+      txc->statfs_delta.encode(bl);
+      string key;
+      get_pool_stat_key(txc->osd_pool_id, &key);
+      txc->t->merge(PREFIX_STAT, key, bl);
+    }
 
     std::lock_guard l(vstatfs_lock);
     auto& stats = osd_pools[txc->osd_pool_id];
@@ -12577,7 +12586,11 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
     vstatfs += txc->statfs_delta; //non-persistent in this mode
 
   } else {
-    txc->t->merge(PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY, bl);
+    if (!is_statfs_recoverable()) {
+      bufferlist bl;
+      txc->statfs_delta.encode(bl);
+      txc->t->merge(PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY, bl);
+    }
 
     std::lock_guard l(vstatfs_lock);
     vstatfs += txc->statfs_delta;
