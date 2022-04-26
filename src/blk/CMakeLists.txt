@@ -28,6 +28,9 @@ endif()
 if(libblk_srcs)
   add_library(blk STATIC ${libblk_srcs})
   target_include_directories(blk PRIVATE "./")
+  # always link common with blk library, common contains device code for plugins
+  add_dependencies(blk common)
+  target_link_libraries(blk PUBLIC common)
 endif()
 
 if(HAVE_LIBAIO)
@@ -65,6 +68,3 @@ if(WITH_LIBURING)
   endif()
   target_link_libraries(blk PRIVATE uring::uring)
 endif()
-
-# always link common with blk library, common contains device code for plugins
-add_dependencies(blk common)
