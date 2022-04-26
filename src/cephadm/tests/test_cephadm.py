@@ -481,6 +481,77 @@ docker.io/ceph/daemon-base:octopus
                 infer_fsid(ctx)
             assert ctx.fsid == result
 
+    @pytest.mark.parametrize('fsid, other_conf_files, config, name, list_daemons, result, ',
+        [
+            # per cluster conf has more precedence than default conf
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                [cd.CEPH_DEFAULT_CONF],
+                None,
+                None,
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
+            ),
+            # mon daemon conf has more precedence than cluster conf and default conf
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                ['/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
+                 cd.CEPH_DEFAULT_CONF],
+                None,
+                None,
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'cephadm:v1'}],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            # daemon conf (--name option) has more precedence than cluster, default and mon conf
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                ['/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
+                 '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+                 cd.CEPH_DEFAULT_CONF],
+                None,
+                'osd.0',
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'cephadm:v1'},
+                 {'name': 'osd.0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'}],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/osd.0/config',
+            ),
+            # user provided conf ('/foo/ceph.conf') more precedence than any other conf
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                ['/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
+                 cd.CEPH_DEFAULT_CONF,
+                 '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config'],
+                '/foo/ceph.conf',
+                None,
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'cephadm:v1'}],
+                '/foo/ceph.conf',
+            ),
+        ])
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.logger')
+    def test_infer_config_precedence(self, logger, _call, other_conf_files, fsid, config, name, list_daemons, result, cephadm_fs):
+        # build the context
+        ctx = cd.CephadmContext()
+        ctx.fsid = fsid
+        ctx.config = config
+        ctx.name = name
+
+        # mock the decorator
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        infer_config = cd.infer_config(mock_fn)
+
+        # mock the config file
+        cephadm_fs.create_file(result)
+
+        # mock other potential config files
+        for f in other_conf_files:
+            cephadm_fs.create_file(f)
+
+        # test
+        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+            infer_config(ctx)
+            assert ctx.config == result
+
     @pytest.mark.parametrize('fsid, config, name, list_daemons, result, ',
         [
             (
@@ -495,7 +566,14 @@ docker.io/ceph/daemon-base:octopus
                 None,
                 None,
                 [],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
@@ -509,21 +587,21 @@ docker.io/ceph/daemon-base:octopus
                 None,
                 None,
                 [{'name': 'mon.a', 'fsid': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'style': 'cephadm:v1'}],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
                 None,
                 None,
                 [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'legacy'}],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
                 None,
                 None,
                 [{'name': 'osd.0'}],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
@@ -551,7 +629,7 @@ docker.io/ceph/daemon-base:octopus
                 None,
                 None,
                 [],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
             ),
         ])
     @mock.patch('cephadm.call')
@@ -1182,11 +1260,11 @@ class TestShell(object):
             assert retval == 0
             assert ctx.config == None
 
-        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+        cephadm_fs.create_file(cd.CEPH_DEFAULT_CONF)
         with with_cephadm_ctx(cmd) as ctx:
             retval = cd.command_shell(ctx)
             assert retval == 0
-            assert ctx.config == cd.SHELL_DEFAULT_CONF
+            assert ctx.config == cd.CEPH_DEFAULT_CONF
 
         cmd = ['shell', '--config', 'foo']
         with with_cephadm_ctx(cmd) as ctx:
@@ -1201,11 +1279,11 @@ class TestShell(object):
             assert retval == 0
             assert ctx.keyring == None
 
-        cephadm_fs.create_file(cd.SHELL_DEFAULT_KEYRING)
+        cephadm_fs.create_file(cd.CEPH_DEFAULT_KEYRING)
         with with_cephadm_ctx(cmd) as ctx:
             retval = cd.command_shell(ctx)
             assert retval == 0
-            assert ctx.keyring == cd.SHELL_DEFAULT_KEYRING
+            assert ctx.keyring == cd.CEPH_DEFAULT_KEYRING
 
         cmd = ['shell', '--keyring', 'foo']
         with with_cephadm_ctx(cmd) as ctx:
