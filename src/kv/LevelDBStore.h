@@ -402,7 +402,7 @@ err:
   }
 
 
-  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override {
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0, IteratorBounds bounds = IteratorBounds()) override {
     return std::make_shared<LevelDBWholeSpaceIteratorImpl>(
 	db->NewIterator(leveldb::ReadOptions()));
   }
