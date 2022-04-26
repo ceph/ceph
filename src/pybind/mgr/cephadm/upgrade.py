@@ -161,47 +161,53 @@ class CephadmUpgrade:
 
         return '%s/%s daemons upgraded' % (done, len(daemons)), completed_types
 
+    def _get_current_version(self) -> Tuple[int, int, str]:
+        current_version = self.mgr.version.split('ceph version ')[1]
+        (current_major, current_minor, _) = current_version.split('-')[0].split('.', 2)
+        return (int(current_major), int(current_minor), current_version)
+
     def _check_target_version(self, version: str) -> Optional[str]:
         try:
-            (major, minor, _) = version.split('.', 2)
-            assert int(minor) >= 0
+            v = version.split('.', 2)
+            (major, minor) = (int(v[0]), int(v[1]))
+            assert minor >= 0
             # patch might be a number or {number}-g{sha1}
         except ValueError:
             return 'version must be in the form X.Y.Z (e.g., 15.2.3)'
-        if int(major) < 15 or (int(major) == 15 and int(minor) < 2):
+        if major < 15 or (major == 15 and minor < 2):
             return 'cephadm only supports octopus (15.2.0) or later'
 
         # to far a jump?
-        current_version = self.mgr.version.split('ceph version ')[1]
-        (current_major, current_minor, _) = current_version.split('-')[0].split('.', 2)
-        if int(current_major) < int(major) - 2:
+        (current_major, current_minor, current_version) = self._get_current_version()
+        if current_major < major - 2:
             return f'ceph can only upgrade 1 or 2 major versions at a time; {current_version} -> {version} is too big a jump'
-        if int(current_major) > int(major):
+        if current_major > major:
             return f'ceph cannot downgrade major versions (from {current_version} to {version})'
-        if int(current_major) == int(major):
-            if int(current_minor) > int(minor):
-                return f'ceph cannot downgrade to a {"rc" if minor == "1" else "dev"} release'
+        if current_major == major:
+            if current_minor > minor:
+                return f'ceph cannot downgrade to a {"rc" if minor == 1 else "dev"} release'
 
         # check mon min
         monmap = self.mgr.get("mon_map")
         mon_min = monmap.get("min_mon_release", 0)
-        if mon_min < int(major) - 2:
+        if mon_min < major - 2:
             return f'min_mon_release ({mon_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
         # check osd min
         osdmap = self.mgr.get("osd_map")
         osd_min_name = osdmap.get("require_osd_release", "argonaut")
         osd_min = ceph_release_to_major(osd_min_name)
-        if osd_min < int(major) - 2:
+        if osd_min < major - 2:
             return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
         return None
 
-    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict:
+    def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict:
         if not image:
             image = self.mgr.container_image_base
         reg_name, bare_image = image.split('/', 1)
         reg = Registry(reg_name)
+        (current_major, current_minor, _) = self._get_current_version()
         versions = []
         r: Dict[Any, Any] = {
             "image": image,
@@ -218,7 +224,12 @@ class CephadmUpgrade:
                     continue
                 if '-' in v[2]:
                     continue
-                versions.append('.'.join(v))
+                v_major = int(v[0])
+                v_minor = int(v[1])
+                candidate_version = (v_major > current_major
+                                     or (v_major == current_major and v_minor >= current_minor))
+                if show_all_versions or candidate_version:
+                    versions.append('.'.join(v))
             r["versions"] = sorted(
                 versions,
                 key=lambda k: list(map(int, k.split('.'))),
