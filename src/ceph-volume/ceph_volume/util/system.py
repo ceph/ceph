@@ -295,6 +295,9 @@ def get_mounts(devices=False, paths=False, realpath=False):
     - devtmpfs
     - /dev/root
 
+    Another special case are zfs filesystems since their device "path" does not start with a leading slash.
+    In such cases we check if the filesystem equals to 'zfs'
+
     If ``devices`` is set to ``True`` the mapping will be a device-to-path(s),
     if ``paths`` is set to ``True`` then the mapping will be
     a path-to-device(s)
@@ -319,9 +322,10 @@ def get_mounts(devices=False, paths=False, realpath=False):
         else:
             device = fields[0]
         path = os.path.realpath(fields[1])
+        filesystem = fields[2]
         # only care about actual existing devices
         if not os.path.exists(device) or not device.startswith('/'):
-            if device not in do_not_skip:
+            if device not in do_not_skip and filesystem != 'zfs':
                 continue
         if device in devices_mounted.keys():
             devices_mounted[device].append(path)
