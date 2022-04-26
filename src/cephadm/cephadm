@@ -1683,9 +1683,8 @@ def call(ctx: CephadmContext,
         assert process.stdout
         assert process.stderr
         try:
-            stdout, stderr = await asyncio.gather(tee(process.stdout),
-                                                  tee(process.stderr))
             returncode = await asyncio.wait_for(process.wait(), timeout)
+            stdout, stderr = await asyncio.gather(tee(process.stdout), tee(process.stderr))
         except asyncio.TimeoutError:
             logger.info(prefix + f'timeout after {timeout} seconds')
             return '', '', 124
