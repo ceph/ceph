@@ -268,6 +268,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
   bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
+  supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
 }
 
 void Server::dispatch(const cref_t<Message> &m)
@@ -875,8 +876,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     metrics_handler->add_session(session);
     ceph_assert(session->get_connection());
     auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
-    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
       reply->supported_features = supported_features;
+      reply->metric_spec = supported_metric_spec;
+    }
     mds->send_message_client(reply, session);
     if (mdcache->is_readonly()) {
       auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
@@ -1029,8 +1032,10 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
         metrics_handler->add_session(session);
 
 	auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
-	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
 	  reply->supported_features = supported_features;
+          reply->metric_spec = supported_metric_spec;
+	}
 	mds->send_message_client(reply, session);
 
 	if (mdcache->is_readonly())
@@ -1500,8 +1505,10 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
     metrics_handler->add_session(session);
     // notify client of success with an OPEN
     auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
-    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
       reply->supported_features = supported_features;
+      reply->metric_spec = supported_metric_spec;
+    }
     mds->send_message_client(reply, session);
     mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   }

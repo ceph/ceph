@@ -487,6 +487,7 @@ private:
   std::set<client_t> client_reconnect_denied;  // clients whose reconnect msg have been denied .
 
   feature_bitset_t supported_features;
+  feature_bitset_t supported_metric_spec;
   feature_bitset_t required_client_features;
 
   bool forward_all_requests_to_auth = false;
