@@ -315,6 +315,16 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   /* Check for necessary roles. */
   for (const auto& role : roles.plain) {
     if (t->has_role(role) == true) {
+      /* If this token was an allowed expired token because we got a
+       * service token we need to update the expiration before we cache it. */
+      if (allow_expired) {
+        /* TODO(tobias-urdin): Make an hour here configurable. */
+        uint64_t new_expires = ceph_clock_now().sec() + 3600;
+        ldpp_dout(dpp, 20) << "updating expiration of allowed expired token"
+                           << " from " << t->get_expires() << " to "
+                           << new_expires << dendl;
+        t->set_expires(new_expires);
+      }
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
