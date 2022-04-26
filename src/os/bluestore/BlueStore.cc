@@ -7610,7 +7610,7 @@ void BlueStore::set_cache_shards(unsigned num)
 }
 
 //---------------------------------------------
-bool BlueStore::has_null_manager()
+bool BlueStore::has_null_manager() const
 {
   return (fm && fm->is_null_manager());
 }
