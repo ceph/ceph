@@ -492,22 +492,21 @@ static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats
 }
 
 int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-               RGWFormatterFlusher& flusher,
-               const DoutPrefixProvider *dpp, std::string *err_msg)
+					 RGWFormatterFlusher& flusher,
+					 const DoutPrefixProvider *dpp,
+					 std::string *err_msg)
 {
-  bool fix_index = op_state.will_fix_index();
-
-  bool is_truncated;
-  map<string, bool> meta_objs;
-  map<rgw_obj_index_key, string> all_objs;
+  const bool fix_index = op_state.will_fix_index();
 
   bucket = op_state.get_bucket()->clone();
 
   rgw::sal::Bucket::ListParams params;
-
   params.list_versions = true;
   params.ns = RGW_OBJ_NS_MULTIPART;
 
+  std::map<std::string, bool> meta_objs;
+  std::map<rgw_obj_index_key, std::string> all_objs;
+  bool is_truncated;
   do {
     rgw::sal::Bucket::ListResults results;
     int r = bucket->list(dpp, params, listing_max_entries, results, null_yield);
@@ -519,11 +518,10 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
     }
     is_truncated = results.is_truncated;
 
-    vector<rgw_bucket_dir_entry>::iterator iter;
-    for (iter = results.objs.begin(); iter != results.objs.end(); ++iter) {
-      rgw_obj_index_key key = iter->key;
+    for (const auto& o : results.objs) {
+      rgw_obj_index_key key = o.key;
       rgw_obj obj(bucket->get_key(), key);
-      string oid = obj.get_oid();
+      std::string oid = obj.get_oid();
 
       int pos = oid.find_last_of('.');
       if (pos < 0) {
@@ -531,8 +529,8 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
         all_objs[key] = oid;
       } else {
         /* obj has suffix */
-        string name = oid.substr(0, pos);
-        string suffix = oid.substr(pos + 1);
+	std::string name = oid.substr(0, pos);
+	std::string suffix = oid.substr(pos + 1);
 
         if (suffix.compare("meta") == 0) {
           meta_objs[name] = true;
@@ -543,16 +541,15 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
     }
   } while (is_truncated);
 
-  list<rgw_obj_index_key> objs_to_unlink;
+  std::list<rgw_obj_index_key> objs_to_unlink;
   Formatter *f =  flusher.get_formatter();
 
   f->open_array_section("invalid_multipart_entries");
 
-  for (auto aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
-    string& name = aiter->second;
-
+  for (const auto& o : all_objs) {
+    const std::string& name = o.second;
     if (meta_objs.find(name) == meta_objs.end()) {
-      objs_to_unlink.push_back(aiter->first);
+      objs_to_unlink.push_back(o.first);
     }
 
     if (objs_to_unlink.size() > listing_max_entries) {
@@ -566,7 +563,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 	}
       }
 
-      dump_mulipart_index_results(objs_to_unlink, flusher.get_formatter());
+      dump_mulipart_index_results(objs_to_unlink, f);
       flusher.flush();
       objs_to_unlink.clear();
     }
