@@ -113,6 +113,7 @@ cached_stdin = None
 
 class EndPoint:
     """EndPoint representing an ip:port format"""
+
     def __init__(self, ip: str, port: int) -> None:
         self.ip = ip
         self.port = port
@@ -122,6 +123,28 @@ class EndPoint:
 
     def __repr__(self) -> str:
         return f'{self.ip}:{self.port}'
+
+
+class ContainerInfo:
+    def __init__(self, container_id: str,
+                 image_name: str,
+                 image_id: str,
+                 start: str,
+                 version: str) -> None:
+        self.container_id = container_id
+        self.image_name = image_name
+        self.image_id = image_id
+        self.start = start
+        self.version = version
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ContainerInfo):
+            return NotImplemented
+        return (self.container_id == other.container_id
+                and self.image_name == other.image_name
+                and self.image_id == other.image_id
+                and self.start == other.start
+                and self.version == other.version)
 
 
 class BaseConfig:
@@ -330,7 +353,7 @@ class UnauthorizedRegistryError(Error):
 
 
 class Ceph(object):
-    daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror',
+    daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror')
 
 ##################################
@@ -2034,7 +2057,7 @@ def infer_image(func: FuncT) -> FuncT:
         if not ctx.image:
             ctx.image = os.environ.get('CEPHADM_IMAGE')
         if not ctx.image:
-            ctx.image = get_last_local_ceph_image(ctx, ctx.container_engine.path)
+            ctx.image = infer_local_ceph_image(ctx, ctx.container_engine.path)
         if not ctx.image:
             ctx.image = _get_default_image(ctx)
         return func(ctx)
@@ -2066,24 +2089,70 @@ def default_image(func: FuncT) -> FuncT:
     return cast(FuncT, _default_image)
 
 
-def get_last_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional[str]:
+def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -> Optional[ContainerInfo]:
     """
+    :param ctx: Cephadm context
+    :param daemon_filter: daemon name or type
+    :param by_name: must be set to True if daemon name is provided
+    :return: Container information or None
+    """
+    def daemon_name_or_type(daemon: Dict[str, str]) -> str:
+        return daemon['name'] if by_name else daemon['name'].split('.', 1)[0]
+
+    if by_name and '.' not in daemon_filter:
+        logger.warning(f'Trying to get container info using invalid daemon name {daemon_filter}')
+        return None
+    daemons = list_daemons(ctx, detail=False)
+    matching_daemons = [d for d in daemons if daemon_name_or_type(d) == daemon_filter and d['fsid'] == ctx.fsid]
+    if matching_daemons:
+        d_type, d_id = matching_daemons[0]['name'].split('.', 1)
+        out, _, code = get_container_stats(ctx, ctx.container_engine.path, ctx.fsid, d_type, d_id)
+        if not code:
+            (container_id, image_name, image_id, start, version) = out.strip().split(',')
+            return ContainerInfo(container_id, image_name, image_id, start, version)
+    return None
+
+
+def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional[str]:
+    """
+     Infer the local ceph image based on the following priority criteria:
+       1- the image specified by --image arg (if provided).
+       2- the same image as the daemon container specified by --name arg (if provided).
+       3- image used by any ceph container running on the host. In this case we use daemon types.
+       4- if no container is found then we use the most ceph recent image on the host.
+
+     Note: any selected container must have the same fsid inferred previously.
+
     :return: The most recent local ceph image (already pulled)
     """
+    # '|' special character is used to separate the output fields into:
+    #  - Repository@digest
+    #  - Image Id
+    #  - Image Tag
+    #  - Image creation date
     out, _, _ = call_throws(ctx,
                             [container_path, 'images',
                              '--filter', 'label=ceph=True',
                              '--filter', 'dangling=false',
-                             '--format', '{{.Repository}}@{{.Digest}}'])
-    return _filter_last_local_ceph_image(out)
+                             '--format', '{{.Repository}}@{{.Digest}}|{{.ID}}|{{.Tag}}|{{.CreatedAt}}'])
 
+    container_info = None
+    daemon_name = ctx.name if ('name' in ctx and ctx.name and '.' in ctx.name) else None
+    daemons_ls = [daemon_name] if daemon_name is not None else Ceph.daemons  # daemon types: 'mon', 'mgr', etc
+    for daemon in daemons_ls:
+        container_info = get_container_info(ctx, daemon, daemon_name is not None)
+        if container_info is not None:
+            logger.debug(f"Using container info for daemon '{daemon}'")
+            break
 
-def _filter_last_local_ceph_image(out):
-    # type: (str) -> Optional[str]
     for image in out.splitlines():
-        if image and not image.endswith('@'):
-            logger.info('Using recent ceph image %s' % image)
-            return image
+        if image and not image.isspace():
+            (digest, image_id, tag, created_date) = image.lstrip().split('|')
+            if container_info is not None and image_id not in container_info.image_id:
+                continue
+            if digest and not digest.endswith('@'):
+                logger.info(f"Using ceph image with id '{image_id}' and tag '{tag}' created on {created_date}\n{digest}")
+                return digest
     return None
 
 
