@@ -348,14 +348,203 @@ class TestCephAdm(object):
         result = cd.dict_get_join({'a': 1}, 'a')
         assert result == 1
 
-    def test_last_local_images(self):
-        out = '''
-docker.io/ceph/daemon-base@
-docker.io/ceph/ceph:v15.2.5
-docker.io/ceph/daemon-base:octopus
-        '''
-        image = cd._filter_last_local_ceph_image(out)
-        assert image == 'docker.io/ceph/ceph:v15.2.5'
+    @mock.patch('os.listdir', return_value=[])
+    @mock.patch('cephadm.logger')
+    def test_infer_local_ceph_image(self, _logger, _listdir):
+        ctx = cd.CephadmContext()
+        ctx.fsid = '00000000-0000-0000-0000-0000deadbeez'
+        ctx.container_engine = mock_podman()
+
+        # make sure the right image is selected when container is found
+        cinfo = cd.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+                                 '514e6a882f6e74806a5856468489eeff8d7106095557578da96935e4d0ba4d9d',
+                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
+                                 '')
+        out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|master|2022-03-23 16:29:19 +0000 UTC
+        quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
+        docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+        with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
+            with mock.patch('cephadm.get_container_info', return_value=cinfo):
+                image = cd.infer_local_ceph_image(ctx, ctx.container_engine)
+                assert image == 'quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e'
+
+        # make sure first valid image is used when no container_info is found
+        out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|master|2022-03-23 16:29:19 +0000 UTC
+        quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
+        docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+        with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
+            with mock.patch('cephadm.get_container_info', return_value=None):
+                image = cd.infer_local_ceph_image(ctx, ctx.container_engine)
+                assert image == 'quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185'
+
+        # make sure images without digest are discarded (no container_info is found)
+        out = '''quay.ceph.io/ceph-ci/ceph@|||
+        docker.io/ceph/ceph@|||
+        docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+        with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
+            with mock.patch('cephadm.get_container_info', return_value=None):
+                image = cd.infer_local_ceph_image(ctx, ctx.container_engine)
+                assert image == 'docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508'
+
+
+
+    @pytest.mark.parametrize('daemon_filter, by_name, daemon_list, container_stats, output',
+        [
+            # get container info by type ('mon')
+            (
+                'mon',
+                False,
+                [
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                    {'name': 'mgr.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
+                 "",
+                 0),
+                cd.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+                                 '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
+                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
+                                 '')
+            ),
+            # get container info by name ('mon.ceph-node-0')
+            (
+                'mon.ceph-node-0',
+                True,
+                [
+                    {'name': 'mgr.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
+                 "",
+                 0),
+                cd.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+                                 '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
+                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
+                                 '')
+            ),
+            # get container info by name (same daemon but two different fsids)
+            (
+                'mon.ceph-node-0',
+                True,
+                [
+                    {'name': 'mon.ceph-node-0', 'fsid': '10000000-0000-0000-0000-0000deadbeef'},
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
+                 "",
+                 0),
+                cd.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+                                 '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
+                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
+                                 '')
+            ),
+            # get container info by type (bad container stats: 127 code)
+            (
+                'mon',
+                False,
+                [
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-FFFF-0000-0000-0000deadbeef'},
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                ("",
+                 "",
+                 127),
+                None
+            ),
+            # get container info by name (bad container stats: 127 code)
+            (
+                'mon.ceph-node-0',
+                True,
+                [
+                    {'name': 'mgr.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                ("",
+                 "",
+                 127),
+                None
+            ),
+            # get container info by invalid name (doens't contain '.')
+            (
+                'mon-ceph-node-0',
+                True,
+                [
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
+                 "",
+                 0),
+                None
+            ),
+            # get container info by invalid name (empty)
+            (
+                '',
+                True,
+                [
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
+                 "",
+                 0),
+                None
+            ),
+            # get container info by invalid type (empty)
+            (
+                '',
+                False,
+                [
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
+                ],
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
+                 "",
+                 0),
+                None
+            ),
+            # get container info by name: no match (invalid fsid)
+            (
+                'mon',
+                False,
+                [
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-1111-0000-0000-0000deadbeef'},
+                    {'name': 'mon.ceph-node-0', 'fsid': '00000000-2222-0000-0000-0000deadbeef'},
+                ],
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
+                 "",
+                 0),
+                None
+            ),
+            # get container info by name: no match
+            (
+                'mon.ceph-node-0',
+                True,
+                [],
+                None,
+                None
+            ),
+            # get container info by type: no match
+            (
+                'mgr',
+                False,
+                [],
+                None,
+                None
+            ),
+        ])
+    def test_get_container_info(self, daemon_filter, by_name, daemon_list, container_stats, output):
+        cd.logger = mock.Mock()
+        ctx = cd.CephadmContext()
+        ctx.fsid = '00000000-0000-0000-0000-0000deadbeef'
+        ctx.container_engine = mock_podman()
+        with mock.patch('cephadm.list_daemons', return_value=daemon_list):
+            with mock.patch('cephadm.get_container_stats', return_value=container_stats):
+                assert cd.get_container_info(ctx, daemon_filter, by_name) == output
 
     def test_should_log_to_journald(self):
         ctx = cd.CephadmContext()
@@ -481,6 +670,77 @@ docker.io/ceph/daemon-base:octopus
                 infer_fsid(ctx)
             assert ctx.fsid == result
 
+    @pytest.mark.parametrize('fsid, other_conf_files, config, name, list_daemons, result, ',
+        [
+            # per cluster conf has more precedence than default conf
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                [cd.CEPH_DEFAULT_CONF],
+                None,
+                None,
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
+            ),
+            # mon daemon conf has more precedence than cluster conf and default conf
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                ['/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
+                 cd.CEPH_DEFAULT_CONF],
+                None,
+                None,
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'cephadm:v1'}],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+            ),
+            # daemon conf (--name option) has more precedence than cluster, default and mon conf
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                ['/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
+                 '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config',
+                 cd.CEPH_DEFAULT_CONF],
+                None,
+                'osd.0',
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'cephadm:v1'},
+                 {'name': 'osd.0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'}],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/osd.0/config',
+            ),
+            # user provided conf ('/foo/ceph.conf') more precedence than any other conf
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                ['/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
+                 cd.CEPH_DEFAULT_CONF,
+                 '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/mon.a/config'],
+                '/foo/ceph.conf',
+                None,
+                [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'cephadm:v1'}],
+                '/foo/ceph.conf',
+            ),
+        ])
+    @mock.patch('cephadm.call')
+    @mock.patch('cephadm.logger')
+    def test_infer_config_precedence(self, logger, _call, other_conf_files, fsid, config, name, list_daemons, result, cephadm_fs):
+        # build the context
+        ctx = cd.CephadmContext()
+        ctx.fsid = fsid
+        ctx.config = config
+        ctx.name = name
+
+        # mock the decorator
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        infer_config = cd.infer_config(mock_fn)
+
+        # mock the config file
+        cephadm_fs.create_file(result)
+
+        # mock other potential config files
+        for f in other_conf_files:
+            cephadm_fs.create_file(f)
+
+        # test
+        with mock.patch('cephadm.list_daemons', return_value=list_daemons):
+            infer_config(ctx)
+            assert ctx.config == result
+
     @pytest.mark.parametrize('fsid, config, name, list_daemons, result, ',
         [
             (
@@ -495,7 +755,14 @@ docker.io/ceph/daemon-base:octopus
                 None,
                 None,
                 [],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
+            ),
+            (
+                '00000000-0000-0000-0000-0000deadbeef',
+                None,
+                None,
+                [],
+                '/var/lib/ceph/00000000-0000-0000-0000-0000deadbeef/config/ceph.conf',
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
@@ -509,21 +776,21 @@ docker.io/ceph/daemon-base:octopus
                 None,
                 None,
                 [{'name': 'mon.a', 'fsid': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'style': 'cephadm:v1'}],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
                 None,
                 None,
                 [{'name': 'mon.a', 'fsid': '00000000-0000-0000-0000-0000deadbeef', 'style': 'legacy'}],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
                 None,
                 None,
                 [{'name': 'osd.0'}],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
             ),
             (
                 '00000000-0000-0000-0000-0000deadbeef',
@@ -551,7 +818,7 @@ docker.io/ceph/daemon-base:octopus
                 None,
                 None,
                 [],
-                cd.SHELL_DEFAULT_CONF,
+                cd.CEPH_DEFAULT_CONF,
             ),
         ])
     @mock.patch('cephadm.call')
@@ -1182,11 +1449,11 @@ class TestShell(object):
             assert retval == 0
             assert ctx.config == None
 
-        cephadm_fs.create_file(cd.SHELL_DEFAULT_CONF)
+        cephadm_fs.create_file(cd.CEPH_DEFAULT_CONF)
         with with_cephadm_ctx(cmd) as ctx:
             retval = cd.command_shell(ctx)
             assert retval == 0
-            assert ctx.config == cd.SHELL_DEFAULT_CONF
+            assert ctx.config == cd.CEPH_DEFAULT_CONF
 
         cmd = ['shell', '--config', 'foo']
         with with_cephadm_ctx(cmd) as ctx:
@@ -1201,11 +1468,11 @@ class TestShell(object):
             assert retval == 0
             assert ctx.keyring == None
 
-        cephadm_fs.create_file(cd.SHELL_DEFAULT_KEYRING)
+        cephadm_fs.create_file(cd.CEPH_DEFAULT_KEYRING)
         with with_cephadm_ctx(cmd) as ctx:
             retval = cd.command_shell(ctx)
             assert retval == 0
-            assert ctx.keyring == cd.SHELL_DEFAULT_KEYRING
+            assert ctx.keyring == cd.CEPH_DEFAULT_KEYRING
 
         cmd = ['shell', '--keyring', 'foo']
         with with_cephadm_ctx(cmd) as ctx:
@@ -1718,8 +1985,8 @@ class TestPull:
 
     @mock.patch('cephadm.logger')
     @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
-    @mock.patch('cephadm.get_last_local_ceph_image', return_value='last_local_ceph_image')
-    def test_image(self, get_last_local_ceph_image, get_image_info_from_inspect, logger):
+    @mock.patch('cephadm.infer_local_ceph_image', return_value='last_local_ceph_image')
+    def test_image(self, infer_local_ceph_image, get_image_info_from_inspect, logger):
         cmd = ['pull']
         with with_cephadm_ctx(cmd) as ctx:
             retval = cd.command_pull(ctx)

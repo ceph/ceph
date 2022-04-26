@@ -692,7 +692,7 @@ static inline void populate_event(reservation_t& res,
   event.object_size = size;
   event.object_etag = etag;
   event.object_versionId = version;
-  event.awsRegion = res.store->get_zone()->get_zonegroup().api_name;
+  event.awsRegion = res.store->get_zone()->get_zonegroup().get_api_name();
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 

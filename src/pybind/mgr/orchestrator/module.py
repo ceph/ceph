@@ -1404,9 +1404,11 @@ Usage:
     @_cli_read_command('orch upgrade ls')
     def _upgrade_ls(self,
                     image: Optional[str] = None,
-                    tags: bool = False) -> HandleCommandResult:
+                    tags: bool = False,
+                    show_all_versions: Optional[bool] = False
+                    ) -> HandleCommandResult:
         """Check for available versions (or tags) we can upgrade to"""
-        completion = self.upgrade_ls(image, tags)
+        completion = self.upgrade_ls(image, tags, show_all_versions)
         r = raise_if_exception(completion)
         out = json.dumps(r, indent=4)
         return HandleCommandResult(stdout=out)

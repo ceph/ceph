@@ -546,3 +546,16 @@ options:
   min: 0
   flags:
   - runtime
+- name: client_collect_and_send_global_metrics
+  type: bool
+  level: advanced
+  desc: to enable and force collecting and sending the global metrics to MDS
+  long_desc: To be careful for this, when connecting to some old ceph clusters
+    it may crash the MDS daemons while upgrading.
+  default: false
+  tags:
+  - client
+  services:
+  - mds_client
+  flags:
+  - runtime

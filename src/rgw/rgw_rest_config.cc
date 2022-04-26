@@ -61,7 +61,7 @@ void RGWOp_ZoneGroupMap_Get::send_response() {
 }
 
 void RGWOp_ZoneConfig_Get::send_response() {
-  const RGWZoneParams& zone_params = store->get_zone()->get_params();
+  const RGWZoneParams& zone_params = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone_params();
 
   set_req_state_err(s, op_ret);
   dump_errno(s);

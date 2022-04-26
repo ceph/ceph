@@ -987,6 +987,14 @@ record_t Cache::prepare_record(
 	  std::move(delta_bl)
 	});
     } else {
+      auto sseq = NULL_SEG_SEQ;
+      auto stype = segment_type_t::NULL_SEG;
+      if (cleaner != nullptr) {
+        auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
+        auto &sinfo = cleaner->get_seg_info(sid);
+        sseq = sinfo.seq;
+        stype = sinfo.type;
+      }
       record.push_back(
 	delta_info_t{
 	  i->get_type(),
@@ -998,12 +1006,8 @@ record_t Cache::prepare_record(
 	  final_crc,
 	  (seastore_off_t)i->get_length(),
 	  i->get_version() - 1,
-	  cleaner
-	  ? cleaner->get_seq(i->get_paddr().as_seg_paddr().get_segment_id())
-	  : MAX_SEG_SEQ,
-	  cleaner
-	  ? cleaner->get_type(i->get_paddr().as_seg_paddr().get_segment_id())
-	  : segment_type_t::NULL_SEG,
+	  sseq,
+	  stype,
 	  std::move(delta_bl)
 	});
       i->last_committed_crc = final_crc;

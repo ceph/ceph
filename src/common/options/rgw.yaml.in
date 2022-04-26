@@ -1447,14 +1447,19 @@ options:
   type: bool
   level: advanced
   desc: Use RADOS for ops log
-  long_desc: If set, RGW will store ops log information in RADOS.
+  long_desc: If set, RGW will store ops log information in RADOS. WARNING,
+    there is no automation to clean up these log entries, so by default they
+    will pile up without bound. This MUST NOT be enabled unless the admin has
+    a strategy to manage and trim these log entries with `radosgw-admin log rm`.
   fmt_desc: Whether the operations log should be written to the
     Ceph Storage Cluster backend.
-  default: true
+  default: false
   services:
   - rgw
   see_also:
   - rgw_enable_ops_log
+  - rgw_log_object_name_utc
+  - rgw_log_object_name
   with_legacy: true
 # path to unix domain socket where ops log can go
 - name: rgw_ops_log_socket_path
@@ -1475,8 +1480,10 @@ options:
   type: str
   level: advanced
   desc: File-system path for ops log.
-  long_desc: Path to file that RGW will log ops logs to.
+  long_desc: Path to file that RGW will log ops logs to. A cephadm deployment will automatically
+    rotate these logs under /var/log/ceph/. Other deployments should arrange for similar log rotation.
   fmt_desc: The file-system path for writing operations logs.
+  daemon_default: /var/log/ceph/ops-log-$cluster-$name.log
   services:
   - rgw
   see_also:
@@ -1954,6 +1961,66 @@ options:
   fmt_desc: The object name prefix for the data log.
   services:
   - rgw
+  with_legacy: true
+- name: rgw_data_sync_poll_interval
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: Once multisite's incremental sync of a datalog shard is caught up
+    with its source, it will wait this long (in seconds) before polling for
+    more changes.
+  services:
+  - rgw
+  see_also:
+  - rgw_meta_sync_poll_interval
+  with_legacy: true
+- name: rgw_meta_sync_poll_interval
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: Once multisite's incremental sync of a mdlog shard is caught up
+    with its source, it will wait this long (in seconds) before polling for
+    more changes.
+  services:
+  - rgw
+  see_also:
+  - rgw_data_sync_poll_interval
+  with_legacy: true
+- name: rgw_bucket_sync_spawn_window
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: The maximum number of items that bucket sync is willing to
+    process in parallel (per remote bilog shard).
+  services:
+  - rgw
+  see_also:
+  - rgw_data_sync_spawn_window
+  - rgw_meta_sync_spawn_window
+  with_legacy: true
+- name: rgw_data_sync_spawn_window
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: The maximum number of items that data sync is willing to
+    process in parallel (per remote datalog shard).
+  services:
+  - rgw
+  see_also:
+  - rgw_bucket_sync_spawn_window
+  - rgw_meta_sync_spawn_window
+  with_legacy: true
+- name: rgw_meta_sync_spawn_window
+  type: int
+  level: dev
+  default: 20
+  fmt_desc: The maximum number of items that metadata sync is willing to
+    process in parallel (per remote mdlog shard).
+  services:
+  - rgw
+  see_also:
+  - rgw_bucket_sync_spawn_window
+  - rgw_data_sync_spawn_window
   with_legacy: true
 - name: rgw_bucket_quota_ttl
   type: int

@@ -1826,8 +1826,7 @@ namespace rgw {
     state->object->set_bucket(state->bucket.get());
 
     auto compression_type =
-      get_store()->get_zone()->get_params().get_compression_type(
-	state->bucket->get_placement_rule());
+      get_store()->get_compression_type(state->bucket->get_placement_rule());
 
     /* not obviously supportable */
     ceph_assert(! dlo_manifest);
