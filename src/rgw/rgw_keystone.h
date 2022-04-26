@@ -187,6 +187,7 @@ public:
   /* We really need the default ctor because of the internals of TokenCache. */
   TokenEnvelope() = default;
 
+  void set_expires(time_t expires) { token.expires = expires; }
   time_t get_expires() const { return token.expires; }
   const std::string& get_domain_id() const {return project.domain.id;};
   const std::string& get_domain_name() const {return project.domain.name;};
