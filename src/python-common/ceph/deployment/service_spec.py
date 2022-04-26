@@ -1112,6 +1112,7 @@ class AlertManagerSpec(MonitoringSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
+                 secure: bool = False,
                  extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'alertmanager'
@@ -1136,6 +1137,7 @@ class AlertManagerSpec(MonitoringSpec):
         #                        added to the default receivers'
         #                        <webhook_configs> configuration.
         self.user_data = user_data or {}
+        self.secure = secure
 
     def get_port_start(self) -> List[int]:
         return [self.get_port(), 9094]

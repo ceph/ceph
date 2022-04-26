@@ -1,5 +1,16 @@
 include(CMakeParseArguments)
 
+# ensure that we are using the exact python version specified by
+# 'WITH_PYTHON3', in case some included 3rd party libraries call
+# 'find_package(Python3 ...) without specifying the exact version number. if
+# the building host happens to have a higher version of python3, that version
+# would be picked up instead by find_package(Python3). and that is not want we
+# expect.
+find_package(Python3 ${WITH_PYTHON3} EXACT
+  QUIET
+  REQUIRED
+  COMPONENTS Interpreter)
+
 function(distutils_install_module name)
   set(py_srcs setup.py README.rst requirements.txt test-requirements.txt bin ${name})
   foreach(src ${py_srcs})

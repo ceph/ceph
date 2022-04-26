@@ -1949,8 +1949,8 @@ void MDSRank::resolve_done()
 }
 
 void MDSRank::apply_blocklist(const std::set<entity_addr_t> &addrs, epoch_t epoch) {
-  auto victims = server->apply_blocklist(addrs);
-  dout(4) << __func__ << ": killed " << victims << " blocklisted sessions ("
+  auto victims = server->apply_blocklist();
+  dout(4) << __func__ << ": killed " << victims << ", blocklisted sessions ("
           << addrs.size() << " blocklist entries, "
           << sessionmap.get_sessions().size() << ")" << dendl;
   if (victims) {
@@ -1971,9 +1971,10 @@ void MDSRank::reconnect_start()
   // into reconnect, so that we don't wait for them.
   objecter->enable_blocklist_events();
   std::set<entity_addr_t> blocklist;
+  std::set<entity_addr_t> range;
   epoch_t epoch = 0;
-  objecter->with_osdmap([&blocklist, &epoch](const OSDMap& o) {
-      o.get_blocklist(&blocklist);
+  objecter->with_osdmap([&blocklist, &range, &epoch](const OSDMap& o) {
+    o.get_blocklist(&blocklist, &range);
       epoch = o.get_epoch();
   });
 
@@ -3351,6 +3352,8 @@ void MDSRank::create_logger()
                             "exi", PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64_counter(l_mds_imported_inodes, "imported_inodes", "Imported inodes",
                             "imi", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mds_slow_reply, "slow_reply", "Slow replies", "slr",
+                              PerfCountersBuilder::PRIO_INTERESTING);
 
     // caps msg stats
     mds_plb.add_u64_counter(l_mdss_handle_client_caps, "handle_client_caps",

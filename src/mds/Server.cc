@@ -1306,38 +1306,23 @@ void Server::kill_session(Session *session, Context *on_safe)
   }
 }
 
-size_t Server::apply_blocklist(const std::set<entity_addr_t> &blocklist)
+size_t Server::apply_blocklist()
 {
-  bool prenautilus = mds->objecter->with_osdmap(
-      [&](const OSDMap& o) {
-	return o.require_osd_release < ceph_release_t::nautilus;
-      });
-
   std::vector<Session*> victims;
   const auto& sessions = mds->sessionmap.get_sessions();
-  for (const auto& p : sessions) {
-    if (!p.first.is_client()) {
-      // Do not apply OSDMap blocklist to MDS daemons, we find out
-      // about their death via MDSMap.
-      continue;
-    }
-
-    Session *s = p.second;
-    auto inst_addr = s->info.inst.addr;
-    // blocklist entries are always TYPE_ANY for nautilus+
-    inst_addr.set_type(entity_addr_t::TYPE_ANY);
-    if (blocklist.count(inst_addr)) {
-      victims.push_back(s);
-      continue;
-    }
-    if (prenautilus) {
-      // ...except pre-nautilus, they were TYPE_LEGACY
-      inst_addr.set_type(entity_addr_t::TYPE_LEGACY);
-      if (blocklist.count(inst_addr)) {
-	victims.push_back(s);
+  mds->objecter->with_osdmap(
+    [&](const OSDMap& o) {
+      for (const auto& p : sessions) {
+	if (!p.first.is_client()) {
+	  // Do not apply OSDMap blocklist to MDS daemons, we find out
+	  // about their death via MDSMap.
+	  continue;
+	}
+	if (o.is_blocklisted(p.second->info.inst.addr)) {
+	  victims.push_back(p.second);
+	}
       }
-    }
-  }
+    });
 
   for (const auto& s : victims) {
     kill_session(s, nullptr);
@@ -2141,6 +2126,9 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   mds->logger->inc(l_mds_reply);
   utime_t lat = ceph_clock_now() - req->get_recv_stamp();
   mds->logger->tinc(l_mds_reply_latency, lat);
+  if (lat >= g_conf()->mds_op_complaint_time) {
+    mds->logger->inc(l_mds_slow_reply);
+  }
   if (client_inst.name.is_client()) {
     mds->sessionmap.hit_session(mdr->session);
   }
@@ -2199,6 +2187,9 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
+    if (lat >= g_conf()->mds_op_complaint_time) {
+      mds->logger->inc(l_mds_slow_reply);
+    }
     if (session && client_inst.name.is_client()) {
       mds->sessionmap.hit_session(session);
     }
