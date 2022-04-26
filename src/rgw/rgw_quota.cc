@@ -927,12 +927,8 @@ public:
       if (ret < 0) {
         return ret;
       }
-<<<<<<< HEAD
-      ret = check_quota(dpp, "bucket", bucket_quota, bucket_stats, num_objs, size);
-=======
-      ldpp_dout(dpp, 1) << "QUOTA OP LOGGING #7: bucket stats cache get done, checking bucket quota" << dendl;
+      // ldpp_dout(dpp, 1) << "QUOTA OP LOGGING #7: bucket stats cache get done, checking bucket quota" << dendl;
       ret = check_quota(dpp, "bucket", quota.bucket_quota, bucket_stats, num_objs, size);
->>>>>>> 87a11632b6c (user_quota and bucket_quota are updated)
       if (ret < 0) {
         return ret;
       }
@@ -944,12 +940,8 @@ public:
       if (ret < 0) {
         return ret;
       }
-<<<<<<< HEAD
-      ret = check_quota(dpp, "user", user_quota, user_stats, num_objs, size);
-=======
-      ldpp_dout(dpp, 1) << "QUOTA OP LOGGING #8: user stats cache get done, checking user quota" << dendl;
+      // ldpp_dout(dpp, 1) << "QUOTA OP LOGGING #8: user stats cache get done, checking user quota" << dendl;
       ret = check_quota(dpp, "user", quota.user_quota, user_stats, num_objs, size);
->>>>>>> 87a11632b6c (user_quota and bucket_quota are updated)
       if (ret < 0) {
         return ret;
       }

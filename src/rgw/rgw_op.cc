@@ -1372,26 +1372,16 @@ int RGWOp::init_quota()
   store->get_quota(quota);
 
   if (s->bucket->get_info().quota.enabled) {
-<<<<<<< HEAD
-    bucket_quota = s->bucket->get_info().quota;
-  } else if (user->get_info().bucket_quota.enabled) {
-    bucket_quota = user->get_info().bucket_quota;
-  }
-
-  if (user->get_info().user_quota.enabled) {
-    user_quota = user->get_info().user_quota;
-=======
     quota.bucket_quota = s->bucket->get_info().quota;
-    ldpp_dout(this, 1) << "QUOTA OP LOGGING #3: init_quota: bucket quota max size is: " << quota.bucket_quota.max_size << " max objects is: " << quota.bucket_quota.max_objects << dendl;
+    // ldpp_dout(this, 1) << "QUOTA OP LOGGING #3: init_quota: bucket quota max size is: " << quota.bucket_quota.max_size << " max objects is: " << quota.bucket_quota.max_objects << dendl;
   } else if (user->get_info().quota.bucket_quota.enabled) {
     quota.bucket_quota = user->get_info().quota.bucket_quota;
-    ldpp_dout(this, 1) << "QUOTA OP LOGGING #3: init_quota: bucket quota max size is: " << quota.bucket_quota.max_size << " max objects is: " << quota.bucket_quota.max_objects << dendl;
+    // ldpp_dout(this, 1) << "QUOTA OP LOGGING #3: init_quota: bucket quota max size is: " << quota.bucket_quota.max_size << " max objects is: " << quota.bucket_quota.max_objects << dendl;
   }
 
   if (user->get_info().quota.user_quota.enabled) {
     quota.user_quota = user->get_info().quota.user_quota;
-    ldpp_dout(this, 1) << "QUOTA OP LOGGING #4: init_quota: user quota max size is: " << quota.user_quota.max_size << " max objects is: " << quota.user_quota.max_objects << dendl;
->>>>>>> 87a11632b6c (user_quota and bucket_quota are updated)
+    // ldpp_dout(this, 1) << "QUOTA OP LOGGING #4: init_quota: user quota max size is: " << quota.user_quota.max_size << " max objects is: " << quota.user_quota.max_objects << dendl;
   }
 
   return 0;
@@ -3894,12 +3884,8 @@ void RGWPutObj::execute(optional_yield y)
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-<<<<<<< HEAD
-    op_ret = s->bucket->check_quota(this, user_quota, bucket_quota, s->content_length, y);
-=======
-    ldpp_dout(this, 1) << "QUOTA OP LOGGING #5: put_obj::execute()" << dendl;
+    // ldpp_dout(this, 1) << "QUOTA OP LOGGING #5: put_obj::execute()" << dendl;
     op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
->>>>>>> 87a11632b6c (user_quota and bucket_quota are updated)
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
@@ -4123,12 +4109,8 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
-<<<<<<< HEAD
-  op_ret = s->bucket->check_quota(this, user_quota, bucket_quota, s->obj_size, y);
-=======
-  ldpp_dout(this, 1) << "QUOTA OP LOGGING: put_obj::execute() #2" << dendl;
+  // ldpp_dout(this, 1) << "QUOTA OP LOGGING: put_obj::execute() #2" << dendl;
   op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
->>>>>>> 87a11632b6c (user_quota and bucket_quota are updated)
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     return;
