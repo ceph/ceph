@@ -2788,7 +2788,7 @@ public:
   bool allows_journal() override { return false; };
 
   void prepare_for_fast_shutdown() override;
-  virtual bool has_null_manager();
+  bool has_null_manager() const override;
 
   uint64_t get_min_alloc_size() const override {
     return min_alloc_size;
