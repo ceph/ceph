@@ -51,7 +51,12 @@ class PrometheusRESTController(RESTController):
                 "Could not reach {}'s API on {}".format(api_name, base_url),
                 http_status_code=404,
                 component='prometheus')
-        content = json.loads(response.content)
+        try:
+            content = json.loads(response.content, strict=False)
+        except json.JSONDecodeError as e:
+            raise DashboardException(
+                "Error parsing Prometheus Alertmanager response: {}".format(e.msg),
+                component='prometheus')
         if content['status'] == 'success':
             if 'data' in content:
                 return content['data']
