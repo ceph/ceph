@@ -250,7 +250,7 @@ class CephCluster(object):
 
     def json_asok(self, command, service_type, service_id, timeout=None):
         if timeout is None:
-            timeout = 15*60
+            timeout = 300
         command.insert(0, '--format=json')
         proc = self.mon_manager.admin_socket(service_type, service_id, command, timeout=timeout)
         response_data = proc.stdout.getvalue().strip()
