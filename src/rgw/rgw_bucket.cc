@@ -159,37 +159,6 @@ void rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
   }
 }
 
-int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id)
-{
-  auto pos = bucket_instance.rfind(':');
-  if (pos == string::npos) {
-    return -EINVAL;
-  }
-
-  string first = bucket_instance.substr(0, pos);
-  string second = bucket_instance.substr(pos + 1);
-
-  pos = first.find(':');
-
-  if (pos == string::npos) {
-    *shard_id = -1;
-    *bucket_name = first;
-    *bucket_id = second;
-    return 0;
-  }
-
-  *bucket_name = first.substr(0, pos);
-  *bucket_id = first.substr(pos + 1);
-
-  string err;
-  *shard_id = strict_strtol(second.c_str(), 10, &err);
-  if (!err.empty()) {
-    return -EINVAL;
-  }
-
-  return 0;
-}
-
 // parse key in format: [tenant/]name:instance[:shard_id]
 int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
                                 rgw_bucket *bucket, int *shard_id)

@@ -358,7 +358,6 @@ public:
 
   int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);
-  int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, rgw::sal::Zone* zone);
 
   bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
 

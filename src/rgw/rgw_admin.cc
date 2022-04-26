@@ -1762,12 +1762,12 @@ static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* store,
 {
   boost::optional<RGWRESTConn> conn;
   if (remote == zonegroup.get_id()) {
-    conn.emplace(store->ctx(), store->svc()->zone, remote, zonegroup.endpoints, zonegroup.api_name);
+    conn.emplace(store->ctx(), store, remote, zonegroup.endpoints, zonegroup.api_name);
   } else {
     for (const auto& z : zonegroup.zones) {
       const auto& zone = z.second;
       if (remote == zone.id) {
-        conn.emplace(store->ctx(), store->svc()->zone, remote, zone.endpoints, zonegroup.api_name);
+        conn.emplace(store->ctx(), store, remote, zone.endpoints, zonegroup.api_name);
         break;
       }
     }
@@ -2416,15 +2416,14 @@ static void tab_dump(const string& header, int width, const list<string>& entrie
 
 static void sync_status(Formatter *formatter)
 {
-  const RGWRealm& realm = store->get_zone()->get_realm();
-  const RGWZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
-  const RGWZone& zone = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone();
+  const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
+  rgw::sal::Zone* zone = store->get_zone();
 
   int width = 15;
 
-  cout << std::setw(width) << "realm" << std::setw(1) << " " << realm.get_id() << " (" << realm.get_name() << ")" << std::endl;
+  cout << std::setw(width) << "realm" << std::setw(1) << " " << zone->get_realm_id() << " (" << zone->get_realm_name() << ")" << std::endl;
   cout << std::setw(width) << "zonegroup" << std::setw(1) << " " << zonegroup.get_id() << " (" << zonegroup.get_name() << ")" << std::endl;
-  cout << std::setw(width) << "zone" << std::setw(1) << " " << zone.id << " (" << zone.name << ")" << std::endl;
+  cout << std::setw(width) << "zone" << std::setw(1) << " " << zone->get_id() << " (" << zone->get_name() << ")" << std::endl;
 
   list<string> md_status;
 
@@ -2726,14 +2725,13 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
 static int bucket_sync_info(rgw::sal::RadosStore* store, const RGWBucketInfo& info,
                               std::ostream& out)
 {
-  const RGWRealm& realm = store->get_zone()->get_realm();
-  const RGWZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
-  const RGWZone& zone = store->svc()->zone->get_zone();
+  const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
+  rgw::sal::Zone* zone = store->get_zone();
   constexpr int width = 15;
 
-  out << indented{width, "realm"} << realm.get_id() << " (" << realm.get_name() << ")\n";
+  out << indented{width, "realm"} << zone->get_realm_id() << " (" << zone->get_realm_name() << ")\n";
   out << indented{width, "zonegroup"} << zonegroup.get_id() << " (" << zonegroup.get_name() << ")\n";
-  out << indented{width, "zone"} << zone.id << " (" << zone.name << ")\n";
+  out << indented{width, "zone"} << zone->get_id() << " (" << zone->get_name() << ")\n";
   out << indented{width, "bucket"} << info.bucket << "\n\n";
 
   if (!static_cast<rgw::sal::RadosStore*>(store)->ctl()->bucket->bucket_imports_data(info.bucket, null_yield, dpp())) {
@@ -2767,14 +2765,13 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
 			      std::optional<rgw_bucket>& opt_source_bucket,
                               std::ostream& out)
 {
-  const RGWRealm& realm = store->get_zone()->get_realm();
-  const RGWZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
-  const RGWZone& zone = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone();
+  const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
+  rgw::sal::Zone* zone = store->get_zone();
   constexpr int width = 15;
 
-  out << indented{width, "realm"} << realm.get_id() << " (" << realm.get_name() << ")\n";
+  out << indented{width, "realm"} << zone->get_realm_id() << " (" << zone->get_realm_name() << ")\n";
   out << indented{width, "zonegroup"} << zonegroup.get_id() << " (" << zonegroup.get_name() << ")\n";
-  out << indented{width, "zone"} << zone.id << " (" << zone.name << ")\n";
+  out << indented{width, "zone"} << zone->get_id() << " (" << zone->get_name() << ")\n";
   out << indented{width, "bucket"} << info.bucket << "\n\n";
 
   if (!static_cast<rgw::sal::RadosStore*>(store)->ctl()->bucket->bucket_imports_data(info.bucket, null_yield, dpp())) {
@@ -2796,8 +2793,8 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
   set<rgw_zone_id> zone_ids;
 
   if (!source_zone_id.empty()) {
-    auto z = zonegroup.zones.find(source_zone_id);
-    if (z == zonegroup.zones.end()) {
+    auto z = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zonegroup().zones.find(source_zone_id);
+    if (z == static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zonegroup().zones.end()) {
       ldpp_dout(dpp(), -1) << "Source zone not found in zonegroup "
           << zonegroup.get_name() << dendl;
       return -EINVAL;
@@ -2809,14 +2806,14 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
     }
     zone_ids.insert(source_zone_id);
   } else {
-    for (const auto& entry : zonegroup.zones) {
+    for (const auto& entry : static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zonegroup().zones) {
       zone_ids.insert(entry.second.id);
     }
   }
 
   for (auto& zone_id : zone_ids) {
-    auto z = zonegroup.zones.find(zone_id.id);
-    if (z == zonegroup.zones.end()) { /* should't happen */
+    auto z = static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zonegroup().zones.find(zone_id.id);
+    if (z == static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zonegroup().zones.end()) { /* should't happen */
       continue;
     }
     auto c = zone_conn_map.find(zone_id.id);
@@ -2831,7 +2828,7 @@ static int bucket_sync_status(rgw::sal::RadosStore* store, const RGWBucketInfo& 
 	continue;
       }
       if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-	bucket_source_sync_status(dpp(), store, zone, z->second,
+	bucket_source_sync_status(dpp(), store, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone(), z->second,
 				  c->second,
 				  info, pipe,
 				  width, out);
@@ -6155,7 +6152,7 @@ int main(int argc, const char **argv)
     rgw_placement_rule target_rule;
     target_rule.name = placement_id;
     target_rule.storage_class = *opt_storage_class;
-    if (!store->get_zone()->get_params().valid_placement(target_rule)) {
+    if (!store->valid_placement(target_rule)) {
       cerr << "NOTICE: invalid dest placement: " << target_rule.to_str() << std::endl;
       return EINVAL;
     }
@@ -8565,7 +8562,7 @@ next:
 
     RGWSyncModuleInstanceRef sync_module;
     int ret = static_cast<rgw::sal::RadosStore*>(store)->svc()->sync_modules->get_manager()->create_instance(dpp(), g_ceph_context, static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone().tier_type,
-        store->get_zone()->get_params().tier_config, &sync_module);
+        static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone_params().tier_config, &sync_module);
     if (ret < 0) {
       ldpp_dout(dpp(), -1) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
       return ret;
