@@ -670,6 +670,17 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_service_token_enabled
+  type: bool
+  level: advanced
+  desc: Service tokens allowing the usage of expired Keystone auth tokens
+  fmt_desc: The service token support allows the incoming request to contain
+    a X-Service-Token header with a Keystone token that if it has acceptable
+    roles allows using an expired token in the X-Auth-Token header.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_barbican_user
   type: str
   level: advanced
