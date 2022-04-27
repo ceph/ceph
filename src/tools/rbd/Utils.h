@@ -82,6 +82,8 @@ struct ProgressContext : public librbd::ProgressContext {
   void fail();
 };
 
+int get_percentage(uint64_t part, uint64_t whole);
+
 template <typename T, void(T::*MF)(int)>
 librbd::RBD::AioCompletion *create_aio_completion(T *t) {
   return new librbd::RBD::AioCompletion(
