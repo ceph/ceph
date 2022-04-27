@@ -950,7 +950,9 @@ def test_datalog_autotrim():
 
     # wait for metadata and data sync to catch up
     zonegroup_meta_checkpoint(zonegroup)
-    zonegroup_data_checkpoint(zonegroup_conns)
+    # double check for every zone's data-sync completely synchronized
+    for _ in range(2):
+    	zonegroup_data_checkpoint(zonegroup_conns)
 
     # trim each datalog
     for zone, _ in zone_bucket:
