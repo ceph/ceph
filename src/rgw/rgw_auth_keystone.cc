@@ -235,13 +235,11 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::grant(std::move(apl));
   }
 
-  /* TODO(tobias-urdin): Add config option for enabling service token support */
-
   /* We have a service token and a token so we verify the service
    * token and if it's invalid the request is invalid. If it's valid
    * we allow an expired token to be used when doing lookup in Keystone.
    * We never get to this if the token is in the cache. */
-  if (! service_token.empty()) {
+  if (g_conf()->rgw_keystone_service_token_enabled && ! service_token.empty()) {
     boost::optional<TokenEngine::token_envelope_t> st;
 
     const auto& service_token_id = rgw_get_token_id(service_token);
