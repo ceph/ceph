@@ -40,13 +40,13 @@ private:
 
   // Asynchronously receive a complete request message.
   void read_request() {
-    // auto self = shared_from_this();
+    auto self = shared_from_this();
 
     http::async_read(socket_, buffer_, request_,
-                     [&](beast::error_code ec, std::size_t bytes_transferred) {
+                     [self](beast::error_code ec, std::size_t bytes_transferred) {
                        boost::ignore_unused(bytes_transferred);
                        if (!ec)
-                         process_request();
+                         self->process_request();
                      });
   }
 
