@@ -691,6 +691,17 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_expired_token_cache_expiration
+  type: int
+  level: advanced
+  desc: The number of seconds to add to current time for expired token expiration
+  fmt_desc: The expired token that is allowed when a valid service token is given
+    need a new expiration date for the caching. This is the seconds to add to the
+    current time and then set on an expired token that is verified with a service token.
+  default: 3600
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_barbican_user
   type: str
   level: advanced
