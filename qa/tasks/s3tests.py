@@ -405,6 +405,7 @@ def run_tests(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.items():
         client_config = client_config or {}
+        (cluster_name,_,_) = teuthology.split_role(client)
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
@@ -422,6 +423,10 @@ def run_tests(ctx, config):
         if client_config.get('calling-format') != 'ordinary':
             attrs += ['!fails_with_subdomain']
         if client_config.get('without-sse-s3'):
+            attrs += ['!sse-s3']
+        elif client_config.get('with-sse-s3'):
+            pass
+        elif ctx.ceph[cluster_name].rgw_crypt_sse_s3_backend is None:
             attrs += ['!sse-s3']
        
         if 'extra_attrs' in client_config:
