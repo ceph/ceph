@@ -79,19 +79,23 @@ seastar::future<> BackgroundRecoveryT<T>::start()
       std::chrono::milliseconds(std::lround(delay * 1000)));
   }
   return maybe_delay.then([ref, this] {
-    return ss.throttler.with_throttle_while(
-      this, get_scheduler_params(), [this] {
-        return T::interruptor::with_interruption([this] {
-          return do_recovery();
-        }, [](std::exception_ptr) {
-	  return seastar::make_ready_future<bool>(false);
-        }, pg);
-      }).handle_exception_type([ref, this](const std::system_error& err) {
-        if (err.code() == std::make_error_code(std::errc::interrupted)) {
-          logger().debug("{} recovery interruped: {}", *pg, err.what());
-	  return seastar::now();
-        }
-        return seastar::make_exception_future<>(err);
+    return this->template with_blocking_event<OperationThrottler::BlockingEvent>(
+      [ref, this] (auto&& trigger) {
+      return ss.throttler.with_throttle_while(
+        std::move(trigger),
+        this, get_scheduler_params(), [this] {
+          return T::interruptor::with_interruption([this] {
+            return do_recovery();
+          }, [](std::exception_ptr) {
+            return seastar::make_ready_future<bool>(false);
+          }, pg);
+        }).handle_exception_type([ref, this](const std::system_error& err) {
+          if (err.code() == std::make_error_code(std::errc::interrupted)) {
+            logger().debug("{} recovery interruped: {}", *pg, err.what());
+            return seastar::now();
+          }
+          return seastar::make_exception_future<>(err);
+        });
       });
   });
 }
