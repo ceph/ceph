@@ -1,5 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CookieService } from 'ngx-cookie-service';
+
 
 import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
@@ -23,6 +25,7 @@ describe('TelemetryActivationNotificationComponent', () => {
   let authStorageService: AuthStorageService;
   let mgrModuleService: MgrModuleService;
   let notificationService: NotificationService;
+  let cookieService: CookieService;
 
   let isNotificationHiddenSpy: jasmine.Spy;
   let getPermissionsSpy: jasmine.Spy;
@@ -51,6 +54,7 @@ describe('TelemetryActivationNotificationComponent', () => {
     authStorageService = TestBed.inject(AuthStorageService);
     mgrModuleService = TestBed.inject(MgrModuleService);
     notificationService = TestBed.inject(NotificationService);
+    cookieService = TestBed.inject(CookieService);
 
     isNotificationHiddenSpy = spyOn(component, 'isNotificationHidden').and.returnValue(false);
     getPermissionsSpy = spyOn(authStorageService, 'getPermissions').and.returnValue(
@@ -94,7 +98,7 @@ describe('TelemetryActivationNotificationComponent', () => {
     fixture.detectChanges();
     component.onDismissed();
     expect(notificationService.show).toHaveBeenCalled();
-    expect(localStorage.getItem('telemetry_notification_hidden')).toBe('true');
+    expect(cookieService.get('telemetry_notification_hidden')).toBe('true');
   });
 
   it('should hide the notification if the user logs out', () => {

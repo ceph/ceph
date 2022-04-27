@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
+import { CookieService } from 'ngx-cookie-service';
 
 import {
   NgbAlertModule,
@@ -97,7 +98,7 @@ import { WizardComponent } from './wizard/wizard.component';
     MotdComponent,
     WizardComponent
   ],
-  providers: [],
+  providers: [ CookieService ],
   exports: [
     SparklineComponent,
     HelperComponent,

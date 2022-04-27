@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
+import { CookieService } from 'ngx-cookie-service';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -21,7 +22,8 @@ export class TelemetryNotificationComponent implements OnInit, OnDestroy {
     private mgrModuleService: MgrModuleService,
     private authStorageService: AuthStorageService,
     private notificationService: NotificationService,
-    private telemetryNotificationService: TelemetryNotificationService
+    private telemetryNotificationService: TelemetryNotificationService,
+    private cookieService: CookieService
   ) {}
 
   ngOnInit() {
@@ -46,12 +48,12 @@ export class TelemetryNotificationComponent implements OnInit, OnDestroy {
   }
 
   isNotificationHidden(): boolean {
-    return localStorage.getItem('telemetry_notification_hidden') === 'true';
+    return this.cookieService.get('telemetry_notification_hidden') === 'true';
   }
 
   onDismissed(): void {
     this.telemetryNotificationService.setVisibility(false);
-    localStorage.setItem('telemetry_notification_hidden', 'true');
+    this.cookieService.set('telemetry_notification_hidden', 'true', 365);
     this.notificationService.show(
       NotificationType.success,
       $localize`Telemetry activation reminder muted`,
