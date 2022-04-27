@@ -27,15 +27,6 @@ PGActivationBlocker::wait(PGActivationBlocker::BlockingEvent::TriggerI&& trigger
   }
 }
 
-blocking_future<> PGActivationBlocker::wait()
-{
-  if (pg->get_peering_state().is_active()) {
-    return make_blocking_future(seastar::now());
-  } else {
-    return make_blocking_future(p.get_shared_future());
-  }
-}
-
 seastar::future<> PGActivationBlocker::stop()
 {
   p.set_exception(crimson::common::system_shutdown_exception());

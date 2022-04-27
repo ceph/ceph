@@ -27,7 +27,6 @@ public:
 
   PGActivationBlocker(PG *pg) : pg(pg) {}
   void on_active();
-  blocking_future<> wait();
   seastar::future<> wait(PGActivationBlocker::BlockingEvent::TriggerI&&);
   seastar::future<> stop();
 };
