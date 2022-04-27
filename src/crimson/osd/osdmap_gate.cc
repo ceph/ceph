@@ -23,32 +23,6 @@ void OSDMapGate<OSDMapGateTypeV>::OSDMapBlocker::dump_detail(Formatter *f) const
 }
 
 template <OSDMapGateType OSDMapGateTypeV>
-blocking_future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(epoch_t epoch)
-{
-  if (__builtin_expect(stopping, false)) {
-    return make_exception_blocking_future<epoch_t>(
-	crimson::common::system_shutdown_exception());
-  }
-  if (current >= epoch) {
-    return make_ready_blocking_future<epoch_t>(current);
-  } else {
-    logger().info("evt epoch is {}, i have {}, will wait", epoch, current);
-    auto &blocker = waiting_peering.emplace(
-      epoch, std::make_pair(blocker_type, epoch)).first->second;
-    auto fut = blocker.promise.get_shared_future();
-    if (shard_services) {
-      return blocker.make_blocking_future(
-	(*shard_services).get().osdmap_subscribe(current, true).then(
-	  [fut=std::move(fut)]() mutable {
-	    return std::move(fut);
-	  }));
-    } else {
-      return blocker.make_blocking_future(std::move(fut));
-    }
-  }
-}
-
-template <OSDMapGateType OSDMapGateTypeV>
 seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
   typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
   epoch_t epoch)
