@@ -224,26 +224,13 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
     crimson::osd::scheduler::params_t params,
     F &&f) {
     if (!max_in_progress) return f();
-    auto fut = acquire_throttle(params);
-    // At any given moment a particular op can  be blocked by a given
-    // OperationThrottler instance no more than once. This means the
-    // same throtter won't be on the op's blockers list more than one
-    // time.
-    return op->with_blocking_future(std::move(fut))
+    return acquire_throttle(params)
       .then(std::forward<F>(f))
       .then([this](auto x) {
 	release_throttle();
 	return x;
       });
   }
-
-public:
-  OperationThrottler(ConfigProxy &conf);
-
-  const char** get_tracked_conf_keys() const final;
-  void handle_conf_change(const ConfigProxy& conf,
-			  const std::set<std::string> &changed) final;
-  void update_from_config(const ConfigProxy &conf);
 
   template <typename OperationT, typename F>
   seastar::future<> with_throttle_while(
@@ -253,6 +240,23 @@ public:
     return with_throttle(op, params, f).then([this, params, op, f](bool cont) {
       return cont ? with_throttle_while(op, params, f) : seastar::now();
     });
+  }
+
+
+public:
+  OperationThrottler(ConfigProxy &conf);
+
+  const char** get_tracked_conf_keys() const final;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set<std::string> &changed) final;
+  void update_from_config(const ConfigProxy &conf);
+
+  template <class OpT, class... Args>
+  seastar::future<> with_throttle_while(
+    BlockingEvent::Trigger<OpT>&& trigger,
+    Args&&... args) {
+    return trigger.maybe_record_blocking(
+      with_throttle_while(std::forward<Args>(args)...), *this);
   }
 
 private:
@@ -267,7 +271,7 @@ private:
 
   void wake();
 
-  blocking_future<> acquire_throttle(
+  seastar::future<> acquire_throttle(
     crimson::osd::scheduler::params_t params);
 
   void release_throttle();

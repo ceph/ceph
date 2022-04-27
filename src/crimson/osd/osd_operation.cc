@@ -50,13 +50,13 @@ void OperationThrottler::release_throttle()
   wake();
 }
 
-blocking_future<> OperationThrottler::acquire_throttle(
+seastar::future<> OperationThrottler::acquire_throttle(
   crimson::osd::scheduler::params_t params)
 {
   crimson::osd::scheduler::item_t item{params, seastar::promise<>()};
   auto fut = item.wake.get_future();
   scheduler->enqueue(std::move(item));
-  return make_blocking_future(std::move(fut));
+  return fut;
 }
 
 void OperationThrottler::dump_detail(Formatter *f) const

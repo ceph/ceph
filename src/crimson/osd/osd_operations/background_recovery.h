@@ -65,6 +65,7 @@ public:
   void print(std::ostream&) const final;
 
   std::tuple<
+    OperationThrottler::BlockingEvent,
     RecoveryBackend::RecoveryBlockingEvent
   > tracking_events;
 
@@ -84,6 +85,7 @@ public:
     float delay = 0);
 
   std::tuple<
+    OperationThrottler::BlockingEvent,
     RecoveryBackend::RecoveryBlockingEvent
   > tracking_events;
 
@@ -114,6 +116,7 @@ public:
   static BackfillRecoveryPipeline &bp(PG &pg);
 
   std::tuple<
+    OperationThrottler::BlockingEvent,
     BackfillRecoveryPipeline::Process::BlockingEvent
   > tracking_events;
 
