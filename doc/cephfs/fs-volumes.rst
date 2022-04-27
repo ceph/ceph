@@ -286,7 +286,7 @@ List snapshots of a subvolume using::
 
     $ ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Fetch the metadata of a snapshot using::
+Fetch the information of a snapshot using::
 
     $ ceph fs subvolume snapshot info <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
@@ -296,6 +296,31 @@ The output format is json and contains fields as follows.
 * data_pool: data pool the snapshot belongs to
 * has_pending_clones: "yes" if snapshot clone is in progress otherwise "no"
 * size: snapshot size in bytes
+
+Set custom metadata on the snapshot as a key-value pair using::
+
+    $ ceph fs subvolume snapshot metadata set <vol_name> <subvol_name> <snap_name> <key_name> <value> [--group_name <subvol_group_name>]
+
+.. note:: If the key_name already exists then the old value will get replaced by the new value.
+
+.. note:: The key_name and value should be a string of ASCII characters (as specified in python's string.printable). The key_name is case-insensitive and always stored in lower case.
+
+.. note:: Custom metadata on a snapshots is not preserved when snapshotting the subvolume, and hence, is also not preserved when cloning the subvolume snapshot.
+
+Get custom metadata set on the snapshot using the metadata key::
+
+    $ ceph fs subvolume snapshot metadata get <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>]
+
+List custom metadata (key-value pairs) set on the snapshot using::
+
+    $ ceph fs subvolume snapshot metadata ls <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+Remove custom metadata set on the snapshot using the metadata key::
+
+    $ ceph fs subvolume snapshot metadata rm <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>] [--force]
+
+Using the '--force' flag allows the command to succeed that would otherwise
+fail if the metadata key did not exist.
 
 Cloning Snapshots
 -----------------
