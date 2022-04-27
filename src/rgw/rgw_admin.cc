@@ -28,8 +28,6 @@ extern "C" {
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
 
-#include "global/global_init.h"
-
 #include "include/utime.h"
 #include "include/str_list.h"
 
@@ -3370,8 +3368,8 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-                         CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = rgw_global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			     CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
@@ -4246,12 +4244,36 @@ int main(int argc, const char **argv)
     bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
     bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end()) && !bypass_gc;
 
+    std::string rgw_store = "rados";
+    // Get the store backend
+    const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_DBSTORE
+    if (config_store == "dbstore") {
+      rgw_store = "dbstore";
+    }
+#endif
+
+#ifdef WITH_RADOSGW_MOTR
+    if (config_store == "motr") {
+      rgw_store = "motr";
+    }
+#endif
+
     if (raw_storage_op) {
-      store = StoreManager::get_raw_storage(dpp(), g_ceph_context, "rados");
+      store = StoreManager::get_raw_storage(dpp(),
+					    g_ceph_context,
+					    rgw_store);
     } else {
-      store = StoreManager::get_storage(dpp(), g_ceph_context, "rados", false, false, false,
-					   false, false,
-					   need_cache && g_conf()->rgw_cache_enabled, need_gc);
+      store = StoreManager::get_storage(dpp(),
+					g_ceph_context,
+					rgw_store,
+					false,
+					false,
+					false,
+					false,
+					false,
+					need_cache && g_conf()->rgw_cache_enabled,
+					need_gc);
     }
     if (!store) {
       cerr << "couldn't init storage provider" << std::endl;
