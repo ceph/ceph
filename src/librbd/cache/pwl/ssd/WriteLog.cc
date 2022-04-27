@@ -535,7 +535,7 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops) {
 
   for (auto &operation : ops) {
     auto &log_entry = operation->get_log_entry();
-    log_entry->ram_entry.entry_valid = 1;
+    log_entry->ram_entry.set_entry_valid(true);
     m_log_entries.push_back(log_entry);
     ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
   }
