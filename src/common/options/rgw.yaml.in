@@ -681,6 +681,16 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_service_token_accepted_roles
+  type: str
+  level: advanced
+  desc: Only users with one of these roles will be valid for service users.
+  fmt_desc: The users that created the service token given must have one of
+    these roles to be considered a valid service user.
+  default: admin
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_barbican_user
   type: str
   level: advanced
