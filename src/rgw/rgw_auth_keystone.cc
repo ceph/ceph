@@ -334,8 +334,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       /* If this token was an allowed expired token because we got a
        * service token we need to update the expiration before we cache it. */
       if (allow_expired) {
-        /* TODO(tobias-urdin): Make an hour here configurable. */
-        uint64_t new_expires = ceph_clock_now().sec() + 3600;
+        uint64_t new_expires = ceph_clock_now().sec() + g_conf()->rgw_keystone_expired_token_cache_expiration;
         ldpp_dout(dpp, 20) << "updating expiration of allowed expired token"
                            << " from " << t->get_expires() << " to "
                            << new_expires << dendl;
