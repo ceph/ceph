@@ -25,18 +25,6 @@ void PGMap::PGCreationState::dump_detail(Formatter *f) const
   f->dump_bool("creating", creating);
 }
 
-std::pair<blocking_future<Ref<PG>>, bool> PGMap::wait_for_pg(spg_t pgid)
-{
-  if (auto pg = get_pg(pgid)) {
-    return make_pair(make_ready_blocking_future<Ref<PG>>(pg), true);
-  } else {
-    auto &state = pgs_creating.emplace(pgid, pgid).first->second;
-    return make_pair(
-      state.make_blocking_future(state.promise.get_shared_future()),
-      state.creating);
-  }
-}
-
 std::pair<seastar::future<Ref<PG>>, bool>
 PGMap::wait_for_pg(PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
 {

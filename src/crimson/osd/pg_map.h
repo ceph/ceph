@@ -46,7 +46,6 @@ public:
    * Get future for pg with a bool indicating whether it's already being
    * created.
    */
-  std::pair<blocking_future<Ref<PG>>, bool> wait_for_pg(spg_t pgid);
   std::pair<seastar::future<Ref<PG>>, bool>
   wait_for_pg(PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
 
