@@ -2230,7 +2230,7 @@ OSD::OSD(CephContext *cct_,
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
   op_tracker(cct, cct->_conf->osd_enable_op_tracker,
-                  cct->_conf->osd_num_op_tracker_shard),
+                  cct->_conf->num_op_tracker_shard),
   test_ops_hook(NULL),
   op_shardedwq(
     this,

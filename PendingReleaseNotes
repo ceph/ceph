@@ -1,5 +1,6 @@
 >=18.0.0
-
+* Rename config option `osd_num_op_tracker_shard` to `num_op_tracker_shard` since it
+  also applies to mds.
 * RGW's default backend for `rgw_enable_ops_log` changed from RADOS to file.
   The default value of `rgw_ops_log_rados` is now false, and `rgw_ops_log_file_path`
   defaults to "/var/log/ceph/ops-log-$cluster-$name.log".

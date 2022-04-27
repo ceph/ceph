@@ -3228,7 +3228,7 @@ options:
   default: true
   with_legacy: true
 # The number of shards for holding the ops
-- name: osd_num_op_tracker_shard
+- name: num_op_tracker_shard
   type: uint
   level: advanced
   default: 32
