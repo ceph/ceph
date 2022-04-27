@@ -31,6 +31,7 @@ struct LttngBackend
     ClientRequest::PGPipeline::GetOBC::BlockingEvent::Backend,
     ClientRequest::PGPipeline::Process::BlockingEvent::Backend,
     ClientRequest::PGPipeline::WaitRepop::BlockingEvent::Backend,
+    ClientRequest::PGPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
     ClientRequest::PGPipeline::SendReply::BlockingEvent::Backend,
     ClientRequest::CompletionEvent::Backend
 {
@@ -95,6 +96,10 @@ struct LttngBackend
   void handle(ClientRequest::PGPipeline::WaitRepop::BlockingEvent& ev,
               const Operation& op,
               const ClientRequest::PGPipeline::WaitRepop& blocker) override {
+  }
+
+  void handle(ClientRequest::PGPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent& ev,
+              const Operation& op) override {
   }
 
   void handle(ClientRequest::PGPipeline::SendReply::BlockingEvent& ev,
