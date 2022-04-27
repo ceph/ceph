@@ -1,4 +1,12 @@
-import { Component, EventEmitter, OnDestroy, Output, TemplateRef, ViewChild } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  OnDestroy,
+  OnInit,
+  Output,
+  TemplateRef,
+  ViewChild
+} from '@angular/core';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
@@ -13,6 +21,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { ActionLabelsI18n, AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { DeploymentOptions } from '~/app/shared/models/osd-deployment-options';
 import { Permissions } from '~/app/shared/models/permissions';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -27,7 +36,7 @@ import { DriveGroup } from '../osd/osd-form/drive-group.model';
   templateUrl: './create-cluster.component.html',
   styleUrls: ['./create-cluster.component.scss']
 })
-export class CreateClusterComponent implements OnDestroy {
+export class CreateClusterComponent implements OnInit, OnDestroy {
   @ViewChild('skipConfirmTpl', { static: true })
   skipConfirmTpl: TemplateRef<any>;
   currentStep: WizardStepModel;
@@ -40,6 +49,9 @@ export class CreateClusterComponent implements OnDestroy {
   modalRef: NgbModalRef;
   driveGroup = new DriveGroup();
   driveGroups: Object[] = [];
+  deploymentOption: DeploymentOptions;
+  selectedOption = {};
+  simpleDeployment = true;
 
   @Output()
   submitAction = new EventEmitter();
@@ -63,6 +75,13 @@ export class CreateClusterComponent implements OnDestroy {
         this.currentStep = step;
       });
     this.currentStep.stepIndex = 1;
+  }
+
+  ngOnInit(): void {
+    this.osdService.getDeploymentOptions().subscribe((options) => {
+      this.deploymentOption = options;
+      this.selectedOption = { option: options.recommended_option };
+    });
   }
 
   createCluster() {
@@ -118,32 +137,61 @@ export class CreateClusterComponent implements OnDestroy {
           error: (error) => error.preventDefault()
         });
     });
+
     if (this.driveGroup) {
       const user = this.authStorageService.getUsername();
       this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
       this.driveGroups.push(this.driveGroup.spec);
     }
 
-    if (this.osdService.osdDevices['totalDevices'] > 0) {
+    if (this.simpleDeployment) {
+      const title = this.deploymentOption?.options[this.selectedOption['option']].title;
+      const trackingId = $localize`${title} deployment`;
       this.taskWrapper
         .wrapTaskAroundCall({
           task: new FinishedTask('osd/' + URLVerbs.CREATE, {
-            tracking_id: _.join(_.map(this.driveGroups, 'service_id'), ', ')
+            tracking_id: trackingId
           }),
-          call: this.osdService.create(this.driveGroups)
+          call: this.osdService.create([this.selectedOption], trackingId, 'predefined')
         })
         .subscribe({
           error: (error) => error.preventDefault(),
           complete: () => {
             this.submitAction.emit();
-            this.osdService.osdDevices = [];
           }
         });
+    } else {
+      if (this.osdService.osdDevices['totalDevices'] > 0) {
+        this.driveGroup.setFeature('encrypted', this.selectedOption['encrypted']);
+        const trackingId = _.join(_.map(this.driveGroups, 'service_id'), ', ');
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('osd/' + URLVerbs.CREATE, {
+              tracking_id: trackingId
+            }),
+            call: this.osdService.create(this.driveGroups, trackingId)
+          })
+          .subscribe({
+            error: (error) => error.preventDefault(),
+            complete: () => {
+              this.submitAction.emit();
+              this.osdService.osdDevices = [];
+            }
+          });
+      }
     }
   }
 
-  getDriveGroup(driveGroup: DriveGroup) {
+  setDriveGroup(driveGroup: DriveGroup) {
     this.driveGroup = driveGroup;
+  }
+
+  setDeploymentOptions(option: object) {
+    this.selectedOption = option;
+  }
+
+  setDeploymentMode(mode: boolean) {
+    this.simpleDeployment = mode;
   }
 
   onNextStep() {

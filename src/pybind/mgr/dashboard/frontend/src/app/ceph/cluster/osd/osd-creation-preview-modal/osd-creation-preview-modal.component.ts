@@ -41,12 +41,13 @@ export class OsdCreationPreviewModalComponent {
   }
 
   onSubmit() {
+    const trackingId = _.join(_.map(this.driveGroups, 'service_id'), ', ');
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('osd/' + URLVerbs.CREATE, {
-          tracking_id: _.join(_.map(this.driveGroups, 'service_id'), ', ')
+          tracking_id: trackingId
         }),
-        call: this.osdService.create(this.driveGroups)
+        call: this.osdService.create(this.driveGroups, trackingId)
       })
       .subscribe({
         error: () => {

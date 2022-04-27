@@ -7,15 +7,21 @@ import _ from 'lodash';
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { OsdService } from '~/app/shared/api/osd.service';
 import { FormButtonPanelComponent } from '~/app/shared/components/form-button-panel/form-button-panel.component';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import {
+  DeploymentOptions,
+  OsdDeploymentOptions
+} from '~/app/shared/models/osd-deployment-options';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
-import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
@@ -49,6 +55,10 @@ export class OsdFormComponent extends CdForm implements OnInit {
 
   @Output() emitDriveGroup: EventEmitter<DriveGroup> = new EventEmitter();
 
+  @Output() emitDeploymentOption: EventEmitter<object> = new EventEmitter();
+
+  @Output() emitMode: EventEmitter<boolean> = new EventEmitter();
+
   icons = Icons;
 
   form: CdFormGroup;
@@ -71,6 +81,11 @@ export class OsdFormComponent extends CdForm implements OnInit {
 
   hasOrchestrator = true;
 
+  simpleDeployment = true;
+
+  deploymentOptions: DeploymentOptions;
+  optionNames = Object.values(OsdDeploymentOptions);
+
   constructor(
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
@@ -78,7 +93,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
     private hostService: HostService,
     private router: Router,
     private modalService: ModalService,
-    public wizardStepService: WizardStepsService
+    private osdService: OsdService,
+    private taskWrapper: TaskWrapperService
   ) {
     super();
     this.resource = $localize`OSDs`;
@@ -103,6 +119,14 @@ export class OsdFormComponent extends CdForm implements OnInit {
       }
     });
 
+    this.osdService.getDeploymentOptions().subscribe((options) => {
+      this.deploymentOptions = options;
+      this.form.get('deploymentOption').setValue(this.deploymentOptions?.recommended_option);
+
+      if (this.deploymentOptions?.recommended_option) {
+        this.enableFeatures();
+      }
+    });
     this.form.get('walSlots').valueChanges.subscribe((value) => this.setSlots('wal', value));
     this.form.get('dbSlots').valueChanges.subscribe((value) => this.setSlots('db', value));
     _.each(this.features, (feature) => {
@@ -123,7 +147,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
           acc[e.key] = new FormControl({ value: false, disabled: true });
           return acc;
         }, {})
-      )
+      ),
+      deploymentOption: new FormControl(0)
     });
   }
 
@@ -209,16 +234,52 @@ export class OsdFormComponent extends CdForm implements OnInit {
     }
   }
 
+  emitDeploymentSelection() {
+    const option = this.form.get('deploymentOption').value;
+    const encrypted = this.form.get('encrypted').value;
+    this.emitDeploymentOption.emit({ option: option, encrypted: encrypted });
+  }
+
+  emitDeploymentMode() {
+    this.simpleDeployment = !this.simpleDeployment;
+    if (!this.simpleDeployment && this.dataDeviceSelectionGroups.devices.length === 0) {
+      this.disableFeatures();
+    } else {
+      this.enableFeatures();
+    }
+    this.emitMode.emit(this.simpleDeployment);
+  }
+
   submit() {
-    // use user name and timestamp for drive group name
-    const user = this.authStorageService.getUsername();
-    this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
-    const modalRef = this.modalService.show(OsdCreationPreviewModalComponent, {
-      driveGroups: [this.driveGroup.spec]
-    });
-    modalRef.componentInstance.submitAction.subscribe(() => {
-      this.router.navigate(['/osd']);
-    });
-    this.previewButtonPanel.submitButton.loading = false;
+    if (this.simpleDeployment) {
+      const option = this.form.get('deploymentOption').value;
+      const encrypted = this.form.get('encrypted').value;
+      const deploymentSpec = { option: option, encrypted: encrypted };
+      const title = this.deploymentOptions.options[deploymentSpec.option].title;
+      const trackingId = `${title} deployment`;
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('osd/' + URLVerbs.CREATE, {
+            tracking_id: trackingId
+          }),
+          call: this.osdService.create([deploymentSpec], trackingId, 'predefined')
+        })
+        .subscribe({
+          complete: () => {
+            this.router.navigate(['/osd']);
+          }
+        });
+    } else {
+      // use user name and timestamp for drive group name
+      const user = this.authStorageService.getUsername();
+      this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
+      const modalRef = this.modalService.show(OsdCreationPreviewModalComponent, {
+        driveGroups: [this.driveGroup.spec]
+      });
+      modalRef.componentInstance.submitAction.subscribe(() => {
+        this.router.navigate(['/osd']);
+      });
+      this.previewButtonPanel.submitButton.loading = false;
+    }
   }
 }
