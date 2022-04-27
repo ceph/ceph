@@ -214,6 +214,14 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     std::vector<std::string> admin;
   } roles(cct);
 
+  static const struct ServiceTokenRolesCacher {
+    explicit ServiceTokenRolesCacher(CephContext* const cct) {
+      get_str_vec(cct->_conf->rgw_keystone_service_token_accepted_roles, plain);
+    }
+
+    std::vector<std::string> plain;
+  } service_token_roles(cct);
+
   if (! is_applicable(token)) {
     return result_t::deny();
   }
@@ -274,15 +282,25 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
         return result_t::deny(-EPERM);
       }
 
-      /* TODO(tobias-urdin): Verify role on service user with corresponding config option */
+      /* Check for necessary roles for service token. */
+      for (const auto& role : service_token_roles.plain) {
+        if (st->has_role(role) == true) {
+          /* Service token is valid so we allow using an expired token for
+           * this request. */
+          ldpp_dout(dpp, 20) << "allowing expired tokens because service_token_id="
+                         << service_token_id
+                         << " is valid, role: "
+                         << role << dendl;
+          allow_expired = true;
+          token_cache.add(service_token_id, *st);
+          break;
+        }
+      }
 
-      /* Service token is valid so we allow using an expired token for
-       * this request. */
-      ldpp_dout(dpp, 20) << "allowing expired tokens because service_token_id="
-                     << service_token_id
-                     << " is valid" << dendl;
-      allow_expired = true;
-      token_cache.add(service_token_id, *st);
+      if (!allow_expired) {
+        ldpp_dout(dpp, 0) << "service token user does not hold a matching role; required roles: "
+                  << g_conf()->rgw_keystone_service_token_accepted_roles << dendl;
+      }
     }
   }
 
