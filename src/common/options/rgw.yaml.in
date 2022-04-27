@@ -688,6 +688,8 @@ options:
   fmt_desc: The users that created the service token given must have one of
     these roles to be considered a valid service user.
   default: admin
+  see_also:
+  - rgw_keystone_service_token_enabled
   services:
   - rgw
   with_legacy: true
@@ -701,6 +703,8 @@ options:
   default: 3600
   services:
   - rgw
+  see_also:
+  - rgw_keystone_service_token_enabled
   with_legacy: true
 - name: rgw_keystone_barbican_user
   type: str
