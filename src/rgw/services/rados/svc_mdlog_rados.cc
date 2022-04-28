@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include "svc_mdlog.h"
+#include "svc_mdlog_rados.h"
 #include "svc_rados.h"
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
@@ -20,16 +20,16 @@
 
 using namespace std;
 
-using Svc = RGWSI_MDLog::Svc;
+using Svc = RGWSI_MDLog_RADOS::Svc;
 using Cursor = RGWPeriodHistory::Cursor;
 
-RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, bool _run_sync) : RGWServiceInstance(cct), run_sync(_run_sync) {
+RGWSI_MDLog_RADOS::RGWSI_MDLog_RADOS(CephContext *cct, bool _run_sync) : RGWSI_MDLog(cct), run_sync(_run_sync) {
 }
 
-RGWSI_MDLog::~RGWSI_MDLog() {
+RGWSI_MDLog_RADOS::~RGWSI_MDLog_RADOS() {
 }
 
-int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_Cls *_cls_svc)
+int RGWSI_MDLog_RADOS::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_Cls *_cls_svc)
 {
   svc.zone = _zone_svc;
   svc.sysobj = _sysobj_svc;
@@ -40,7 +40,7 @@ int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysO
   return 0;
 }
 
-int RGWSI_MDLog::do_start(optional_yield y, const DoutPrefixProvider *dpp)
+int RGWSI_MDLog_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
   auto& current_period = svc.zone->get_current_period();
 
@@ -58,7 +58,7 @@ int RGWSI_MDLog::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
+int RGWSI_MDLog_RADOS::read_history(RGWMetadataLogHistory *state,
                               RGWObjVersionTracker *objv_tracker,
 			      optional_yield y,
                               const DoutPrefixProvider *dpp) const
@@ -93,7 +93,7 @@ int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
   return 0;
 }
 
-int RGWSI_MDLog::write_history(const DoutPrefixProvider *dpp, 
+int RGWSI_MDLog_RADOS::write_history(const DoutPrefixProvider *dpp, 
                                const RGWMetadataLogHistory& state,
                                RGWObjVersionTracker *objv_tracker,
                                optional_yield y, bool exclusive)
@@ -148,7 +148,7 @@ class ReadHistoryCR : public RGWCoroutine {
             << cpp_strerror(retcode) << dendl;
         return set_cr_error(retcode);
       }
-      *cursor = svc.mdlog->period_history->lookup(state.oldest_realm_epoch);
+      *cursor = svc.mdlog->get_period_history()->lookup(state.oldest_realm_epoch);
       if (!*cursor) {
         return set_cr_error(cursor->get_error());
       }
@@ -252,7 +252,7 @@ class TrimHistoryCR : public RGWCoroutine {
 
 // traverse all the way back to the beginning of the period history, and
 // return a cursor to the first period in a fully attached history
-Cursor RGWSI_MDLog::find_oldest_period(const DoutPrefixProvider *dpp, optional_yield y)
+Cursor RGWSI_MDLog_RADOS::find_oldest_period(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto cursor = period_history->get_current();
 
@@ -286,7 +286,7 @@ Cursor RGWSI_MDLog::find_oldest_period(const DoutPrefixProvider *dpp, optional_y
   return cursor;
 }
 
-Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp)
+Cursor RGWSI_MDLog_RADOS::init_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp)
 {
   // read the mdlog history
   RGWMetadataLogHistory state;
@@ -355,7 +355,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixPro
   return period_history->attach(dpp, std::move(period), y);
 }
 
-Cursor RGWSI_MDLog::read_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp) const
+Cursor RGWSI_MDLog_RADOS::read_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp) const
 {
   RGWMetadataLogHistory state;
   int ret = read_history(&state, nullptr, y, dpp);
@@ -372,19 +372,19 @@ Cursor RGWSI_MDLog::read_oldest_log_period(optional_yield y, const DoutPrefixPro
   return period_history->lookup(state.oldest_realm_epoch);
 }
 
-RGWCoroutine* RGWSI_MDLog::read_oldest_log_period_cr(const DoutPrefixProvider *dpp, 
+RGWCoroutine* RGWSI_MDLog_RADOS::read_oldest_log_period_cr(const DoutPrefixProvider *dpp, 
         Cursor *period, RGWObjVersionTracker *objv) const
 {
   return new mdlog::ReadHistoryCR(dpp, svc, period, objv);
 }
 
-RGWCoroutine* RGWSI_MDLog::trim_log_period_cr(const DoutPrefixProvider *dpp, 
+RGWCoroutine* RGWSI_MDLog_RADOS::trim_log_period_cr(const DoutPrefixProvider *dpp, 
         Cursor period, RGWObjVersionTracker *objv) const
 {
   return new mdlog::TrimHistoryCR(dpp, svc, period, objv);
 }
 
-RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
+RGWMetadataLog* RGWSI_MDLog_RADOS::get_log(const std::string& period)
 {
   // construct the period's log in place if it doesn't exist
   auto insert = md_logs.emplace(std::piecewise_construct,
@@ -393,19 +393,19 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
   return &insert.first->second;
 }
 
-int RGWSI_MDLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl)
+int RGWSI_MDLog_RADOS::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl)
 {
   ceph_assert(current_log); // must have called init()
   return current_log->add_entry(dpp, hash_key, section, key, bl);
 }
 
-int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
+int RGWSI_MDLog_RADOS::get_shard_id(const string& hash_key, int *shard_id)
 {
   ceph_assert(current_log); // must have called init()
   return current_log->get_shard_id(hash_key, shard_id);
 }
 
-int RGWSI_MDLog::pull_period(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
+int RGWSI_MDLog_RADOS::pull_period(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
 			     optional_yield y)
 {
   return period_puller->pull(dpp, period_id, period, y);

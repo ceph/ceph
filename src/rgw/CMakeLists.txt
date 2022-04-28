@@ -25,7 +25,6 @@ set(librgw_common_srcs
   services/svc_bucket.cc
   services/svc_bucket_sobj.cc
   services/svc_bucket_sync_sobj.cc
-  services/svc_mdlog.cc
   services/svc_meta.cc
   services/svc_meta_be.cc
   services/svc_meta_be_sobj.cc
@@ -42,6 +41,7 @@ set(librgw_common_srcs
   services/rados/svc_bilog_rados.cc
   services/rados/svc_cls.cc
   services/rados/svc_config_key_rados.cc
+  services/rados/svc_mdlog_rados.cc
   services/rados/svc_meta_be_otp_rados.cc
   services/rados/svc_notify.cc
   services/rados/svc_rados.cc
