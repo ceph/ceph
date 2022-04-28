@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include "svc_sys_obj_core.h"
+#include "svc_sys_obj_core_rados.h"
 #include "svc_rados.h"
 #include "svc_zone.h"
 
@@ -11,7 +11,7 @@
 
 using namespace std;
 
-int RGWSI_SysObj_Core_GetObjState::get_rados_obj(const DoutPrefixProvider *dpp,
+int RGWSI_SysObj_Core_GetObjState_RADOS::get_rados_obj(const DoutPrefixProvider *dpp,
                                                  RGWSI_RADOS *rados_svc,
                                                  RGWSI_Zone *zone_svc,
                                                  const rgw_raw_obj& obj,
@@ -34,7 +34,7 @@ int RGWSI_SysObj_Core_GetObjState::get_rados_obj(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::get_rados_obj(const DoutPrefixProvider *dpp,
+int RGWSI_SysObj_Core_RADOS::get_rados_obj(const DoutPrefixProvider *dpp,
                                      RGWSI_Zone *zone_svc,
                                      const rgw_raw_obj& obj,
                                      RGWSI_RADOS::Obj *pobj)
@@ -53,7 +53,7 @@ int RGWSI_SysObj_Core::get_rados_obj(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
+int RGWSI_SysObj_Core_RADOS::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
                                                  const rgw_raw_obj& obj,
                                                  RGWSysObjState **state,
                                                  RGWObjVersionTracker *objv_tracker,
@@ -97,7 +97,7 @@ int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
   return 0;
 }
 
-int RGWSI_SysObj_Core::get_system_obj_state(RGWSysObjectCtxBase *rctx,
+int RGWSI_SysObj_Core_RADOS::get_system_obj_state(RGWSysObjectCtxBase *rctx,
                                             const rgw_raw_obj& obj,
                                             RGWSysObjState **state,
                                             RGWObjVersionTracker *objv_tracker,
@@ -113,7 +113,7 @@ int RGWSI_SysObj_Core::get_system_obj_state(RGWSysObjectCtxBase *rctx,
   return ret;
 }
 
-int RGWSI_SysObj_Core::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
+int RGWSI_SysObj_Core_RADOS::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                                 map<string, bufferlist> *attrs, bufferlist *first_chunk,
                                 RGWObjVersionTracker *objv_tracker,
                                 optional_yield y)
@@ -156,7 +156,7 @@ int RGWSI_SysObj_Core::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj
   return 0;
 }
 
-int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
+int RGWSI_SysObj_Core_RADOS::stat(RGWSysObjectCtxBase& obj_ctx,
                             RGWSI_SysObj_Obj_GetObjState& _state,
                             const rgw_raw_obj& obj,
                             map<string, bufferlist> *attrs,
@@ -199,7 +199,7 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
   return 0;
 }
 
-int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
+int RGWSI_SysObj_Core_RADOS::read(const DoutPrefixProvider *dpp,
                             RGWSysObjectCtxBase& obj_ctx,
                             RGWSI_SysObj_Obj_GetObjState& _read_state,
                             RGWObjVersionTracker *objv_tracker,
@@ -275,7 +275,7 @@ int RGWSI_SysObj_Core::read(const DoutPrefixProvider *dpp,
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWSI_SysObj_Core::get_attr(const DoutPrefixProvider *dpp,
+int RGWSI_SysObj_Core_RADOS::get_attr(const DoutPrefixProvider *dpp,
                                 const rgw_raw_obj& obj,
                                 const char *name,
                                 bufferlist *dest,
@@ -300,7 +300,7 @@ int RGWSI_SysObj_Core::get_attr(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::set_attrs(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core_RADOS::set_attrs(const DoutPrefixProvider *dpp, 
                                  const rgw_raw_obj& obj,
                                  map<string, bufferlist>& attrs,
                                  map<string, bufferlist> *rmattrs,
@@ -353,7 +353,7 @@ int RGWSI_SysObj_Core::set_attrs(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::omap_get_vals(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core_RADOS::omap_get_vals(const DoutPrefixProvider *dpp, 
                                      const rgw_raw_obj& obj,
                                      const string& marker,
                                      uint64_t count,
@@ -396,7 +396,7 @@ int RGWSI_SysObj_Core::omap_get_vals(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::omap_get_all(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core_RADOS::omap_get_all(const DoutPrefixProvider *dpp, 
                                     const rgw_raw_obj& obj,
                                     std::map<string, bufferlist> *m,
                                     optional_yield y)
@@ -433,7 +433,7 @@ int RGWSI_SysObj_Core::omap_get_all(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
+int RGWSI_SysObj_Core_RADOS::omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
                                 bufferlist& bl, bool must_exist,
                                 optional_yield y)
 {
@@ -456,7 +456,7 @@ int RGWSI_SysObj_Core::omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj
   return r;
 }
 
-int RGWSI_SysObj_Core::omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+int RGWSI_SysObj_Core_RADOS::omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                                 const std::map<std::string, bufferlist>& m,
                                 bool must_exist, optional_yield y)
 {
@@ -475,7 +475,7 @@ int RGWSI_SysObj_Core::omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj
   return r;
 }
 
-int RGWSI_SysObj_Core::omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
+int RGWSI_SysObj_Core_RADOS::omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
                                 optional_yield y)
 {
   RGWSI_RADOS::Obj rados_obj;
@@ -496,7 +496,7 @@ int RGWSI_SysObj_Core::omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj
   return r;
 }
 
-int RGWSI_SysObj_Core::notify(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, bufferlist& bl,
+int RGWSI_SysObj_Core_RADOS::notify(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, bufferlist& bl,
                               uint64_t timeout_ms, bufferlist *pbl,
                               optional_yield y)
 {
@@ -511,7 +511,7 @@ int RGWSI_SysObj_Core::notify(const DoutPrefixProvider *dpp, const rgw_raw_obj& 
   return r;
 }
 
-int RGWSI_SysObj_Core::remove(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core_RADOS::remove(const DoutPrefixProvider *dpp, 
                               RGWSysObjectCtxBase& obj_ctx,
                               RGWObjVersionTracker *objv_tracker,
                               const rgw_raw_obj& obj,
@@ -538,7 +538,7 @@ int RGWSI_SysObj_Core::remove(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::write(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core_RADOS::write(const DoutPrefixProvider *dpp, 
                              const rgw_raw_obj& obj,
                              real_time *pmtime,
                              map<std::string, bufferlist>& attrs,
@@ -606,7 +606,7 @@ int RGWSI_SysObj_Core::write(const DoutPrefixProvider *dpp,
 }
 
 
-int RGWSI_SysObj_Core::write_data(const DoutPrefixProvider *dpp, 
+int RGWSI_SysObj_Core_RADOS::write_data(const DoutPrefixProvider *dpp, 
                                   const rgw_raw_obj& obj,
                                   const bufferlist& bl,
                                   bool exclusive,
@@ -640,7 +640,7 @@ int RGWSI_SysObj_Core::write_data(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::pool_list_prefixed_objs(const DoutPrefixProvider *dpp,
+int RGWSI_SysObj_Core_RADOS::pool_list_prefixed_objs(const DoutPrefixProvider *dpp,
                                                const rgw_pool& pool, const string& prefix,
                                                std::function<void(const string&)> cb)
 {
@@ -674,7 +674,7 @@ int RGWSI_SysObj_Core::pool_list_prefixed_objs(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::pool_list_objects_init(const DoutPrefixProvider *dpp,
+int RGWSI_SysObj_Core_RADOS::pool_list_objects_init(const DoutPrefixProvider *dpp,
                                               const rgw_pool& pool,
                                               const string& marker,
                                               const string& prefix,
@@ -695,7 +695,7 @@ int RGWSI_SysObj_Core::pool_list_objects_init(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_SysObj_Core::pool_list_objects_next(const DoutPrefixProvider *dpp,
+int RGWSI_SysObj_Core_RADOS::pool_list_objects_next(const DoutPrefixProvider *dpp,
                                               RGWSI_SysObj::Pool::ListCtx& _ctx,
                                               int max,
                                               vector<string> *oids,
@@ -715,7 +715,7 @@ int RGWSI_SysObj_Core::pool_list_objects_next(const DoutPrefixProvider *dpp,
   return oids->size();
 }
 
-int RGWSI_SysObj_Core::pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
+int RGWSI_SysObj_Core_RADOS::pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
                                                     string *marker)
 {
   if (!_ctx.impl) {

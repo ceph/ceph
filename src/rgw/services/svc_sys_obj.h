@@ -7,7 +7,6 @@
 
 #include "rgw/rgw_service.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj_types.h"
 #include "svc_sys_obj_core_types.h"
 
@@ -50,7 +49,7 @@ public:
     struct ROp {
       Obj& source;
 
-      ceph::static_ptr<RGWSI_SysObj_Obj_GetObjState, sizeof(RGWSI_SysObj_Core_GetObjState)> state;
+      ceph::static_ptr<RGWSI_SysObj_Obj_GetObjState, sizeof(RGWSI_SysObj_Core_GetObjState_RADOS)> state;
       
       RGWObjVersionTracker *objv_tracker{nullptr};
       std::map<std::string, bufferlist> *attrs{nullptr};
@@ -204,6 +203,8 @@ public:
   class Pool {
     friend class Op;
     friend class RGWSI_SysObj_Core;
+    friend class RGWSI_SysObj_Cache;
+    friend class RGWSI_SysObj_Core_RADOS; // to allow access to ListCtx
 
     RGWSI_SysObj_Core *core_svc;
     rgw_pool pool;
@@ -257,12 +258,9 @@ public:
   friend class Pool::Op;
 
 protected:
-  RGWSI_RADOS *rados_svc{nullptr};
   RGWSI_SysObj_Core *core_svc{nullptr};
 
-  void init(RGWSI_RADOS *_rados_svc,
-            RGWSI_SysObj_Core *_core_svc) {
-    rados_svc = _rados_svc;
+  void init(RGWSI_SysObj_Core *_core_svc) {
     core_svc = _core_svc;
   }
 

@@ -6,17 +6,18 @@
 
 #include "rgw/rgw_service.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj_types.h"
+#include "rados/svc_rados.h"
 
 
+class RGWSI_Rados;
 
-struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
+struct RGWSI_SysObj_Core_GetObjState_RADOS : public RGWSI_SysObj_Obj_GetObjState {
   RGWSI_RADOS::Obj rados_obj;
   bool has_rados_obj{false};
   uint64_t last_ver{0};
 
-  RGWSI_SysObj_Core_GetObjState() {}
+  RGWSI_SysObj_Core_GetObjState_RADOS() {}
 
   int get_rados_obj(const DoutPrefixProvider *dpp,
                     RGWSI_RADOS *rados_svc,

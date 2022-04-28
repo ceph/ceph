@@ -6,7 +6,6 @@
 
 #include "svc_sys_obj_cache.h"
 #include "svc_zone.h"
-#include "svc_notify.h"
 
 #include "rgw/rgw_zone.h"
 #include "rgw/rgw_tools.h"
@@ -15,24 +14,6 @@
 
 using namespace std;
 
-class RGWSI_SysObj_Cache_CB : public RGWSI_Notify::CB
-{
-  RGWSI_SysObj_Cache *svc;
-public:
-  RGWSI_SysObj_Cache_CB(RGWSI_SysObj_Cache *_svc) : svc(_svc) {}
-  int watch_cb(const DoutPrefixProvider *dpp,
-               uint64_t notify_id,
-               uint64_t cookie,
-               uint64_t notifier_id,
-               bufferlist& bl) {
-    return svc->watch_cb(dpp, notify_id, cookie, notifier_id, bl);
-  }
-
-  void set_enabled(bool status) {
-    svc->set_enabled(status);
-  }
-};
-
 int RGWSI_SysObj_Cache::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
   int r = asocket.start();
@@ -40,32 +21,16 @@ int RGWSI_SysObj_Cache::do_start(optional_yield y, const DoutPrefixProvider *dpp
     return r;
   }
 
-  r = RGWSI_SysObj_Core::do_start(y, dpp);
-  if (r < 0) {
-    return r;
-  }
-
-  r = notify_svc->start(y, dpp);
-  if (r < 0) {
-    return r;
-  }
-
-  assert(notify_svc->is_started());
-
-  cb.reset(new RGWSI_SysObj_Cache_CB(this));
-
-  notify_svc->register_watch_cb(cb.get());
-
   return 0;
 }
 
 void RGWSI_SysObj_Cache::shutdown()
 {
   asocket.shutdown();
-  RGWSI_SysObj_Core::shutdown();
+  sysobj_core_svc->shutdown();
 }
 
-static string normal_name(rgw_pool& pool, const std::string& oid) {
+string RGWSI_SysObj_Cache::normal_name(rgw_pool& pool, const std::string& oid) {
   std::string buf;
   buf.reserve(pool.name.size() + pool.ns.size() + oid.size() + 2);
   buf.append(pool.name).append("+").append(pool.ns).append("+").append(oid);
@@ -78,7 +43,7 @@ void RGWSI_SysObj_Cache::normalize_pool_and_obj(const rgw_pool& src_pool, const 
     dst_pool = src_pool;
     dst_obj = src_obj;
   } else {
-    dst_pool = zone_svc->get_zone_params().domain_root;
+    dst_pool = get_zone_svc()->get_zone_params().domain_root;
     dst_obj = src_pool.name;
   }
 }
@@ -104,7 +69,7 @@ int RGWSI_SysObj_Cache::remove(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to distribute cache: r=" << r << dendl;
   }
 
-  return RGWSI_SysObj_Core::remove(dpp, obj_ctx, objv_tracker, obj, y);
+  return sysobj_core_svc->remove(dpp, obj_ctx, objv_tracker, obj, y);
 }
 
 int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
@@ -122,7 +87,7 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
   rgw_pool pool;
   string oid;
   if (ofs != 0) {
-    return RGWSI_SysObj_Core::read(dpp, obj_ctx, read_state, objv_tracker,
+    return sysobj_core_svc->read(dpp, obj_ctx, read_state, objv_tracker,
                                    obj, obl, ofs, end, attrs, raw_attrs,
                                    cache_info, refresh_version, y);
   }
@@ -166,7 +131,7 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
     return -ENOENT;
 
   map<string, bufferlist> unfiltered_attrset;
-  r = RGWSI_SysObj_Core::read(dpp, obj_ctx, read_state, objv_tracker,
+  r = sysobj_core_svc->read(dpp, obj_ctx, read_state, objv_tracker,
                          obj, obl, ofs, end,
 			 (attrs ? &unfiltered_attrset : nullptr),
 			 true, /* cache unfiltered attrs */
@@ -240,7 +205,7 @@ int RGWSI_SysObj_Cache::get_attr(const DoutPrefixProvider *dpp,
     return -ENOENT;
   }
   /* don't try to cache this one */
-  return RGWSI_SysObj_Core::get_attr(dpp, obj, attr_name, dest, y);
+  return sysobj_core_svc->get_attr(dpp, obj, attr_name, dest, y);
 }
 
 int RGWSI_SysObj_Cache::set_attrs(const DoutPrefixProvider *dpp, 
@@ -260,7 +225,7 @@ int RGWSI_SysObj_Cache::set_attrs(const DoutPrefixProvider *dpp,
   }
   info.status = 0;
   info.flags = CACHE_FLAG_MODIFY_XATTRS;
-  int ret = RGWSI_SysObj_Core::set_attrs(dpp, obj, attrs, rmattrs, objv_tracker, y);
+  int ret = sysobj_core_svc->set_attrs(dpp, obj, attrs, rmattrs, objv_tracker, y);
   string name = normal_name(pool, oid);
   if (ret >= 0) {
     if (objv_tracker && objv_tracker->read_version.ver) {
@@ -297,7 +262,7 @@ int RGWSI_SysObj_Cache::write(const DoutPrefixProvider *dpp,
   info.data = data;
   info.flags = CACHE_FLAG_XATTRS | CACHE_FLAG_DATA | CACHE_FLAG_META;
   ceph::real_time result_mtime;
-  int ret = RGWSI_SysObj_Core::write(dpp, obj, &result_mtime, attrs,
+  int ret = sysobj_core_svc->write(dpp, obj, &result_mtime, attrs,
                                      exclusive, data,
                                      objv_tracker, set_mtime, y);
   if (pmtime) {
@@ -339,7 +304,7 @@ int RGWSI_SysObj_Cache::write_data(const DoutPrefixProvider *dpp,
   info.status = 0;
   info.flags = CACHE_FLAG_DATA;
 
-  int ret = RGWSI_SysObj_Core::write_data(dpp, obj, data, exclusive, objv_tracker, y);
+  int ret = sysobj_core_svc->write_data(dpp, obj, data, exclusive, objv_tracker, y);
   string name = normal_name(pool, oid);
   if (ret >= 0) {
     if (objv_tracker && objv_tracker->read_version.ver) {
@@ -391,7 +356,7 @@ int RGWSI_SysObj_Cache::raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_ob
   if (r == -ENODATA) {
     return -ENOENT;
   }
-  r = RGWSI_SysObj_Core::raw_stat(dpp, obj, &size, &mtime, &epoch, &info.xattrs,
+  r = sysobj_core_svc->raw_stat(dpp, obj, &size, &mtime, &epoch, &info.xattrs,
                                   first_chunk, objv_tracker, y);
   if (r < 0) {
     if (r == -ENOENT) {
@@ -419,58 +384,6 @@ done:
     *pepoch = epoch;
   if (attrs)
     *attrs = info.xattrs;
-  return 0;
-}
-
-int RGWSI_SysObj_Cache::distribute_cache(const DoutPrefixProvider *dpp, 
-                                         const string& normal_name,
-                                         const rgw_raw_obj& obj,
-                                         ObjectCacheInfo& obj_info, int op,
-                                         optional_yield y)
-{
-  RGWCacheNotifyInfo info;
-  info.op = op;
-  info.obj_info = obj_info;
-  info.obj = obj;
-  return notify_svc->distribute(dpp, normal_name, info, y);
-}
-
-int RGWSI_SysObj_Cache::watch_cb(const DoutPrefixProvider *dpp,
-                                 uint64_t notify_id,
-                                 uint64_t cookie,
-                                 uint64_t notifier_id,
-                                 bufferlist& bl)
-{
-  RGWCacheNotifyInfo info;
-
-  try {
-    auto iter = bl.cbegin();
-    decode(info, iter);
-  } catch (buffer::end_of_buffer& err) {
-    ldpp_dout(dpp, 0) << "ERROR: got bad notification" << dendl;
-    return -EIO;
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: buffer::error" << dendl;
-    return -EIO;
-  }
-
-  rgw_pool pool;
-  string oid;
-  normalize_pool_and_obj(info.obj.pool, info.obj.oid, pool, oid);
-  string name = normal_name(pool, oid);
-  
-  switch (info.op) {
-  case UPDATE_OBJ:
-    cache.put(dpp, name, info.obj_info, NULL);
-    break;
-  case INVALIDATE_OBJ:
-    cache.invalidate_remove(dpp, name);
-    break;
-  default:
-    ldpp_dout(dpp, 0) << "WARNING: got unknown notification op: " << info.op << dendl;
-    return -EINVAL;
-  }
-
   return 0;
 }
 

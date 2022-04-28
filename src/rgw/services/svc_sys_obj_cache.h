@@ -9,8 +9,6 @@
 
 #include "svc_sys_obj_core.h"
 
-class RGWSI_Notify;
-
 class RGWSI_SysObj_Cache_CB;
 class RGWSI_SysObj_Cache_ASocketHook;
 
@@ -20,18 +18,19 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
   friend class RGWServices_Def;
   friend class ASocketHandler;
 
-  RGWSI_Notify *notify_svc{nullptr};
+  RGWSI_SysObj_Core *sysobj_core_svc{nullptr};
   ObjectCache cache;
 
   std::shared_ptr<RGWSI_SysObj_Cache_CB> cb;
 
-  void normalize_pool_and_obj(const rgw_pool& src_pool, const std::string& src_obj, rgw_pool& dst_pool, std::string& dst_obj);
 protected:
-  void init(RGWSI_RADOS *_rados_svc,
-            RGWSI_Zone *_zone_svc,
-            RGWSI_Notify *_notify_svc) {
-    core_init(_rados_svc, _zone_svc);
-    notify_svc = _notify_svc;
+  static std::string normal_name(rgw_pool& pool, const std::string& oid);
+  void normalize_pool_and_obj(const rgw_pool& src_pool, const std::string& src_obj, rgw_pool& dst_pool, std::string& dst_obj);
+
+  void init(RGWSI_SysObj_Core *_sysobj_core_svc,
+            RGWSI_Zone *_zone_svc) {
+    sysobj_core_svc = _sysobj_core_svc;
+    init_core(_zone_svc);
   }
 
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
@@ -87,17 +86,94 @@ protected:
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);
 
-  int distribute_cache(const DoutPrefixProvider *dpp, const std::string& normal_name, const rgw_raw_obj& obj,
-                       ObjectCacheInfo& obj_info, int op,
-                       optional_yield y);
-
-  int watch_cb(const DoutPrefixProvider *dpp,
-               uint64_t notify_id,
-               uint64_t cookie,
-               uint64_t notifier_id,
-               bufferlist& bl);
-
+  virtual int distribute_cache(const DoutPrefixProvider *dpp, const std::string& normal_name, const rgw_raw_obj& obj,
+                               ObjectCacheInfo& obj_info, int op,
+                               optional_yield y) = 0;
   void set_enabled(bool status);
+
+  /* uncached interfaces */
+
+  int omap_get_all(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, std::map<std::string, bufferlist> *m,
+                   optional_yield y) override {
+    return sysobj_core_svc->omap_get_all(dpp, obj, m, y);
+  }
+
+  int omap_get_vals(const DoutPrefixProvider *dpp, 
+                    const rgw_raw_obj& obj,
+                    const std::string& marker,
+                    uint64_t count,
+                    std::map<std::string, bufferlist> *m,
+                    bool *pmore,
+                    optional_yield y) override {
+    return sysobj_core_svc->omap_get_vals(dpp, obj, marker, count, m, pmore, y);
+  }
+
+  int omap_set(const DoutPrefixProvider *dpp, 
+               const rgw_raw_obj& obj, const std::string& key,
+               bufferlist& bl, bool must_exist,
+               optional_yield y) override {
+    return sysobj_core_svc->omap_set(dpp, obj, key, bl, must_exist, y);
+  }
+
+  int omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+               const std::map<std::string, bufferlist>& m, bool must_exist,
+               optional_yield y) override {
+    return sysobj_core_svc->omap_set(dpp, obj, m, must_exist, y);
+  }
+
+  int omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
+               optional_yield y) override {
+    return sysobj_core_svc->omap_del(dpp, obj, key, y);
+  }
+
+  int notify(const DoutPrefixProvider *dpp, 
+                     const rgw_raw_obj& obj, bufferlist& bl,
+                     uint64_t timeout_ms, bufferlist *pbl,
+                     optional_yield y) override {
+    return sysobj_core_svc->notify(dpp, obj, bl, timeout_ms, pbl, y);
+  }
+
+  int pool_list_prefixed_objs(const DoutPrefixProvider *dpp,
+                                      const rgw_pool& pool,
+                                      const std::string& prefix,
+                                      std::function<void(const std::string&)> cb) override {
+    return sysobj_core_svc->pool_list_prefixed_objs(dpp, pool, prefix, cb);
+  }
+
+  int pool_list_objects_init(const DoutPrefixProvider *dpp,
+                                     const rgw_pool& pool,
+                                     const std::string& marker,
+                                     const std::string& prefix,
+                                     RGWSI_SysObj::Pool::ListCtx *ctx) override {
+    return sysobj_core_svc->pool_list_objects_init(dpp, pool, marker, prefix, ctx);
+  }
+
+  int pool_list_objects_next(const DoutPrefixProvider *dpp,
+                                     RGWSI_SysObj::Pool::ListCtx& ctx,
+                                     int max,
+                                     std::vector<std::string> *oids,
+                                     bool *is_truncated) override {
+    return sysobj_core_svc->pool_list_objects_next(dpp, ctx, max, oids, is_truncated);
+  }
+
+  int pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
+                                           std::string *marker) override {
+    return sysobj_core_svc->pool_list_objects_get_marker(_ctx, marker);
+  }
+
+  int stat(RGWSysObjectCtxBase& obj_ctx,
+                   RGWSI_SysObj_Obj_GetObjState& state,
+                   const rgw_raw_obj& obj,
+                   std::map<std::string, bufferlist> *attrs,
+                   bool raw_attrs,
+                   real_time *lastmod,
+                   uint64_t *obj_size,
+                   RGWObjVersionTracker *objv_tracker,
+                   optional_yield y,
+                   const DoutPrefixProvider *dpp) override {
+    return sysobj_core_svc->stat(obj_ctx, state, obj, attrs, raw_attrs,
+                                 lastmod, obj_size, objv_tracker, y, dpp);
+  }
 
 public:
   RGWSI_SysObj_Cache(const DoutPrefixProvider *dpp, CephContext *cct) : RGWSI_SysObj_Core(cct), asocket(dpp, this) {
@@ -109,6 +185,10 @@ public:
                          RGWChainedCache::Entry *chained_entry);
   void register_chained_cache(RGWChainedCache *cc);
   void unregister_chained_cache(RGWChainedCache *cc);
+
+  RGWSI_Zone *get_zone_svc() {
+    return sysobj_core_svc->get_zone_svc();
+  }
 
   class ASocketHandler {
     const DoutPrefixProvider *dpp;

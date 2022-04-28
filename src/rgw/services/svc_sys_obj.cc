@@ -3,7 +3,6 @@
 
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_core.h"
-#include "svc_rados.h"
 #include "svc_zone.h"
 
 #include "rgw/rgw_zone.h"
@@ -28,7 +27,7 @@ void RGWSI_SysObj::Obj::invalidate()
 }
 
 RGWSI_SysObj::Obj::ROp::ROp(Obj& _source) : source(_source) {
-  state.emplace<RGWSI_SysObj_Core::GetObjState>();
+  state.emplace<RGWSI_SysObj_Core_GetObjState_RADOS>(); /* FIXME */
 }
 
 int RGWSI_SysObj::Obj::ROp::stat(optional_yield y, const DoutPrefixProvider *dpp)
