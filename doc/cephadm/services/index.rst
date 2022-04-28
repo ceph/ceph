@@ -252,7 +252,7 @@ Daemons can be explicitly placed on hosts by simply specifying them:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="host1 host2 host3"
+    ceph orch apply prometheus --placement="host1 host2 host3"
 
 Or in YAML:
 
@@ -269,7 +269,7 @@ MONs and other services may require some enhanced network specifications:
 
    .. prompt:: bash #
 
-    orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
+    ceph orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
 
 where ``[v2:1.2.3.4:3300,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
@@ -315,7 +315,7 @@ this command:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="label:mylabel"
+    ceph orch apply prometheus --placement="label:mylabel"
 
 Or in YAML:
 
@@ -334,7 +334,7 @@ Daemons can be placed on hosts as well:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement='myhost[1-3]'
+    ceph orch apply prometheus --placement='myhost[1-3]'
 
 Or in YAML:
 
@@ -348,7 +348,7 @@ To place a service on *all* hosts, use ``"*"``:
 
    .. prompt:: bash #
 
-    orch apply node-exporter --placement='*'
+    ceph orch apply node-exporter --placement='*'
 
 Or in YAML:
 
@@ -366,19 +366,19 @@ By specifying ``count``, only the number of daemons specified will be created:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement=3
+    ceph orch apply prometheus --placement=3
 
 To deploy *daemons* on a subset of hosts, specify the count:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="2 host1 host2 host3"
+    ceph orch apply prometheus --placement="2 host1 host2 host3"
 
 If the count is bigger than the amount of hosts, cephadm deploys one per host:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="3 host1 host2"
+    ceph orch apply prometheus --placement="3 host1 host2"
 
 The command immediately above results in two Prometheus daemons.
 
