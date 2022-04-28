@@ -34,7 +34,6 @@ set(librgw_common_srcs
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc
   services/svc_user.cc
-  services/svc_user_rados.cc
   services/svc_zone.cc
   services/rados/svc_bi_rados.cc
   services/rados/svc_bilog_rados.cc
@@ -47,6 +46,7 @@ set(librgw_common_srcs
   services/rados/svc_sys_obj_cache_rados.cc
   services/rados/svc_sys_obj_core_rados.cc
   services/rados/svc_tier_rados.cc
+  services/rados/svc_user_rados.cc
   services/rados/svc_zone_rados.cc
   services/rados/svc_zone_utils_rados.cc
   rgw_service.cc
