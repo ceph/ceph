@@ -424,34 +424,50 @@ public:
 
   /// Config
   struct config_t {
+    /// Number of minimum journal segments to stop trimming.
     size_t target_journal_segments = 0;
+    /// Number of maximum journal segments to block user transactions.
     size_t max_journal_segments = 0;
 
+    /// Ratio of maximum available space to disable reclaiming.
     double available_ratio_gc_max = 0;
-    double reclaim_ratio_hard_limit = 0;
-    double reclaim_ratio_gc_threshhold = 0;
-
+    /// Ratio of minimum available space to force reclaiming.
     double available_ratio_hard_limit = 0;
 
-    /// Number of bytes to reclaim on each cycle
-    size_t reclaim_bytes_stride = 0;
+    /// Ratio of maximum reclaimable space to block user transactions.
+    double reclaim_ratio_hard_limit = 0;
+    /// Ratio of minimum reclaimable space to stop reclaiming.
+    double reclaim_ratio_gc_threshold = 0;
 
-    /// Number of bytes of journal entries to rewrite per cycle
-    size_t journal_rewrite_dirty_per_cycle = 0;
+    /// Number of bytes to reclaim per cycle
+    size_t reclaim_bytes_per_cycle = 0;
 
-    size_t journal_rewrite_backref_per_cycle = 0;
+    /// Number of bytes to rewrite dirty per cycle
+    size_t rewrite_dirty_bytes_per_cycle = 0;
+
+    /// Number of bytes to rewrite backref per cycle
+    size_t rewrite_backref_bytes_per_cycle = 0;
+
+    void validate() const {
+      ceph_assert(max_journal_segments > target_journal_segments);
+      ceph_assert(available_ratio_gc_max > available_ratio_hard_limit);
+      ceph_assert(reclaim_ratio_hard_limit > reclaim_ratio_gc_threshold);
+      ceph_assert(reclaim_bytes_per_cycle > 0);
+      ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
+      ceph_assert(rewrite_backref_bytes_per_cycle > 0);
+    }
 
     static config_t get_default() {
       return config_t{
 	  2,    // target_journal_segments
 	  4,    // max_journal_segments
 	  .9,   // available_ratio_gc_max
-	  .8,   // reclaim_ratio_hard_limit
-	  .6,   // reclaim_ratio_gc_threshhold
 	  .2,   // available_ratio_hard_limit
-	  1<<20,// reclaim 1MB per gc cycle
-	  1<<20,// rewrite 1MB of journal entries per gc cycle
-	  1<<24 // create 16MB of backref extents per gc cycle
+	  .8,   // reclaim_ratio_hard_limit
+	  .6,   // reclaim_ratio_gc_threshold
+	  1<<20,// reclaim_bytes_per_cycle
+	  1<<20,// rewrite_dirty_bytes_per_cycle
+	  1<<24 // rewrite_backref_bytes_per_cycle
 	};
     }
   };
@@ -886,7 +902,7 @@ private:
 
   bool final_reclaim() {
     return next_reclaim_pos->as_seg_paddr().get_segment_off()
-      + config.reclaim_bytes_stride >= (size_t)segments.get_segment_size();
+      + config.reclaim_bytes_per_cycle >= (size_t)segments.get_segment_size();
   }
 
   /**
@@ -1092,11 +1108,11 @@ private:
   bool should_block_on_gc() const {
     // TODO: probably worth projecting journal usage as well
     auto aratio = get_projected_available_ratio();
+    auto rratio = get_projected_reclaim_ratio();
     return (
+      (aratio < config.available_ratio_hard_limit) ||
       ((aratio < config.available_ratio_gc_max) &&
-       ((get_projected_reclaim_ratio() >
-	 config.reclaim_ratio_hard_limit) ||
-	(aratio < config.available_ratio_hard_limit))) ||
+       (rratio > config.reclaim_ratio_hard_limit)) ||
       (get_dirty_tail_limit() > journal_tail_target)
     );
   }
@@ -1194,10 +1210,11 @@ private:
    */
   bool gc_should_reclaim_space() const {
     auto aratio = get_available_ratio();
+    auto rratio = get_reclaim_ratio();
     return (
-      (aratio < config.available_ratio_gc_max) &&
-      (get_reclaim_ratio() > config.reclaim_ratio_gc_threshhold ||
-       aratio < config.available_ratio_hard_limit)
+      (aratio < config.available_ratio_hard_limit) ||
+      ((aratio < config.available_ratio_gc_max) &&
+       (rratio > config.reclaim_ratio_gc_threshold))
     );
   }
 

@@ -387,7 +387,9 @@ SegmentCleaner::SegmentCleaner(
     ool_segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::OOL)),
     gc_process(*this)
-{}
+{
+  config.validate();
+}
 
 void SegmentCleaner::register_metrics()
 {
@@ -564,7 +566,7 @@ SegmentCleaner::trim_backrefs_ret SegmentCleaner::trim_backrefs(
   return backref_manager.batch_insert_from_cache(
     t,
     limit,
-    config.journal_rewrite_backref_per_cycle
+    config.rewrite_backref_bytes_per_cycle
   );
 }
 
@@ -575,7 +577,7 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
   return ecb->get_next_dirty_extents(
     t,
     limit,
-    config.journal_rewrite_dirty_per_cycle
+    config.rewrite_dirty_bytes_per_cycle
   ).si_then([=, &t](auto dirty_list) {
     LOG_PREFIX(SegmentCleaner::rewrite_dirty);
     DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
@@ -766,7 +768,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
       segment_id.device_segment_id() + 1};
     end_paddr = paddr_t::make_seg_paddr(next_segment_id, 0);
   } else {
-    end_paddr = seg_paddr + config.reclaim_bytes_stride;
+    end_paddr = seg_paddr + config.reclaim_bytes_per_cycle;
   }
 
   double pavail_ratio = get_projected_available_ratio();
@@ -888,7 +890,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 	next_reclaim_pos.reset();
       } else {
 	next_reclaim_pos =
-	  paddr_t(*next_reclaim_pos + config.reclaim_bytes_stride);
+	  paddr_t(*next_reclaim_pos + config.reclaim_bytes_per_cycle);
       }
     });
   });
