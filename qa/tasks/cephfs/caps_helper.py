@@ -1,11 +1,39 @@
 """
 Helper methods to test that MON and MDS caps are enforced properly.
 """
+from os.path import join as os_path_join
+
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 from teuthology.orchestra.run import Raw
 
 class CapsHelper(CephFSTestCase):
+
+    def write_test_files(self, mounts):
+        """
+        Exercising 'r' and 'w' access levels on a file on CephFS mount is
+        pretty routine across all tests for caps. Adding to method to write
+        that file will reduce clutter in these tests.
+
+        This methods writes a fixed data in a file with a fixed name located
+        at a fixed path for given list of mounts.
+        """
+        filepaths, filedata = [], 'testdata'
+        dirname, filename = 'testdir', 'testfile'
+
+        for mount_x in mounts:
+            dirpath = os_path_join(mount_x.hostfs_mntpt, dirname)
+            mount_x.run_shell(f'mkdir {dirpath}')
+            filepath = os_path_join(dirpath, filename)
+            mount_x.write_file(filepath, filedata)
+            filepaths.append(filepath)
+
+        return filepaths, (filedata,), mounts
+
+    def run_cap_tests(self, filepaths, filedata, mounts, perm):
+        # TODO
+        #self.run_mon_cap_tests()
+        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
 
     def run_mon_cap_tests(self, moncap, keyring):
         keyring_path = self.fs.admin_remote.mktemp(data=keyring)
