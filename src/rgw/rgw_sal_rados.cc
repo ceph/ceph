@@ -38,7 +38,7 @@
 #include "rgw_lc_tier.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
-#include "services/svc_tier_rados.h"
+#include "services/rados/svc_tier_rados.h"
 #include "services/svc_quota.h"
 #include "services/svc_config_key.h"
 #include "services/svc_zone_utils.h"

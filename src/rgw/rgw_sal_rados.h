@@ -22,7 +22,7 @@
 #include "rgw_role.h"
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
-#include "services/svc_tier_rados.h"
+#include "services/rados/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
 
 namespace rgw { namespace sal {

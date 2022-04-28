@@ -55,7 +55,7 @@
 #include "rgw_tracer.h"
 
 #include "services/svc_sys_obj.h"
-#include "services/svc_tier_rados.h"
+#include "services/rados/svc_tier_rados.h"
 
 #include "include/ceph_assert.h"
 

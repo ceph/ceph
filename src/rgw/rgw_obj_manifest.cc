@@ -4,7 +4,7 @@
 #include "rgw_obj_manifest.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_tier_rados.h"
+#include "services/rados/svc_tier_rados.h"
 #include "rgw_rados.h" // RGW_OBJ_NS_SHADOW and RGW_OBJ_NS_MULTIPART
 #include "rgw_bucket.h"
 
