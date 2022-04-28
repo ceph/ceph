@@ -732,11 +732,11 @@ int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
   return store->getRados()->check_bucket_empty(dpp, info, y);
 }
 
-int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
 				optional_yield y, bool check_size_only)
 {
     return store->getRados()->check_quota(dpp, owner->get_id(), get_key(),
-					  user_quota, bucket_quota, obj_size, y, check_size_only);
+					  quota, obj_size, y, check_size_only);
 }
 
 int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
@@ -1228,10 +1228,10 @@ int RadosStore::register_to_service_map(const DoutPrefixProvider *dpp, const std
   return rados->register_to_service_map(dpp, daemon_type, meta);
 }
 
-void RadosStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
+void RadosStore::get_quota(RGWQuota& quota)
 {
-    bucket_quota = svc()->quota->get_bucket_quota();
-    user_quota = svc()->quota->get_user_quota();
+    quota.bucket_quota = svc()->quota->get_bucket_quota();
+    quota.user_quota = svc()->quota->get_user_quota();
 }
 
 void RadosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)

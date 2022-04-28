@@ -928,8 +928,8 @@ int RGWSI_Zone::convert_regionmap(const DoutPrefixProvider *dpp, optional_yield 
     }
   }
 
-  current_period->set_user_quota(zonegroupmap.user_quota);
-  current_period->set_bucket_quota(zonegroupmap.bucket_quota);
+  current_period->set_user_quota(zonegroupmap.quota.user_quota);
+  current_period->set_bucket_quota(zonegroupmap.quota.bucket_quota);
 
   // remove the region_map so we don't try to convert again
   ret = sysobj.wop().remove(dpp, y);
