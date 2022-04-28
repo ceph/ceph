@@ -60,7 +60,7 @@ struct clog_targets_conf_t {
  * Past queueing the LogEntry, the LogChannel is done with the whole thing.
  * LogClient will deal with sending and handling of LogEntries.
  */
-class LogChannel : public OstreamTemp::OstreamTempSink
+class LogChannel : public LoggerSinkSet
 {
 public:
 
@@ -70,10 +70,10 @@ public:
              const std::string &facility,
              const std::string &prio);
 
-  OstreamTemp debug() {
+  OstreamTemp debug() final {
     return OstreamTemp(CLOG_DEBUG, this);
   }
-  void debug(std::stringstream &s) {
+  void debug(std::stringstream &s) final {
     do_log(CLOG_DEBUG, s);
   }
   /**
@@ -93,28 +93,28 @@ public:
         ceph_abort();
     }
   }
-  OstreamTemp info() {
+  OstreamTemp info() final {
     return OstreamTemp(CLOG_INFO, this);
   }
-  void info(std::stringstream &s) {
+  void info(std::stringstream &s) final {
     do_log(CLOG_INFO, s);
   }
-  OstreamTemp warn() {
+  OstreamTemp warn() final {
     return OstreamTemp(CLOG_WARN, this);
   }
-  void warn(std::stringstream &s) {
+  void warn(std::stringstream &s) final {
     do_log(CLOG_WARN, s);
   }
-  OstreamTemp error() {
+  OstreamTemp error() final {
     return OstreamTemp(CLOG_ERROR, this);
   }
-  void error(std::stringstream &s) {
+  void error(std::stringstream &s) final {
     do_log(CLOG_ERROR, s);
   }
-  OstreamTemp sec() {
+  OstreamTemp sec() final {
     return OstreamTemp(CLOG_SEC, this);
   }
-  void sec(std::stringstream &s) {
+  void sec(std::stringstream &s) final {
     do_log(CLOG_SEC, s);
   }
 
@@ -162,8 +162,8 @@ public:
    */
   clog_targets_conf_t parse_client_options(CephContext* conf_cct);
 
-  void do_log(clog_type prio, std::stringstream& ss);
-  void do_log(clog_type prio, const std::string& s);
+  void do_log(clog_type prio, std::stringstream& ss) final;
+  void do_log(clog_type prio, const std::string& s) final;
 
 private:
   CephContext *cct;
