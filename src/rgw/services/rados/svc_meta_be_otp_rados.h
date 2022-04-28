@@ -29,18 +29,6 @@
 using RGWSI_MBOTP_Handler_Module  = RGWSI_MBSObj_Handler_Module;
 using RGWSI_MetaBackend_Handler_OTP  = RGWSI_MetaBackend_Handler_SObj;
 
-using otp_devices_list_t = std::list<rados::cls::otp::otp_info_t>;
-
-struct RGWSI_MBOTP_GetParams : public RGWSI_MetaBackend::GetParams {
-  otp_devices_list_t *pdevices{nullptr};
-};
-
-struct RGWSI_MBOTP_PutParams : public RGWSI_MetaBackend::PutParams {
-  otp_devices_list_t devices;
-};
-
-using RGWSI_MBOTP_RemoveParams = RGWSI_MBSObj_RemoveParams;
-
 class RGWSI_MetaBackend_OTP : public RGWSI_MetaBackend_SObj
 {
   RGWSI_Cls *cls_svc{nullptr};

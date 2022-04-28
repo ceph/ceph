@@ -1,7 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include "svc_meta_be_otp.h"
+#include "svc_otp.h"
+#include "svc_meta_be_otp_rados.h"
 
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_metadata.h"

@@ -63,7 +63,7 @@ extern "C" {
 #include "services/rados/svc_cls.h"
 #include "services/rados/svc_bilog_rados.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_meta_be_otp.h"
+#include "services/rados/svc_meta_be_otp_rados.h"
 #include "services/svc_zone.h"
 
 #define dout_context g_ceph_context

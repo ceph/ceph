@@ -22,7 +22,6 @@
 #include "services/svc_zone.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be.h"
-#include "services/svc_meta_be_otp.h"
 #include "services/svc_otp.h"
 
 #define dout_subsys ceph_subsys_rgw

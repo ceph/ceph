@@ -22,9 +22,21 @@
 #include "rgw/rgw_service.h"
 
 #include "svc_otp_types.h"
-#include "svc_meta_be_otp.h"
+#include "svc_meta_be_sobj.h"
 
 class RGWSI_Zone;
+
+using otp_devices_list_t = std::list<rados::cls::otp::otp_info_t>;
+
+struct RGWSI_MBOTP_GetParams : public RGWSI_MetaBackend::GetParams {
+  otp_devices_list_t *pdevices{nullptr};
+};
+
+struct RGWSI_MBOTP_PutParams : public RGWSI_MetaBackend::PutParams {
+  otp_devices_list_t devices;
+};
+
+using RGWSI_MBOTP_RemoveParams = RGWSI_MBSObj_RemoveParams;
 
 class RGWSI_OTP : public RGWServiceInstance
 {

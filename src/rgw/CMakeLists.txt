@@ -28,7 +28,6 @@ set(librgw_common_srcs
   services/svc_mdlog.cc
   services/svc_meta.cc
   services/svc_meta_be.cc
-  services/svc_meta_be_otp.cc
   services/svc_meta_be_sobj.cc
   services/svc_notify.cc
   services/svc_otp.cc
@@ -44,6 +43,7 @@ set(librgw_common_srcs
   services/rados/svc_bilog_rados.cc
   services/rados/svc_cls.cc
   services/rados/svc_config_key_rados.cc
+  services/rados/svc_meta_be_otp_rados.cc
   services/rados/svc_rados.cc
   services/rados/svc_sys_obj_cache_rados.cc
   services/rados/svc_sys_obj_core_rados.cc

@@ -76,7 +76,7 @@ int RGWSI_OTP::do_start(optional_yield, const DoutPrefixProvider *dpp)
 
   be_handler = _otp_be_handler;
 
-  RGWSI_MetaBackend_Handler_OTP *otp_be_handler = static_cast<RGWSI_MetaBackend_Handler_OTP *>(_otp_be_handler);
+  RGWSI_MetaBackend_Handler_SObj *otp_be_handler = static_cast<RGWSI_MetaBackend_Handler_SObj *>(_otp_be_handler);
 
   auto otp_be_module = new RGW_MB_Handler_Module_OTP(svc.zone);
   be_module.reset(otp_be_module);

@@ -8,8 +8,7 @@ namespace rgw { namespace sal {
 class Store;
 } }
 
-#include "cls/otp/cls_otp_types.h"
-#include "services/svc_meta_be_otp.h"
+#include "services/svc_otp.h"
 
 #include "rgw_basic_types.h"
 #include "rgw_metadata.h"
