@@ -25,9 +25,9 @@ using rgw::IAM::Policy;
 
 void RGWRestUserPolicy::dump(Formatter *f) const
 {
-  encode_json("Policyname", policy_name , f);
-  encode_json("Username", user_name , f);
-  encode_json("Policydocument", policy, f);
+  encode_json("PolicyName", policy_name , f);
+  encode_json("UserName", user_name , f);
+  encode_json("PolicyDocument", policy, f);
 }
 
 void RGWRestUserPolicy::send_response()
@@ -277,11 +277,11 @@ void RGWListUserPolicies::execute(optional_yield y)
       s->formatter->open_object_section("ListUserPoliciesResult");
       bufferlist bl = it->second;
       decode(policies, bl);
+      s->formatter->open_object_section("PolicyNames");
       for (const auto& p : policies) {
-        s->formatter->open_object_section("PolicyNames");
         s->formatter->dump_string("member", p.first);
-        s->formatter->close_section();
       }
+      s->formatter->close_section();
       s->formatter->close_section();
       s->formatter->close_section();
     } else {
