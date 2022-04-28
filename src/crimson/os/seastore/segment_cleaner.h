@@ -997,16 +997,6 @@ private:
       backref_buf_entry_t::cmp_t> &&backrefs,
     std::vector<CachedExtentRef> &extents);
 
-  size_t get_bytes_used_current_segment() const {
-    auto& seg_addr = journal_head.offset.as_seg_paddr();
-    return seg_addr.get_segment_off();
-  }
-
-  size_t get_bytes_available_current_segment() const {
-    auto segment_size = segments.get_segment_size();
-    return segment_size - get_bytes_used_current_segment();
-  }
-
   /// Returns free space available for writes
   size_t get_available_bytes() const {
     return segments.get_available_bytes();
@@ -1036,9 +1026,6 @@ private:
   size_t get_used_bytes() const {
     return stats.used_bytes;
   }
-  size_t get_projected_used_bytes() const {
-    return stats.used_bytes + stats.projected_used_bytes;
-  }
 
   /// Return bytes contained in segments in journal
   size_t get_journal_segment_bytes() const {
@@ -1062,13 +1049,6 @@ private:
    */
   size_t get_reclaimable_bytes() const {
     auto ret = get_unavailable_bytes() - get_used_bytes();
-    if (ret > get_journal_segment_bytes())
-      return ret - get_journal_segment_bytes();
-    else
-      return 0;
-  }
-  size_t get_projected_reclaimable_bytes() const {
-    auto ret = get_projected_unavailable_bytes() - get_projected_used_bytes();
     if (ret > get_journal_segment_bytes())
       return ret - get_journal_segment_bytes();
     else
