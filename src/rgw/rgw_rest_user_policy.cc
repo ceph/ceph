@@ -24,9 +24,9 @@ using rgw::IAM::Policy;
 
 void RGWRestUserPolicy::dump(Formatter *f) const
 {
-  encode_json("Policyname", policy_name , f);
-  encode_json("Username", user_name , f);
-  encode_json("Policydocument", policy, f);
+  encode_json("PolicyName", policy_name , f);
+  encode_json("UserName", user_name , f);
+  encode_json("PolicyDocument", policy, f);
 }
 
 void RGWRestUserPolicy::send_response()
@@ -281,13 +281,19 @@ void RGWListUserPolicies::execute(optional_yield y)
       s->formatter->dump_string("RequestId", s->trans_id);
       s->formatter->close_section();
       s->formatter->open_object_section("ListUserPoliciesResult");
-      bufferlist bl = uattrs[RGW_ATTR_USER_POLICY];
-      decode(policies, bl);
-      for (const auto& p : policies) {
-        s->formatter->open_object_section("PolicyNames");
-        s->formatter->dump_string("member", p.first);
-        s->formatter->close_section();
+      bufferlist bl = it->second;
+      try {
+        decode(policies, bl);
+      } catch (buffer::error& err) {
+        ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+        op_ret = -EIO;
+        return;
       }
+      s->formatter->open_object_section("PolicyNames");
+      for (const auto& p : policies) {
+        s->formatter->dump_string("member", p.first);
+      }
+      s->formatter->close_section();
       s->formatter->close_section();
       s->formatter->close_section();
     } else {
