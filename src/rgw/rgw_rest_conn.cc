@@ -21,7 +21,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Store* store,
     api_name(_api_name),
     host_style(_host_style)
 {
-  if (store) {
+  if (store && store->get_zone()) {
     key = store->get_zone()->get_system_key();
     self_zone_group = store->get_zone()->get_zonegroup().get_id();
   }
