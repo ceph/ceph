@@ -37,7 +37,7 @@ class MetricType(Enum):
 FS_TOP_PROG_STR = 'cephfs-top'
 
 # version match b/w fstop and stats emitted by mgr/stats
-FS_TOP_SUPPORTED_VER = 1
+FS_TOP_SUPPORTED_VER = 2
 
 ITEMS_PAD_LEN = 1
 ITEMS_PAD = " " * ITEMS_PAD_LEN
