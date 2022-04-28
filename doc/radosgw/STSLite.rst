@@ -60,9 +60,9 @@ The above STS configurables can be used with the Keystone configurables if one
 needs to use STS Lite in conjunction with Keystone. The complete set of
 configurable options will be::
 
-  [client.radosgw.gateway]
-  rgw sts key = {sts key for encrypting/ decrypting the session token}
-  rgw s3 auth use sts = true
+  [client.{your-rgw-name}]
+  rgw_sts_key = {sts key for encrypting/ decrypting the session token, exactly 16 hex characters}
+  rgw_s3_auth_use_sts = true
 
   rgw keystone url = {keystone server url:keystone server admin port}
   rgw keystone admin project = {keystone admin project name}
@@ -81,9 +81,9 @@ The details of the integrating ldap with Ceph Object Gateway can be found here:
 
 The complete set of configurables to use STS Lite with LDAP are::
 
-  [client.radosgw.gateway]
-  rgw sts key = {sts key for encrypting/ decrypting the session token}
-  rgw s3 auth use sts = true
+  [client.{your-rgw-name}]
+  rgw_sts_key = {sts key for encrypting/ decrypting the session token, exactly 16 hex characters}
+  rgw_s3_auth_use_sts = true
 
   rgw_s3_auth_use_ldap = true
   rgw_ldap_uri = {LDAP server to use}
