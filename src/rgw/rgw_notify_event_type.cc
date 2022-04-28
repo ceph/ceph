@@ -42,6 +42,14 @@ namespace rgw::notify {
       return "s3:ObjectLifecycle:Transition:Current";
     case ObjectTransitionNoncurrent:
       return "s3:ObjectLifecycle:Transition:Noncurrent";
+    case ObjectSynced:
+      return "s3:ObjectSynced:*";
+    case ObjectSyncedCreate:
+      return "s3:ObjectSynced:Create";
+    case ObjectSyncedDelete:
+      return "s3:ObjectSynced:Delete";
+    case ObjectSyncedDeletionMarkerCreated:
+      return "s3:ObjectSynced:DeletionMarkerCreated";
     case UnknownEvent:
         return "s3:UnknownEvent";
     }
@@ -72,6 +80,11 @@ namespace rgw::notify {
     case ObjectTransitionCurrent:
     case ObjectTransitionNoncurrent:
       return "OBJECT_TRANSITION";
+    case ObjectSynced:
+    case ObjectSyncedCreate:
+    case ObjectSyncedDelete:
+    case ObjectSyncedDeletionMarkerCreated:
+      return "OBJECT_SYNCED";
     case ObjectRemoved:
     case UnknownEvent:
       return "UNKNOWN_EVENT";
@@ -118,6 +131,14 @@ namespace rgw::notify {
         return ObjectTransitionCurrent;
     if (s == "s3:ObjectLifecycle:Transition:Noncurrent")
         return ObjectTransitionNoncurrent;
+    if (s == "s3:ObjectSynced:*" || s == "OBJECT_SYNCED")
+        return ObjectSynced;
+    if (s == "s3:ObjectSynced:Create")
+        return ObjectSyncedCreate;
+    if (s == "s3:ObjectSynced:Delete")
+        return ObjectSyncedDelete;
+    if (s == "s3:ObjectSynced:DeletionMarkerCreated")
+        return ObjectSyncedDeletionMarkerCreated;
     return UnknownEvent;
   }
 
