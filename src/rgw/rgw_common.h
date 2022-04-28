@@ -748,9 +748,8 @@ struct RGWUserInfo
   __u8 system;
   rgw_placement_rule default_placement;
   std::list<std::string> placement_tags;
-  RGWQuotaInfo bucket_quota;
   std::map<int, std::string> temp_url_keys;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
   uint32_t type;
   std::set<std::string> mfa_ids;
   std::string assumed_role_arn;
@@ -811,9 +810,9 @@ struct RGWUserInfo
      encode(system, bl);
      encode(default_placement, bl);
      encode(placement_tags, bl);
-     encode(bucket_quota, bl);
+     encode(quota.bucket_quota, bl);
      encode(temp_url_keys, bl);
-     encode(user_quota, bl);
+     encode(quota.user_quota, bl);
      encode(user_id.tenant, bl);
      encode(admin, bl);
      encode(type, bl);
@@ -879,13 +878,13 @@ struct RGWUserInfo
       decode(placement_tags, bl); /* tags of allowed placement rules */
     }
     if (struct_v >= 14) {
-      decode(bucket_quota, bl);
+      decode(quota.bucket_quota, bl);
     }
     if (struct_v >= 15) {
      decode(temp_url_keys, bl);
     }
     if (struct_v >= 16) {
-      decode(user_quota, bl);
+      decode(quota.user_quota, bl);
     }
     if (struct_v >= 17) {
       decode(user_id.tenant, bl);

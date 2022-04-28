@@ -1540,9 +1540,9 @@ int set_user_bucket_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
 {
   RGWUserInfo& user_info = op_state.get_user_info();
 
-  set_quota_info(user_info.bucket_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
+  set_quota_info(user_info.quota.bucket_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
-  op_state.set_bucket_quota(user_info.bucket_quota);
+  op_state.set_bucket_quota(user_info.quota.bucket_quota);
 
   string err;
   int r = user.modify(dpp(), op_state, null_yield, &err);
@@ -1558,9 +1558,9 @@ int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
 {
   RGWUserInfo& user_info = op_state.get_user_info();
 
-  set_quota_info(user_info.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
+  set_quota_info(user_info.quota.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
-  op_state.set_user_quota(user_info.user_quota);
+  op_state.set_user_quota(user_info.quota.user_quota);
 
   string err;
   int r = user.modify(dpp(), op_state, null_yield, &err);
@@ -4639,19 +4639,19 @@ int main(int argc, const char **argv)
 
         formatter->open_object_section("period_config");
         if (quota_scope == "bucket") {
-          set_quota_info(period_config.bucket_quota, opt_cmd,
+          set_quota_info(period_config.quota.bucket_quota, opt_cmd,
                          max_size, max_objects,
                          have_max_size, have_max_objects);
-          encode_json("bucket quota", period_config.bucket_quota, formatter.get());
+          encode_json("bucket quota", period_config.quota.bucket_quota, formatter.get());
         } else if (quota_scope == "user") {
-          set_quota_info(period_config.user_quota, opt_cmd,
+          set_quota_info(period_config.quota.user_quota, opt_cmd,
                          max_size, max_objects,
                          have_max_size, have_max_objects);
-          encode_json("user quota", period_config.user_quota, formatter.get());
+          encode_json("user quota", period_config.quota.user_quota, formatter.get());
         } else if (quota_scope.empty() && opt_cmd == OPT::GLOBAL_QUOTA_GET) {
           // if no scope is given for GET, print both
-          encode_json("bucket quota", period_config.bucket_quota, formatter.get());
-          encode_json("user quota", period_config.user_quota, formatter.get());
+          encode_json("bucket quota", period_config.quota.bucket_quota, formatter.get());
+          encode_json("user quota", period_config.quota.user_quota, formatter.get());
         } else {
           cerr << "ERROR: invalid quota scope specification. Please specify "
               "either --quota-scope=bucket, or --quota-scope=user" << std::endl;

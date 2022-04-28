@@ -2694,8 +2694,8 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("default_placement", default_placement.name, f);
   encode_json("default_storage_class", default_placement.storage_class, f);
   encode_json("placement_tags", placement_tags, f);
-  encode_json("bucket_quota", bucket_quota, f);
-  encode_json("user_quota", user_quota, f);
+  encode_json("bucket_quota", quota.bucket_quota, f);
+  encode_json("user_quota", quota.user_quota, f);
   encode_json("temp_url_keys", temp_url_keys, f);
 
   string user_source_type;
@@ -2753,8 +2753,8 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("default_placement", default_placement.name, obj);
   JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
   JSONDecoder::decode_json("placement_tags", placement_tags, obj);
-  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
-  JSONDecoder::decode_json("user_quota", user_quota, obj);
+  JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
   JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
 
   string user_source_type;
