@@ -60,7 +60,7 @@ extern "C" {
 #include "rgw_lua.h"
 
 #include "services/svc_sync_modules.h"
-#include "services/svc_cls.h"
+#include "services/rados/svc_cls.h"
 #include "services/rados/svc_bilog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta_be_otp.h"

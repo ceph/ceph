@@ -35,7 +35,7 @@
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_user.h"
-#include "services/svc_cls.h"
+#include "services/rados/svc_cls.h"
 #include "services/rados/svc_bilog_rados.h"
 
 #include "include/rados/librados.hpp"

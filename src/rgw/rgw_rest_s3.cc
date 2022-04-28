@@ -61,7 +61,7 @@
 #include "rgw_bucket_sync.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_cls.h"
+#include "services/rados/svc_cls.h"
 
 #include "include/ceph_assert.h"
 #include "rgw_role.h"

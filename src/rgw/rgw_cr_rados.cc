@@ -12,7 +12,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_sys_obj.h"
-#include "services/svc_cls.h"
+#include "services/rados/svc_cls.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
