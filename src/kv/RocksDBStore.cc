@@ -626,18 +626,6 @@ bool RocksDBStore::is_column_family(const std::string& prefix) {
   return cf_handles.count(prefix);
 }
 
-std::string_view RocksDBStore::get_key_hash_view(const prefix_shards& shards, const char* key, const size_t keylen) {
-  uint32_t hash_l = std::min<uint32_t>(shards.hash_l, keylen);
-  uint32_t hash_h = std::min<uint32_t>(shards.hash_h, keylen);
-  return { key + hash_l, hash_h - hash_l };
-}
-
-rocksdb::ColumnFamilyHandle *RocksDBStore::get_key_cf(const prefix_shards& shards, const char* key, const size_t keylen) {
-  auto sv = get_key_hash_view(shards, key, keylen);
-  uint32_t hash = ceph_str_hash_rjenkins(sv.data(), sv.size());
-  return shards.handles[hash % shards.handles.size()];
-}
-
 rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& prefix, const std::string& key) {
   auto iter = cf_handles.find(prefix);
   if (iter == cf_handles.end()) {
@@ -646,7 +634,10 @@ rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& pref
     if (iter->second.handles.size() == 1) {
       return iter->second.handles[0];
     } else {
-      return get_key_cf(iter->second, key.data(), key.size());
+      uint32_t hash_l = std::min<uint32_t>(iter->second.hash_l, key.size());
+      uint32_t hash_h = std::min<uint32_t>(iter->second.hash_h, key.size());
+      uint32_t hash = ceph_str_hash_rjenkins(&key[hash_l], hash_h - hash_l);
+      return iter->second.handles[hash % iter->second.handles.size()];
     }
   }
 }
@@ -659,36 +650,10 @@ rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& pref
     if (iter->second.handles.size() == 1) {
       return iter->second.handles[0];
     } else {
-      return get_key_cf(iter->second, key, keylen);
-    }
-  }
-}
-
-/**
- * If the specified IteratorBounds arg has both an upper and a lower bound defined, and they have equal placement hash
- * strings, we can be sure that the entire iteration range exists in a single CF. In that case, we return the relevant
- * CF handle. In all other cases, we return a nullptr to indicate that the specified bounds cannot necessarily be mapped
- * to a single CF.
- */
-rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& prefix, const IteratorBounds& bounds) {
-  if (!bounds.lower_bound || !bounds.upper_bound) {
-    return nullptr;
-  }
-  auto iter = cf_handles.find(prefix);
-  if (iter == cf_handles.end() || iter->second.hash_l != 0) {
-    return nullptr;
-  } else {
-    if (iter->second.handles.size() == 1) {
-      return iter->second.handles[0];
-    } else {
-      auto lower_bound_hash_str = get_key_hash_view(iter->second, bounds.lower_bound->data(), bounds.lower_bound->size());
-      auto upper_bound_hash_str = get_key_hash_view(iter->second, bounds.upper_bound->data(), bounds.upper_bound->size());
-      if (lower_bound_hash_str == upper_bound_hash_str) {
-        auto key = *bounds.lower_bound;
-        return get_key_cf(iter->second, key.data(), key.size());
-      } else {
-        return nullptr;
-      }
+      uint32_t hash_l = std::min<uint32_t>(iter->second.hash_l, keylen);
+      uint32_t hash_h = std::min<uint32_t>(iter->second.hash_h, keylen);
+      uint32_t hash = ceph_str_hash_rjenkins(&key[hash_l], hash_h - hash_l);
+      return iter->second.handles[hash % iter->second.handles.size()];
     }
   }
 }
@@ -2237,27 +2202,10 @@ class CFIteratorImpl : public KeyValueDB::IteratorImpl {
 protected:
   string prefix;
   rocksdb::Iterator *dbiter;
-  const KeyValueDB::IteratorBounds bounds;
-  const rocksdb::Slice iterate_lower_bound;
-  const rocksdb::Slice iterate_upper_bound;
 public:
-  explicit CFIteratorImpl(const RocksDBStore* db,
-                          const std::string& p,
-                          rocksdb::ColumnFamilyHandle* cf,
-                          KeyValueDB::IteratorBounds bounds_)
-    : prefix(p), bounds(std::move(bounds_)),
-      iterate_lower_bound(make_slice(bounds.lower_bound)),
-      iterate_upper_bound(make_slice(bounds.upper_bound))
-      {
-      auto options = rocksdb::ReadOptions();
-      if (bounds.lower_bound) {
-        options.iterate_lower_bound = &iterate_lower_bound;
-      }
-      if (bounds.upper_bound) {
-        options.iterate_upper_bound = &iterate_upper_bound;
-      }
-      dbiter = db->db->NewIterator(options, cf);
-  }
+  explicit CFIteratorImpl(const std::string& p,
+				 rocksdb::Iterator *iter)
+    : prefix(p), dbiter(iter) { }
   ~CFIteratorImpl() {
     delete dbiter;
   }
@@ -2789,29 +2737,16 @@ private:
   const RocksDBStore* db;
   KeyLess keyless;
   string prefix;
-  const KeyValueDB::IteratorBounds bounds;
-  const rocksdb::Slice iterate_lower_bound;
-  const rocksdb::Slice iterate_upper_bound;
   std::vector<rocksdb::Iterator*> iters;
 public:
   explicit ShardMergeIteratorImpl(const RocksDBStore* db,
 				  const std::string& prefix,
-				  const std::vector<rocksdb::ColumnFamilyHandle*>& shards,
-                  KeyValueDB::IteratorBounds bounds_)
-    : db(db), keyless(db->comparator), prefix(prefix), bounds(std::move(bounds_)),
-      iterate_lower_bound(make_slice(bounds.lower_bound)),
-      iterate_upper_bound(make_slice(bounds.upper_bound))
+				  const std::vector<rocksdb::ColumnFamilyHandle*>& shards)
+    : db(db), keyless(db->comparator), prefix(prefix)
   {
     iters.reserve(shards.size());
-    auto options = rocksdb::ReadOptions();
-    if (bounds.lower_bound) {
-      options.iterate_lower_bound = &iterate_lower_bound;
-    }
-    if (bounds.upper_bound) {
-      options.iterate_upper_bound = &iterate_upper_bound;
-    }
     for (auto& s : shards) {
-      iters.push_back(db->db->NewIterator(options, s));
+      iters.push_back(db->db->NewIterator(rocksdb::ReadOptions(), s));
     }
   }
   ~ShardMergeIteratorImpl() {
@@ -2982,31 +2917,22 @@ public:
   }
 };
 
-KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, IteratorOpts opts, IteratorBounds bounds)
+KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, IteratorOpts opts)
 {
   auto cf_it = cf_handles.find(prefix);
   if (cf_it != cf_handles.end()) {
-    rocksdb::ColumnFamilyHandle* cf = nullptr;
     if (cf_it->second.handles.size() == 1) {
-      cf = cf_it->second.handles[0];
-    } else {
-      cf = get_cf_handle(prefix, bounds);
-    }
-    if (cf) {
       return std::make_shared<CFIteratorImpl>(
-              this,
-              prefix,
-              cf,
-              std::move(bounds));
+        prefix,
+        db->NewIterator(rocksdb::ReadOptions(), cf_it->second.handles[0]));
     } else {
       return std::make_shared<ShardMergeIteratorImpl>(
         this,
         prefix,
-        cf_it->second.handles,
-        std::move(bounds));
+        cf_it->second.handles);
     }
   } else {
-    return KeyValueDB::get_iterator(prefix, opts, std::move(bounds));
+    return KeyValueDB::get_iterator(prefix, opts);
   }
 }
 
@@ -3015,11 +2941,14 @@ rocksdb::Iterator* RocksDBStore::new_shard_iterator(rocksdb::ColumnFamilyHandle*
   return db->NewIterator(rocksdb::ReadOptions(), cf);
 }
 
-RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorOpts opts, IteratorBounds bounds)
+RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorOpts opts)
 {
   if (cf_handles.size() == 0) {
+    rocksdb::ReadOptions opt = rocksdb::ReadOptions();
+    if (opts & ITERATOR_NOCACHE)
+      opt.fill_cache=false;
     return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
-      this, default_cf, opts, std::move(bounds));
+      db->NewIterator(opt, default_cf));
   } else {
     return std::make_shared<WholeMergeIteratorImpl>(this);
   }
@@ -3027,7 +2956,8 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorO
 
 RocksDBStore::WholeSpaceIterator RocksDBStore::get_default_cf_iterator()
 {
-  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(this, default_cf, 0, IteratorBounds());
+  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
+    db->NewIterator(rocksdb::ReadOptions(), default_cf));
 }
 
 int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
