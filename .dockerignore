@@ -1,0 +1,9 @@
+# Ignore everything
+*
+
+# Don't ignore files required for docker build
+!run-make-check.sh
+!install-deps.sh
+!do_cmake.sh
+!src/script/run-make.sh
+!ceph.spec.in
