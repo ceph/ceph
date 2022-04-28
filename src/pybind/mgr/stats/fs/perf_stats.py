@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from threading import Lock, Condition, Thread, Timer
 from ipaddress import ip_address
 
-PERF_STATS_VERSION = 1
+PERF_STATS_VERSION = 2
 
 QUERY_IDS = "query_ids"
 GLOBAL_QUERY_ID = "global_query_id"
@@ -25,6 +25,8 @@ QUERY_RAW_COUNTERS_GLOBAL = "query_raw_counters_global"
 MDS_RANK_ALL = (-1,)
 CLIENT_ID_ALL = "\d*"
 CLIENT_IP_ALL = ".*"
+
+fs_list = [] # type: List[str]
 
 MDS_PERF_QUERY_REGEX_MATCH_ALL_RANKS = '^(.*)$'
 MDS_PERF_QUERY_REGEX_MATCH_CLIENTS = '^(client.{0}\s+{1}):.*'
@@ -137,8 +139,9 @@ class FSPerfStats(object):
         self.report_processor = Thread(target=self.run)
         self.report_processor.start()
 
-    def set_client_metadata(self, client_id, key, meta):
-        result = self.client_metadata['metadata'].setdefault(client_id, {})
+    def set_client_metadata(self, fs_name, client_id, key, meta):
+        result = (self.client_metadata['metadata'].setdefault(
+                            fs_name, {})).setdefault(client_id, {})
         if not key in result or not result[key] == meta:
             result[key] = meta
 
@@ -150,35 +153,40 @@ class FSPerfStats(object):
             except KeyError:
                 self.log.warn(f"cmdtag {cmdtag} not found in client metadata")
                 return
-
-            client_meta = result[1].wait()
+            fs_name = result[0]
+            client_meta = result[2].wait()
             if client_meta[0] != 0:
-                self.log.warn("failed to fetch client metadata from rank {0}, err={1}".format(
-                    result[0], client_meta[2]))
+                self.log.warn("failed to fetch client metadata from gid {0}, err={1}".format(
+                    result[1], client_meta[2]))
                 return
             self.log.debug("notify: client metadata={0}".format(json.loads(client_meta[1])))
             for metadata in json.loads(client_meta[1]):
                 client_id = "client.{0}".format(metadata['id'])
-                result = self.client_metadata['metadata'].setdefault(client_id, {})
+                result = (self.client_metadata['metadata'].setdefault(fs_name, {})).setdefault(client_id, {})
                 for subkey in CLIENT_METADATA_SUBKEYS:
-                    self.set_client_metadata(client_id, subkey, metadata[CLIENT_METADATA_KEY][subkey])
+                    self.set_client_metadata(fs_name, client_id, subkey, metadata[CLIENT_METADATA_KEY][subkey])
                 for subkey in CLIENT_METADATA_SUBKEYS_OPTIONAL:
-                    self.set_client_metadata(client_id, subkey,
+                    self.set_client_metadata(fs_name, client_id, subkey,
                                              metadata[CLIENT_METADATA_KEY].get(subkey, NON_EXISTENT_KEY_STR))
                 metric_features = int(metadata[CLIENT_METADATA_KEY]["metric_spec"]["metric_flags"]["feature_bits"], 16)
                 supported_metrics = [metric for metric, bit in MDS_PERF_QUERY_COUNTERS_MAP.items() if metric_features & (1 << bit)]
-                self.set_client_metadata(client_id, "valid_metrics", supported_metrics)
+                self.set_client_metadata(fs_name, client_id, "valid_metrics", supported_metrics)
                 kver = metadata[CLIENT_METADATA_KEY].get("kernel_version", None)
                 if kver:
-                    self.set_client_metadata(client_id, "kernel_version", kver)
+                    self.set_client_metadata(fs_name, client_id, "kernel_version", kver)
             # when all async requests are done, purge clients metadata if any.
             if not self.client_metadata['in_progress']:
-                for client in self.client_metadata['to_purge']:
-                    try:
-                        self.log.info("purge client metadata for {0}".format(client))
-                        self.client_metadata['metadata'].remove(client)
-                    except:
-                        pass
+                global fs_list
+                for fs_name in fs_list:
+                    for client in self.client_metadata['to_purge']:
+                        try:
+                            if client in self.client_metadata['metadata'][fs_name]:
+                                self.log.info("purge client metadata for {0}".format(client))
+                                self.client_metadata['metadata'][fs_name].pop(client)
+                        except:
+                            pass
+                    if fs_name in self.client_metadata['metadata'] and not bool(self.client_metadata['metadata'][fs_name]):
+                        self.client_metadata['metadata'].pop(fs_name)
                 self.client_metadata['to_purge'].clear()
             self.log.debug("client_metadata={0}, to_purge={1}".format(
                 self.client_metadata['metadata'], self.client_metadata['to_purge']))
@@ -226,23 +234,28 @@ class FSPerfStats(object):
     def update_client_meta(self):
         new_updates = {}
         pending_updates = [v[0] for v in self.client_metadata['in_progress'].values()]
+        global fs_list
+        fs_list.clear()
         with self.meta_lock:
             fsmap = self.module.get('fs_map')
             for fs in fsmap['filesystems']:
-                mdsmap = fs['mdsmap']                
-                gid = mdsmap['up']["mds_0"]
-                if gid in pending_updates:
-                    continue                
-                tag = str(uuid.uuid4())
-                result = CommandResult(tag)
-                new_updates[tag] = (gid, result)
-            self.client_metadata['in_progress'].update(new_updates)
+                mds_map = fs['mdsmap']
+                if mds_map is not None:
+                    fsname = mds_map['fs_name']
+                    for mds_id, mds_status in mds_map['info'].items():
+                        if mds_status['rank'] == 0:
+                            fs_list.append(fsname)
+                            rank0_gid = mds_status['gid']
+                            tag = str(uuid.uuid4())
+                            result = CommandResult(tag)
+                            new_updates[tag] = (fsname, rank0_gid, result)
+                    self.client_metadata['in_progress'].update(new_updates)
 
         self.log.debug(f"updating client metadata from {new_updates}")
 
         cmd_dict = {'prefix': 'client ls'}
         for tag,val in new_updates.items():
-            self.module.send_command(val[1], "mds", str(val[0]), json.dumps(cmd_dict), tag)
+            self.module.send_command(val[2], "mds", str(val[1]), json.dumps(cmd_dict), tag)
 
     def run(self):
         try:
@@ -274,7 +287,7 @@ class FSPerfStats(object):
     def cull_client_entries(self, raw_perf_counters, incoming_metrics, missing_clients):
         # this is a bit more involed -- for each rank figure out what clients
         # are missing in incoming report and purge them from our tracked map.
-        # but, if this is invoked _after_ cull_mds_entries(), the rank set
+        # but, if this is invoked after cull_mds_entries(), the rank set
         # is same, so we can loop based on that assumption.
         ranks = raw_perf_counters.keys()
         for rank in ranks:
@@ -297,13 +310,16 @@ class FSPerfStats(object):
                 self.log.info("deferring client metadata purge (now {0} client(s))".format(
                     len(self.client_metadata['to_purge'])))
             else:
-                for client in missing_clients:
-                    try:
-                        self.log.info("purge client metadata for {0}".format(client))
-                        self.client_metadata['metadata'].pop(client)
-                    except KeyError:
-                        pass
-                self.log.debug("client_metadata={0}".format(self.client_metadata['metadata']))
+                global fs_list
+                for fs_name in fs_list:
+                    for client in missing_clients:
+                        try:
+                            self.log.info("purge client metadata for {0}".format(client))
+                            if client in self.client_metadata['metadata'][fs_name]:
+                                self.client_metadata['metadata'][fs_name].pop(client)
+                        except KeyError:
+                            pass
+                    self.log.debug("client_metadata={0}".format(self.client_metadata['metadata']))
 
     def cull_global_metrics(self, raw_perf_counters, incoming_metrics):
         tracked_clients = raw_perf_counters.keys()
@@ -334,21 +350,27 @@ class FSPerfStats(object):
 
             # iterate over metrics list and update our copy (note that we have
             # already culled the differences).
-            for counter in incoming_metrics:
-                mds_rank = int(counter['k'][0][0])
-                client_id, client_ip = extract_client_id_and_ip(counter['k'][1][0])
-                if client_id is not None or not client_ip: # client_id _could_ be 0
-                    with self.meta_lock:
-                        self.set_client_metadata(client_id, "IP", client_ip)
-                else:
-                    self.log.warn("client metadata for client_id={0} might be unavailable".format(client_id))
+            global fs_list
+            for fs_name in fs_list:
+                for counter in incoming_metrics:
+                    mds_rank = int(counter['k'][0][0])
+                    client_id, client_ip = extract_client_id_and_ip(counter['k'][1][0])
+                    if self.client_metadata['metadata'].get(fs_name):
+                        if (client_id is not None or not client_ip) and\
+                             self.client_metadata["metadata"][fs_name].get(client_id): # client_id _could_ be 0
+                            with self.meta_lock:
+                                self.set_client_metadata(fs_name, client_id, "IP", client_ip)
+                        else:
+                            self.log.warn(f"client metadata for client_id={client_id} might be unavailable")
+                    else:
+                        self.log.warn(f"client metadata for filesystem={fs_name} might be unavailable")
 
-                raw_counters = raw_perf_counters.setdefault(mds_rank, [False, {}])
-                raw_counters[0] = True if mds_rank in delayed_ranks else False
-                raw_client_counters = raw_counters[1].setdefault(client_id, [])
+                    raw_counters = raw_perf_counters.setdefault(mds_rank, [False, {}])
+                    raw_counters[0] = True if mds_rank in delayed_ranks else False
+                    raw_client_counters = raw_counters[1].setdefault(client_id, [])
 
-                del raw_client_counters[:]
-                raw_client_counters.extend(counter['c'])
+                    del raw_client_counters[:]
+                    raw_client_counters.extend(counter['c'])
         # send an asynchronous client metadata refresh
         self.update_client_meta()
 
@@ -465,32 +487,42 @@ class FSPerfStats(object):
 
     def generate_report(self, user_query):
         result = {} # type: Dict
+        global fs_list
         # start with counter info -- metrics that are global and per mds
         result["version"] = PERF_STATS_VERSION
         result["global_counters"] = MDS_GLOBAL_PERF_QUERY_COUNTERS
         result["counters"] = MDS_PERF_QUERY_COUNTERS
 
         # fill in client metadata
-        raw_perfs = user_query.setdefault(QUERY_RAW_COUNTERS_GLOBAL, {})
+        raw_perfs_global = user_query.setdefault(QUERY_RAW_COUNTERS_GLOBAL, {})
+        raw_perfs = user_query.setdefault(QUERY_RAW_COUNTERS, {})
         with self.meta_lock:
+            raw_counters_clients = []
+            for val in raw_perfs.values():
+                raw_counters_clients.extend(list(val[1]))
             result_meta = result.setdefault("client_metadata", {})
-            for client_id in raw_perfs.keys():
-                if client_id in self.client_metadata["metadata"]:
-                    client_meta = result_meta.setdefault(client_id, {})
-                    client_meta.update(self.client_metadata["metadata"][client_id])
+            for fs_name in fs_list:
+                meta = self.client_metadata["metadata"]
+                if fs_name in meta and len(meta[fs_name]):
+                    for client_id in raw_perfs_global.keys():
+                        if client_id in meta[fs_name] and client_id in raw_counters_clients:
+                            client_meta = (result_meta.setdefault(fs_name, {})).setdefault(client_id, {})
+                            client_meta.update(meta[fs_name][client_id])
 
             # start populating global perf metrics w/ client metadata
             metrics = result.setdefault("global_metrics", {})
-            for client_id, counters in raw_perfs.items():
-                global_client_metrics = metrics.setdefault(client_id, [])
-                del global_client_metrics[:]
-                global_client_metrics.extend(counters)
+            for fs_name in fs_list:
+                if fs_name in meta and len(meta[fs_name]):
+                    for client_id, counters in raw_perfs_global.items():
+                        if client_id in meta[fs_name] and client_id in raw_counters_clients:
+                            global_client_metrics = (metrics.setdefault(fs_name, {})).setdefault(client_id, [])
+                            del global_client_metrics[:]
+                            global_client_metrics.extend(counters)
 
             # and, now per-mds metrics keyed by mds rank along with delayed ranks
-            raw_perfs = user_query.setdefault(QUERY_RAW_COUNTERS, {})
             metrics = result.setdefault("metrics", {})
 
-            metrics["delayed_ranks"] = [rank for rank,counters in raw_perfs.items() if counters[0]]
+            metrics["delayed_ranks"] = [rank for rank, counters in raw_perfs.items() if counters[0]]
             for rank, counters in raw_perfs.items():
                 mds_key = "mds.{}".format(rank)
                 mds_metrics = metrics.setdefault(mds_key, {})
