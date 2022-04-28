@@ -313,6 +313,13 @@ global_init(const std::map<std::string,std::string> *defaults,
 	     << std::endl;
 	exit(1);
       }
+#if defined(HAVE_SYS_PRCTL_H)
+      if (g_conf().get_val<bool>("set_keepcaps")) {
+	if (prctl(PR_SET_KEEPCAPS, 1) == -1) {
+	  cerr << "warning: unable to set keepcaps flag: " << cpp_strerror(errno) << std::endl;
+	}
+      }
+#endif
       if (setuid(uid) != 0) {
 	cerr << "unable to setuid " << uid << ": " << cpp_strerror(errno)
 	     << std::endl;
