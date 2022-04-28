@@ -32,7 +32,7 @@
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
 
-#include "services/svc_rados.h"
+#include "services/rados/svc_rados.h"
 #include "services/svc_bi_rados.h"
 #include "common/Throttle.h"
 #include "common/ceph_mutex.h"

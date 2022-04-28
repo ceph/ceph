@@ -15,7 +15,7 @@
 #include "rgw_sync_error_repo.h"
 #include "rgw_coroutine.h"
 #include "rgw_sal.h"
-#include "services/svc_rados.h"
+#include "services/rados/svc_rados.h"
 #include "cls/cmpomap/client.h"
 
 ceph::real_time rgw_error_repo_decode_value(const bufferlist& bl)

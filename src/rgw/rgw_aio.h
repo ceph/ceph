@@ -23,7 +23,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
 
-#include "services/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
+#include "services/rados/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
 
 #include "rgw_common.h"
 

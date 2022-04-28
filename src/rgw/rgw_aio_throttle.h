@@ -20,7 +20,7 @@
 #include "common/ceph_mutex.h"
 #include "common/async/completion.h"
 #include "common/async/yield_context.h"
-#include "services/svc_rados.h"
+#include "services/rados/svc_rados.h"
 #include "rgw_aio.h"
 
 namespace rgw {

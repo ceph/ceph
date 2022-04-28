@@ -21,7 +21,7 @@
 #include "rgw_metadata.h"
 #include "rgw_mdlog_types.h"
 
-#include "services/svc_rados.h"
+#include "services/rados/svc_rados.h"
 
 #define META_LOG_OBJ_PREFIX "meta.log."
 
