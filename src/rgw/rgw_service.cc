@@ -4,28 +4,28 @@
 #include "rgw_service.h"
 
 #include "services/svc_finisher.h"
-#include "services/svc_bi_rados.h"
-#include "services/svc_bilog_rados.h"
+#include "services/rados/svc_bi_rados.h"
+#include "services/rados/svc_bilog_rados.h"
 #include "services/svc_bucket_sobj.h"
 #include "services/svc_bucket_sync_sobj.h"
-#include "services/svc_cls.h"
-#include "services/svc_config_key_rados.h"
-#include "services/svc_mdlog.h"
+#include "services/rados/svc_cls.h"
+#include "services/rados/svc_config_key_rados.h"
+#include "services/rados/svc_mdlog_rados.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be.h"
 #include "services/svc_meta_be_sobj.h"
-#include "services/svc_meta_be_otp.h"
-#include "services/svc_notify.h"
+#include "services/rados/svc_notify.h"
 #include "services/svc_otp.h"
-#include "services/svc_rados.h"
-#include "services/svc_zone.h"
-#include "services/svc_zone_utils.h"
+#include "services/rados/svc_rados.h"
 #include "services/svc_quota.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_sys_obj.h"
-#include "services/svc_sys_obj_cache.h"
-#include "services/svc_sys_obj_core.h"
-#include "services/svc_user_rados.h"
+#include "services/rados/svc_meta_be_otp_rados.h"
+#include "services/rados/svc_sys_obj_cache_rados.h"
+#include "services/rados/svc_sys_obj_core_rados.h"
+#include "services/rados/svc_user_rados.h"
+#include "services/rados/svc_zone_rados.h"
+#include "services/rados/svc_zone_utils_rados.h"
 
 #include "common/errno.h"
 
@@ -60,58 +60,58 @@ int RGWServices_Def::init(CephContext *cct,
   cls = std::make_unique<RGWSI_Cls>(cct);
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
   datalog_rados = std::make_unique<RGWDataChangesLog>(cct);
-  mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
+  mdlog_rados = std::make_unique<RGWSI_MDLog_RADOS>(cct, run_sync);
   meta = std::make_unique<RGWSI_Meta>(cct);
   meta_be_sobj = std::make_unique<RGWSI_MetaBackend_SObj>(cct);
   meta_be_otp = std::make_unique<RGWSI_MetaBackend_OTP>(cct);
   notify = std::make_unique<RGWSI_Notify>(cct);
   otp = std::make_unique<RGWSI_OTP>(cct);
   rados = std::make_unique<RGWSI_RADOS>(cct);
-  zone = std::make_unique<RGWSI_Zone>(cct);
-  zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
+  zone_rados = std::make_unique<RGWSI_Zone_RADOS>(cct);
+  zone_utils_rados = std::make_unique<RGWSI_ZoneUtils_RADOS>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
   sync_modules = std::make_unique<RGWSI_SyncModules>(cct);
   sysobj = std::make_unique<RGWSI_SysObj>(cct);
-  sysobj_core = std::make_unique<RGWSI_SysObj_Core>(cct);
+  sysobj_core_rados = std::make_unique<RGWSI_SysObj_Core_RADOS>(cct);
   user_rados = std::make_unique<RGWSI_User_RADOS>(cct);
 
   if (have_cache) {
-    sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(dpp, cct);
+    sysobj_cache_rados = std::make_unique<RGWSI_SysObj_Cache_RADOS>(dpp, cct);
   }
 
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
   finisher->init();
-  bi_rados->init(zone.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
+  bi_rados->init(zone_rados.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
   bilog_rados->init(bi_rados.get());
-  bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
+  bucket_sobj->init(zone_rados.get(), sysobj.get(), sysobj_cache_rados.get(),
                     bi_rados.get(), meta.get(), meta_be_sobj.get(),
                     sync_modules.get(), bucket_sync_sobj.get());
-  bucket_sync_sobj->init(zone.get(),
+  bucket_sync_sobj->init(zone_rados.get(),
                          sysobj.get(),
-                         sysobj_cache.get(),
+                         sysobj_cache_rados.get(),
                          bucket_sobj.get());
-  cls->init(zone.get(), rados.get());
+  cls->init(zone_rados.get(), rados.get());
   config_key_rados->init(rados.get());
-  mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
-  meta->init(sysobj.get(), mdlog.get(), meta_bes);
-  meta_be_sobj->init(sysobj.get(), mdlog.get());
-  meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
-  notify->init(zone.get(), rados.get(), finisher.get());
-  otp->init(zone.get(), meta.get(), meta_be_otp.get());
+  mdlog_rados->init(rados.get(), zone_rados.get(), sysobj.get(), cls.get());
+  meta->init(sysobj.get(), mdlog_rados.get(), meta_bes);
+  meta_be_sobj->init(sysobj.get(), mdlog_rados.get());
+  meta_be_otp->init(sysobj.get(), mdlog_rados.get(), cls.get());
+  notify->init(zone_rados.get(), rados.get(), finisher.get());
+  otp->init(zone_rados.get(), meta.get(), meta_be_otp.get());
   rados->init();
-  zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
-  zone_utils->init(rados.get(), zone.get());
-  quota->init(zone.get());
-  sync_modules->init(zone.get());
-  sysobj_core->core_init(rados.get(), zone.get());
+  zone_rados->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
+  zone_utils_rados->init(rados.get(), zone_rados.get());
+  quota->init(zone_rados.get());
+  sync_modules->init(zone_rados.get());
+  sysobj_core_rados->init(rados.get(), zone_rados.get());
   if (have_cache) {
-    sysobj_cache->init(rados.get(), zone.get(), notify.get());
-    sysobj->init(rados.get(), sysobj_cache.get());
+    sysobj_cache_rados->do_init(sysobj_core_rados.get(), zone_rados.get(), notify.get());
+    sysobj->init(sysobj_cache_rados.get());
   } else {
-    sysobj->init(rados.get(), sysobj_core.get());
+    sysobj->init(sysobj_core_rados.get());
   }
-  user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
+  user_rados->init(rados.get(), zone_rados.get(), sysobj.get(), sysobj_cache_rados.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
 
   can_shutdown = true;
@@ -137,23 +137,23 @@ int RGWServices_Def::init(CephContext *cct,
   }
 
   if (!raw) {
-    r = zone->start(y, dpp);
+    r = zone_rados->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
       return r;
     }
 
-    r = datalog_rados->start(dpp, &zone->get_zone(),
-			     zone->get_zone_params(),
+    r = datalog_rados->start(dpp, &zone_rados->get_zone(),
+			     zone_rados->get_zone_params(),
 			     rados->get_rados_handle());
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
     }
 
-    r = mdlog->start(y, dpp);
+    r = mdlog_rados->start(y, dpp);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to start mdlog service (" << cpp_strerror(-r) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to start mdlog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
     }
 
@@ -176,9 +176,9 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
-  r = zone_utils->start(y, dpp);
+  r = zone_utils_rados->start(y, dpp);
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to start zone_utils service (" << cpp_strerror(-r) << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to start zone_utils_rados service (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -188,16 +188,16 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
-  r = sysobj_core->start(y, dpp);
+  r = sysobj_core_rados->start(y, dpp);
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to start sysobj_core service (" << cpp_strerror(-r) << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to start sysobj_core_rados service (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
   if (have_cache) {
-    r = sysobj_cache->start(y, dpp);
+    r = sysobj_cache_rados->start(y, dpp);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to start sysobj_cache service (" << cpp_strerror(-r) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to start sysobj_cache_rados service (" << cpp_strerror(-r) << dendl;
       return r;
     }
   }
@@ -262,14 +262,14 @@ void RGWServices_Def::shutdown()
   }
 
   sysobj->shutdown();
-  sysobj_core->shutdown();
+  sysobj_core_rados->shutdown();
   notify->shutdown();
-  if (sysobj_cache) {
-    sysobj_cache->shutdown();
+  if (sysobj_cache_rados) {
+    sysobj_cache_rados->shutdown();
   }
   quota->shutdown();
-  zone_utils->shutdown();
-  zone->shutdown();
+  zone_utils_rados->shutdown();
+  zone_rados->shutdown();
   rados->shutdown();
 
   has_shutdown = true;
@@ -298,20 +298,20 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   config_key_rados = _svc.config_key_rados.get();
   config_key = config_key_rados;
   datalog_rados = _svc.datalog_rados.get();
-  mdlog = _svc.mdlog.get();
+  mdlog = _svc.mdlog_rados.get();
   meta = _svc.meta.get();
   meta_be_sobj = _svc.meta_be_sobj.get();
   meta_be_otp = _svc.meta_be_otp.get();
   notify = _svc.notify.get();
   otp = _svc.otp.get();
   rados = _svc.rados.get();
-  zone = _svc.zone.get();
-  zone_utils = _svc.zone_utils.get();
+  zone = _svc.zone_rados.get();
+  zone_utils = _svc.zone_utils_rados.get();
   quota = _svc.quota.get();
   sync_modules = _svc.sync_modules.get();
   sysobj = _svc.sysobj.get();
-  cache = _svc.sysobj_cache.get();
-  core = _svc.sysobj_core.get();
+  cache = _svc.sysobj_cache_rados.get();
+  core = _svc.sysobj_core_rados.get();
   user = _svc.user_rados.get();
 
   return 0;
