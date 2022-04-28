@@ -517,12 +517,6 @@ private:
   seastar::shared_mutex mutex;
 };
 
-// TODO: drop this after migrating to the new event tracking infrastructure.
-struct OrderedExclusivePhase : OrderedExclusivePhaseT<OrderedExclusivePhase> {
-  OrderedExclusivePhase(const char *type_name) : type_name(type_name) {}
-  const char * type_name;
-};
-
 /**
  * Permits multiple ops to inhabit the stage concurrently, but ensures that
  * they will proceed to the next stage in the order in which they called
@@ -608,11 +602,6 @@ private:
   seastar::shared_mutex mutex;
 };
 
-struct OrderedConcurrentPhase : OrderedConcurrentPhaseT<OrderedConcurrentPhase> {
-  OrderedConcurrentPhase(const char *type_name) : type_name(type_name) {}
-  const char * type_name;
-};
-
 /**
  * Imposes no ordering or exclusivity at all.  Ops enter without constraint and
  * may exit in any order.  Useful mainly for informational purposes between
@@ -643,11 +632,6 @@ public:
     return seastar::make_ready_future<PipelineExitBarrierI::Ref>(
       new ExitBarrier);
   }
-};
-
-struct UnorderedStage : UnorderedStageT<UnorderedStage> {
-  UnorderedStage(const char *type_name) : type_name(type_name) {}
-  const char * type_name;
 };
 
 }
