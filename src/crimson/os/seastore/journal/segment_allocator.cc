@@ -138,7 +138,7 @@ SegmentAllocator::roll_ertr::future<>
 SegmentAllocator::roll()
 {
   ceph_assert(can_write());
-  return close_segment(true).safe_then([this] {
+  return close_segment().safe_then([this] {
     return do_open().discard_result();
   });
 }
@@ -191,7 +191,7 @@ SegmentAllocator::close()
     LOG_PREFIX(SegmentAllocator::close);
     if (current_segment) {
       INFO("{} close current segment", print_name);
-      return close_segment(false);
+      return close_segment();
     } else {
       INFO("{} no current segment", print_name);
       return close_segment_ertr::now();
@@ -202,16 +202,14 @@ SegmentAllocator::close()
 }
 
 SegmentAllocator::close_segment_ertr::future<>
-SegmentAllocator::close_segment(bool is_rolling)
+SegmentAllocator::close_segment()
 {
   LOG_PREFIX(SegmentAllocator::close_segment);
   assert(can_write());
   // Note: make sure no one can access the current segment once closing
   auto seg_to_close = std::move(current_segment);
   auto close_segment_id = seg_to_close->get_segment_id();
-  if (is_rolling) {
-    segment_provider.close_segment(close_segment_id);
-  }
+  segment_provider.close_segment(close_segment_id);
   auto close_seg_info = segment_provider.get_seg_info(close_segment_id);
   journal_seq_t cur_journal_tail;
   journal_seq_t new_alloc_replay_from;

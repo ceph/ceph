@@ -108,9 +108,8 @@ class SegmentAllocator {
     current_segment_nonce = 0;
   }
 
-  // FIXME: remove the unnecessary is_rolling
   using close_segment_ertr = base_ertr;
-  close_segment_ertr::future<> close_segment(bool is_rolling);
+  close_segment_ertr::future<> close_segment();
 
   const std::string name;
   // device id is not available during construction,

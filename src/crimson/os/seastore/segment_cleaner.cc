@@ -550,7 +550,6 @@ void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 void SegmentCleaner::close_segment(segment_id_t segment)
 {
   LOG_PREFIX(SegmentCleaner::close_segment);
-  ceph_assert(init_complete);
   segments.mark_closed(segment);
   INFO("closed, should_block_on_gc {}, projected_avail_ratio {}, "
        "projected_reclaim_ratio {}",
