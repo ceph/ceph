@@ -28,7 +28,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_bilog_rados.h"
+#include "services/rados/svc_bilog_rados.h"
 
 #include "common/errno.h"
 #include "include/ceph_assert.h"

@@ -35,7 +35,7 @@
 #include "services/rados/svc_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
-#include "services/svc_bi_rados.h"
+#include "services/rados/svc_bi_rados.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/timeindex/cls_timeindex_client.h"

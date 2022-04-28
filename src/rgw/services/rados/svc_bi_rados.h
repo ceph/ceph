@@ -20,7 +20,7 @@
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_tools.h"
 
-#include "svc_bi.h"
+#include "rgw/services/svc_bi.h"
 #include "svc_rados.h"
 #include "svc_tier_rados.h"
 
