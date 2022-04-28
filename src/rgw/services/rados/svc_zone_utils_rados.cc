@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include "svc_zone_utils.h"
+#include "svc_zone_utils_rados.h"
 #include "svc_rados.h"
 #include "svc_zone.h"
 
@@ -9,14 +9,14 @@
 
 using namespace std;
 
-int RGWSI_ZoneUtils::do_start(optional_yield, const DoutPrefixProvider *dpp)
+int RGWSI_ZoneUtils_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   init_unique_trans_id_deps();
 
   return 0;
 }
 
-string RGWSI_ZoneUtils::gen_host_id() {
+string RGWSI_ZoneUtils_RADOS::gen_host_id() {
   /* uint64_t needs 16, two '-' separators and a trailing null */
   const string& zone_name = zone_svc->get_zone().name;
   const string& zonegroup_name = zone_svc->get_zonegroup().get_name();
@@ -25,7 +25,7 @@ string RGWSI_ZoneUtils::gen_host_id() {
   return string(charbuf);
 }
 
-string RGWSI_ZoneUtils::unique_id(uint64_t unique_num)
+string RGWSI_ZoneUtils_RADOS::unique_id(uint64_t unique_num)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)rados_svc->instance_id(), (unsigned long long)unique_num);
@@ -33,7 +33,7 @@ string RGWSI_ZoneUtils::unique_id(uint64_t unique_num)
   return s;
 }
 
-void RGWSI_ZoneUtils::init_unique_trans_id_deps() {
+void RGWSI_ZoneUtils_RADOS::init_unique_trans_id_deps() {
   char buf[16 + 2 + 1]; /* uint64_t needs 16, 2 hyphens add further 2 */
 
   snprintf(buf, sizeof(buf), "-%llx-", (unsigned long long)rados_svc->instance_id());
@@ -51,7 +51,7 @@ void RGWSI_ZoneUtils::init_unique_trans_id_deps() {
  *    range;
  *  - last, optional part of transaction ID is any url-encoded string
  *    without restriction on length. */
-string RGWSI_ZoneUtils::unique_trans_id(const uint64_t unique_num) {
+string RGWSI_ZoneUtils_RADOS::unique_trans_id(const uint64_t unique_num) {
   char buf[41]; /* 2 + 21 + 1 + 16 (timestamp can consume up to 16) + 1 */
   time_t timestamp = time(NULL);
 

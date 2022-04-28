@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "svc_zone.h"
-#include "svc_rados.h"
 #include "svc_sys_obj.h"
 #include "svc_sync_modules.h"
 
@@ -22,13 +21,11 @@ RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)
 {
 }
 
-void RGWSI_Zone::init(RGWSI_SysObj *_sysobj_svc,
-                      RGWSI_RADOS * _rados_svc,
-                      RGWSI_SyncModules * _sync_modules_svc,
-		      RGWSI_Bucket_Sync *_bucket_sync_svc)
+void RGWSI_Zone::init_base(RGWSI_SysObj *_sysobj_svc,
+                           RGWSI_SyncModules * _sync_modules_svc,
+                           RGWSI_Bucket_Sync *_bucket_sync_svc)
 {
   sysobj_svc = _sysobj_svc;
-  rados_svc = _rados_svc;
   sync_modules_svc = _sync_modules_svc;
   bucket_sync_svc = _bucket_sync_svc;
 
@@ -119,7 +116,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
-  ret = rados_svc->start(y, dpp);
+  ret = do_start_backend(y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -1247,7 +1244,7 @@ int RGWSI_Zone::select_bucket_placement(const DoutPrefixProvider *dpp, const RGW
 }
 
 int RGWSI_Zone::select_legacy_bucket_placement(const DoutPrefixProvider *dpp, RGWZonePlacementInfo *rule_info,
-					       optional_yield y)
+                                                     optional_yield y)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
@@ -1279,12 +1276,9 @@ read_omap:
   }
 
   if (ret < 0 || m.empty()) {
-    vector<rgw_pool> pools;
     string s = string("default.") + default_storage_pool_suffix;
-    pools.push_back(rgw_pool(s));
-    vector<int> retcodes;
     bufferlist bl;
-    ret = rados_svc->pool().create(dpp, pools, &retcodes);
+    ret = create_placement(dpp, rgw_pool(s));
     if (ret < 0)
       return ret;
     ret = sysobj.omap().set(dpp, s, bl, y);
@@ -1345,7 +1339,7 @@ int RGWSI_Zone::update_placement_map(const DoutPrefixProvider *dpp, optional_yie
 
 int RGWSI_Zone::add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& new_pool, optional_yield y)
 {
-  int ret = rados_svc->pool(new_pool).lookup();
+  int ret = lookup_placement(dpp, new_pool);
   if (ret < 0) { // DNE, or something
     return ret;
   }
