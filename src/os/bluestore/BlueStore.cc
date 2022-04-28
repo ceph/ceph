@@ -11004,7 +11004,10 @@ int BlueStore::_onode_omap_get(
     string head, tail;
     o->get_omap_header(&head);
     o->get_omap_tail(&tail);
-    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, KeyValueDB::IteratorBounds{head, tail});
+    auto bounds = KeyValueDB::IteratorBounds();
+    bounds.lower_bound = head;
+    bounds.upper_bound = tail;
+    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, std::move(bounds));
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() == head) {
@@ -11089,7 +11092,10 @@ int BlueStore::omap_get_keys(
     string head, tail;
     o->get_omap_key(string(), &head);
     o->get_omap_tail(&tail);
-    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, KeyValueDB::IteratorBounds{head, tail});
+    auto bounds = KeyValueDB::IteratorBounds();
+    bounds.lower_bound = head;
+    bounds.upper_bound = tail;
+    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, std::move(bounds));
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() >= tail) {
@@ -15551,7 +15557,10 @@ int BlueStore::_clone(TransContext *txc,
     string head, tail;
     oldo->get_omap_header(&head);
     oldo->get_omap_tail(&tail);
-    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, KeyValueDB::IteratorBounds{head, tail});
+    auto bounds = KeyValueDB::IteratorBounds();
+    bounds.lower_bound = head;
+    bounds.upper_bound = tail;
+    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, std::move(bounds));
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() >= tail) {

@@ -2250,13 +2250,11 @@ public:
       iterate_upper_bound(make_slice(bounds.upper_bound))
       {
       auto options = rocksdb::ReadOptions();
-      if (db->cct->_conf->osd_rocksdb_iterator_bounds_enabled) {
-        if (bounds.lower_bound) {
-          options.iterate_lower_bound = &iterate_lower_bound;
-        }
-        if (bounds.upper_bound) {
-          options.iterate_upper_bound = &iterate_upper_bound;
-        }
+      if (bounds.lower_bound) {
+        options.iterate_lower_bound = &iterate_lower_bound;
+      }
+      if (bounds.upper_bound) {
+        options.iterate_upper_bound = &iterate_upper_bound;
       }
       dbiter = db->db->NewIterator(options, cf);
   }
@@ -2806,13 +2804,11 @@ public:
   {
     iters.reserve(shards.size());
     auto options = rocksdb::ReadOptions();
-    if (db->cct->_conf->osd_rocksdb_iterator_bounds_enabled) {
-      if (bounds.lower_bound) {
-        options.iterate_lower_bound = &iterate_lower_bound;
-      }
-      if (bounds.upper_bound) {
-        options.iterate_upper_bound = &iterate_upper_bound;
-      }
+    if (bounds.lower_bound) {
+      options.iterate_lower_bound = &iterate_lower_bound;
+    }
+    if (bounds.upper_bound) {
+      options.iterate_upper_bound = &iterate_upper_bound;
     }
     for (auto& s : shards) {
       iters.push_back(db->db->NewIterator(options, s));
@@ -2993,7 +2989,7 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
     rocksdb::ColumnFamilyHandle* cf = nullptr;
     if (cf_it->second.handles.size() == 1) {
       cf = cf_it->second.handles[0];
-    } else if (cct->_conf->osd_rocksdb_iterator_bounds_enabled) {
+    } else {
       cf = get_cf_handle(prefix, bounds);
     }
     if (cf) {
