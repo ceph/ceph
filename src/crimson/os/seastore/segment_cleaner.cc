@@ -215,8 +215,7 @@ void segments_info_t::update_written_to(
   if (!segment_info.is_open()) {
     ERROR("segment is not open, not updating, offset={}, {}",
           offset, segment_info);
-    // FIXME
-    return;
+    ceph_abort();
   }
 
   auto new_avail = get_segment_size() - saddr.get_segment_off();
@@ -488,25 +487,23 @@ void SegmentCleaner::update_journal_tail_target(
   journal_seq_t dirty_replay_from,
   journal_seq_t alloc_replay_from)
 {
-  logger().debug(
-    "{}: {}, current dirty_extents_replay_from {}",
-    __func__,
-    dirty_replay_from,
-    dirty_extents_replay_from);
+  LOG_PREFIX(SegmentCleaner::update_journal_tail_target);
   if (dirty_extents_replay_from == JOURNAL_SEQ_NULL
       || dirty_replay_from > dirty_extents_replay_from) {
+    DEBUG("dirty_extents_replay_from={} => {}",
+          dirty_extents_replay_from, dirty_replay_from);
     dirty_extents_replay_from = dirty_replay_from;
   }
 
   update_alloc_info_replay_from(alloc_replay_from);
 
   journal_seq_t target = std::min(dirty_replay_from, alloc_replay_from);
-  logger().debug(
-    "{}: {}, current tail target {}",
-    __func__,
-    target,
-    journal_tail_target);
-  if (journal_tail_target == JOURNAL_SEQ_NULL || target > journal_tail_target) {
+  ceph_assert(target != JOURNAL_SEQ_NULL);
+  ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+              journal_head >= target);
+  if (journal_tail_target == JOURNAL_SEQ_NULL ||
+      target > journal_tail_target) {
+    DEBUG("journal_tail_target={} => {}", journal_tail_target, target);
     journal_tail_target = target;
   }
   gc_process.maybe_wake_on_space_used();
@@ -516,33 +513,34 @@ void SegmentCleaner::update_journal_tail_target(
 void SegmentCleaner::update_alloc_info_replay_from(
   journal_seq_t alloc_replay_from)
 {
-  logger().debug(
-    "{}: {}, current alloc_info_replay_from {}",
-    __func__,
-    alloc_replay_from,
-    alloc_info_replay_from);
+  LOG_PREFIX(SegmentCleaner::update_alloc_info_replay_from);
   if (alloc_info_replay_from == JOURNAL_SEQ_NULL
       || alloc_replay_from > alloc_info_replay_from) {
+    DEBUG("alloc_info_replay_from={} => {}",
+          alloc_info_replay_from, alloc_replay_from);
     alloc_info_replay_from = alloc_replay_from;
   }
 }
 
 void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 {
+  LOG_PREFIX(SegmentCleaner::update_journal_tail_committed);
+  if (committed == JOURNAL_SEQ_NULL) {
+    return;
+  }
+  ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+              journal_head >= committed);
+
   if (journal_tail_committed == JOURNAL_SEQ_NULL ||
       committed > journal_tail_committed) {
-    logger().debug(
-      "{}: update journal_tail_committed {}",
-      __func__,
-      committed);
+    DEBUG("update journal_tail_committed={} => {}",
+          journal_tail_committed, committed);
     journal_tail_committed = committed;
   }
   if (journal_tail_target == JOURNAL_SEQ_NULL ||
       committed > journal_tail_target) {
-    logger().debug(
-      "{}: update journal_tail_target {}",
-      __func__,
-      committed);
+    DEBUG("update journal_tail_target={} => {}",
+          journal_tail_target, committed);
     journal_tail_target = committed;
   }
 }
@@ -1099,6 +1097,15 @@ SegmentCleaner::maybe_release_segment(Transaction &t)
   } else {
     return SegmentManager::release_ertr::now();
   }
+}
+
+void SegmentCleaner::complete_init()
+{
+  LOG_PREFIX(SegmentCleaner::complete_init);
+  INFO("done, start GC");
+  ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+  init_complete = true;
+  gc_process.start();
 }
 
 }
