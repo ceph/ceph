@@ -922,9 +922,11 @@ private:
 
     SegmentCleaner &cleaner;
 
-    bool stopping = false;
-
     std::optional<seastar::promise<>> blocking;
+
+    bool is_stopping() const {
+      return !process_join;
+    }
 
     gc_cycle_ret run();
 
@@ -939,7 +941,7 @@ private:
       return seastar::do_until(
 	[this] {
 	  cleaner.log_gc_state("GCProcess::maybe_wait_should_run");
-	  return stopping || cleaner.gc_should_run();
+	  return is_stopping() || cleaner.gc_should_run();
 	},
 	[this] {
 	  ceph_assert(!blocking);
@@ -951,23 +953,25 @@ private:
     GCProcess(SegmentCleaner &cleaner) : cleaner(cleaner) {}
 
     void start() {
-      ceph_assert(!process_join);
+      ceph_assert(is_stopping());
+      process_join = seastar::now(); // allow run()
       process_join = run();
+      assert(!is_stopping());
     }
 
     gc_cycle_ret stop() {
-      if (!process_join)
-	return seastar::now();
-      stopping = true;
-      wake();
-      ceph_assert(process_join);
+      if (is_stopping()) {
+        return seastar::now();
+      }
       auto ret = std::move(*process_join);
-      process_join = std::nullopt;
-      return ret.then([this] { stopping = false; });
+      process_join.reset();
+      assert(is_stopping());
+      wake();
+      return ret;
     }
 
     gc_cycle_ret run_until_halt() {
-      ceph_assert(!process_join);
+      ceph_assert(is_stopping());
       return seastar::do_until(
 	[this] {
 	  cleaner.log_gc_state("GCProcess::run_until_halt");

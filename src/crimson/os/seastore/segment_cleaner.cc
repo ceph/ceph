@@ -597,13 +597,13 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
 SegmentCleaner::gc_cycle_ret SegmentCleaner::GCProcess::run()
 {
   return seastar::do_until(
-    [this] { return stopping; },
+    [this] { return is_stopping(); },
     [this] {
       return maybe_wait_should_run(
       ).then([this] {
 	cleaner.log_gc_state("GCProcess::run");
 
-	if (stopping) {
+	if (is_stopping()) {
 	  return seastar::now();
 	} else {
 	  return cleaner.do_gc_cycle();
