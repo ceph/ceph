@@ -5,7 +5,6 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
-#include "crimson/osd/osd_operation_sequencer.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
@@ -13,7 +12,6 @@
 namespace crimson::osd {
 
 struct OSDConnectionPriv : public crimson::net::Connection::user_private_t {
-  OpSequencers op_sequencer;
   ConnectionPipeline client_request_conn_pipeline;
   ConnectionPipeline peering_request_conn_pipeline;
   ConnectionPipeline replicated_request_conn_pipeline;

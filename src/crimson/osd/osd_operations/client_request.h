@@ -3,6 +3,11 @@
 
 #pragma once
 
+#include <seastar/core/future.hh>
+
+#include <boost/intrusive/list.hpp>
+#include <boost/intrusive_ptr.hpp>
+
 #include "osd/osd_op_util.h"
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
@@ -26,6 +31,8 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   crimson::net::ConnectionRef conn;
   Ref<MOSDOp> m;
   OpInfo op_info;
+  seastar::promise<> on_complete;
+  unsigned instance_id = 0;
 
 public:
   class PGPipeline : public CommonPGPipeline {
@@ -41,6 +48,34 @@ public:
     friend class ClientRequest;
     friend class LttngBackend;
   };
+
+  using ordering_hook_t = boost::intrusive::list_member_hook<>;
+  ordering_hook_t ordering_hook;
+  class Orderer {
+    using list_t = boost::intrusive::list<
+      ClientRequest,
+      boost::intrusive::member_hook<
+	ClientRequest,
+	typename ClientRequest::ordering_hook_t,
+	&ClientRequest::ordering_hook>
+      >;
+    list_t list;
+
+  public:
+    void add_request(ClientRequest &request) {
+      assert(!request.ordering_hook.is_linked());
+      intrusive_ptr_add_ref(&request);
+      list.push_back(request);
+    }
+    void remove_request(ClientRequest &request) {
+      assert(request.ordering_hook.is_linked());
+      list.erase(list_t::s_iterator_to(request));
+      intrusive_ptr_release(&request);
+    }
+    void requeue(ShardServices &shard_services, Ref<PG> pg);
+    void clear_and_cancel();
+  };
+  void complete_request();
 
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
 
@@ -58,7 +93,7 @@ public:
   PipelineHandle &get_handle() { return handle; }
   epoch_t get_epoch() const { return m->get_min_epoch(); }
 
-  seastar::future<seastar::stop_iteration> with_pg_int(
+  seastar::future<> with_pg_int(
     ShardServices &shard_services, Ref<PG> pg);
 public:
   bool same_session_and_pg(const ClientRequest& other_op) const;
@@ -88,12 +123,6 @@ private:
 
   ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
-
-  class OpSequencer& sequencer;
-  // a tombstone used currently by OpSequencer. In the future it's supposed
-  // to be replaced with a reusage of OpTracking facilities.
-  bool finished = false;
-  friend class OpSequencer;
 
   template <typename Errorator>
   using interruptible_errorator =
