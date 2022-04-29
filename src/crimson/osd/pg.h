@@ -55,7 +55,6 @@ namespace crimson::os {
 }
 
 namespace crimson::osd {
-class ClientRequest;
 class OpsExecuter;
 
 class PG : public boost::intrusive_ref_counter<
@@ -71,6 +70,8 @@ class PG : public boost::intrusive_ref_counter<
   ClientRequest::PGPipeline client_request_pg_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;
   RepRequest::PGPipeline replicated_request_pg_pipeline;
+
+  ClientRequest::Orderer client_request_orderer;
 
   spg_t pgid;
   pg_shard_t pg_whoami;
