@@ -500,7 +500,7 @@ public:
       raw_attrs(_raw_attrs),
       objv_tracker(objv_tracker)
   {}
-  ~RGWSimpleRadosReadAttrsCR() override {
+  virtual ~RGWSimpleRadosReadAttrsCR() override {
     request_cleanup();
   }
                                                          
@@ -862,6 +862,8 @@ public:
                                 const DoutPrefixProvider *dpp)
     : RGWAsyncRadosRequest(caller, cn), store(_store), bucket(bucket), dpp(dpp) {}
 
+  virtual ~RGWAsyncGetBucketInstanceInfo() {}
+
   RGWBucketInfo bucket_info;
   std::map<std::string, bufferlist> attrs;
 };
@@ -982,6 +984,8 @@ public:
       zones_trace = *_zones_trace;
     }
   }
+
+  virtual ~RGWAsyncFetchRemoteObj() {}
 };
 
 class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
@@ -1099,6 +1103,8 @@ public:
                                                       petag(_petag),
                                                       pattrs(_pattrs),
                                                       pheaders(_pheaders) {}
+
+  virtual ~RGWAsyncStatRemoteObj() {}
 };
 
 class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
@@ -1214,6 +1220,8 @@ public:
     store->get_bucket(nullptr, _bucket_info, &bucket);
     obj = bucket->get_object(_key);
   }
+
+  virtual ~RGWAsyncRemoveObj() {}
 };
 
 class RGWRemoveObjCR : public RGWSimpleCoroutine {

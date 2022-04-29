@@ -41,6 +41,7 @@ public:
       from_meta(_oid);
     }
   }
+  virtual ~RGWMPObj() {}
   void init(const std::string& _oid, const std::string& _upload_id) {
     init(_oid, _upload_id, _upload_id);
   }
@@ -132,6 +133,8 @@ class RGWSI_Tier_RADOS : public RGWServiceInstance
 
 public:
   RGWSI_Tier_RADOS(CephContext *cct): RGWServiceInstance(cct) {}
+
+  virtual ~RGWSI_Tier_RADOS() {}
 
   void init(RGWSI_Zone *_zone_svc) {
     zone_svc = _zone_svc;

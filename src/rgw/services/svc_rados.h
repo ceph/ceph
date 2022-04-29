@@ -61,7 +61,7 @@ private:
 
 public:
   RGWSI_RADOS(CephContext *cct);
-  ~RGWSI_RADOS();
+  virtual ~RGWSI_RADOS();
   librados::Rados* get_rados_handle();
 
   void init() {}

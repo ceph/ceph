@@ -109,7 +109,7 @@ public:
   } svc;
 
   RGWSI_User_RADOS(CephContext *cct);
-  ~RGWSI_User_RADOS();
+  virtual ~RGWSI_User_RADOS();
 
   void init(RGWSI_RADOS *_rados_svc,
             RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,

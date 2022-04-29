@@ -36,7 +36,7 @@ class RGWSI_Meta : public RGWServiceInstance
 
 public:
   RGWSI_Meta(CephContext *cct);
-  ~RGWSI_Meta();
+  virtual ~RGWSI_Meta();
 
   void init(RGWSI_SysObj *_sysobj_svc,
             RGWSI_MDLog *_mdlog_svc,

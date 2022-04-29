@@ -76,6 +76,8 @@ public:
 
   RGWSI_BucketIndex_RADOS(CephContext *cct);
 
+  virtual ~RGWSI_BucketIndex_RADOS() {}
+
   void init(RGWSI_Zone *zone_svc,
             RGWSI_RADOS *rados_svc,
             RGWSI_BILog_RADOS *bilog_svc,

@@ -91,7 +91,7 @@ public:
   } svc;
 
   RGWSI_Bucket_Sync_SObj(CephContext *cct);
-  ~RGWSI_Bucket_Sync_SObj();
+  virtual ~RGWSI_Bucket_Sync_SObj();
 
   void init(RGWSI_Zone *_zone_svc,
             RGWSI_SysObj *_sysobj_svc,

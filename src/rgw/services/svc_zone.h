@@ -83,7 +83,7 @@ class RGWSI_Zone : public RGWServiceInstance
                              optional_yield y);
 public:
   RGWSI_Zone(CephContext *cct);
-  ~RGWSI_Zone();
+  virtual ~RGWSI_Zone();
 
   const RGWZoneParams& get_zone_params() const;
   const RGWPeriod& get_current_period() const;

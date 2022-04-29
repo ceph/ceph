@@ -21,7 +21,7 @@ class RGWSI_SyncModules : public RGWServiceInstance
 
 public:
   RGWSI_SyncModules(CephContext *cct): RGWServiceInstance(cct) {}
-  ~RGWSI_SyncModules();
+  virtual ~RGWSI_SyncModules();
 
   RGWSyncModulesManager *get_manager() {
     return sync_modules_manager;

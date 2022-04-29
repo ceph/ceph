@@ -15,7 +15,7 @@ class Store;
 #include "rgw_metadata.h"
 
 
-class RGWObjVersionTracker;
+struct RGWObjVersionTracker;
 class RGWMetadataHandler;
 class RGWOTPMetadataHandler;
 class RGWSI_Zone;

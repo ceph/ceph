@@ -29,7 +29,7 @@ protected:
 
 public:
   RGWSI_Finisher(CephContext *cct): RGWServiceInstance(cct) {}
-  ~RGWSI_Finisher();
+  virtual ~RGWSI_Finisher();
 
   class ShutdownCB {
   public:

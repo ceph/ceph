@@ -118,7 +118,7 @@ public:
 
   public:
     ASocketHandler(const DoutPrefixProvider *dpp, RGWSI_SysObj_Cache *_svc);
-    ~ASocketHandler();
+    virtual ~ASocketHandler();
 
     int start();
     void shutdown();
@@ -154,7 +154,7 @@ class RGWChainedCacheImpl : public RGWChainedCache {
 
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
-  ~RGWChainedCacheImpl() {
+  virtual ~RGWChainedCacheImpl() {
     if (!svc) {
       return;
     }

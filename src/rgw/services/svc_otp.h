@@ -42,7 +42,7 @@ public:
   } svc;
 
   RGWSI_OTP(CephContext *cct);
-  ~RGWSI_OTP();
+  virtual ~RGWSI_OTP();
 
   RGWSI_OTP_BE_Handler& get_be_handler() {
     return be_handler;

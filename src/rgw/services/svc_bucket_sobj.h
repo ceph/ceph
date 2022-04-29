@@ -82,7 +82,7 @@ public:
   } svc;
 
   RGWSI_Bucket_SObj(CephContext *cct);
-  ~RGWSI_Bucket_SObj();
+  virtual ~RGWSI_Bucket_SObj();
 
   RGWSI_Bucket_BE_Handler& get_ep_be_handler() override {
     return ep_be_handler;

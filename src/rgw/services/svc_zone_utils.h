@@ -31,6 +31,8 @@ class RGWSI_ZoneUtils : public RGWServiceInstance
 public:
   RGWSI_ZoneUtils(CephContext *cct): RGWServiceInstance(cct) {}
 
+  virtual ~RGWSI_ZoneUtils() {}
+
   std::string gen_host_id();
   std::string unique_id(uint64_t unique_num);
 
