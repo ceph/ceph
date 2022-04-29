@@ -86,11 +86,8 @@ SegmentAllocator::do_open()
     auto new_journal_seq = journal_seq_t{
       new_segment_seq,
       paddr_t::make_seg_paddr(segment_id, written_to)};
-    if (type == segment_type_t::OOL) {
-      // FIXME: improve the special handling for OOL
-      segment_provider.update_segment_avail_bytes(
-          new_journal_seq.offset);
-    }
+    segment_provider.update_segment_avail_bytes(
+        type, new_journal_seq.offset);
     return sref->write(0, bl
     ).handle_error(
       open_ertr::pass_further{},
@@ -165,13 +162,11 @@ SegmentAllocator::write(ceph::bufferlist to_write)
     static_cast<seastore_off_t>(write_length)
   };
   written_to += write_length;
-  if (type == segment_type_t::OOL) {
-    // FIXME: improve the special handling for OOL
-    segment_provider.update_segment_avail_bytes(
-      paddr_t::make_seg_paddr(
-        current_segment->get_segment_id(), written_to)
-    );
-  }
+  segment_provider.update_segment_avail_bytes(
+    type,
+    paddr_t::make_seg_paddr(
+      current_segment->get_segment_id(), written_to)
+  );
   return current_segment->write(
     write_start_offset, to_write
   ).handle_error(
