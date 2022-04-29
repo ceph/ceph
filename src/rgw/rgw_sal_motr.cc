@@ -1572,27 +1572,34 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   // Delete from the cache first.
   source->store->get_obj_meta_cache()->remove(dpp, source->get_key().to_str());
 
-  // Delete the object's entry from the bucket index.
+  if (ent.meta.size == 0) {
+    ldpp_dout(dpp, 20) << __func__ << ": Object size is 0, not deleting motr object." << dendl;
+  } else {
+    // Remove the motr object.
+    if (source->get_bucket()->get_info().versioning_status() == BUCKET_VERSIONED ||
+        source->get_bucket()->get_info().versioning_status() == BUCKET_VERSIONS_SUSPENDED) {
+          // TODO - Object Versioning feature
+          // If Bucket is versioned or versioning suspended, handle object deletion here.
+          // Presently, do nothing.
+          return 0;
+    } else {
+      if (source->category == RGWObjCategory::MultiMeta)
+        rc = source->delete_part_objs(dpp);
+      else
+        rc = source->delete_mobj(dpp);
+      if (rc < 0) {
+        ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. " << dendl;
+        return rc;
+      }
+    }
+  }
+  // Finally, delete the object's entry from the bucket index.
   bufferlist bl;
   string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
   rc = source->store->do_idx_op_by_name(bucket_index_iname,
                                             M0_IC_DEL, source->get_key().to_str(), bl);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << "Failed to del object's entry from bucket index. " << dendl;
-    return rc;
-  }
-
-  if (ent.meta.size == 0) {
-    ldpp_dout(dpp, 0) << __func__ << ": Object size is 0, not deleting motr object." << dendl;
-    return 0;
-  }
-  // Remove the motr objects.
-  if (source->category == RGWObjCategory::MultiMeta)
-    rc = source->delete_part_objs(dpp);
-  else
-    rc = source->delete_mobj(dpp);
-  if (rc < 0) {
-    ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. " << dendl;
     return rc;
   }
 
@@ -2784,6 +2791,8 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
   int last_num = 0;
   int part_cnt = 0;
   ldpp_dout(dpp, 20) << __func__ << ": marker = " << marker << dendl;
+  parts.clear();
+
   for (const auto& bl: val_vec) {
     if (bl.length() == 0)
       break;
@@ -2850,7 +2859,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   int marker = 0;
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
-  rgw::sal::Attrs attrs = target_obj->get_attrs();
+  rgw::sal::Attrs &attrs = target_obj->get_attrs();
 
   do {
     ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): list_parts()" << dendl;
@@ -2996,8 +3005,9 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   rc = this->store->do_idx_op_by_name(bucket_multipart_iname,
                                       M0_IC_GET, meta_obj->get_key().to_str(), bl);
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): read entry from bucket multipart index rc=" << rc << dendl;
-  if (rc < 0)
-    return rc;
+  if (rc < 0) {
+    return rc == -ENOENT ? -ERR_NO_SUCH_UPLOAD : rc;
+  }
   rgw_bucket_dir_entry ent;
   bufferlist& blr = bl;
   auto ent_iter = blr.cbegin();
@@ -3005,7 +3015,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   // Update the dir entry and insert it to the bucket index so
   // the object will be seen when listing the bucket.
-  bufferlist update_bl;
+  bufferlist update_bl, old_check_bl;
   target_obj->get_key().get_index_key(&ent.key);  // Change to offical name :)
   ent.meta.size = off;
   ent.meta.accounted_size = accounted_size;
@@ -3021,6 +3031,40 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): target_obj name=" << target_obj->get_name()
                                   << " target_obj oid=" << target_obj->get_oid() << dendl;
+
+  std::string obj_type = "simple object";
+  MotrObject::Meta old_meta;
+  rgw_bucket_dir_entry old_ent;
+
+  // Before updating bucket index with entry for new object, check if
+  // old object exists. Perform M0_IC_GET operation on bucket index.
+  rc = store->do_idx_op_by_name(bucket_index_iname, M0_IC_GET,
+                                target_obj->get_name(), old_check_bl);
+  if (rc == 0 && old_check_bl.length() > 0) {
+    auto ent_iter = old_check_bl.cbegin();
+    old_ent.decode(ent_iter);
+    rgw::sal::Attrs dummy;
+    decode(dummy, ent_iter);
+    old_meta.decode(ent_iter);
+    std::unique_ptr<rgw::sal::Object> old_obj = target_obj->get_bucket()->get_object(rgw_obj_key(target_obj->get_name()));
+    rgw::sal::MotrObject *old_mobj = static_cast<rgw::sal::MotrObject *>(old_obj.get());
+    if (old_ent.meta.category == RGWObjCategory::MultiMeta) {
+      obj_type = "multipart object";
+      old_mobj->set_category(RGWObjCategory::MultiMeta);
+    }
+    ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): Old " << obj_type << " exists" << dendl;
+    // Delete old object
+    rc = old_mobj->delete_object(dpp, obj_ctx, y, true);
+    if (rc == 0) {
+      ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): Old " << obj_type << " ["
+          << old_mobj->get_name() <<  "] deleted succesfully" << dendl;
+    } else {
+      ldpp_dout(dpp, 0) << "MotrMultipartUpload::complete(): Failed to delete old " << obj_type << " ["
+          << old_mobj->get_name() <<  "]. Error = " << rc << dendl;
+      return rc;
+    }
+  }
+
   rc = store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT,
                                 target_obj->get_name(), update_bl);
   if (rc < 0)

@@ -6385,6 +6385,9 @@ void RGWCompleteMultipart::execute(optional_yield y)
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
   }
+  // Set the calculated etag used in the send response
+  rgw::sal::Attrs &attrs = target_obj->get_attrs();
+  etag = attrs[RGW_ATTR_ETAG].to_str();
 
   // remove the upload meta object ; the meta object is not versioned
   // when the bucket is, as that would add an unneeded delete marker
