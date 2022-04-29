@@ -20,15 +20,14 @@ SET_SUBSYS(seastore_cleaner);
 namespace crimson::os::seastore {
 
 void segment_info_t::set_open(
-    segment_seq_t _seq, segment_type_t _type, std::size_t seg_size)
+    segment_seq_t _seq, segment_type_t _type)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
-  ceph_assert(seg_size > 0);
   state = Segment::segment_state_t::OPEN;
   seq = _seq;
   type = _type;
-  open_avail_bytes = seg_size;
+  written_to = 0;
 }
 
 void segment_info_t::set_empty()
@@ -38,7 +37,7 @@ void segment_info_t::set_empty()
   type = segment_type_t::NULL_SEG;
   last_modified = {};
   last_rewritten = {};
-  open_avail_bytes = 0;
+  written_to = 0;
 }
 
 void segment_info_t::set_closed()
@@ -48,14 +47,14 @@ void segment_info_t::set_closed()
 }
 
 void segment_info_t::init_closed(
-    segment_seq_t _seq, segment_type_t _type)
+    segment_seq_t _seq, segment_type_t _type, std::size_t seg_size)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   state = Segment::segment_state_t::CLOSED;
   seq = _seq;
   type = _type;
-  open_avail_bytes = 0;
+  written_to = seg_size;
 }
 
 std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
@@ -69,7 +68,7 @@ std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
         << ", type=" << info.type
         << ", last_modified=" << info.last_modified.time_since_epoch()
         << ", last_rewritten=" << info.last_rewritten.time_since_epoch()
-        << ", open_avail_bytes=" << info.open_avail_bytes;
+        << ", written_to=" << info.written_to;
   }
   return out << ")";
 }
@@ -80,7 +79,9 @@ void segments_info_t::reset()
 
   segment_size = 0;
 
+  journal_segment_id = NULL_SEG_ID;
   num_in_journal = 0;
+
   num_open = 0;
   num_empty = 0;
   num_closed = 0;
@@ -134,11 +135,13 @@ void segments_info_t::init_closed(
        segment, segment_seq_printer_t{seq}, type,
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
-  segment_info.init_closed(seq, type);
+  segment_info.init_closed(seq, type, get_segment_size());
   ceph_assert(num_empty > 0);
   --num_empty;
   ++num_closed;
   if (type == segment_type_t::JOURNAL) {
+    // init_closed won't initialize journal_segment_id
+    ceph_assert(get_journal_head() == JOURNAL_SEQ_NULL);
     ++num_in_journal;
   }
   ceph_assert(avail_bytes >= get_segment_size());
@@ -155,11 +158,18 @@ void segments_info_t::mark_open(
        segment, segment_seq_printer_t{seq}, type,
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
-  segment_info.set_open(seq, type, get_segment_size());
+  segment_info.set_open(seq, type);
   ceph_assert(num_empty > 0);
   --num_empty;
   ++num_open;
   if (type == segment_type_t::JOURNAL) {
+    if (journal_segment_id != NULL_SEG_ID) {
+      auto& last_journal_segment = segments[journal_segment_id];
+      ceph_assert(last_journal_segment.is_closed());
+      ceph_assert(last_journal_segment.type == segment_type_t::JOURNAL);
+      ceph_assert(last_journal_segment.seq + 1 == seq);
+    }
+    journal_segment_id = segment;
     ++num_in_journal;
   }
   ++count_open;
@@ -201,35 +211,40 @@ void segments_info_t::mark_closed(
   ceph_assert(num_open > 0);
   --num_open;
   ++num_closed;
-  ceph_assert(avail_bytes >= segment_info.open_avail_bytes);
-  avail_bytes -= segment_info.open_avail_bytes;
+  ceph_assert(get_segment_size() >= segment_info.written_to);
+  auto seg_avail_bytes = get_segment_size() - segment_info.written_to;
+  ceph_assert(avail_bytes >= seg_avail_bytes);
+  avail_bytes -= seg_avail_bytes;
   ++count_close;
 }
 
 void segments_info_t::update_written_to(
+    segment_type_t type,
     paddr_t offset)
 {
   LOG_PREFIX(segments_info_t::update_written_to);
   auto& saddr = offset.as_seg_paddr();
   auto& segment_info = segments[saddr.get_segment_id()];
   if (!segment_info.is_open()) {
-    ERROR("segment is not open, not updating, offset={}, {}",
-          offset, segment_info);
+    ERROR("segment is not open, not updating, type={}, offset={}, {}",
+          type, offset, segment_info);
     ceph_abort();
   }
 
-  auto new_avail = get_segment_size() - saddr.get_segment_off();
-  if (segment_info.open_avail_bytes < new_avail) {
-    ERROR("open_avail_bytes should not increase! offset={}, {}",
-          offset, segment_info);
+  auto new_written_to = static_cast<std::size_t>(saddr.get_segment_off());
+  ceph_assert(new_written_to <= get_segment_size());
+  if (segment_info.written_to > new_written_to) {
+    ERROR("written_to should not decrease! type={}, offset={}, {}",
+          type, offset, segment_info);
     ceph_abort();
   }
 
-  DEBUG("offset={}, {}", offset, segment_info);
-  auto avail_deduction = segment_info.open_avail_bytes - new_avail;
+  DEBUG("type={}, offset={}, {}", type, offset, segment_info);
+  ceph_assert(type == segment_info.type);
+  auto avail_deduction = new_written_to - segment_info.written_to;
   ceph_assert(avail_bytes >= avail_deduction);
   avail_bytes -= avail_deduction;
-  segment_info.open_avail_bytes = new_avail;
+  segment_info.written_to = new_written_to;
 }
 
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
@@ -499,6 +514,7 @@ void SegmentCleaner::update_journal_tail_target(
 
   journal_seq_t target = std::min(dirty_replay_from, alloc_replay_from);
   ceph_assert(target != JOURNAL_SEQ_NULL);
+  auto journal_head = segments.get_journal_head();
   ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
               journal_head >= target);
   if (journal_tail_target == JOURNAL_SEQ_NULL ||
@@ -528,6 +544,7 @@ void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
   if (committed == JOURNAL_SEQ_NULL) {
     return;
   }
+  auto journal_head = segments.get_journal_head();
   ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
               journal_head >= committed);
 
@@ -902,7 +919,6 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   stats = {};
   journal_tail_target = JOURNAL_SEQ_NULL;
   journal_tail_committed = JOURNAL_SEQ_NULL;
-  journal_head = JOURNAL_SEQ_NULL;
   dirty_extents_replay_from = JOURNAL_SEQ_NULL;
   alloc_info_replay_from = JOURNAL_SEQ_NULL;
   
@@ -1103,7 +1119,7 @@ void SegmentCleaner::complete_init()
 {
   LOG_PREFIX(SegmentCleaner::complete_init);
   INFO("done, start GC");
-  ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+  ceph_assert(segments.get_journal_head() != JOURNAL_SEQ_NULL);
   init_complete = true;
   gc_process.start();
 }

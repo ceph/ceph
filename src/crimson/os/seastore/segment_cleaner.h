@@ -41,7 +41,7 @@ struct segment_info_t {
   time_point last_modified;
   time_point last_rewritten;
 
-  std::size_t open_avail_bytes = 0;
+  std::size_t written_to = 0;
 
   bool is_in_journal(journal_seq_t tail_committed) const {
     return type == segment_type_t::JOURNAL &&
@@ -60,9 +60,9 @@ struct segment_info_t {
     return state == Segment::segment_state_t::OPEN;
   }
 
-  void init_closed(segment_seq_t, segment_type_t);
+  void init_closed(segment_seq_t, segment_type_t, std::size_t);
 
-  void set_open(segment_seq_t, segment_type_t, std::size_t segment_size);
+  void set_open(segment_seq_t, segment_type_t);
 
   void set_empty();
 
@@ -141,6 +141,21 @@ public:
   std::size_t get_available_bytes() const {
     return avail_bytes;
   }
+  journal_seq_t get_journal_head() const {
+    if (unlikely(journal_segment_id == NULL_SEG_ID)) {
+      return JOURNAL_SEQ_NULL;
+    }
+    auto &segment_info = segments[journal_segment_id];
+    assert(!segment_info.is_empty());
+    assert(segment_info.type == segment_type_t::JOURNAL);
+    assert(segment_info.seq != NULL_SEG_SEQ);
+    return journal_seq_t{
+      segment_info.seq,
+      paddr_t::make_seg_paddr(
+        journal_segment_id,
+        segment_info.written_to)
+    };
+  }
 
   void reset();
 
@@ -155,7 +170,7 @@ public:
 
   void mark_closed(segment_id_t);
 
-  void update_written_to(paddr_t offset);
+  void update_written_to(segment_type_t, paddr_t);
 
   void update_last_modified_rewritten(
       segment_id_t id, time_point last_modified, time_point last_rewritten) {
@@ -168,7 +183,9 @@ private:
 
   std::size_t segment_size;
 
+  segment_id_t journal_segment_id;
   std::size_t num_in_journal;
+
   std::size_t num_open;
   std::size_t num_empty;
   std::size_t num_closed;
@@ -201,7 +218,7 @@ public:
 
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
 
-  virtual void update_segment_avail_bytes(paddr_t offset) = 0;
+  virtual void update_segment_avail_bytes(segment_type_t, paddr_t) = 0;
 
   virtual SegmentManagerGroup* get_segment_manager_group() = 0;
 
@@ -612,9 +629,6 @@ private:
   /// most recently committed journal_tail
   journal_seq_t journal_tail_committed;
 
-  /// head of journal
-  journal_seq_t journal_head;
-
   ExtentCallbackInterface *ecb = nullptr;
 
   /// populated if there is an IO blocked on hard limits
@@ -657,8 +671,8 @@ public:
 
   void update_journal_tail_committed(journal_seq_t committed) final;
 
-  void update_segment_avail_bytes(paddr_t offset) final {
-    segments.update_written_to(offset);
+  void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final {
+    segments.update_written_to(type, offset);
     gc_process.maybe_wake_on_space_used();
   }
 
@@ -681,19 +695,11 @@ public:
   void update_alloc_info_replay_from(
     journal_seq_t alloc_replay_from);
 
-  void init_mkfs(journal_seq_t head) {
-    ceph_assert(head != JOURNAL_SEQ_NULL);
-    journal_tail_target = head;
-    journal_tail_committed = head;
-    journal_head = head;
-  }
-
-  void set_journal_head(journal_seq_t head) {
-    ceph_assert(head != JOURNAL_SEQ_NULL);
-    assert(journal_head == JOURNAL_SEQ_NULL || head >= journal_head);
-    journal_head = head;
-    segments.update_written_to(head.offset);
-    gc_process.maybe_wake_on_space_used();
+  void init_mkfs() {
+    auto journal_head = segments.get_journal_head();
+    ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+    journal_tail_target = journal_head;
+    journal_tail_committed = journal_head;
   }
 
   using release_ertr = SegmentManagerGroup::release_ertr;
@@ -878,7 +884,7 @@ private:
     journal_seq_t limit);
 
   journal_seq_t get_dirty_tail() const {
-    auto ret = journal_head;
+    auto ret = segments.get_journal_head();
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.target_journal_segments) {
       ret.segment_seq -= config.target_journal_segments;
@@ -890,7 +896,7 @@ private:
   }
 
   journal_seq_t get_dirty_tail_limit() const {
-    auto ret = journal_head;
+    auto ret = segments.get_journal_head();
     ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.max_journal_segments) {
       ret.segment_seq -= config.max_journal_segments;
@@ -1148,7 +1154,7 @@ private:
 	get_available_ratio(),
 	should_block_on_gc(),
 	gc_should_reclaim_space(),
-	journal_head,
+	segments.get_journal_head(),
 	journal_tail_target,
 	journal_tail_committed,
 	get_dirty_tail(),

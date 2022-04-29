@@ -48,8 +48,8 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   return segment_cleaner->mount(
   ).safe_then([this] {
     return journal->open_for_write();
-  }).safe_then([this](auto addr) {
-    segment_cleaner->init_mkfs(addr);
+  }).safe_then([this](auto) {
+    segment_cleaner->init_mkfs();
     return epm->open();
   }).safe_then([this, FNAME]() {
     return with_transaction_intr(
@@ -108,8 +108,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
       });
   }).safe_then([this] {
     return journal->open_for_write();
-  }).safe_then([this, FNAME](auto addr) {
-    segment_cleaner->set_journal_head(addr);
+  }).safe_then([this, FNAME](auto) {
     return seastar::do_with(
       create_weak_transaction(
         Transaction::src_t::READ, "mount"),
@@ -371,8 +370,6 @@ TransactionManager::submit_transaction_direct(
       (auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
-      auto end_seq = submit_result.write_result.get_end_seq();
-      segment_cleaner->set_journal_head(end_seq);
       if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
 	cache->trim_backref_bufs(*seq_to_trim);
       }
