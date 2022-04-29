@@ -6858,7 +6858,7 @@ def _stop_and_disable(ctx, unit_name):
 
 ##################################
 
-
+@infer_config
 def command_rm_daemon(ctx):
     # type: (CephadmContext) -> None
     lock = FileLock(ctx, ctx.fsid)
@@ -6875,21 +6875,26 @@ def command_rm_daemon(ctx):
          verbosity=CallVerbosity.DEBUG)
 
     # remove the mon from cluster after we stop the mon.
-    # necessary to do this here because <insert-reason-here>
-    # if daemon_type == 'mon':
-    #     logger.debug('command_rm_daemon(): monitor')
-    #     ctx.command = ['ceph', 'mon', 'remove', daemon_id]
-    #     ctx.keyring = os.path.join(get_data_dir(ctx.fsid, ctx.data_dir, 'mon', daemon_id), 'keyring')
-    #     ctx.mount = []
-    #     ctx.volume = []
-    #     ctx.no_hosts = False
-    #     ctx.timeout = ctx.timeout if ctx.timeout else 60
-    #     command_shell(ctx)
-
+    # necessary to do this strictly inorder here because
+    # in the monitor elector code (and possible other parts)
+    # it is assumed that monitor will be unreachable (stopped)
+    # before it is removed. This is the correct procedure according to:
+    # https://docs.ceph.com/en/latest/rados/operations/add-or-rm-mons/#removing-a-monitor-manual
     if daemon_type == 'mon':
-        ctx.timeout = ctx.timeout if ctx.timeout else 60
-        call(ctx, ['ceph', 'mon', 'remove', daemon_id],
-            verbosity=CallVerbosity.DEBUG)
+        mon_key_path = os.path.join(get_data_dir(ctx.fsid, ctx.data_dir, 'mon', daemon_id), 'keyring')
+        c = CephContainer(
+            ctx,
+            image=ctx.image,
+            entrypoint='/usr/bin/ceph',
+            args=['--name', 'mon.', 'mon', 'remove', daemon_id],
+            volume_mounts={
+                mon_key_path: '/etc/ceph/ceph.keyring:z',
+                ctx.config: '/etc/ceph/ceph.conf:z',
+            },
+        )
+        _, err, ret = call_throws(ctx, c.run_cmd(), timeout=ctx.timeout if ctx.timeout else 60)
+        if ret:
+            raise Error(f'Failed removing monitor: {err}')
 
     call(ctx, ['systemctl', 'reset-failed', unit_name],
          verbosity=CallVerbosity.DEBUG)
