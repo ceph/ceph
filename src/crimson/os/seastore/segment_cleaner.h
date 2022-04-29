@@ -659,6 +659,7 @@ public:
 
   void update_segment_avail_bytes(paddr_t offset) final {
     segments.update_written_to(offset);
+    gc_process.maybe_wake_on_space_used();
   }
 
   SegmentManagerGroup* get_segment_manager_group() final {
