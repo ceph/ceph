@@ -83,6 +83,28 @@ steps below:
 
      ceph orch apply grafana
 
+.. _cephadm-monitoring-centralized-logs:
+
+Centralized Logging in Ceph
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Ceph now provides centralized logging with Loki & Promtail. Centralized Log Management (CLM) consolidates all log data and pushes it to a central repository, 
+with an accessible and easy-to-use interface. Centralized logging is designed to make your life easier. 
+Some of the advantages are:
+
+#. **Linear event timeline**: it is easier to troubleshoot issues analyzing a single chain of events than thousands of different logs from a hundred nodes.
+#. **Real-time live log monitoring**: it is impractical to follow logs from thousands of different sources.
+#. **Flexible retention policies**: with per-daemon logs, log rotation is usually set to a short interval (1-2 weeks) to save disk usage.
+#. **Increased security & backup**: logs can contain sensitive information and expose usage patterns. Additionally, centralized logging allows for HA, etc.
+
+Centralized Logging in Ceph is implemented using two new services - ``loki`` & ``promtail``.
+
+Loki: It is basically a log aggregation system and is used to query logs. It can be configured as a datasource in Grafana. 
+
+Promtail: It acts as an agent that gathers logs from the system and makes them available to Loki.
+
+These two services are not deployed by default in a Ceph cluster. To enable the centralized logging you can follow the steps mentioned here :ref:`centralized-logging`.
+
 .. _cephadm-monitoring-networks-ports:
 
 Networks and Ports
