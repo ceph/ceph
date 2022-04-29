@@ -883,17 +883,23 @@ private:
 
   journal_seq_t get_dirty_tail() const {
     auto ret = journal_head;
-    ret.segment_seq -= std::min(
-      static_cast<size_t>(ret.segment_seq),
-      config.target_journal_segments);
+    if (ret.segment_seq >= config.target_journal_segments) {
+      ret.segment_seq -= config.target_journal_segments;
+    } else {
+      ret.segment_seq = 0;
+      ret.offset = P_ADDR_MIN;
+    }
     return ret;
   }
 
   journal_seq_t get_dirty_tail_limit() const {
     auto ret = journal_head;
-    ret.segment_seq -= std::min(
-      static_cast<size_t>(ret.segment_seq),
-      config.max_journal_segments);
+    if (ret.segment_seq >= config.max_journal_segments) {
+      ret.segment_seq -= config.max_journal_segments;
+    } else {
+      ret.segment_seq = 0;
+      ret.offset = P_ADDR_MIN;
+    }
     return ret;
   }
 
