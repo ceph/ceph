@@ -331,11 +331,11 @@ public:
     std::optional<std::string> upper_bound;
   };
 
-  virtual WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0, IteratorBounds bounds = IteratorBounds()) = 0;
+  virtual WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) = 0;
   virtual Iterator get_iterator(const std::string &prefix, IteratorOpts opts = 0, IteratorBounds bounds = IteratorBounds()) {
     return std::make_shared<PrefixIteratorImpl>(
       prefix,
-      get_wholespace_iterator(opts, std::move(bounds)));
+      get_wholespace_iterator(opts));
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;

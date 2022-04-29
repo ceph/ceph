@@ -2999,7 +2999,7 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
         std::move(bounds));
     }
   } else {
-    return KeyValueDB::get_iterator(prefix, opts, std::move(bounds));
+    return KeyValueDB::get_iterator(prefix, opts);
   }
 }
 
@@ -3008,11 +3008,11 @@ rocksdb::Iterator* RocksDBStore::new_shard_iterator(rocksdb::ColumnFamilyHandle*
   return db->NewIterator(rocksdb::ReadOptions(), cf);
 }
 
-RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorOpts opts, IteratorBounds bounds)
+RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorOpts opts)
 {
   if (cf_handles.size() == 0) {
     return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
-      this, default_cf, opts, std::move(bounds));
+      this, default_cf, opts);
   } else {
     return std::make_shared<WholeMergeIteratorImpl>(this);
   }
@@ -3020,7 +3020,7 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorO
 
 RocksDBStore::WholeSpaceIterator RocksDBStore::get_default_cf_iterator()
 {
-  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(this, default_cf, 0, IteratorBounds());
+  return std::make_shared<RocksDBWholeSpaceIteratorImpl>(this, default_cf, 0);
 }
 
 int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,

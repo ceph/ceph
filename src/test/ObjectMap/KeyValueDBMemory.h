@@ -184,5 +184,5 @@ private:
   friend class WholeSpaceMemIterator;
 
 public:
-  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0, IteratorBounds bounds = IteratorBounds()) override;
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
 };
