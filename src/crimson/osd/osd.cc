@@ -1198,7 +1198,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
 seastar::future<> OSD::handle_osd_op(crimson::net::ConnectionRef conn,
                                      Ref<MOSDOp> m)
 {
-  (void) shard_services.start_operation<ClientRequest>(
+  (void) start_pg_operation<ClientRequest>(
     *this,
     conn,
     std::move(m));
