@@ -96,9 +96,10 @@ function main() {
     if [ $WITH_ZBD ]; then
         cmake_opts+=" -DWITH_ZBD=ON"
     fi
-    if [ $WITH_PMEM ]; then
-        cmake_opts+=" -DWITH_RBD_RWL=ON -DWITH_SYSTEM_PMDK=ON"
+    if [ $WITH_RBD_RWL ]; then
+        cmake_opts+=" -DWITH_RBD_RWL=ON"
     fi
+    cmake_opts+=" -DWITH_RBD_SSD_CACHE=ON"
     configure "$cmake_opts" "$@"
     build tests
     echo "make check: successful build on $(git rev-parse HEAD)"
