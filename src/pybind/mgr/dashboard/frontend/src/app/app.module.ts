@@ -5,6 +5,7 @@ import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastrModule } from 'ngx-toastr';
+import { CookieService } from 'ngx-cookie-service';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -13,6 +14,7 @@ import { CoreModule } from './core/core.module';
 import { ApiInterceptorService } from './shared/services/api-interceptor.service';
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
+import { TelemetryNotificationComponent } from './shared/components/telemetry-notification/telemetry-notification.component';
 
 @NgModule({
   declarations: [AppComponent],
@@ -32,6 +34,11 @@ import { SharedModule } from './shared/shared.module';
   ],
   exports: [SharedModule],
   providers: [
+    {
+      provide: CookieService,
+      useClass: TelemetryNotificationComponent
+    },
+    
     {
       provide: ErrorHandler,
       useClass: JsErrorHandler

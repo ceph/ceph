@@ -45,7 +45,7 @@ describe('TelemetryActivationNotificationComponent', () => {
   configureTestBed({
     declarations: [TelemetryNotificationComponent, AlertPanelComponent],
     imports: [NgbAlertModule, HttpClientTestingModule, ToastrModule.forRoot(), PipesModule],
-    providers: [MgrModuleService, UserService]
+    providers: [MgrModuleService, UserService, CookieService]
   });
 
   beforeEach(() => {
