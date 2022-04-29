@@ -135,10 +135,10 @@ public:
   std::size_t get_count_close() const {
     return count_close;
   }
-  size_t get_total_bytes() const {
+  std::size_t get_total_bytes() const {
     return total_bytes;
   }
-  size_t get_available_bytes() const {
+  std::size_t get_available_bytes() const {
     return avail_bytes;
   }
 
@@ -682,12 +682,14 @@ public:
     journal_seq_t alloc_replay_from);
 
   void init_mkfs(journal_seq_t head) {
+    ceph_assert(head != JOURNAL_SEQ_NULL);
     journal_tail_target = head;
     journal_tail_committed = head;
     journal_head = head;
   }
 
   void set_journal_head(journal_seq_t head) {
+    ceph_assert(head != JOURNAL_SEQ_NULL);
     assert(journal_head == JOURNAL_SEQ_NULL || head >= journal_head);
     journal_head = head;
     segments.update_written_to(head.offset);
@@ -780,14 +782,7 @@ public:
     return space_tracker->make_empty();
   }
 
-  void start() {
-    gc_process.start();
-  }
-
-  void complete_init() {
-    init_complete = true;
-    start();
-  }
+  void complete_init();
 
   store_statfs_t stat() const {
     store_statfs_t st;
@@ -884,6 +879,7 @@ private:
 
   journal_seq_t get_dirty_tail() const {
     auto ret = journal_head;
+    ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.target_journal_segments) {
       ret.segment_seq -= config.target_journal_segments;
     } else {
@@ -895,6 +891,7 @@ private:
 
   journal_seq_t get_dirty_tail_limit() const {
     auto ret = journal_head;
+    ceph_assert(ret != JOURNAL_SEQ_NULL);
     if (ret.segment_seq >= config.max_journal_segments) {
       ret.segment_seq -= config.max_journal_segments;
     } else {
@@ -984,6 +981,9 @@ private:
     }
 
     void maybe_wake_on_space_used() {
+      if (is_stopping()) {
+        return;
+      }
       if (cleaner.gc_should_run()) {
 	wake();
       }
@@ -1044,9 +1044,8 @@ private:
     return segments.get_total_bytes() - segments.get_available_bytes();
   }
   size_t get_projected_unavailable_bytes() const {
-    return (get_total_bytes() > get_projected_available_bytes()) ?
-      (get_total_bytes() - get_projected_available_bytes()) :
-      0;
+    assert(get_total_bytes() >= get_projected_available_bytes());
+    return get_total_bytes() - get_projected_available_bytes();
   }
 
   /// Returns bytes currently occupied by live extents (not journal)
@@ -1056,16 +1055,7 @@ private:
 
   /// Return bytes contained in segments in journal
   size_t get_journal_segment_bytes() const {
-    if (journal_head == JOURNAL_SEQ_NULL) {
-      // this for calculating journal bytes in the journal
-      // replay phase in which journal_head is not set
-      return segments.get_num_in_journal() * segments.get_segment_size();
-    } else {
-      assert(journal_head >= journal_tail_committed);
-      auto segment_size = segments.get_segment_size();
-      return (journal_head.segment_seq - journal_tail_committed.segment_seq + 1) *
-	segment_size;
-    }
+    return segments.get_num_in_journal() * segments.get_segment_size();
   }
 
   /**
@@ -1170,6 +1160,7 @@ private:
 
 public:
   seastar::future<> reserve_projected_usage(size_t projected_usage) {
+    ceph_assert(init_complete);
     // The pipeline configuration prevents another IO from entering
     // prepare until the prior one exits and clears this.
     ceph_assert(!blocked_io_wake);
@@ -1193,12 +1184,16 @@ public:
   }
 
   void release_projected_usage(size_t projected_usage) {
+    ceph_assert(init_complete);
     ceph_assert(stats.projected_used_bytes >= projected_usage);
     stats.projected_used_bytes -= projected_usage;
     return maybe_wake_gc_blocked_io();
   }
 private:
   void maybe_wake_gc_blocked_io() {
+    if (!init_complete) {
+      return;
+    }
     if (!should_block_on_gc() && blocked_io_wake) {
       blocked_io_wake->set_value();
       blocked_io_wake = std::nullopt;
@@ -1244,6 +1239,7 @@ private:
    * True if gc should be running.
    */
   bool gc_should_run() const {
+    ceph_assert(init_complete);
     return gc_should_reclaim_space() || gc_should_trim_journal();
   }
 
