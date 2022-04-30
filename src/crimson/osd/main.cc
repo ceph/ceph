@@ -51,11 +51,11 @@ auto partition_args(int argc, const char *argv[])
       }
     };
     DummyTracker dt;
-    ConfigValues values;
-    md_config_t config(values, dt, true);
+    ConfigValues config_values;
+    md_config_t config(config_values, dt, true);
     std::vector<const char *> seastar_n_early_args{argv, argv + argc};
     // pull off the stuff from seastar_n_early_args that we'll give to local_conf
-    config.parse_argv(values, dt, seastar_n_early_args, CONF_CMDLINE);
+    config.parse_argv(config_values, dt, seastar_n_early_args, CONF_CMDLINE);
     return seastar_n_early_args;
   }();
   
