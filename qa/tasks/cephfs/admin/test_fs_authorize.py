@@ -2,16 +2,17 @@ from logging import getLogger
 from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from tasks.cephfs.caps_helper import CapTester
+from tasks.cephfs.caps_helper import CapTester, CapsUtil
 
 
 log = getLogger(__name__)
 
 
-class FsAuthorizeUpdate(CephFSTestCase):
+class FsAuthorizeUpdate(CephFSTestCase, CapsUtil):
     def setUp(self):
         super(FsAuthorizeUpdate, self).setUp()
         self.captester = CapTester()
+
 
 class ClientWithCapsForNoFs(FsAuthorizeUpdate):
     """
@@ -36,10 +37,10 @@ class ClientWithCapsForNoFs(FsAuthorizeUpdate):
         self.fs.authorize(self.client_id, ('/', TEST_PERM,))
 
         keyring = self.run_cluster_cmd(f'auth get {self.client_name}')
-        mon_cap = f'caps mon = "allow r fsname={self.fs.name}"'
-        osd_cap = f'caps osd = "allow rw tag cephfs data={self.fs.name}"'
-        mds_cap = f'caps mds = "allow rw fsname={self.fs.name}"'
-        for cap in (mon_cap, osd_cap, mds_cap):
+        moncap = self.gen_moncap_str((('r', self.fs.name,),))
+        osdcap = self.gen_osdcap_str(((TEST_PERM, self.fs.name),))
+        mdscap = self.gen_mdscap_str(((TEST_PERM, self.fs.name),))
+        for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
         self.captester.run_cap_tests(TEST_PERM)
 
@@ -76,13 +77,13 @@ class ClientWithCapsForOneFs(FsAuthorizeUpdate):
         keyring = self.fs.mon_manager.run_cluster_cmd(
                 args=f'auth get {self.client_name}', stdout=StringIO()).\
                 stdout.getvalue()
-        mon_cap = (f'caps mon = "allow r fsname={self.fs1.name}, '
-                               f'allow r fsname={self.fs2.name}"')
-        osd_cap = (f'caps osd = "allow rw tag cephfs data={self.fs1.name}, '
-                               f'allow rw tag cephfs data={self.fs2.name}"')
-        mds_cap = (f'caps mds = "allow rw fsname={self.fs1.name}, '
-                               f'allow rw fsname={self.fs2.name}"')
-        for cap in (mon_cap, osd_cap, mds_cap):
+        moncap = self.gen_moncap_str((('r', self.fs1.name),
+                                      ('r', self.fs2.name)))
+        osdcap = self.gen_osdcap_str(((TEST_PERM, self.fs1.name),
+                                      (TEST_PERM, self.fs2.name)))
+        mdscap = self.gen_mdscap_str(((TEST_PERM, self.fs1.name),
+                                      (TEST_PERM, self.fs2.name)))
+        for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
 
         keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
@@ -121,10 +122,10 @@ class ClientWithCapsForOneFs(FsAuthorizeUpdate):
         keyring = self.fs.mon_manager.run_cluster_cmd(
             args=f'auth get {self.client_name}', stdout=StringIO()).\
             stdout.getvalue()
-        mon_cap = f'caps mon = "allow r fsname={self.fs.name}"'
-        osd_cap = f'caps osd = "allow {NEW_PERM} tag cephfs data={self.fs.name}"'
-        mds_cap = f'caps mds = "allow {NEW_PERM} fsname={self.fs.name}"'
-        for cap in (mon_cap, osd_cap, mds_cap):
+        moncap = self.gen_moncap_str((('r', self.fs.name,),))
+        osdcap = self.gen_osdcap_str(((NEW_PERM, self.fs.name),))
+        mdscap = self.gen_mdscap_str(((NEW_PERM, self.fs.name),))
+        for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
 
         keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
@@ -168,10 +169,10 @@ class ClientWithCapsForOneFs(FsAuthorizeUpdate):
         keyring = self.fs.mon_manager.run_cluster_cmd(
             args=f'auth get {self.client_name}', stdout=StringIO()).\
             stdout.getvalue()
-        mon_cap = f'caps mon = "allow r fsname={self.fs.name}"'
-        osd_cap = f'caps osd = "allow rw tag cephfs data={self.fs.name}"'
-        mds_cap = f'caps mds = "allow rw fsname={self.fs.name} path={NEW_MNTPT}"'
-        for cap in (mon_cap, osd_cap, mds_cap):
+        moncap = self.gen_moncap_str((('r', self.fs.name),))
+        osdcap = self.gen_osdcap_str(((PERM, self.fs.name),))
+        mdscap = self.gen_mdscap_str(((PERM, self.fs.name, NEW_MNTPT),))
+        for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
 
         keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
@@ -213,10 +214,10 @@ class ClientWithCapsForOneFs(FsAuthorizeUpdate):
         keyring = self.fs.mon_manager.run_cluster_cmd(
             args=f'auth get {self.client_name}', stdout=StringIO()).\
             stdout.getvalue()
-        mon_cap = f'caps mon = "allow r fsname={self.fs.name}"'
-        osd_cap = f'caps osd = "allow rw tag cephfs data={self.fs.name}"'
-        mds_cap = f'caps mds = "allow rw fsname={self.fs.name} path={NEW_MNTPT}"'
-        for cap in (mon_cap, osd_cap, mds_cap):
+        moncap = self.gen_moncap_str((('r', self.fs.name),))
+        osdcap = self.gen_osdcap_str(((PERM, self.fs.name),))
+        mdscap = self.gen_mdscap_str(((PERM, self.fs.name, NEW_MNTPT),))
+        for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
 
         keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
@@ -258,10 +259,10 @@ class ClientWithCapsForOneFs(FsAuthorizeUpdate):
         keyring = self.fs.mon_manager.run_cluster_cmd(
             args=f'auth get {self.client_name}', stdout=StringIO()).\
             stdout.getvalue()
-        mon_cap = f'caps mon = "allow r fsname={self.fs.name}"'
-        osd_cap = f'caps osd = "allow {NEW_PERM} tag cephfs data={self.fs.name}"'
-        mds_cap = f'caps mds = "allow {NEW_PERM} fsname={self.fs.name} path={NEW_MNTPT}"'
-        for cap in (mon_cap, osd_cap, mds_cap):
+        moncap = self.gen_moncap_str((('r', self.fs.name),))
+        osdcap = self.gen_osdcap_str(((NEW_PERM, self.fs.name),))
+        mdscap = self.gen_mdscap_str(((NEW_PERM, self.fs.name, NEW_MNTPT),))
+        for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
 
         keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
@@ -336,13 +337,13 @@ class ClientWithCapsForTwoFss(FsAuthorizeUpdate):
         keyring = self.fs1.mon_manager.run_cluster_cmd(
             args=f'auth get {self.client_name}', stdout=StringIO()).\
             stdout.getvalue()
-        mon_cap = (f'caps mon = "allow r fsname={self.fs1.name}, '
-                               f'allow r fsname={self.fs2.name}"')
-        osd_cap = (f'caps osd = "allow {NEW_PERM} tag cephfs data={self.fs1.name}, '
-                               f'allow {OLD_PERM} tag cephfs data={self.fs2.name}"')
-        mds_cap = (f'caps mds = "allow {NEW_PERM} fsname={self.fs1.name}, '
-                               f'allow {OLD_PERM} fsname={self.fs2.name}"')
-        for cap in (mon_cap, osd_cap, mds_cap):
+        moncap = self.gen_moncap_str((('r', self.fs1.name),
+                                      ('r', self.fs2.name)))
+        osdcap = self.gen_osdcap_str(((NEW_PERM, self.fs1.name),
+                                      (OLD_PERM, self.fs2.name)))
+        mdscap = self.gen_mdscap_str(((NEW_PERM, self.fs1.name),
+                                      (OLD_PERM, self.fs2.name)))
+        for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
 
         keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)
@@ -361,13 +362,13 @@ class ClientWithCapsForTwoFss(FsAuthorizeUpdate):
         keyring = self.fs1.mon_manager.run_cluster_cmd(
             args=f'auth get {self.client_name}', stdout=StringIO()).\
             stdout.getvalue()
-        mon_cap = (f'caps mon = "allow r fsname={self.fs1.name}, '
-                               f'allow r fsname={self.fs2.name}"')
-        osd_cap = (f'caps osd = "allow {NEW_PERM} tag cephfs data={self.fs1.name}, '
-                               f'allow {NEW_PERM} tag cephfs data={self.fs2.name}"')
-        mds_cap = (f'caps mds = "allow {NEW_PERM} fsname={self.fs1.name}, '
-                               f'allow {NEW_PERM} fsname={self.fs2.name}"')
-        for cap in (mon_cap, osd_cap, mds_cap):
+        moncap = self.gen_moncap_str((('r', self.fs1.name,),
+                                      ('r', self.fs2.name)))
+        osdcap = self.gen_osdcap_str(((NEW_PERM, self.fs1.name),
+                                      (NEW_PERM, self.fs2.name)))
+        mdscap = self.gen_mdscap_str(((NEW_PERM, self.fs1.name),
+                                      (NEW_PERM, self.fs2.name)))
+        for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
 
         keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring)

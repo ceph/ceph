@@ -12,6 +12,100 @@ from teuthology.orchestra.run import Raw
 log = getLogger(__name__)
 
 
+class CapsUtil():
+
+    def gen_moncap_str(self, caps):
+        """
+        Expects a tuple of tuples where the inner tuple has perm and CephFS
+        name.
+        """
+        def _unpack_tuple(c):
+            if len(c) == 1:
+                perm, fsname = c[0], None
+            elif len(c) == 2:
+                perm, fsname = c
+            else:
+                raise RuntimeError('received too items caps')
+            return perm, fsname
+
+        def _gen_moncap_str(c):
+            perm, fsname = _unpack_tuple(c)
+            moncap = f'allow {perm}'
+            if fsname:
+                moncap += f' fsname={fsname}'
+            return moncap
+
+        if len(caps) == 1:
+            return _gen_moncap_str(caps[0])
+
+        moncap = ''
+        for i, c in enumerate(caps):
+            moncap += _gen_moncap_str(c)
+            if i != len(caps) - 1:
+                moncap += ', '
+
+        return moncap
+
+    def gen_osdcap_str(self, caps):
+        """
+        Expects a tuple of tuples where the inner tuple has perm and data
+        pool names.
+        """
+        def _gen_osdcap_str(c):
+            perm, datapoolname = c
+            osdcap = f'allow {perm} tag cephfs'
+            if datapoolname:
+                osdcap += f' data={datapoolname}'
+            return osdcap
+
+        if len(caps) == 1:
+            return _gen_osdcap_str(caps[0])
+
+        osdcap = ''
+        for i, c in enumerate(caps):
+            osdcap += _gen_osdcap_str(c)
+            if i != len(caps) - 1:
+                osdcap += ', '
+
+        return osdcap
+
+    def gen_mdscap_str(self, caps):
+        """
+        Expects a tuple of tuples where inner tuple has perm an Ceph FS name
+        and CephFS mountpoint.
+        """
+        def _unpack_tuple(c):
+            if len(c) == 2:
+                perm, fsname, cephfs_mntpt = c[0], c[1], '/'
+            elif len(c) == 3:
+                perm, fsname, cephfs_mntpt = c
+            elif len(c) < 2:
+                raise RuntimeError('received items are too less in caps')
+            else: # len(c) > 3
+                raise RuntimeError('received items are too many in caps')
+
+            return perm, fsname, cephfs_mntpt
+
+        def _gen_mdscap_str(c):
+            perm, fsname, cephfs_mntpt = _unpack_tuple(c)
+            mdscap = f'allow {perm}'
+            if fsname:
+                mdscap += f' fsname={fsname}'
+            if cephfs_mntpt != '/':
+                mdscap += f' path={cephfs_mntpt}'
+            return mdscap
+
+            return _gen_mdscap_str(caps[0])
+
+        mdscap = ''
+        for i, c in enumerate(caps):
+            mdscap +=  _gen_mdscap_str(c)
+            if i != len(caps) - 1:
+                mdscap += ', '
+
+        return mdscap
+
+
 class CapTester(CephFSTestCase):
     """
     Test that MON and MDS caps are enforced.
@@ -146,7 +240,7 @@ class CapTester(CephFSTestCase):
         # Example -
         #   orignal path: /mnt/cephfs_x/dir1/dir2/testdir
         #   cephfs dir serving as root for current mnt: /dir1/dir2
-        #   therefore, final path: /mnt/cephfs_x//testdir
+        #   therefore, final path: /mnt/cephfs_x/testdir
         if mntpt:
             self.test_set = [(x, y.replace(mntpt, ''), z) for x, y, z in \
                              self.test_set]
