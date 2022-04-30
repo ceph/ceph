@@ -33,7 +33,7 @@ class CapTester(CephFSTestCase):
         at the path passed in testpath for the given list of mounts. If
         testpath is empty, the file is created at the root of the CephFS.
         """
-        dirname, filename, filedata = 'testdir', 'testfile', 'testdata'
+        dirname, filename = 'testdir', 'testfile'
         self.test_set = []
         # XXX: The reason behind testpath[1:] below is that the testpath is
         # supposed to contain a path inside CephFS (which might be passed as
@@ -51,6 +51,15 @@ class CapTester(CephFSTestCase):
             dirpath = os_path_join(mount_x.hostfs_mntpt, testpath, dirname)
             mount_x.run_shell(f'mkdir {dirpath}')
             filepath = os_path_join(dirpath, filename)
+            # XXX: the reason behind adding filepathm, cephfs_name and both
+            # mntpts is to avoid a test bug where we mount cephfs1 but what
+            # ends up being mounted cephfs2. since filepath and filedata are
+            # identical, how would tests figure otherwise that they are
+            # accessing the right filename but on wrong CephFS.
+            filedata = (f'filepath = {filepath}\n'
+                        f'cephfs_name = {mount_x.cephfs_name}\n'
+                        f'cephfs_mntpt = {mount_x.cephfs_mntpt}\n'
+                        f'hostfs_mntpt = {mount_x.hostfs_mntpt}')
             mount_x.write_file(filepath, filedata)
             self.test_set.append((mount_x, filepath, filedata))
 
