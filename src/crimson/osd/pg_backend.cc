@@ -1110,7 +1110,13 @@ PGBackend::omap_get_header(
   const crimson::os::CollectionRef& c,
   const ghobject_t& oid) const
 {
-  return store->omap_get_header(c, oid);
+  return store->omap_get_header(c, oid)
+    .handle_error(
+      crimson::ct_error::enodata::handle([] {
+	return seastar::make_ready_future<bufferlist>();
+      }),
+      ll_read_errorator::pass_further{}
+    );
 }
 
 PGBackend::ll_read_ierrorator::future<>
