@@ -103,7 +103,8 @@
 using namespace std;
 using namespace librados;
 
-#define ldout_bitx(_bitx, _ctx, _level) if(_bitx) { ldout(_ctx, 0) << "BITX: "
+#define ldout_bitx(_bitx, _dpp, _level) if(_bitx) { ldpp_dout(_dpp, 0) << "BITX: "
+#define ldout_bitx_c(_bitx, _ctx, _level) if(_bitx) { ldout(_ctx, 0) << "BITX: "
 #define dendl_bitx                      dendl ; }
 
 static string shadow_ns = "shadow";
@@ -897,11 +898,11 @@ void RGWIndexCompletionManager::process()
       r = store->guard_reshard(&dpp, &bs, c->obj, bucket_info,
 			     [&](RGWRados::BucketShard *bs) -> int {
 			       const bool bitx = ctx()->_conf->rgw_bucket_index_transaction_instrumentation;
-			       ldout_bitx(bitx, ctx(), 10) <<
+			       ldout_bitx(bitx, &dpp, 10) <<
 				 "ENTERING " << __func__ << ": bucket-shard=" << bs <<
 				 " obj=" << c->obj << " tag=" << c->tag <<
 				 " op=" << c->op << ", remove_objs=" << c->remove_objs << dendl_bitx;
-			       ldout_bitx(bitx, ctx(), 25) <<
+			       ldout_bitx(bitx, &dpp, 25) <<
 				 "BACKTRACE: " << __func__ << ": " << ClibBackTrace(1) << dendl_bitx;
 
 			       librados::ObjectWriteOperation o;
@@ -909,7 +910,7 @@ void RGWIndexCompletionManager::process()
 			       cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
 							  c->log_op, c->bilog_op, &c->zones_trace);
 			       int ret = bs->bucket_obj.operate(&dpp, &o, null_yield);
-			       ldout_bitx(bitx, ctx(), 10) <<
+			       ldout_bitx(bitx, &dpp, 10) <<
 				 "EXITING " << __func__ << ": ret=" << dendl_bitx;
 			       return ret;
                              });
@@ -8363,8 +8364,8 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
                                  rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *_zones_trace)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
-  ldout_bitx(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs << " obj=" << obj << " tag=" << tag << " op=" << op << dendl_bitx;
-  ldout_bitx(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
+  ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs << " obj=" << obj << " tag=" << tag << " op=" << op << dendl_bitx;
+  ldout_bitx(bitx, dpp, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
   rgw_zone_set zones_trace;
   if (_zones_trace) {
@@ -8377,7 +8378,7 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), svc.zone->get_zone().log_data, bilog_flags, zones_trace);
   int ret = bs.bucket_obj.operate(dpp, &o, y);
-  ldout_bitx(bitx, cct, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
+  ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
   return ret;
 }
 
@@ -8387,10 +8388,10 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
 				  list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *_zones_trace)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
-  ldout_bitx(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs <<
+  ldout_bitx_c(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs <<
     " obj=" << obj << " tag=" << tag << " op=" << op <<
     ", remove_objs=" << (remove_objs ? *remove_objs : std::list<rgw_obj_index_key>()) << dendl_bitx;
-  ldout_bitx(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
+  ldout_bitx_c(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
   ObjectWriteOperation o;
   rgw_bucket_dir_entry_meta dir_meta;
@@ -8417,7 +8418,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
   int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o);
   completion->release(); /* can't reference arg here, as it might have already been released */
 
-  ldout_bitx(bitx, cct, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
+  ldout_bitx_c(bitx, cct, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
   return ret;
 }
 
@@ -8522,7 +8523,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
    * few results, perhaps due to filtering or to a series of
    * namespaced entries */
 
-  ldout_bitx(bitx, cct, 10) << "ENTERING " << __func__ << ": " << bucket_info.bucket <<
+  ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": " << bucket_info.bucket <<
     " start_after=\"" << start_after.to_string() <<
     "\", prefix=\"" << prefix <<
     ", delimiter=\"" << delimiter <<
@@ -8532,7 +8533,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
     ", expansion_factor=" << expansion_factor <<
     ", force_check_filter is " <<
     (force_check_filter ? "set" : "unset") << dendl_bitx;
-  ldout_bitx(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
+  ldout_bitx(bitx, dpp, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
   m.clear();
 
@@ -8696,7 +8697,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
        * well. */
       librados::IoCtx sub_ctx;
       sub_ctx.dup(ioctx);
-      ldout_bitx(bitx, cct, 20) << "INFO: " << __func__ <<
+      ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
 	" calling check_disk_state bucket=" << bucket_info.bucket <<
 	" entry=" << dirent.key << dendl_bitx;
       r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent,
@@ -8759,7 +8760,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       AioCompletion *c =
 	librados::Rados::aio_create_completion(nullptr, nullptr);
 
-      ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ <<
+      ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
 	": doing dir_suggest on " << miter.first << dendl_bitx;
       ioctx.aio_operate(miter.first, c, &o);
       c->release();
@@ -8795,7 +8796,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       ": returning, last_entry NOT SET" << dendl;
   }
 
-  ldout_bitx(bitx, cct, 10) << "EXITING " << __func__ << dendl_bitx;
+  ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << dendl_bitx;
   return 0;
 }
 
@@ -8831,14 +8832,14 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 					RGWBucketListNameFilter force_check_filter) {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
 
-  ldout_bitx(bitx, cct, 10) << "ENTERING " << __func__ << ": " << bucket_info.bucket <<
+  ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": " << bucket_info.bucket <<
     " start_after=\"" << start_after <<
     "\", prefix=\"" << prefix <<
     "\", shard_id=" << shard_id <<
     "\", num_entries=" << num_entries <<
     ", list_versions=" << list_versions <<
     (force_check_filter ? "set" : "unset") << dendl_bitx;
-  ldout_bitx(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
+  ldout_bitx(bitx, dpp, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
 
   ent_list.clear();
   static MultipartMetaFilter multipart_meta_filter;
@@ -8939,7 +8940,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	 * and if the tags are old we need to do cleanup as well. */
 	librados::IoCtx sub_ctx;
 	sub_ctx.dup(ioctx);
-	ldout_bitx(bitx, cct, 20) << "INFO: " << __func__ <<
+	ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
 	  ": calling check_disk_state bucket=" << bucket_info.bucket <<
 	  " entry=" << dirent.key << dendl_bitx;
 	r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent, updates[oid], y);
@@ -8994,7 +8995,7 @@ check_updates:
       // we don't care if we lose suggested updates, send them off blindly
       AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
 
-      ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ <<
+      ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
 	" doing dir_suggest on " << miter->first << dendl_bitx;
       ioctx.aio_operate(miter->first, c, &o);
       c->release();
@@ -9005,7 +9006,7 @@ check_updates:
     *last_entry = last_added_entry;
   }
 
-  ldout_bitx(bitx, cct, 10) << "EXITING " << __func__ << dendl_bitx;
+  ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << dendl_bitx;
   return 0;
 } // RGWRados::cls_bucket_list_unordered
 
@@ -9096,43 +9097,81 @@ int RGWRados::cls_obj_usage_log_clear(const DoutPrefixProvider *dpp, string& oid
 }
 
 
-int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list)
+// note: this removes entries from the rados bucket index objects
+// without going through CLS; this is known to be called from
+// "radosgw-admin unlink" and "radosgw-admin bucket check --fix"
+int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
+				     RGWBucketInfo& bucket_info,
+				     const std::list<rgw_obj_index_key>& entry_key_list)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
-  ldout_bitx(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket=" << bucket_info.bucket <<
-    " oid_list.size()=" << oid_list.size() << dendl_bitx;
-   ldout_bitx(bitx, cct, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
+  ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket=" << bucket_info.bucket <<
+    " entry_key_list.size()=" << entry_key_list.size() << dendl_bitx;
+  ldout_bitx(bitx, dpp, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
+
+  const rgw::bucket_index_layout_generation& latest_layout = bucket_info.layout.current_index;
+  if (latest_layout.layout.type != rgw::BucketIndexType::Normal ||
+      latest_layout.layout.normal.hash_type != rgw::BucketHashType::Mod) {
+    ldout_bitx(bitx, dpp, 0) << "ERROR: " << __func__ << " index for bucket=" <<
+      bucket_info.bucket << " is not a normal modulo index" << dendl_bitx;
+    return -EINVAL;
+  }
+  const uint32_t num_shards = latest_layout.layout.normal.num_shards;
 
   RGWSI_RADOS::Pool index_pool;
-  string dir_oid;
-
-  uint8_t suggest_flag = (svc.zone->get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
-
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, &index_pool, &dir_oid);
-  if (r < 0)
+  std::map<int, std::string> index_oids;
+  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, &index_pool,
+					  &index_oids, nullptr);
+  if (r < 0) {
+    ldout_bitx(bitx, dpp, 0) << "ERROR: " << __func__ <<
+      " open_bucket_index returned " << r << dendl_bitx;
     return r;
-
-  bufferlist updates;
-
-  for (auto iter = oid_list.begin(); iter != oid_list.end(); ++iter) {
-    rgw_bucket_dir_entry entry;
-    entry.key = *iter;
-    ldout_bitx(bitx, cct, 5) << "INFO: " << __func__ <<
-      ": encoding removal of bucket=" << bucket_info.bucket <<
-      " entry=" << entry.key << " in updates" << dendl_bitx;
-    entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
-    updates.append(CEPH_RGW_REMOVE | suggest_flag);
-    encode(entry, updates);
   }
 
-  ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ <<
-    ": calling dir_suggest on shards of dir=" << bucket_info.bucket << dendl_bitx;
+  // split up removals by shard
+  std::map<int, std::set<std::string>> sharded_removals;
+  for (const auto& entry_key : entry_key_list) {
+    const rgw_obj_key obj_key(entry_key);
+    const uint32_t shard =
+      RGWSI_BucketIndex_RADOS::bucket_shard_index(obj_key, num_shards);
 
-  bufferlist out;
-  r = index_pool.ioctx().exec(dir_oid, RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates, out);
+    // entry_key already combines namespace and name, so we first have
+    // to break that apart before we can then combine with instance
+    std::string name;
+    std::string ns; // namespace
+    rgw_obj_key::parse_index_key(entry_key.name, &name, &ns);
+    rgw_obj_key full_key(name, entry_key.instance, ns);
+    std::string combined_key = full_key.get_oid();
 
-  ldout_bitx(bitx, cct, 10) <<
+    sharded_removals[shard].insert(combined_key);
+
+    ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
+      ": removal from bucket index, bucket=" << bucket_info.bucket <<
+      " key=" << combined_key << " designated for shard " << shard <<
+      dendl_bitx;
+  }
+
+  for (const auto& removals : sharded_removals) {
+    const int shard = removals.first;
+    const std::string& oid = index_oids[shard];
+
+    ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
+      ": removal from bucket index, bucket=" << bucket_info.bucket <<
+      ", shard=" << shard << ", oid=" << oid << ", num_keys=" <<
+      removals.second.size() << dendl_bitx;
+
+    r = index_pool.ioctx().omap_rm_keys(oid, removals.second);
+    if (r < 0) {
+      ldout_bitx(bitx, dpp, 0) << "ERROR: " << __func__ <<
+	": omap_rm_keys returned ret=" << r <<
+	dendl_bitx;
+      return r;
+    }
+  }
+
+  ldout_bitx(bitx, dpp, 5) <<
     "EXITING " << __func__ << " and returning " << r << dendl_bitx;
+
   return r;
 }
 
@@ -9145,7 +9184,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
-  ldout_bitx(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket=" <<
+  ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket=" <<
     bucket_info.bucket << " dir_entry=" << list_state.key << dendl_bitx;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -9174,11 +9213,11 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
 
   list_state.pending_map.clear(); // we don't need this and it inflates size
   if (!list_state.is_delete_marker() && !astate->exists) {
-    ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ << ": disk state exists" << dendl_bitx;
+    ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": disk state exists" << dendl_bitx;
       /* object doesn't exist right now -- hopefully because it's
        * marked as !exists and got deleted */
     if (list_state.exists) {
-      ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ << ": index list state exists" << dendl_bitx;
+      ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": index list state exists" << dendl_bitx;
       /* FIXME: what should happen now? Work out if there are any
        * non-bad ways this could happen (there probably are, but annoying
        * to handle!) */
@@ -9187,7 +9226,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     // encode a suggested removal of that key
     list_state.ver.epoch = io_ctx.get_last_version();
     list_state.ver.pool = io_ctx.get_id();
-    ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ << ": encoding remove of " << list_state.key << " on suggested_updates" << dendl_bitx;
+    ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": encoding remove of " << list_state.key << " on suggested_updates" << dendl_bitx;
     cls_rgw_encode_suggestion(CEPH_RGW_REMOVE | suggest_flag, list_state, suggested_updates);
     return -ENOENT;
   }
@@ -9224,10 +9263,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
       RGWSI_Tier_RADOS::raw_obj_to_obj(manifest->get_obj().bucket, raw_loc, &loc);
 
       if (loc.key.ns == RGW_OBJ_NS_MULTIPART) {
-	ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ << " removing manifest part from index loc=" << loc << dendl_bitx;
+	ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << " removing manifest part from index loc=" << loc << dendl_bitx;
 	r = delete_obj_index(loc, astate->mtime, dpp);
 	if (r < 0) {
-	  ldout_bitx(bitx, cct, 0) <<
+	  ldout_bitx(bitx, dpp, 0) <<
 	    "WARNING: " << __func__ << ": delete_obj_index returned r=" << r << dendl_bitx;
 	}
       }
@@ -9268,11 +9307,11 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
 
   list_state.exists = true;
 
-  ldout_bitx(bitx, cct, 10) << "INFO: " << __func__ <<
+  ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ <<
     ": encoding update of " << list_state.key << " on suggested_updates" << dendl_bitx;
   cls_rgw_encode_suggestion(CEPH_RGW_UPDATE | suggest_flag, list_state, suggested_updates);
 
-  ldout_bitx(bitx, cct, 10) << "EXITING " << __func__ << dendl_bitx;
+  ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << dendl_bitx;
   return 0;
 } // RGWRados::check_disk_state
 
