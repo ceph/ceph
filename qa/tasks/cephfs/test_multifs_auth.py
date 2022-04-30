@@ -3,10 +3,8 @@ Test for Ceph clusters with multiple FSs.
 """
 import logging
 
-from os.path import join as os_path_join
-
-# CapsHelper is subclassed from CephFSTestCase
-from tasks.cephfs.caps_helper import CapsHelper
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.caps_helper import CapTester
 
 from teuthology.exceptions import CommandFailedError
 
@@ -14,7 +12,7 @@ from teuthology.exceptions import CommandFailedError
 log = logging.getLogger(__name__)
 
 
-class TestMultiFS(CapsHelper):
+class TestMultiFS(CephFSTestCase):
     client_id = 'testuser'
     client_name = 'client.' + client_id
     # one dedicated for each FS
@@ -23,6 +21,8 @@ class TestMultiFS(CapsHelper):
 
     def setUp(self):
         super(TestMultiFS, self).setUp()
+
+        self.captester = CapTester()
 
         # we might have it - the client - if the same cluster was used for a
         # different vstart_runner.py run.
@@ -42,25 +42,25 @@ class TestMONCaps(TestMultiFS):
 
     def test_moncap_with_one_fs_names(self):
         moncap = f'allow r fsname={self.fs1.name}'
-        keyring = self.setup_test_env(moncap)
+        self.setup_test_env(moncap)
 
-        self.run_mon_cap_tests(moncap, keyring)
+        self.captester.run_mon_cap_tests(self.fs1, self.client_id)
 
     def test_moncap_with_multiple_fs_names(self):
         moncap = (f'allow r fsname={self.fs1.name}, '
                   f'allow r fsname={self.fs2.name}')
-        keyring = self.setup_test_env(moncap)
+        self.setup_test_env(moncap)
 
-        self.run_mon_cap_tests(moncap, keyring)
+        self.captester.run_mon_cap_tests(self.fs1, self.client_id)
 
     def test_moncap_with_blanket_allow(self):
         moncap = 'allow r'
-        keyring = self.setup_test_env(moncap)
+        self.setup_test_env(moncap)
 
-        self.run_mon_cap_tests(moncap, keyring)
+        self.captester.run_mon_cap_tests(self.fs1, self.client_id)
 
     def setup_test_env(self, moncap):
-        return self.create_client(self.client_id, moncap)
+        self.create_client(self.client_id, moncap)
 
 
 #TODO: add tests for capsecs 'p' and 's'.
@@ -73,80 +73,70 @@ class TestMDSCaps(TestMultiFS):
     4. Test read and write on both FSs.
     """
     def test_rw_with_fsname_and_no_path_in_cap(self):
-        perm = 'rw'
-        filepaths, filedata, mounts = self.setup_test_env(perm, True)
+        PERM = 'rw'
+        self.setup_test_env(PERM, True)
 
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mds_cap_tests(PERM)
 
     def test_r_with_fsname_and_no_path_in_cap(self):
-        perm = 'r'
-        filepaths, filedata, mounts = self.setup_test_env(perm, True)
+        PERM = 'r'
+        self.setup_test_env(PERM, True)
 
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mds_cap_tests(PERM)
 
     def test_rw_with_fsname_and_path_in_cap(self):
-        perm = 'rw'
-        filepaths, filedata, mounts = self.setup_test_env(perm, True,'dir1')
+        PERM, CEPHFS_MNTPT = 'rw', 'dir1'
+        self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        self.setup_test_env(PERM, True, CEPHFS_MNTPT)
 
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mds_cap_tests(PERM, CEPHFS_MNTPT)
 
     def test_r_with_fsname_and_path_in_cap(self):
-        perm = 'r'
-        filepaths, filedata, mounts = self.setup_test_env(perm, True, 'dir1')
+        PERM, CEPHFS_MNTPT = 'r', 'dir1'
+        self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        self.setup_test_env(PERM, True, CEPHFS_MNTPT)
 
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mds_cap_tests(PERM, CEPHFS_MNTPT)
 
     # XXX: this tests the backward compatibility; "allow rw path=<dir1>" is
     # treated as "allow rw fsname=* path=<dir1>"
     def test_rw_with_no_fsname_and_path_in_cap(self):
-        perm = 'rw'
-        filepaths, filedata, mounts = self.setup_test_env(perm, False, 'dir1')
+        PERM, CEPHFS_MNTPT = 'rw', 'dir1'
+        self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        self.setup_test_env(PERM, False, CEPHFS_MNTPT)
 
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mds_cap_tests(PERM, CEPHFS_MNTPT)
 
     # XXX: this tests the backward compatibility; "allow r path=<dir1>" is
     # treated as "allow r fsname=* path=<dir1>"
     def test_r_with_no_fsname_and_path_in_cap(self):
-        perm = 'r'
-        filepaths, filedata, mounts = self.setup_test_env(perm, False, 'dir1')
+        PERM, CEPHFS_MNTPT = 'r', 'dir1'
+        self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        self.setup_test_env(PERM, False, CEPHFS_MNTPT)
 
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mds_cap_tests(PERM, CEPHFS_MNTPT)
 
     def test_rw_with_no_fsname_and_no_path(self):
-        perm = 'rw'
-        filepaths, filedata, mounts = self.setup_test_env(perm)
+        PERM = 'rw'
+        self.setup_test_env(PERM)
 
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mds_cap_tests(PERM)
 
     def test_r_with_no_fsname_and_no_path(self):
-        perm = 'r'
-        filepaths, filedata, mounts = self.setup_test_env(perm)
+        PERM = 'r'
+        self.setup_test_env(PERM)
 
-        self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
+        self.captester.run_mds_cap_tests(PERM)
 
     def tearDown(self):
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
         super(type(self), self).tearDown()
-
-    def setup_test_env(self, perm, fsname=False, cephfs_mntpt='/'):
-        """
-        Creates the cap string, files on both the FSs and then creates the
-        new client with the cap and remounts both the FSs with newly created
-        client.
-        """
-        filenames = ('file_on_fs1', 'file_on_fs2')
-        filedata = ('some data on first fs', 'some data on second fs')
-        mounts = (self.mount_a, self.mount_b)
-        self.setup_fs_contents(cephfs_mntpt, filenames, filedata)
-
-        keyring_paths = self.create_client_and_keyring_file(perm, fsname,
-                                                            cephfs_mntpt)
-        filepaths = self.remount_with_new_client(cephfs_mntpt, filenames,
-                                                 keyring_paths)
-
-        return filepaths, filedata, mounts
 
     def generate_caps(self, perm, fsname, cephfs_mntpt):
         moncap = 'allow r'
@@ -170,6 +160,19 @@ class TestMDSCaps(TestMultiFS):
 
         return moncap, osdcap, mdscap
 
+    def setup_test_env(self, perm, fsname=False, cephfs_mntpt='/'):
+        """
+        Creates the cap string, files on both the FSs and then creates the
+        new client with the cap and remounts both the FSs with newly created
+        client.
+        """
+        self.captester.write_test_files((self.mount_a, self.mount_b),
+                                        cephfs_mntpt)
+
+        keyring_paths = self.create_client_and_keyring_file(perm, fsname,
+                                                            cephfs_mntpt)
+        self.remount_with_new_client(cephfs_mntpt, keyring_paths)
+
     def create_client_and_keyring_file(self, perm, fsname, cephfs_mntpt):
         moncap, osdcap, mdscap = self.generate_caps(perm, fsname,
                                                     cephfs_mntpt)
@@ -181,22 +184,7 @@ class TestMDSCaps(TestMultiFS):
 
         return keyring_paths
 
-    def setup_fs_contents(self, cephfs_mntpt, filenames, filedata):
-        filepaths = []
-        iter_on = zip((self.mount_a, self.mount_b), filenames, filedata)
-
-        for mount_x, filename, data in iter_on:
-            if cephfs_mntpt != '/' :
-                mount_x.run_shell(args=['mkdir', cephfs_mntpt])
-                filepaths.append(os_path_join(mount_x.hostfs_mntpt,
-                                              cephfs_mntpt, filename))
-            else:
-                filepaths.append(os_path_join(mount_x.hostfs_mntpt, filename))
-
-            mount_x.write_file(filepaths[-1], data)
-
-    def remount_with_new_client(self, cephfs_mntpt, filenames,
-                                           keyring_paths):
+    def remount_with_new_client(self, cephfs_mntpt, keyring_paths):
         if isinstance(cephfs_mntpt, str) and cephfs_mntpt != '/' :
             cephfs_mntpt = '/' + cephfs_mntpt
 
@@ -214,9 +202,6 @@ class TestMDSCaps(TestMultiFS):
                              cephfs_mntpt=cephfs_mntpt,
                              hostfs_mntpt=self.mount_b.hostfs_mntpt,
                              wait=True)
-
-        return (os_path_join(self.mount_a.hostfs_mntpt, filenames[0]),
-                os_path_join(self.mount_b.hostfs_mntpt, filenames[1]))
 
 
 class TestClientsWithoutAuth(TestMultiFS):
