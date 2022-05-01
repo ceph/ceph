@@ -1126,61 +1126,17 @@ int make_dedup_object(const po::variables_map &opts)
       return ret;
     }
 
-    /*
-     * TODO: add a better way to make an object a manifest object.  
-     * We're using set_chunk with an incorrect object here simply to make 
-     * the object a manifest object, the tier_flush() will remove
-     * it and replace it with the real contents.
-     */
-    // convert object to manifest object
     auto create_new_deduped_object =
-      [&chunk_io_ctx, &io_ctx](string object_name) -> int {
-
-      int ret = 0;
-      ObjectWriteOperation op;
-      bufferlist temp;
-      temp.append("temp");
-      op.write_full(temp);
-
-      auto gen_r_num = [] () -> string {
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<uint64_t> dist;
-	uint64_t r_num = dist(gen);
-	return to_string(r_num);
-      };
-      string temp_oid = gen_r_num();
-      // create temp chunk object for set-chunk
-      ret = chunk_io_ctx.operate(temp_oid, &op);
-      if (ret == -EEXIST) {
-	// one more try
-	temp_oid = gen_r_num();
-	ret = chunk_io_ctx.operate(temp_oid, &op);
-      }
-      if (ret < 0) {
-	cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
-	return ret;
-      }
-
-      // set-chunk to make manifest object
-      ObjectReadOperation chunk_op;
-      chunk_op.set_chunk(0, 4, chunk_io_ctx, temp_oid, 0,
-	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-      ret = io_ctx.operate(object_name, &chunk_op, NULL);
-      if (ret < 0) {
-	cerr << " set_chunk fail : " << cpp_strerror(ret) << std::endl;
-	return ret;
-      }
+      [&io_ctx](string object_name) -> int {
 
       // tier-flush to perform deduplication
       ObjectReadOperation flush_op;
       flush_op.tier_flush();
-      ret = io_ctx.operate(object_name, &flush_op, NULL);
+      int ret = io_ctx.operate(object_name, &flush_op, NULL);
       if (ret < 0) {
 	cerr << " tier_flush fail : " << cpp_strerror(ret) << std::endl;
 	return ret;
       }
-
       // tier-evict
       ObjectReadOperation evict_op;
       evict_op.tier_evict();
