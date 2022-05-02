@@ -300,6 +300,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       if (!allow_expired) {
         ldpp_dout(dpp, 0) << "service token user does not hold a matching role; required roles: "
                   << g_conf()->rgw_keystone_service_token_accepted_roles << dendl;
+        return result_t::deny(-EPERM);
       }
     }
   }
