@@ -1321,6 +1321,7 @@ int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPr
 int MotrObject::modify_obj_attrs(RGWObjectCtx* rctx, const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
 {
   rgw_obj target = get_obj();
+  // TODO: To modularize code across get / set obj attr calls
   int r = get_obj_attrs(rctx, y, dpp, &target);
   if (r < 0) {
     return r;
