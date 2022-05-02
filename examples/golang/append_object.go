@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/smithy-go/ptr"
@@ -11,7 +12,7 @@ import (
 	"os"
 )
 
-func uploadObject(bucketName, objectName string) {
+func uploadObject(bucketName, objectName string, svc *s3.S3) {
 	// Open an object:
 	obj, err := os.Open(objectName)
 	if err != nil {
@@ -19,23 +20,8 @@ func uploadObject(bucketName, objectName string) {
 	}
 	defer obj.Close()
 
-	// Create a S3 session:
-	s3session := s3.New(session.Must(session.NewSession(&aws.Config{
-		Region:           aws.String("default"),
-		Endpoint:         aws.String("http://127.0.0.1:8000"),
-		S3ForcePathStyle: aws.Bool(true),
-	})))
-
-	// Create a bucket according to bucketName:
-	_, err = s3session.CreateBucket(&s3.CreateBucketInput{
-		Bucket: aws.String(bucketName),
-	})
-	if err != nil {
-		log.Printf("Error create a bucket to s3: %v\n", err)
-	}
-
 	// Upload an object:
-	_, err = s3session.PutObject(&s3.PutObjectInput{
+	_, err = svc.PutObject(&s3.PutObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(objectName),
 		Body:   obj,
@@ -47,17 +33,21 @@ func uploadObject(bucketName, objectName string) {
 	}
 }
 
-// This is a utility function to help show an object is successfully uploaded.
-func listObject(bucketName string) {
-	// Create a S3 session:
-	s3session := s3.New(session.Must(session.NewSession(&aws.Config{
-		Region:           aws.String("default"),
-		Endpoint:         aws.String("http://127.0.0.1:8000"),
-		S3ForcePathStyle: aws.Bool(true),
-	})))
+// This is a utility function to help create a bucket if not existed.
+func createBucket(bucketName string, svc *s3.S3) {
+	// Create a bucket according to bucketName:
+	_, err := svc.CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+	if err != nil {
+		log.Printf("Error create a bucket to s3: %v\n", err)
+	}
+}
 
+// This is a utility function to help show an object is successfully uploaded.
+func listObject(bucketName string, svc *s3.S3) {
 	// List objects:
-	output, err := s3session.ListObjectsV2(&s3.ListObjectsV2Input{
+	output, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket: aws.String(bucketName),
 	})
 	if err != nil {
@@ -74,6 +64,18 @@ func main() {
 	// Set bucket name and object name:
 	bucketName := "mybucket"
 	objectName := "myimage.jpg"
+	region := "default"
+	endpoint := "http://127.0.0.1:8000"
+	accessKeyID := "0555b35654ad1656d804"
+	secretAccessKey := "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=="
+
+	// Create a S3 session:
+	svc := s3.New(session.Must(session.NewSession(&aws.Config{
+		Region:           aws.String(region),
+		Endpoint:         aws.String(endpoint),
+		Credentials:      credentials.NewStaticCredentials(accessKeyID, secretAccessKey, ""),
+		S3ForcePathStyle: aws.Bool(true),
+	})))
 
 	// Create an object:
 	_, err := os.Create(objectName)
@@ -81,9 +83,12 @@ func main() {
 		log.Printf("Error creating object: %v\n", err)
 	}
 
+	// Create a bucket if not existed:
+	createBucket(bucketName, svc)
+
 	// Upload an object to bucket:
-	uploadObject(bucketName, objectName)
+	uploadObject(bucketName, objectName, svc)
 
 	// List objects in bucket:
-	listObject(bucketName)
+	listObject(bucketName, svc)
 }

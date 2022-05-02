@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This directory contains examples on how to use [AWS SDK for Java V1](https://github.com/aws/aws-sdk-java) to experience the RadosGW extensions with the S3 API.
+This directory contains examples on how to create a client based on [AWS SDK for Java V1](https://github.com/aws/aws-sdk-java) to integrate Ceph as storage backend through the RADOS Gateway (RGW).
 
 ## Feature
 
@@ -20,12 +20,13 @@ Then, you could run the following command to run a local vstart cluster.
 ```
 # Suppose you are under ceph/ directory now
 $ cd build
-$ env MON=1 OSD=1 MDS=0 MGR=0 RGW=1 ../src/vstart.sh -n -d
+$ MON=1 OSD=1 MDS=0 MGR=0 RGW=1 ../src/vstart.sh -n -d
 ```
 
 Finally, you could run the following commands to experience the example.
 
 ```
+# Suppose you are under ceph/examples/java directory now
 # Clean and compile:
 $ mvn clean compile assembly:single
 
