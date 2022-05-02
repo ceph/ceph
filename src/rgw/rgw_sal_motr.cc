@@ -62,6 +62,11 @@ static std::string motr_global_indices[] = {
   RGW_IAM_MOTR_EMAIL_KEY
 };
 
+static unsigned roundup(unsigned x, unsigned by)
+{
+  return ((x - 1) / by + 1) * by;
+}
+
 void MotrMetaCache::invalid(const DoutPrefixProvider *dpp,
                            const string& name)
 {
@@ -1901,7 +1906,7 @@ void MotrObject::close_mobj()
 int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer, uint64_t offset)
 {
   int rc;
-  unsigned bs, left;
+  int64_t bs, left;
   struct m0_op *op;
   char *start, *p;
   struct m0_bufvec buf;
@@ -1960,9 +1965,16 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
     if (left < bs)
       bs = this->get_optimal_bs(left);
     if (left < bs) {
+      // This is the last I/O.
+      // Pad to allign with unit size (and not the group size) and 
+      // set M0_ENF_NO_RMW flag to force no RMW
+      mobj->ob_entity.en_flags |= M0_ENF_NO_RMW;
+      uint64_t lid = M0_OBJ_LAYOUT_ID(meta.layout_id);
+      unsigned unit_sz = m0_obj_layout_id_to_unit_size(lid);
+
+      bs = roundup(left, unit_sz);
       ldpp_dout(dpp, 20) <<__func__<< " Padding [" << (bs - left) << "] bytes" << dendl;
       data.append_zero(bs - left);
-      left = bs;
       p = data.c_str();
     }
     buf.ov_buf[0] = p;
@@ -2350,11 +2362,6 @@ int MotrObject::read_multipart_obj(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-static unsigned roundup(unsigned x, unsigned by)
-{
-  return ((x - 1) / by + 1) * by;
-}
-
 unsigned MotrObject::get_optimal_bs(unsigned len)
 {
   struct m0_pool_version *pver;
@@ -2425,7 +2432,7 @@ unsigned MotrAtomicWriter::populate_bvec(unsigned len, bufferlist::iterator &bi)
 int MotrAtomicWriter::write()
 {
   int rc;
-  unsigned bs, left;
+  int64_t bs, left;
   struct m0_op *op;
   bufferlist::iterator bi;
 
@@ -2456,7 +2463,16 @@ int MotrAtomicWriter::write()
     if (left < bs)
       bs = obj.get_optimal_bs(left);
     if (left < bs) {
-      acc_data.append_zero(bs - left);
+      // Pad to allign with unit size (and not the group size) and 
+      // set M0_ENF_NO_RMW flag to force no RMW
+      obj.mobj->ob_entity.en_flags |= M0_ENF_NO_RMW;
+      uint64_t lid = M0_OBJ_LAYOUT_ID(obj.meta.layout_id);
+      unsigned unit_sz = m0_obj_layout_id_to_unit_size(lid);
+
+      unsigned left_alligned_unit_sz = roundup(left, unit_sz);
+      ldpp_dout(dpp, 20) <<__func__<< " Padding [" << (left_alligned_unit_sz - left) << "] bytes" << dendl;
+      acc_data.append_zero(left_alligned_unit_sz - left);
+      bs = left_alligned_unit_sz;
       auto off = bi.get_off();
       bufferlist tmp;
       acc_data.splice(off, bs, &tmp);
