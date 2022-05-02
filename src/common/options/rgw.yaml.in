@@ -678,6 +678,9 @@ options:
     a X-Service-Token header with a Keystone token that if it has acceptable
     roles allows using an expired token in the X-Auth-Token header.
   default: false
+  see_also:
+  - rgw_keystone_service_token_accepted_roles
+  - rgw_keystone_expired_token_cache_expiration
   services:
   - rgw
   with_legacy: true
