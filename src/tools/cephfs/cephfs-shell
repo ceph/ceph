@@ -18,6 +18,7 @@ import errno
 
 from cmd2 import Cmd
 from cmd2 import __version__ as cmd2_version
+from cmd2.exceptions import Cmd2ArgparseError
 from distutils.version import LooseVersion
 
 if sys.version_info.major < 3:
@@ -466,7 +467,13 @@ class CephFSShell(Cmd):
         except (libcephfs.Error, Exception) as e:
             if shell.debug:
                 traceback.print_exc(file=sys.stdout)
-            set_exit_code_msg(msg=e)
+            if isinstance(e, Cmd2ArgparseError):
+                # NOTE: In case of Cmd2ArgparseError the error message is
+                # already printed beforehand (plus Cmd2ArgparseError
+                # instances have empty message)
+                pass
+            else:
+                set_exit_code_msg(msg=f'{type(e).__name__}: {e}')
 
     class path_to_bytes(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
