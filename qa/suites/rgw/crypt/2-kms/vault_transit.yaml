@@ -6,6 +6,10 @@ overrides:
         rgw crypt vault auth: token
         rgw crypt vault secret engine: transit
         rgw crypt vault prefix: /v1/transit/
+        rgw crypt sse s3 backend: vault
+        rgw crypt sse s3 vault auth: token
+        rgw crypt sse s3 vault secret engine: transit
+        rgw crypt sse s3 vault prefix: /v1/transit/
   rgw:
     client.0:
       use-vault-role: client.0
