@@ -47,13 +47,13 @@ struct reservation_t {
 	    cls_2pc_reservation::id_t _res_id) :
       configurationId(_configurationId), cfg(_cfg), res_id(_res_id) {}
 
-    std::string configurationId;
-    rgw_pubsub_topic cfg;
+    const std::string configurationId;
+    const rgw_pubsub_topic cfg;
     // res_id is reset after topic is committed/aborted
     cls_2pc_reservation::id_t res_id;
   };
 
-  const DoutPrefixProvider* dpp;
+  const DoutPrefixProvider* const dpp;
   std::vector<topic_t> topics;
   rgw::sal::RadosStore* const store;
   const req_state* const s;
@@ -62,17 +62,17 @@ struct reservation_t {
   rgw::sal::Object* const src_object; // may differ from object
   rgw::sal::Bucket* const bucket;
   const std::string* const object_name;
-  boost::optional<RGWObjTags&> tagset;
+  boost::optional<const RGWObjTags&> tagset;
   meta_map_t x_meta_map; // metadata cached by value
-  std::string user_id;
-  std::string user_tenant;
-  std::string req_id;
+  const std::string user_id;
+  const std::string user_tenant;
+  const std::string req_id;
   optional_yield yield;
 
   /* ctor for rgw_op callers */
   reservation_t(const DoutPrefixProvider* _dpp,
 		rgw::sal::RadosStore* _store,
-		req_state* _s,
+		const req_state* _s,
 		rgw::sal::Object* _object,
 		rgw::sal::Object* _src_object,
 		const std::string* _object_name);
@@ -83,9 +83,9 @@ struct reservation_t {
 		rgw::sal::Object* _object,
 		rgw::sal::Object* _src_object,
 		rgw::sal::Bucket* _bucket,
-		std::string& _user_id,
-		std::string& _user_tenant,
-		std::string& _req_id,
+		const std::string& _user_id,
+		const std::string& _user_tenant,
+		const std::string& _req_id,
 		optional_yield y);
 
   // dtor doing resource leak guarding
@@ -110,7 +110,7 @@ int publish_commit(rgw::sal::Object* obj,
         const DoutPrefixProvider *dpp);
 
 // cancel the reservation
-int publish_abort(const DoutPrefixProvider *dpp, reservation_t& reservation);
+int publish_abort(reservation_t& reservation);
 
 }
 
