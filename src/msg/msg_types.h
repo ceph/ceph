@@ -426,6 +426,7 @@ struct entity_addr_t {
   }
 
   std::string ip_only_to_str() const;
+  std::string ip_n_port_to_str() const;
 
   std::string get_legacy_str() const {
     std::ostringstream ss;
