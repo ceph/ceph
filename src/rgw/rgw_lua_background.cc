@@ -8,10 +8,29 @@ namespace rgw::lua {
 
 void Background::shutdown(){
   this->stop();
-  runner.join();
+  if (runner.joinable()) {
+    runner.join();
+  }
 }
 void Background::stop(){
   stopped = true;
+}
+
+void Background::start() {
+  if (started) {
+    // start the thread only once
+    return;
+  }
+  started = true;
+  runner = std::thread(&Background::run, this);
+  const auto rc = ceph_pthread_setname(runner.native_handle(),
+      "lua_background");
+  ceph_assert(rc == 0);
+}
+
+int Background::read_script() {
+  std::string tenant;
+  return rgw::lua::read_script(dpp, store, tenant, null_yield, rgw::lua::context::background, rgw_script);
 }
 
 //(1) Loads the script from the object
@@ -22,13 +41,11 @@ void Background::run() {
   rgw::lua::lua_state_guard lguard(L);
   open_standard_libs(L);
   set_package_path(L, luarocks_path);
-  create_debug_action(L, cct->get());
+  create_debug_action(L, cct);
   create_background_metatable(L);
 
   while (!stopped) {
-
-    std::string tenant;
-    auto rc = rgw::lua::read_script(dpp, store, tenant, null_yield, rgw::lua::context::background, rgw_script);
+    const auto rc = read_script();
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {

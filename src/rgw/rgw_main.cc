@@ -607,6 +607,7 @@ int radosgw_Main(int argc, const char **argv)
   int fe_count = 0;
 
   rgw::lua::Background lua_background(&dp, store, cct.get(), store->get_luarocks_path());
+  lua_background.start();
 
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
        fiter != fe_map.end(); ++fiter, ++fe_count) {

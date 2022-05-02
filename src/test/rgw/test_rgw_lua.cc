@@ -5,6 +5,7 @@
 #include "rgw/rgw_process.h"
 #include "rgw/rgw_sal_rados.h"
 #include "rgw/rgw_lua_request.h"
+#include "rgw/rgw_lua_background.h"
 
 using namespace std;
 using namespace rgw;
@@ -644,5 +645,87 @@ TEST(TestRGWLua, OpsLog)
   rc = lua::request::execute(store.get(), nullptr, &olog, &s, "put_obj", script);
   EXPECT_EQ(rc, 0);
   EXPECT_TRUE(olog.logged);
+}
+
+class TestBackground : public rgw::lua::Background {
+protected:
+  int read_script() override {
+    // don't read the object from the store
+    return 0;
+  }
+
+public:
+  TestBackground(const std::string& script) : 
+    rgw::lua::Background(nullptr, nullptr, nullptr, "") {
+      // the script is passed in the constructor
+      rgw_script = script;
+    }
+
+  ~TestBackground() override {
+    shutdown();
+  }
+};
+
+TEST(TestRGWLua, Background)
+{
+  {
+    // ctr and dtor without running
+    TestBackground lua_background("");
+  }
+  {
+    // ctr and dtor with running
+    TestBackground lua_background("");
+    lua_background.start();
+    // let the background context run for 5 seconds
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+  }
+}
+
+TEST(TestRGWLua, BackgroundScript)
+{
+  const std::string script = R"(
+    local key = "hello"
+    local value = "world"
+    RGW[key] = value
+    print(RGW[key] == value)
+  )";
+
+  TestBackground lua_background(script);
+  lua_background.start();
+  // let the background context run for 5 seconds
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+}
+
+TEST(TestRGWLua, BackgroundRequestScript)
+{
+  const std::string background_script = R"(
+    local key = "hello"
+    local value = "from background"
+    -- set the value only if not set
+    if RGW[key] == nil then 
+      RGW[key] = value
+    end
+    print("from background:", RGW[key])
+  )";
+
+  TestBackground lua_background(background_script);
+  lua_background.start();
+  // let the background context run for 5 seconds
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+
+  const std::string request_script = R"(
+    local key = "hello"
+    local value = "from request"
+    print("from request (before setting):", RGW[key])
+    RGW[key] = value
+    print("from request (after setting):", RGW[key])
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+  // let the background context run for 5 seconds
+  std::this_thread::sleep_for(std::chrono::seconds(5));
 }
 
