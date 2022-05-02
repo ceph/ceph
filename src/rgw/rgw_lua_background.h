@@ -36,17 +36,21 @@ class Background {
 
 private:
   BackgroundMap rgw_map;
-  std::string rgw_script;
   bool stopped = false;
+  bool started = false;
   int execute_interval = INIT_EXECUTE_INTERVAL;
   const DoutPrefixProvider* const dpp;
   rgw::sal::Store* const store;
   CephContext* const cct;
-  std::string luarocks_path;
+  const std::string luarocks_path;
   std::thread runner;
   std::mutex m_mutex;
 
   void run();
+
+protected:
+  std::string rgw_script;
+  virtual int read_script();
 
 public:
   Background(const DoutPrefixProvider* dpp,
@@ -56,14 +60,10 @@ public:
     dpp(dpp),
     store(store),
     cct(cct),
-    luarocks_path(luarocks_path),
-    runner(std::thread(&Background::run, this)) {
-      const auto rc = ceph_pthread_setname(runner.native_handle(),
-                                           "lua_background");
-      ceph_assert(rc == 0);
-    }
+    luarocks_path(luarocks_path) {}
 
-    ~Background() = default;
+    virtual ~Background() = default;
+    void start();
     void stop();
     void shutdown();
     void create_background_metatable(lua_State* L);
