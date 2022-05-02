@@ -1100,12 +1100,17 @@ int make_dedup_object(const std::map < std::string, std::string > &opts,
     }
   } else if (op_name == "object-dedup") {
     unsigned chunk_size;
+    bool snap = false;
     i = opts.find("dedup-cdc-chunk-size");
     if (i != opts.end()) {
       if (rados_sistrtoll(i, &chunk_size)) {
 	cerr << "unrecognized dedup_cdc_chunk_size " << chunk_size << std::endl;
 	return -EINVAL;
       }
+    }
+    i = opts.find("snap");
+    if (i != opts.end()) {
+      snap = true;
     }
 
     bufferlist inbl;
@@ -1145,57 +1150,84 @@ int make_dedup_object(const std::map < std::string, std::string > &opts,
      * it and replace it with the real contents.
      */
     // convert object to manifest object
-    ObjectWriteOperation op;
-    bufferlist temp;
-    temp.append("temp");
-    op.write_full(temp);
+    auto create_new_deduped_object =
+      [&chunk_io_ctx, &io_ctx](string object_name) -> int {
 
-    auto gen_r_num = [] () -> string {
-      std::random_device rd;
-      std::mt19937 gen(rd());
-      std::uniform_int_distribution<uint64_t> dist;
-      uint64_t r_num = dist(gen);
-      return to_string(r_num);
-    };
-    string temp_oid = gen_r_num();
-    // create temp chunk object for set-chunk
-    ret = chunk_io_ctx.operate(temp_oid, &op);
-    if (ret == -EEXIST) {
-      // one more try
-      temp_oid = gen_r_num();
+      int ret = 0;
+      ObjectWriteOperation op;
+      bufferlist temp;
+      temp.append("temp");
+      op.write_full(temp);
+
+      auto gen_r_num = [] () -> string {
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<uint64_t> dist;
+	uint64_t r_num = dist(gen);
+	return to_string(r_num);
+      };
+      string temp_oid = gen_r_num();
+      // create temp chunk object for set-chunk
       ret = chunk_io_ctx.operate(temp_oid, &op);
-    }
-    if (ret < 0) {
-      cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
+      if (ret == -EEXIST) {
+	// one more try
+	temp_oid = gen_r_num();
+	ret = chunk_io_ctx.operate(temp_oid, &op);
+      }
+      if (ret < 0) {
+	cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
+	return ret;
+      }
 
-    // set-chunk to make manifest object
-    ObjectReadOperation chunk_op;
-    chunk_op.set_chunk(0, 4, chunk_io_ctx, temp_oid, 0,
-      CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    ret = io_ctx.operate(object_name, &chunk_op, NULL);
-    if (ret < 0) {
-      cerr << " set_chunk fail : " << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
+      // set-chunk to make manifest object
+      ObjectReadOperation chunk_op;
+      chunk_op.set_chunk(0, 4, chunk_io_ctx, temp_oid, 0,
+	CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+      ret = io_ctx.operate(object_name, &chunk_op, NULL);
+      if (ret < 0) {
+	cerr << " set_chunk fail : " << cpp_strerror(ret) << std::endl;
+	return ret;
+      }
 
-    // tier-flush to perform deduplication
-    ObjectReadOperation flush_op;
-    flush_op.tier_flush();
-    ret = io_ctx.operate(object_name, &flush_op, NULL);
-    if (ret < 0) {
-      cerr << " tier_flush fail : " << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
+      // tier-flush to perform deduplication
+      ObjectReadOperation flush_op;
+      flush_op.tier_flush();
+      ret = io_ctx.operate(object_name, &flush_op, NULL);
+      if (ret < 0) {
+	cerr << " tier_flush fail : " << cpp_strerror(ret) << std::endl;
+	return ret;
+      }
 
-    // tier-evict
-    ObjectReadOperation evict_op;
-    evict_op.tier_evict();
-    ret = io_ctx.operate(object_name, &evict_op, NULL);
-    if (ret < 0) {
-      cerr << " tier_evict fail : " << cpp_strerror(ret) << std::endl;
-      goto out;
+      // tier-evict
+      ObjectReadOperation evict_op;
+      evict_op.tier_evict();
+      ret = io_ctx.operate(object_name, &evict_op, NULL);
+      if (ret < 0) {
+	cerr << " tier_evict fail : " << cpp_strerror(ret) << std::endl;
+	return ret;
+      }
+      return ret;
+    };
+
+    if (snap) {
+      io_ctx.snap_set_read(librados::SNAP_DIR);
+      snap_set_t snap_set;
+      int snap_ret;
+      ObjectReadOperation op;
+      op.list_snaps(&snap_set, &snap_ret);
+      io_ctx.operate(object_name, &op, NULL);
+
+      for (vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
+	r != snap_set.clones.end();
+	++r) {
+	io_ctx.snap_set_read(r->cloneid);
+	ret = create_new_deduped_object(object_name);
+	if (ret < 0) {
+	  goto out;
+	}
+      }
+    } else {
+      ret = create_new_deduped_object(object_name);
     }
   }
 
@@ -1269,6 +1301,8 @@ int main(int argc, const char **argv)
       opts["source-length"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--dedup-cdc-chunk-size", (char*)NULL)) {
       opts["dedup-cdc-chunk-size"] = val;
+    } else if (ceph_argparse_flag(args, i, "--snap", (char*)NULL)) {
+      opts["snap"] = "true";
     } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
       opts["debug"] = "true";
     } else {
