@@ -1,5 +1,5 @@
 set(exporter_srcs
-  ${CMAKE_SOURCE_DIR}/src/ceph_exporter.cc
+  ceph_exporter.cc
   DaemonMetricCollector.cc
   http_server.cc
   )
