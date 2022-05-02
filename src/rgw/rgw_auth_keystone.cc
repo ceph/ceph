@@ -342,7 +342,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                            << g_conf()->rgw_keystone_expired_token_cache_expiration
                            << " secs = "
                            << new_expires << dendl;
-        t->set_expires(new_expires);
+        t->set_expires(static_cast<time_t>(new_expires));
       }
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
