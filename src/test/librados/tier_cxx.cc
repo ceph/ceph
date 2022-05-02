@@ -6199,6 +6199,110 @@ TEST_F(LibRadosTwoPoolsPP, ManifestEvictRollback) {
   is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk2", 1);
 }
 
+TEST_F(LibRadosTwoPoolsPP, ManifestEvictFlush) {
+  // skip test if not yet pacific
+  if (_get_required_osd_release(cluster) < "pacific") {
+    cout << "cluster is not yet pacific, skipping test" << std::endl;
+    return;
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("ABere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("EFere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("chunk3", &op));
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 4096),
+	inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-chunk
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 2, 2, "chunk1", "foo");
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // evict
+  {
+    ObjectReadOperation op, stat_op;
+    op.tier_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+	"foo", completion, &op,
+	librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+  }
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  sleep(10);
+
+  // check chunk's refcount
+  {
+    string chunk("CDere hiHI");
+    unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1] = {0};
+    char p_str[CEPH_CRYPTO_SHA1_DIGESTSIZE*2+1] = {0};
+    bufferlist t;
+    SHA1 sha1_gen;
+    int size = chunk.length();
+    sha1_gen.Update((const unsigned char *)chunk.c_str(), size);
+    sha1_gen.Final(fingerprint);
+    buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
+    is_intended_refcount_state(cache_ioctx, "foo", ioctx, p_str, 1);
+  }
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
