@@ -1269,7 +1269,7 @@ int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
   string bucket_index_iname = "motr.rgw.bucket.index." + bname;
   int rc = this->store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT, key, bl);
   if (rc < 0) {
-    ldpp_dout(dpp, 0) << "Failed to get object's entry from bucket index. " << dendl;
+    ldpp_dout(dpp, 0) << "Failed to get object's entry from bucket index. rc=" << rc << dendl;
     return rc;
   }
   // Put into cache.
@@ -1321,6 +1321,11 @@ int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPr
 int MotrObject::modify_obj_attrs(RGWObjectCtx* rctx, const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
 {
   rgw_obj target = get_obj();
+  int r = get_obj_attrs(rctx, y, dpp, &target);
+  if (r < 0) {
+    return r;
+  }
+  set_atomic(rctx);
   attrs[attr_name] = attr_val;
   return set_obj_attrs(dpp, rctx, &attrs, nullptr, y, &target);
 }
