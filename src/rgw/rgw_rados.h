@@ -581,16 +581,16 @@ public:
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int initialize(CephContext *_cct, const DoutPrefixProvider *dpp) {
+  int init_begin(CephContext *_cct, const DoutPrefixProvider *dpp) {
     set_context(_cct);
-    return initialize(dpp);
+    return init_begin(dpp);
   }
   /** Initialize the RADOS instance and prepare to do other ops */
   int init_svc(bool raw, const DoutPrefixProvider *dpp);
   int init_ctl(const DoutPrefixProvider *dpp);
   virtual int init_rados();
+  int init_begin(const DoutPrefixProvider *dpp);
   int init_complete(const DoutPrefixProvider *dpp);
-  int initialize(const DoutPrefixProvider *dpp);
   void finalize();
 
   int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type, const std::map<std::string, std::string>& meta);
