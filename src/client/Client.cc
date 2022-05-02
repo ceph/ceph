@@ -2573,7 +2573,7 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
    * using the hardcode here.
    */
   int max_fwd = sizeof(((struct ceph_mds_request_head*)0)->num_fwd);
-  max_fwd = 1 << (max_fwd * CHAR_BIT) - 1;
+  max_fwd = (1 << (max_fwd * CHAR_BIT)) - 1;
   auto num_fwd = fwd->get_num_fwd();
   if (num_fwd <= request->num_fwd || num_fwd >= max_fwd) {
     if (request->num_fwd >= max_fwd || num_fwd >= max_fwd) {
