@@ -1266,17 +1266,14 @@ int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
   ent.encode(bl);
   encode(attrs, bl);
 
-  if (this->store->get_obj_meta_cache()->get(dpp, key, bl)) {
-    // Cache misses.
-    string bucket_index_iname = "motr.rgw.bucket.index." + bname;
-    int rc = this->store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT, key, bl);
-    if (rc < 0) {
-      ldpp_dout(dpp, 0) << "Failed to get object's entry from bucket index. " << dendl;
-      return rc;
+  string bucket_index_iname = "motr.rgw.bucket.index." + bname;
+  int rc = this->store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT, key, bl);
+  if (rc < 0) {
+    ldpp_dout(dpp, 0) << "Failed to get object's entry from bucket index. " << dendl;
+    return rc;
   }
-    // Put into cache.
-    this->store->get_obj_meta_cache()->put(dpp, key, bl);
-  }
+  // Put into cache.
+  this->store->get_obj_meta_cache()->put(dpp, key, bl);
 
   return 0;
 }
