@@ -726,7 +726,7 @@ int MotrBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::re
 
   // Insert bucket instance using bucket's marker (string).
   int rc = store->do_idx_op_by_name(RGW_MOTR_BUCKET_INST_IDX_NAME,
-                                  M0_IC_PUT, tenant_bkt_name, bl, !exclusive);
+                                  M0_IC_PUT, tenant_bkt_name, bl, exclusive);
   if (rc == 0)
     store->get_bucket_inst_cache()->put(dpp, tenant_bkt_name, bl);
 
