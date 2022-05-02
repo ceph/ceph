@@ -770,6 +770,7 @@ protected:
   uint64_t actual_part_size = 0;
   // Part object size available from Content-Length header
   uint64_t expected_part_size = 0;
+  const std::string upload_id;
 
 public:
   MotrMultipartWriter(const DoutPrefixProvider *dpp,
@@ -780,7 +781,7 @@ public:
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t _part_num, const std::string& part_num_str) :
 				  Writer(dpp, y), store(_store), head_obj(std::move(_head_obj)),
-				  part_num(_part_num), part_num_str(part_num_str)
+				  part_num(_part_num), part_num_str(part_num_str), upload_id(upload->get_upload_id())
   {
     struct req_state *s = static_cast<struct req_state *>(obj_ctx.get_private());
     if (s) {
@@ -865,7 +866,8 @@ class MotrMultipartUpload : public MultipartUpload {
 public:
   MotrMultipartUpload(MotrStore* _store, Bucket* _bucket, const std::string& oid,
                       std::optional<std::string> upload_id, ACLOwner _owner, ceph::real_time _mtime) :
-       MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {}
+       MultipartUpload(_bucket), store(_store), mp_obj(oid, upload_id), owner(_owner), mtime(_mtime) {
+       }
   virtual ~MotrMultipartUpload() = default;
 
   virtual const std::string& get_meta() const { return mp_obj.get_meta(); }
@@ -1010,6 +1012,7 @@ class MotrStore : public Store {
     virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
         const std::string& tenant,
         std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
+    int get_upload_id(std::string tenant_bkt_name, std::string key_name, std::string& upload_id);
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
         std::unique_ptr<rgw::sal::Object> _head_obj,

@@ -2673,9 +2673,19 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp)
   } while (truncated);
 
   // Delete object part index.
-  std::string oid = mp_obj.get_key();
   string tenant_bkt_name = get_bucket_name(bucket->get_tenant(), bucket->get_name());
-  string obj_part_iname = "motr.rgw.object." + tenant_bkt_name + "." + oid + ".parts";
+  string upload_id = get_upload_id();
+  
+  if (upload_id.length() == 0){
+    rc = store->get_upload_id(tenant_bkt_name, mp_obj.get_key(), upload_id);
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: get_upload_id failed. " << rc << dendl;
+      return rc;
+    }
+  }
+
+  string obj_part_iname = "motr.rgw.object." + tenant_bkt_name + "." + mp_obj.get_key() + 
+                          "." + upload_id + ".parts";
   return store->delete_motr_idx_by_name(obj_part_iname);
 }
 
@@ -2720,16 +2730,19 @@ std::unique_ptr<rgw::sal::Object> MotrMultipartUpload::get_meta_obj()
 struct motr_multipart_upload_info
 {
   rgw_placement_rule dest_placement;
+  string upload_id;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(dest_placement, bl);
+    encode(upload_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(dest_placement, bl);
+    decode(upload_id, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -2762,6 +2775,7 @@ int MotrMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
     motr_multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
+    upload_info.upload_id = upload_id;
     bufferlist mpbl;
     encode(upload_info, mpbl);
 
@@ -2790,10 +2804,12 @@ int MotrMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   if (rc < 0)
     return rc;
   string tenant_bkt_name = get_bucket_name(bucket->get_tenant(), bucket->get_name());
+  //This is multipart init, you will always have upload id here.
+  string upload_id = get_upload_id();
 
   // Create object part index.
-  // TODO: add bucket as part of the name.
-  string obj_part_iname = "motr.rgw.object." + tenant_bkt_name + "." + oid + ".parts";
+  string obj_part_iname = "motr.rgw.object." + tenant_bkt_name + "." + mp_obj.get_key() +
+                          "." + upload_id + ".parts";
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::init(): object part index=" << obj_part_iname << dendl;
   rc = store->create_motr_idx_by_name(obj_part_iname);
   if (rc == -EEXIST)
@@ -2817,9 +2833,19 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
   vector<string> key_vec(num_parts);
   vector<bufferlist> val_vec(num_parts);
 
-  std::string oid = mp_obj.get_key();
   string tenant_bkt_name = get_bucket_name(bucket->get_tenant(), bucket->get_name());
-  string obj_part_iname = "motr.rgw.object." + tenant_bkt_name + "." + oid + ".parts";
+  string upload_id = get_upload_id();
+
+  if(upload_id.length() == 0){
+    rc = store->get_upload_id(tenant_bkt_name, this->get_key(), upload_id);
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: get_upload_id failed. " << rc << dendl;
+      return rc;
+    }
+  }
+
+  string obj_part_iname = "motr.rgw.object." + tenant_bkt_name + "." + mp_obj.get_key() + 
+                          "." + upload_id + ".parts";
   ldpp_dout(dpp, 20) << __func__ << ": object part index = " << obj_part_iname << dendl;
   key_vec[0].clear();
   key_vec[0] = "part.";
@@ -3072,6 +3098,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   MotrObject::Meta meta_dummy;
   meta_dummy.encode(update_bl);
 
+
   string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): target_obj name=" << target_obj->get_name()
                                   << " target_obj oid=" << target_obj->get_oid() << dendl;
@@ -3270,8 +3297,12 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
   snprintf(buf, sizeof(buf), "%08d", (int)part_num);
   p.append(buf);
   string tenant_bkt_name = get_bucket_name(head_obj->get_bucket()->get_tenant(), head_obj->get_bucket()->get_name());
+  
+  //This is a MultipartComplete operation so this should always have valid upload id.
+  string upload_id_str = upload_id;
+
   string obj_part_iname = "motr.rgw.object." + tenant_bkt_name + "." +
-	                  head_obj->get_key().to_str() + ".parts";
+	                  head_obj->get_key().to_str() + "." + upload_id_str + ".parts";
   ldpp_dout(dpp, 20) << "MotrMultipartWriter::complete(): object part index = " << obj_part_iname << dendl;
   rc = store->do_idx_op_by_name(obj_part_iname, M0_IC_PUT, p, bl);
   if (rc < 0) {
@@ -3279,6 +3310,36 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
   }
 
   return 0;
+}
+
+int MotrStore::get_upload_id(string tenant_bkt_name, string key_name, string& upload_id){
+  int rc = 0;
+  bufferlist bl;
+
+  string index_name = "motr.rgw.bucket.index." + tenant_bkt_name;
+
+  rc = this->do_idx_op_by_name(index_name,
+                              M0_IC_GET, key_name, bl);
+  if (rc < 0) {
+    //ldpp_dout(cctx, 0) << "ERROR: NEXT query failed. " << rc << dendl;
+    return rc;
+  }
+
+  rgw_bucket_dir_entry ent;
+  bufferlist& blr = bl;
+  auto ent_iter = blr.cbegin();
+  ent.decode(ent_iter);
+
+  motr_multipart_upload_info upload_info;
+  bufferlist mpbl;
+  mpbl.append(ent.meta.user_data.c_str(), ent.meta.user_data.size());
+  auto mpbl_iter = mpbl.cbegin();
+  upload_info.decode(mpbl_iter);
+
+  upload_id.clear();
+  upload_id.append(upload_info.upload_id);
+
+  return rc;
 }
 
 std::unique_ptr<RGWRole> MotrStore::get_role(std::string name,
