@@ -86,7 +86,20 @@ predefined_drive_groups = {
         },
         'encrypted': False
     },
-    OsdDeploymentOptions.THROUGHPUT: {},
+    OsdDeploymentOptions.THROUGHPUT: {
+        'service_type': 'osd',
+        'service_id': 'throughput_optimized',
+        'placement': {
+            'host_pattern': '*'
+        },
+        'data_devices': {
+            'rotational': 1
+        },
+        'db_devices': {
+            'rotational': 0
+        },
+        'encrypted': False
+    },
     OsdDeploymentOptions.IOPS: {},
 }
 
@@ -341,12 +354,13 @@ class Osd(RESTController):
 
     def _create_predefined_drive_group(self, data):
         orch = OrchClient.instance()
-        if OsdDeploymentOptions(data[0]['option']) == OsdDeploymentOptions.COST_CAPACITY:
+        option = OsdDeploymentOptions(data[0]['option'])
+        if option in list(OsdDeploymentOptions):
             try:
                 predefined_drive_groups[
-                    OsdDeploymentOptions.COST_CAPACITY]['encrypted'] = data[0]['encrypted']
+                    option]['encrypted'] = data[0]['encrypted']
                 orch.osds.create([DriveGroupSpec.from_json(
-                    predefined_drive_groups[OsdDeploymentOptions.COST_CAPACITY])])
+                    predefined_drive_groups[option])])
             except (ValueError, TypeError, DriveGroupValidationError) as e:
                 raise DashboardException(e, component='osd')
 
@@ -494,6 +508,10 @@ class OsdUi(Osd):
         if hdds:
             res.options[OsdDeploymentOptions.COST_CAPACITY].available = True
             res.recommended_option = OsdDeploymentOptions.COST_CAPACITY
+        if ssds:
+            res.options[OsdDeploymentOptions.THROUGHPUT].available = True
+            res.recommended_option = OsdDeploymentOptions.THROUGHPUT
+
         return res.as_dict()
 
 
