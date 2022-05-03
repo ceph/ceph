@@ -3926,6 +3926,11 @@ void RGWPutObj::execute(optional_yield y)
     op_ret = upload->get_info(this, s->yield, &pdest_placement);
 
     s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, multipart_upload_id);
+
+    // set an attribute called "upload_id", 
+    // initialize it with value 0 (implement the algo later)
+    s->trace->SetAttribute(tracing::rgw::UPLOAD_CHECKSUM, 0); 
+
     multipart_trace = tracing::rgw::tracer.add_span(name(), upload->get_trace());
 
     if (op_ret < 0) {
@@ -6189,6 +6194,11 @@ void RGWInitMultipart::execute(optional_yield y)
     upload_id = upload->get_upload_id();
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
+
+  // set an attribute called "upload_id", 
+  // initialize it with value 0 (implement the algo later)
+  s->trace->SetAttribute(tracing::rgw::UPLOAD_CHECKSUM, 0);
+
   multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
 
 }
@@ -6352,6 +6362,11 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
+
+  // set an attribute called "upload_id",
+  // initialize it with value 0 (implement the algo later)
+  s->trace->SetAttribute(tracing::rgw::UPLOAD_CHECKSUM, 0);
+
   jspan_context trace_ctx(false, false);
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
