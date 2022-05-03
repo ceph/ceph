@@ -4741,6 +4741,10 @@ def infer_mon_network(ctx: CephadmContext, mon_eps: List[EndPoint]) -> Optional[
     # Make sure IP is configured locally, and then figure out the CIDR network
     mon_networks = []
     for net, ifaces in list_networks(ctx).items():
+
+        if '/' not in net:  # discard /32 single host Ipv4 nets
+            continue
+
         # build local_ips list for the specified network
         local_ips: List[str] = []
         for _, ls in ifaces.items():
