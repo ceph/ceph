@@ -20,11 +20,13 @@ Edit ceph.conf to add below option
     [client]
         rgw backend store = dbstore
 
-Restart vstart cluster or just RGW server
+Start vstart cluster
 
-    [..] RGW=1 ../src/vstart.sh -d
+    [..] RGW=1 ../src/vstart.sh -o rgw_backend_store=dbstore -n -d
 
-The above configuration brings up RGW server on dbstore and creates testid user to be used for s3 operations.
+The above vstart command brings up RGW server on dbstore and creates few default users (eg., testid) to be used for s3 operations.
+
+`radosgw-admin` can be used to create and remove other users.
 
 
 By default, dbstore creates .db file *'/var/run/ceph/dbstore-default_ns.db'* to store the data. This can be configured using below options in ceph.conf
