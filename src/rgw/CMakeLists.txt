@@ -9,6 +9,12 @@ if(WITH_RADOSGW_SELECT_PARQUET)
   message("-- arrow is installed, radosgw/s3select-op is able to process parquet objects")
 endif(WITH_RADOSGW_SELECT_PARQUET)
 
+if(WITH_RADOSGW_ARROW_FLIGHT)
+  set(ARROW_FLIGHT_LIBRARIES Arrow::Arrow Arrow::Parquet Arrow::Flight utf8proc::utf8proc) # order is important
+  add_definitions(-D_ARROW_EXIST)
+  message("-- arrow flight is installed")
+endif(WITH_RADOSGW_ARROW_FLIGHT)
+
 function(gperf_generate input output)
   add_custom_command(
     OUTPUT ${output}
