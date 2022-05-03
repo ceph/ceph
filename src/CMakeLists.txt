@@ -871,8 +871,8 @@ if(WITH_RADOSGW)
 
       include(BuildArrow)
       build_arrow()
-    endif()
-  endif()
+    endif(WITH_SYSTEM_ARROW)
+  endif(WITH_RADOSGW_SELECT_PARQUET)
 
   add_subdirectory(libkmip)
   add_subdirectory(rgw)
