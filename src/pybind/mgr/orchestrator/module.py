@@ -1070,6 +1070,10 @@ Usage:
 
                 if dry_run and not isinstance(spec, HostSpec):
                     spec.preview_only = dry_run
+
+                if isinstance(spec, TracingSpec) and spec.service_type == 'jaeger-tracing':
+                    specs.extend(spec.get_tracing_specs())
+                    continue
                 specs.append(spec)
         else:
             placementspec = PlacementSpec.from_string(placement)
@@ -1271,25 +1275,12 @@ Usage:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
-        specs: List[ServiceSpec] = []
-
-        if es_nodes == None:
-            specs.append(TracingSpec(service_type="elasticsearch",
-                         unmanaged=unmanaged, preview_only=dry_run))
-        if not without_query:
-            specs.append(TracingSpec(service_type="jaeger-query",
-                                    es_nodes=es_nodes,
-                                    unmanaged=unmanaged,
-                                    preview_only=dry_run))
-        specs.append(TracingSpec(service_type="jaeger-collector",
-                                 es_nodes=es_nodes,
-                                 placement=PlacementSpec.from_string(placement),
-                                 unmanaged=unmanaged,
-                                 preview_only=dry_run))
-        specs.append(TracingSpec(service_type="jaeger-agent",
-            unmanaged=unmanaged,
-            preview_only=dry_run))
-
+        spec = TracingSpec(service_type='jaeger-tracing',
+                           es_nodes=es_nodes,
+                           without_query=without_query,
+                           placement=PlacementSpec.from_string(placement),
+                           unmanaged=unmanaged)
+        specs: List[ServiceSpec] = spec.get_tracing_specs()
         return self._apply_misc(specs, dry_run, format, no_overwrite)
 
     @_cli_write_command('orch set backend')
