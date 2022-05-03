@@ -51,6 +51,9 @@ def dashboard_exception_handler(handler, *args, **kwargs):
         cherrypy.response.headers['Content-Type'] = 'application/json'
         cherrypy.response.status = getattr(error, 'status', 400)
         return json.dumps(serialize_dashboard_exception(error)).encode('utf-8')
+    except cherrypy.HTTPRedirect:
+        # No internal errors
+        raise
     except Exception as error:
         logger.exception('Internal Server Error')
         raise error
@@ -112,3 +115,11 @@ def handle_request_error(component):
                 raise DashboardException(
                     msg=content_message, component=component)
         raise DashboardException(e=e, component=component)
+
+
+@contextmanager
+def handle_error(component, http_status_code=None):
+    try:
+        yield
+    except Exception as e:  # pylint: disable=broad-except
+        raise DashboardException(e, component=component, http_status_code=http_status_code)

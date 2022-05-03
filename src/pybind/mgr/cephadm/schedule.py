@@ -7,6 +7,7 @@ import orchestrator
 from ceph.deployment.service_spec import ServiceSpec
 from orchestrator._interface import DaemonDescription
 from orchestrator import OrchestratorValidationError
+from .utils import RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES
 
 logger = logging.getLogger(__name__)
 T = TypeVar('T')
@@ -255,6 +256,10 @@ class HostAssignment(object):
 
         # get candidate hosts based on [hosts, label, host_pattern]
         candidates = self.get_candidates()  # type: List[DaemonPlacement]
+        if self.primary_daemon_type in RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES:
+            # remove unreachable hosts that are not in maintenance so daemons
+            # on these hosts will be rescheduled
+            candidates = self.remove_non_maintenance_unreachable_candidates(candidates)
 
         def expand_candidates(ls: List[DaemonPlacement], num: int) -> List[DaemonPlacement]:
             r = []
@@ -433,3 +438,15 @@ class HostAssignment(object):
         final = sorted(ls)
         random.Random(seed).shuffle(final)
         return ls
+
+    def remove_non_maintenance_unreachable_candidates(self, candidates: List[DaemonPlacement]) -> List[DaemonPlacement]:
+        in_maintenance: Dict[str, bool] = {}
+        for h in self.hosts:
+            if h.status.lower() == 'maintenance':
+                in_maintenance[h.hostname] = True
+                continue
+            in_maintenance[h.hostname] = False
+        unreachable_hosts = [h.hostname for h in self.unreachable_hosts]
+        candidates = [
+            c for c in candidates if c.hostname not in unreachable_hosts or in_maintenance[c.hostname]]
+        return candidates

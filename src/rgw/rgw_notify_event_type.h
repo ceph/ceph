@@ -25,7 +25,11 @@ namespace rgw::notify {
     ObjectTransition                     = 0xF000,
     ObjectTransitionCurrent              = 0x1000,
     ObjectTransitionNoncurrent           = 0x2000,
-    UnknownEvent                         = 0x10000
+    ObjectSynced                         = 0xF0000,
+    ObjectSyncedCreate                   = 0x10000,
+    ObjectSyncedDelete                   = 0x20000,
+    ObjectSyncedDeletionMarkerCreated    = 0x40000,
+    UnknownEvent                         = 0x100000
   };
 
   using EventTypeList = std::vector<EventType>;

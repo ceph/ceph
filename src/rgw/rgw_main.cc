@@ -16,7 +16,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "rgw_common.h"
-#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
@@ -227,8 +227,8 @@ int radosgw_Main(int argc, const char **argv)
   // privileged ports
   flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
 
-  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_DAEMON, flags);
+  auto cct = rgw_global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
+			     CODE_ENVIRONMENT_DAEMON, flags);
 
   // First, let's determine which frontends are configured.
   list<string> frontends;
@@ -361,6 +361,7 @@ int radosgw_Main(int argc, const char **argv)
 
   std::string rgw_store = (!rgw_d3n_datacache_enabled) ? "rados" : "d3n";
 
+  // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
 #ifdef WITH_RADOSGW_DBSTORE
   if (config_store == "dbstore") {
@@ -498,7 +499,7 @@ int radosgw_Main(int argc, const char **argv)
                           set_logging(rest_filter(store, RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
-      if (store->get_zone()->get_zonegroup().zones.size() > 1) {
+      if (store->get_zone()->get_zonegroup().get_zone_count() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"
              << " multi-site configuration requires another instance of RadosGW"
              << " with S3 API enabled!" << dendl;
@@ -666,15 +667,21 @@ int radosgw_Main(int argc, const char **argv)
   }
 
 
-  // add a watcher to respond to realm configuration changes
-  RGWPeriodPusher pusher(&dp, store, null_yield);
-  RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
-  auto reloader = std::make_unique<RGWRealmReloader>(store,
-						     service_map_meta, &pauser);
+  std::unique_ptr<RGWRealmReloader> reloader;
+  std::unique_ptr<RGWPeriodPusher> pusher;
+  std::unique_ptr<RGWFrontendPauser> pauser;
+  std::unique_ptr<RGWRealmWatcher> realm_watcher;
+  if (store->get_name() == "rados") {
+    // add a watcher to respond to realm configuration changes
+    pusher = std::make_unique<RGWPeriodPusher>(&dp, store, null_yield);
+    pauser = std::make_unique<RGWFrontendPauser>(fes, implicit_tenant_context, pusher.get());
+    reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, pauser.get());
 
-  RGWRealmWatcher realm_watcher(&dp, g_ceph_context, store->get_zone()->get_realm());
-  realm_watcher.add_watcher(RGWRealmNotify::Reload, *reloader);
-  realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
+    realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
+				  static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm());
+    realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
+    realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher.get());
+  }
 
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
@@ -686,7 +693,9 @@ int radosgw_Main(int argc, const char **argv)
 
   derr << "shutting down" << dendl;
 
-  reloader.reset(); // stop the realm reloader
+  if (store->get_name() == "rados") {
+    reloader.reset(); // stop the realm reloader
+  }
 
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end();
        ++liter) {

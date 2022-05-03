@@ -62,20 +62,23 @@ Getting librados for Python
 ---------------------------
 
 The ``rados`` module provides ``librados`` support to Python
-applications. The ``librados-dev`` package for Debian/Ubuntu
-and the ``librados2-devel`` package for RHEL/CentOS will install the
-``python-rados`` package for you. You may install ``python-rados``
-directly too.
+applications. You may install ``python3-rados`` for Debian, Ubuntu, SLE or
+openSUSE or the ``python-rados`` package for CentOS/RHEL.
 
 To install ``librados`` development support files for Python on Debian/Ubuntu
 distributions, execute the following::
 
-	sudo apt-get install python-rados
+	sudo apt-get install python3-rados
 
 To install ``librados`` development support files for Python on RHEL/CentOS
 distributions, execute the following::
 
 	sudo yum install python-rados
+
+To install ``librados`` development support files for Python on SLE/openSUSE
+distributions, execute the following::
+
+	sudo zypper install python3-rados
 
 You can find the module under ``/usr/share/pyshared`` on Debian systems,
 or under ``/usr/lib/python*/site-packages`` on CentOS/RHEL systems.
@@ -202,10 +205,10 @@ app must supply a monitor address, a username and an authentication key
 RADOS provides a number of ways for you to set the required values. For
 the monitor and encryption key settings, an easy way to handle them is to ensure
 that your Ceph configuration file contains a ``keyring`` path to a keyring file
-and at least one monitor address (e.g., ``mon host``). For example::
+and at least one monitor address (e.g., ``mon_host``). For example::
 
 	[global]
-	mon host = 192.168.1.1
+	mon_host = 192.168.1.1
 	keyring = /etc/ceph/ceph.client.admin.keyring
 
 Once you create the handle, you can read a Ceph configuration file to configure

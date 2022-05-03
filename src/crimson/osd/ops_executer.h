@@ -40,12 +40,16 @@ class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
   using call_errorator = crimson::errorator<
     crimson::stateful_ec,
     crimson::ct_error::enoent,
+    crimson::ct_error::eexist,
     crimson::ct_error::invarg,
     crimson::ct_error::erange,
+    crimson::ct_error::ecanceled,
+    crimson::ct_error::enametoolong,
     crimson::ct_error::permission_denied,
     crimson::ct_error::operation_not_supported,
     crimson::ct_error::input_output_error,
-    crimson::ct_error::value_too_large>;
+    crimson::ct_error::value_too_large,
+    crimson::ct_error::file_too_large>;
   using read_errorator = PGBackend::read_errorator;
   using write_ertr = PGBackend::write_ertr;
   using get_attr_errorator = PGBackend::get_attr_errorator;
@@ -227,6 +231,9 @@ private:
     return crimson::ct_error::operation_not_supported::make();
   }
 
+  interruptible_errorated_future<osd_op_errorator>
+  do_execute_op(OSDOp& osd_op);
+
 public:
   template <class MsgT>
   OpsExecuter(Ref<PG> pg,
@@ -253,7 +260,11 @@ public:
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
   template <typename MutFunc>
-  rep_op_fut_t flush_changes_n_do_ops_effects(MutFunc&& mut_func) &&;
+  rep_op_fut_t flush_changes_n_do_ops_effects(const std::vector<OSDOp>& ops,
+    MutFunc&& mut_func) &&;
+  std::vector<pg_log_entry_t> prepare_transaction(
+    const std::vector<OSDOp>& ops);
+  void fill_op_params_bump_pg_version();
 
   const hobject_t &get_target() const {
     return obc->obs.oi.soid;
@@ -319,7 +330,9 @@ auto OpsExecuter::with_effect_on_obc(
 
 template <typename MutFunc>
 OpsExecuter::rep_op_fut_t
-OpsExecuter::flush_changes_n_do_ops_effects(MutFunc&& mut_func) &&
+OpsExecuter::flush_changes_n_do_ops_effects(
+  const std::vector<OSDOp>& ops,
+  MutFunc&& mut_func) &&
 {
   const bool want_mutate = !txn.empty();
   // osd_op_params are instantiated by every wr-like operation.
@@ -330,12 +343,12 @@ OpsExecuter::flush_changes_n_do_ops_effects(MutFunc&& mut_func) &&
 	seastar::now(),
 	interruptor::make_interruptible(osd_op_errorator::now()));
   if (want_mutate) {
-    osd_op_params->req_id = msg->get_reqid();
-    osd_op_params->mtime = msg->get_mtime();
+    fill_op_params_bump_pg_version();
+    auto log_entries = prepare_transaction(ops);
     auto [submitted, all_completed] = std::forward<MutFunc>(mut_func)(std::move(txn),
                                                     std::move(obc),
                                                     std::move(*osd_op_params),
-                                                    user_modify);
+                                                    std::move(log_entries));
     maybe_mutated = interruptor::make_ready_future<rep_op_fut_tuple>(
 	std::move(submitted),
 	osd_op_ierrorator::future<>(std::move(all_completed)));

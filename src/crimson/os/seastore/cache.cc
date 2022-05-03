@@ -27,10 +27,8 @@ SET_SUBSYS(seastore_cache);
 namespace crimson::os::seastore {
 
 Cache::Cache(
-  ExtentReader &reader,
   ExtentPlacementManager &epm)
-  : reader(reader),
-    epm(epm),
+  : epm(epm),
     lru(crimson::common::get_conf<Option::size_t>(
 	  "seastore_cache_lru_size"))
 {
@@ -327,12 +325,6 @@ void Cache::register_metrics()
             "committed_ool_records",
             efforts.num_ool_records,
             sm::description("number of ool-records from committed transactions"),
-            {src_label}
-          ),
-          sm::make_counter(
-            "committed_ool_record_padding_bytes",
-            efforts.ool_record_padding_bytes,
-            sm::description("bytes of ool-record padding from committed transactions"),
             {src_label}
           ),
           sm::make_counter(
@@ -786,9 +778,8 @@ void Cache::mark_transaction_conflicted(
     auto& ool_stats = t.get_ool_write_stats();
     efforts.fresh_ool_written.increment_stat(ool_stats.extents);
     efforts.num_ool_records += ool_stats.num_records;
-    auto ool_record_bytes = (ool_stats.header_bytes + ool_stats.data_bytes);
+    auto ool_record_bytes = (ool_stats.md_bytes + ool_stats.get_data_bytes());
     efforts.ool_record_bytes += ool_record_bytes;
-    // Note: we only account overhead from committed ool records
 
     if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
         t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
@@ -917,7 +908,9 @@ CachedExtentRef Cache::duplicate_for_write(
   return ret;
 }
 
-record_t Cache::prepare_record(Transaction &t)
+record_t Cache::prepare_record(
+  Transaction &t,
+  SegmentProvider *cleaner)
 {
   LOG_PREFIX(Cache::prepare_record);
   SUBTRACET(seastore_t, "enter", t);
@@ -989,9 +982,19 @@ record_t Cache::prepare_record(Transaction &t)
 	  0,
 	  0,
 	  t.root->get_version() - 1,
+	  MAX_SEG_SEQ,
+	  segment_type_t::NULL_SEG,
 	  std::move(delta_bl)
 	});
     } else {
+      auto sseq = NULL_SEG_SEQ;
+      auto stype = segment_type_t::NULL_SEG;
+      if (cleaner != nullptr) {
+        auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
+        auto &sinfo = cleaner->get_seg_info(sid);
+        sseq = sinfo.seq;
+        stype = sinfo.type;
+      }
       record.push_back(
 	delta_info_t{
 	  i->get_type(),
@@ -1003,6 +1006,8 @@ record_t Cache::prepare_record(Transaction &t)
 	  final_crc,
 	  (seastore_off_t)i->get_length(),
 	  i->get_version() - 1,
+	  sseq,
+	  stype,
 	  std::move(delta_bl)
 	});
       i->last_committed_crc = final_crc;
@@ -1114,7 +1119,7 @@ record_t Cache::prepare_record(Transaction &t)
 
   SUBDEBUGT(seastore_t,
       "commit H{} dirty_from={}, {} read, {} fresh with {} invalid, "
-      "{} delta, {} retire, {}(md={}B, data={}B, fill={}) ool-records, "
+      "{} delta, {} retire, {}(md={}B, data={}B) ool-records, "
       "{}B md, {}B data",
       t, (void*)&t.get_handle(),
       get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
@@ -1124,10 +1129,8 @@ record_t Cache::prepare_record(Transaction &t)
       delta_stat,
       retire_stat,
       ool_stats.num_records,
-      ool_stats.header_raw_bytes,
-      ool_stats.data_bytes,
-      ((double)(ool_stats.header_raw_bytes + ool_stats.data_bytes) /
-       (ool_stats.header_bytes + ool_stats.data_bytes)),
+      ool_stats.md_bytes,
+      ool_stats.get_data_bytes(),
       record.size.get_raw_mdlength(),
       record.size.dlength);
   if (trans_src == Transaction::src_t::CLEANER_TRIM ||
@@ -1150,10 +1153,8 @@ record_t Cache::prepare_record(Transaction &t)
 
   ++(efforts.num_trans);
   efforts.num_ool_records += ool_stats.num_records;
-  efforts.ool_record_padding_bytes +=
-    (ool_stats.header_bytes - ool_stats.header_raw_bytes);
-  efforts.ool_record_metadata_bytes += ool_stats.header_raw_bytes;
-  efforts.ool_record_data_bytes += ool_stats.data_bytes;
+  efforts.ool_record_metadata_bytes += ool_stats.md_bytes;
+  efforts.ool_record_data_bytes += ool_stats.get_data_bytes();
   efforts.inline_record_metadata_bytes +=
     (record.size.get_raw_mdlength() - record.get_delta_size());
 
@@ -1351,7 +1352,7 @@ Cache::replay_delta(
 	return;
       }
 
-      TRACE("replay extent delta at {} {} ... -- {}, prv_extent={}",
+      DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
             journal_seq, record_base, delta, *extent);
 
       assert(extent->version == delta.pversion);
@@ -1394,9 +1395,12 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
-    ceph_assert(dirty_from != JOURNAL_SEQ_NULL &&
+    if (unlikely(!(dirty_from != JOURNAL_SEQ_NULL &&
                 dirty_from != JOURNAL_SEQ_MAX &&
-                dirty_from != NO_DELTAS);
+                dirty_from != NO_DELTAS))) {
+      ERRORT("{}", t, *i);
+      ceph_abort();
+    }
     if (dirty_from < seq) {
       TRACET("next extent -- {}", t, *i);
       if (!cand.empty() && cand.back()->get_dirty_from() > dirty_from) {

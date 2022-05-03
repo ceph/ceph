@@ -1394,8 +1394,6 @@ public:
   int state_store_mdlog_entries_complete();
 };
 
-#define META_SYNC_SPAWN_WINDOW 20
-
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
 
@@ -1626,7 +1624,7 @@ public:
               pos_to_prev[marker] = marker;
             }
             // limit spawn window
-            while (num_spawned() > META_SYNC_SPAWN_WINDOW) {
+            while (num_spawned() > cct->_conf->rgw_meta_sync_spawn_window) {
               yield wait_for_child();
               collect_children();
             }
@@ -1824,7 +1822,7 @@ public:
                 pos_to_prev[log_iter->id] = marker;
               }
               // limit spawn window
-              while (num_spawned() > META_SYNC_SPAWN_WINDOW) {
+              while (num_spawned() > cct->_conf->rgw_meta_sync_spawn_window) {
                 yield wait_for_child();
                 collect_children();
               }
@@ -1841,8 +1839,7 @@ public:
         }
 	if (mdlog_marker == max_marker && can_adjust_marker) {
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
-#define INCREMENTAL_INTERVAL 20
-	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
+	  yield wait(utime_t(cct->_conf->rgw_meta_sync_poll_interval, 0));
 	}
       } while (can_adjust_marker);
 

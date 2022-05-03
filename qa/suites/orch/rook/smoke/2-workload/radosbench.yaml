@@ -3,10 +3,3 @@ tasks:
     host.a:
 - radosbench:
     clients: [client.a]
-- rook.shell:
-    commands:
-        - |
-          ceph orch host label add `hostname` foo
-          ceph orch host ls | grep foo
-          ceph orch host label rm `hostname` foo
-          ceph orch host ls | grep -v foo

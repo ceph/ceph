@@ -251,6 +251,9 @@ class TestMonitoring:
 
                 global:
                   resolve_timeout: 5m
+                  http_config:
+                    tls_config:
+                      insecure_skip_verify: true
 
                 route:
                   receiver: 'default'
@@ -302,7 +305,7 @@ class TestMonitoring:
                     honor_labels: true
                     static_configs:
                     - targets:
-                      - '[::1]:8081'
+                      - '[::1]:9283'
 
                   - job_name: 'node'
                     static_configs:

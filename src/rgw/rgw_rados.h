@@ -4,6 +4,7 @@
 #ifndef CEPH_RGWRADOS_H
 #define CEPH_RGWRADOS_H
 
+#include <iostream>
 #include <functional>
 #include <boost/container/flat_map.hpp>
 
@@ -63,9 +64,6 @@ struct get_obj_data;
 #define PUT_OBJ_EXCL        0x02
 #define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
 
-#define RGW_OBJ_NS_MULTIPART "multipart"
-#define RGW_OBJ_NS_SHADOW    "shadow"
-
 static inline void prepend_bucket_marker(const rgw_bucket& bucket, const std::string& orig_oid, std::string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
@@ -88,11 +86,6 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& o
     locator.clear();
   }
 }
-
-int rgw_policy_from_attrset(const DoutPrefixProvider *dpp,
-			    CephContext *cct,
-			    std::map<std::string, bufferlist>& attrset,
-			    RGWAccessControlPolicy *policy);
 
 struct RGWOLHInfo {
   rgw_obj target;
@@ -588,16 +581,16 @@ public:
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int initialize(CephContext *_cct, const DoutPrefixProvider *dpp) {
+  int init_begin(CephContext *_cct, const DoutPrefixProvider *dpp) {
     set_context(_cct);
-    return initialize(dpp);
+    return init_begin(dpp);
   }
   /** Initialize the RADOS instance and prepare to do other ops */
   int init_svc(bool raw, const DoutPrefixProvider *dpp);
   int init_ctl(const DoutPrefixProvider *dpp);
   virtual int init_rados();
+  int init_begin(const DoutPrefixProvider *dpp);
   int init_complete(const DoutPrefixProvider *dpp);
-  int initialize(const DoutPrefixProvider *dpp);
   void finalize();
 
   int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type, const std::map<std::string, std::string>& meta);
@@ -658,6 +651,13 @@ public:
     int init(const rgw_bucket& _bucket, int sid, const rgw::bucket_index_layout_generation& idx_layout, RGWBucketInfo* out, const DoutPrefixProvider *dpp);
     int init(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj);
     int init(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int sid);
+
+    friend std::ostream& operator<<(std::ostream& out, const BucketShard& bs) {
+      out << "BucketShard:{ bucket=" << bs.bucket <<
+	", shard_id=" << bs.shard_id <<
+	", bucket_ojb=" << bs.bucket_obj << "}";
+      return out;
+    }
   };
 
   class Object {
@@ -1482,7 +1482,9 @@ public:
                          std::map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
   int bucket_set_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry);
-  int remove_objs_from_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, std::list<rgw_obj_index_key>& oid_list);
+  int remove_objs_from_index(const DoutPrefixProvider *dpp,
+			     RGWBucketInfo& bucket_info,
+			     const std::list<rgw_obj_index_key>& oid_list);
   int move_rados_obj(const DoutPrefixProvider *dpp,
                      librados::IoCtx& src_ioctx,
 		     const std::string& src_oid, const std::string& src_locator,

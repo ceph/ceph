@@ -603,6 +603,10 @@ std::string RGWDataChangesLog::get_oid(uint64_t gen_id, int i) const {
 }
 
 int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id) {
+  if (!zone->log_data) {
+    return 0;
+  }
+
   auto& bucket = bucket_info.bucket;
 
   if (!filter_bucket(dpp, bucket, null_yield)) {

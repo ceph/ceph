@@ -100,7 +100,7 @@ public:
     crimson::ct_error::input_output_error>;
   using base_iertr = trans_iertr<base_ertr>;
 
-  Cache(ExtentReader &reader, ExtentPlacementManager &epm);
+  Cache(ExtentPlacementManager &epm);
   ~Cache();
 
   /// Creates empty transaction by source
@@ -501,6 +501,7 @@ public:
     auto result = epm.alloc_new_extent(t, T::TYPE, length, hint);
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->set_paddr(result.paddr);
+    ret->hint = hint;
     t.add_fresh_extent(ret);
     ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
     SUBDEBUGT(seastore_cache, "allocated {} {}B extent at {}, hint={} -- {}",
@@ -543,7 +544,8 @@ public:
    * Construct the record for Journal from transaction.
    */
   record_t prepare_record(
-    Transaction &t ///< [in, out] current transaction
+    Transaction &t, ///< [in, out] current transaction
+    SegmentProvider *cleaner
   );
 
   /**
@@ -737,7 +739,6 @@ public:
   void dump_contents();
 
 private:
-  ExtentReader &reader;	   	   ///< ref to extent reader
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents;             ///< set of live extents
@@ -872,7 +873,6 @@ private:
     counter_by_extent_t<io_stat_t> fresh_ool_by_ext;
     uint64_t num_trans = 0; // the number of inline records
     uint64_t num_ool_records = 0;
-    uint64_t ool_record_padding_bytes = 0;
     uint64_t ool_record_metadata_bytes = 0;
     uint64_t ool_record_data_bytes = 0;
     uint64_t inline_record_metadata_bytes = 0; // metadata exclude the delta bytes
@@ -1019,7 +1019,7 @@ private:
   ) {
     assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING);
     extent->set_io_wait();
-    return reader.read(
+    return epm.read(
       extent->get_paddr(),
       extent->get_length(),
       extent->get_bptr()

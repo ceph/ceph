@@ -22,9 +22,6 @@
 class RGWGetDataCB;
 class RGWAccessListFilter;
 class RGWLC;
-struct RGWZoneGroup;
-struct RGWZoneParams;
-struct RGWRealm;
 struct RGWCtl;
 struct rgw_user_bucket;
 class RGWUsageBatch;
@@ -212,6 +209,7 @@ class Zone;
 class LuaScriptManager;
 class RGWOIDCProvider;
 class RGWRole;
+class PlacementTier;
 
 enum AttrsMod {
   ATTRSMOD_NONE    = 0,
@@ -286,8 +284,10 @@ class Store {
     Store() {}
     virtual ~Store() = default;
 
+    /** Post-creation initialization of store */
+    virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) = 0;
     /** Name of this store provider (e.g., "rados") */
-    virtual const char* get_name() const = 0;
+    virtual const std::string get_name() const = 0;
     /** Get cluster unique identifier */
     virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) = 0;
     /** Get a User from a rgw_user.  Does not query store for user info, so quick */
@@ -436,6 +436,11 @@ class Store {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) = 0;
+
+    /** Get the compression type of a placement rule */
+    virtual const std::string& get_compression_type(const rgw_placement_rule& rule) = 0;
+    /** Check to see if this placement rule is valid */
+    virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 
     /** Clean up a store for termination */
     virtual void finalize(void) = 0;
@@ -1073,6 +1078,15 @@ class Object {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) = 0;
+    /** Move an object to the cloud */
+    virtual int transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump store-specific object layout info in JSON */
@@ -1441,6 +1455,40 @@ public:
                        optional_yield y) = 0;
 };
 
+class PlacementTier {
+public:
+  virtual ~PlacementTier() = default;
+
+  /** Get the type of this tier */
+  virtual const std::string& get_tier_type() = 0;
+  /** Get the storage class of this tier */
+  virtual const std::string& get_storage_class() = 0;
+  /** Should we retain the head object when transitioning */
+  virtual bool retain_head_object() = 0;
+  /** Get the placement rule associated with this tier */
+};
+
+class ZoneGroup {
+public:
+  virtual ~ZoneGroup() = default;
+  virtual const std::string& get_id() const = 0;
+  virtual const std::string& get_name() const = 0;
+  virtual int equals(const std::string& other_zonegroup) const = 0;
+  /** Get the endpoint from zonegroup, or from master zone if not set */
+  virtual const std::string& get_endpoint() const = 0;
+  virtual bool placement_target_exists(std::string& target) const = 0;
+  virtual bool is_master_zonegroup() const = 0;
+  virtual const std::string& get_api_name() const = 0;
+  virtual int get_placement_target_names(std::set<std::string>& names) const = 0;
+  virtual const std::string& get_default_placement_name() const = 0;
+  virtual int get_hostnames(std::list<std::string>& names) const = 0;
+  virtual int get_s3website_hostnames(std::list<std::string>& names) const = 0;
+  /** Get the number of zones in this zonegroup */
+  virtual int get_zone_count() const = 0;
+  /** Get the placement tier associated with the rule */
+  virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier) = 0;
+};
+
 /**
  * @brief Abstraction of a Zone
  *
@@ -1452,15 +1500,11 @@ class Zone {
     virtual ~Zone() = default;
 
     /** Get info about the zonegroup containing this zone */
-    virtual const RGWZoneGroup& get_zonegroup() = 0;
+    virtual ZoneGroup& get_zonegroup() = 0;
     /** Get info about a zonegroup by ID */
-    virtual int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) = 0;
-    /** Get the parameters of this zone */
-    virtual const RGWZoneParams& get_params() = 0;
+    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) = 0;
     /** Get the ID of this zone */
     virtual const rgw_zone_id& get_id() = 0;
-    /** Get info about the realm containing this zone */
-    virtual const RGWRealm& get_realm() = 0;
     /** Get the name of this zone */
     virtual const std::string& get_name() const = 0;
     /** True if this zone is writable */
@@ -1471,6 +1515,12 @@ class Zone {
     virtual bool has_zonegroup_api(const std::string& api) const = 0;
     /** Get the current period ID for this zone */
     virtual const std::string& get_current_period_id() = 0;
+    /** Get thes system access key for this zone */
+    virtual const RGWAccessKey& get_system_key() = 0;
+    /** Get the name of the realm containing this zone */
+    virtual const std::string& get_realm_name() = 0;
+    /** Get the ID of the realm containing this zone */
+    virtual const std::string& get_realm_id() = 0;
 };
 
 /**

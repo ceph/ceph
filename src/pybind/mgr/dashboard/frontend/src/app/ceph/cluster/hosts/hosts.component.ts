@@ -474,7 +474,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     } else {
       // mark host facts columns unavailable
       for (let column = 4; column < this.columns.length; column++) {
-        this.columns[column]['prop'] = '';
         this.columns[column]['cellTemplate'] = this.orchTmpl;
       }
     }

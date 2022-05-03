@@ -15,11 +15,12 @@
 
 #include "rgw/rgw_basic_types.h"
 
-#define CEPH_RGW_REMOVE 'r'
-#define CEPH_RGW_UPDATE 'u'
-#define CEPH_RGW_TAG_TIMEOUT 120
+#define CEPH_RGW_REMOVE 'r' // value 114
+#define CEPH_RGW_UPDATE 'u' // value 117
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
 #define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
+
+constexpr uint64_t CEPH_RGW_DEFAULT_TAG_TIMEOUT = 120; // in seconds
 
 class JSONObj;
 
@@ -567,7 +568,7 @@ struct rgw_cls_bi_entry {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
-
+  static void generate_test_instances(std::list<rgw_cls_bi_entry*>& o);
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
 		rgw_bucket_category_stats *accounted_stats);
 };
@@ -651,6 +652,7 @@ struct rgw_bucket_olh_entry {
   }
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<rgw_bucket_olh_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
 
@@ -957,6 +959,8 @@ struct rgw_usage_data {
     ops += usage.ops;
     successful_ops += usage.successful_ops;
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_usage_data*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_usage_data)
 
@@ -1063,6 +1067,8 @@ struct rgw_usage_log_info {
     decode(entries, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<rgw_usage_log_info*>& o);
 
   rgw_usage_log_info() {}
 };
@@ -1098,6 +1104,8 @@ struct rgw_user_bucket {
 
     return false;
   }
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<rgw_user_bucket*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_user_bucket)
 
@@ -1301,7 +1309,7 @@ struct cls_rgw_lc_entry {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
+  static void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_entry);
 

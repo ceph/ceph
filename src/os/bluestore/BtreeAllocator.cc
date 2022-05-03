@@ -429,8 +429,9 @@ void BtreeAllocator::_dump() const
   }
 }
 
-void BtreeAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+void BtreeAllocator::foreach(std::function<void(uint64_t offset, uint64_t length)> notify)
 {
+  std::lock_guard l(lock);
   for (auto& rs : range_tree) {
     notify(rs.first, rs.second - rs.first);
   }

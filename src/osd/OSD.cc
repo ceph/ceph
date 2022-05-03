@@ -1299,7 +1299,7 @@ bool OSDService::prepare_to_stop()
 
   OSDMapRef osdmap = get_osdmap();
   if (osdmap && osdmap->is_up(whoami)) {
-    dout(0) << __func__ << " telling mon we are shutting down" << dendl;
+    dout(0) << __func__ << " telling mon we are shutting down and dead " << dendl;
     set_state(PREPARING_TO_STOP);
     monc->send_mon_message(
       new MOSDMarkMeDown(
@@ -1307,12 +1307,14 @@ bool OSDService::prepare_to_stop()
 	whoami,
 	osdmap->get_addrs(whoami),
 	osdmap->get_epoch(),
-	true  // request ack
+	true,  // request ack
+	true   // mark as down and dead
 	));
     const auto timeout = ceph::make_timespan(cct->_conf->osd_mon_shutdown_timeout);
     is_stopping_cond.wait_for(l, timeout,
       [this] { return get_state() == STOPPING; });
   }
+
   dout(0) << __func__ << " starting shutdown" << dendl;
   set_state(STOPPING);
   return true;
@@ -2662,12 +2664,24 @@ will start to track new ops received afterwards.";
     f->close_section();
   } else if (prefix == "dump_blocklist") {
     list<pair<entity_addr_t,utime_t> > bl;
+    list<pair<entity_addr_t,utime_t> > rbl;
     OSDMapRef curmap = service.get_osdmap();
+    curmap->get_blocklist(&bl, &rbl);
 
     f->open_array_section("blocklist");
-    curmap->get_blocklist(&bl);
     for (list<pair<entity_addr_t,utime_t> >::iterator it = bl.begin();
 	it != bl.end(); ++it) {
+      f->open_object_section("entry");
+      f->open_object_section("entity_addr_t");
+      it->first.dump(f);
+      f->close_section(); //entity_addr_t
+      it->second.localtime(f->dump_stream("expire_time"));
+      f->close_section(); //entry
+    }
+    f->close_section(); //blocklist
+    f->open_array_section("range_blocklist");
+    for (list<pair<entity_addr_t,utime_t> >::iterator it = rbl.begin();
+	it != rbl.end(); ++it) {
       f->open_object_section("entry");
       f->open_object_section("entity_addr_t");
       it->first.dump(f);

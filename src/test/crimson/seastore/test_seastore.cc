@@ -217,6 +217,53 @@ struct seastore_test_t :
       write(seastore, offset, bl);
     }
 
+    void zero(
+      SeaStore &seastore,
+      CTransaction &t,
+      uint64_t offset,
+      size_t len) {
+      ceph::buffer::list bl;
+      bl.append_zero(len);
+      bufferlist new_contents;
+      if (offset > 0 && contents.length()) {
+        new_contents.substr_of(
+          contents,
+          0,
+          std::min<size_t>(offset, contents.length())
+        );
+      }
+      new_contents.append_zero(offset - new_contents.length());
+      new_contents.append(bl);
+
+      auto tail_offset = offset + bl.length();
+      if (contents.length() > tail_offset) {
+        bufferlist tail;
+        tail.substr_of(
+          contents,
+          tail_offset,
+          contents.length() - tail_offset);
+        new_contents.append(tail);
+      }
+      contents.swap(new_contents);
+
+      t.zero(
+        cid,
+        oid,
+        offset,
+        len);
+    }
+
+    void zero(
+      SeaStore &seastore,
+      uint64_t offset,
+      size_t len) {
+      CTransaction t;
+      zero(seastore, t, offset, len);
+      seastore.do_transaction(
+        coll,
+        std::move(t)).get0();
+    }
+
     void read(
       SeaStore &seastore,
       uint64_t offset,
@@ -737,5 +784,63 @@ TEST_F(seastore_test_t, sparse_read)
       off += miter.second;
     }
     test_obj.remove(*seastore);
+  });
+}
+
+TEST_F(seastore_test_t, zero)
+{
+  run_async([this] {
+    auto test_zero = [this](
+      // [(off, len, repeat)]
+      std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> writes,
+      uint64_t zero_off, uint64_t zero_len) {
+
+      // Test zero within a block
+      auto &test_obj = get_object(make_oid(0));
+      uint64_t size = 0;
+      for (auto &[off, len, repeat]: writes) {
+	for (decltype(repeat) i = 0; i < repeat; ++i) {
+	  test_obj.write(*seastore, off + (len * repeat), len, 'a');
+	}
+	size = off + (len * (repeat + 1));
+      }
+      test_obj.read(
+	*seastore,
+	0,
+	size);
+      test_obj.check_size(*seastore);
+      test_obj.zero(*seastore, zero_off, zero_len);
+      test_obj.read(
+	*seastore,
+	0,
+	size);
+      test_obj.check_size(*seastore);
+      remove_object(test_obj);
+    };
+
+    const uint64_t BS = 4<<10;
+
+    // Test zero within a block
+    test_zero(
+      {{1<<10, 1<<10, 1}},
+      1124, 200);
+
+    // Multiple writes, partial on left, partial on right.
+    test_zero(
+      {{BS, BS, 10}},
+      BS + 128,
+      BS * 4);
+
+    // Single large write, block boundary on right, partial on left.
+    test_zero(
+      {{BS, BS * 10, 1}},
+      BS + 128,
+      (BS * 4) - 128);
+
+    // Multiple writes, block boundary on left, partial on right.
+    test_zero(
+      {{BS, BS, 10}},
+      BS,
+      (BS * 4) + 128);
   });
 }

@@ -21,10 +21,15 @@ log = logging.getLogger(__name__)
 
 class MetadataManager(object):
     GLOBAL_SECTION = "GLOBAL"
+    USER_METADATA_SECTION   = "USER_METADATA"
     GLOBAL_META_KEY_VERSION = "version"
     GLOBAL_META_KEY_TYPE    = "type"
     GLOBAL_META_KEY_PATH    = "path"
     GLOBAL_META_KEY_STATE   = "state"
+
+    CLONE_FAILURE_SECTION = "CLONE_FAILURE"
+    CLONE_FAILURE_META_KEY_ERRNO = "errno"
+    CLONE_FAILURE_META_KEY_ERROR_MSG = "error_msg"
 
     MAX_IO_BYTES = 8 * 1024
 
@@ -109,7 +114,7 @@ class MetadataManager(object):
     def remove_option(self, section, key):
         if not self.config.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
-        self.config.remove_option(section, key)
+        return self.config.remove_option(section, key)
 
     def remove_section(self, section):
         self.config.remove_section(section)
@@ -137,6 +142,14 @@ class MetadataManager(object):
 
     def get_global_option(self, key):
         return self.get_option(MetadataManager.GLOBAL_SECTION, key)
+
+    def list_all_options_from_section(self, section):
+        metadata_dict = {}
+        if self.config.has_section(section):
+            options = self.config.options(section)
+            for option in options:
+                metadata_dict[option] = self.config.get(section,option)
+        return metadata_dict
 
     def section_has_item(self, section, item):
         if not self.config.has_section(section):

@@ -686,13 +686,13 @@ static inline void populate_event(reservation_t& res,
   event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
   // configurationId is filled from notification configuration
   event.bucket_name = res.bucket->get_name();
-  event.bucket_ownerIdentity = res.bucket->get_owner()->get_id().id;
+  event.bucket_ownerIdentity = res.bucket->get_owner() ? res.bucket->get_owner()->get_id().id : "";
   event.bucket_arn = to_string(rgw::ARN(res.bucket->get_key()));
   event.object_key = res.object_name ? *res.object_name : obj->get_name();
   event.object_size = size;
   event.object_etag = etag;
   event.object_versionId = version;
-  event.awsRegion = res.store->get_zone()->get_zonegroup().api_name;
+  event.awsRegion = res.store->get_zone()->get_zonegroup().get_api_name();
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
@@ -936,7 +936,7 @@ int publish_commit(rgw::sal::Object* obj,
   return 0;
 }
 
-extern int publish_abort(reservation_t& res) {
+int publish_abort(reservation_t& res) {
   for (auto& topic : res.topics) {
     if (!topic.cfg.dest.persistent ||
 	topic.res_id == cls_2pc_reservation::NO_ID) {
@@ -962,7 +962,7 @@ extern int publish_abort(reservation_t& res) {
 
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,
-			     req_state* _s,
+			     const req_state* _s,
 			     rgw::sal::Object* _object,
 			     rgw::sal::Object* _src_object,
 			     const std::string* _object_name) :
@@ -982,9 +982,9 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::Object* _object,
 			     rgw::sal::Object* _src_object,
 			     rgw::sal::Bucket* _bucket,
-			     std::string& _user_id,
-			     std::string& _user_tenant,
-			     std::string& _req_id,
+			     const std::string& _user_id,
+			     const std::string& _user_tenant,
+			     const std::string& _req_id,
 			     optional_yield y) :
     dpp(_dpp), store(_store), s(nullptr), size(0) /* XXX */,
     object(_object), src_object(_src_object), bucket(_bucket),

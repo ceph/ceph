@@ -21,6 +21,9 @@
 
 namespace crimson::os::seastore {
 
+/* using a special xattr key "omap_header" to store omap header */
+  const std::string OMAP_HEADER_XATTR_KEY = "omap_header";
+
 /*
  * Note: NULL value is usually the default and max value.
  */
@@ -62,8 +65,10 @@ constexpr uint16_t DEVICE_ID_LEN_BITS = 8;
 // segment ids without a device id encapsulated
 using device_segment_id_t = uint32_t;
 
-constexpr device_id_t DEVICE_ID_MAX = 
-  (std::numeric_limits<device_id_t>::max() >>
+constexpr device_id_t DEVICE_ID_GLOBAL_MAX =
+  std::numeric_limits<device_id_t>::max();
+constexpr device_id_t DEVICE_ID_MAX = // the max value regardless of addrs_type_t prefix
+  (DEVICE_ID_GLOBAL_MAX >>
    (std::numeric_limits<device_id_t>::digits - DEVICE_ID_LEN_BITS + 1));
 constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX;
 constexpr device_id_t DEVICE_ID_RECORD_RELATIVE = DEVICE_ID_MAX - 1;
@@ -145,7 +150,7 @@ private:
   );
 
   static inline device_id_t internal_to_device(internal_segment_id_t id) {
-    return (static_cast<device_id_t>(id) & SM_ID_MASK) >> segment_bits;
+    return static_cast<device_id_t>((id & SM_ID_MASK) >> segment_bits);
   }
 
   constexpr static inline device_segment_id_t internal_to_segment(
@@ -208,18 +213,15 @@ using segment_seq_t = uint32_t;
 static constexpr segment_seq_t MAX_SEG_SEQ =
   std::numeric_limits<segment_seq_t>::max();
 static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
-static constexpr segment_seq_t OOL_SEG_SEQ = MAX_SEG_SEQ - 1;
 static constexpr segment_seq_t MAX_VALID_SEG_SEQ = MAX_SEG_SEQ - 2;
 
-enum class segment_type_t {
+enum class segment_type_t : uint8_t {
   JOURNAL = 0,
   OOL,
   NULL_SEG,
 };
 
 std::ostream& operator<<(std::ostream& out, segment_type_t t);
-
-segment_type_t segment_seq_to_type(segment_seq_t seq);
 
 struct segment_seq_printer_t {
   segment_seq_t seq;
@@ -245,9 +247,10 @@ public:
     // are not yet present
     device_to_segments.resize(DEVICE_ID_MAX_VALID);
   }
-  void add_device(device_id_t device, size_t segments, const T& init) {
-    assert(device <= DEVICE_ID_MAX_VALID);
-    assert(device_to_segments[device].size() == 0);
+  void add_device(device_id_t device, std::size_t segments, const T& init) {
+    ceph_assert(device <= DEVICE_ID_MAX_VALID);
+    ceph_assert(device_to_segments[device].size() == 0);
+    ceph_assert(segments > 0);
     device_to_segments[device].resize(segments, init);
     total_segments += segments;
   }
@@ -760,10 +763,6 @@ struct journal_seq_t {
     return {segment_seq, offset.add_offset(o)};
   }
 
-  segment_type_t get_type() const {
-    return segment_seq_to_type(segment_seq);
-  }
-
   DENC(journal_seq_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.segment_seq, p);
@@ -918,6 +917,8 @@ struct delta_info_t {
   uint32_t final_crc = 0;
   seastore_off_t length = NULL_SEG_OFF;         ///< extent length
   extent_version_t pversion;                   ///< prior version
+  segment_seq_t ext_seq;		       ///< seq of the extent's segment
+  segment_type_t seg_type;
   ceph::bufferlist bl;                         ///< payload
 
   DENC(delta_info_t, v, p) {
@@ -929,6 +930,8 @@ struct delta_info_t {
     denc(v.final_crc, p);
     denc(v.length, p);
     denc(v.pversion, p);
+    denc(v.ext_seq, p);
+    denc(v.seg_type, p);
     denc(v.bl, p);
     DENC_FINISH(p);
   }
@@ -942,6 +945,7 @@ struct delta_info_t {
       final_crc == rhs.final_crc &&
       length == rhs.length &&
       pversion == rhs.pversion &&
+      ext_seq == rhs.ext_seq &&
       bl == rhs.bl
     );
   }
@@ -1294,42 +1298,53 @@ using segment_nonce_t = uint32_t;
  * 2) Replay starting at record located at that segment's journal_tail
  */
 struct segment_header_t {
-  segment_seq_t journal_segment_seq;
+  segment_seq_t segment_seq;
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
   segment_nonce_t segment_nonce;
 
+  segment_type_t type;
+
   segment_type_t get_type() const {
-    return segment_seq_to_type(journal_segment_seq);
+    return type;
   }
 
   DENC(segment_header_t, v, p) {
     DENC_START(1, 1, p);
-    denc(v.journal_segment_seq, p);
+    denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
     denc(v.segment_nonce, p);
+    denc(v.type, p);
     DENC_FINISH(p);
   }
 };
 std::ostream &operator<<(std::ostream &out, const segment_header_t &header);
 
 struct segment_tail_t {
-  segment_seq_t journal_segment_seq;
+  segment_seq_t segment_seq;
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
   segment_nonce_t segment_nonce;
+
+  segment_type_t type;
+
   mod_time_point_t last_modified;
   mod_time_point_t last_rewritten;
 
+  segment_type_t get_type() const {
+    return type;
+  }
+
   DENC(segment_tail_t, v, p) {
     DENC_START(1, 1, p);
-    denc(v.journal_segment_seq, p);
+    denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
     denc(v.segment_nonce, p);
+    denc(v.type, p);
     denc(v.last_modified, p);
     denc(v.last_rewritten, p);
     DENC_FINISH(p);
@@ -1749,6 +1764,43 @@ struct denc_traits<crimson::os::seastore::device_type_t> {
     crimson::os::seastore::device_type_t& o,
     ceph::buffer::list::const_iterator &p) {
     p.copy(sizeof(crimson::os::seastore::device_type_t),
+           reinterpret_cast<char*>(&o));
+  }
+};
+
+template<>
+struct denc_traits<crimson::os::seastore::segment_type_t> {
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
+
+  static void bound_encode(
+    const crimson::os::seastore::segment_type_t &o,
+    size_t& p,
+    uint64_t f=0) {
+    p += sizeof(crimson::os::seastore::segment_type_t);
+  }
+  template<class It>
+  static std::enable_if_t<!is_const_iterator_v<It>>
+  encode(
+    const crimson::os::seastore::segment_type_t &o,
+    It& p,
+    uint64_t f=0) {
+    get_pos_add<crimson::os::seastore::segment_type_t>(p) = o;
+  }
+  template<class It>
+  static std::enable_if_t<is_const_iterator_v<It>>
+  decode(
+    crimson::os::seastore::segment_type_t& o,
+    It& p,
+    uint64_t f=0) {
+    o = get_pos_add<crimson::os::seastore::segment_type_t>(p);
+  }
+  static void decode(
+    crimson::os::seastore::segment_type_t& o,
+    ceph::buffer::list::const_iterator &p) {
+    p.copy(sizeof(crimson::os::seastore::segment_type_t),
            reinterpret_cast<char*>(&o));
   }
 };

@@ -84,7 +84,7 @@ namespace crimson::os::seastore::segment_manager::zns {
   class ZNSSegmentManager final : public SegmentManager{
   public:
     mount_ret mount() final;
-    mkfs_ret mkfs(segment_manager_config_t meta) final;
+    mkfs_ret mkfs(device_config_t meta) final;
     open_ertr::future<SegmentRef> open(segment_id_t id) final;
     close_ertr::future<> close() final;
 
@@ -114,8 +114,6 @@ namespace crimson::os::seastore::segment_manager::zns {
     device_id_t get_device_id() const final;
 
     secondary_device_set_t& get_secondary_devices() final;
-
-    device_spec_t get_device_spec() const final;
 
     magic_t get_magic() const final;
 

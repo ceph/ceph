@@ -41,10 +41,14 @@ public:
   }
 
   void dump() override;
-  void dump(std::function<void(uint64_t offset, uint64_t length)> notify) override;
+  void foreach(
+    std::function<void(uint64_t offset, uint64_t length)> notify) override
+  {
+    foreach_internal(notify);
+  }
   double get_fragmentation() override
   {
-    return _get_fragmentation();
+    return get_fragmentation_internal();
   }
 
   void init_add_free(uint64_t offset, uint64_t length) override;

@@ -143,15 +143,20 @@ RGWCoroutine::~RGWCoroutine() {
 
 void RGWCoroutine::init_new_io(RGWIOProvider *io_provider)
 {
+  ceph_assert(stack); // if there's no stack, io_provider won't be uninitialized
   stack->init_new_io(io_provider);
 }
 
 void RGWCoroutine::set_io_blocked(bool flag) {
-  stack->set_io_blocked(flag);
+  if (stack) {
+    stack->set_io_blocked(flag);
+  }
 }
 
 void RGWCoroutine::set_sleeping(bool flag) {
-  stack->set_sleeping(flag);
+  if (stack) {
+    stack->set_sleeping(flag);
+  }
 }
 
 int RGWCoroutine::io_block(int ret, int64_t io_id) {
@@ -159,6 +164,9 @@ int RGWCoroutine::io_block(int ret, int64_t io_id) {
 }
 
 int RGWCoroutine::io_block(int ret, const rgw_io_id& io_id) {
+  if (!stack) {
+    return 0;
+  }
   if (stack->consume_io_finish(io_id)) {
     return 0;
   }
@@ -168,7 +176,9 @@ int RGWCoroutine::io_block(int ret, const rgw_io_id& io_id) {
 }
 
 void RGWCoroutine::io_complete(const rgw_io_id& io_id) {
-  stack->io_complete(io_id);
+  if (stack) {
+    stack->io_complete(io_id);
+  }
 }
 
 void RGWCoroutine::StatusItem::dump(Formatter *f) const {

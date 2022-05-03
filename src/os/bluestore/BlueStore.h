@@ -2743,7 +2743,7 @@ private:
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
     //NB: opt_name reserved for future use
-    boost::optional<T> val2 = f();
+    std::optional<T> val2 = f();
     if (val2) {
       return *val2;
     }
@@ -2794,6 +2794,7 @@ public:
 
   bool is_rotational() override;
   bool is_journal_rotational() override;
+  bool is_db_rotational() ;
 
   std::string get_default_device_class() override {
     std::string device_class;
