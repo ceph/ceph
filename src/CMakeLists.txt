@@ -610,8 +610,10 @@ add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon os global-static ceph-common
+  ${ALLOC_LIBS}
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
+  ${CMAKE_DL_LIBS}
+  ${GSSAPI_LIBRARIES})
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
@@ -647,6 +649,7 @@ endif()
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
+  ${ALLOC_LIBS}
   ${BLKID_LIBRARIES})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd FUSE::FUSE)
@@ -664,7 +667,8 @@ if (WITH_CEPHFS)
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs})
   target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
-    Boost::thread)
+    Boost::thread
+    ${ALLOC_LIBS})
   install(TARGETS ceph-mds DESTINATION bin)
 endif()
 
