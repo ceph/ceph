@@ -23,6 +23,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <filesystem>
+#include <fstream>
+
+#include <fmt/format.h>
 
 #include "PMEMDevice.h"
 #include "libpmem.h"
@@ -66,51 +70,31 @@ int PMEMDevice::_lock()
 
 static int pmem_check_file_type(int fd, const char *pmem_file, uint64_t *total_size)
 {
-  int rc = 0;
+  namespace fs = std::filesystem;
+  if (!fs::is_character_file(pmem_file)) {
+    return -EINVAL;
+  }
   struct stat file_stat;
-
-  rc = ::fstat(fd, &file_stat);
-  if (rc) {
-    return -1;
+  if (::fstat(fd, &file_stat)) {
+    return -EINVAL;
   }
-
-  if ((file_stat.st_mode & S_IFCHR) != S_IFCHR) {
-    return -1;
-  }
-
-  char spath[PATH_MAX], npath[PATH_MAX];
-  snprintf(spath, PATH_MAX, "/sys/dev/char/%d:%d/subsystem",
-           major(file_stat.st_rdev), minor(file_stat.st_rdev));
-
-  char *real_path = realpath(spath, npath);
-  if (!real_path) {
-    return -1;
-  }
-
+  fs::path char_dir = fmt::format("/sys/dev/char/{}:{}",
+				  major(file_stat.st_rdev),
+				  minor(file_stat.st_rdev));
   // Need to check if it is a DAX device
-  char *base_name = strrchr(real_path, '/');
-  if (!base_name || strcmp("dax", base_name + 1)) {
-    return -1;
+  if (auto subsys_path = char_dir / "subsystem";
+      fs::read_symlink(subsys_path).filename().string() != "dax") {
+    return -EINVAL;
   }
-
-  snprintf(spath, PATH_MAX, "/sys/dev/char/%d:%d/size",
-           major(file_stat.st_rdev), minor(file_stat.st_rdev));
-  FILE *sfile = fopen(spath, "r");
-  if (!sfile) {
-    return -1;
+  if (total_size == nullptr) {
+    return 0;
   }
-
-  if (total_size != nullptr) {
-    rc = fscanf(sfile, "%lu", total_size);
-    if (rc < 0) {
-      rc = -1;
-    } else {
-      rc = 0;
-    }
+  if (std::ifstream size_file(char_dir / "size"); size_file) {
+    size_file >> *total_size;
+    return size_file ? 0 : -EINVAL;
+  } else {
+    return -EINVAL;
   }
-
-  fclose(sfile);
-  return rc;
 }
 
 int PMEMDevice::open(const std::string& p)
