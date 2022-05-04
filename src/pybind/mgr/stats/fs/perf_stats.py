@@ -229,19 +229,22 @@ class FSPerfStats(object):
                         return mds_status['gid'], mds_status['state']
         logger.warn("No rank0 mds in the fsmap")
 
-    def update_client_meta(self, rank_set):
+    def update_client_meta(self):
         new_updates = {}
         pending_updates = [v[0] for v in self.client_metadata['in_progress'].values()]
         with self.meta_lock:
-            for rank in rank_set:
-                if rank in pending_updates:
-                    continue
+            fsmap = self.module.get('fs_map')
+            for fs in fsmap['filesystems']:
+                mdsmap = fs['mdsmap']                
+                gid = mdsmap['up']["mds_0"]
+                if gid in pending_updates:
+                    continue                
                 tag = str(uuid.uuid4())
                 result = CommandResult(tag)
-                new_updates[tag] = (rank, result)
+                new_updates[tag] = (gid, result)
             self.client_metadata['in_progress'].update(new_updates)
 
-        self.log.debug("updating client metadata from {0}".format(new_updates))
+        self.log.debug(f"updating client metadata from {new_updates}")
 
         cmd_dict = {'prefix': 'client ls'}
         for tag,val in new_updates.items():
@@ -337,14 +340,11 @@ class FSPerfStats(object):
 
             # iterate over metrics list and update our copy (note that we have
             # already culled the differences).
-            meta_refresh_ranks = set()
             for counter in incoming_metrics:
                 mds_rank = int(counter['k'][0][0])
                 client_id, client_ip = extract_client_id_and_ip(counter['k'][1][0])
                 if client_id is not None or not client_ip: # client_id _could_ be 0
                     with self.meta_lock:
-                        if not client_id in self.client_metadata['metadata']:
-                            meta_refresh_ranks.add(mds_rank)
                         self.set_client_metadata(client_id, "IP", client_ip)
                 else:
                     self.log.warn("client metadata for client_id={0} might be unavailable".format(client_id))
@@ -356,7 +356,7 @@ class FSPerfStats(object):
                 del raw_client_counters[:]
                 raw_client_counters.extend(counter['c'])
         # send an asynchronous client metadata refresh
-        self.update_client_meta(meta_refresh_ranks)
+        self.update_client_meta()
 
     def get_raw_perf_counters_global(self, query):
         raw_perf_counters = query.setdefault(QUERY_RAW_COUNTERS_GLOBAL, {})
