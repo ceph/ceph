@@ -685,7 +685,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
     max_dirty(max_dirty), target_dirty(target_dirty),
     max_size(max_bytes), max_objects(max_objects),
     max_dirty_age(ceph::make_timespan(max_dirty_age)),
-    block_writes_upfront(block_writes_upfront),
+    cfg_block_writes_upfront(block_writes_upfront),
     trace_endpoint("ObjectCacher"),
     flush_set_callback(flush_callback),
     flush_set_callback_arg(flush_callback_arg),
@@ -1722,7 +1722,8 @@ void ObjectCacher::retry_waiting_reads()
 }
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
-			 ZTracer::Trace *parent_trace)
+			 ZTracer::Trace *parent_trace,
+			 bool block_writes_upfront)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph::real_time now = ceph::real_clock::now();
@@ -1813,7 +1814,8 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     }
   }
 
-  int r = _wait_for_write(wr, bytes_written, oset, &trace, onfreespace);
+  int r = _wait_for_write(wr, bytes_written, oset, &trace, onfreespace,
+                          block_writes_upfront);
   delete wr;
 
   finish_contexts(cct, wait_for_reads, 0);
@@ -1893,7 +1895,8 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
 
 // blocking wait for write.
 int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
-				  ZTracer::Trace *trace, Context *onfreespace)
+				  ZTracer::Trace *trace, Context *onfreespace,
+                                  bool block_writes_upfront)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
   ceph_assert(trace != nullptr);
