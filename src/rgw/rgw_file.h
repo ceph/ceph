@@ -1488,9 +1488,9 @@ public:
 
     if (unlikely(!! get<uint64_t*>(&offset))) {
       ioff = get<uint64_t*>(offset);
-      const auto& mk = rgw_fh->find_marker(*ioff);
-      if (mk) {
-	marker = *mk;
+      if (*ioff > 0) {
+	auto index_key = reinterpret_cast<rgw_obj_index_key*>(*ioff);
+	marker = rgw_obj_key(index_key->name, index_key->instance);
       }
     } else {
       const char* mk = get<const char*>(offset);
@@ -1538,19 +1538,12 @@ public:
     return 0;
   }
 
-  int operator()(const std::string_view name, const rgw_obj_key& marker,
+  int operator()(const std::string_view name, const rgw_obj_index_key& cls_marker,
 		 const ceph::real_time& t, const uint64_t fsz, uint8_t type) {
 
     assert(name.length() > 0); // all cases handled in callers
 
-    /* hash offset of name in parent (short name) for NFS readdir cookie */
-    uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
-    if (unlikely(!! ioff)) {
-      *ioff = off;
-    }
-
-    /* update traversal cache */
-    rgw_fh->add_marker(off, marker, type);
+    uint64_t marker_off = reinterpret_cast<uint64_t>(&cls_marker);
     ++d_count;
 
     /* set c/mtime and size from bucket index entry */
@@ -1566,7 +1559,7 @@ public:
 #endif
     st.st_size = fsz;
 
-    return rcb(name.data(), cb_arg, off, &st, RGWFileHandle::RCB_MASK,
+    return rcb(name.data(), cb_arg, marker_off, &st, RGWFileHandle::RCB_MASK,
 	       (type == RGW_FS_TYPE_DIRECTORY) ?
 	       RGW_LOOKUP_FLAG_DIR :
 	       RGW_LOOKUP_FLAG_FILE);
@@ -1720,7 +1713,7 @@ public:
 				 << " size=" << obj_entry.meta.accounted_size
 				 << dendl;
 
-	  if (! this->operator()(sref, next_marker, obj_entry.meta.mtime,
+	  if (! this->operator()(sref, di.get_obj_iter()->key, obj_entry.meta.mtime,
 				 obj_entry.meta.accounted_size,
 				 RGW_FS_TYPE_FILE)) {
 	    /* caller cannot accept more */
@@ -1749,7 +1742,8 @@ public:
 	    /* null path segment--could be created in S3 but has no NFS
 	     * interpretation */
 	  } else {
-	    if (! this->operator()(sref, next_marker, cnow, 0,
+	    const cls_rgw_obj_key tmp_cls_marker = cls_rgw_obj_key(sref.data());
+	    if (! this->operator()(sref, tmp_cls_marker, cnow, 0,
 				   RGW_FS_TYPE_DIRECTORY)) {
 	      /* caller cannot accept more */
 	      lsubdout(cct, rgw, 5) << "readdir rcb caller signalled stop"
