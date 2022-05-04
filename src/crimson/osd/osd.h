@@ -235,7 +235,6 @@ private:
   RemotePeeringEvent::OSDPipeline peering_request_osd_pipeline;
   friend class RemotePeeringEvent;
 
-public:
   seastar::future<Ref<PG>> get_or_create_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&,
     spg_t pgid,
@@ -243,6 +242,8 @@ public:
     std::unique_ptr<PGCreateInfo> info);
   seastar::future<Ref<PG>> wait_for_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
+
+public:
   Ref<PG> get_pg(spg_t pgid);
   seastar::future<> send_beacon();
 
