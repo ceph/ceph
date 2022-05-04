@@ -79,5 +79,5 @@ int main(int argc, const char **argv) {
 
   delete cachectl;
 
-  return r < 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+  return r < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
