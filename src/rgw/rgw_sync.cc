@@ -1776,6 +1776,7 @@ public:
           *reset_backoff = false; // back off and try again later
           return retcode;
         }
+        truncated = true;
         *reset_backoff = true; /* if we got to this point, all systems function */
 	if (mdlog_marker > max_marker) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
