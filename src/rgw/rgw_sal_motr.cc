@@ -1055,7 +1055,8 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
   if( max_uploads <= 0 )
 	return rc;
   int upl = max_uploads;
-  upl++;
+  if( marker != "" )
+	upl++;
   vector<string> key_vec(upl);
   vector<bufferlist> val_vec(upl);
   string tenant_bkt_name = get_bucket_name(this->get_tenant(), this->get_name());
@@ -1089,15 +1090,15 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
     auto iter = bl.cbegin();
     ent.decode(iter);
 
+    rgw_obj_key key(ent.key);
     if (prefix.size() &&
-        (0 != ent.key.name.compare(0, prefix.size(), prefix))) {
+        (0 != key.name.compare(0, prefix.size(), prefix))) {
       ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ <<
         ": skippping \"" << ent.key <<
         "\" because doesn't match prefix" << dendl;
       continue;
     }
 
-    rgw_obj_key key(ent.key);
     uploads.push_back(this->get_multipart_upload(key.name));
     last_obj_key = key;
     ocount++;
