@@ -37,7 +37,10 @@ void DaemonMetricCollector::main() {
   io.run();
 }
 
-std::string DaemonMetricCollector::get_metrics() { return metrics; }
+std::string DaemonMetricCollector::get_metrics() {
+  const std::lock_guard<std::mutex> lock(metrics_mutex);
+  return metrics;
+}
 
 template <class T>
 void add_metric(std::stringstream &ss, T value, std::string name,
@@ -105,6 +108,7 @@ void DaemonMetricCollector::dump_asok_metrics() {
       }
     }
   }
+  const std::lock_guard<std::mutex> lock(metrics_mutex);
   metrics = ss.str();
 }
 
