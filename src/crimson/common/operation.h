@@ -427,11 +427,11 @@ public:
   PipelineHandle &operator=(PipelineHandle&&) = default;
 
   /**
-     * Returns a future which unblocks when the handle has entered the passed
-     * OrderedPipelinePhase.  If already in a phase, enter will also release
-     * that phase after placing itself in the queue for the next one to preserve
-     * ordering.
-     */
+   * Returns a future which unblocks when the handle has entered the passed
+   * OrderedPipelinePhase.  If already in a phase, enter will also release
+   * that phase after placing itself in the queue for the next one to preserve
+   * ordering.
+   */
   template <typename T>
   blocking_future<> enter(T &t) {
     /* Strictly speaking, we probably want the blocker to be registered on
