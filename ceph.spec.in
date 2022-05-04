@@ -262,7 +262,11 @@ BuildRequires:	socat
 %if 0%{with zbd}
 BuildRequires:  libzbd-devel
 %endif
+%if 0%{?suse_version}
+BuildRequires:  libthrift-devel >= 0.13.0
+%else
 BuildRequires:  thrift-devel >= 0.13.0
+%endif
 BuildRequires:  re2-devel
 %if 0%{with jaeger}
 BuildRequires:  bison
