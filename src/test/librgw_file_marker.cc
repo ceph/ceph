@@ -337,7 +337,10 @@ TEST(LibRGW, MARKER1_READDIR)
 			    RGW_READDIR_FLAG_DOTDOT);
       ASSERT_EQ(ret, 0);
       ASSERT_GE(dvec.obj_names.size(), 0);
-      ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
+      if (!eof) {
+	// eof should skip cookie checking
+	ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
+      }
       ++dvec.count;
     } while(!eof);
     std::cout << "Read " << dvec.obj_names.size() << " objects in "
