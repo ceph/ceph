@@ -109,7 +109,7 @@ execute_process(
 set(frontend_dist_dir "${CMAKE_CURRENT_BINARY_DIR}/dist")
 set(npm_args "--output-path ${frontend_dist_dir}")
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  string(APPEND npm_args " --prod --progress=false")
+  string(APPEND npm_args " --configuration=production --progress=false")
 else()
   string(APPEND npm_args " --progress=false")
 endif()
