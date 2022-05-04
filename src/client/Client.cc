@@ -11027,7 +11027,8 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     r = objectcacher->file_write(&in->oset, &in->layout,
 				 in->snaprealm->get_snap_context(),
 				 offset, size, bl, ceph::real_clock::now(),
-				 0);
+				 0, nullptr,
+				 objectcacher->CFG_block_writes_upfront());
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     if (r < 0)
