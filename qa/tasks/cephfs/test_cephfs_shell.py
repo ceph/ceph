@@ -335,43 +335,6 @@ class TestRmdir(TestCephFSShell):
 
 
 class TestGetAndPut(TestCephFSShell):
-    def test_without_target_dir(self):
-        """
-        Test put and get commands without target path.
-        """
-        tempdir = self.mount_a.client_remote.mkdtemp()
-        tempdirname = path.basename(tempdir)
-        files = ('dump1', 'dump2', 'dump3', tempdirname)
-
-        for i, file_ in enumerate(files[: -1]):
-            size = i + 1
-            ofarg = 'of=' + path.join(tempdir, file_)
-            bsarg = 'bs=' + str(size) + 'M'
-            self.mount_a.run_shell_payload("dd if=/dev/urandom "
-                                           f"{ofarg} {bsarg} count=1")
-
-        self.run_cephfs_shell_cmd('put ' + tempdir)
-        for file_ in files:
-            if file_ == tempdirname:
-                self.mount_a.stat(path.join(self.mount_a.mountpoint, file_))
-            else:
-                self.mount_a.stat(path.join(self.mount_a.mountpoint,
-                                            tempdirname, file_))
-
-        self.mount_a.run_shell_payload(f"rm -rf {tempdir}")
-
-        self.run_cephfs_shell_cmd('get ' + tempdirname)
-        # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
-        pwd = self.mount_a.run_shell('pwd', cwd=None).stdout.getvalue(). \
-            strip()
-        for file_ in files:
-            if file_ == tempdirname:
-                self.mount_a.run_shell_payload(f"stat {path.join(pwd, file_)}")
-            else:
-                self.mount_a.run_shell_payload(
-                    f"stat "
-                    f"{path.join(pwd, tempdirname, file_)}")
-
     def test_get_with_target_name(self):
         """
         Test that get passes with target name
