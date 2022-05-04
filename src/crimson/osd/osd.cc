@@ -1235,8 +1235,7 @@ seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
 				     Ref<MOSDRepOp> m)
 {
   m->finish_decode();
-  (void) shard_services.start_operation<RepRequest>(
-    *this,
+  std::ignore = start_pg_operation<RepRequest>(
     std::move(conn),
     std::move(m));
   return seastar::now();
