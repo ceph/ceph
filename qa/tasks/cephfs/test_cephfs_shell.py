@@ -159,6 +159,14 @@ class TestCephFSShell(CephFSTestCase):
             check_status=check_status).stdout.getvalue().strip())
 
 
+class TestGeneric(TestCephFSShell):
+
+    def test_mistyped_cmd(self):
+        with self.assertRaises(CommandFailedError) as cm:
+            self.run_cephfs_shell_cmd('lsx')
+        self.assertEqual(cm.exception.exitstatus, 127)
+
+
 class TestMkdir(TestCephFSShell):
     def test_mkdir(self):
         """
@@ -267,7 +275,14 @@ class TestRmdir(TestCephFSShell):
         """
         self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
         self.run_cephfs_shell_cmd("put - test_dir/dumpfile", stdin="Valid File")
-        self.run_cephfs_shell_cmd("rmdir" + self.dir_name)
+        # see comment below
+        # with self.assertRaises(CommandFailedError) as cm:
+        with self.assertRaises(CommandFailedError):
+            self.run_cephfs_shell_cmd("rmdir " + self.dir_name)
+        # TODO: we need to check for exit code and error message as well.
+        # skipping it for not since error codes used by cephfs-shell are not
+        # standard and they may change soon.
+        # self.assertEqual(cm.exception.exitcode, 39)
         self.mount_a.stat(self.dir_name)
 
     def test_rmdir_existing_file(self):
