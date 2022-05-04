@@ -1,6 +1,7 @@
 #include "rgw_lua_background.h"
 #include "rgw_lua.h"
 #include "rgw_lua_utils.h"
+#include "rgw_perf_counters.h"
 #include "include/ceph_assert.h"
 #include <lua.hpp>
 
@@ -51,14 +52,20 @@ void Background::run() {
     } else if (rc < 0) {
       ldpp_dout(dpp, 1) << "WARNING: failed to read background script. error " << rc << dendl;
     } else {
+      auto failed = false;
       try {
         //execute the background lua script
         if (luaL_dostring(L, rgw_script.c_str()) != LUA_OK) {
           const std::string err(lua_tostring(L, -1));
           ldpp_dout(dpp, 1) << "Lua ERROR: " << err << dendl;
+          failed = true;
         }
       } catch (const std::exception& e) {
-         ldpp_dout(dpp, 1) << "Lua ERROR: " << e.what() << dendl;
+        ldpp_dout(dpp, 1) << "Lua ERROR: " << e.what() << dendl;
+        failed = true;
+      }
+      if (perfcounter) {
+        perfcounter->inc((failed ? l_rgw_lua_script_fail : l_rgw_lua_script_ok), 1);
       }
     }
     std::this_thread::sleep_for(std::chrono::seconds(execute_interval));

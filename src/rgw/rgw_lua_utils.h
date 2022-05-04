@@ -7,6 +7,7 @@
 #include <lua.hpp>
 
 #include "include/common_fwd.h"
+#include "rgw_perf_counters.h"
 
 namespace rgw::lua {
 
@@ -38,8 +39,17 @@ void stack_dump(lua_State* L);
 class lua_state_guard {
   lua_State* l;
 public:
-  lua_state_guard(lua_State* _l) : l(_l) {}
-  ~lua_state_guard() {lua_close(l);}
+  lua_state_guard(lua_State* _l) : l(_l) {
+    if (perfcounter) {
+      perfcounter->inc(l_rgw_lua_current_vms, 1);
+    }
+  }
+  ~lua_state_guard() {
+    lua_close(l);
+    if (perfcounter) {
+      perfcounter->dec(l_rgw_lua_current_vms, 1);
+    }
+  }
   void reset(lua_State* _l=nullptr) {l = _l;}
 };
 

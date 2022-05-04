@@ -12,6 +12,7 @@
 #include "rgw_acl.h"
 #include "rgw_sal_rados.h"
 #include "rgw_lua_background.h"
+#include "rgw_perf_counters.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -750,19 +751,23 @@ int execute(
     ceph_assert(lua_istable(L, -1));
   }
 
+  int rc = 0;
   try {
     // execute the lua script
     if (luaL_dostring(L, script.c_str()) != LUA_OK) {
       const std::string err(lua_tostring(L, -1));
       ldpp_dout(s, 1) << "Lua ERROR: " << err << dendl;
-      return -1;
+      rc = -1;
     }
   } catch (const std::runtime_error& e) {
     ldpp_dout(s, 1) << "Lua ERROR: " << e.what() << dendl;
-    return -1;
+    rc = -1;
+  }
+  if (perfcounter) {
+    perfcounter->inc((rc == -1 ? l_rgw_lua_script_fail : l_rgw_lua_script_ok), 1);
   }
 
-  return 0;
+  return rc;
 }
 
 }
