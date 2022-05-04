@@ -178,11 +178,11 @@ class TestMkdir(TestCephFSShell):
         o = self.mount_a.stat('d1')
         log.info("mount_a output:\n{}".format(o))
 
-    def test_mkdir_with_07000_octal_mode(self):
+    def test_mkdir_with_070000_octal_mode(self):
         """
-        Test that mkdir fails with octal mode greater than 0777
+        Test that mkdir fails with octal mode greater than 07777
         """
-        self.negtest_cephfs_shell_cmd(cmd="mkdir -m 07000 d2")
+        self.negtest_cephfs_shell_cmd(cmd="mkdir -m 070000 d2")
         try:
             self.mount_a.stat('d2')
         except CommandFailedError:
@@ -978,6 +978,14 @@ class TestMisc(TestCephFSShell):
         o = self.get_cephfs_shell_cmd_output("help all")
         log.info("output:\n{}".format(o))
 
+    def test_chmod(self):
+        """Test chmod is allowed above o0777 """
+        
+        test_file1 = "test_file2.txt"
+        file1_content = 'A' * 102
+        self.run_cephfs_shell_cmd(f"write {test_file1}", stdin=file1_content)
+        self.run_cephfs_shell_cmd(f"chmod 01777 {test_file1}")
+        
 class TestShellOpts(TestCephFSShell):
     """
     Contains tests for shell options from conf file and shell prompt.
