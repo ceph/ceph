@@ -1288,10 +1288,7 @@ seastar::future<> OSD::handle_mark_me_down(crimson::net::ConnectionRef conn,
 seastar::future<> OSD::handle_recovery_subreq(crimson::net::ConnectionRef conn,
 				   Ref<MOSDFastDispatchOp> m)
 {
-  (void) shard_services.start_operation<RecoverySubRequest>(
-    *this,
-    conn,
-    std::move(m));
+  std::ignore = start_pg_operation<RecoverySubRequest>(conn, std::move(m));
   return seastar::now();
 }
 
