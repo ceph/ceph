@@ -704,6 +704,11 @@ struct blk_paddr_t : public paddr_t {
     return add_relative(o);
   }
 
+  paddr_t add_record_relative(paddr_t o) const {
+    assert(o.is_record_relative());
+    return add_relative(o);
+  }
+
 private:
   void check_blk_off_valid(const block_off_t offset) const {
     assert(offset <= BLK_OFF_MAX);
@@ -1195,12 +1200,7 @@ public:
   void adjust_addrs_from_base(paddr_t base) {
     paddr_t _root_addr = root_addr;
     if (_root_addr.is_relative()) {
-      if (base.get_addr_type() == addr_types_t::SEGMENT) {
-	root_addr = base.add_record_relative(_root_addr);
-      } else {
-	// RANDOM_BLOCK
-	root_addr = base.add_offset(_root_addr.as_seg_paddr().get_segment_off());
-      }
+      root_addr = base.add_record_relative(_root_addr);
     }
   }
 };
@@ -1816,6 +1816,7 @@ inline paddr_t paddr_t::add_block_relative(paddr_t o) const {
 
 inline paddr_t paddr_t::add_record_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_record_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_record_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
