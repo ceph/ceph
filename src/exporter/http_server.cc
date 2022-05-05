@@ -145,7 +145,8 @@ std::string dns_lookup(std::string hostname) {
   return ip_address;
 }
 
-void http_server_thread_entrypoint() {
+void http_server_thread_entrypoint(std::string cert_path, std::string key_path,
+                                   std::string tls_options) {
   try {
     std::string hostname = ceph_get_short_hostname();
 
