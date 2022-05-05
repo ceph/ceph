@@ -5356,12 +5356,14 @@ def _list_ipv4_networks(ctx: CephadmContext) -> Dict[str, Dict[str, Set[str]]]:
 
 def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
     r = {}  # type: Dict[str, Dict[str, Set[str]]]
-    p = re.compile(r'^(\S+) dev (\S+) (.*)scope link (.*)src (\S+)')
+    p = re.compile(r'^(\S+) (?:via \S+)? ?dev (\S+) (.*)scope link (.*)src (\S+)')
     for line in out.splitlines():
         m = p.findall(line)
         if not m:
             continue
         net = m[0][0]
+        if '/' not in net:  # aggregate /32 mask for single host sub-networks
+            net += '/32'
         iface = m[0][1]
         ip = m[0][4]
         if net not in r:
@@ -5391,9 +5393,11 @@ def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, Set[str]]]:
         if not m or m[0][0].lower() == 'default':
             continue
         net = m[0][0]
-        if '/' not in net:  # only consider networks with a mask
-            continue
+        if '/' not in net:  # aggregate /128 mask for single host sub-networks
+            net += '/128'
         iface = m[0][1]
+        if iface == 'lo':  # skip loopback devices
+            continue
         if net not in r:
             r[net] = {}
         if iface not in r[net]:
