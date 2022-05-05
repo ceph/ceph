@@ -26,6 +26,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.inited = True
 
     @CLICommand('nfs export create cephfs', perm='rw')
+    @object_format.Responder()
     def _cmd_nfs_export_create_cephfs(
             self,
             cluster_id: str,
@@ -36,7 +37,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-    ) -> Tuple[int, str, str]:
+    ) -> Dict[str, Any]:
         """Create a CephFS export"""
         return self.export_mgr.create_export(
             fsal_type='cephfs',
@@ -51,6 +52,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
 
     @CLICommand('nfs export create rgw', perm='rw')
+    @object_format.Responder()
     def _cmd_nfs_export_create_rgw(
             self,
             cluster_id: str,
@@ -61,7 +63,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-    ) -> Tuple[int, str, str]:
+    ) -> Dict[str, Any]:
         """Create an RGW export"""
         return self.export_mgr.create_export(
             fsal_type='rgw',
