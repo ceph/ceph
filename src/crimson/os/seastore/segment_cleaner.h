@@ -117,6 +117,20 @@ public:
   std::size_t get_num_in_journal() const {
     return num_in_journal;
   }
+  std::size_t get_num_unreclaimable() const {
+    auto ret = num_in_journal + num_open;
+    if (ret > 0) {
+      // assume there is always 1 segment opened for journal (1 overlap)
+      return ret - 1;
+    } else {
+      return ret;
+    }
+  }
+  std::size_t get_num_reclaimable() const {
+    auto ret = num_open + num_closed;
+    assert(ret >= get_num_unreclaimable());
+    return ret - get_num_unreclaimable();
+  }
   std::size_t get_num_open() const {
     return num_open;
   }
@@ -135,6 +149,14 @@ public:
   std::size_t get_count_close() const {
     return count_close;
   }
+
+  /*
+   * Space classification
+   * - total = available + unavailable (unreclaimable + reclaimable)
+   *   - available: the available space for write, including open segments
+   *   - unreclaimable: in journal or still open, cannot be reclaimed
+   *   - reclaimable: closed and non-empty segments, can be reclaimed
+   */
   std::size_t get_total_bytes() const {
     return total_bytes;
   }
@@ -145,6 +167,17 @@ public:
     assert(total_bytes >= get_available_bytes());
     return total_bytes - get_available_bytes();
   }
+  std::size_t get_unavailable_unreclaimable_bytes() const {
+    auto ret = get_num_unreclaimable() * get_segment_size();
+    assert(ret >= avail_bytes_in_open);
+    return ret - avail_bytes_in_open;
+  }
+  std::size_t get_unavailable_reclaimable_bytes() const {
+    auto ret = get_num_reclaimable() * get_segment_size();
+    assert(ret + get_unavailable_unreclaimable_bytes() == get_unavailable_bytes());
+    return ret;
+  }
+
   journal_seq_t get_journal_head() const {
     if (unlikely(journal_segment_id == NULL_SEG_ID)) {
       return JOURNAL_SEQ_NULL;
