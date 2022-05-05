@@ -1348,13 +1348,7 @@ void Cache::complete_commit(
     bool is_inline = false;
     if (i->is_inline()) {
       is_inline = true;
-      if (final_block_start.get_addr_type() == addr_types_t::SEGMENT) {
-	i->set_paddr(final_block_start.add_relative(i->get_paddr()));
-      } else if (final_block_start.get_addr_type() ==
-	addr_types_t::RANDOM_BLOCK) {
-	i->set_paddr(final_block_start.add_offset(
-	  i->get_paddr().as_seg_paddr().get_segment_off()));
-      }
+      i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
     i->last_committed_crc = i->get_crc32c();
     i->on_initial_write();
@@ -1543,12 +1537,7 @@ Cache::replay_delta(
     for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
       if (alloc_blk.paddr.is_relative()) {
 	assert(alloc_blk.paddr.is_record_relative());
-	if (record_base.get_addr_type() == addr_types_t::SEGMENT) {
-	  alloc_blk.paddr = record_base.add_relative(alloc_blk.paddr);
-	} else {
-	  alloc_blk.paddr = record_base.add_offset(
-	    alloc_blk.paddr.as_seg_paddr().get_segment_off());
-	}
+	alloc_blk.paddr = record_base.add_relative(alloc_blk.paddr);
       }
       DEBUG("replay alloc_blk {}~{} {}, journal_seq: {}",
 	alloc_blk.paddr, alloc_blk.len, alloc_blk.laddr, journal_seq);

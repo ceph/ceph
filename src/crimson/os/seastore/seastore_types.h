@@ -683,6 +683,19 @@ struct blk_paddr_t : public paddr_t {
     return paddr_t::make_blk_paddr(get_device_id(), get_block_off() + o);
   }
 
+  paddr_t add_relative(paddr_t o) const {
+    seastore_off_t off;
+    if (o.get_addr_type() == addr_types_t::SEGMENT) {
+      // segment addr is allocated when alloc_new_extent is called.
+      // But, if random block device is used,
+      // this eventually can be converted to blk addr after submit_record().
+      off = o.as_seg_paddr().get_segment_off();
+    } else {
+      off = o.as_blk_paddr().get_block_off();
+    }
+    return add_offset(off);
+  }
+
 private:
   void check_blk_off_valid(const block_off_t offset) const {
     assert(offset <= BLK_OFF_MAX);
@@ -1781,6 +1794,7 @@ inline paddr_t paddr_t::add_offset(int32_t o) const {
 
 inline paddr_t paddr_t::add_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
