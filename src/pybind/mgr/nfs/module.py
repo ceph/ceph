@@ -127,12 +127,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            port=port)
 
     @CLICommand('nfs cluster rm', perm='rw')
-    def _cmd_nfs_cluster_rm(self, cluster_id: str) -> Tuple[int, str, str]:
+    @object_format.EmptyResponder()
+    def _cmd_nfs_cluster_rm(self, cluster_id: str) -> None:
         """Removes an NFS Cluster"""
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
     @CLICommand('nfs cluster delete', perm='rw')
-    def _cmd_nfs_cluster_delete(self, cluster_id: str) -> Tuple[int, str, str]:
+    @object_format.EmptyResponder()
+    def _cmd_nfs_cluster_delete(self, cluster_id: str) -> None:
         """Removes an NFS Cluster (DEPRECATED)"""
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
