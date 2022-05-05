@@ -3,8 +3,27 @@
 
 #include "osd_operation.h"
 #include "common/Formatter.h"
+#include "crimson/common/log.h"
+#include "crimson/osd/osd_operations/client_request.h"
+
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+}
 
 namespace crimson::osd {
+
+size_t OSDOperationRegistry::dump_client_requests(ceph::Formatter* f) const
+{
+  const auto& client_registry =
+    get_registry<static_cast<size_t>(ClientRequest::type)>();
+  logger().warn("{} num_ops={}", __func__, std::size(client_registry));
+  for (const auto& op : client_registry) {
+    op.dump(f);
+  }
+  return std::size(client_registry);
+}
 
 OperationThrottler::OperationThrottler(ConfigProxy &conf)
   : scheduler(crimson::osd::scheduler::make_scheduler(conf))
@@ -31,13 +50,13 @@ void OperationThrottler::release_throttle()
   wake();
 }
 
-blocking_future<> OperationThrottler::acquire_throttle(
+seastar::future<> OperationThrottler::acquire_throttle(
   crimson::osd::scheduler::params_t params)
 {
   crimson::osd::scheduler::item_t item{params, seastar::promise<>()};
   auto fut = item.wake.get_future();
   scheduler->enqueue(std::move(item));
-  return make_blocking_future(std::move(fut));
+  return fut;
 }
 
 void OperationThrottler::dump_detail(Formatter *f) const

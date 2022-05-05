@@ -542,32 +542,6 @@ std::ostream& operator<<(std::ostream& os, const PG& pg)
   return os;
 }
 
-void PG::WaitForActiveBlocker::dump_detail(Formatter *f) const
-{
-  f->dump_stream("pgid") << pg->pgid;
-}
-
-void PG::WaitForActiveBlocker::on_active()
-{
-  p.set_value();
-  p = {};
-}
-
-blocking_future<> PG::WaitForActiveBlocker::wait()
-{
-  if (pg->peering_state.is_active()) {
-    return make_blocking_future(seastar::now());
-  } else {
-    return make_blocking_future(p.get_shared_future());
-  }
-}
-
-seastar::future<> PG::WaitForActiveBlocker::stop()
-{
-  p.set_exception(crimson::common::system_shutdown_exception());
-  return seastar::now();
-}
-
 std::tuple<PG::interruptible_future<>,
            PG::interruptible_future<>>
 PG::submit_transaction(
