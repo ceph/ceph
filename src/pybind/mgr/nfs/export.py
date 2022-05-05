@@ -411,7 +411,8 @@ class ExportMgr:
                 return self.create_rgw_export(**kwargs)
             raise NotImplementedError()
         except Exception as e:
-            log.exception(f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
+            log.exception(
+                f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
             raise ErrorResponse.wrap(e)
 
     def delete_export(self,
