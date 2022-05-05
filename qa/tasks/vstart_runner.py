@@ -328,34 +328,30 @@ class LocalRemote(RemoteShell):
         except shutil.SameFileError:
             pass
 
-    # XXX: omit_sudo is re-set to False even in cases of commands like passwd
-    # and chown.
-    # XXX: "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments
-    # are overridden. Former two usually have no applicability for test runs
-    # on developer's machines and see note point on "omit_sudo" to know more
-    # about overriding of "sudo".
-    # XXX: the presence of binary file named after the first argument is
-    # checked in build/bin/, if present the first argument is replaced with
-    # the path to binary file.
-    def _perform_checks_and_adjustments(self, args, omit_sudo, shell):
-        if isinstance(args, list):
-            args = quote(args)
 
-        assert isinstance(args, str)
+    def _omit_cmd_args(self, args, omit_sudo):
+        """
+        Helper tools are omitted since those are not meant for tests executed
+        using vstart_runner.py. And sudo's omission depends on the value of
+        the variable omit_sudo.
+        """
+        helper_tools = ('adjust-ulimits', 'ceph-coverage',
+                        'None/archive/coverage')
+        for i in helper_tools:
+            if i in args:
+                helper_tools_found = True
+                break
+        else:
+            helper_tools_found = False
 
-        first_arg = args[ : args.find(' ')]
-        if '/' not in first_arg:
-            local_bin = os.path.join(BIN_PREFIX, first_arg)
-            if os.path.exists(local_bin):
-                args = args.replace(first_arg, local_bin, 1)
+        if not helper_tools_found and 'sudo' not in args:
+            return args, args
 
-        # we're intentionally logging the command before overriding to avoid
-        # this clutter in the log.
-        log.debug('> ' + args)
+        prefix = ''
 
-        args = args.replace('None/archive/ceph-coverage', '')
-
-        prefix = """
+        if helper_tools_found:
+            args = args.replace('None/archive/coverage', '')
+            prefix += """
 adjust-ulimits() {
     "$@"
 }
@@ -363,6 +359,12 @@ ceph-coverage() {
     "$@"
 }
 """
+            log.debug('Helper tools like adjust-ulimits and ceph-coverage '
+                      'were omitted from the following cmd args before '
+                      'logging and execution; check vstart_runner.py for '
+                      'more details.')
+
+        first_arg = args[ : args.find(' ')]
         # We'll let sudo be a part of command even omit flag says otherwise in
         # cases of commands which can normally be ran only by root.
         last_arg = args[args.rfind(' ') + 1 : ]
@@ -374,17 +376,35 @@ ceph-coverage() {
                     omit_sudo = False
 
         if omit_sudo:
-            prefix = prefix + """
+            prefix += """
 sudo() {
     "$@"
 }
 """
+            log.debug('"sudo" was omitted from the following cmd args '
+                      'before execution and logging using function '
+                      'overriding; check vstart_runner.py for more details.')
+
         # usr_args = args passed by the user/caller of this method
         usr_args, args = args, prefix + args
-        log.info('helper tools like adjust-ulimits , ceph-coverage and '
-                 '"archive/coverage" were found it cmd args. they have been'
-                 'omitted before execution, check vstart_runner.py for more '
-                 'details.')
+
+        return usr_args, args
+
+    def _perform_checks_and_adjustments(self, args, omit_sudo):
+        if isinstance(args, list):
+            args = quote(args)
+
+        assert isinstance(args, str)
+
+        first_arg = args[ : args.find(' ')]
+        if '/' not in first_arg:
+            local_bin = os.path.join(BIN_PREFIX, first_arg)
+            if os.path.exists(local_bin):
+                args = args.replace(first_arg, local_bin, 1)
+
+        usr_args, args = self._omit_cmd_args(args, omit_sudo)
+
+        log.debug('> ' + usr_args)
 
         return args, usr_args
 
@@ -396,11 +416,19 @@ sudo() {
     # XXX: omit_sudo is set to True since using sudo can change the ownership
     # of files which becomes problematic for following executions of
     # vstart_runner.py.
+    # XXX: omit_sudo is re-set to False even in cases of commands like passwd
+    # and chown.
+    # XXX: "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments
+    # are overridden. Former two usually have no applicability for test runs
+    # on developer's machines and see note point on "omit_sudo" to know more
+    # about overriding of "sudo".
+    # XXX: the presence of binary file named after the first argument is
+    # checked in build/bin/, if present the first argument is replaced with
+    # the path to binary file.
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
                 env=None, timeout=None, omit_sudo=True, shell=True, quiet=False):
-        args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo,
-                                                              shell)
+        args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo)
 
         subproc = launch_subprocess(args, cwd, env, shell)
 
