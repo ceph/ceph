@@ -168,6 +168,7 @@ class Zap(object):
         """
         lv = api.get_single_lv(filters={'lv_name': device.lv_name, 'vg_name':
                                         device.vg_name})
+        pv = api.get_single_pv(filters={'lv_uuid': lv.lv_uuid})
         self.unmount_lv(lv)
 
         wipefs(device.abspath)
@@ -182,6 +183,7 @@ class Zap(object):
                 mlogger.info('Only 1 LV left in VG, will proceed to destroy '
                              'volume group %s', device.vg_name)
                 api.remove_vg(device.vg_name)
+                api.remove_pv(pv.pv_name)
             else:
                 mlogger.info('More than 1 LV left in VG, will proceed to '
                              'destroy LV only')
@@ -362,7 +364,7 @@ class Zap(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidDevice(gpt_ok=True),
+            type=arg_validators.ValidZapDevice(gpt_ok=True),
             default=[],
             help='Path to one or many lv (as vg/lv), partition (as /dev/sda1) or device (as /dev/sda)'
         )

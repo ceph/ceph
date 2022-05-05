@@ -5,7 +5,7 @@ Automatically scale MDSs based on status of the file-system using the FSMap
 import logging
 from typing import Any, Optional
 from mgr_module import MgrModule, NotifyType
-from ceph.deployment.service_spec import ServiceSpec
+from orchestrator._interface import MDSSpec, ServiceSpec
 import orchestrator
 import copy
 
@@ -32,12 +32,12 @@ class MDSAutoscaler(orchestrator.OrchestratorClientMixin, MgrModule):
             return completion.result[0]
         return None
 
-    def update_daemon_count(self, spec: ServiceSpec, fs_name: str, abscount: int) -> ServiceSpec:
+    def update_daemon_count(self, spec: ServiceSpec, fs_name: str, abscount: int) -> MDSSpec:
         ps = copy.deepcopy(spec.placement)
         ps.count = abscount
-        newspec = ServiceSpec(service_type=spec.service_type,
-                              service_id=spec.service_id,
-                              placement=ps)
+        newspec = MDSSpec(service_type=spec.service_type,
+                          service_id=spec.service_id,
+                          placement=ps)
         return newspec
 
     def get_required_standby_count(self, fs_map: dict, fs_name: str) -> int:

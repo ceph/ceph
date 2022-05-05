@@ -110,6 +110,15 @@ that case, you can install cephadm directly. For example:
 
      apt install -y cephadm
 
+  In CentOS Stream:
+
+  .. prompt:: bash #
+     :substitutions:
+
+     dnf search release-ceph
+     dnf install --assumeyes centos-release-ceph-|stable-release|
+     dnf install --assumeyes cephadm
+
   In Fedora:
 
   .. prompt:: bash #
@@ -363,10 +372,10 @@ To configure a Ceph cluster to run on a single host, use the ``--single-host-def
 
 The ``--single-host-defaults`` flag sets the following configuration options::
 
-  global/osd_crush_choose_leaf_type = 0
+  global/osd_crush_chooseleaf_type = 0
   global/osd_pool_default_size = 2
   mgr/mgr_standby_modules = False
-   
+
 For more information on these options, see :ref:`one-node-cluster` and ``mgr_standby_modules`` in :ref:`mgr-administrator-guide`.
 
 Deployment in an isolated environment

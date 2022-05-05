@@ -149,7 +149,7 @@ class DriveGroupSpec(ServiceSpec):
         "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
-        "journal_size", "unmanaged", "filter_logic", "preview_only",
+        "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
         "data_allocate_fraction", "method"
     ]
 
@@ -174,6 +174,7 @@ class DriveGroupSpec(ServiceSpec):
                  unmanaged=False,  # type: bool
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
+                 extra_container_args=None,  # type: Optional[List[str]]
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
                  ):
@@ -181,7 +182,8 @@ class DriveGroupSpec(ServiceSpec):
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
                                              placement=placement,
                                              unmanaged=unmanaged,
-                                             preview_only=preview_only)
+                                             preview_only=preview_only,
+                                             extra_container_args=extra_container_args)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
@@ -206,6 +208,7 @@ class DriveGroupSpec(ServiceSpec):
 
         #: Number of osd daemons per "DATA" device.
         #: To fully utilize nvme devices multiple osds are required.
+        #: Can be used to split dual-actuator devices across 2 OSDs, by setting the option to 2.
         self.osds_per_device = osds_per_device
 
         #: A list of strings, containing paths which should back OSDs
