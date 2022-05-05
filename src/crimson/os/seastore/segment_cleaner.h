@@ -177,6 +177,9 @@ public:
     assert(ret + get_unavailable_unreclaimable_bytes() == get_unavailable_bytes());
     return ret;
   }
+  double get_available_ratio() const {
+    return (double)get_available_bytes() / (double)total_bytes;
+  }
 
   journal_seq_t get_journal_head() const {
     if (unlikely(journal_segment_id == NULL_SEG_ID)) {
@@ -636,6 +639,11 @@ private:
   bool init_complete = false;
 
   struct {
+    /**
+     * used_bytes
+     *
+     * Bytes occupied by live extents
+     */
     uint64_t used_bytes = 0;
     /**
      * projected_used_bytes
@@ -829,10 +837,10 @@ public:
 
   store_statfs_t stat() const {
     store_statfs_t st;
-    st.total = get_total_bytes();
-    st.available = get_total_bytes() - get_used_bytes();
-    st.allocated = get_used_bytes();
-    st.data_stored = get_used_bytes();
+    st.total = segments.get_total_bytes();
+    st.available = segments.get_total_bytes() - stats.used_bytes;
+    st.allocated = stats.used_bytes;
+    st.data_stored = stats.used_bytes;
 
     // TODO add per extent type counters for omap_allocated and
     // internal metadata
@@ -1067,81 +1075,29 @@ private:
       backref_buf_entry_t::cmp_t> &&backrefs,
     std::vector<CachedExtentRef> &extents);
 
-  /// Returns free space available for writes
-  size_t get_available_bytes() const {
-    return segments.get_available_bytes();
-  }
-  size_t get_projected_available_bytes() const {
-    return (get_available_bytes() > stats.projected_used_bytes) ?
-      get_available_bytes() - stats.projected_used_bytes:
-      0;
-  }
-
-  /// Returns total space available
-  size_t get_total_bytes() const {
-    return segments.get_total_bytes();
-  }
-
-  /// Returns total space not free
-  size_t get_unavailable_bytes() const {
-    return segments.get_total_bytes() - segments.get_available_bytes();
-  }
-  size_t get_projected_unavailable_bytes() const {
-    assert(get_total_bytes() >= get_projected_available_bytes());
-    return get_total_bytes() - get_projected_available_bytes();
-  }
-
-  /// Returns bytes currently occupied by live extents (not journal)
-  size_t get_used_bytes() const {
-    return stats.used_bytes;
-  }
-
-  /// Return bytes contained in segments in journal
-  size_t get_journal_segment_bytes() const {
-    return segments.get_num_in_journal() * segments.get_segment_size();
-  }
-
-  /**
-   * get_reclaimable_bytes
-   *
-   * Returns the number of bytes in unavailable segments that can be
-   * reclaimed.
+  /*
+   * Space calculations
    */
-  size_t get_reclaimable_bytes() const {
-    auto ret = get_unavailable_bytes() - get_used_bytes();
-    if (ret > get_journal_segment_bytes())
-      return ret - get_journal_segment_bytes();
-    else
-      return 0;
+  std::size_t get_unavailable_unused_bytes() const {
+    assert(segments.get_unavailable_bytes() > stats.used_bytes);
+    return segments.get_unavailable_bytes() - stats.used_bytes;
   }
-
-  /**
-   * get_reclaim_ratio
-   *
-   * Returns the ratio of space reclaimable unavailable space to
-   * total unavailable space.
-   */
   double get_reclaim_ratio() const {
-    if (get_unavailable_bytes() == 0) return 0;
-    return (double)get_reclaimable_bytes() / (double)get_unavailable_bytes();
-  }
-  double get_projected_reclaim_ratio() const {
-    if (get_projected_unavailable_bytes() == 0) return 0;
-    return (double)get_reclaimable_bytes() /
-      (double)get_projected_unavailable_bytes();
+    if (segments.get_unavailable_bytes() == 0) return 0;
+    return (double)get_unavailable_unused_bytes() / (double)segments.get_unavailable_bytes();
   }
 
-  /**
-   * get_available_ratio
-   *
-   * Returns ratio of available space to write to total space
+  /*
+   * Space calculations (projected)
    */
-  double get_available_ratio() const {
-    return (double)get_available_bytes() / (double)get_total_bytes();
+  std::size_t get_projected_available_bytes() const {
+    return (segments.get_available_bytes() > stats.projected_used_bytes) ?
+      segments.get_available_bytes() - stats.projected_used_bytes:
+      0;
   }
   double get_projected_available_ratio() const {
     return (double)get_projected_available_bytes() /
-      (double)get_total_bytes();
+      (double)segments.get_total_bytes();
   }
 
   /**
@@ -1150,9 +1106,8 @@ private:
    * Encapsulates whether block pending gc.
    */
   bool should_block_on_gc() const {
-    // TODO: probably worth projecting journal usage as well
     auto aratio = get_projected_available_ratio();
-    auto rratio = get_projected_reclaim_ratio();
+    auto rratio = get_reclaim_ratio();
     return (
       (aratio < config.available_ratio_hard_limit) ||
       ((aratio < config.available_ratio_gc_max) &&
@@ -1169,8 +1124,8 @@ private:
 	"total {}, "
 	"available {}, "
 	"unavailable {}, "
-	"used {}, "
-	"reclaimable {}, "
+	"unavailable_used {}, "
+	"unavailable_unused {}, "
 	"reclaim_ratio {}, "
 	"available_ratio {}, "
 	"should_block_on_gc {}, "
@@ -1182,13 +1137,13 @@ private:
 	"dirty_tail_limit {}, "
 	"gc_should_trim_journal {}, ",
 	caller,
-	get_total_bytes(),
-	get_available_bytes(),
-	get_unavailable_bytes(),
-	get_used_bytes(),
-	get_reclaimable_bytes(),
+	segments.get_total_bytes(),
+	segments.get_available_bytes(),
+	segments.get_unavailable_bytes(),
+	stats.used_bytes,
+	get_unavailable_unused_bytes(),
 	get_reclaim_ratio(),
-	get_available_ratio(),
+	segments.get_available_ratio(),
 	should_block_on_gc(),
 	gc_should_reclaim_space(),
 	segments.get_journal_head(),
@@ -1258,7 +1213,7 @@ private:
    * Encapsulates logic for whether gc should be reclaiming segment space.
    */
   bool gc_should_reclaim_space() const {
-    auto aratio = get_available_ratio();
+    auto aratio = segments.get_available_ratio();
     auto rratio = get_reclaim_ratio();
     return (
       (aratio < config.available_ratio_hard_limit) ||
