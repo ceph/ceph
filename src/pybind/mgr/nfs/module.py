@@ -6,7 +6,7 @@ from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
 
-from .export import ExportMgr
+from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
 from .utils import available_clusters
 
@@ -109,7 +109,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @CLICommand('nfs export apply', perm='rw')
     @CLICheckNonemptyFileInput(desc='Export JSON or Ganesha EXPORT specification')
-    def _cmd_nfs_export_apply(self, cluster_id: str, inbuf: str) -> Tuple[int, str, str]:
+    @object_format.Responder()
+    def _cmd_nfs_export_apply(self, cluster_id: str, inbuf: str) -> AppliedExportResults:
         """Create or update an export by `-i <json_or_ganesha_export_file>`"""
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf)
 
