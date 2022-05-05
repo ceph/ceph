@@ -91,7 +91,7 @@ void segments_info_t::reset()
   count_close = 0;
 
   total_bytes = 0;
-  avail_bytes = 0;
+  avail_bytes_in_open = 0;
 }
 
 void segments_info_t::add_segment_manager(
@@ -123,7 +123,6 @@ void segments_info_t::add_segment_manager(
   num_empty += nsegments;
 
   total_bytes += sm_size;
-  avail_bytes += sm_size;
 }
 
 void segments_info_t::init_closed(
@@ -144,8 +143,6 @@ void segments_info_t::init_closed(
     ceph_assert(get_journal_head() == JOURNAL_SEQ_NULL);
     ++num_in_journal;
   }
-  ceph_assert(avail_bytes >= get_segment_size());
-  avail_bytes -= get_segment_size();
   // do not increment count_close;
 }
 
@@ -172,6 +169,8 @@ void segments_info_t::mark_open(
     journal_segment_id = segment;
     ++num_in_journal;
   }
+  ceph_assert(segment_info.written_to == 0);
+  avail_bytes_in_open += get_segment_size();
   ++count_open;
 }
 
@@ -194,7 +193,6 @@ void segments_info_t::mark_empty(
     ceph_assert(num_in_journal > 0);
     --num_in_journal;
   }
-  avail_bytes += get_segment_size();
   ++count_release;
 }
 
@@ -213,8 +211,8 @@ void segments_info_t::mark_closed(
   ++num_closed;
   ceph_assert(get_segment_size() >= segment_info.written_to);
   auto seg_avail_bytes = get_segment_size() - segment_info.written_to;
-  ceph_assert(avail_bytes >= seg_avail_bytes);
-  avail_bytes -= seg_avail_bytes;
+  ceph_assert(avail_bytes_in_open >= seg_avail_bytes);
+  avail_bytes_in_open -= seg_avail_bytes;
   ++count_close;
 }
 
@@ -242,8 +240,8 @@ void segments_info_t::update_written_to(
   DEBUG("type={}, offset={}, {}", type, offset, segment_info);
   ceph_assert(type == segment_info.type);
   auto avail_deduction = new_written_to - segment_info.written_to;
-  ceph_assert(avail_bytes >= avail_deduction);
-  avail_bytes -= avail_deduction;
+  ceph_assert(avail_bytes_in_open >= avail_deduction);
+  avail_bytes_in_open -= avail_deduction;
   segment_info.written_to = new_written_to;
 }
 

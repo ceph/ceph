@@ -139,7 +139,11 @@ public:
     return total_bytes;
   }
   std::size_t get_available_bytes() const {
-    return avail_bytes;
+    return num_empty * get_segment_size() + avail_bytes_in_open;
+  }
+  std::size_t get_unavailable_bytes() const {
+    assert(total_bytes >= get_available_bytes());
+    return total_bytes - get_available_bytes();
   }
   journal_seq_t get_journal_head() const {
     if (unlikely(journal_segment_id == NULL_SEG_ID)) {
@@ -195,7 +199,7 @@ private:
   std::size_t count_close;
 
   std::size_t total_bytes;
-  std::size_t avail_bytes;
+  std::size_t avail_bytes_in_open;
 };
 
 /**
