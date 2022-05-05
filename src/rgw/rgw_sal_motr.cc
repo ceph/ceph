@@ -630,7 +630,7 @@ int MotrBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int MotrBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+int MotrBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
     optional_yield y, bool check_size_only)
 {
   /* Not Handled in the first pass as stats are also needed */
@@ -2988,7 +2988,7 @@ void MotrStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
   return;
 }
 
-void MotrStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
+void MotrStore::get_quota(RGWQuota& quota)
 {
   // XXX: Not handled for the first pass
   return;
