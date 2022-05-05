@@ -5443,22 +5443,22 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
 {
   dout(10) << "get_mon_metadata: mon." << mon << dendl;
   ceph_assert(f);
-  if (mon_metadata.size() > monmap->ranks.size()) {
-    for (auto i = monmap->removed_ranks.rbegin();
-        i != monmap->removed_ranks.rend(); ++i) {
-      int rank = *i;
-      if (rank == monmap->ranks.size()){
-        mon_metadata.erase(rank);
-      }
-      for (unsigned j = rank+1; j <= monmap->ranks.size(); ++j){
-          mon_metadata.erase(j-1);
-          mon_metadata.insert( std::pair<int, Metadata>(j-1,mon_metadata[j]) );
-          if (j == monmap->ranks.size()){
-            mon_metadata.erase(j);
-          }
-      }
-   }
-  }
+  // if (mon_metadata.size() > monmap->ranks.size()) {
+  //   for (auto i = monmap->removed_ranks.rbegin();
+  //       i != monmap->removed_ranks.rend(); ++i) {
+  //     int rank = *i;
+  //     if (rank == monmap->ranks.size()){
+  //       mon_metadata.erase(rank);
+  //     }
+  //     for (unsigned j = rank+1; j <= monmap->ranks.size(); ++j){
+  //         mon_metadata.erase(j-1);
+  //         mon_metadata.insert( std::pair<int, Metadata>(j-1,mon_metadata[j]) );
+  //         if (j == monmap->ranks.size()){
+  //           mon_metadata.erase(j);
+  //         }
+  //     }
+  //  }
+  // }
   if (!mon_metadata.count(mon)) {
     err << "mon." << mon << " not found";
     return -EINVAL;
