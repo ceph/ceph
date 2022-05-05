@@ -756,11 +756,10 @@ public:
 
   int get_mon_metadata(int mon, ceph::Formatter *f, std::ostream& err);
   int print_nodes(ceph::Formatter *f, std::ostream& err);
-
   // track metadata reported by win_election()
   std::map<int, Metadata> mon_metadata;
   std::map<int, Metadata> pending_metadata;
-
+  void print_mon_metadata(std::map<int, Metadata> &metadata);
   /**
    *
    */

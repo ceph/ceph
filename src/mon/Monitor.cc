@@ -2256,6 +2256,8 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
   {
     // include previous metadata for missing mons (that aren't part of
     // the current quorum).
+    dout(10) << "mon_metadata:" << dendl;
+    print_mon_metadata(mon_metadata);
     map<int,Metadata> m = metadata;
     for (unsigned rank = 0; rank < monmap->size(); ++rank) {
       if (m.count(rank) == 0 &&
@@ -2263,6 +2265,8 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
 	m[rank] = mon_metadata[rank];
       }
     }
+    dout(10) << "m:" << dendl;
+    print_mon_metadata(m);
 
     // FIXME: This is a bit sloppy because we aren't guaranteed to submit
     // a new transaction immediately after the election finishes.  We should
@@ -5405,15 +5409,32 @@ void Monitor::handle_mon_get_map(MonOpRequestRef op)
   send_latest_monmap(m->get_connection().get());
 }
 
+void Monitor::print_mon_metadata(map<int,Metadata> &metadata) {
+  std::string output = "metadata:\n";
+  for (auto &[key, value] : metadata) {
+    const Metadata& m = value;
+    output += "mon.";
+    output += to_string(key);
+    output += "\n";
+    for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
+        output += p->first.c_str();
+        output += ": ";
+        output += p->second;
+        output += "\n";
+    }
+  }
+  dout(10) << output << dendl;
+} 
 int Monitor::load_metadata()
 {
+  dout(10) << "load_metadata:"<< dendl;
   bufferlist bl;
   int r = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
   if (r)
     return r;
   auto it = bl.cbegin();
   decode(mon_metadata, it);
-
+  print_mon_metadata(mon_metadata);
   pending_metadata = mon_metadata;
   return 0;
 }
@@ -5445,11 +5466,11 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
   const Metadata& m = mon_metadata[mon];
   std::string output = "metadata:\n";
   for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
-    f->dump_string(p->first.c_str(), p->second);
-    output += p->first.c_str();
-    output += ": ";
-    output += p->second;
-    output += "\n";
+      f->dump_string(p->first.c_str(), p->second);
+      output += p->first.c_str();
+      output += ": ";
+      output += p->second;
+      output += "\n";
   }
   dout(10) << output << dendl;
   return 0;
