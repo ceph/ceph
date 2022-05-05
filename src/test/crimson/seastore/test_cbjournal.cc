@@ -248,9 +248,6 @@ struct cbjournal_test_t : public seastar_test_suite_t
   auto get_written_to() {
     return cbj->get_written_to();
   }
-  auto get_last_committed_record_base() {
-    return cbj->get_last_committed_record_base();
-  }
   auto get_applied_to() {
     return cbj->get_applied_to();
   }
@@ -259,9 +256,6 @@ struct cbjournal_test_t : public seastar_test_suite_t
   }
   void update_applied_to(rbm_abs_addr addr, uint32_t len) {
     cbj->update_applied_to(addr, len);
-  }
-  void set_last_committed_record_base(rbm_abs_addr addr) {
-    cbj->set_last_committed_record_base(addr);
   }
   void set_written_to(rbm_abs_addr addr) {
     cbj->set_written_to(addr);
@@ -415,8 +409,6 @@ TEST_F(cbjournal_test_t, update_header)
     ASSERT_EQ(header.size, update_header.size);
     ASSERT_EQ(header.used_size, update_header.used_size);
     ASSERT_EQ(header.written_to + record_total_size, update_header.written_to);
-    ASSERT_EQ(header.last_committed_record_base + block_size,
-	      update_header.last_committed_record_base);
   });
 }
 
@@ -475,15 +467,11 @@ TEST_F(cbjournal_test_t, replay_after_reset)
        });
     }
     auto old_written_to = get_written_to();
-    auto old_last_committed_record_base = get_last_committed_record_base();
     auto old_used_size = get_used_size();
     set_written_to(4096);
-    set_last_committed_record_base(4096);
     set_used_size(0);
     replay();
     ASSERT_EQ(old_written_to, get_written_to());
-    ASSERT_EQ(old_last_committed_record_base,
-      get_last_committed_record_base());
     ASSERT_EQ(old_used_size,
       get_used_size());
   });

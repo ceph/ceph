@@ -23,7 +23,6 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", error=" << header.error
 	     << ", start_offset=" << header.start_offset
 	     << ", applied_to="<< header.applied_to
-	     << ", last_committed_record_base="<< header.last_committed_record_base
 	     << ", written_to=" << header.written_to
 	     << ", flsg=" << header.flag
 	     << ", csum_type=" << header.csum_type
@@ -286,7 +285,6 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
       "append_record: commit target {} used_size {} written length {}",
       target, get_used_size(), length);
 
-    set_last_committed_record_base(target);
     set_used_size(get_used_size() + length);
     paddr_t paddr = convert_abs_addr_to_paddr(
       target + r_size.get_mdlength(),
@@ -403,7 +401,6 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	    r_header.committed_to,
 	    (seastore_off_t)bl.length()
 	  };
-	  set_last_committed_record_base(cursor_addr);
 	  cursor_addr += bl.length();
 	  set_written_to(cursor_addr);
 	  last_seq = r_header.committed_to.segment_seq;

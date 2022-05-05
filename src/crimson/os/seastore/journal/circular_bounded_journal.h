@@ -38,16 +38,15 @@ using NVMeBlockDevice = nvme_device::NVMeBlockDevice;
  * in CBjournal to RBM---the tail (applied_to) is advanced (TODO).
  *
  * - Commit time
- * After submit_record is done, last_committed_record_base and written_to are
- * increased (these are in-memory values)---last_committed_record_base indicates
- * the last committed record and written_to represents where the new record
- * will be appended. Note that applied_to is not changed here.
+ * After submit_record is done, written_to is increased(this in-memory value)
+ * ---written_to represents where the new record will be appended. Note that
+ * applied_to is not changed here.
  *
  * - Replay time
  * At replay time, CBJournal begins to replay records in CBjournal by reading
  * records from applied_to. Then, CBJournal examines whether the records is valid
- * one by one, at which point last_committed_record_base and written_to are
- * recovered if the valid record is founded. Note that only applied_to is stored
+ * one by one, at which point written_to is recovered
+ * if the valid record is founded. Note that only applied_to is stored
  * permanently when the apply work---applying the records in CBJournal to RBM---
  * is done by CBJournal (TODO).
  *
@@ -215,8 +214,6 @@ public:
 
     // start offset of CircularBoundedJournal in the device (start + header length)
     rbm_abs_addr start_offset = 0;
-    // start address where last committed record is written
-    rbm_abs_addr last_committed_record_base = 0;
     // start address where the newest record will be written
     rbm_abs_addr written_to = 0;
     // address to represent where last appllied record is written
@@ -240,7 +237,6 @@ public:
 
       denc(v.start_offset, p);
 
-      denc(v.last_committed_record_base, p);
       denc(v.written_to, p);
       denc(v.applied_to, p);
 
@@ -261,9 +257,9 @@ public:
    * Write position for CircularBoundedJournal
    *
    * | written to rbm |    written length to CircularBoundedJournal    | new write |
-   * ----------------->----------------------------------->------------>
-   *                  ^      	                          ^            ^
-   *            applied_to              last_committed_record_base     written_to
+   * ----------------->------------------------------------------------>
+   *                  ^      	                                       ^
+   *            applied_to                                        written_to
    *
    */
 
@@ -286,7 +282,7 @@ public:
   void update_applied_to(rbm_abs_addr addr, uint32_t len) {
     rbm_abs_addr new_applied_to = addr;
     set_used_size(
-      get_last_committed_record_base() >= new_applied_to ?
+      get_written_to() >= new_applied_to ?
       get_written_to() - (new_applied_to + len) :
       get_written_to() + get_total_size() - (new_applied_to + len));
     set_applied_to(new_applied_to + len);
@@ -305,12 +301,6 @@ public:
   }
   void set_written_to(rbm_abs_addr addr) {
     header.written_to = addr;
-  }
-  rbm_abs_addr get_last_committed_record_base() const {
-    return header.last_committed_record_base;
-  }
-  void set_last_committed_record_base(rbm_abs_addr addr) {
-    header.last_committed_record_base = addr;
   }
   rbm_abs_addr get_applied_to() const {
     return header.applied_to;
