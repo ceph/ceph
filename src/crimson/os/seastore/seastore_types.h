@@ -649,8 +649,7 @@ struct seg_paddr_t : public paddr_t {
   paddr_t maybe_relative_to(paddr_t base) const {
     assert(!base.is_block_relative());
     if (is_block_relative()) {
-      seg_paddr_t& s = base.as_seg_paddr();
-      return s.add_block_relative(*this);
+      return base.add_block_relative(*this);
     } else
       return *this;
   }
@@ -698,6 +697,11 @@ struct blk_paddr_t : public paddr_t {
 
   paddr_t maybe_relative_to(paddr_t base) const {
     return *this;
+  }
+
+  paddr_t add_block_relative(paddr_t o) const {
+    assert(o.is_block_relative());
+    return add_relative(o);
   }
 
 private:
@@ -1805,6 +1809,7 @@ inline paddr_t paddr_t::add_relative(paddr_t o) const {
 
 inline paddr_t paddr_t::add_block_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_block_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_block_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
