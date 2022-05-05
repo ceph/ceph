@@ -6,11 +6,13 @@
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
+#include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/pg_activation_blocker.h"
 
 namespace crimson::osd {
 
-class InternalClientRequest : public OperationT<InternalClientRequest>,
+class InternalClientRequest : public PhasedOperationT<InternalClientRequest>,
                               private CommonClientRequest {
 public:
   explicit InternalClientRequest(Ref<PG> pg);
@@ -42,8 +44,18 @@ private:
   seastar::future<> do_process();
 
   Ref<PG> pg;
-  PipelineHandle handle;
   OpInfo op_info;
+
+public:
+  std::tuple<
+    StartEvent,
+    CommonPGPipeline::WaitForActive::BlockingEvent,
+    PGActivationBlocker::BlockingEvent,
+    CommonPGPipeline::RecoverMissing::BlockingEvent,
+    CommonPGPipeline::GetOBC::BlockingEvent,
+    CommonPGPipeline::Process::BlockingEvent,
+    CompletionEvent
+  > tracking_events;
 };
 
 } // namespace crimson::osd

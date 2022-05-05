@@ -11,7 +11,6 @@
 #include "include/types.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/osd_operation.h"
-#include "crimson/osd/pg.h"
 #include "osd/osd_types.h"
 
 namespace crimson::osd {
@@ -41,11 +40,14 @@ class PGMap {
   pgs_t pgs;
 
 public:
+  using PGCreationBlocker = PGCreationState;
+  using PGCreationBlockingEvent = PGCreationBlocker::BlockingEvent;
   /**
    * Get future for pg with a bool indicating whether it's already being
    * created.
    */
-  std::pair<blocking_future<Ref<PG>>, bool> wait_for_pg(spg_t pgid);
+  std::pair<seastar::future<Ref<PG>>, bool>
+  wait_for_pg(PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
 
   /**
    * get PG in non-blocking manner

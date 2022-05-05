@@ -1,8 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "crimson/osd/osd_operations/pg_advance_map.h"
-
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <seastar/core/future.hh>
 
@@ -10,6 +8,9 @@
 #include "common/Formatter.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
+#include "crimson/osd/osd_operations/pg_advance_map.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
+#include "osd/PeeringState.h"
 
 namespace {
   seastar::logger& logger() {
@@ -56,42 +57,42 @@ seastar::future<> PGAdvanceMap::start()
   logger().debug("{}: start", *this);
 
   IRef ref = this;
-  return with_blocking_future(
-    handle.enter(pg->peering_request_pg_pipeline.process))
-    .then([this] {
-      if (do_init) {
-	pg->handle_initialize(rctx);
-	pg->handle_activate_map(rctx);
-      }
-      return seastar::do_for_each(
-	boost::make_counting_iterator(from + 1),
-	boost::make_counting_iterator(to + 1),
-	[this](epoch_t next_epoch) {
-	  return osd.get_map(next_epoch).then(
-	    [this] (cached_map_t&& next_map) {
-	      pg->handle_advance_map(next_map, rctx);
-	    });
-	}).then([this] {
-	  pg->handle_activate_map(rctx);
-	  handle.exit();
-	  if (do_init) {
-	    osd.pg_map.pg_created(pg->get_pgid(), pg);
-	    osd.shard_services.inc_pg_num();
-	    logger().info("PGAdvanceMap::start new pg {}", *pg);
-	  }
-	  return seastar::when_all_succeed(
-	    pg->get_need_up_thru() \
-              ? osd.shard_services.send_alive(pg->get_same_interval_since())
-              : seastar::now(),
-	    osd.shard_services.dispatch_context(
-	      pg->get_collection_ref(),
-	      std::move(rctx)));
-	}).then_unpack([this] {
-          return osd.shard_services.send_pg_temp();
-        });
-    }).then([this, ref=std::move(ref)] {
-      logger().debug("{}: complete", *this);
-    });
+  return enter_stage<>(
+    pg->peering_request_pg_pipeline.process
+  ).then([this] {
+    if (do_init) {
+      pg->handle_initialize(rctx);
+      pg->handle_activate_map(rctx);
+    }
+    return seastar::do_for_each(
+      boost::make_counting_iterator(from + 1),
+      boost::make_counting_iterator(to + 1),
+      [this](epoch_t next_epoch) {
+        return osd.get_map(next_epoch).then(
+          [this] (cached_map_t&& next_map) {
+            pg->handle_advance_map(next_map, rctx);
+          });
+      }).then([this] {
+        pg->handle_activate_map(rctx);
+        handle.exit();
+        if (do_init) {
+          osd.pg_map.pg_created(pg->get_pgid(), pg);
+          osd.shard_services.inc_pg_num();
+          logger().info("PGAdvanceMap::start new pg {}", *pg);
+        }
+        return seastar::when_all_succeed(
+          pg->get_need_up_thru() \
+            ? osd.shard_services.send_alive(pg->get_same_interval_since())
+            : seastar::now(),
+          osd.shard_services.dispatch_context(
+            pg->get_collection_ref(),
+            std::move(rctx)));
+      }).then_unpack([this] {
+        return osd.shard_services.send_pg_temp();
+      });
+  }).then([this, ref=std::move(ref)] {
+    logger().debug("{}: complete", *this);
+  });
 }
 
 }

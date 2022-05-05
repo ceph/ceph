@@ -21,8 +21,15 @@ namespace crimson::osd {
 
 class ShardServices;
 
+enum class OSDMapGateType {
+  OSD,
+  PG,
+};
+
+template <OSDMapGateType OSDMapGateTypeV>
 class OSDMapGate {
-  struct OSDMapBlocker : public Blocker {
+public:
+  struct OSDMapBlocker : BlockerT<OSDMapBlocker> {
     const char * type_name;
     epoch_t epoch;
 
@@ -37,12 +44,9 @@ class OSDMapGate {
     seastar::shared_promise<epoch_t> promise;
 
     void dump_detail(Formatter *f) const final;
-  private:
-    const char *get_type_name() const final {
-      return type_name;
-    }
   };
 
+private:
   // order the promises in ascending order of the waited osdmap epoch,
   // so we can access all the waiters expecting a map whose epoch is less
   // than or equal to a given epoch
@@ -60,9 +64,15 @@ public:
     : blocker_type(blocker_type), shard_services(shard_services) {}
 
   // wait for an osdmap whose epoch is greater or equal to given epoch
-  blocking_future<epoch_t> wait_for_map(epoch_t epoch);
+  // TODO: define me!
+  seastar::future<epoch_t>
+  wait_for_map(typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
+	       epoch_t epoch);
   void got_map(epoch_t epoch);
   seastar::future<> stop();
 };
+
+using OSD_OSDMapGate = OSDMapGate<OSDMapGateType::OSD>;
+using PG_OSDMapGate = OSDMapGate<OSDMapGateType::PG>;
 
 }

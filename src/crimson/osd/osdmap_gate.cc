@@ -14,39 +14,45 @@ namespace {
 
 namespace crimson::osd {
 
-void OSDMapGate::OSDMapBlocker::dump_detail(Formatter *f) const
+template <OSDMapGateType OSDMapGateTypeV>
+void OSDMapGate<OSDMapGateTypeV>::OSDMapBlocker::dump_detail(Formatter *f) const
 {
   f->open_object_section("OSDMapGate");
   f->dump_int("epoch", epoch);
   f->close_section();
 }
 
-blocking_future<epoch_t> OSDMapGate::wait_for_map(epoch_t epoch)
+template <OSDMapGateType OSDMapGateTypeV>
+seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
+  typename OSDMapBlocker::BlockingEvent::TriggerI&& trigger,
+  epoch_t epoch)
 {
   if (__builtin_expect(stopping, false)) {
-    return make_exception_blocking_future<epoch_t>(
+    return seastar::make_exception_future<epoch_t>(
 	crimson::common::system_shutdown_exception());
   }
   if (current >= epoch) {
-    return make_ready_blocking_future<epoch_t>(current);
+    return seastar::make_ready_future<epoch_t>(current);
   } else {
     logger().info("evt epoch is {}, i have {}, will wait", epoch, current);
     auto &blocker = waiting_peering.emplace(
       epoch, std::make_pair(blocker_type, epoch)).first->second;
     auto fut = blocker.promise.get_shared_future();
     if (shard_services) {
-      return blocker.make_blocking_future(
+      return trigger.maybe_record_blocking(
 	(*shard_services).get().osdmap_subscribe(current, true).then(
 	  [fut=std::move(fut)]() mutable {
 	    return std::move(fut);
-	  }));
+	  }),
+	blocker);
     } else {
-      return blocker.make_blocking_future(std::move(fut));
+      return trigger.maybe_record_blocking(std::move(fut), blocker);
     }
   }
 }
 
-void OSDMapGate::got_map(epoch_t epoch) {
+template <OSDMapGateType OSDMapGateTypeV>
+void OSDMapGate<OSDMapGateTypeV>::got_map(epoch_t epoch) {
   current = epoch;
   auto first = waiting_peering.begin();
   auto last = waiting_peering.upper_bound(epoch);
@@ -56,7 +62,8 @@ void OSDMapGate::got_map(epoch_t epoch) {
   waiting_peering.erase(first, last);
 }
 
-seastar::future<> OSDMapGate::stop() {
+template <OSDMapGateType OSDMapGateTypeV>
+seastar::future<> OSDMapGate<OSDMapGateTypeV>::stop() {
   logger().info("osdmap::stop");
   stopping = true;
   auto first = waiting_peering.begin();
@@ -68,4 +75,7 @@ seastar::future<> OSDMapGate::stop() {
   return seastar::now();
 }
 
-}
+template class OSDMapGate<OSDMapGateType::PG>;
+template class OSDMapGate<OSDMapGateType::OSD>;
+
+} // namespace crimson::osd
