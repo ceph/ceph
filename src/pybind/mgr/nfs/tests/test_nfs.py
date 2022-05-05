@@ -610,7 +610,7 @@ NFS_CORE_PARAM {
                 'secret_access_key': 'the_secret_key',
             }
         }))
-        assert r[0] == 0
+        assert len(r.changes) == 1
 
         export = conf._fetch_export('foo', '/rgw/bucket')
         assert export.export_id == 2
@@ -651,7 +651,7 @@ NFS_CORE_PARAM {
                 'secret_access_key': 'the_secret_key',
             }
         }))
-        assert r[0] == 0
+        assert len(r.changes) == 1
 
         export = conf._fetch_export('foo', '/rgw/bucket')
         assert export.export_id == 2
@@ -691,7 +691,7 @@ NFS_CORE_PARAM {
                 'secret_access_key': 'the_secret_key',
             }
         }))
-        assert r[0] == 0
+        assert len(r.changes) == 1
 
         export = conf._fetch_export(self.cluster_id, '/rgw/bucket')
         assert export.export_id == 2
@@ -737,7 +737,7 @@ NFS_CORE_PARAM {
                 'secret_access_key': 'the_secret_key',
             }
         }))
-        assert r[0] == 0
+        assert len(r.changes) == 1
 
         # no sectype was given, key not present
         info = conf._get_export_dict(self.cluster_id, "/rgw/bucket")
@@ -768,7 +768,7 @@ NFS_CORE_PARAM {
                 'secret_access_key': 'the_secret_key',
             }
         }))
-        assert r[0] == 0
+        assert len(r.changes) == 1
 
         # assert sectype matches new value(s)
         info = conf._get_export_dict(self.cluster_id, "/rgw/bucket")
@@ -783,7 +783,7 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
         r = conf.apply_export(self.cluster_id, self.export_3)
-        assert r[0] == 0
+        assert len(r.changes) == 1
 
     def test_update_export_with_ganesha_conf_sectype(self):
         self._do_mock_test(
@@ -800,7 +800,7 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
         r = conf.apply_export(self.cluster_id, export_conf)
-        assert r[0] == 0
+        assert len(r.changes) == 1
 
         # assert sectype matches new value(s)
         info = conf._get_export_dict(self.cluster_id, "/secure1")
@@ -858,7 +858,10 @@ NFS_CORE_PARAM {
                 }
             },
         ]))
-        assert r[0] == 0
+        # The input object above contains TWO items (two different pseudo paths)
+        # therefore we expect the result to report that two changes have been
+        # applied, rather than the typical 1 change.
+        assert len(r.changes) == 2
 
         export = conf._fetch_export('foo', '/rgw/bucket')
         assert export.export_id == 3
