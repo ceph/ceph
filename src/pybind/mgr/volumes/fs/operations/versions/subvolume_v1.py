@@ -6,7 +6,8 @@ import errno
 import logging
 import json
 from datetime import datetime
-from typing import List, Dict
+from typing import Any, List, Dict
+from pathlib import Path
 
 import cephfs
 
@@ -738,6 +739,69 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 return False
             raise
 
+    def get_pending_clones(self, snapname):
+        pending_clones_info = {"has_pending_clones": "no"}  # type: Dict[str, Any]
+        pending_track_id_list = []
+        pending_clone_list = []
+        index_path = ""
+        orphan_clones_count = 0
+
+        try:
+            if self.has_pending_clones(snapname):
+                pending_track_id_list = self.metadata_mgr.list_all_keys_with_specified_values_from_section('clone snaps', snapname)
+            else:
+                return pending_clones_info
+        except MetadataMgrException as me:
+            if me.errno != -errno.ENOENT:
+                raise VolumeException(-me.args[0], me.args[1])
+
+        try:
+            with open_clone_index(self.fs, self.vol_spec) as index:
+                index_path = index.path.decode('utf-8')
+        except IndexException as e:
+            log.warning("failed to open clone index '{0}' for snapshot '{1}'".format(e, snapname))
+            raise VolumeException(-errno.EINVAL, "failed to open clone index")
+
+        for track_id in pending_track_id_list:
+            try:
+                link_path = self.fs.readlink(os.path.join(index_path, track_id), 4096)
+            except cephfs.Error as e:
+                if e.errno != errno.ENOENT:
+                    raise VolumeException(-e.args[0], e.args[1])
+                else:
+                    try:
+                        # If clone is completed between 'list_all_keys_with_specified_values_from_section'
+                        # and readlink(track_id_path) call then readlink will fail with error ENOENT (2)
+                        # Hence we double check whether track_id is exist in .meta file or not.
+                        value = self.metadata_mgr.get_option('clone snaps', track_id)
+                        # Edge case scenario.
+                        # If track_id for clone exist but path /volumes/_index/clone/{track_id} not found
+                        # then clone is orphan.
+                        orphan_clones_count += 1
+                        continue
+                    except MetadataMgrException as me:
+                        if me.errno != -errno.ENOENT:
+                            raise VolumeException(-me.args[0], me.args[1])
+
+            path = Path(link_path.decode('utf-8'))
+            clone_name = os.path.basename(link_path).decode('utf-8')
+            group_name = os.path.basename(path.parent.absolute())
+            details = {"name": clone_name}  # type: Dict[str, str]
+            if group_name != Group.NO_GROUP_NAME:
+                details["target_group"] = group_name
+            pending_clone_list.append(details)
+
+        if len(pending_clone_list) != 0:
+            pending_clones_info["has_pending_clones"] = "yes"
+            pending_clones_info["pending_clones"] = pending_clone_list
+        else:
+            pending_clones_info["has_pending_clones"] = "no"
+
+        if orphan_clones_count > 0:
+            pending_clones_info["orphan_clones_count"] = orphan_clones_count
+
+        return pending_clones_info
+
     def remove_snapshot(self, snapname):
         if self.has_pending_clones(snapname):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
@@ -757,9 +821,11 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                           'data_pool':'ceph.dir.layout.pool'}
             for key, val in snap_attrs.items():
                 snap_info[key] = self.fs.getxattr(snappath, val)
-            return {'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
-                    'data_pool': snap_info['data_pool'].decode('utf-8'),
-                    'has_pending_clones': "yes" if self.has_pending_clones(snapname) else "no"}
+            pending_clones_info = self.get_pending_clones(snapname)
+            info_dict = {'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
+                    'data_pool': snap_info['data_pool'].decode('utf-8')}  # type: Dict[str, Any]
+            info_dict.update(pending_clones_info);
+            return info_dict
         except cephfs.Error as e:
             if e.errno == errno.ENOENT:
                 raise VolumeException(-errno.ENOENT,
