@@ -6726,7 +6726,8 @@ void Client::collect_and_send_global_metrics() {
   }
 
   // metadata latency
-  if (session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
     metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat)));
     message.push_back(metric);
   }
@@ -6748,7 +6749,8 @@ void Client::collect_and_send_global_metrics() {
   }
 
   // opened files
-  if (session->mds_metric_flags.test(CLIENT_METRIC_TYPE_OPENED_FILES)) {
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_OPENED_FILES)) {
     auto [opened_files, total_inodes] = get_opened_files_rates();
     metric = ClientMetricMessage(OpenedFilesPayload(opened_files, total_inodes));
     message.push_back(metric);
