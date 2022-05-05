@@ -115,21 +115,11 @@ public:
     return segment_size;
   }
   std::size_t get_num_in_journal() const {
+    assert(num_in_journal <= num_closed);
     return num_in_journal;
   }
-  std::size_t get_num_unreclaimable() const {
-    auto ret = num_in_journal + num_open;
-    if (ret > 0) {
-      // assume there is always 1 segment opened for journal (1 overlap)
-      return ret - 1;
-    } else {
-      return ret;
-    }
-  }
   std::size_t get_num_reclaimable() const {
-    auto ret = num_open + num_closed;
-    assert(ret >= get_num_unreclaimable());
-    return ret - get_num_unreclaimable();
+    return num_closed - get_num_in_journal();
   }
   std::size_t get_num_open() const {
     return num_open;
@@ -168,7 +158,7 @@ public:
     return total_bytes - get_available_bytes();
   }
   std::size_t get_unavailable_unreclaimable_bytes() const {
-    auto ret = get_num_unreclaimable() * get_segment_size();
+    auto ret = (num_open + get_num_in_journal()) * get_segment_size();
     assert(ret >= avail_bytes_in_open);
     return ret - avail_bytes_in_open;
   }
@@ -907,6 +897,9 @@ private:
 	max_benefit_cost);
       return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
     } else {
+      ceph_assert(segments.get_num_reclaimable() == 0);
+      // see gc_should_reclaim_space()
+      ceph_abort("impossible!");
       return JOURNAL_SEQ_NULL;
     }
   }
@@ -1106,13 +1099,18 @@ private:
    * Encapsulates whether block pending gc.
    */
   bool should_block_on_gc() const {
+    if (get_dirty_tail_limit() > journal_tail_target) {
+      return true;
+    }
+    if (segments.get_num_reclaimable() == 0) {
+      return false;
+    }
     auto aratio = get_projected_available_ratio();
     auto rratio = get_reclaim_ratio();
     return (
       (aratio < config.available_ratio_hard_limit) ||
       ((aratio < config.available_ratio_gc_max) &&
-       (rratio > config.reclaim_ratio_hard_limit)) ||
-      (get_dirty_tail_limit() > journal_tail_target)
+       (rratio > config.reclaim_ratio_hard_limit))
     );
   }
 
@@ -1121,11 +1119,15 @@ private:
     if (logger.is_enabled(seastar::log_level::debug)) {
       logger.debug(
 	"SegmentCleaner::log_gc_state({}): "
-	"total {}, "
-	"available {}, "
-	"unavailable {}, "
-	"unavailable_used {}, "
-	"unavailable_unused {}, "
+	"empty {}, "
+	"open {}, "
+	"closed {}, "
+	"in_journal {}, "
+	"total {}B, "
+	"available {}B, "
+	"unavailable {}B, "
+	"unavailable_used {}B, "
+	"unavailable_unused {}B; "
 	"reclaim_ratio {}, "
 	"available_ratio {}, "
 	"should_block_on_gc {}, "
@@ -1137,6 +1139,10 @@ private:
 	"dirty_tail_limit {}, "
 	"gc_should_trim_journal {}, ",
 	caller,
+	segments.get_num_empty(),
+	segments.get_num_open(),
+	segments.get_num_closed(),
+	segments.get_num_in_journal(),
 	segments.get_total_bytes(),
 	segments.get_available_bytes(),
 	segments.get_unavailable_bytes(),
@@ -1213,6 +1219,9 @@ private:
    * Encapsulates logic for whether gc should be reclaiming segment space.
    */
   bool gc_should_reclaim_space() const {
+    if (segments.get_num_reclaimable() == 0) {
+      return false;
+    }
     auto aratio = segments.get_available_ratio();
     auto rratio = get_reclaim_ratio();
     return (

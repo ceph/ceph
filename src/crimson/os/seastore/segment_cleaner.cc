@@ -80,6 +80,7 @@ void segments_info_t::reset()
   segment_size = 0;
 
   journal_segment_id = NULL_SEG_ID;
+  // the number of in-journal closed segments
   num_in_journal = 0;
 
   num_open = 0;
@@ -167,7 +168,6 @@ void segments_info_t::mark_open(
       ceph_assert(last_journal_segment.seq + 1 == seq);
     }
     journal_segment_id = segment;
-    ++num_in_journal;
   }
   ceph_assert(segment_info.written_to == 0);
   avail_bytes_in_open += get_segment_size();
@@ -209,6 +209,9 @@ void segments_info_t::mark_closed(
   ceph_assert(num_open > 0);
   --num_open;
   ++num_closed;
+  if (segment_info.type == segment_type_t::JOURNAL) {
+    ++num_in_journal;
+  }
   ceph_assert(get_segment_size() >= segment_info.written_to);
   auto seg_avail_bytes = get_segment_size() - segment_info.written_to;
   ceph_assert(avail_bytes_in_open >= seg_avail_bytes);
