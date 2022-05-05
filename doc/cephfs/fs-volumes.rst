@@ -362,6 +362,39 @@ The output format is json and contains fields as follows.
 * created_at: time of creation of snapshot in the format "YYYY-MM-DD HH:MM:SS:ffffff"
 * data_pool: data pool the snapshot belongs to
 * has_pending_clones: "yes" if snapshot clone is in progress otherwise "no"
+* pending_clones: list of in progress or pending clones and their target group if exist otherwise this field is not shown
+* orphan_clones_count: count of orphan clones if snapshot has orphan clones otherwise this field is not shown
+
+Sample output if snapshot clones are in progress or pending state::
+
+  $ ceph fs subvolume snapshot info cephfs subvol snap
+  {
+      "created_at": "2022-06-14 13:54:58.618769",
+      "data_pool": "cephfs.cephfs.data",
+      "has_pending_clones": "yes",
+      "pending_clones": [
+          {
+              "name": "clone_1",
+              "target_group": "target_subvol_group"
+          },
+          {
+              "name": "clone_2"
+          },
+          {
+              "name": "clone_3",
+              "target_group": "target_subvol_group"
+          }
+      ]
+  }
+
+Sample output if no snapshot clone is in progress or pending state::
+
+  $ ceph fs subvolume snapshot info cephfs subvol snap
+  {
+      "created_at": "2022-06-14 13:54:58.618769",
+      "data_pool": "cephfs.cephfs.data",
+      "has_pending_clones": "no"
+  }
 
 Set custom metadata on the snapshot as a key-value pair using::
 
