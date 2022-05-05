@@ -24,6 +24,8 @@ class TestCommandListNetworks:
             139.1.0.0/16 via 10.4.0.1 dev tun0 proto static metric 50
             140.1.0.0/17 via 10.4.0.1 dev tun0 proto static metric 50
             141.1.0.0/16 via 10.4.0.1 dev tun0 proto static metric 50
+            172.16.100.34 via 172.16.100.34 dev eth1 proto kernel scope link src 172.16.100.34
+            192.168.122.1 dev ens3 proto dhcp scope link src 192.168.122.236 metric 100
             169.254.0.0/16 dev docker0 scope link metric 1000
             172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1
             192.168.39.0/24 dev virbr1 proto kernel scope link src 192.168.39.1 linkdown
@@ -33,7 +35,9 @@ class TestCommandListNetworks:
             195.135.221.12 via 192.168.178.1 dev enxd89ef3f34260 proto static metric 100
             """),
             {
-                '10.4.0.1': {'tun0': {'10.4.0.2'}},
+                '172.16.100.34/32': {'eth1': {'172.16.100.34'}},
+                '192.168.122.1/32': {'ens3': {'192.168.122.236'}},
+                '10.4.0.1/32': {'tun0': {'10.4.0.2'}},
                 '172.17.0.0/16': {'docker0': {'172.17.0.1'}},
                 '192.168.39.0/24': {'virbr1': {'192.168.39.1'}},
                 '192.168.122.0/24': {'virbr0': {'192.168.122.1'}},
@@ -61,7 +65,7 @@ class TestCommandListNetworks:
             {
                 '10.3.64.0/24': {'eno1': {'10.3.64.23', '10.3.64.27'}},
                 '10.88.0.0/16': {'cni-podman0': {'10.88.0.1'}},
-                '172.21.3.1': {'tun0': {'172.21.3.2'}},
+                '172.21.3.1/32': {'tun0': {'172.21.3.2'}},
                 '192.168.122.0/24': {'virbr0': {'192.168.122.1'}}
             }
         ),
@@ -175,10 +179,13 @@ class TestCommandListNetworks:
                    valid_lft forever preferred_lft forever
             """),
             {
-                '2001:1458:301:eb::/64': {
+                '2001:1458:301:eb::100:1a/128': {
                     'ens20f0': {
                         '2001:1458:301:eb::100:1a'
                     },
+                },
+                '2001:1458:301:eb::/64': {
+                    'ens20f0': set(),
                 },
                 'fe80::/64': {
                     'ens20f0': {'fe80::2e60:cff:fef8:da41'},
@@ -224,5 +231,5 @@ class TestCommandListNetworks:
         with with_cephadm_ctx([]) as ctx:
             cd.command_list_networks(ctx)
             assert json.loads(capsys.readouterr().out) == {
-                '10.4.0.1': {'tun0': ['10.4.0.2']}
+                '10.4.0.1/32': {'tun0': ['10.4.0.2']}
             }
