@@ -696,6 +696,10 @@ struct blk_paddr_t : public paddr_t {
     return add_offset(off);
   }
 
+  paddr_t maybe_relative_to(paddr_t base) const {
+    return *this;
+  }
+
 private:
   void check_blk_off_valid(const block_off_t offset) const {
     assert(offset <= BLK_OFF_MAX);
@@ -1813,9 +1817,7 @@ inline paddr_t paddr_t::add_record_relative(paddr_t o) const {
 
 inline paddr_t paddr_t::maybe_relative_to(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, maybe_relative_to(o))
-  if (get_addr_type() == addr_types_t::RANDOM_BLOCK) {
-    return *this;
-  }
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, maybe_relative_to(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
