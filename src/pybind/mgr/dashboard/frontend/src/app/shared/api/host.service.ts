@@ -141,7 +141,9 @@ export class HostService extends ApiClient {
         const devices = _.flatMap(hosts, (host) => {
           return host.devices.map((device) => {
             device.hostname = host.name;
-            device.uid = device.device_id ? device.device_id : `${device.hostname}-${device.path}`;
+            device.uid = device.device_id
+              ? `${device.device_id}-${device.hostname}-${device.path}`
+              : `${device.hostname}-${device.path}`;
             return device;
           });
         });
