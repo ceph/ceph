@@ -61,6 +61,7 @@ SUBSYS(perfcounter, 1, 5)
 SUBSYS(rgw, 1, 5)                 // log level for the Rados gateway
 SUBSYS(rgw_sync, 1, 5)
 SUBSYS(rgw_datacache, 1, 5)
+SUBSYS(rgw_access, 1, 5)
 SUBSYS(javaclient, 1, 5)
 SUBSYS(asok, 1, 5)
 SUBSYS(throttle, 1, 1)
