@@ -114,12 +114,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf)
 
     @CLICommand('nfs cluster create', perm='rw')
+    @object_format.EmptyResponder()
     def _cmd_nfs_cluster_create(self,
                                 cluster_id: str,
                                 placement: Optional[str] = None,
                                 ingress: Optional[bool] = None,
                                 virtual_ip: Optional[str] = None,
-                                port: Optional[int] = None) -> Tuple[int, str, str]:
+                                port: Optional[int] = None) -> None:
         """Create an NFS Cluster"""
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
