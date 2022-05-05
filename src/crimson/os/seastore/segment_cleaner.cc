@@ -434,6 +434,7 @@ void SegmentCleaner::register_metrics()
     sm::make_counter("segments_closed",
 		     [this] { return segments.get_num_closed(); },
 		     sm::description("the number of closed segments")),
+
     sm::make_counter("segments_count_open",
 		     [this] { return segments.get_count_open(); },
 		     sm::description("the count of open segment operations")),
@@ -443,12 +444,26 @@ void SegmentCleaner::register_metrics()
     sm::make_counter("segments_count_close",
 		     [this] { return segments.get_count_close(); },
 		     sm::description("the count of close segment operations")),
+
     sm::make_counter("total_bytes",
 		     [this] { return segments.get_total_bytes(); },
 		     sm::description("the size of the space")),
     sm::make_counter("available_bytes",
 		     [this] { return segments.get_available_bytes(); },
 		     sm::description("the size of the space is available")),
+    sm::make_counter("unavailable_unreclaimable_bytes",
+		     [this] { return segments.get_unavailable_unreclaimable_bytes(); },
+		     sm::description("the size of the space is unavailable and unreclaimable")),
+    sm::make_counter("unavailable_reclaimable_bytes",
+		     [this] { return segments.get_unavailable_reclaimable_bytes(); },
+		     sm::description("the size of the space is unavailable and reclaimable")),
+    sm::make_counter("used_bytes", stats.used_bytes,
+		     sm::description("the size of the space occupied by live extents")),
+    sm::make_counter("unavailable_unused_bytes",
+		     [this] { return get_unavailable_unused_bytes(); },
+		     sm::description("the size of the space is unavailable and not alive")),
+    sm::make_counter("projected_used_bytes", stats.projected_used_bytes,
+		     sm::description("the size of the space going to be occupied by new extents")),
 
     sm::make_counter("accumulated_blocked_ios", stats.accumulated_blocked_ios,
 		     sm::description("accumulated total number of ios that were blocked by gc")),
@@ -458,10 +473,6 @@ void SegmentCleaner::register_metrics()
 		     sm::description("bytes being reclaimed")),
     sm::make_counter("ios_blocking", stats.ios_blocking,
 		     sm::description("IOs that are blocking on space usage")),
-    sm::make_counter("used_bytes", stats.used_bytes,
-		     sm::description("the size of the space occupied by live extents")),
-    sm::make_counter("projected_used_bytes", stats.projected_used_bytes,
-		     sm::description("the size of the space going to be occupied by new extents")),
     sm::make_histogram("segment_utilization_distribution",
 		       [this]() -> seastar::metrics::histogram& {
 		         return stats.segment_util;
@@ -484,10 +495,10 @@ segment_id_t SegmentCleaner::allocate_segment(
     if (segment_info.is_empty()) {
       segments.mark_open(seg_id, seq, type);
       INFO("opened, should_block_on_gc {}, projected_avail_ratio {}, "
-           "projected_reclaim_ratio {}",
+           "reclaim_ratio {}",
            should_block_on_gc(),
            get_projected_available_ratio(),
-           get_projected_reclaim_ratio());
+           get_reclaim_ratio());
       return seg_id;
     }
   }
@@ -565,10 +576,10 @@ void SegmentCleaner::close_segment(segment_id_t segment)
   LOG_PREFIX(SegmentCleaner::close_segment);
   segments.mark_closed(segment);
   INFO("closed, should_block_on_gc {}, projected_avail_ratio {}, "
-       "projected_reclaim_ratio {}",
+       "reclaim_ratio {}",
        should_block_on_gc(),
        get_projected_available_ratio(),
-       get_projected_reclaim_ratio());
+       get_reclaim_ratio());
 }
 
 SegmentCleaner::trim_backrefs_ret SegmentCleaner::trim_backrefs(
@@ -1097,11 +1108,11 @@ SegmentCleaner::maybe_release_segment(Transaction &t)
     ).safe_then([this, FNAME, &t, to_release] {
       segments.mark_empty(to_release);
       INFOT("released, should_block_on_gc {}, projected_avail_ratio {}, "
-           "projected_reclaim_ratio {}",
+           "reclaim_ratio {}",
            t,
            should_block_on_gc(),
            get_projected_available_ratio(),
-           get_projected_reclaim_ratio());
+           get_reclaim_ratio());
       if (space_tracker->get_usage(to_release) != 0) {
         space_tracker->dump_usage(to_release);
         ceph_abort();
