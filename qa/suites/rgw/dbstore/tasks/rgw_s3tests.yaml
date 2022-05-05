@@ -1,0 +1,15 @@
+tasks:
+- install:
+- ceph:
+- rgw: [client.0]
+- exec:
+    client.0:
+      - sudo chmod 0777 /var/run/ceph
+      - sudo chmod 0777 /var/run/ceph/dbstore-default_ns.db
+- s3tests:
+    client.0:
+      force-branch: ceph-master
+      dbstore_tests: True
+      rgw_server: client.0
+      extra_attrs: ["!fails_on_rgw,!fails_on_dbstore"]
+
