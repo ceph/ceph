@@ -535,7 +535,7 @@ class LocalDaemon(object):
             self.stop()
 
         self.proc = self.controller.run(args=[
-            os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)),
+            os.path.join(BIN_PREFIX, "ceph-{0}".format(self.daemon_type)),
             "-i", self.daemon_id])
 
     def signal(self, sig, silent=False):
