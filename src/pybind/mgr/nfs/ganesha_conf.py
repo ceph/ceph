@@ -10,6 +10,42 @@ if TYPE_CHECKING:
     from nfs.module import Module
 
 
+def _indentation(depth: int, size: int = 4) -> str:
+    return " " * (depth * size)
+
+
+def _format_val(block_name: str, key: str, val: str) -> str:
+    if isinstance(val, list):
+        return ', '.join([_format_val(block_name, key, v) for v in val])
+    if isinstance(val, bool):
+        return str(val).lower()
+    if isinstance(val, int) or (block_name == 'CLIENT'
+                                and key == 'clients'):
+        return '{}'.format(val)
+    return '"{}"'.format(val)
+
+
+def _validate_squash(squash: str) -> None:
+    valid_squash_ls = [
+        "root", "root_squash", "rootsquash", "rootid", "root_id_squash",
+        "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
+        "allanonymous", "no_root_squash", "none", "noidsquash",
+    ]
+    if squash.lower() not in valid_squash_ls:
+        raise NFSInvalidOperation(
+            f"squash {squash} not in valid list {valid_squash_ls}"
+        )
+
+
+def _validate_access_type(access_type: str) -> None:
+    valid_access_types = ['rw', 'ro', 'none']
+    if not isinstance(access_type, str) or access_type.lower() not in valid_access_types:
+        raise NFSInvalidOperation(
+            f'{access_type} is invalid, valid access type are'
+            f'{valid_access_types}'
+        )
+
+
 class RawBlock():
     def __init__(self, block_name: str, blocks: List['RawBlock'] = [], values: Dict[str, Any] = {}):
         if not values:  # workaround mutable default argument
@@ -133,49 +169,6 @@ class GaneshaConfParser:
         while self.stream():
             blocks.append(self.parse_block_or_section())
         return blocks
-
-    @staticmethod
-    def _indentation(depth: int, size: int = 4) -> str:
-        conf_str = ""
-        for _ in range(0, depth * size):
-            conf_str += " "
-        return conf_str
-
-    @staticmethod
-    def write_block_body(block: RawBlock, depth: int = 0) -> str:
-        def format_val(key: str, val: str) -> str:
-            if isinstance(val, list):
-                return ', '.join([format_val(key, v) for v in val])
-            if isinstance(val, bool):
-                return str(val).lower()
-            if isinstance(val, int) or (block.block_name == 'CLIENT'
-                                        and key == 'clients'):
-                return '{}'.format(val)
-            return '"{}"'.format(val)
-
-        conf_str = ""
-        for blo in block.blocks:
-            conf_str += GaneshaConfParser.write_block(blo, depth)
-
-        for key, val in block.values.items():
-            if val is not None:
-                conf_str += GaneshaConfParser._indentation(depth)
-                conf_str += '{} = {};\n'.format(key, format_val(key, val))
-        return conf_str
-
-    @staticmethod
-    def write_block(block: RawBlock, depth: int = 0) -> str:
-        if block.block_name == "%url":
-            return '%url "{}"\n\n'.format(block.values['value'])
-
-        conf_str = ""
-        conf_str += GaneshaConfParser._indentation(depth)
-        conf_str += format(block.block_name)
-        conf_str += " {\n"
-        conf_str += GaneshaConfParser.write_block_body(block, depth + 1)
-        conf_str += GaneshaConfParser._indentation(depth)
-        conf_str += "}\n"
-        return conf_str
 
 
 class FSAL(object):
@@ -456,27 +449,6 @@ class Export:
             'clients': [client.to_dict() for client in self.clients]
         }
 
-    @staticmethod
-    def validate_access_type(access_type: str) -> None:
-        valid_access_types = ['rw', 'ro', 'none']
-        if not isinstance(access_type, str) or access_type.lower() not in valid_access_types:
-            raise NFSInvalidOperation(
-                f'{access_type} is invalid, valid access type are'
-                f'{valid_access_types}'
-            )
-
-    @staticmethod
-    def validate_squash(squash: str) -> None:
-        valid_squash_ls = [
-            "root", "root_squash", "rootsquash", "rootid", "root_id_squash",
-            "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
-            "allanonymous", "no_root_squash", "none", "noidsquash",
-        ]
-        if squash.lower() not in valid_squash_ls:
-            raise NFSInvalidOperation(
-                f"squash {squash} not in valid list {valid_squash_ls}"
-            )
-
     def validate(self, mgr: 'Module') -> None:
         if not isabs(self.pseudo) or self.pseudo == "/":
             raise NFSInvalidOperation(
@@ -484,8 +456,8 @@ class Export:
                 "path and it cannot be just '/'."
             )
 
-        self.validate_squash(self.squash)
-        self.validate_access_type(self.access_type)
+        _validate_squash(self.squash)
+        _validate_access_type(self.access_type)
 
         if not isinstance(self.security_label, bool):
             raise NFSInvalidOperation('security_label must be a boolean value')
@@ -501,9 +473,9 @@ class Export:
 
         for client in self.clients:
             if client.squash:
-                self.validate_squash(client.squash)
+                _validate_squash(client.squash)
             if client.access_type:
-                self.validate_access_type(client.access_type)
+                _validate_access_type(client.access_type)
 
         if self.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             fs = cast(CephFSFSAL, self.fsal)
@@ -519,3 +491,33 @@ class Export:
         if not isinstance(other, Export):
             return False
         return self.to_dict() == other.to_dict()
+
+
+def _format_block_body(block: RawBlock, depth: int = 0) -> str:
+    conf_str = ""
+    for blo in block.blocks:
+        conf_str += format_block(blo, depth)
+
+    for key, val in block.values.items():
+        if val is not None:
+            conf_str += _indentation(depth)
+            fval = _format_val(block.block_name, key, val)
+            conf_str += '{} = {};\n'.format(key, fval)
+    return conf_str
+
+
+def format_block(block: RawBlock, depth: int = 0) -> str:
+    """Format a raw block object into text suitable as a ganesha configuration
+    block.
+    """
+    if block.block_name == "%url":
+        return '%url "{}"\n\n'.format(block.values['value'])
+
+    conf_str = ""
+    conf_str += _indentation(depth)
+    conf_str += format(block.block_name)
+    conf_str += " {\n"
+    conf_str += _format_block_body(block, depth + 1)
+    conf_str += _indentation(depth)
+    conf_str += "}\n"
+    return conf_str
