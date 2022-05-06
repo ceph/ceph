@@ -255,22 +255,22 @@ class NFSCluster:
             log.exception(f"Setting NFS-Ganesha Config failed for {cluster_id}")
             raise ErrorResponse.wrap(e)
 
-    def reset_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
+    def reset_nfs_cluster_config(self, cluster_id: str) -> None:
         try:
             if cluster_id in available_clusters(self.mgr):
                 rados_obj = self._rados(cluster_id)
                 if not rados_obj.check_user_config():
-                    return 0, "", "NFS-Ganesha User Config does not exist"
+                    raise NonFatalError("NFS-Ganesha User Config does not exist")
                 rados_obj.remove_obj(user_conf_obj_name(cluster_id),
                                      conf_obj_name(cluster_id))
                 restart_nfs_service(self.mgr, cluster_id)
-                return 0, "NFS-Ganesha Config Reset Successfully", ""
+                return
             raise ClusterNotFound()
         except NotImplementedError:
-            return 0, "NFS-Ganesha Config Removed Successfully "\
-                "(Manual Restart of NFS PODS required)", ""
+            raise ManualRestartRequired("NFS-Ganesha Config Removed Successfully")
         except Exception as e:
-            return exception_handler(e, f"Resetting NFS-Ganesha Config failed for {cluster_id}")
+            log.exception(f"Resetting NFS-Ganesha Config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
     def _rados(self, cluster_id: str) -> NFSRados:
         """Return a new NFSRados object for the given cluster id."""
