@@ -260,10 +260,6 @@ public:
     return src;
   }
 
-  bool is_cleaner_transaction() const {
-    return src >= Transaction::src_t::CLEANER_TRIM;
-  }
-
   bool is_weak() const {
     return weak;
   }
@@ -474,6 +470,11 @@ inline std::ostream& operator<<(std::ostream& os,
   default:
     ceph_abort("impossible");
   }
+}
+
+constexpr bool is_cleaner_transaction(Transaction::src_t src) {
+  return (src >= Transaction::src_t::CLEANER_TRIM &&
+          src < Transaction::src_t::MAX);
 }
 
 /// Should only be used with dummy staged-fltree node extent manager
