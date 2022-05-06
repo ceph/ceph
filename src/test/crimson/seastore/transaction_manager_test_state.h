@@ -129,7 +129,7 @@ protected:
 };
 
 auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
-  auto tm = make_transaction_manager(true);
+  auto tm = make_transaction_manager(tm_make_config_t::get_default());
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     "",
@@ -154,8 +154,9 @@ protected:
   TMTestState(std::size_t num_devices) : EphemeralTestState(num_devices) {}
 
   virtual void _init() override {
-    tm = make_transaction_manager(true,
-      j_type == journal_type::SEGMENT_JOURNAL ? false : true);
+    tm_make_config_t config;
+    config.cbjournal = j_type == journal_type::SEGMENT_JOURNAL ? false : true;
+    tm = make_transaction_manager(config);
     tm->add_device(segment_manager.get(), true);
     if (j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
       tm->add_device(rb_device.get(), false);
