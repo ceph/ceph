@@ -209,7 +209,6 @@ public:
     uuid_d uuid;
     uint64_t block_size = 0; // block size of underlying device
     uint64_t size = 0;   // max length of journal
-    uint32_t error = 0;      // reserved
 
     // start offset of CircularBoundedJournal in the device (start + header length)
     rbm_abs_addr start_offset = 0;
@@ -230,7 +229,6 @@ public:
       denc(v.magic, p);
       denc(v.uuid, p);
       denc(v.block_size, p);
-      denc(v.error, p);
 
       denc(v.start_offset, p);
 
