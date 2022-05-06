@@ -653,6 +653,7 @@ TransactionManagerRef make_transaction_manager(bool detailed, bool cbjournal)
   } else {
     journal = journal::make_circularbounded(
       nullptr, "");
+    segment_cleaner->set_disable_trim(true);
   }
   epm->init_ool_writers(
       *segment_cleaner,

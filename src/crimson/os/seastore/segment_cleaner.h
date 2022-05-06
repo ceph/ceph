@@ -690,6 +690,7 @@ private:
 
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
 
+  bool disable_trim = false; // for test
 public:
   SegmentCleaner(
     config_t config,
@@ -751,7 +752,7 @@ public:
 
   void init_mkfs() {
     auto journal_head = segments.get_journal_head();
-    ceph_assert(journal_head != JOURNAL_SEQ_NULL);
+    ceph_assert(disable_trim || journal_head != JOURNAL_SEQ_NULL);
     journal_tail_target = journal_head;
     journal_tail_committed = journal_head;
   }
@@ -876,6 +877,10 @@ public:
 
   bool debug_check_space(const SpaceTrackerI &tracker) {
     return space_tracker->equals(tracker);
+  }
+
+  void set_disable_trim(bool val){
+    disable_trim = val;
   }
 
   using work_ertr = ExtentCallbackInterface::extent_mapping_ertr;
@@ -1222,10 +1227,12 @@ private:
    * Encapsulates whether block pending gc.
    */
   bool should_block_on_trim() const {
+    if (disable_trim) return false;
     return get_dirty_tail_limit() > journal_tail_target;
   }
 
   bool should_block_on_reclaim() const {
+    if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1244,7 +1251,8 @@ private:
 
   void log_gc_state(const char *caller) const {
     auto &logger = crimson::get_logger(ceph_subsys_seastore_cleaner);
-    if (logger.is_enabled(seastar::log_level::debug)) {
+    if (logger.is_enabled(seastar::log_level::debug) &&
+	!disable_trim) {
       logger.debug(
 	"SegmentCleaner::log_gc_state({}): "
 	"empty {}, "
@@ -1292,6 +1300,9 @@ private:
 
 public:
   seastar::future<> reserve_projected_usage(size_t projected_usage) {
+    if (disable_trim) {
+      return seastar::now();
+    }
     ceph_assert(init_complete);
     // The pipeline configuration prevents another IO from entering
     // prepare until the prior one exits and clears this.
@@ -1333,6 +1344,7 @@ public:
   }
 
   void release_projected_usage(size_t projected_usage) {
+    if (disable_trim) return;
     ceph_assert(init_complete);
     ceph_assert(stats.projected_used_bytes >= projected_usage);
     stats.projected_used_bytes -= projected_usage;
@@ -1364,6 +1376,7 @@ private:
    * Encapsulates logic for whether gc should be reclaiming segment space.
    */
   bool gc_should_reclaim_space() const {
+    if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1391,6 +1404,7 @@ private:
    * True if gc should be running.
    */
   bool gc_should_run() const {
+    if (disable_trim) return false;
     ceph_assert(init_complete);
     return gc_should_reclaim_space() || gc_should_trim_journal();
   }
