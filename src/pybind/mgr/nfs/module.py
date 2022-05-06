@@ -78,12 +78,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
 
     @CLICommand('nfs export rm', perm='rw')
-    def _cmd_nfs_export_rm(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
+    @object_format.EmptyResponder()
+    def _cmd_nfs_export_rm(self, cluster_id: str, pseudo_path: str) -> None:
         """Remove a cephfs export"""
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
     @CLICommand('nfs export delete', perm='rw')
-    def _cmd_nfs_export_delete(self, cluster_id: str, pseudo_path: str) -> Tuple[int, str, str]:
+    @object_format.EmptyResponder()
+    def _cmd_nfs_export_delete(self, cluster_id: str, pseudo_path: str) -> None:
         """Delete a cephfs export (DEPRECATED)"""
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 

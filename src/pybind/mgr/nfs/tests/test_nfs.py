@@ -899,8 +899,8 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
         assert len(conf.exports[self.cluster_id]) == 2
-        assert conf.delete_export(cluster_id=self.cluster_id,
-                                  pseudo_path="/rgw") == (0, "Successfully deleted export", "")
+        conf.delete_export(cluster_id=self.cluster_id,
+                           pseudo_path="/rgw")
         exports = conf.exports[self.cluster_id]
         assert len(exports) == 1
         assert exports[0].export_id == 1

@@ -323,7 +323,7 @@ class ExportMgr:
             cluster_id: str,
             pseudo_path: Optional[str],
             export_obj: Optional[Export] = None
-    ) -> Tuple[int, str, str]:
+    ) -> None:
         try:
             if export_obj:
                 export: Optional[Export] = export_obj
@@ -340,10 +340,11 @@ class ExportMgr:
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                     log.debug("Deleted all exports for cluster %s", cluster_id)
-                return 0, "Successfully deleted export", ""
-            return 0, "", "Export does not exist"
+                return None
+            raise NonFatalError("Export does not exist")
         except Exception as e:
-            return exception_handler(e, f"Failed to delete {pseudo_path} export for {cluster_id}")
+            log.exception(f"Failed to delete {pseudo_path} export for {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
     def _fetch_export_obj(self, cluster_id: str, ex_id: int) -> Optional[Export]:
         try:
@@ -413,10 +414,10 @@ class ExportMgr:
             log.exception(f"Failed to create {kwargs['pseudo_path']} export for {kwargs['cluster_id']}")
             raise ErrorResponse.wrap(e)
 
-    @export_cluster_checker
     def delete_export(self,
                       cluster_id: str,
-                      pseudo_path: str) -> Tuple[int, str, str]:
+                      pseudo_path: str) -> None:
+        self._validate_cluster_id(cluster_id)
         return self._delete_export(cluster_id, pseudo_path)
 
     def delete_all_exports(self, cluster_id: str) -> None:
@@ -426,10 +427,11 @@ class ExportMgr:
             log.info("No exports to delete")
             return
         for export in export_list:
-            ret, out, err = self._delete_export(cluster_id=cluster_id, pseudo_path=None,
-                                                export_obj=export)
-            if ret != 0:
-                raise NFSException(f"Failed to delete exports: {err} and {ret}")
+            try:
+                self._delete_export(cluster_id=cluster_id, pseudo_path=None,
+                                    export_obj=export)
+            except Exception as e:
+                raise NFSException(f"Failed to delete export {export.export_id}: {e}")
         log.info("All exports successfully deleted for cluster id: %s", cluster_id)
 
     def list_all_exports(self) -> List[Dict[str, Any]]:
