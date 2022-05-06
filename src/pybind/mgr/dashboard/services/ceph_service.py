@@ -249,7 +249,7 @@ class CephService(object):
             # thus it is not relevant for us which daemon we are using.
             # NOTE: the list may contain daemons that are 'down' or 'destroyed'.
             for daemon in device['daemons']:
-                svc_type, svc_id = daemon.split('.')
+                svc_type, svc_id = daemon.split('.', 1)
                 if 'osd' in svc_type:
                     if daemon not in osd_daemons_up:
                         continue
