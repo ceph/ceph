@@ -6,6 +6,8 @@ overrides:
         setgroup: ceph
         rgw crypt require ssl: false
         debug rgw: 20
+  rgw:
+    compression type: random
 
 tasks:
 - rgw:
