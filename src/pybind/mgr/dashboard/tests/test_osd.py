@@ -188,6 +188,30 @@ class OsdHelper(object):
     def gen_mgr_get_counter(cls) -> List[List[int]]:
         return [[1551973855, 35], [1551973860, 35], [1551973865, 35], [1551973870, 35]]
 
+    @staticmethod
+    def mock_inventory_host(orch_client_mock, devices_data: Dict[str, str]) -> None:
+        class MockDevice:
+            def __init__(self, human_readable_type, path, available=True):
+                self.human_readable_type = human_readable_type
+                self.available = available
+                self.path = path
+
+        def create_invetory_host(host, devices_data):
+            inventory_host = mock.Mock()
+            inventory_host.devices.devices = []
+            for data in devices_data:
+                if data['host'] != host:
+                    continue
+                inventory_host.devices.devices.append(MockDevice(data['type'], data['path']))
+            return inventory_host
+
+        hosts = set()
+        for device in devices_data:
+            hosts.add(device['host'])
+
+        inventory = [create_invetory_host(host, devices_data) for host in hosts]
+        orch_client_mock.inventory.list.return_value = inventory
+
 
 class OsdTest(ControllerTestCase):
     @classmethod
@@ -376,47 +400,55 @@ class OsdTest(ControllerTestCase):
         instance.send_command.assert_called_with('mon', 'osd reweight', id=1, weight=1.0)
         self.assertStatus(200)
 
+    def _get_deployment_options(self, fake_client, devices_data: Dict[str, str]) -> Dict[str, Any]:
+        OsdHelper.mock_inventory_host(fake_client, devices_data)
+        self._get('/ui-api/osd/deployment_options')
+        self.assertStatus(200)
+        res = self.json_body()
+        return res
+
     @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
     def test_deployment_options(self, instance):
         fake_client = mock.Mock()
         instance.return_value = fake_client
         fake_client.get_missing_features.return_value = []
 
-        class MockDevice:
-            def __init__(self, human_readable_type, path, available=True):
-                self.human_readable_type = human_readable_type
-                self.available = available
-                self.path = path
-
-        def create_invetory_host(devices_data):
-            inventory_host = mock.Mock()
-            inventory_host.devices.devices = []
-            for data in devices_data:
-                inventory_host.devices.devices.append(MockDevice(data['type'], data['path']))
-            return inventory_host
-
         devices_data = [
-            {'type': 'hdd', 'path': '/dev/sda'},
-            {'type': 'hdd', 'path': '/dev/sdb'},
-            {'type': 'hdd', 'path': '/dev/sdc'},
-            {'type': 'hdd', 'path': '/dev/sdd'},
-            {'type': 'hdd', 'path': '/dev/sde'},
+            {'type': 'hdd', 'path': '/dev/sda', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdc', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdb', 'host': 'host2'},
+            {'type': 'hdd', 'path': '/dev/sde', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdd', 'host': 'host2'},
         ]
-        inventory_host = create_invetory_host(devices_data)
-        fake_client.inventory.list.return_value = [inventory_host]
-        self._get('/ui-api/osd/deployment_options')
-        self.assertStatus(200)
-        res = self.json_body()
+
+        res = self._get_deployment_options(fake_client, devices_data)
         self.assertTrue(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
         assert res['recommended_option'] == OsdDeploymentOptions.COST_CAPACITY
 
+        # we don't want cost_capacity enabled without hdds
         for data in devices_data:
             data['type'] = 'ssd'
-        inventory_host = create_invetory_host(devices_data)
-        fake_client.inventory.list.return_value = [inventory_host]
 
-        self._get('/ui-api/osd/deployment_options')
-        self.assertStatus(200)
-        res = self.json_body()
+        res = self._get_deployment_options(fake_client, devices_data)
         self.assertFalse(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
-        self.assertIsNone(res['recommended_option'])
+        self.assertTrue(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
+        self.assertEqual(res['recommended_option'], 'throughput_optimized')
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_deployment_options_throughput(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
+
+        devices_data = [
+            {'type': 'ssd', 'path': '/dev/sda', 'host': 'host1'},
+            {'type': 'ssd', 'path': '/dev/sdc', 'host': 'host1'},
+            {'type': 'ssd', 'path': '/dev/sdb', 'host': 'host2'},
+            {'type': 'hdd', 'path': '/dev/sde', 'host': 'host1'},
+            {'type': 'hdd', 'path': '/dev/sdd', 'host': 'host2'},
+        ]
+
+        res = self._get_deployment_options(fake_client, devices_data)
+        self.assertTrue(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
+        self.assertTrue(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
+        assert res['recommended_option'] == OsdDeploymentOptions.THROUGHPUT
