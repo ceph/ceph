@@ -591,6 +591,16 @@ public:
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
-TransactionManagerRef make_transaction_manager(bool detailed, bool cbjournal = false);
+struct tm_make_config_t {
+  bool detailed = true;
+  bool cbjournal = false;
+  static tm_make_config_t get_default() {
+    return tm_make_config_t {
+      true,
+      false
+    };
+  }
+};
 
+TransactionManagerRef make_transaction_manager(tm_make_config_t config);
 }
