@@ -708,23 +708,20 @@ class CephFSMount(object):
 
     def run_shell(self, args, timeout=300, **kwargs):
         omit_sudo = kwargs.pop('omit_sudo', False)
-        sudo = kwargs.pop('sudo', False)
         cwd = kwargs.pop('cwd', self.mountpoint)
         stdout = kwargs.pop('stdout', StringIO())
         stderr = kwargs.pop('stderr', StringIO())
-
-        if sudo:
-            if isinstance(args, list):
-                args.insert(0, 'sudo')
-            elif isinstance(args, str):
-                args = 'sudo ' + args
 
         return self.client_remote.run(args=args, cwd=cwd, timeout=timeout,
                                       stdout=stdout, stderr=stderr,
                                       omit_sudo=omit_sudo, **kwargs)
 
     def run_shell_payload(self, payload, **kwargs):
-        return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
+        kwargs['args'] = ["bash", "-c", Raw(f"'{payload}'")]
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        return self.run_shell(**kwargs)
 
     def run_as_user(self, **kwargs):
         """
@@ -1324,11 +1321,13 @@ class CephFSMount(object):
         """
         Wrap ls: return a list of strings
         """
-        cmd = ["ls"]
+        kwargs['args'] = ["ls"]
         if path:
-            cmd.append(path)
-
-        ls_text = self.run_shell(cmd, **kwargs).stdout.getvalue().strip()
+            kwargs['args'].append(path)
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        ls_text = self.run_shell(**kwargs).stdout.getvalue().strip()
 
         if ls_text:
             return ls_text.split("\n")
@@ -1346,7 +1345,11 @@ class CephFSMount(object):
         :param val: xattr value
         :return: None
         """
-        self.run_shell(["setfattr", "-n", key, "-v", val, path], **kwargs)
+        kwargs['args'] = ["setfattr", "-n", key, "-v", val, path]
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        self.run_shell(**kwargs)
 
     def getfattr(self, path, attr, **kwargs):
         """
@@ -1355,7 +1358,12 @@ class CephFSMount(object):
 
         :return: a string
         """
-        p = self.run_shell(["getfattr", "--only-values", "-n", attr, path], wait=False, **kwargs)
+        kwargs['args'] = ["getfattr", "--only-values", "-n", attr, path]
+        if kwargs.pop('sudo', False):
+            kwargs['args'].insert(0, 'sudo')
+            kwargs['omit_sudo'] = False
+        kwargs['wait'] = False
+        p = self.run_shell(**kwargs)
         try:
             p.wait()
         except CommandFailedError as e:
