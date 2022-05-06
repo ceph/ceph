@@ -62,6 +62,23 @@ Options
 Commands
 ========
 
+.. note::
+
+    Apart from Ceph File System, CephFS Shell commands can also interact
+    directly with the local file system. To achieve this, ``!`` (an
+    exclamation point) must precede the CephFS Shell command.
+
+    Usage :
+
+        !<cephfs_shell_command>
+
+    For example,
+
+    .. code:: bash
+
+        CephFS:~/>>> !ls # Lists the local file system directory contents.
+        CephFS:~/>>> ls  # Lists the Ceph File System directory contents.
+
 mkdir
 -----
 
