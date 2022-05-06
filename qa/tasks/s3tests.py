@@ -364,22 +364,24 @@ def configure(ctx, config):
         if lc_debug_interval:
             s3tests_conf['s3 main']['lc_debug_interval'] = lc_debug_interval
 
-        client_rgw_config = ctx.rgw.config.get(client)
-        if client_rgw_config:
-            cloudtier_config = client_rgw_config.get('cloudtier')
-            if cloudtier_config:
+        log.info('Before ctx.rgw_clouudtier %s ...', ctx.rgw_cloudtier)
+        if ctx.rgw_cloudtier is not None:
+            log.info(' ctx.rgw_cloudtier config  is %s ...', ctx.rgw_cloudtier.config)
+            client_rgw_config = ctx.rgw_cloudtier.config.get(client)
+            if client_rgw_config:
+                log.info(' ctx.rgw_cloudtier config  is %s ...', client_rgw_config)
                 cloudtier_user = client_rgw_config.get('cloudtier_user')
-                cloud_client = cloudtier_config.get('cloud_client')
+                cloud_client = client_rgw_config.get('cloud_client')
                 endpoint = ctx.rgw.role_endpoints.get(cloud_client)
                 s3tests_conf['s3 cloud']['host'] = endpoint.dns_name
                 s3tests_conf['s3 cloud']['port'] = endpoint.port
                 s3tests_conf['s3 cloud']['access_key'] = cloudtier_user.get('cloud_access_key')
                 s3tests_conf['s3 cloud']['secret_key'] = cloudtier_user.get('cloud_secret')
-                s3tests_conf['s3 cloud']['cloud_storage_class'] = cloudtier_config.get('cloud_storage_class')
-                s3tests_conf['s3 cloud']['storage_class'] = cloudtier_config.get('cloud_regular_storage_class')
-                s3tests_conf['s3 cloud']['retain_head_object'] = cloudtier_config.get('cloud_retain_head_object')
-                cloud_target_path = cloudtier_config.get('cloud_target_path')
-                cloud_target_storage_class = cloudtier_config.get('cloud_target_storage_class')
+                s3tests_conf['s3 cloud']['cloud_storage_class'] = client_rgw_config.get('cloud_storage_class')
+                s3tests_conf['s3 cloud']['storage_class'] = client_rgw_config.get('cloud_regular_storage_class')
+                s3tests_conf['s3 cloud']['retain_head_object'] = client_rgw_config.get('cloud_retain_head_object')
+                cloud_target_path = client_rgw_config.get('cloud_target_path')
+                cloud_target_storage_class = client_rgw_config.get('cloud_target_storage_class')
                 if (cloud_target_path != None):
                     s3tests_conf['s3 cloud']['target_path'] = cloud_target_path
                 if (cloud_target_storage_class != None):
