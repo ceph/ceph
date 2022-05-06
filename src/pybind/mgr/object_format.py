@@ -190,12 +190,6 @@ class Format(str, enum.Enum):
 SimpleData = Any
 
 
-ObjectResponseFuncType = Union[
-    Callable[..., Dict[Any, Any]],
-    Callable[..., List[Any]],
-]
-
-
 class SimpleDataProvider(Protocol):
     def to_simplified(self) -> SimpleData:
         """Return a simplified representation of the current object.
@@ -441,6 +435,16 @@ class ErrorResponse(ErrorResponseBase):
         err = cls(str(exc), return_value=return_value)
         setattr(err, "__cause__", exc)
         return err
+
+
+ObjectResponseFuncType = Union[
+    Callable[..., Dict[Any, Any]],
+    Callable[..., List[Any]],
+    Callable[..., SimpleDataProvider],
+    Callable[..., JSONDataProvider],
+    Callable[..., YAMLDataProvider],
+    Callable[..., ReturnValueProvider],
+]
 
 
 def _get_requested_format(f: ObjectResponseFuncType, kw: Dict[str, Any]) -> str:
