@@ -272,11 +272,11 @@ PGRecovery::recover_missing(
   const hobject_t &soid, eversion_t need)
 {
   if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
-    return pg->get_recovery_backend()->add_recovering(soid).track_blocking(
+    return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
       trigger,
       pg->get_recovery_backend()->recover_delete(soid, need));
   } else {
-    return pg->get_recovery_backend()->add_recovering(soid).track_blocking(
+    return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
       trigger,
       pg->get_recovery_backend()->recover_object(soid, need)
       .handle_exception_interruptible(
@@ -293,7 +293,7 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_deletes(
   const hobject_t& soid,
   eversion_t need)
 {
-  return pg->get_recovery_backend()->add_recovering(soid).track_blocking(
+  return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
     trigger,
     pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
       [=] {
@@ -310,7 +310,7 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_pushes(
   const hobject_t& soid,
   eversion_t need)
 {
-  return pg->get_recovery_backend()->add_recovering(soid).track_blocking(
+  return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
     trigger,
     pg->get_recovery_backend()->recover_object(soid, need)
     .handle_exception_interruptible(
