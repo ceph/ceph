@@ -134,7 +134,7 @@ CircularBoundedJournal::open_for_write(rbm_abs_addr start)
     return open_for_write_ret(
       open_for_write_ertr::ready_future_marker{},
       journal_seq_t{
-	header.cur_segment_seq,
+	cur_segment_seq,
 	paddr
       });
   }
@@ -157,7 +157,7 @@ CircularBoundedJournal::open_for_write(rbm_abs_addr start)
       return open_for_write_ret(
 	open_for_write_ertr::ready_future_marker{},
 	journal_seq_t{
-	  header.cur_segment_seq,
+	  cur_segment_seq,
 	  paddr
 	});
     });
@@ -240,7 +240,7 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
   }
 
   journal_seq_t j_seq {
-    header.cur_segment_seq++,
+    cur_segment_seq++,
     convert_abs_addr_to_paddr(
       get_written_to(),
       header.device_id)};
@@ -401,6 +401,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	    r_header.committed_to,
 	    (seastore_off_t)bl.length()
 	  };
+	  cur_segment_seq = r_header.committed_to.segment_seq + 1;
 	  cursor_addr += bl.length();
 	  set_written_to(cursor_addr);
 	  last_seq = r_header.committed_to.segment_seq;
