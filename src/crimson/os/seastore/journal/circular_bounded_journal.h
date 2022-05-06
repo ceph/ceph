@@ -207,7 +207,7 @@ public:
   struct cbj_header_t {
     uint64_t magic = CBJOURNAL_MAGIC;
     uuid_d uuid;
-    uint64_t block_size = 0; // aligned with block_size
+    uint64_t block_size = 0; // block size of underlying device
     uint64_t size = 0;   // max length of journal
     uint32_t error = 0;      // reserved
 
