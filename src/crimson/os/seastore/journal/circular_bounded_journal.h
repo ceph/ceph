@@ -222,7 +222,6 @@ public:
     uint64_t flag = 0;       // represent features (reserved)
     uint8_t csum_type = 0;   // type of checksum algoritghm used in cbj_header_t
     uint64_t csum = 0;       // checksum of entire cbj_header_t
-    uint32_t cur_segment_seq = 0;
 
     rbm_abs_addr start = 0; // start address of CircularBoundedJournal
     rbm_abs_addr end = 0;   // start address of CircularBoundedJournal
@@ -243,7 +242,6 @@ public:
       denc(v.flag, p);
       denc(v.csum_type, p);
       denc(v.csum, p);
-      denc(v.cur_segment_seq, p);
       denc(v.start, p);
       denc(v.end, p);
       denc(v.device_id, p);
@@ -323,6 +321,7 @@ private:
   std::string path;
   WritePipeline *write_pipeline = nullptr;
   bool init = false;
+  segment_seq_t cur_segment_seq = 0; // segment seq to track the sequence to written records
 };
 
 std::ostream &operator<<(std::ostream &out, const CircularBoundedJournal::cbj_header_t &header);
