@@ -213,7 +213,7 @@ def start_rgw(ctx, config, clients):
             stdin=run.PIPE,
             wait=False,
             )
-     
+
     # XXX: add_daemon() doesn't let us wait until radosgw finishes startup
     for client in clients:
         endpoint = ctx.rgw.role_endpoints[client]

@@ -44,13 +44,13 @@ def download(ctx, config):
                 'git', 'clone',
                 '-b', s3tests_branch,
                 git_remote + 's3-tests.git',
-                '{tdir}/s3-tests'.format(tdir=testdir),
+                '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                 ],
             )
         if sha1 is not None:
             ctx.cluster.only(client).run(
                 args=[
-                    'cd', '{tdir}/s3-tests'.format(tdir=testdir),
+                    'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                     run.Raw('&&'),
                     'git', 'reset', '--hard', sha1,
                     ],
@@ -65,7 +65,7 @@ def download(ctx, config):
                 args=[
                     'rm',
                     '-rf',
-                    '{tdir}/s3-tests'.format(tdir=testdir),
+                    '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                     ],
                 )
 
@@ -364,7 +364,6 @@ def configure(ctx, config):
         if lc_debug_interval:
             s3tests_conf['s3 main']['lc_debug_interval'] = lc_debug_interval
 
-        log.info('Before ctx.rgw_clouudtier %s ...', ctx.rgw_cloudtier)
         if ctx.rgw_cloudtier is not None:
             log.info(' ctx.rgw_cloudtier config  is %s ...', ctx.rgw_cloudtier.config)
             client_rgw_config = ctx.rgw_cloudtier.config.get(client)
@@ -391,7 +390,7 @@ def configure(ctx, config):
         remote.run(
             args=[
                 'cd',
-                '{tdir}/s3-tests'.format(tdir=testdir),
+                '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                 run.Raw('&&'),
                 './bootstrap',
                 ],
@@ -411,7 +410,7 @@ def configure(ctx, config):
             conf = f.read().format(
                 idle_timeout=config.get('idle_timeout', 30)
                 )
-            remote.write_file('{tdir}/boto.cfg'.format(tdir=testdir), conf)
+            remote.write_file('{tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client), conf)
 
     try:
         yield
@@ -423,7 +422,7 @@ def configure(ctx, config):
             remote.run(
                 args=[
                     'rm',
-                    '{tdir}/boto.cfg'.format(tdir=testdir),
+                    '{tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client),
                     ],
                 )
 
@@ -443,7 +442,7 @@ def run_tests(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
-            'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir)
+            'BOTO_CONFIG={tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client)
             ]
         # the 'requests' library comes with its own ca bundle to verify ssl
         # certificates - override that to use the system's ca bundle, which
@@ -466,10 +465,10 @@ def run_tests(ctx, config):
         if 'extra_attrs' in client_config:
             attrs = client_config.get('extra_attrs') 
         args += [
-            '{tdir}/s3-tests/virtualenv/bin/python'.format(tdir=testdir),
+            '{tdir}/s3-tests-{client}/virtualenv/bin/python'.format(tdir=testdir, client=client),
             '-m', 'nose',
             '-w',
-            '{tdir}/s3-tests'.format(tdir=testdir),
+            '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
             '-v',
             '-a', ','.join(attrs),
             ]
