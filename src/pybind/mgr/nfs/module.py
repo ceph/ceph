@@ -158,7 +158,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @CLICommand('nfs cluster config set', perm='rw')
     @CLICheckNonemptyFileInput(desc='NFS-Ganesha Configuration')
-    def _cmd_nfs_cluster_config_set(self, cluster_id: str, inbuf: str) -> Tuple[int, str, str]:
+    @object_format.EmptyResponder()
+    def _cmd_nfs_cluster_config_set(self, cluster_id: str, inbuf: str) -> None:
         """Set NFS-Ganesha config by `-i <config_file>`"""
         return self.nfs.set_nfs_cluster_config(cluster_id=cluster_id, nfs_config=inbuf)
 

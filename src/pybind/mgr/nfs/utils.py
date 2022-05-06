@@ -26,6 +26,15 @@ class NonFatalError(ErrorResponseBase):
         return 0, "", self.msg
 
 
+class ManualRestartRequired(NonFatalError):
+    """Raise this exception type if all other changes were successful but
+    user needs to manually restart nfs services.
+    """
+
+    def __init__(self, msg: str) -> None:
+        super().__init__(" ".join((msg, "(Manual Restart of NFS Pods required)")))
+
+
 def export_obj_name(export_id: int) -> str:
     """Return a rados object name for the export."""
     return f"{EXPORT_PREFIX}{export_id}"

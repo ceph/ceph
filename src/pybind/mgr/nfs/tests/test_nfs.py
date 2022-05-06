@@ -1105,15 +1105,13 @@ NFS_CORE_PARAM {
         assert rc == 0
         assert out == ""
 
-        rc, out, err = cluster.set_nfs_cluster_config(self.cluster_id, '# foo\n')
-        assert rc == 0
+        cluster.set_nfs_cluster_config(self.cluster_id, '# foo\n')
 
         rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
         assert rc == 0
         assert out == "# foo\n"
 
-        rc, out, err = cluster.reset_nfs_cluster_config(self.cluster_id)
-        assert rc == 0
+        cluster.reset_nfs_cluster_config(self.cluster_id)
 
         rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
         assert rc == 0
