@@ -67,6 +67,21 @@
         </div>
       </ng-template>
     </li>
+    <li ngbNavItem="daemon-logs">
+      <a ngbNavLink
+         i18n>Daemon Logs</a>
+      <ng-template ngbNavContent>
+        <ng-container *ngIf="lokiServiceStatus$ | async as lokiServiceStatus; else daemonLogsTpl">
+          <div *ngIf="promtailServiceStatus$ | async as promtailServiceStatus; else daemonLogsTpl">
+            <cd-grafana [grafanaPath]="'explore?'"
+                        [type]="'logs'"
+                        uid="CrAHE0iZz"
+                        grafanaStyle="two">
+            </cd-grafana>
+          </div>
+        </ng-container>
+      </ng-template>
+    </li>
   </ul>
 
   <div [ngbNavOutlet]="nav"></div>
@@ -156,4 +171,12 @@
   <a href="#"
      (click)="resetFilter()"
      i18n>Reset filter.</a>
+</ng-template>
+
+<ng-template #daemonLogsTpl>
+  <cd-alert-panel type="info"
+                  title="Loki/Promtail service not running"
+                  i18n-title>
+  <ng-container i18n>Please start the loki and promtail service to see these logs.</ng-container>
+  </cd-alert-panel>
 </ng-template>
