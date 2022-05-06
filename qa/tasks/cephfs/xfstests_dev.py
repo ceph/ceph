@@ -13,7 +13,6 @@ from tasks.cephfs.kernel_mount import KernelMount
 log = getLogger(__name__)
 
 
-# TODO: add code to run non-ACL tests too.
 # TODO: make xfstests-dev tests running without running `make install`.
 class XFSTestsDev(CephFSTestCase):
 
