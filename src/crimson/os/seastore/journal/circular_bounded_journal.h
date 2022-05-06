@@ -220,8 +220,7 @@ public:
     rbm_abs_addr applied_to = 0;
 
     uint64_t flag = 0;       // represent features (reserved)
-    uint8_t csum_type = 0;   // type of checksum algoritghm used in cbj_header_t
-    uint64_t csum = 0;       // checksum of entire cbj_header_t
+    checksum_t header_checksum = 0;       // checksum of entire cbj_header_t
 
     rbm_abs_addr start = 0; // start address of CircularBoundedJournal
     rbm_abs_addr end = 0;   // start address of CircularBoundedJournal
@@ -240,8 +239,7 @@ public:
       denc(v.applied_to, p);
 
       denc(v.flag, p);
-      denc(v.csum_type, p);
-      denc(v.csum, p);
+      denc(v.header_checksum, p);
       denc(v.start, p);
       denc(v.end, p);
       denc(v.device_id, p);

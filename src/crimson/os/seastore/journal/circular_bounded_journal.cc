@@ -25,8 +25,7 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", applied_to="<< header.applied_to
 	     << ", written_to=" << header.written_to
 	     << ", flsg=" << header.flag
-	     << ", csum_type=" << header.csum_type
-	     << ", csum=" << header.csum
+	     << ", header_checksum=" << header.header_checksum
 	     << ", start=" << header.start
 	     << ", end=" << header.end
              << ")";
