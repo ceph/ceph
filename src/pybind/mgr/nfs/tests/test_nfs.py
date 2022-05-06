@@ -1101,20 +1101,17 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         cluster = NFSCluster(nfs_mod)
 
-        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
-        assert rc == 0
+        out = cluster.get_nfs_cluster_config(self.cluster_id)
         assert out == ""
 
         cluster.set_nfs_cluster_config(self.cluster_id, '# foo\n')
 
-        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
-        assert rc == 0
+        out = cluster.get_nfs_cluster_config(self.cluster_id)
         assert out == "# foo\n"
 
         cluster.reset_nfs_cluster_config(self.cluster_id)
 
-        rc, out, err = cluster.get_nfs_cluster_config(self.cluster_id)
-        assert rc == 0
+        out = cluster.get_nfs_cluster_config(self.cluster_id)
         assert out == ""
 
     def test_cluster_config(self):
