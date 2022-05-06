@@ -126,8 +126,10 @@ void Cache::register_metrics()
     {src_t::MUTATE, sm::label_instance("src", "MUTATE")},
     {src_t::READ, sm::label_instance("src", "READ")},
     {src_t::CLEANER_TRIM, sm::label_instance("src", "CLEANER_TRIM")},
+    {src_t::TRIM_BACKREF, sm::label_instance("src", "TRIM_BACKREF")},
     {src_t::CLEANER_RECLAIM, sm::label_instance("src", "CLEANER_RECLAIM")},
   };
+  assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
   std::map<extent_types_t, sm::label_instance> labels_by_ext {
     {extent_types_t::ROOT,                sm::label_instance("ext", "ROOT")},
@@ -140,9 +142,13 @@ void Cache::register_metrics()
     {extent_types_t::OBJECT_DATA_BLOCK,   sm::label_instance("ext", "OBJECT_DATA_BLOCK")},
     {extent_types_t::RETIRED_PLACEHOLDER, sm::label_instance("ext", "RETIRED_PLACEHOLDER")},
     {extent_types_t::ALLOC_INFO,      	  sm::label_instance("ext", "ALLOC_INFO")},
+    {extent_types_t::ALLOC_TAIL,          sm::label_instance("ext", "ALLOC_TAIL")},
     {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
-    {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")}
+    {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")},
+    {extent_types_t::BACKREF_INTERNAL,    sm::label_instance("ext", "BACKREF_INTERNAL")},
+    {extent_types_t::BACKREF_LEAF,        sm::label_instance("ext", "BACKREF_LEAF")}
   };
+  assert(labels_by_ext.size() == (std::size_t)extent_types_t::NONE);
 
   /*
    * trans_created
@@ -508,8 +514,7 @@ void Cache::register_metrics()
         // READ transaction won't contain any tree inserts and erases
         continue;
       }
-      if ((src == src_t::CLEANER_TRIM ||
-           src == src_t::CLEANER_RECLAIM) &&
+      if (is_cleaner_transaction(src) &&
           tree_label == onode_label) {
         // CLEANER transaction won't contain any onode tree operations
         continue;
@@ -577,8 +582,8 @@ void Cache::register_metrics()
            src2 == Transaction::src_t::CLEANER_TRIM) ||
           (src1 == Transaction::src_t::CLEANER_RECLAIM &&
            src2 == Transaction::src_t::CLEANER_RECLAIM) ||
-          (src1 == Transaction::src_t::CLEANER_TRIM &&
-           src2 == Transaction::src_t::CLEANER_RECLAIM)) {
+          (src1 == Transaction::src_t::TRIM_BACKREF &&
+           src2 == Transaction::src_t::TRIM_BACKREF)) {
         continue;
       }
       std::ostringstream oss;
@@ -788,8 +793,7 @@ void Cache::mark_transaction_conflicted(
     auto ool_record_bytes = (ool_stats.md_bytes + ool_stats.get_data_bytes());
     efforts.ool_record_bytes += ool_record_bytes;
 
-    if (t.get_src() == Transaction::src_t::CLEANER_TRIM ||
-        t.get_src() == Transaction::src_t::CLEANER_RECLAIM) {
+    if (is_cleaner_transaction(t.get_src())) {
       // CLEANER transaction won't contain any onode tree operations
       assert(t.onode_tree_stats.is_clear());
     } else {
@@ -1078,7 +1082,7 @@ record_t Cache::prepare_record(
     if (t.get_src() == Transaction::src_t::MUTATE) {
       i->set_last_modified(commit_time);
     } else {
-      assert(t.get_src() >= Transaction::src_t::CLEANER_TRIM);
+      assert(is_cleaner_transaction(t.get_src()));
       i->set_last_rewritten(commit_time);
     }
 
@@ -1134,7 +1138,7 @@ record_t Cache::prepare_record(
     record.push_back(std::move(delta));
   }
 
-  if (t.is_cleaner_transaction()) {
+  if (is_cleaner_transaction(trans_src)) {
     bufferlist bl;
     encode(get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL), bl);
     delta_info_t delta;
@@ -1175,8 +1179,7 @@ record_t Cache::prepare_record(
       ool_stats.get_data_bytes(),
       record.size.get_raw_mdlength(),
       record.size.dlength);
-  if (trans_src == Transaction::src_t::CLEANER_TRIM ||
-      trans_src == Transaction::src_t::CLEANER_RECLAIM) {
+  if (is_cleaner_transaction(trans_src)) {
     // CLEANER transaction won't contain any onode tree operations
     assert(t.onode_tree_stats.is_clear());
   } else {
@@ -1279,7 +1282,7 @@ void Cache::complete_commit(
 	  (t.get_src() == Transaction::src_t::MUTATE)
 	    ? i->last_modified
 	    : seastar::lowres_system_clock::time_point(),
-	  (t.get_src() >= Transaction::src_t::CLEANER_TRIM)
+	  (is_cleaner_transaction(t.get_src()))
 	    ? i->last_rewritten
 	    : seastar::lowres_system_clock::time_point());
       }
