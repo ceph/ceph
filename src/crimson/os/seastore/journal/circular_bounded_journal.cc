@@ -19,7 +19,6 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", uuid=" << header.uuid
 	     << ", block_size=" << header.block_size
 	     << ", size=" << header.size
-	     << ", error=" << header.error
 	     << ", start_offset=" << header.start_offset
 	     << ", applied_to="<< header.applied_to
 	     << ", written_to=" << header.written_to
