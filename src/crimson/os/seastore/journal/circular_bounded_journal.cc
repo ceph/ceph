@@ -19,7 +19,7 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", uuid=" << header.uuid
 	     << ", block_size=" << header.block_size
 	     << ", size=" << header.size
-	     << ", start_offset=" << header.start_offset
+	     << ", journal_tail=" << header.journal_tail
 	     << ", applied_to="<< header.applied_to
 	     << ", written_to=" << header.written_to
 	     << ", flsg=" << header.flag
@@ -44,9 +44,9 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
     CircularBoundedJournal::cbj_header_t head;
     head.block_size = config.block_size;
     head.size = config.total_size - device->get_block_size();
-    head.start_offset = device->get_block_size();
-    head.written_to = head.start_offset;
-    head.applied_to = head.start_offset;
+    head.journal_tail = device->get_block_size();
+    head.written_to = head.journal_tail;
+    head.applied_to = head.journal_tail;
     head.device_id = config.device_id;
     start_dev_addr = config.start;
     encode(head, bl);
@@ -347,7 +347,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
   auto fut = open_for_write(CBJOURNAL_START_ADDRESS);
   return fut.safe_then([this, FNAME, delta_handler=std::move(delta_handler)] (auto addr) {
     return seastar::do_with(
-      rbm_abs_addr(get_applied_to()),
+      rbm_abs_addr(get_journal_tail()),
       std::move(delta_handler),
       segment_seq_t(),
       [this, FNAME](auto &cursor_addr, auto &d_handler, auto &last_seq) {

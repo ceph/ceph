@@ -35,7 +35,7 @@ using NVMeBlockDevice = nvme_device::NVMeBlockDevice;
  * queue. With CBJournal, Seastore will append some of the records if the size
  * of the record is small (most likely metadata), at which point the head
  * (written_to) will be moved. Then, eventually, Seastore applies the records
- * in CBjournal to RBM---the tail (applied_to) is advanced (TODO).
+ * in CBjournal to RBM (TODO).
  *
  * - Commit time
  * After submit_record is done, written_to is increased(this in-memory value)
@@ -44,9 +44,9 @@ using NVMeBlockDevice = nvme_device::NVMeBlockDevice;
  *
  * - Replay time
  * At replay time, CBJournal begins to replay records in CBjournal by reading
- * records from applied_to. Then, CBJournal examines whether the records is valid
+ * records from journal_tail. Then, CBJournal examines whether the records is valid
  * one by one, at which point written_to is recovered
- * if the valid record is founded. Note that only applied_to is stored
+ * if the valid record is founded. Note that applied_to is stored
  * permanently when the apply work---applying the records in CBJournal to RBM---
  * is done by CBJournal (TODO).
  *
@@ -208,8 +208,8 @@ public:
     uint64_t block_size = 0; // block size of underlying device
     uint64_t size = 0;   // max length of journal
 
-    // start offset of CircularBoundedJournal in the device (start + header length)
-    rbm_abs_addr start_offset = 0;
+    // start offset of CircularBoundedJournal in the device
+    rbm_abs_addr journal_tail = 0;
     // start address where the newest record will be written
     rbm_abs_addr written_to = 0;
     // address to represent where last appllied record is written
@@ -227,7 +227,7 @@ public:
       denc(v.block_size, p);
       denc(v.size, p);
 
-      denc(v.start_offset, p);
+      denc(v.journal_tail, p);
 
       denc(v.written_to, p);
       denc(v.applied_to, p);
@@ -252,22 +252,26 @@ public:
    */
 
   size_t get_used_size() const {
-    return get_written_to() >= get_applied_to() ?
-      get_written_to() - get_applied_to() :
-      get_written_to() + get_total_size() - get_applied_to();
+    return get_written_to() >= get_journal_tail() ?
+      get_written_to() - get_journal_tail() :
+      get_written_to() + get_total_size() - get_journal_tail();
   }
   size_t get_total_size() const {
     return header.size;
   }
   rbm_abs_addr get_start_addr() const {
-    return header.start_offset;
+    return get_block_size();
   }
   size_t get_available_size() const {
     return get_total_size() - get_used_size();
   }
 
-  void update_applied_to(rbm_abs_addr addr, uint32_t len) {
-    set_applied_to(addr + len);
+  write_ertr::future<> update_journal_tail(rbm_abs_addr addr) {
+    header.journal_tail = addr;
+    return write_header();
+  }
+  rbm_abs_addr get_journal_tail() const {
+    return header.journal_tail;
   }
 
   write_ertr::future<> write_header();
@@ -283,12 +287,6 @@ public:
   }
   void set_written_to(rbm_abs_addr addr) {
     header.written_to = addr;
-  }
-  rbm_abs_addr get_applied_to() const {
-    return header.applied_to;
-  }
-  void set_applied_to(rbm_abs_addr addr) {
-    header.applied_to = addr;
   }
   device_id_t get_device_id() const {
     return header.device_id;

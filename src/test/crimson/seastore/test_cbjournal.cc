@@ -248,14 +248,14 @@ struct cbjournal_test_t : public seastar_test_suite_t
   auto get_written_to() {
     return cbj->get_written_to();
   }
-  auto get_applied_to() {
-    return cbj->get_applied_to();
+  auto get_journal_tail() {
+    return cbj->get_journal_tail();
   }
   auto get_used_size() {
     return cbj->get_used_size();
   }
-  void update_applied_to(rbm_abs_addr addr, uint32_t len) {
-    cbj->update_applied_to(addr, len);
+  void update_journal_tail(rbm_abs_addr addr, uint32_t len) {
+    cbj->update_journal_tail(addr + len).unsafe_get0();
   }
   void set_written_to(rbm_abs_addr addr) {
     cbj->set_written_to(addr);
@@ -322,7 +322,7 @@ TEST_F(cbjournal_test_t, submit_full_records)
     }
 
     uint64_t avail = get_available_size();
-    update_applied_to(entries.back().addr, record_total_size);
+    update_journal_tail(entries.back().addr, record_total_size);
     ASSERT_EQ(get_total_size(),
 	     get_available_size());
 
@@ -365,7 +365,7 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
     }
 
     uint64_t avail = get_available_size();
-    update_applied_to(entries.front().addr, record_total_size);
+    update_journal_tail(entries.front().addr, record_total_size);
     entries.erase(entries.begin());
     ASSERT_EQ(avail + record_total_size, get_available_size());
     avail = get_available_size();
@@ -394,12 +394,12 @@ TEST_F(cbjournal_test_t, update_header)
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
 
-    update_applied_to(entries.front().addr, record_total_size);
+    update_journal_tail(entries.front().addr, record_total_size);
     cbj->write_header().unsafe_get0();
     auto [update_header, update_buf2] = *(cbj->read_header(0).unsafe_get0());
     replay();
 
-    ASSERT_EQ(update_header.applied_to, update_header.applied_to);
+    ASSERT_EQ(update_header.journal_tail, update_header.journal_tail);
     ASSERT_EQ(header.block_size, update_header.block_size);
     ASSERT_EQ(header.size, update_header.size);
     ASSERT_EQ(header.written_to + record_total_size, update_header.written_to);
@@ -427,7 +427,7 @@ TEST_F(cbjournal_test_t, replay)
     }
     // will be appended at the begining of WAL
     uint64_t avail = get_available_size();
-    update_applied_to(entries.front().addr, record_total_size);
+    update_journal_tail(entries.front().addr, record_total_size);
     entries.erase(entries.begin());
     ASSERT_EQ(avail + record_total_size, get_available_size());
     avail = get_available_size();
