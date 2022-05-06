@@ -160,7 +160,7 @@ CREATE TABLE DeviceHealthMetrics (
             self.sleep_interval = 0.0
 
     def is_valid_daemon_name(self, who: str) -> bool:
-        parts = who.split('.')
+        parts = who.split('.', 1)
         if len(parts) != 2:
             return False
         return parts[0] in ('osd', 'mon')
