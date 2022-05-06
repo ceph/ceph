@@ -209,7 +209,6 @@ public:
     uuid_d uuid;
     uint64_t block_size = 0; // aligned with block_size
     uint64_t size = 0;   // max length of journal
-    uint64_t used_size = 0;  // current used_size of journal
     uint32_t error = 0;      // reserved
 
     // start offset of CircularBoundedJournal in the device (start + header length)
@@ -260,10 +259,9 @@ public:
    */
 
   size_t get_used_size() const {
-    return header.used_size;
-  }
-  void set_used_size(size_t size) {
-    header.used_size = size;
+    return get_written_to() >= get_applied_to() ?
+      get_written_to() - get_applied_to() :
+      get_written_to() + get_total_size() - get_applied_to();
   }
   size_t get_total_size() const {
     return header.size;
@@ -276,12 +274,7 @@ public:
   }
 
   void update_applied_to(rbm_abs_addr addr, uint32_t len) {
-    rbm_abs_addr new_applied_to = addr;
-    set_used_size(
-      get_written_to() >= new_applied_to ?
-      get_written_to() - (new_applied_to + len) :
-      get_written_to() + get_total_size() - (new_applied_to + len));
-    set_applied_to(new_applied_to + len);
+    set_applied_to(addr + len);
   }
 
   write_ertr::future<> write_header();
