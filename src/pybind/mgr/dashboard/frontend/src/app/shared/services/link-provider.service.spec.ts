@@ -31,6 +31,5 @@ describe('LinkProviderService', () => {
   });
   it ('should test for correct links', () => {
     expect(service.iscsitargetformcomponent()) .toBe (`https://en.wikipedia.org/wiki/ISCSI#Addressing`);
-  });
-  
+  });  
 });

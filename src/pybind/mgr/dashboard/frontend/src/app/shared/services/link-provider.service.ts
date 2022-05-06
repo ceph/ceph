@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 
-
 @Injectable({
   providedIn: 'root'
 })
@@ -19,7 +18,7 @@ export class LinkProviderService {
   };
 
   docservice1 () {
-    const url =  "https://docs.ceph.com/en/${docVersion}/"
+    const url =  " https://docs.ceph.com/en/${docVersion}/ "
     return url;
   };
 
