@@ -2,14 +2,10 @@
 rgw_cloudtier configuration routines
 """
 import argparse
-import contextlib
 import logging
 
-from teuthology.orchestra import run
 from teuthology import misc as teuthology
-from teuthology import contextutil
 from teuthology.exceptions import ConfigError
-from tasks.util import get_remote_for_role
 from tasks.util.rgw import rgwadmin, wait_for_radosgw
 from teuthology.task import Task
 
@@ -67,7 +63,6 @@ class RGWCloudTier(Task):
                 cloud_storage_class = client_config.get('cloud_storage_class')
                 cloud_target_path = client_config.get('cloud_target_path')
                 cloud_target_storage_class = client_config.get('cloud_target_storage_class')
-                cloud_regular_storage_class = client_config.get('cloud_regular_storage_class')
                 cloud_retain_head_object = client_config.get('cloud_retain_head_object')
 
                 cloudtier_user = client_config.get('cloudtier_user')
@@ -103,9 +98,11 @@ class RGWCloudTier(Task):
                       check_status=True)
 
                 ## create cloudtier user with the access keys given on the cloud client
+                cloud_tier_user_id = "cloud-tier-user-" + cloud_client
+                cloud_tier_user_name = "CLOUD TIER USER - " + cloud_client
                 rgwadmin(self.ctx, cloud_client,
-                     cmd=['user', 'create', '--uid', 'cloud-tier-user',
-                        '--display-name', 'CLOUD TIER USER',
+                     cmd=['user', 'create', '--uid', cloud_tier_user_id,
+                        '--display-name', cloud_tier_user_name,
                         '--access-key', cloud_access_key,
                         '--secret', cloud_secret,
                         '--caps', 'user-policy=*'],
@@ -115,7 +112,6 @@ class RGWCloudTier(Task):
                 
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
                 client_with_id = daemon_type + '.' + client_id
-                client_with_cluster = cluster_name + '.' + client_with_id
                 self.ctx.daemons.get_daemon('rgw', client_with_id, cluster_name).restart()
                 log.info('restarted rgw daemon ...')
 
