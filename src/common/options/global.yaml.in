@@ -5418,6 +5418,17 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_zero_block_detection
+  type: bool
+  level: dev
+  desc: punch holes instead of writing zeros
+  long_desc: Intended for large-scale synthetic testing. Currently this is implemented
+    with punch hole semantics, affecting the logical extent map of the object. This does
+    not interact well with some RBD and CephFS features.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
 - name: kstore_max_ops
   type: uint
   level: advanced

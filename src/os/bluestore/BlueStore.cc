@@ -14581,7 +14581,7 @@ void BlueStore::_do_write_small(
     o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
 
     // Zero detection -- small block
-    if (!bl.is_zero()) {
+    if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
       BlobRef b = c->new_blob();
       _pad_zeros(&bl, &b_off0, min_alloc_size);
       wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length, false, true);
@@ -14820,7 +14820,7 @@ void BlueStore::_do_write_small(
 	    o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
 
 	    // Zero detection -- small block
-	    if (!bl.is_zero()) {
+	    if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
 	      _pad_zeros(&bl, &b_off0, chunk_size);
 
 	      dout(20) << __func__ << " reuse blob " << *b << std::hex
@@ -14882,7 +14882,7 @@ void BlueStore::_do_write_small(
 	  o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
 
 	  // Zero detection -- small block
-	  if (!bl.is_zero()) {
+	  if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
 	    uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
 	    _pad_zeros(&bl, &b_off0, chunk_size);
 
@@ -14938,7 +14938,7 @@ void BlueStore::_do_write_small(
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
 
   // Zero detection -- small block
-  if (!bl.is_zero()) {
+  if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
     // new blob.
     BlobRef b = c->new_blob();
     _pad_zeros(&bl, &b_off0, block_size);
@@ -15271,7 +15271,7 @@ void BlueStore::_do_write_big(
     blp.copy(l, t);
 
     // Zero detection -- big block
-    if (!t.is_zero()) {
+    if (!cct->_conf->bluestore_zero_block_detection || !t.is_zero()) {
       wctx->write(offset, b, l, b_off, t, b_off, l, false, new_blob);
 
       dout(20) << __func__ << " schedule write big: 0x"
