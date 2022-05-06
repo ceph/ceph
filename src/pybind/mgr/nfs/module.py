@@ -164,7 +164,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.nfs.set_nfs_cluster_config(cluster_id=cluster_id, nfs_config=inbuf)
 
     @CLICommand('nfs cluster config reset', perm='rw')
-    def _cmd_nfs_cluster_config_reset(self, cluster_id: str) -> Tuple[int, str, str]:
+    @object_format.EmptyResponder()
+    def _cmd_nfs_cluster_config_reset(self, cluster_id: str) -> None:
         """Reset NFS-Ganesha Config to default"""
         return self.nfs.reset_nfs_cluster_config(cluster_id=cluster_id)
 
