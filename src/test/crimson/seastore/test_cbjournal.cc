@@ -37,7 +37,10 @@ std::optional<record_t> decode_record(
   decode(r_header, bliter);
   logger().debug(" decode_record mdlength {} records {}",
 		  r_header.mdlength, r_header.records);
-  auto del_infos = try_decode_deltas(r_header, bl, paddr_t{});
+  device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
+
+  auto del_infos = try_decode_deltas(r_header, bl,
+    paddr_t::make_blk_paddr(d_id, 0));
   for (auto &iter : *del_infos) {
     for (auto r : iter.deltas) {
       record.deltas.push_back(r.second);
