@@ -46,13 +46,13 @@ public:
       backend{backend} {}
   virtual ~RecoveryBackend() {}
   WaitForObjectRecovery& add_recovering(const hobject_t& soid) {
-    auto [it, added] = recovering.emplace(soid, WaitForObjectRecovery{});
+    auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery{});
     assert(added);
-    return it->second;
+    return *(it->second);
   }
   WaitForObjectRecovery& get_recovering(const hobject_t& soid) {
     assert(is_recovering(soid));
-    return recovering.at(soid);
+    return *(recovering.at(soid));
   }
   void remove_recovering(const hobject_t& soid) {
     recovering.erase(soid);
@@ -88,7 +88,7 @@ public:
 
   seastar::future<> stop() {
     for (auto& [soid, recovery_waiter] : recovering) {
-      recovery_waiter.stop();
+      recovery_waiter->stop();
     }
     return on_stop();
   }
@@ -120,7 +120,10 @@ protected:
   };
 
 public:
-  class WaitForObjectRecovery : public crimson::BlockerT<WaitForObjectRecovery> {
+  class WaitForObjectRecovery :
+    public boost::intrusive_ref_counter<
+      WaitForObjectRecovery, boost::thread_unsafe_counter>,
+    public crimson::BlockerT<WaitForObjectRecovery> {
     seastar::shared_promise<> readable, recovered, pulled;
     std::map<pg_shard_t, seastar::shared_promise<>> pushes;
   public:
@@ -139,8 +142,17 @@ public:
     seastar::future<> wait_for_recovered() {
       return recovered.get_shared_future();
     }
+    template <typename T, typename F>
+    auto wait_track_blocking(T &trigger, F &&fut) {
+      WaitForObjectRecoveryRef ref = this;
+      return track_blocking(
+	trigger,
+	std::forward<F>(fut)
+      ).finally([ref] {});
+    }
     seastar::future<> wait_for_recovered(BlockingEvent::TriggerI& trigger) {
-      return trigger.maybe_record_blocking(recovered.get_shared_future(), *this);
+      WaitForObjectRecoveryRef ref = this;
+      return wait_track_blocking(trigger, recovered.get_shared_future());
     }
     seastar::future<> wait_for_pull() {
       return pulled.get_shared_future();
@@ -178,8 +190,9 @@ public:
   };
   using RecoveryBlockingEvent =
     crimson::AggregateBlockingEvent<WaitForObjectRecovery::BlockingEvent>;
+  using WaitForObjectRecoveryRef = boost::intrusive_ptr<WaitForObjectRecovery>;
 protected:
-  std::map<hobject_t, WaitForObjectRecovery> recovering;
+  std::map<hobject_t, WaitForObjectRecoveryRef> recovering;
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
     eversion_t version) const;
