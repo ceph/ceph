@@ -19,7 +19,6 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", uuid=" << header.uuid
 	     << ", block_size=" << header.block_size
 	     << ", size=" << header.size
-	     << ", used_size=" << header.used_size
 	     << ", error=" << header.error
 	     << ", start_offset=" << header.start_offset
 	     << ", applied_to="<< header.applied_to
@@ -226,7 +225,6 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
     // |        cbjournal      |
     // 	          v            v
     //      written_to <-> the end of journal
-    set_used_size(get_used_size() + (header.end - get_written_to()));
     set_written_to(get_start_addr());
   }
   if (encoded_size > get_available_size()) {
@@ -284,7 +282,6 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
       "append_record: commit target {} used_size {} written length {}",
       target, get_used_size(), length);
 
-    set_used_size(get_used_size() + length);
     paddr_t paddr = convert_abs_addr_to_paddr(
       target + r_size.get_mdlength(),
       header.device_id);
@@ -404,7 +401,6 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	  cursor_addr += bl.length();
 	  set_written_to(cursor_addr);
 	  last_seq = r_header.committed_to.segment_seq;
-	  set_used_size(get_used_size() + bl.length());
 	  return seastar::do_with(
 	    std::move(*maybe_record_deltas_list),
 	    [write_result,

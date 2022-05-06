@@ -260,9 +260,6 @@ struct cbjournal_test_t : public seastar_test_suite_t
   void set_written_to(rbm_abs_addr addr) {
     cbj->set_written_to(addr);
   }
-  void set_used_size(size_t size) {
-    cbj->set_used_size(size);
-  }
 };
 
 TEST_F(cbjournal_test_t, submit_one_record)
@@ -407,7 +404,6 @@ TEST_F(cbjournal_test_t, update_header)
     ASSERT_EQ(header.start, update_header.start);
     ASSERT_EQ(header.end, update_header.end);
     ASSERT_EQ(header.size, update_header.size);
-    ASSERT_EQ(header.used_size, update_header.used_size);
     ASSERT_EQ(header.written_to + record_total_size, update_header.written_to);
   });
 }
@@ -469,7 +465,6 @@ TEST_F(cbjournal_test_t, replay_after_reset)
     auto old_written_to = get_written_to();
     auto old_used_size = get_used_size();
     set_written_to(4096);
-    set_used_size(0);
     replay();
     ASSERT_EQ(old_written_to, get_written_to());
     ASSERT_EQ(old_used_size,
