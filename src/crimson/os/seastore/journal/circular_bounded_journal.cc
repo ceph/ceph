@@ -24,8 +24,6 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", written_to=" << header.written_to
 	     << ", flsg=" << header.flag
 	     << ", header_checksum=" << header.header_checksum
-	     << ", start=" << header.start
-	     << ", end=" << header.end
              << ")";
 }
 
@@ -40,23 +38,17 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
   LOG_PREFIX(CircularBoundedJournal::mkfs);
   return _open_device(path
   ).safe_then([this, config, FNAME]() mutable -> mkfs_ret {
-    rbm_abs_addr start_addr = convert_paddr_to_abs_addr(
-      config.start);
     assert(static_cast<seastore_off_t>(config.block_size) ==
       device->get_block_size());
     ceph::bufferlist bl;
     CircularBoundedJournal::cbj_header_t head;
     head.block_size = config.block_size;
-    rbm_abs_addr end_addr = convert_paddr_to_abs_addr(
-      config.end);
-    head.size = end_addr - start_addr
-      - device->get_block_size();
+    head.size = config.total_size - device->get_block_size();
     head.start_offset = device->get_block_size();
     head.written_to = head.start_offset;
     head.applied_to = head.start_offset;
-    head.start = start_addr;
-    head.end = end_addr;
     head.device_id = config.device_id;
+    start_dev_addr = config.start;
     encode(head, bl);
     header = head;
     DEBUG(
@@ -142,14 +134,14 @@ CircularBoundedJournal::open_for_write(rbm_abs_addr start)
       open_for_write_ertr::pass_further{},
       crimson::ct_error::assert_all{
 	"Invalid error read_header"
-    }).safe_then([this, FNAME](auto p) mutable {
+    }).safe_then([this, start, FNAME](auto p) mutable {
       auto &[head, bl] = *p;
       header = head;
       DEBUG("header : {}", header);
       paddr_t paddr = convert_abs_addr_to_paddr(
 	get_written_to(),
 	header.device_id);
-      header.size = header.end - header.start - get_block_size();
+      start_dev_addr = start;
       init = true;
       return open_for_write_ret(
 	open_for_write_ertr::ready_future_marker{},
@@ -171,14 +163,14 @@ CircularBoundedJournal::write_ertr::future<> CircularBoundedJournal::append_reco
 {
   LOG_PREFIX(CircularBoundedJournal::append_record);
   std::vector<std::pair<rbm_abs_addr, bufferlist>> writes;
-  if (addr + bl.length() <= header.end) {
+  if (addr + bl.length() <= get_journal_end()) {
     writes.push_back(std::make_pair(addr, bl));
   } else {
     // write remaining data---in this case,
     // data is splited into two parts before due to the end of CircularBoundedJournal.
     // the following code is to write the second part
     bufferlist first_write, next_write;
-    first_write.substr_of(bl, 0, header.end - addr);
+    first_write.substr_of(bl, 0, get_journal_end() - addr);
     writes.push_back(std::make_pair(addr, first_write));
     next_write.substr_of(
       bl, first_write.length(), bl.length() - first_write.length());
@@ -218,7 +210,7 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
   auto r_size = record_group_size_t(record.size, get_block_size());
   auto encoded_size = r_size.get_encoded_length();
   if (get_written_to() +
-      ceph::encoded_sizeof_bounded<record_group_header_t>() > header.end) {
+      ceph::encoded_sizeof_bounded<record_group_header_t>() > get_journal_end()) {
     // not enough space between written_to and the end of journal,
     // so that update used size to increase the amount of the remaing space
     // |        cbjournal      |
@@ -244,9 +236,9 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
     std::move(record), device->get_block_size(),
     j_seq, 0);
   auto target = get_written_to();
-  if (get_written_to() + to_write.length() >= header.end) {
+  if (get_written_to() + to_write.length() >= get_journal_end()) {
     set_written_to(get_start_addr() +
-      (to_write.length() - (header.end - get_written_to())));
+      (to_write.length() - (get_journal_end() - get_written_to())));
   } else {
     set_written_to(get_written_to() + to_write.length());
   }
@@ -297,7 +289,7 @@ CircularBoundedJournal::write_ertr::future<> CircularBoundedJournal::device_writ
 {
   LOG_PREFIX(CircularBoundedJournal::device_write_bl);
   auto length = bl.length();
-  if (offset + length > header.end) {
+  if (offset + length > get_journal_end()) {
     return crimson::ct_error::erange::make();
   }
   bl.rebuild_aligned(get_block_size());
@@ -432,11 +424,11 @@ Journal::replay_ret CircularBoundedJournal::replay(
 		  );
 	      });
 	    }).safe_then([this, &cursor_addr]() {
-	      if (cursor_addr >= header.end) {
-		cursor_addr = (cursor_addr - header.end) + get_start_addr();
+	      if (cursor_addr >= get_journal_end()) {
+		cursor_addr = (cursor_addr - get_journal_end()) + get_start_addr();
 	      }
 	      if (get_written_to() +
-		  ceph::encoded_sizeof_bounded<record_group_header_t>() > header.end) {
+		  ceph::encoded_sizeof_bounded<record_group_header_t>() > get_journal_end()) {
 		cursor_addr = get_start_addr();
 	      }
 	      return replay_ertr::make_ready_future<
@@ -476,9 +468,9 @@ CircularBoundedJournal::read_record_ret CircularBoundedJournal::read_record(padd
     off);
   rbm_abs_addr addr = offset;
   auto read_length = get_block_size();
-  if (addr + get_block_size() > header.end) {
+  if (addr + get_block_size() > get_journal_end()) {
     addr = get_start_addr();
-    read_length = header.end - offset;
+    read_length = get_journal_end() - offset;
   }
   DEBUG("read_record: reading record from abs addr {} read length {}",
       addr, read_length);
@@ -517,11 +509,11 @@ CircularBoundedJournal::read_record_ret CircularBoundedJournal::read_record(padd
       auto next_read = h.mdlength + h.dlength - read_length;
       DEBUG(" next_read_addr {}, next_read_length {} ",
 	  next_read_addr, next_read);
-      if (header.end < next_read_addr + next_read) {
+      if (get_journal_end() < next_read_addr + next_read) {
 	// In this case, need two more reads.
 	// The first is to read remain bytes to the end of cbjournal
 	// The second is to read the data at the begining of cbjournal
-	next_read = header.end - (addr + read_length);
+	next_read = get_journal_end() - (addr + read_length);
       }
       DEBUG("read_entry: additional reading addr {} length {}",
 	    next_read_addr,
@@ -576,7 +568,7 @@ CircularBoundedJournal::write_header()
   DEBUG(
     "sync header of CircularBoundedJournal, length {}",
     bl.length());
-  return device_write_bl(header.start, bl);
+  return device_write_bl(start_dev_addr, bl);
 }
 
 }

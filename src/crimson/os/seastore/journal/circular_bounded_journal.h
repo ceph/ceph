@@ -61,8 +61,7 @@ class CircularBoundedJournal : public Journal {
 public:
   struct mkfs_config_t {
     std::string path;
-    paddr_t start;
-    paddr_t end;
+    rbm_abs_addr start = 0;
     size_t block_size = 0;
     size_t total_size = 0;
     device_id_t device_id = 0;
@@ -71,8 +70,7 @@ public:
       device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
       return mkfs_config_t {
 	"",
-	paddr_t::make_blk_paddr(d_id, 0),
-	paddr_t::make_blk_paddr(d_id, DEFAULT_SIZE),
+	0,
 	DEFAULT_BLOCK_SIZE,
 	DEFAULT_SIZE,
 	d_id,
@@ -220,8 +218,6 @@ public:
     uint64_t flag = 0;       // represent features (reserved)
     checksum_t header_checksum = 0;       // checksum of entire cbj_header_t
 
-    rbm_abs_addr start = 0; // start address of CircularBoundedJournal
-    rbm_abs_addr end = 0;   // start address of CircularBoundedJournal
     device_id_t device_id;
 
     DENC(cbj_header_t, v, p) {
@@ -229,6 +225,7 @@ public:
       denc(v.magic, p);
       denc(v.uuid, p);
       denc(v.block_size, p);
+      denc(v.size, p);
 
       denc(v.start_offset, p);
 
@@ -237,8 +234,6 @@ public:
 
       denc(v.flag, p);
       denc(v.header_checksum, p);
-      denc(v.start, p);
-      denc(v.end, p);
       denc(v.device_id, p);
 
       DENC_FINISH(p);
@@ -301,6 +296,9 @@ public:
   size_t get_block_size() const {
     return header.block_size;
   }
+  rbm_abs_addr get_journal_end() const {
+    return header.size + get_block_size(); // journal size + header length
+  }
   void add_device(NVMeBlockDevice* dev) {
     device = dev;
   }
@@ -311,6 +309,7 @@ private:
   WritePipeline *write_pipeline = nullptr;
   bool init = false;
   segment_seq_t cur_segment_seq = 0; // segment seq to track the sequence to written records
+  rbm_abs_addr start_dev_addr = 0; // cbjournal start address in device
 };
 
 std::ostream &operator<<(std::ostream &out, const CircularBoundedJournal::cbj_header_t &header);
