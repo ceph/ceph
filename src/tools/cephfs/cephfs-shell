@@ -79,7 +79,8 @@ exit_codes = {'Misc': 1,
               errno.ECONNABORTED: 19,
               errno.ECONNREFUSED: 20,
               errno.ECONNRESET: 21,
-              errno.EINTR: 22}
+              errno.EINTR: 22,
+              errno.EISDIR: 23}
 
 
 #########################################################################
@@ -949,7 +950,18 @@ class CephFSShell(Cmd):
                     cephfs.unlink(path)
                 except libcephfs.Error as e:
                     # NOTE: perhaps we need a better msg here
-                    set_exit_code_msg(msg=e)
+                    if e.get_error_code() == 2:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rm: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "No such file or directory")
+                    elif e.get_error_code() == 21:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rm: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "Is a directory")
+                    else:
+                        set_exit_code_msg(msg=e)
 
     def complete_mv(self, text, line, begidx, endidx):
         """
