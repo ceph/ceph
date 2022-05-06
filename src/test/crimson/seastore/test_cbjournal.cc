@@ -141,8 +141,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
     device = new nvme_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE);
     cbj.reset(new CircularBoundedJournal(device, std::string()));
     device_id_t d_id = 1 << (std::numeric_limits<device_id_t>::digits - 1);
-    config.start = paddr_t::make_blk_paddr(d_id, 0);
-    config.end = paddr_t::make_blk_paddr(d_id, CBTEST_DEFAULT_TEST_SIZE);
+    config.start = 0;
     config.block_size = CBTEST_DEFAULT_BLOCK_SIZE;
     config.total_size = CBTEST_DEFAULT_TEST_SIZE;
     config.device_id = d_id;
@@ -235,9 +234,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
     return cbj->mkfs(config).unsafe_get0();
   }
   auto open() {
-    rbm_abs_addr addr = convert_paddr_to_abs_addr(
-      config.start);
-    return cbj->open_for_write(addr).unsafe_get0();
+    return cbj->open_for_write(config.start).unsafe_get0();
   }
   auto get_available_size() {
     return cbj->get_available_size();
@@ -404,8 +401,6 @@ TEST_F(cbjournal_test_t, update_header)
 
     ASSERT_EQ(update_header.applied_to, update_header.applied_to);
     ASSERT_EQ(header.block_size, update_header.block_size);
-    ASSERT_EQ(header.start, update_header.start);
-    ASSERT_EQ(header.end, update_header.end);
     ASSERT_EQ(header.size, update_header.size);
     ASSERT_EQ(header.written_to + record_total_size, update_header.written_to);
   });
