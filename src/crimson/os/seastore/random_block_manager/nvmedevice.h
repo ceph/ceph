@@ -336,7 +336,11 @@ public:
   virtual open_ertr::future<> open(
       const std::string& path,
       seastar::open_flags mode) = 0;
-  //virtual seastar::future<> close() = 0;
+
+  virtual write_ertr::future<> writev(
+    uint64_t offset,
+    ceph::bufferlist bl,
+    uint16_t stream = 0) = 0;
 
   /*
    * For passsing through nvme IO or Admin command to SSD
@@ -428,6 +432,11 @@ public:
     return mount_ertr::now();
   }
 
+  write_ertr::future<> writev(
+    uint64_t offset,
+    ceph::bufferlist bl,
+    uint16_t stream = 0) final;
+
   nvme_command_ertr::future<int> pass_admin(
     nvme_admin_command_t& admin_cmd) override;
   nvme_command_ertr::future<int> pass_through_io(
@@ -488,6 +497,11 @@ public:
     bufferptr &bptr) override;
 
   close_ertr::future<> close() override;
+
+  write_ertr::future<> writev(
+    uint64_t offset,
+    ceph::bufferlist bl,
+    uint16_t stream = 0) final;
 
   char *buf;
   size_t size;
