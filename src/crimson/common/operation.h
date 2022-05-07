@@ -232,28 +232,58 @@ private:
 template <class T>
 struct AggregateBlockingEvent {
   struct TriggerI {
+  protected:
+    struct TriggerContainerI {
+      virtual typename T::TriggerI& get_trigger() = 0;
+      virtual ~TriggerContainerI() = default;
+    };
+    using TriggerContainerIRef = std::unique_ptr<TriggerContainerI>;
+    virtual TriggerContainerIRef create_part_trigger() = 0;
+
+  public:
     template <class FutureT>
     auto maybe_record_blocking(FutureT&& fut,
 			       const typename T::Blocker& blocker) {
       // AggregateBlockingEvent is supposed to be used on relatively cold
       // paths (recovery), so we don't need to worry about the dynamic
       // polymothps / dynamic memory's overhead.
-      return create_part_trigger()->maybe_record_blocking(
-	std::move(fut), blocker);
+      auto tcont = create_part_trigger();
+      return tcont->get_trigger().maybe_record_blocking(
+	std::move(fut), blocker
+      ).finally([tcont=std::move(tcont)] {});
     }
 
-    virtual std::unique_ptr<typename T::TriggerI> create_part_trigger() = 0;
     virtual ~TriggerI() = default;
   };
 
   template <class OpT>
-  struct Trigger : TriggerI {
+  struct Trigger final : TriggerI {
     Trigger(AggregateBlockingEvent& event, const OpT& op)
       : event(event), op(op) {}
 
-    std::unique_ptr<typename T::TriggerI> create_part_trigger() override {
-      return std::make_unique<typename T::template Trigger<OpT>>(
-	event.events.emplace_back(), op);
+    class TriggerContainer final : public TriggerI::TriggerContainerI {
+      AggregateBlockingEvent& event;
+      typename decltype(event.events)::iterator iter;
+      typename T::template Trigger<OpT> trigger;
+
+      typename T::TriggerI &get_trigger() final {
+	return trigger;
+      }
+
+    public:
+      TriggerContainer(AggregateBlockingEvent& _event, const OpT& op) :
+	event(_event),
+	iter(event.events.emplace(event.events.end())),
+	trigger(*iter, op) {}
+
+      ~TriggerContainer() final {
+	event.events.erase(iter);
+      }
+    };
+
+  protected:
+    typename TriggerI::TriggerContainerIRef create_part_trigger() final {
+      return std::make_unique<TriggerContainer>(event, op);
     }
 
   private:
