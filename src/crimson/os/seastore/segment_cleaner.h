@@ -749,9 +749,11 @@ public:
   release_ertr::future<> maybe_release_segment(Transaction &t);
 
   void adjust_segment_util(double old_usage, double new_usage) {
-    assert(stats.segment_util.buckets[std::floor(old_usage * 10)].count > 0);
-    stats.segment_util.buckets[std::floor(old_usage * 10)].count--;
-    stats.segment_util.buckets[std::floor(new_usage * 10)].count++;
+    auto old_index = get_bucket_index(old_usage);
+    auto new_index = get_bucket_index(new_usage);
+    assert(stats.segment_util.buckets[old_index].count > 0);
+    stats.segment_util.buckets[old_index].count--;
+    stats.segment_util.buckets[new_index].count++;
   }
 
   void mark_space_used(
@@ -766,12 +768,12 @@ public:
       return;
 
     stats.used_bytes += len;
-    auto old_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
+    auto old_usage = calc_utilization(seg_addr.get_segment_id());
     [[maybe_unused]] auto ret = space_tracker->allocate(
       seg_addr.get_segment_id(),
       seg_addr.get_segment_off(),
       len);
-    auto new_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
+    auto new_usage = calc_utilization(seg_addr.get_segment_id());
     adjust_segment_util(old_usage, new_usage);
 
     // use the last extent's last modified time for the calculation of the projected
@@ -809,12 +811,12 @@ public:
       seg_addr.get_segment_id(),
       addr,
       len);
-    auto old_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
+    auto old_usage = calc_utilization(seg_addr.get_segment_id());
     [[maybe_unused]] auto ret = space_tracker->release(
       seg_addr.get_segment_id(),
       seg_addr.get_segment_off(),
       len);
-    auto new_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
+    auto new_usage = calc_utilization(seg_addr.get_segment_id());
     adjust_segment_util(old_usage, new_usage);
     maybe_wake_gc_blocked_io();
     assert(ret >= 0);
@@ -865,11 +867,36 @@ public:
   using work_iertr = ExtentCallbackInterface::extent_mapping_iertr;
 
 private:
+  /*
+   * 10 buckets for the number of closed segments by usage
+   * 2 extra buckets for the number of open and empty segments
+   */
+  static constexpr double UTIL_STATE_OPEN = 1.05;
+  static constexpr double UTIL_STATE_EMPTY = 1.15;
+  static constexpr std::size_t UTIL_BUCKETS = 12;
+  static std::size_t get_bucket_index(double util) {
+    auto index = std::floor(util * 10);
+    assert(index < UTIL_BUCKETS);
+    return index;
+  }
+  double calc_utilization(segment_id_t id) const {
+    auto& info = segments[id];
+    if (info.is_open()) {
+      return UTIL_STATE_OPEN;
+    } else if (info.is_empty()) {
+      return UTIL_STATE_EMPTY;
+    } else {
+      auto ret = space_tracker->calc_utilization(id);
+      assert(ret >= 0 && ret < 1);
+      return ret;
+    }
+  }
 
   // journal status helpers
 
   double calc_gc_benefit_cost(segment_id_t id) const {
-    double util = space_tracker->calc_utilization(id);
+    double util = calc_utilization(id);
+    ceph_assert(util >= 0 && util < 1);
     auto cur_time = seastar::lowres_system_clock::now();
     auto segment = segments[id];
     assert(cur_time >= segment.last_modified);
@@ -888,13 +915,14 @@ private:
 	 ++it) {
       auto _id = it->first;
       const auto& segment_info = it->second;
-      double benefit_cost = calc_gc_benefit_cost(_id);
       if (segment_info.is_closed() &&
-	  !segment_info.is_in_journal(journal_tail_committed) &&
-	  benefit_cost > max_benefit_cost) {
-	id = _id;
-	seq = segment_info.seq;
-	max_benefit_cost = benefit_cost;
+	  !segment_info.is_in_journal(journal_tail_committed)) {
+        double benefit_cost = calc_gc_benefit_cost(_id);
+        if (benefit_cost > max_benefit_cost) {
+          id = _id;
+          seq = segment_info.seq;
+          max_benefit_cost = benefit_cost;
+        }
       }
     }
     if (id != NULL_SEG_ID) {
@@ -1273,7 +1301,10 @@ private:
       segment_seq_t seq,
       segment_type_t s_type) {
     ceph_assert(!init_complete);
+    auto old_usage = calc_utilization(segment);
     segments.init_closed(segment, seq, s_type);
+    auto new_usage = calc_utilization(segment);
+    adjust_segment_util(old_usage, new_usage);
     if (s_type == segment_type_t::OOL) {
       ool_segment_seq_allocator->set_next_segment_seq(seq);
     }
