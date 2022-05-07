@@ -912,8 +912,7 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
-        exports = conf.list_exports(cluster_id=self.cluster_id)
-        ls = json.loads(exports[1])
+        ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 2
 
         r = conf.create_export(
@@ -927,8 +926,7 @@ NFS_CORE_PARAM {
         )
         assert r[0] == 0
 
-        exports = conf.list_exports(cluster_id=self.cluster_id)
-        ls = json.loads(exports[1])
+        ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 3
 
         export = conf._fetch_export('foo', '/mybucket')
@@ -956,8 +954,7 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
-        exports = conf.list_exports(cluster_id=self.cluster_id)
-        ls = json.loads(exports[1])
+        ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 2
 
         r = conf.create_export(
@@ -972,8 +969,7 @@ NFS_CORE_PARAM {
         )
         assert r[0] == 0
 
-        exports = conf.list_exports(cluster_id=self.cluster_id)
-        ls = json.loads(exports[1])
+        ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 3
 
         export = conf._fetch_export('foo', '/mybucket')
@@ -1001,8 +997,7 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
-        exports = conf.list_exports(cluster_id=self.cluster_id)
-        ls = json.loads(exports[1])
+        ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 2
 
         r = conf.create_export(
@@ -1016,8 +1011,7 @@ NFS_CORE_PARAM {
         )
         assert r[0] == 0
 
-        exports = conf.list_exports(cluster_id=self.cluster_id)
-        ls = json.loads(exports[1])
+        ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 3
 
         export = conf._fetch_export('foo', '/mybucket')
@@ -1045,8 +1039,7 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
-        exports = conf.list_exports(cluster_id=self.cluster_id)
-        ls = json.loads(exports[1])
+        ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 2
 
         r = conf.create_export(
@@ -1061,8 +1054,7 @@ NFS_CORE_PARAM {
         )
         assert r[0] == 0
 
-        exports = conf.list_exports(cluster_id=self.cluster_id)
-        ls = json.loads(exports[1])
+        ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 3
 
         export = conf._fetch_export('foo', '/cephfs2')

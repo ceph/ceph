@@ -3,6 +3,7 @@ import threading
 from typing import Tuple, Optional, List, Dict, Any
 
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
+import object_format
 import orchestrator
 
 from .export import ExportMgr
@@ -85,7 +86,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
     @CLICommand('nfs export ls', perm='r')
-    def _cmd_nfs_export_ls(self, cluster_id: str, detailed: bool = False) -> Tuple[int, str, str]:
+    @object_format.Responder()
+    def _cmd_nfs_export_ls(self, cluster_id: str, detailed: bool = False) -> List[Any]:
         """List exports of a NFS cluster"""
         return self.export_mgr.list_exports(cluster_id=cluster_id, detailed=detailed)
 
