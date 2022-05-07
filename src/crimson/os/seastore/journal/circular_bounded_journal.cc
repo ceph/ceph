@@ -292,16 +292,11 @@ CircularBoundedJournal::write_ertr::future<> CircularBoundedJournal::device_writ
   if (offset + length > get_journal_end()) {
     return crimson::ct_error::erange::make();
   }
-  bl.rebuild_aligned(get_block_size());
   DEBUG(
     "overwrite in CircularBoundedJournal, offset {}, length {}",
     offset,
     length);
-  auto write_length = length < get_block_size() ? get_block_size() : length;
-  auto bptr = bufferptr(ceph::buffer::create_page_aligned(write_length));
-  auto iter = bl.cbegin();
-  iter.copy(bl.length(), bptr.c_str());
-  return device->write(offset, bptr
+  return device->writev(offset, bl
   ).handle_error(
     write_ertr::pass_further{},
     crimson::ct_error::assert_all{ "Invalid error device->write" }
