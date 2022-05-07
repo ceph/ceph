@@ -56,25 +56,6 @@ def known_cluster_ids(mgr: 'Module') -> Set[str]:
     return clusters
 
 
-def export_cluster_checker(func: FuncT) -> FuncT:
-    def cluster_check(
-            export: 'ExportMgr',
-            *args: Any,
-            **kwargs: Any
-    ) -> Tuple[int, str, str]:
-        """
-        This method checks if cluster exists
-        """
-        clusters = known_cluster_ids(export.mgr)
-        cluster_id: str = kwargs['cluster_id']
-        log.debug("checking for %r in known nfs clusters: %r",
-                  cluster_id, clusters)
-        if cluster_id not in clusters:
-            return -errno.ENOENT, "", "Cluster does not exist"
-        return func(export, *args, **kwargs)
-    return cast(FuncT, cluster_check)
-
-
 def exception_handler(
         exception_obj: Exception,
         log_msg: str = ""
