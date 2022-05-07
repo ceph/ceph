@@ -262,7 +262,7 @@ struct AggregateBlockingEvent {
   };
 
 private:
-  std::vector<T> events;
+  std::list<T> events;
   template <class OpT>
   friend class Trigger;
 };
