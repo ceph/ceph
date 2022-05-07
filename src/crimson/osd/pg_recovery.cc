@@ -51,9 +51,7 @@ PGRecovery::start_recovery_ops(
   assert(!pg->is_backfilling());
   assert(!pg->get_peering_state().is_deleting());
 
-  std::vector<RecoveryBackend::interruptible_future<>> new_started;
   std::vector<interruptible_future<>> started;
-  new_started.reserve(max_to_start);
   started.reserve(max_to_start);
   max_to_start -= start_primary_recovery_ops(trigger, max_to_start, &started);
   if (max_to_start > 0) {
@@ -61,7 +59,7 @@ PGRecovery::start_recovery_ops(
   }
   using interruptor =
     crimson::interruptible::interruptor<crimson::osd::IOInterruptCondition>;
-  return interruptor::parallel_for_each(std::move(new_started),
+  return interruptor::parallel_for_each(std::move(started),
 					[] (auto&& ifut) {
     return std::move(ifut);
   }).then_interruptible([this] {
