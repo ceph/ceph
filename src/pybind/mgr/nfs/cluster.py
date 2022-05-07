@@ -7,6 +7,7 @@ from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING, Tuple
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
+from object_format import ErrorResponse
 
 import orchestrator
 
@@ -148,11 +149,12 @@ class NFSCluster:
         except Exception as e:
             return exception_handler(e, f"Failed to delete NFS Cluster {cluster_id}")
 
-    def list_nfs_cluster(self) -> Tuple[int, str, str]:
+    def list_nfs_cluster(self) -> List[str]:
         try:
-            return 0, '\n'.join(available_clusters(self.mgr)), ""
+            return available_clusters(self.mgr)
         except Exception as e:
-            return exception_handler(e, "Failed to list NFS Cluster")
+            log.exception("Failed to list NFS Cluster")
+            raise ErrorResponse.wrap(e)
 
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
         completion = self.mgr.list_daemons(daemon_type='nfs')

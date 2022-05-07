@@ -1078,9 +1078,8 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         cluster = NFSCluster(nfs_mod)
 
-        rc, out, err = cluster.list_nfs_cluster()
-        assert rc == 0
-        assert out == self.cluster_id
+        out = cluster.list_nfs_cluster()
+        assert out[0] == self.cluster_id
 
     def test_cluster_ls(self):
         self._do_mock_test(self._do_test_cluster_ls)
