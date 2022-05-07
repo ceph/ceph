@@ -409,15 +409,16 @@ SegmentCleaner::SegmentCleaner(
 void SegmentCleaner::register_metrics()
 {
   namespace sm = seastar::metrics;
-  stats.segment_util.buckets.resize(11);
-  for (int i = 0; i < 11; i++) {
+  stats.segment_util.buckets.resize(UTIL_BUCKETS);
+  std::size_t i;
+  for (i = 0; i < UTIL_BUCKETS; ++i) {
     stats.segment_util.buckets[i].upper_bound = ((double)(i + 1)) / 10;
-    if (!i) {
-      stats.segment_util.buckets[i].count = segments.get_num_segments();
-    } else {
-      stats.segment_util.buckets[i].count = 0;
-    }
+    stats.segment_util.buckets[i].count = 0;
   }
+  // NOTE: by default the segments are empty
+  i = get_bucket_index(UTIL_STATE_EMPTY);
+  stats.segment_util.buckets[i].count = segments.get_num_segments();
+
   metrics.add_group("segment_cleaner", {
     sm::make_counter("segments_number",
 		     [this] { return segments.get_num_segments(); },
@@ -510,7 +511,10 @@ segment_id_t SegmentCleaner::allocate_segment(
     auto seg_id = it->first;
     auto& segment_info = it->second;
     if (segment_info.is_empty()) {
+      auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type);
+      auto new_usage = calc_utilization(seg_id);
+      adjust_segment_util(old_usage, new_usage);
       INFO("opened, should_block_on_gc {}, projected_avail_ratio {}, "
            "reclaim_ratio {}",
            should_block_on_gc(),
@@ -591,7 +595,10 @@ void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 void SegmentCleaner::close_segment(segment_id_t segment)
 {
   LOG_PREFIX(SegmentCleaner::close_segment);
+  auto old_usage = calc_utilization(segment);
   segments.mark_closed(segment);
+  auto new_usage = calc_utilization(segment);
+  adjust_segment_util(old_usage, new_usage);
   INFO("closed, should_block_on_gc {}, projected_avail_ratio {}, "
        "reclaim_ratio {}",
        should_block_on_gc(),
@@ -1124,7 +1131,11 @@ SegmentCleaner::maybe_release_segment(Transaction &t)
     INFOT("releasing segment {}", t, to_release);
     return sm_group->release_segment(to_release
     ).safe_then([this, FNAME, &t, to_release] {
+      auto old_usage = calc_utilization(to_release);
+      ceph_assert(old_usage == 0);
       segments.mark_empty(to_release);
+      auto new_usage = calc_utilization(to_release);
+      adjust_segment_util(old_usage, new_usage);
       INFOT("released, should_block_on_gc {}, projected_avail_ratio {}, "
            "reclaim_ratio {}",
            t,
