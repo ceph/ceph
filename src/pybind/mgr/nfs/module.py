@@ -132,7 +132,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
     @CLICommand('nfs cluster ls', perm='r')
-    def _cmd_nfs_cluster_ls(self) -> Tuple[int, str, str]:
+    @object_format.Responder()
+    def _cmd_nfs_cluster_ls(self) -> List[str]:
         """List NFS Clusters"""
         return self.nfs.list_nfs_cluster()
 
