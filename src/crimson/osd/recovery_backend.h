@@ -150,7 +150,8 @@ public:
 	std::forward<F>(fut)
       ).finally([ref] {});
     }
-    seastar::future<> wait_for_recovered(BlockingEvent::TriggerI& trigger) {
+    template <typename T>
+    seastar::future<> wait_for_recovered(T &trigger) {
       WaitForObjectRecoveryRef ref = this;
       return wait_track_blocking(trigger, recovered.get_shared_future());
     }
