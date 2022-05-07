@@ -156,8 +156,7 @@ size_t PGRecovery::start_primary_recovery_ops(
     // TODO: handle lost/unfound
     if (pg->get_recovery_backend()->is_recovering(soid)) {
       auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
-      out->emplace_back(recovery_waiter.wait_for_recovered(
-	*trigger.create_part_trigger()));
+      out->emplace_back(recovery_waiter.wait_for_recovered(trigger));
       ++started;
     } else if (pg->get_recovery_backend()->is_recovering(head)) {
       ++skipped;
@@ -225,8 +224,7 @@ size_t PGRecovery::start_replica_recovery_ops(
       if (pg->get_recovery_backend()->is_recovering(soid)) {
 	logger().debug("{}: already recovering object {}", __func__, soid);
 	auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
-	out->emplace_back(recovery_waiter.wait_for_recovered(
-	  *trigger.create_part_trigger()));
+	out->emplace_back(recovery_waiter.wait_for_recovered(trigger));
 	started++;
 	continue;
       }
