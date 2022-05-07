@@ -59,7 +59,11 @@ class SyncBucketUploader:
         for msg in consumer:
             message = msg.value
             if message['s3']['bucket']['name'] == self._bucket_name and message["s3"]['object']['key'] in self._objects \
+<<<<<<< HEAD
+                    and message['eventName'] == "ObjectSynced":
+=======
                     and message['eventName'] == "ceph:ObjectSynced":
+>>>>>>> f4cb7b0defcc54218e7dd5b0893bd940dd6705a9
                 key = message["s3"]['object']['key']
                 if self._objects[key][0] > 0:
                     # decrement the zones we are waiting on by one
@@ -109,7 +113,17 @@ class SyncBucketUploader:
         if timeout >= 0:
             timer = threading.Timer(timeout, lambda: self._cancel(object_key))
             timer.start()
+<<<<<<< HEAD
+        
+        try:
+            # Put objects to the relevant bucket
+            ans = self._s3_clients[zone_name].upload_file(Filename=file_name, Bucket=self._bucket_name,
+                                        Key=object_key)
+        except KeyError:
+            print("Key Exception! Is it possible the provided zone does not have a client?")
+=======
             
         # Put objects to the relevant bucket
         ans = self._s3_clients[zone_name].upload_file(Filename=file_name, Bucket=self._bucket_name,
                                     Key=object_key)
+>>>>>>> f4cb7b0defcc54218e7dd5b0893bd940dd6705a9
