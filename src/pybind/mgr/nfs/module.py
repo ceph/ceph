@@ -138,7 +138,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.nfs.list_nfs_cluster()
 
     @CLICommand('nfs cluster info', perm='r')
-    def _cmd_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
+    @object_format.Responder()
+    def _cmd_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         """Displays NFS Cluster info"""
         return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
 

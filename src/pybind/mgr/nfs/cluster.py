@@ -1,6 +1,5 @@
 import ipaddress
 import logging
-import json
 import re
 import socket
 from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING, Tuple
@@ -203,7 +202,7 @@ class NFSCluster:
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r
 
-    def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Tuple[int, str, str]:
+    def show_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         try:
             if cluster_id and cluster_id not in available_clusters(self.mgr):
                 raise ClusterNotFound()
@@ -217,9 +216,10 @@ class NFSCluster:
                 res = self._show_nfs_cluster_info(cluster_id)
                 if res:
                     info_res[cluster_id] = res
-            return (0, json.dumps(info_res, indent=4), '')
+            return info_res
         except Exception as e:
-            return exception_handler(e, "Failed to show info for cluster")
+            log.exception("Failed to show info for cluster")
+            raise ErrorResponse.wrap(e)
 
     def get_nfs_cluster_config(self, cluster_id: str) -> Tuple[int, str, str]:
         try:
