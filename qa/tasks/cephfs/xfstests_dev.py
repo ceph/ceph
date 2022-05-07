@@ -27,13 +27,44 @@ class XFSTestsDev(CephFSTestCase):
         self.install_xfsprogs = False
 
     def prepare_xfstests_devs(self):
+        # NOTE: To run a quick test with vstart_runner.py, enable next line
+        # and disable calls to get_repo(), install_deps(), and
+        # build_and_install() and also disable lines in tearDown() for repo
+        # deletion.
+        #self.xfstests_repo_path = '/path/to/xfstests-dev'
+
         self.get_repos()
         self.get_test_and_scratch_dirs_ready()
         self.install_deps()
         self.create_reqd_users()
         self.write_local_config()
         self.write_ceph_exclude()
+        self.build_and_install()
 
+    def tearDown(self):
+        self.del_users_and_groups()
+        self.del_repos()
+        super(XFSTestsDev, self).tearDown()
+
+    def del_users_and_groups(self):
+        self.mount_a.client_remote.run(args=['sudo', 'userdel', '--force',
+                                             '--remove', 'fsgqa'],
+                                       omit_sudo=False, check_status=False)
+        self.mount_a.client_remote.run(args=['sudo', 'userdel', '--force',
+                                             '--remove', '123456-fsgqa'],
+                                       omit_sudo=False, check_status=False)
+        self.mount_a.client_remote.run(args=['sudo', 'groupdel', 'fsgqa'],
+                                       omit_sudo=False, check_status=False)
+
+    def del_repos(self):
+        self.mount_a.client_remote.run(args=f'sudo rm -rf {self.xfstests_repo_path}',
+                                       omit_sudo=False, check_status=False)
+
+        if self.install_xfsprogs:
+            self.mount_a.client_remote.run(args=f'sudo rm -rf {self.xfsprogs_repo_path}',
+                                           omit_sudo=False, check_status=False)
+
+    def build_and_install(self):
         # NOTE: On teuthology machines it's necessary to run "make" as
         # superuser since the repo is cloned somewhere in /tmp.
         self.mount_a.client_remote.run(args=['sudo', 'make'],
@@ -192,24 +223,3 @@ class XFSTestsDev(CephFSTestCase):
 
         self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'ceph.exclude'),
                                               xfstests_exclude_contents, sudo=True)
-
-    def tearDown(self):
-        self.mount_a.client_remote.run(args=['sudo', 'userdel', '--force',
-                                             '--remove', 'fsgqa'],
-                                       omit_sudo=False, check_status=False)
-        self.mount_a.client_remote.run(args=['sudo', 'userdel', '--force',
-                                             '--remove', '123456-fsgqa'],
-                                       omit_sudo=False, check_status=False)
-        self.mount_a.client_remote.run(args=['sudo', 'groupdel', 'fsgqa'],
-                                       omit_sudo=False, check_status=False)
-
-        self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
-                                             self.xfstests_repo_path],
-                                       omit_sudo=False, check_status=False)
-
-        if self.install_xfsprogs:
-            self.mount_a.client_remote.run(args=['sudo', 'rm', '-rf',
-                                                 self.xfsprogs_repo_path],
-                                           omit_sudo=False, check_status=False)
-
-        super(XFSTestsDev, self).tearDown()
