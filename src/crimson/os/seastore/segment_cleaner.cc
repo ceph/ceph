@@ -465,17 +465,31 @@ void SegmentCleaner::register_metrics()
     sm::make_counter("unavailable_unused_bytes",
 		     [this] { return get_unavailable_unused_bytes(); },
 		     sm::description("the size of the space is unavailable and not alive")),
-    sm::make_counter("projected_used_bytes", stats.projected_used_bytes,
-		     sm::description("the size of the space going to be occupied by new extents")),
 
-    sm::make_counter("accumulated_blocked_ios", stats.accumulated_blocked_ios,
-		     sm::description("accumulated total number of ios that were blocked by gc")),
-    sm::make_counter("reclaim_rewrite_bytes", stats.reclaim_rewrite_bytes,
+    sm::make_counter("projected_count", stats.projected_count,
+		    sm::description("the number of projected usage reservations")),
+    sm::make_counter("projected_used_bytes_sum", stats.projected_used_bytes_sum,
+		    sm::description("the sum of the projected usage in bytes")),
+
+    sm::make_counter("io_count", stats.io_count,
+		    sm::description("the sum of IOs")),
+    sm::make_counter("io_blocked_count", stats.io_blocked_count,
+		    sm::description("IOs that are blocked by gc")),
+    sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
+		     sm::description("the sum of blocking IOs")),
+
+    sm::make_counter("reclaimed_bytes", stats.reclaimed_bytes,
 		     sm::description("rewritten bytes due to reclaim")),
-    sm::make_counter("reclaiming_bytes", stats.reclaiming_bytes,
-		     sm::description("bytes being reclaimed")),
-    sm::make_counter("ios_blocking", stats.ios_blocking,
-		     sm::description("IOs that are blocking on space usage")),
+    sm::make_counter("reclaimed_segment_bytes", stats.reclaimed_segment_bytes,
+		     sm::description("rewritten bytes due to reclaim")),
+
+    sm::make_gauge("available_ratio",
+                   [this] { return segments.get_available_ratio(); },
+                   sm::description("ratio of available space to total space")),
+    sm::make_gauge("reclaim_ratio",
+                   [this] { return get_reclaim_ratio(); },
+                   sm::description("ratio of reclaimable space to unavailable space")),
+
     sm::make_histogram("segment_utilization_distribution",
 		       [this]() -> seastar::metrics::histogram& {
 		         return stats.segment_util;
@@ -911,7 +925,8 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
       auto d = seastar::lowres_system_clock::now() - start;
       INFO("duration: {}, pavail_ratio before: {}, repeats: {}", d, pavail_ratio, runs);
       if (final_reclaim()) {
-	stats.reclaim_rewrite_bytes += stats.reclaiming_bytes;
+	stats.reclaimed_bytes += stats.reclaiming_bytes;
+	stats.reclaimed_segment_bytes += segments.get_segment_size();
 	stats.reclaiming_bytes = 0;
 	next_reclaim_pos.reset();
       } else {

@@ -635,18 +635,26 @@ private:
      * Bytes occupied by live extents
      */
     uint64_t used_bytes = 0;
+
     /**
      * projected_used_bytes
      *
      * Sum of projected bytes used by each transaction between throttle
-     * acquisition and commit completion.  See await_throttle()
+     * acquisition and commit completion.  See reserve_projected_usage()
      */
     uint64_t projected_used_bytes = 0;
+    uint64_t projected_count = 0;
+    uint64_t projected_used_bytes_sum = 0;
 
-    uint64_t accumulated_blocked_ios = 0;
-    int64_t ios_blocking = 0;
-    uint64_t reclaim_rewrite_bytes = 0;
+    uint64_t io_blocking_num = 0;
+    uint64_t io_count = 0;
+    uint64_t io_blocked_count = 0;
+    uint64_t io_blocked_sum = 0;
+
     uint64_t reclaiming_bytes = 0;
+    uint64_t reclaimed_bytes = 0;
+    uint64_t reclaimed_segment_bytes = 0;
+
     seastar::metrics::histogram segment_util;
   } stats;
   seastar::metrics::metric_group metrics;
@@ -1168,22 +1176,32 @@ public:
     // The pipeline configuration prevents another IO from entering
     // prepare until the prior one exits and clears this.
     ceph_assert(!blocked_io_wake);
-    stats.ios_blocking++;
+    bool is_blocked = false;
+    ++stats.io_count;
+    if (should_block_on_gc()) {
+      ++stats.io_blocking_num;
+      ++stats.io_blocked_count;
+      stats.io_blocked_sum += stats.io_blocking_num;
+      is_blocked = true;
+    }
     return seastar::do_until(
       [this] {
 	log_gc_state("await_hard_limits");
 	return !should_block_on_gc();
       },
       [this] {
-	stats.accumulated_blocked_ios++;
 	blocked_io_wake = seastar::promise<>();
 	return blocked_io_wake->get_future();
       }
-    ).then([this, projected_usage] {
+    ).then([this, projected_usage, is_blocked] {
       ceph_assert(!blocked_io_wake);
-      assert(stats.ios_blocking > 0);
-      stats.ios_blocking--;
       stats.projected_used_bytes += projected_usage;
+      ++stats.projected_count;
+      stats.projected_used_bytes_sum += stats.projected_used_bytes;
+      if (is_blocked) {
+        assert(stats.io_blocking_num > 0);
+        --stats.io_blocking_num;
+      }
     });
   }
 
