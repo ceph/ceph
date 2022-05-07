@@ -5,7 +5,6 @@ from typing import (
     List,
     Any,
     Dict,
-    Tuple,
     Optional,
     TYPE_CHECKING,
     TypeVar,
@@ -54,15 +53,6 @@ def known_cluster_ids(mgr: 'Module') -> Set[str]:
     except NoOrchestrator:
         clusters = nfs_rados_configs(mgr.rados)
     return clusters
-
-
-def exception_handler(
-        exception_obj: Exception,
-        log_msg: str = ""
-) -> Tuple[int, str, str]:
-    if log_msg:
-        log.exception(log_msg)
-    return getattr(exception_obj, 'errno', -1), "", str(exception_obj)
 
 
 def _check_rados_notify(ioctx: Any, obj: str) -> None:
