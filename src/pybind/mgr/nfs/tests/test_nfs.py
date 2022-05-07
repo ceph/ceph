@@ -241,7 +241,7 @@ EXPORT {
             return OrchResult([])
 
         with mock.patch('nfs.module.Module.describe_service', mock_describe_service) as describe_service, \
-             mock.patch('nfs.module.Module.list_daemons', mock_list_daemons) as list_daemons, \
+            mock.patch('nfs.module.Module.list_daemons', mock_list_daemons) as list_daemons, \
                 mock.patch('nfs.module.Module.rados') as rados, \
                 mock.patch('nfs.export.available_clusters',
                            return_value=[self.cluster_id]), \
@@ -992,7 +992,7 @@ NFS_CORE_PARAM {
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.0.0/16"]
         assert export.cluster_id == self.cluster_id
-        
+
     def test_create_export_rgw_user(self):
         self._do_mock_test(self._do_test_create_export_rgw_user)
 
@@ -1034,7 +1034,7 @@ NFS_CORE_PARAM {
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.0.0/16"]
         assert export.cluster_id == self.cluster_id
-        
+
     def test_create_export_cephfs(self):
         self._do_mock_test(self._do_test_create_export_cephfs)
 
