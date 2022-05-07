@@ -1088,9 +1088,8 @@ NFS_CORE_PARAM {
         nfs_mod = Module('nfs', '', '')
         cluster = NFSCluster(nfs_mod)
 
-        rc, out, err = cluster.show_nfs_cluster_info(self.cluster_id)
-        assert rc == 0
-        assert json.loads(out) == {"foo": {"virtual_ip": None, "backend": []}}
+        out = cluster.show_nfs_cluster_info(self.cluster_id)
+        assert out == {"foo": {"virtual_ip": None, "backend": []}}
 
     def test_cluster_info(self):
         self._do_mock_test(self._do_test_cluster_info)
