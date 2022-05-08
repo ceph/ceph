@@ -158,3 +158,22 @@ It is possible to use Keystone for authentication even when using the
 S3 API (with AWS-like access and secret keys), if the ``rgw s3 auth
 use keystone`` option is set. For details, see
 :doc:`s3/authentication`.
+
+Service token support
+---------------------
+
+Service tokens can be enabled to support RadosGW Keystone integration
+to allow expired tokens when coupled with a valid service token in the request.
+
+Enable the support with ``rgw keystone service token enabled`` and use the
+``rgw keystone service token accepted roles`` to specify which roles are considered
+service roles.
+
+The ``rgw_keystone_expired_token_cache_expiration`` option can be used to tune the cache
+expiration for an expired token allowed with a service token, please note that this must
+be lower than the ``[token]/allow_expired_window`` option in the Keystone configuration.
+
+Enabling this will cause an expired token given in the X-Auth-Token header to be allowed
+if coupled with a X-Service-Token header that contains a valid token with the accepted
+roles. This can allow long running processes using a user token in X-Auth-Token to function
+beyond the expiration of the token.
