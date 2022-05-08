@@ -5,6 +5,9 @@ import json
 import random
 import sys
 import threading
+import importlib
+import inspect
+from selftest.plugins import Plugin, plugin_names
 from code import InteractiveInterpreter
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
@@ -56,6 +59,8 @@ class Module(MgrModule):
                type='int',
                min=1,
                max=42),
+        Option(name='epdb_port',
+               type='int'),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -64,6 +69,7 @@ class Module(MgrModule):
         self._workload: Optional[Workload] = None
         self._health: Dict[str, Dict[str, Any]] = {}
         self._repl = InteractiveInterpreter(dict(mgr=self))
+        self._plugins: List[Plugin] = []
 
     @CLICommand('mgr self-test python-version', perm='r')
     def python_version(self) -> Tuple[int, str, str]:
@@ -446,6 +452,8 @@ class Module(MgrModule):
     def shutdown(self) -> None:
         self._workload = Workload.SHUTDOWN
         self._event.set()
+        while self._plugins:
+            self._plugins.pop().shutdown()
 
     def _command_spam(self) -> None:
         self.log.info("Starting command_spam workload...")
@@ -492,6 +500,53 @@ class Module(MgrModule):
                 stdout = out.getvalue()
                 stderr = err.getvalue()
             return HandleCommandResult(retval, stdout, stderr)
+
+    def _plugin_exists(self, name):
+        for i, plugin in enumerate(self._plugins):
+            if plugin.__module__.split('.')[-1] == name:
+                return True
+        return False
+    def _plugin_name(self, plugin_class):
+        return plugin_class.__module__.split('.')[-1]
+        
+    @CLICommand('mgr self-test plugin add')
+    def add_plugin(self, plugin_name: str) -> Tuple[int, str, str]:
+        if self._plugin_exists(plugin_name):
+            return 0, f'Plugin {plugin_name} already added', ''
+        plugin_module = importlib.import_module(f'selftest.plugins.{plugin_name}', '')
+        for name, cls in plugin_module.__dict__.items():
+            if inspect.isclass(cls) and issubclass(cls, Plugin) and cls != Plugin:
+                obj = cls(self)
+                obj.serve()
+                self._plugins.append(obj)
+                return 0, 'Done', ''
+        return 0, '', 'Plugin not found'
+
+    @CLICommand('mgr self-test plugin remove')
+    def remove_plugin(self, plugin_name: str) -> Tuple[int, str, str]:
+        for i, plugin in enumerate(self._plugins):
+            if self._plugin_name(plugin) == plugin_name:
+                plugin.shutdown()
+                self._plugins.pop(i)
+                break
+        return 0, '', ''
+
+    @CLICommand('mgr self-test plugin list')
+    def list_plugins(self) -> Tuple[int, str, str]:
+        res = []
+        for plugin in plugin_names:
+            added = False
+            for added_plugin in self._plugins:
+                added_plugin_name = self._plugin_name(added_plugin.__class__)
+                if plugin == added_plugin_name:
+                    res.append(f'{plugin}: on')
+                    added = True
+                    break
+            if not added:
+                res.append(f'{plugin}: off')
+                    
+        return 0, '\n'.join(res), ''
+
 
     def serve(self) -> None:
         while True:
