@@ -30,7 +30,8 @@ class TokenEngine : public rgw::auth::Engine {
   using result_t = rgw::auth::Engine::result_t;
   using token_envelope_t = rgw::keystone::TokenEnvelope;
 
-  const rgw::auth::TokenExtractor* const extractor;
+  const rgw::auth::TokenExtractor* const auth_token_extractor;
+  const rgw::auth::TokenExtractor* const service_token_extractor;
   const rgw::auth::RemoteApplier::Factory* const apl_factory;
   rgw::keystone::Config& config;
   rgw::keystone::TokenCache& token_cache;
@@ -52,12 +53,14 @@ class TokenEngine : public rgw::auth::Engine {
 
 public:
   TokenEngine(CephContext* const cct,
-              const rgw::auth::TokenExtractor* const extractor,
+              const rgw::auth::TokenExtractor* const auth_token_extractor,
+              const rgw::auth::TokenExtractor* const service_token_extractor,
               const rgw::auth::RemoteApplier::Factory* const apl_factory,
               rgw::keystone::Config& config,
               rgw::keystone::TokenCache& token_cache)
     : cct(cct),
-      extractor(extractor),
+      auth_token_extractor(auth_token_extractor),
+      service_token_extractor(service_token_extractor),
       apl_factory(apl_factory),
       config(config),
       token_cache(token_cache) {
@@ -69,7 +72,7 @@ public:
 
   result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s,
 			optional_yield y) const override {
-    return authenticate(dpp, extractor->get_token(s), extractor->get_service_token(s), s);
+    return authenticate(dpp, auth_token_extractor->get_token(s), service_token_extractor->get_token(s), s);
   }
 }; /* class TokenEngine */
 

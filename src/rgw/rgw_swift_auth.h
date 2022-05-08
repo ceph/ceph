@@ -182,7 +182,6 @@ public:
 
 
 class DefaultStrategy : public rgw::auth::Strategy,
-                        public rgw::auth::TokenExtractor,
                         public rgw::auth::RemoteApplier::Factory,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::swift::TempURLApplier::Factory {
@@ -202,16 +201,20 @@ class DefaultStrategy : public rgw::auth::Strategy,
   using acl_strategy_t = rgw::auth::RemoteApplier::acl_strategy_t;
 
   /* The method implements TokenExtractor for X-Auth-Token present in req_state. */
-  std::string get_token(const req_state* const s) const override {
-    /* Returning a reference here would end in GCC complaining about a reference
-     * to temporary. */
-    return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
-  }
+  struct AuthTokenExtractor : rgw::auth::TokenExtractor {
+    std::string get_token(const req_state* const s) const override {
+      /* Returning a reference here would end in GCC complaining about a reference
+       * to temporary. */
+      return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
+    }
+  } auth_token_extractor;
 
   /* The method implements TokenExtractor for X-Service-Token present in req_state. */
-  std::string get_service_token(const req_state* const s) const override {
-    return s->info.env->get("HTTP_X_SERVICE_TOKEN", "");
-  }
+  struct ServiceTokenExtractor : rgw::auth::TokenExtractor {
+    std::string get_token(const req_state* const s) const override {
+      return s->info.env->get("HTTP_X_SERVICE_TOKEN", "");
+    }
+  } service_token_extractor;
 
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
@@ -261,15 +264,15 @@ public:
                      static_cast<rgw::auth::swift::TempURLApplier::Factory*>(this)),
       signed_engine(cct,
                     store,
-                    static_cast<rgw::auth::TokenExtractor*>(this),
+                    static_cast<rgw::auth::TokenExtractor*>(&auth_token_extractor),
                     static_cast<rgw::auth::LocalApplier::Factory*>(this)),
       external_engine(cct,
                       store,
-                      static_cast<rgw::auth::TokenExtractor*>(this),
+                      static_cast<rgw::auth::TokenExtractor*>(&auth_token_extractor),
                       static_cast<rgw::auth::LocalApplier::Factory*>(this)),
       anon_engine(cct,
                   static_cast<SwiftAnonymousApplier::Factory*>(this),
-                  static_cast<rgw::auth::TokenExtractor*>(this)) {
+                  static_cast<rgw::auth::TokenExtractor*>(&auth_token_extractor)) {
     /* When the constructor's body is being executed, all member engines
      * should be initialized. Thus, we can safely add them. */
     using Control = rgw::auth::Strategy::Control;
@@ -281,7 +284,8 @@ public:
      * engine is disabled or not. */
     if (! cct->_conf->rgw_keystone_url.empty()) {
       keystone_engine.emplace(cct,
-                              static_cast<rgw::auth::TokenExtractor*>(this),
+                              static_cast<rgw::auth::TokenExtractor*>(&auth_token_extractor),
+                              static_cast<rgw::auth::TokenExtractor*>(&service_token_extractor),
                               static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                               keystone_config_t::get_instance(),
                               keystone_cache_t::get_instance<keystone_config_t>());
