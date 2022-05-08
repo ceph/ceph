@@ -166,10 +166,10 @@ Service tokens can be enabled to support RadosGW Keystone integration
 to allow expired tokens when coupled with a valid service token in the request.
 
 Enable the support with ``rgw keystone service token enabled`` and use the
-``rgw keystone service token accepted roles`` to specify which roles are considered
+``rgw keystone service token accepted roles`` option to specify which roles are considered
 service roles.
 
-The ``rgw_keystone_expired_token_cache_expiration`` option can be used to tune the cache
+The ``rgw keystone expired token cache expiration`` option can be used to tune the cache
 expiration for an expired token allowed with a service token, please note that this must
 be lower than the ``[token]/allow_expired_window`` option in the Keystone configuration.
 
