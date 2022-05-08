@@ -335,14 +335,14 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       /* If this token was an allowed expired token because we got a
        * service token we need to update the expiration before we cache it. */
       if (allow_expired) {
-        uint64_t now = ceph_clock_now().sec();
-        uint64_t new_expires = now + g_conf()->rgw_keystone_expired_token_cache_expiration;
+        time_t now = ceph_clock_now().sec();
+        time_t new_expires = now + g_conf()->rgw_keystone_expired_token_cache_expiration;
         ldpp_dout(dpp, 20) << "updating expiration of allowed expired token"
                            << " from old " << t->get_expires() << " to now " << now << " + "
                            << g_conf()->rgw_keystone_expired_token_cache_expiration
                            << " secs = "
                            << new_expires << dendl;
-        t->set_expires(static_cast<time_t>(new_expires));
+        t->set_expires(new_expires);
       }
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
