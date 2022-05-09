@@ -76,14 +76,15 @@ AlienStore::AlienStore(const std::string& type,
   : type(type),
     path{path}
 {
-  cct = std::make_unique<CephContext>(CEPH_ENTITY_TYPE_OSD);
-  g_ceph_context = cct.get();
-  cct->_conf.set_config_values(values);
+  if (!g_ceph_context) {
+    cct = std::make_unique<CephContext>(CEPH_ENTITY_TYPE_OSD);
+    g_ceph_context = cct.get();
+  }
 }
 
 seastar::future<> AlienStore::start()
 {
-  store = ObjectStore::create(cct.get(), type, path);
+  store = ObjectStore::create(g_ceph_context, type, path);
   if (!store) {
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
   }
@@ -124,7 +125,12 @@ seastar::future<> AlienStore::stop()
   });
 }
 
-AlienStore::~AlienStore() = default;
+AlienStore::~AlienStore()
+{
+  if (g_ceph_context == cct.get()) {
+    g_ceph_context = nullptr;
+  }
+}
 
 AlienStore::mount_ertr::future<> AlienStore::mount()
 {
