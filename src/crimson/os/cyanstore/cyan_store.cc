@@ -392,6 +392,14 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         r = _truncate(cid, oid, off);
       }
       break;
+      case Transaction::OP_CLONE:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        ghobject_t noid = i.get_oid(op->dest_oid);
+        r = _clone(cid, oid, noid);
+      }
+      break;
       case Transaction::OP_SETATTR:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -701,6 +709,30 @@ int CyanStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size
   int r = o->truncate(size);
   used_bytes += (o->get_size() - old_size);
   return r;
+}
+
+int CyanStore::_clone(const coll_t& cid, const ghobject_t& oid,
+                      const ghobject_t& noid)
+{
+  logger().debug("{} cid={} oid={} noid={}",
+                __func__, cid, oid, noid);
+  auto c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+
+  ObjectRef oo = c->get_object(oid);
+  if (!oo)
+    return -ENOENT;
+  if (local_conf()->memstore_debug_omit_block_device_write)
+    return 0;
+  ObjectRef no = c->get_or_create_object(noid);
+  used_bytes += ((ssize_t)oo->get_size() - (ssize_t)no->get_size());
+  no->clone(oo.get(), 0, oo->get_size(), 0);
+
+  no->omap_header = oo->omap_header;
+  no->omap = oo->omap;
+  no->xattr = oo->xattr;
+  return 0;
 }
 
 int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
