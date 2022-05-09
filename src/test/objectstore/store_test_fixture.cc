@@ -44,11 +44,21 @@ void StoreTestFixture::SetUp()
     cerr << __func__ << ": unable to create " << data_dir << ": " << cpp_strerror(r) << std::endl;
   }
   ASSERT_EQ(0, r);
-
-  store = ObjectStore::create(g_ceph_context,
-                              type,
-                              data_dir,
-                              "store_test_temp_journal");
+#if defined(WITH_XSTORE)
+  if (type.find("xstore-") == 0) {
+    string sub_type = type.substr(7);
+    store = XStore__create(g_ceph_context,
+                           g_ceph_context->_conf.get_config_values(),
+                           sub_type,
+                           data_dir);
+  } else
+#endif
+  {
+    store = ObjectStore::create(g_ceph_context,
+                                type,
+                                data_dir,
+                                "store_test_temp_journal");
+  }
   if (!store) {
     cerr << __func__ << ": objectstore type " << type << " doesn't exist yet!" << std::endl;
   }
@@ -118,10 +128,21 @@ void StoreTestFixture::CloseAndReopen() {
   EXPECT_EQ(0, r);
   ch.reset(nullptr);
   store.reset(nullptr);
-  store = ObjectStore::create(g_ceph_context,
-                              type,
-                              data_dir,
-                              "store_test_temp_journal");
+#if defined(WITH_XSTORE)
+  if (type.find("xstore-") == 0) {
+    string sub_type = type.substr(7);
+    store = XStore__create(g_ceph_context,
+                           g_ceph_context->_conf.get_config_values(),
+                           sub_type,
+                           data_dir);
+  } else
+#endif
+  {
+    store = ObjectStore::create(g_ceph_context,
+                                type,
+                                data_dir,
+                                "store_test_temp_journal");
+  }
   if (!store) {
     cerr << __func__ << ": objectstore type " << type << " failed to reopen!" << std::endl;
   }

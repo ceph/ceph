@@ -14,11 +14,9 @@ class StoreTestFixture : virtual public ::testing::Test {
   ConfigProxy* conf = nullptr;
 
   std::string orig_death_test_style;
-
 public:
   std::unique_ptr<ObjectStore> store;
   ObjectStore::CollectionHandle ch;
-
   explicit StoreTestFixture(const std::string& type)
     : type(type), data_dir(type + ".test_temp_dir")
   {}

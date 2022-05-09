@@ -46,7 +46,9 @@
 #include "include/unordered_map.h"
 #include "os/kv.h"
 #include "store_test_fixture.h"
-
+#if defined(WITH_XSTORE)
+#include "xstore-crimson.h"
+#endif
 
 using namespace std;
 using namespace std::placeholders;
@@ -6843,7 +6845,12 @@ INSTANTIATE_TEST_SUITE_P(
 #if defined(WITH_BLUESTORE)
     "bluestore",
 #endif
-    "kstore"));
+    "kstore"
+#if defined(WITH_XSTORE)
+    ,
+    "xstore-bluestore"
+#endif
+  ));
 
 // Note: instantiate all stores to preserve store numbering order only
 INSTANTIATE_TEST_SUITE_P(
@@ -10616,6 +10623,10 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
+#ifdef WITH_XSTORE
+  XStore__save_args(argc, argv);
+#endif
+
   auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
@@ -10671,7 +10682,8 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.apply_changes(nullptr);
 
   ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  int gtest_result = RUN_ALL_TESTS();
+  return gtest_result;
 }
 
 /*
