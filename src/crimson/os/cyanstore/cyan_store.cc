@@ -311,7 +311,7 @@ CyanStore::omap_get_values(CollectionRef ch,
   }
   omap_values_t values;
   for (auto i = start ? o->omap.upper_bound(*start) : o->omap.begin();
-       values.size() < MAX_KEYS_PER_OMAP_GET_CALL && i != o->omap.end();
+       i != o->omap.end();
        ++i) {
     values.insert(*i);
   }
