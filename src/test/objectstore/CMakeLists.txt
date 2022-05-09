@@ -11,6 +11,12 @@ target_include_directories(store_test_fixture PRIVATE
 add_executable(ceph_test_objectstore
   store_test.cc
   $<TARGET_OBJECTS:store_test_fixture>)
+
+if(WITH_SEASTAR)
+target_compile_definitions(ceph_test_objectstore PUBLIC WITH_XSTORE=1)
+target_compile_definitions(store_test_fixture PUBLIC WITH_XSTORE=1)
+endif()
+
 target_link_libraries(ceph_test_objectstore
   os
   ceph-common
@@ -22,6 +28,24 @@ target_link_libraries(ceph_test_objectstore
   )
 install(TARGETS ceph_test_objectstore
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+if(WITH_SEASTAR)
+add_library(xstore-crimson STATIC
+  xstore-crimson.cc
+  )
+target_link_libraries(xstore-crimson
+  PRIVATE
+  crimson-os
+  crimson-common
+  crimson
+  crimson::cflags)
+
+add_library(xstore-classic STATIC
+  xstore.cc)
+target_link_libraries(xstore-classic PRIVATE
+  xstore-crimson
+  os)
+endif()
 
 add_executable(ceph_test_keyvaluedb
   test_kv.cc)
