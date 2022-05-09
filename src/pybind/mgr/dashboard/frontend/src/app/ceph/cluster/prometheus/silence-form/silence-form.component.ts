@@ -217,12 +217,18 @@ export class SilenceFormComponent {
         return;
       }
       if (this.edit || this.recreate) {
-        this.prometheusService.getSilences(params).subscribe((silences) => {
-          this.fillFormWithSilence(silences[0]);
+        this.prometheusService.getSilences().subscribe((silences) => {
+          const silence = _.find(silences, ['id', params.id]);
+          if (!_.isUndefined(silence)) {
+            this.fillFormWithSilence(silence);
+          }
         });
       } else {
-        this.prometheusService.getAlerts(params).subscribe((alerts) => {
-          this.fillFormByAlert(alerts[0]);
+        this.prometheusService.getAlerts().subscribe((alerts) => {
+          const alert = _.find(alerts, ['fingerprint', params.id]);
+          if (!_.isUndefined(alert)) {
+            this.fillFormByAlert(alert);
+          }
         });
       }
     });
