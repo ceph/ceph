@@ -3,28 +3,80 @@
 
 #pragma once
 
+#include <set>
+
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
-#include "crimson/os/seastore/logging.h"
 
 namespace crimson::os::seastore {
 
-class SegmentCleaner;
-class TransactionManager;
-
-class ExtentReader {
+class SegmentManagerGroup {
 public:
-  seastore_off_t get_block_size() const {
-    assert(segment_managers.size());
-    // assume all segment managers have the same block size
-    return segment_managers[0]->get_block_size();
-  }
-
-  using read_ertr = SegmentManager::read_ertr;
-  ExtentReader() {
+  SegmentManagerGroup() {
     segment_managers.resize(DEVICE_ID_MAX, nullptr);
   }
+
+  const std::set<device_id_t>& get_device_ids() const {
+    return device_ids;
+  }
+
+  std::vector<SegmentManager*> get_segment_managers() const {
+    assert(device_ids.size());
+    std::vector<SegmentManager*> ret;
+    for (auto& device_id : device_ids) {
+      auto segment_manager = segment_managers[device_id];
+      assert(segment_manager->get_device_id() == device_id);
+      ret.emplace_back(segment_manager);
+    }
+    return ret;
+  }
+
+  void add_segment_manager(SegmentManager* segment_manager) {
+    auto device_id = segment_manager->get_device_id();
+    ceph_assert(!has_device(device_id));
+    segment_managers[device_id] = segment_manager;
+    device_ids.insert(device_id);
+  }
+
+  void reset() {
+    segment_managers.clear();
+    segment_managers.resize(DEVICE_ID_MAX, nullptr);
+    device_ids.clear();
+  }
+
+  /**
+   * get device info
+   *
+   * Assume all segment managers share the same following information.
+   */
+  seastore_off_t get_block_size() const {
+    assert(device_ids.size());
+    return segment_managers[*device_ids.begin()]->get_block_size();
+  }
+
+  seastore_off_t get_segment_size() const {
+    assert(device_ids.size());
+    return segment_managers[*device_ids.begin()]->get_segment_size();
+  }
+
+  const seastore_meta_t &get_meta() const {
+    assert(device_ids.size());
+    return segment_managers[*device_ids.begin()]->get_meta();
+  }
+
+  std::size_t get_rounded_header_length() const {
+    return p2roundup(
+      ceph::encoded_sizeof_bounded<segment_header_t>(),
+      (std::size_t)get_block_size());
+  }
+
+  std::size_t get_rounded_tail_length() const {
+    return p2roundup(
+      ceph::encoded_sizeof_bounded<segment_tail_t>(),
+      (std::size_t)get_block_size());
+  }
+
   using read_segment_header_ertr = crimson::errorator<
     crimson::ct_error::enoent,
     crimson::ct_error::enodata,
@@ -53,6 +105,7 @@ public:
    * Returns list<extent, extent_info>
    * cursor.is_complete() will be true when no further extents exist in segment.
    */
+  using read_ertr = SegmentManager::read_ertr;
   using scan_extents_cursor = scan_valid_records_cursor;
   using scan_extents_ertr = read_ertr::extend<crimson::ct_error::enodata>;
   using scan_extents_ret_bare =
@@ -80,30 +133,35 @@ public:
     found_record_handler_t &handler    ///< [in] handler for records
   ); ///< @return used budget
 
-  void add_segment_manager(SegmentManager* segment_manager) {
-    ceph_assert(!segment_managers[segment_manager->get_device_id()]);
-    segment_managers[segment_manager->get_device_id()] = segment_manager;
+  /*
+   * read journal segment headers
+   */
+  using find_journal_segment_headers_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using find_journal_segment_headers_ret_bare = std::vector<
+    std::pair<segment_id_t, segment_header_t>>;
+  using find_journal_segment_headers_ret = find_journal_segment_headers_ertr::future<
+    find_journal_segment_headers_ret_bare>;
+  find_journal_segment_headers_ret find_journal_segment_headers();
+
+  using open_ertr = SegmentManager::open_ertr;
+  open_ertr::future<SegmentRef> open(segment_id_t id) {
+    assert(has_device(id.device_id()));
+    return segment_managers[id.device_id()]->open(id);
   }
 
-  read_ertr::future<> read(
-    paddr_t addr,
-    size_t len,
-    ceph::bufferptr &out) {
-    assert(segment_managers[addr.get_device_id()]);
-    return segment_managers[addr.get_device_id()]->read(addr, len, out);
-  }
-
-  void reset() {
-    segment_managers.clear();
-    segment_managers.resize(DEVICE_ID_MAX, nullptr);
+  using release_ertr = SegmentManager::release_ertr;
+  release_ertr::future<> release_segment(segment_id_t id) {
+    assert(has_device(id.device_id()));
+    return segment_managers[id.device_id()]->release(id);
   }
 
 private:
-  std::vector<SegmentManager*> segment_managers;
-
-  std::vector<SegmentManager*>& get_segment_managers() {
-    return segment_managers;
+  bool has_device(device_id_t id) const {
+    assert(id <= DEVICE_ID_MAX_VALID);
+    return device_ids.count(id) >= 1;
   }
+
   /// read record metadata for record starting at start
   using read_validate_record_metadata_ertr = read_ertr;
   using read_validate_record_metadata_ret =
@@ -129,9 +187,10 @@ private:
       found_record_handler_t& handler,
       std::size_t& budget_used);
 
-  friend class TransactionManager;
+  std::vector<SegmentManager*> segment_managers;
+  std::set<device_id_t> device_ids;
 };
 
-using ExtentReaderRef = std::unique_ptr<ExtentReader>;
+using SegmentManagerGroupRef = std::unique_ptr<SegmentManagerGroup>;
 
 } // namespace crimson::os::seastore

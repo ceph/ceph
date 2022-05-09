@@ -33,10 +33,12 @@ export class ManagerModulesPageHelper extends PageHelper {
 
     // Clears the editable fields
     for (const input of inputs) {
-      const id = `#${input.id}`;
-      cy.get(id).clear();
       if (input.oldValue) {
-        cy.get(id).type(input.oldValue);
+        const id = `#${input.id}`;
+        cy.get(id).clear();
+        if (input.oldValue) {
+          cy.get(id).type(input.oldValue);
+        }
       }
     }
 
@@ -44,10 +46,12 @@ export class ManagerModulesPageHelper extends PageHelper {
     cy.contains('button', 'Update').click();
     this.getExpandCollapseElement(name).should('be.visible').click();
     for (const input of inputs) {
-      cy.get('.datatable-body')
-        .eq(1)
-        .should('contain', input.id)
-        .and('not.contain', input.newValue);
+      if (input.oldValue) {
+        cy.get('.datatable-body')
+          .eq(1)
+          .should('contain', input.id)
+          .and('not.contain', input.newValue);
+      }
     }
   }
 }

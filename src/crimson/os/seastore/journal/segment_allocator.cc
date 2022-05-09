@@ -16,13 +16,12 @@ SegmentAllocator::SegmentAllocator(
   std::string name,
   segment_type_t type,
   SegmentProvider &sp,
-  SegmentManager &sm,
   SegmentSeqAllocator &ssa)
   : name{name},
     print_name{fmt::format("D?_{}", name)},
     type{type},
     segment_provider{sp},
-    segment_manager{sm},
+    sm_group{*sp.get_segment_manager_group()},
     segment_seq_allocator(ssa)
 {
   ceph_assert(type != segment_type_t::NULL_SEG);
@@ -36,14 +35,14 @@ SegmentAllocator::do_open()
   ceph_assert(!current_segment);
   segment_seq_t new_segment_seq =
     segment_seq_allocator.get_and_inc_next_segment_seq();
-  auto meta = segment_manager.get_meta();
+  auto meta = sm_group.get_meta();
   current_segment_nonce = ceph_crc32c(
     new_segment_seq,
     reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
     sizeof(meta.seastore_id.uuid));
-  auto new_segment_id = segment_provider.get_segment(
-      get_device_id(), new_segment_seq, type);
-  return segment_manager.open(new_segment_id
+  auto new_segment_id = segment_provider.allocate_segment(new_segment_seq, type);
+  ceph_assert(new_segment_id != NULL_SEG_ID);
+  return sm_group.open(new_segment_id
   ).handle_error(
     open_ertr::pass_further{},
     crimson::ct_error::assert_all{
@@ -67,7 +66,7 @@ SegmentAllocator::do_open()
     INFO("{} writing header to new segment ... -- {}",
          print_name, header);
 
-    auto header_length = segment_manager.get_block_size();
+    auto header_length = get_block_size();
     bufferlist bl;
     encode(header, bl);
     bufferptr bp(ceph::buffer::create_page_aligned(header_length));
@@ -107,7 +106,7 @@ SegmentAllocator::do_open()
       DEBUG("{} rolled new segment id={}",
             print_name, current_segment->get_segment_id());
       ceph_assert(new_journal_seq.segment_seq ==
-        segment_provider.get_seq(current_segment->get_segment_id()));
+        segment_provider.get_seg_info(current_segment->get_segment_id()).seq);
       return new_journal_seq;
     });
   });
@@ -117,9 +116,16 @@ SegmentAllocator::open_ret
 SegmentAllocator::open()
 {
   LOG_PREFIX(SegmentAllocator::open);
-  print_name = fmt::format("D{}_{}",
-                           device_id_printer_t{get_device_id()},
-                           name);
+  auto& device_ids = sm_group.get_device_ids();
+  ceph_assert(device_ids.size());
+  std::ostringstream oss;
+  oss << "D";
+  for (auto& device_id : device_ids) {
+    oss << "_" << device_id_printer_t{device_id};
+  }
+  oss << "_" << name;
+  print_name = oss.str();
+
   INFO("{}", print_name);
   return do_open();
 }
@@ -141,13 +147,13 @@ SegmentAllocator::write(ceph::bufferlist to_write)
   auto write_length = to_write.length();
   auto write_start_offset = written_to;
   auto write_start_seq = journal_seq_t{
-    segment_provider.get_seq(current_segment->get_segment_id()),
+    segment_provider.get_seg_info(current_segment->get_segment_id()).seq,
     paddr_t::make_seg_paddr(
       current_segment->get_segment_id(), write_start_offset)
   };
   TRACE("{} {}~{}", print_name, write_start_seq, write_length);
   assert(write_length > 0);
-  assert((write_length % segment_manager.get_block_size()) == 0);
+  assert((write_length % get_block_size()) == 0);
   assert(!needs_roll(write_length));
 
   auto write_result = write_result_t{
@@ -202,8 +208,7 @@ SegmentAllocator::close_segment(bool is_rolling)
   if (is_rolling) {
     segment_provider.close_segment(close_segment_id);
   }
-  segment_seq_t cur_segment_seq =
-    segment_provider.get_seq(seg_to_close->get_segment_id());
+  auto close_seg_info = segment_provider.get_seg_info(close_segment_id);
   journal_seq_t cur_journal_tail;
   if (type == segment_type_t::JOURNAL) {
     cur_journal_tail = segment_provider.get_journal_tail_target();
@@ -211,39 +216,33 @@ SegmentAllocator::close_segment(bool is_rolling)
     cur_journal_tail = NO_DELTAS;
   }
   auto tail = segment_tail_t{
-    segment_provider.get_seq(close_segment_id),
+    close_seg_info.seq,
     close_segment_id,
     cur_journal_tail,
     current_segment_nonce,
     type,
-    segment_provider.get_last_modified(
-      close_segment_id).time_since_epoch().count(),
-    segment_provider.get_last_rewritten(
-      close_segment_id).time_since_epoch().count()};
+    close_seg_info.last_modified.time_since_epoch().count(),
+    close_seg_info.last_rewritten.time_since_epoch().count()};
   ceph::bufferlist bl;
   encode(tail, bl);
   INFO("{} close segment id={}, seq={}, written_to={}, nonce={}, journal_tail={}",
        print_name,
        close_segment_id,
-       cur_segment_seq,
+       close_seg_info.seq,
        written_to,
        current_segment_nonce,
        tail.journal_tail);
 
-  bufferptr bp(
-    ceph::buffer::create_page_aligned(
-      segment_manager.get_block_size()));
+  bufferptr bp(ceph::buffer::create_page_aligned(get_block_size()));
   bp.zero();
   auto iter = bl.cbegin();
   iter.copy(bl.length(), bp.c_str());
   bl.clear();
   bl.append(bp);
 
-  assert(bl.length() ==
-    (size_t)segment_manager.get_rounded_tail_length());
+  assert(bl.length() == sm_group.get_rounded_tail_length());
   return seg_to_close->write(
-    segment_manager.get_segment_size()
-      - segment_manager.get_rounded_tail_length(),
+    sm_group.get_segment_size() - sm_group.get_rounded_tail_length(),
     bl
   ).safe_then([seg_to_close=std::move(seg_to_close)] {
     return seg_to_close->close();

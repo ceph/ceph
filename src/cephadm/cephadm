@@ -65,8 +65,15 @@ DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
 LOGROTATE_DIR = '/etc/logrotate.d'
-SYSCTL_DIR = '/usr/lib/sysctl.d'
+SYSCTL_DIR = '/etc/sysctl.d'
 UNIT_DIR = '/etc/systemd/system'
+CEPH_CONF_DIR = 'config'
+CEPH_CONF = 'ceph.conf'
+CEPH_PUBKEY = 'ceph.pub'
+CEPH_KEYRING = 'ceph.client.admin.keyring'
+CEPH_DEFAULT_CONF = f'/etc/ceph/{CEPH_CONF}'
+CEPH_DEFAULT_KEYRING = f'/etc/ceph/{CEPH_KEYRING}'
+CEPH_DEFAULT_PUBKEY = f'/etc/ceph/{CEPH_PUBKEY}'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
 CONTAINER_INIT = True
@@ -75,8 +82,6 @@ CGROUPS_SPLIT_PODMAN_VERSION = (2, 1, 0)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 15
-SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
-SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 logger: logging.Logger = None  # type: ignore
@@ -104,6 +109,42 @@ You can invoke cephadm in two ways:
 cached_stdin = None
 
 ##################################
+
+
+class EndPoint:
+    """EndPoint representing an ip:port format"""
+
+    def __init__(self, ip: str, port: int) -> None:
+        self.ip = ip
+        self.port = port
+
+    def __str__(self) -> str:
+        return f'{self.ip}:{self.port}'
+
+    def __repr__(self) -> str:
+        return f'{self.ip}:{self.port}'
+
+
+class ContainerInfo:
+    def __init__(self, container_id: str,
+                 image_name: str,
+                 image_id: str,
+                 start: str,
+                 version: str) -> None:
+        self.container_id = container_id
+        self.image_name = image_name
+        self.image_id = image_id
+        self.start = start
+        self.version = version
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ContainerInfo):
+            return NotImplemented
+        return (self.container_id == other.container_id
+                and self.image_name == other.image_name
+                and self.image_id == other.image_id
+                and self.start == other.start
+                and self.version == other.version)
 
 
 class BaseConfig:
@@ -209,7 +250,9 @@ class Docker(ContainerEngine):
 CONTAINER_PREFERENCE = (Podman, Docker)  # prefer podman to docker
 
 
-# Log and console output config
+# During normal cephadm operations (cephadm ls, gather-facts, etc ) we use:
+# stdout: for JSON output only
+# stderr: for error, debug, info, etc
 logging_config = {
     'version': 1,
     'disable_existing_loggers': True,
@@ -239,6 +282,56 @@ logging_config = {
 }
 
 
+class ExcludeErrorsFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Only lets through log messages with log level below WARNING ."""
+        return record.levelno < logging.WARNING
+
+
+# When cephadm is used as standard binary (bootstrap, rm-cluster, etc) we use:
+# stdout: for debug and info
+# stderr: for errors and warnings
+interactive_logging_config = {
+    'version': 1,
+    'filters': {
+        'exclude_errors': {
+            '()': ExcludeErrorsFilter
+        }
+    },
+    'disable_existing_loggers': True,
+    'formatters': {
+        'cephadm': {
+            'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
+        },
+    },
+    'handlers': {
+        'console_stdout': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'filters': ['exclude_errors'],
+            'stream': sys.stdout
+        },
+        'console_stderr': {
+            'level': 'WARNING',
+            'class': 'logging.StreamHandler',
+            'stream': sys.stderr
+        },
+        'log_file': {
+            'level': 'DEBUG',
+            'class': 'logging.handlers.WatchedFileHandler',
+            'formatter': 'cephadm',
+            'filename': '%s/cephadm.log' % LOG_DIR,
+        }
+    },
+    'loggers': {
+        '': {
+            'level': 'DEBUG',
+            'handlers': ['console_stdout', 'console_stderr', 'log_file'],
+        }
+    }
+}
+
+
 class termcolor:
     yellow = '\033[93m'
     red = '\033[31m'
@@ -252,11 +345,15 @@ class Error(Exception):
 class TimeoutExpired(Error):
     pass
 
+
+class UnauthorizedRegistryError(Error):
+    pass
+
 ##################################
 
 
 class Ceph(object):
-    daemons = ('mon', 'mgr', 'mds', 'osd', 'rgw', 'rbd-mirror',
+    daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror')
 
 ##################################
@@ -606,7 +703,7 @@ class NFSGanesha(object):
     def get_container_envs():
         # type: () -> List[str]
         envs = [
-            'CEPH_CONF=%s' % ('/etc/ceph/ceph.conf')
+            'CEPH_CONF=%s' % (CEPH_DEFAULT_CONF)
         ]
         return envs
 
@@ -813,10 +910,7 @@ class CephIscsi(object):
         # remove extra container args for tcmu container.
         # extra args could cause issue with forking service type
         tcmu_container.container_args = []
-        # set container limits to unlimited as defaults (Docker 4096 / Podman 2048)
-        # prevents the creation of max lun (default 255)
-        pids_unlimited = '-1' if isinstance(self.ctx.container_engine, Podman) else '0'
-        tcmu_container.container_args.extend(['--pids-limit=%s' % pids_unlimited])
+        set_pids_limit_unlimited(self.ctx, tcmu_container.container_args)
         return tcmu_container
 
 ##################################
@@ -1234,16 +1328,17 @@ def port_in_use(ctx, port_num):
     ))
 
 
-def check_ip_port(ctx, ip, port):
-    # type: (CephadmContext, str, int) -> None
+def check_ip_port(ctx, ep):
+    # type: (CephadmContext, EndPoint) -> None
     if not ctx.skip_ping_check:
-        logger.info('Verifying IP %s port %d ...' % (ip, port))
-        if is_ipv6(ip):
+        logger.info(f'Verifying IP {ep.ip} port {ep.port} ...')
+        if is_ipv6(ep.ip):
             s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-            ip = unwrap_ipv6(ip)
+            ip = unwrap_ipv6(ep.ip)
         else:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        attempt_bind(ctx, s, ip, port)
+            ip = ep.ip
+        attempt_bind(ctx, s, ip, ep.port)
 
 ##################################
 
@@ -1611,9 +1706,8 @@ def call(ctx: CephadmContext,
         assert process.stdout
         assert process.stderr
         try:
-            stdout, stderr = await asyncio.gather(tee(process.stdout),
-                                                  tee(process.stderr))
             returncode = await asyncio.wait_for(process.wait(), timeout)
+            stdout, stderr = await asyncio.gather(tee(process.stdout), tee(process.stderr))
         except asyncio.TimeoutError:
             logger.info(prefix + f'timeout after {timeout} seconds')
             return '', '', 124
@@ -1882,7 +1976,7 @@ def infer_fsid(func: FuncT) -> FuncT:
             logger.info('Inferring fsid %s' % fsids[0])
             ctx.fsid = fsids[0]
         else:
-            raise Error('Cannot infer an fsid, one must be specified: %s' % fsids)
+            raise Error('Cannot infer an fsid, one must be specified (using --fsid): %s' % fsids)
         return func(ctx)
 
     return cast(FuncT, _infer_fsid)
@@ -1890,39 +1984,54 @@ def infer_fsid(func: FuncT) -> FuncT:
 
 def infer_config(func: FuncT) -> FuncT:
     """
-    If we find a MON daemon, use the config from that container
+    Infer the clusater configuration using the followign priority order:
+     1- if the user has provided custom conf file (-c option) use it
+     2- otherwise if daemon --name has been provided use daemon conf
+     3- otherwise find the mon daemon conf file and use it (if v1)
+     4- otherwise if {ctx.data_dir}/{fsid}/{CEPH_CONF_DIR} dir exists use it
+     5- finally: fallback to the default file /etc/ceph/ceph.conf
     """
     @wraps(func)
     def _infer_config(ctx: CephadmContext) -> Any:
-        ctx.config = ctx.config if 'config' in ctx else None
-        if ctx.config:
-            logger.debug('Using specified config: %s' % ctx.config)
-            return func(ctx)
 
         def config_path(daemon_type: str, daemon_name: str) -> str:
             data_dir = get_data_dir(ctx.fsid, ctx.data_dir, daemon_type, daemon_name)
             return os.path.join(data_dir, 'config')
 
+        def get_mon_daemon_name(fsid: str) -> Optional[str]:
+            daemon_list = list_daemons(ctx, detail=False)
+            for daemon in daemon_list:
+                if (
+                    daemon.get('name', '').startswith('mon.')
+                    and daemon.get('fsid', '') == fsid
+                    and daemon.get('style', '') == 'cephadm:v1'
+                    and os.path.exists(config_path('mon', daemon['name'].split('.', 1)[1]))
+                ):
+                    return daemon['name']
+            return None
+
+        ctx.config = ctx.config if 'config' in ctx else None
+        #  check if user has provided conf by using -c option
+        if ctx.config and (ctx.config != CEPH_DEFAULT_CONF):
+            logger.debug(f'Using specified config: {ctx.config}')
+            return func(ctx)
+
         if 'fsid' in ctx and ctx.fsid:
-            name = ctx.name if 'name' in ctx else None
-            if not name:
-                daemon_list = list_daemons(ctx, detail=False)
-                for daemon in daemon_list:
-                    if (
-                        daemon.get('name', '').startswith('mon.')
-                        and daemon.get('fsid', '') == ctx.fsid
-                        and daemon.get('style', '') == 'cephadm:v1'
-                        and os.path.exists(config_path('mon', daemon['name'].split('.', 1)[1]))
-                    ):
-                        name = daemon['name']
-                        break
-            if name:
+            name = ctx.name if ('name' in ctx and ctx.name) else get_mon_daemon_name(ctx.fsid)
+            if name is not None:
+                # daemon name has been specified (or inffered from mon), let's use its conf
                 ctx.config = config_path(name.split('.', 1)[0], name.split('.', 1)[1])
+            else:
+                # no daemon, in case the cluster has a config dir then use it
+                ceph_conf = f'{ctx.data_dir}/{ctx.fsid}/{CEPH_CONF_DIR}/{CEPH_CONF}'
+                if os.path.exists(ceph_conf):
+                    ctx.config = ceph_conf
+
         if ctx.config:
-            logger.info('Inferring config %s' % ctx.config)
-        elif os.path.exists(SHELL_DEFAULT_CONF):
-            logger.debug('Using default config: %s' % SHELL_DEFAULT_CONF)
-            ctx.config = SHELL_DEFAULT_CONF
+            logger.info(f'Inferring config {ctx.config}')
+        elif os.path.exists(CEPH_DEFAULT_CONF):
+            logger.debug(f'Using default config {CEPH_DEFAULT_CONF}')
+            ctx.config = CEPH_DEFAULT_CONF
         return func(ctx)
 
     return cast(FuncT, _infer_config)
@@ -1948,7 +2057,7 @@ def infer_image(func: FuncT) -> FuncT:
         if not ctx.image:
             ctx.image = os.environ.get('CEPHADM_IMAGE')
         if not ctx.image:
-            ctx.image = get_last_local_ceph_image(ctx, ctx.container_engine.path)
+            ctx.image = infer_local_ceph_image(ctx, ctx.container_engine.path)
         if not ctx.image:
             ctx.image = _get_default_image(ctx)
         return func(ctx)
@@ -1980,24 +2089,70 @@ def default_image(func: FuncT) -> FuncT:
     return cast(FuncT, _default_image)
 
 
-def get_last_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional[str]:
+def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -> Optional[ContainerInfo]:
     """
+    :param ctx: Cephadm context
+    :param daemon_filter: daemon name or type
+    :param by_name: must be set to True if daemon name is provided
+    :return: Container information or None
+    """
+    def daemon_name_or_type(daemon: Dict[str, str]) -> str:
+        return daemon['name'] if by_name else daemon['name'].split('.', 1)[0]
+
+    if by_name and '.' not in daemon_filter:
+        logger.warning(f'Trying to get container info using invalid daemon name {daemon_filter}')
+        return None
+    daemons = list_daemons(ctx, detail=False)
+    matching_daemons = [d for d in daemons if daemon_name_or_type(d) == daemon_filter and d['fsid'] == ctx.fsid]
+    if matching_daemons:
+        d_type, d_id = matching_daemons[0]['name'].split('.', 1)
+        out, _, code = get_container_stats(ctx, ctx.container_engine.path, ctx.fsid, d_type, d_id)
+        if not code:
+            (container_id, image_name, image_id, start, version) = out.strip().split(',')
+            return ContainerInfo(container_id, image_name, image_id, start, version)
+    return None
+
+
+def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional[str]:
+    """
+     Infer the local ceph image based on the following priority criteria:
+       1- the image specified by --image arg (if provided).
+       2- the same image as the daemon container specified by --name arg (if provided).
+       3- image used by any ceph container running on the host. In this case we use daemon types.
+       4- if no container is found then we use the most ceph recent image on the host.
+
+     Note: any selected container must have the same fsid inferred previously.
+
     :return: The most recent local ceph image (already pulled)
     """
+    # '|' special character is used to separate the output fields into:
+    #  - Repository@digest
+    #  - Image Id
+    #  - Image Tag
+    #  - Image creation date
     out, _, _ = call_throws(ctx,
                             [container_path, 'images',
                              '--filter', 'label=ceph=True',
                              '--filter', 'dangling=false',
-                             '--format', '{{.Repository}}@{{.Digest}}'])
-    return _filter_last_local_ceph_image(out)
+                             '--format', '{{.Repository}}@{{.Digest}}|{{.ID}}|{{.Tag}}|{{.CreatedAt}}'])
 
+    container_info = None
+    daemon_name = ctx.name if ('name' in ctx and ctx.name and '.' in ctx.name) else None
+    daemons_ls = [daemon_name] if daemon_name is not None else Ceph.daemons  # daemon types: 'mon', 'mgr', etc
+    for daemon in daemons_ls:
+        container_info = get_container_info(ctx, daemon, daemon_name is not None)
+        if container_info is not None:
+            logger.debug(f"Using container info for daemon '{daemon}'")
+            break
 
-def _filter_last_local_ceph_image(out):
-    # type: (str) -> Optional[str]
     for image in out.splitlines():
-        if image and not image.endswith('@'):
-            logger.info('Using recent ceph image %s' % image)
-            return image
+        if image and not image.isspace():
+            (digest, image_id, tag, created_date) = image.lstrip().split('|')
+            if container_info is not None and image_id not in container_info.image_id:
+                continue
+            if digest and not digest.endswith('@'):
+                logger.info(f"Using ceph image with id '{image_id}' and tag '{tag}' created on {created_date}\n{digest}")
+                return digest
     return None
 
 
@@ -2753,6 +2908,17 @@ def get_ceph_volume_container(ctx: CephadmContext,
     )
 
 
+def set_pids_limit_unlimited(ctx: CephadmContext, container_args: List[str]) -> None:
+    # set container's pids-limit to unlimited rather than default (Docker 4096 / Podman 2048)
+    # Useful for daemons like iscsi where the default pids-limit limits the number of luns
+    # per iscsi target or rgw where increasing the rgw_thread_pool_size to a value near
+    # the default pids-limit may cause the container to crash.
+    if isinstance(ctx.container_engine, Podman):
+        container_args.append('--pids-limit=-1')
+    else:
+        container_args.append('--pids-limit=0')
+
+
 def get_container(ctx: CephadmContext,
                   fsid: str, daemon_type: str, daemon_id: Union[int, str],
                   privileged: bool = False,
@@ -2774,6 +2940,7 @@ def get_container(ctx: CephadmContext,
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % daemon_id
+        set_pids_limit_unlimited(ctx, container_args)
     elif daemon_type == 'rbd-mirror':
         entrypoint = '/usr/bin/rbd-mirror'
         name = 'client.rbd-mirror.%s' % daemon_id
@@ -2807,6 +2974,7 @@ def get_container(ctx: CephadmContext,
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
         privileged = True
+        set_pids_limit_unlimited(ctx, container_args)
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, fsid, daemon_id)
         entrypoint = cc.entrypoint
@@ -2840,8 +3008,6 @@ def get_container(ctx: CephadmContext,
 
     # if using podman, set -d, --conmon-pidfile & --cidfile flags
     # so service can have Type=Forking
-    # set containers limits to unlimited as defaults (Docker 4096 / Podman 2048)
-    # prevents some app customizations from running
     if isinstance(ctx.container_engine, Podman):
         runtime_dir = '/run'
         container_args.extend([
@@ -2850,14 +3016,9 @@ def get_container(ctx: CephadmContext,
             runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, daemon_id),
             '--cidfile',
             runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id),
-            '--pids-limit=-1',
         ])
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
             container_args.append('--cgroups=split')
-    else:
-        container_args.extend([
-            '--pids-limit=0',
-        ])
 
     return CephContainer.for_daemon(
         ctx,
@@ -3377,6 +3538,47 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
         Path(ctx.sysctl_dir).mkdir(mode=0o755, exist_ok=True)
         _write(conf, lines)
         call_throws(ctx, ['sysctl', '--system'])
+
+
+def migrate_sysctl_dir(ctx: CephadmContext, fsid: str) -> None:
+    """
+    Cephadm once used '/usr/lib/sysctl.d' for storing sysctl configuration.
+    This moves it to '/etc/sysctl.d'.
+    """
+    deprecated_location: str = '/usr/lib/sysctl.d'
+    deprecated_confs: List[str] = glob(f'{deprecated_location}/90-ceph-{fsid}-*.conf')
+    if not deprecated_confs:
+        return
+
+    file_count: int = len(deprecated_confs)
+    logger.info(f'Found sysctl {file_count} files in deprecated location {deprecated_location}. Starting Migration.')
+    for conf in deprecated_confs:
+        try:
+            shutil.move(conf, ctx.sysctl_dir)
+            file_count -= 1
+        except shutil.Error as err:
+            if str(err).endswith('already exists'):
+                logger.warning(f'Destination file already exists. Deleting {conf}.')
+                try:
+                    os.unlink(conf)
+                    file_count -= 1
+                except OSError as del_err:
+                    logger.warning(f'Could not remove {conf}: {del_err}.')
+            else:
+                logger.warning(f'Could not move {conf} from {deprecated_location} to {ctx.sysctl_dir}: {err}')
+
+    # Log successful migration
+    if file_count == 0:
+        logger.info(f'Successfully migrated sysctl config to {ctx.sysctl_dir}.')
+        return
+
+    # Log partially successful / unsuccessful migration
+    files_processed: int = len(deprecated_confs)
+    if file_count < files_processed:
+        status: str = f'partially successful (failed {file_count}/{files_processed})'
+    elif file_count == files_processed:
+        status = 'unsuccessful'
+    logger.warning(f'Migration of sysctl configuration {status}. You may want to perform a migration manually.')
 
 
 def install_base_units(ctx, fsid):
@@ -4265,7 +4467,12 @@ def command_version(ctx):
 def command_pull(ctx):
     # type: (CephadmContext) -> int
 
-    _pull_image(ctx, ctx.image, ctx.insecure)
+    try:
+        _pull_image(ctx, ctx.image, ctx.insecure)
+    except UnauthorizedRegistryError:
+        err_str = 'Failed to pull container image. Check that host(s) are logged into the registry'
+        logger.debug(f'Pulling image for `command_pull` failed: {err_str}')
+        raise Error(err_str)
     return command_inspect_image(ctx)
 
 
@@ -4292,6 +4499,9 @@ def _pull_image(ctx, image, insecure=False):
         out, err, ret = call(ctx, cmd)
         if not ret:
             return
+
+        if 'unauthorized' in err:
+            raise UnauthorizedRegistryError()
 
         if not any(pattern in err for pattern in ignorelist):
             raise Error('Failed command: %s' % cmd_str)
@@ -4424,94 +4634,183 @@ def is_ipv6(address):
         return False
 
 
-def prepare_mon_addresses(
-    ctx: CephadmContext
-) -> Tuple[str, bool, Optional[str]]:
+def ip_in_subnets(ip_addr: str, subnets: str) -> bool:
+    """Determine if the ip_addr belongs to any of the subnets list."""
+    subnet_list = [x.strip() for x in subnets.split(',')]
+    for subnet in subnet_list:
+        if ipaddress.ip_address(ip_addr) in ipaddress.ip_network(subnet):
+            return True
+    return False
+
+
+def parse_mon_addrv(addrv_arg: str) -> List[EndPoint]:
+    """Parse mon-addrv param into a list of mon end points."""
     r = re.compile(r':(\d+)$')
-    base_ip = ''
+    addrv_args = []
+    addr_arg = addrv_arg
+    if addr_arg[0] != '[' or addr_arg[-1] != ']':
+        raise Error(f'--mon-addrv value {addr_arg} must use square backets')
+
+    for addr in addr_arg[1: -1].split(','):
+        hasport = r.findall(addr)
+        if not hasport:
+            raise Error(f'--mon-addrv value {addr_arg} must include port number')
+        port_str = hasport[0]
+        addr = re.sub(r'^v\d+:', '', addr)  # strip off v1: or v2: prefix
+        base_ip = addr[0:-(len(port_str)) - 1]
+        addrv_args.append(EndPoint(base_ip, int(port_str)))
+
+    return addrv_args
+
+
+def parse_mon_ip(mon_ip: str) -> List[EndPoint]:
+    """Parse mon-ip param into a list of mon end points."""
+    r = re.compile(r':(\d+)$')
+    addrv_args = []
+    hasport = r.findall(mon_ip)
+    if hasport:
+        port_str = hasport[0]
+        base_ip = mon_ip[0:-(len(port_str)) - 1]
+        addrv_args.append(EndPoint(base_ip, int(port_str)))
+    else:
+        # No port provided: use fixed ports for ceph monitor
+        addrv_args.append(EndPoint(mon_ip, 3300))
+        addrv_args.append(EndPoint(mon_ip, 6789))
+
+    return addrv_args
+
+
+def build_addrv_params(addrv: List[EndPoint]) -> str:
+    """Convert mon end-points (ip:port) into the format: [v[1|2]:ip:port1]"""
+    if len(addrv) > 2:
+        raise Error('Detected a local mon-addrv list with more than 2 entries.')
+    port_to_ver: Dict[int, str] = {6789: 'v1', 3300: 'v2'}
+    addr_arg_list: List[str] = []
+    for ep in addrv:
+        if ep.port in port_to_ver:
+            ver = port_to_ver[ep.port]
+        else:
+            ver = 'v2'  # default mon protocol version if port is not provided
+            logger.warning(f'Using msgr2 protocol for unrecognized port {ep}')
+        addr_arg_list.append(f'{ver}:{ep.ip}:{ep.port}')
+
+    addr_arg = '[{0}]'.format(','.join(addr_arg_list))
+    return addr_arg
+
+
+def get_public_net_from_cfg(ctx: CephadmContext) -> Optional[str]:
+    """Get mon public network from configuration file."""
+    cp = read_config(ctx.config)
+    if not cp.has_option('global', 'public_network'):
+        return None
+
+    # Ensure all public CIDR networks are valid
+    public_network = cp.get('global', 'public_network')
+    rc, _, err_msg = check_subnet(public_network)
+    if rc:
+        raise Error(f'Invalid public_network {public_network} parameter: {err_msg}')
+
+    # Ensure all public CIDR networks are configured locally
+    configured_subnets = set([x.strip() for x in public_network.split(',')])
+    local_subnets = set([x[0] for x in list_networks(ctx).items()])
+    valid_public_net = False
+    for net in configured_subnets:
+        if net in local_subnets:
+            valid_public_net = True
+        else:
+            logger.warning(f'The public CIDR network {net} (from -c conf file) is not configured locally.')
+    if not valid_public_net:
+        raise Error(f'None of the public CIDR network(s) {configured_subnets} (from -c conf file) is configured locally.')
+
+    # Ensure public_network is compatible with the provided mon-ip (or mon-addrv)
+    if ctx.mon_ip:
+        if not ip_in_subnets(ctx.mon_ip, public_network):
+            raise Error(f'The provided --mon-ip {ctx.mon_ip} does not belong to any public_network(s) {public_network}')
+    elif ctx.mon_addrv:
+        addrv_args = parse_mon_addrv(ctx.mon_addrv)
+        for addrv in addrv_args:
+            if not ip_in_subnets(addrv.ip, public_network):
+                raise Error(f'The provided --mon-addrv {addrv.ip} ip does not belong to any public_network(s) {public_network}')
+
+    logger.debug(f'Using mon public network from configuration file {public_network}')
+    return public_network
+
+
+def infer_mon_network(ctx: CephadmContext, mon_eps: List[EndPoint]) -> Optional[str]:
+    """Infer mon public network from local network."""
+    # Make sure IP is configured locally, and then figure out the CIDR network
+    mon_networks = []
+    for net, ifaces in list_networks(ctx).items():
+        # build local_ips list for the specified network
+        local_ips: List[str] = []
+        for _, ls in ifaces.items():
+            local_ips.extend([ipaddress.ip_address(ip) for ip in ls])
+
+        # check if any of mon ips belong to this net
+        for mon_ep in mon_eps:
+            try:
+                if ipaddress.ip_address(unwrap_ipv6(mon_ep.ip)) in local_ips:
+                    mon_networks.append(net)
+                    logger.info(f'Mon IP `{mon_ep.ip}` is in CIDR network `{net}`')
+            except ValueError as e:
+                logger.warning(f'Cannot infer CIDR network for mon IP `{mon_ep.ip}` : {e}')
+
+    if not mon_networks:
+        raise Error('Cannot infer CIDR network. Pass --skip-mon-network to configure it later')
+    else:
+        logger.debug(f'Inferred mon public CIDR from local network configuration {mon_networks}')
+
+    mon_networks = list(set(mon_networks))  # remove duplicates
+    return ','.join(mon_networks)
+
+
+def prepare_mon_addresses(ctx: CephadmContext) -> Tuple[str, bool, Optional[str]]:
+    """Get mon public network configuration."""
     ipv6 = False
+    addrv_args: List[EndPoint] = []
+    mon_addrv: str = ''  # i.e: [v2:192.168.100.1:3300,v1:192.168.100.1:6789]
 
     if ctx.mon_ip:
         ipv6 = is_ipv6(ctx.mon_ip)
         if ipv6:
             ctx.mon_ip = wrap_ipv6(ctx.mon_ip)
-        hasport = r.findall(ctx.mon_ip)
-        if hasport:
-            port_str = hasport[0]
-            port = int(port_str)
-            if port == 6789:
-                addr_arg = '[v1:%s]' % ctx.mon_ip
-            elif port == 3300:
-                addr_arg = '[v2:%s]' % ctx.mon_ip
-            else:
-                logger.warning('Using msgr2 protocol for unrecognized port %d' %
-                               port)
-                addr_arg = '[v2:%s]' % ctx.mon_ip
-            base_ip = ctx.mon_ip[0:-(len(port_str)) - 1]
-            check_ip_port(ctx, base_ip, port)
-        else:
-            base_ip = ctx.mon_ip
-            addr_arg = '[v2:%s:3300,v1:%s:6789]' % (ctx.mon_ip, ctx.mon_ip)
-            check_ip_port(ctx, ctx.mon_ip, 3300)
-            check_ip_port(ctx, ctx.mon_ip, 6789)
+        addrv_args = parse_mon_ip(ctx.mon_ip)
+        mon_addrv = build_addrv_params(addrv_args)
     elif ctx.mon_addrv:
-        addr_arg = ctx.mon_addrv
-        if addr_arg[0] != '[' or addr_arg[-1] != ']':
-            raise Error('--mon-addrv value %s must use square backets' %
-                        addr_arg)
-        ipv6 = addr_arg.count('[') > 1
-        for addr in addr_arg[1: -1].split(','):
-            hasport = r.findall(addr)
-            if not hasport:
-                raise Error('--mon-addrv value %s must include port number' %
-                            addr_arg)
-            port_str = hasport[0]
-            port = int(port_str)
-            # strip off v1: or v2: prefix
-            addr = re.sub(r'^v\d+:', '', addr)
-            base_ip = addr[0:-(len(port_str)) - 1]
-            check_ip_port(ctx, base_ip, port)
+        ipv6 = ctx.mon_addrv.count('[') > 1
+        addrv_args = parse_mon_addrv(ctx.mon_addrv)
+        mon_addrv = ctx.mon_addrv
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
-    logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
 
+    if addrv_args:
+        for end_point in addrv_args:
+            check_ip_port(ctx, end_point)
+
+    logger.debug(f'Base mon IP(s) is {addrv_args}, mon addrv is {mon_addrv}')
     mon_network = None
-    cp = read_config(ctx.config)
-    if cp.has_option('global', 'public_network'):
-        mon_network = cp.get('global', 'public_network')
+    if not ctx.skip_mon_network:
+        mon_network = get_public_net_from_cfg(ctx) or infer_mon_network(ctx, addrv_args)
 
-    if mon_network is None and not ctx.skip_mon_network:
-        # make sure IP is configured locally, and then figure out the
-        # CIDR network
-        errmsg = f'Cannot infer CIDR network for mon IP `{base_ip}`'
-        for net, ifaces in list_networks(ctx).items():
-            ips: List[str] = []
-            for iface, ls in ifaces.items():
-                ips.extend(ls)
-            try:
-                if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
-                        [ipaddress.ip_address(ip) for ip in ips]:
-                    mon_network = net
-                    logger.info(f'Mon IP `{base_ip}` is in CIDR network `{mon_network}`')
-                    break
-            except ValueError as e:
-                logger.warning(f'{errmsg}: {e}')
-        if not mon_network:
-            raise Error(f'{errmsg}: pass --skip-mon-network to configure it later')
-
-    return (addr_arg, ipv6, mon_network)
+    return (mon_addrv, ipv6, mon_network)
 
 
 def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
-    ipv6_cluster_network = False
     # the cluster network may not exist on this node, so all we can do is
     # validate that the address given is valid ipv4 or ipv6 subnet
+    ipv6_cluster_network = False
     cp = read_config(ctx.config)
     cluster_network = ctx.cluster_network
     if cluster_network is None and cp.has_option('global', 'cluster_network'):
         cluster_network = cp.get('global', 'cluster_network')
 
     if cluster_network:
+        cluser_nets = set([x.strip() for x in cluster_network.split(',')])
+        local_subnets = set([x[0] for x in list_networks(ctx).items()])
+        for net in cluser_nets:
+            if net not in local_subnets:
+                logger.warning(f'The cluster CIDR network {net} is not configured locally.')
+
         rc, versions, err_msg = check_subnet(cluster_network)
         if rc:
             raise Error(f'Invalid --cluster-network parameter: {err_msg}')
@@ -4782,6 +5081,9 @@ def prepare_ssh(
         args = ['orch', 'host', 'add', host]
         if ctx.mon_ip:
             args.append(unwrap_ipv6(ctx.mon_ip))
+        elif ctx.mon_addrv:
+            addrv_args = parse_mon_addrv(ctx.mon_addrv)
+            args.append(unwrap_ipv6(addrv_args[0].ip))
         cli(args)
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
@@ -5027,7 +5329,7 @@ def parse_yaml_objs(f: Iterable[str]) -> List[Dict[str, str]]:
 
 def _distribute_ssh_keys(ctx: CephadmContext, host_spec: Dict[str, str], bootstrap_hostname: str) -> int:
     # copy ssh key to hosts in host spec (used for apply spec)
-    ssh_key = '/etc/ceph/ceph.pub'
+    ssh_key = CEPH_DEFAULT_PUBKEY
     if ctx.ssh_public_key:
         ssh_key = ctx.ssh_public_key.name
 
@@ -5045,17 +5347,35 @@ def _distribute_ssh_keys(ctx: CephadmContext, host_spec: Dict[str, str], bootstr
     return 0
 
 
+def save_cluster_config(ctx: CephadmContext, uid: int, gid: int, fsid: str) -> None:
+    """Save cluster configuration to the per fsid directory """
+    def copy_file(src: str, dst: str) -> None:
+        if src:
+            shutil.copyfile(src, dst)
+
+    conf_dir = f'{ctx.data_dir}/{fsid}/{CEPH_CONF_DIR}'
+    makedirs(conf_dir, uid, gid, DATA_DIR_MODE)
+    if os.path.exists(conf_dir):
+        logger.info(f'Saving cluster configuration to {conf_dir} directory')
+        copy_file(ctx.output_config, os.path.join(conf_dir, CEPH_CONF))
+        copy_file(ctx.output_keyring, os.path.join(conf_dir, CEPH_KEYRING))
+        # ctx.output_pub_ssh_key may not exist if user has provided custom ssh keys
+        if (os.path.exists(ctx.output_pub_ssh_key)):
+            copy_file(ctx.output_pub_ssh_key, os.path.join(conf_dir, CEPH_PUBKEY))
+    else:
+        logger.warning(f'Cannot create cluster configuration directory {conf_dir}')
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
 
     if not ctx.output_config:
-        ctx.output_config = os.path.join(ctx.output_dir, 'ceph.conf')
+        ctx.output_config = os.path.join(ctx.output_dir, CEPH_CONF)
     if not ctx.output_keyring:
-        ctx.output_keyring = os.path.join(ctx.output_dir,
-                                          'ceph.client.admin.keyring')
+        ctx.output_keyring = os.path.join(ctx.output_dir, CEPH_KEYRING)
     if not ctx.output_pub_ssh_key:
-        ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, 'ceph.pub')
+        ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, CEPH_PUBKEY)
 
     if ctx.fsid:
         data_dir_base = os.path.join(ctx.data_dir, ctx.fsid)
@@ -5109,7 +5429,12 @@ def command_bootstrap(ctx):
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.image)
 
     if not ctx.skip_pull:
-        _pull_image(ctx, ctx.image)
+        try:
+            _pull_image(ctx, ctx.image)
+        except UnauthorizedRegistryError:
+            err_str = 'Failed to pull container image. Check that correct registry credentials are provided in bootstrap by --registry-url, --registry-username, --registry-password, or supply --registry-json with credentials'
+            logger.debug(f'Pulling image for bootstrap on {hostname} failed: {err_str}')
+            raise Error(err_str)
 
     image_ver = CephContainer(ctx, ctx.image, 'ceph', ['--version']).run().strip()
     logger.info(f'Ceph version: {image_ver}')
@@ -5232,7 +5557,7 @@ def command_bootstrap(ctx):
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
-    if ctx.output_config == '/etc/ceph/ceph.conf' and not ctx.skip_admin_label:
+    if ctx.output_config == CEPH_DEFAULT_CONF and not ctx.skip_admin_label and not ctx.no_minimize_config:
         logger.info('Enabling client.admin keyring and conf on hosts with "admin" label')
         try:
             cli(['orch', 'client-keyring', 'set', 'client.admin', 'label:_admin'])
@@ -5259,6 +5584,8 @@ def command_bootstrap(ctx):
         except Exception:
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
+    save_cluster_config(ctx, uid, gid, fsid)
+
     # enable autotune for osd_memory_target
     logger.info('Enabling autotune for osd_memory_target')
     cli(['config', 'set', 'osd', 'osd_memory_target_autotune', 'true'])
@@ -5266,12 +5593,15 @@ def command_bootstrap(ctx):
     # Notify the Dashboard to show the 'Expand cluster' page on first log in.
     cli(['config-key', 'set', 'mgr/dashboard/cluster/status', 'INSTALLED'])
 
-    logger.info('You can access the Ceph CLI with:\n\n'
+    logger.info('You can access the Ceph CLI as following in case of multi-cluster or non-default config:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
                     sys.argv[0],
                     fsid,
                     ctx.output_config,
                     ctx.output_keyring))
+
+    logger.info('Or, if you are only running a single cluster on this host:\n\n\tsudo %s shell \n' % (sys.argv[0]))
+
     logger.info('Please consider enabling telemetry to help improve Ceph:\n\n'
                 '\tceph telemetry on\n\n'
                 'For more information see:\n\n'
@@ -5382,6 +5712,9 @@ def command_deploy(ctx):
         logger.info('%s daemon %s ...' % ('Redeploy', ctx.name))
     else:
         logger.info('%s daemon %s ...' % ('Deploy', ctx.name))
+
+    # Migrate sysctl conf files from /usr/lib to /etc
+    migrate_sysctl_dir(ctx, ctx.fsid)
 
     # Get and check ports explicitly required to be opened
     daemon_ports = []  # type: List[int]
@@ -5536,11 +5869,16 @@ def command_shell(ctx):
     if daemon_id and not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    # use /etc/ceph files by default, if present.  we do this instead of
+    # in case a dedicated keyring for the specified fsid is found we us it.
+    # Otherwise, use /etc/ceph files by default, if present.  We do this instead of
     # making these defaults in the arg parser because we don't want an error
     # if they don't exist.
-    if not ctx.keyring and os.path.exists(SHELL_DEFAULT_KEYRING):
-        ctx.keyring = SHELL_DEFAULT_KEYRING
+    if not ctx.keyring:
+        keyring_file = f'{ctx.data_dir}/{ctx.fsid}/{CEPH_CONF_DIR}/{CEPH_KEYRING}'
+        if os.path.exists(keyring_file):
+            ctx.keyring = keyring_file
+        elif os.path.exists(CEPH_DEFAULT_KEYRING):
+            ctx.keyring = CEPH_DEFAULT_KEYRING
 
     container_args: List[str] = ['-i']
     mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
@@ -5683,19 +6021,19 @@ def command_ceph_volume(ctx):
 
 @infer_fsid
 def command_unit(ctx):
-    # type: (CephadmContext) -> None
+    # type: (CephadmContext) -> int
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
     unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
-    call_throws(ctx, [
-        'systemctl',
-        ctx.command,
-        unit_name],
+    _, _, code = call(
+        ctx,
+        ['systemctl', ctx.command, unit_name],
         verbosity=CallVerbosity.VERBOSE,
         desc=''
     )
+    return code
 
 ##################################
 
@@ -6109,7 +6447,12 @@ def command_adopt(ctx):
     # type: (CephadmContext) -> None
 
     if not ctx.skip_pull:
-        _pull_image(ctx, ctx.image)
+        try:
+            _pull_image(ctx, ctx.image)
+        except UnauthorizedRegistryError:
+            err_str = 'Failed to pull container image. Host may not be logged into container registry. Try `cephadm registry-login --registry-url <url> --registry-username <username> --registry-password <password>` or supply login info via a json file with `cephadm registry-login --registry-json <file>`'
+            logger.debug(f'Pulling image for `command_adopt` failed: {err_str}')
+            raise Error(err_str)
 
     (daemon_type, daemon_id) = ctx.name.split('.', 1)
 
@@ -6524,6 +6867,18 @@ def command_rm_daemon(ctx):
     else:
         call_throws(ctx, ['rm', '-rf', data_dir])
 
+    if 'tcp_ports' in ctx and ctx.tcp_ports is not None:
+        ports: List[int] = [int(p) for p in ctx.tcp_ports.split()]
+        try:
+            fw = Firewalld(ctx)
+            fw.close_ports(ports)
+            fw.apply_rules()
+        except RuntimeError as e:
+            # in case we cannot close the ports we will remove
+            # the daemon but keep them open.
+            logger.warning(f' Error when trying to close ports: {e}')
+
+
 ##################################
 
 
@@ -6656,9 +7011,11 @@ def command_rm_cluster(ctx):
                 os.remove(fname)
 
     # rm sysctl settings
-    sysctl_dir = Path(ctx.sysctl_dir)
-    for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
-        p.unlink()
+    sysctl_dirs: List[Path] = [Path(ctx.sysctl_dir), Path('/usr/lib/sysctl.d')]
+
+    for sysctl_dir in sysctl_dirs:
+        for p in sysctl_dir.glob(f'90-ceph-{ctx.fsid}-*.conf'):
+            p.unlink()
 
     # cleanup remaining ceph directories
     ceph_dirs = [f'/run/ceph/{ctx.fsid}', f'/tmp/var/lib/ceph/{ctx.fsid}', f'/var/run/ceph/{ctx.fsid}']
@@ -6666,7 +7023,7 @@ def command_rm_cluster(ctx):
         shutil.rmtree(dd, ignore_errors=True)
 
     # clean up config, keyring, and pub key files
-    files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
+    files = [CEPH_DEFAULT_CONF, CEPH_DEFAULT_PUBKEY, CEPH_DEFAULT_KEYRING]
     if os.path.exists(files[0]):
         valid_fsid = False
         with open(files[0]) as f:
@@ -7652,6 +8009,16 @@ class HostFacts():
                 continue
             for iface in os.listdir(nic_path):
 
+                if os.path.exists(os.path.join(nic_path, iface, 'bridge')):
+                    nic_type = 'bridge'
+                elif os.path.exists(os.path.join(nic_path, iface, 'bonding')):
+                    nic_type = 'bonding'
+                else:
+                    nic_type = hw_lookup.get(read_file([os.path.join(nic_path, iface, 'type')]), 'Unknown')
+
+                if nic_type == 'loopback':  # skip loopback devices
+                    continue
+
                 lower_devs_list = [os.path.basename(link.replace('lower_', '')) for link in glob(os.path.join(nic_path, iface, 'lower_*'))]
                 upper_devs_list = [os.path.basename(link.replace('upper_', '')) for link in glob(os.path.join(nic_path, iface, 'upper_*'))]
 
@@ -7669,13 +8036,6 @@ class HostFacts():
                     #
                     # Either way, we show a -1 when speed isn't available
                     speed = -1
-
-                if os.path.exists(os.path.join(nic_path, iface, 'bridge')):
-                    nic_type = 'bridge'
-                elif os.path.exists(os.path.join(nic_path, iface, 'bonding')):
-                    nic_type = 'bonding'
-                else:
-                    nic_type = hw_lookup.get(read_file([os.path.join(nic_path, iface, 'type')]), 'Unknown')
 
                 dev_link = os.path.join(nic_path, iface, 'device')
                 if os.path.exists(dev_link):
@@ -8166,6 +8526,9 @@ def _get_parser():
         action=CustomValidation,
         help='daemon name (type.id)')
     parser_rm_daemon.add_argument(
+        '--tcp-ports',
+        help='List of tcp ports to close in the host firewall')
+    parser_rm_daemon.add_argument(
         '--fsid',
         required=True,
         help='cluster FSID')
@@ -8341,10 +8704,11 @@ def _get_parser():
         '--mon-id',
         required=False,
         help='mon id (default: local hostname)')
-    parser_bootstrap.add_argument(
+    group = parser_bootstrap.add_mutually_exclusive_group()
+    group.add_argument(
         '--mon-addrv',
         help='mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])')
-    parser_bootstrap.add_argument(
+    group.add_argument(
         '--mon-ip',
         help='mon IP')
     parser_bootstrap.add_argument(
@@ -8700,7 +9064,12 @@ def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
     global logger
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
-    dictConfig(logging_config)
+    operations = ['bootstrap', 'rm-cluster']
+    if any(op in args for op in operations):
+        dictConfig(interactive_logging_config)
+    else:
+        dictConfig(logging_config)
+
     logger = logging.getLogger()
 
     if not os.path.exists(ctx.logrotate_dir + '/cephadm'):

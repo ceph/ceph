@@ -120,11 +120,6 @@ int RGWObjManifest::append(const DoutPrefixProvider *dpp, RGWObjManifest& m, con
   return 0;
 }
 
-int RGWObjManifest::append(const DoutPrefixProvider *dpp, RGWObjManifest& m, rgw::sal::Zone* zone_svc)
-{
-  return append(dpp, m, zone_svc->get_zonegroup(), zone_svc->get_params());
-}
-
 void RGWObjManifest::append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& miter,
                                   string *override_prefix)
 {

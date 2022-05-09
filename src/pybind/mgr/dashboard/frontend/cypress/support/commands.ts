@@ -2,6 +2,7 @@ declare global {
   namespace Cypress {
     interface Chainable<Subject> {
       login(): void;
+      logToConsole(message: string, optional?: any): void;
       text(): Chainable<string>;
     }
   }
@@ -26,8 +27,8 @@ const fillAuth = () => {
 };
 
 Cypress.Commands.add('login', () => {
-  const username = Cypress.env('LOGIN_USER') || 'admin';
-  const password = Cypress.env('LOGIN_PWD') || 'admin';
+  const username = Cypress.env('LOGIN_USER');
+  const password = Cypress.env('LOGIN_PWD');
 
   if (auth === undefined) {
     cy.request({
@@ -49,6 +50,10 @@ Cypress.Commands.add('login', () => {
 });
 
 // @ts-ignore
-Cypress.Commands.add('text', { prevSubject: true }, (subject) => {
+Cypress.Commands.add('text', { prevSubject: true }, (subject: any) => {
   return subject.text();
+});
+
+Cypress.Commands.add('logToConsole', (message: string, optional?: any) => {
+  cy.task('log', { message: `(${new Date().toISOString()}) ${message}`, optional });
 });

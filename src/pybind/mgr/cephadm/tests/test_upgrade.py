@@ -164,3 +164,88 @@ def test_enough_mds_for_ok_to_stop(get, get_daemons_by_service, cephadm_module: 
     get_daemons_by_service.side_effect = [[DaemonDescription(), DaemonDescription()]]
     assert cephadm_module.upgrade._enough_mds_for_ok_to_stop(
         DaemonDescription(daemon_type='mds', daemon_id='myfs.test.host1.gfknd', service_name='mds.myfs.test'))
+
+
+@pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
+                         [
+                             # several candidate versions (from different major versions)
+                             (
+                                 (16, 1, '16.1.0'),
+                                 False,  # use_tags
+                                 False,  # show_all_versions
+                                 [
+                                     'v17.1.0',
+                                     'v16.2.7',
+                                     'v16.2.6',
+                                     'v16.2.5',
+                                     'v16.1.4',
+                                     'v16.1.3',
+                                     'v15.2.0',
+                                 ],
+                                 ['17.1.0', '16.2.7', '16.2.6', '16.2.5', '16.1.4', '16.1.3']
+                             ),
+                             # candidate minor versions are available
+                             (
+                                 (16, 1, '16.1.0'),
+                                 False,  # use_tags
+                                 False,  # show_all_versions
+                                 [
+                                     'v16.2.2',
+                                     'v16.2.1',
+                                     'v16.1.6',
+                                 ],
+                                 ['16.2.2', '16.2.1', '16.1.6']
+                             ),
+                             # all versions are less than the current version
+                             (
+                                 (17, 2, '17.2.0'),
+                                 False,  # use_tags
+                                 False,  # show_all_versions
+                                 [
+                                     'v17.1.0',
+                                     'v16.2.7',
+                                     'v16.2.6',
+                                 ],
+                                 []
+                             ),
+                             # show all versions (regardless of the current version)
+                             (
+                                 (16, 1, '16.1.0'),
+                                 False,  # use_tags
+                                 True,   # show_all_versions
+                                 [
+                                     'v17.1.0',
+                                     'v16.2.7',
+                                     'v16.2.6',
+                                     'v15.1.0',
+                                     'v14.2.0',
+                                 ],
+                                 ['17.1.0', '16.2.7', '16.2.6', '15.1.0', '14.2.0']
+                             ),
+                             # show all tags (regardless of the current version and show_all_versions flag)
+                             (
+                                 (16, 1, '16.1.0'),
+                                 True,   # use_tags
+                                 False,  # show_all_versions
+                                 [
+                                     'v17.1.0',
+                                     'v16.2.7',
+                                     'v16.2.6',
+                                     'v16.2.5',
+                                     'v16.1.4',
+                                     'v16.1.3',
+                                     'v15.2.0',
+                                 ],
+                                 ['v15.2.0', 'v16.1.3', 'v16.1.4', 'v16.2.5',
+                                     'v16.2.6', 'v16.2.7', 'v17.1.0']
+                             ),
+                         ])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_ls(current_version, use_tags, show_all_versions, tags, result, cephadm_module: CephadmOrchestrator):
+    with mock.patch('cephadm.upgrade.Registry.get_tags', return_value=tags):
+        with mock.patch('cephadm.upgrade.CephadmUpgrade._get_current_version', return_value=current_version):
+            out = cephadm_module.upgrade.upgrade_ls(None, use_tags, show_all_versions)
+            if use_tags:
+                assert out['tags'] == result
+            else:
+                assert out['versions'] == result

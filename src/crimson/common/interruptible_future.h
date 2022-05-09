@@ -174,7 +174,7 @@ auto call_with_interruption_impl(
     typename futurator_t::type>();
   INTR_FUT_DEBUG(
     "call_with_interruption_impl: may_interrupt: {}, "
-    "local interrupt_condintion: {}, "
+    "local interrupt_condition: {}, "
     "global interrupt_cond: {},{}",
     interrupt,
     (void*)interrupt_condition.get(),

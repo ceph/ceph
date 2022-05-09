@@ -1,8 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "scrub_machine.h"
-
 #include <chrono>
 #include <typeinfo>
 
@@ -10,7 +8,9 @@
 
 #include "osd/OSD.h"
 #include "osd/OpRequest.h"
+
 #include "ScrubStore.h"
+#include "scrub_machine.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
@@ -44,9 +44,11 @@ std::string ScrubMachine::current_states_desc() const
 {
   std::string sts{"<"};
   for (auto si = state_begin(); si != state_end(); ++si) {
-    const auto& siw{ *si };  // prevents a warning re side-effects
+    const auto& siw{*si};  // prevents a warning re side-effects
     // the '7' is the size of the 'scrub::'
-    sts += boost::core::demangle(typeid(siw).name()).substr(7, std::string::npos) + "/";
+    sts +=
+      boost::core::demangle(typeid(siw).name()).substr(7, std::string::npos) +
+      "/";
   }
   return sts + ">";
 }
@@ -98,6 +100,14 @@ NotActive::NotActive(my_context ctx) : my_base(ctx)
 sc::result NotActive::react(const StartScrub&)
 {
   dout(10) << "NotActive::react(const StartScrub&)" << dendl;
+  DECLARE_LOCALS;
+  scrbr->set_scrub_begin_time();
+  return transit<ReservingReplicas>();
+}
+
+sc::result NotActive::react(const AfterRepairScrub&)
+{
+  dout(10) << "NotActive::react(const AfterRepairScrub&)" << dendl;
   DECLARE_LOCALS;
   scrbr->set_scrub_begin_time();
   return transit<ReservingReplicas>();
@@ -260,8 +270,9 @@ WaitPushes::WaitPushes(my_context ctx) : my_base(ctx)
 sc::result WaitPushes::react(const ActivePushesUpd&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "WaitPushes::react(const ActivePushesUpd&) pending_active_pushes: "
-	   << scrbr->pending_active_pushes() << dendl;
+  dout(10)
+    << "WaitPushes::react(const ActivePushesUpd&) pending_active_pushes: "
+    << scrbr->pending_active_pushes() << dendl;
 
   if (!scrbr->pending_active_pushes()) {
     // done waiting
@@ -320,8 +331,8 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx)
   dout(10) << " -- state -->> Act/BuildMap" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
-  // no need to check for an epoch change, as all possible flows that brought us here have
-  // a check_interval() verification of their final event.
+  // no need to check for an epoch change, as all possible flows that brought
+  // us here have a check_interval() verification of their final event.
 
   if (scrbr->get_preemptor().was_preempted()) {
 
@@ -366,7 +377,7 @@ sc::result BuildMap::react(const IntLocalMapDone&)
 DrainReplMaps::DrainReplMaps(my_context ctx) : my_base(ctx)
 {
   dout(10) << "-- state -->> Act/DrainReplMaps" << dendl;
-  // we may have received all maps already. Send the event that will make us check.
+  // we may have got all maps already. Send the event that will make us check.
   post_event(GotReplicas{});
 }
 
@@ -380,7 +391,8 @@ sc::result DrainReplMaps::react(const GotReplicas&)
     return transit<PendingTimer>();
   }
 
-  dout(15) << "DrainReplMaps::react(const GotReplicas&): still draining incoming maps: "
+  dout(15) << "DrainReplMaps::react(const GotReplicas&): still draining "
+	      "incoming maps: "
 	   << scrbr->dump_awaited_maps() << dendl;
   return discard_event();
 }
@@ -394,17 +406,18 @@ WaitReplicas::WaitReplicas(my_context ctx) : my_base(ctx)
 }
 
 /**
- * note: now that maps_compare_n_cleanup() is "futurized"(*), and we remain in this state
- *  for a while even after we got all our maps, we must prevent are_all_maps_available()
- *  (actually - the code after the if()) from being called more than once.
- * This is basically a separate state, but it's too transitory and artificial to justify
- *  the cost of a separate state.
+ * note: now that maps_compare_n_cleanup() is "futurized"(*), and we remain in
+ * this state for a while even after we got all our maps, we must prevent
+ * are_all_maps_available() (actually - the code after the if()) from being
+ * called more than once.
+ * This is basically a separate state, but it's too transitory and artificial
+ * to justify the cost of a separate state.
 
- * (*) "futurized" - in Crimson, the call to maps_compare_n_cleanup() returns immediately
- *  after initiating the process. The actual termination of the maps comparing etc' is
- *  signalled via an event. As we share the code with "classic" OSD, here too
- *  maps_compare_n_cleanup() is responsible for signalling the completion of the
- *  processing.
+ * (*) "futurized" - in Crimson, the call to maps_compare_n_cleanup() returns
+ * immediately after initiating the process. The actual termination of the
+ * maps comparing etc' is signalled via an event. As we share the code with
+ * "classic" OSD, here too maps_compare_n_cleanup() is responsible for
+ * signalling the completion of the processing.
  */
 sc::result WaitReplicas::react(const GotReplicas&)
 {
@@ -425,7 +438,8 @@ sc::result WaitReplicas::react(const GotReplicas&)
 
     } else {
 
-      // maps_compare_n_cleanup() will arrange for MapsCompared event to be sent:
+      // maps_compare_n_cleanup() will arrange for MapsCompared event to be
+      // sent:
       scrbr->maps_compare_n_cleanup();
       return discard_event();
     }
@@ -437,7 +451,8 @@ sc::result WaitReplicas::react(const GotReplicas&)
 sc::result WaitReplicas::react(const DigestUpdate&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  auto warn_msg = "WaitReplicas::react(const DigestUpdate&): Unexpected DigestUpdate event"s;
+  auto warn_msg =
+    "WaitReplicas::react(const DigestUpdate&): Unexpected DigestUpdate event"s;
   dout(10) << warn_msg << dendl;
   scrbr->log_cluster_warning(warn_msg);
   return discard_event();
@@ -480,9 +495,9 @@ sc::result WaitDigestUpdate::react(const ScrubFinished&)
 }
 
 ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub)
-    : m_pg_id{pg->pg_id}, m_scrbr{pg_scrub}
-{
-}
+    : m_pg_id{pg->pg_id}
+    , m_scrbr{pg_scrub}
+{}
 
 ScrubMachine::~ScrubMachine() = default;
 
@@ -530,7 +545,8 @@ ActiveReplica::ActiveReplica(my_context ctx) : my_base(ctx)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> ActiveReplica" << dendl;
-  scrbr->on_replica_init();  // as we might have skipped ReplicaWaitUpdates
+  // and as we might have skipped ReplicaWaitUpdates:
+  scrbr->on_replica_init();
   post_event(SchedReplica{});
 }
 

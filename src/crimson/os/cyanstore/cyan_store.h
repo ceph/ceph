@@ -115,7 +115,7 @@ public:
     const ghobject_t& end,
     uint64_t limit) const final;
 
-  read_errorator::future<ceph::bufferlist> omap_get_header(
+  get_attr_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef c,
     const ghobject_t& oid) final;
 

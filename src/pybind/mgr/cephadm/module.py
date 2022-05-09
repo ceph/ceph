@@ -979,6 +979,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return 0, "value unchanged", ""
 
         self._validate_and_set_ssh_val('ssh_user', user, current_user)
+        current_ssh_config = self._get_ssh_config()
+        new_ssh_config = re.sub(r"(\s{2}User\s)(.*)", r"\1" + user, current_ssh_config.stdout)
+        self._set_ssh_config(new_ssh_config)
 
         msg = 'ssh user set to %s' % user
         if user != 'root':
@@ -2679,8 +2682,8 @@ Then run the following:
         return self.upgrade.upgrade_status()
 
     @handle_orch_error
-    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict[Any, Any]:
-        return self.upgrade.upgrade_ls(image, tags)
+    def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict[Any, Any]:
+        return self.upgrade.upgrade_ls(image, tags, show_all_versions)
 
     @handle_orch_error
     def upgrade_start(self, image: str, version: str) -> str:

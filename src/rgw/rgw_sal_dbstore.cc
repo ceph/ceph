@@ -345,7 +345,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+  int DBBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
       optional_yield y, bool check_size_only)
   {
     /* Not Handled in the first pass as stats are also needed */
@@ -508,19 +508,48 @@ namespace rgw::sal {
       dbsm->destroyAllHandles();
   }
 
-  const RGWZoneGroup& DBZone::get_zonegroup()
+  const std::string&  DBZoneGroup::get_endpoint() const {
+    if (!group->endpoints.empty()) {
+      return group->endpoints.front();
+    } else {
+      // use zonegroup's master zone endpoints
+      auto z = group->zones.find(group->master_zone);
+      if (z != group->zones.end() && !z->second.endpoints.empty()) {
+	return z->second.endpoints.front();
+      }
+    }
+    return empty;
+  }
+
+  bool DBZoneGroup::placement_target_exists(std::string& target) const {
+    return !!group->placement_targets.count(target);
+  }
+
+  int DBZoneGroup::get_placement_target_names(std::set<std::string>& names) const {
+    for (const auto& target : group->placement_targets) {
+      names.emplace(target.second.name);
+    }
+
+    return 0;
+  }
+
+  ZoneGroup& DBZone::get_zonegroup()
   {
     return *zonegroup;
   }
 
-  int DBZone::get_zonegroup(const std::string& id, RGWZoneGroup& zg)
+  int DBZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
   {
     /* XXX: for now only one zonegroup supported */
-    zg = *zonegroup;
+    ZoneGroup* group = new DBZoneGroup(store, std::make_unique<RGWZoneGroup>());
+    if (!group)
+      return -ENOMEM;
+
+    zg->reset(group);
     return 0;
   }
 
-  const RGWZoneParams& DBZone::get_params()
+  const RGWZoneParams& DBZone::get_rgw_params()
   {
     return *zone_params;
   }
@@ -530,10 +559,6 @@ namespace rgw::sal {
     return cur_zone_id;
   }
 
-  const RGWRealm& DBZone::get_realm()
-  {
-    return *realm;
-  }
 
   const std::string& DBZone::get_name() const
   {
@@ -558,6 +583,21 @@ namespace rgw::sal {
   const std::string& DBZone::get_current_period_id()
   {
     return current_period->get_id();
+  }
+
+  const RGWAccessKey& DBZone::get_system_key()
+  {
+    return zone_params->system_key;
+  }
+
+  const std::string& DBZone::get_realm_name()
+  {
+    return realm->get_name();
+  }
+
+  const std::string& DBZone::get_realm_id()
+  {
+    return realm->get_id();
   }
 
   std::unique_ptr<LuaScriptManager> DBStore::get_lua_script_manager()
@@ -691,6 +731,18 @@ namespace rgw::sal {
       uint64_t olh_epoch,
       const DoutPrefixProvider* dpp,
       optional_yield y)
+  {
+    return 0;
+  }
+
+  int DBObject::transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y)
   {
     return 0;
   }
@@ -1543,6 +1595,15 @@ namespace rgw::sal {
                     ptail_placement_rule, olh_epoch, unique_tag);
   }
 
+  const std::string& DBStore::get_compression_type(const rgw_placement_rule& rule) {
+    return zone.get_rgw_params().get_compression_type(rule);
+  }
+
+  bool DBStore::valid_placement(const rgw_placement_rule& rule)
+  {
+    return zone.get_rgw_params().valid_placement(rule);
+  }
+
   std::unique_ptr<User> DBStore::get_user(const rgw_user &u)
   {
     return std::make_unique<DBUser>(this, u);
@@ -1773,7 +1834,7 @@ namespace rgw::sal {
     return;
   }
 
-  void DBStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
+  void DBStore::get_quota(RGWQuota& quota)
   {
     // XXX: Not handled for the first pass 
     return;
@@ -1847,7 +1908,7 @@ namespace rgw::sal {
 
   int DBStore::get_config_key_val(string name, bufferlist *bl)
   {
-    return 0;
+    return -ENOTSUP;
   }
 
   int DBStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const string& section, const string& marker, void** phandle)

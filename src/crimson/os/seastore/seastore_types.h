@@ -21,6 +21,9 @@
 
 namespace crimson::os::seastore {
 
+/* using a special xattr key "omap_header" to store omap header */
+  const std::string OMAP_HEADER_XATTR_KEY = "omap_header";
+
 /*
  * Note: NULL value is usually the default and max value.
  */
@@ -62,8 +65,10 @@ constexpr uint16_t DEVICE_ID_LEN_BITS = 8;
 // segment ids without a device id encapsulated
 using device_segment_id_t = uint32_t;
 
-constexpr device_id_t DEVICE_ID_MAX = 
-  (std::numeric_limits<device_id_t>::max() >>
+constexpr device_id_t DEVICE_ID_GLOBAL_MAX =
+  std::numeric_limits<device_id_t>::max();
+constexpr device_id_t DEVICE_ID_MAX = // the max value regardless of addrs_type_t prefix
+  (DEVICE_ID_GLOBAL_MAX >>
    (std::numeric_limits<device_id_t>::digits - DEVICE_ID_LEN_BITS + 1));
 constexpr device_id_t DEVICE_ID_NULL = DEVICE_ID_MAX;
 constexpr device_id_t DEVICE_ID_RECORD_RELATIVE = DEVICE_ID_MAX - 1;
@@ -145,7 +150,7 @@ private:
   );
 
   static inline device_id_t internal_to_device(internal_segment_id_t id) {
-    return (static_cast<device_id_t>(id) & SM_ID_MASK) >> segment_bits;
+    return static_cast<device_id_t>((id & SM_ID_MASK) >> segment_bits);
   }
 
   constexpr static inline device_segment_id_t internal_to_segment(
@@ -242,9 +247,10 @@ public:
     // are not yet present
     device_to_segments.resize(DEVICE_ID_MAX_VALID);
   }
-  void add_device(device_id_t device, size_t segments, const T& init) {
-    assert(device <= DEVICE_ID_MAX_VALID);
-    assert(device_to_segments[device].size() == 0);
+  void add_device(device_id_t device, std::size_t segments, const T& init) {
+    ceph_assert(device <= DEVICE_ID_MAX_VALID);
+    ceph_assert(device_to_segments[device].size() == 0);
+    ceph_assert(segments > 0);
     device_to_segments[device].resize(segments, init);
     total_segments += segments;
   }

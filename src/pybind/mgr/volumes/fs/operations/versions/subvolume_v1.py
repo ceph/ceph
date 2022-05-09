@@ -139,6 +139,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         if flush:
             self.metadata_mgr.flush()
 
+    def add_clone_failure(self, errno, error_msg):
+        self.metadata_mgr.add_section(MetadataManager.CLONE_FAILURE_SECTION)
+        self.metadata_mgr.update_section(MetadataManager.CLONE_FAILURE_SECTION,
+                                         MetadataManager.CLONE_FAILURE_META_KEY_ERRNO, errno)
+        self.metadata_mgr.update_section(MetadataManager.CLONE_FAILURE_SECTION,
+                                         MetadataManager.CLONE_FAILURE_META_KEY_ERROR_MSG, error_msg)
+        self.metadata_mgr.flush()
+
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
@@ -660,6 +668,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
         return clone_source
 
+    def _get_clone_failure(self):
+        clone_failure = {
+            'errno'     : self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERRNO),
+            'error_msg' : self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERROR_MSG),
+        }
+        return clone_failure
+
     @property
     def status(self):
         state = SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
@@ -669,6 +684,12 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         }
         if not SubvolumeOpSm.is_complete_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
             subvolume_status["source"] = self._get_clone_source()
+        if SubvolumeOpSm.is_failed_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
+            try:
+                subvolume_status["failure"] = self._get_clone_failure()
+            except MetadataMgrException:
+                pass
+
         return subvolume_status
 
     @property
@@ -775,8 +796,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EINVAL, "error cloning subvolume")
 
     def detach_snapshot(self, snapname, track_id):
-        if not snapname.encode('utf-8') in self.list_snapshots():
-            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
         try:
             with open_clone_index(self.fs, self.vol_spec) as index:
                 index.untrack(track_id)

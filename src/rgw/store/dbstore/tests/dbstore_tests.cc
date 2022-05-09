@@ -687,8 +687,7 @@ TEST_F(DBStoreTest, GetObject) {
 TEST_F(DBStoreTest, GetObjectState) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
-  RGWObjState state;
-  RGWObjState *s = &state;
+  RGWObjState* s;
 
   params.op.obj.state.obj.key.name = "object2";
   params.op.obj.state.obj.key.instance = "inst2";
@@ -698,14 +697,14 @@ TEST_F(DBStoreTest, GetObjectState) {
   ret = op_target.get_obj_state(dpp, params.op.bucket.info, params.op.obj.state.obj,
       false, &s);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(state.size, 12);
-  ASSERT_EQ(state.is_olh, false);
+  ASSERT_EQ(s->size, 12);
+  ASSERT_EQ(s->is_olh, false);
 
   /* Recheck with get_state API */
   ret = op_target.get_state(dpp, &s, false);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(state.size, 12);
-  ASSERT_EQ(state.is_olh, false);
+  ASSERT_EQ(s->size, 12);
+  ASSERT_EQ(s->is_olh, false);
 }
 
 TEST_F(DBStoreTest, ObjAttrs) {
@@ -880,8 +879,7 @@ TEST_F(DBStoreTest, ListBucketObjects) {
 TEST_F(DBStoreTest, DeleteObj) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
-  RGWObjState state;
-  RGWObjState *s = &state;
+  RGWObjState *s;
 
   /* delete object2 */
   params.op.obj.state.obj.key.name = "object2";

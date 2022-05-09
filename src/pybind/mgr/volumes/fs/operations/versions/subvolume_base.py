@@ -405,3 +405,31 @@ class SubvolumeBase(object):
                 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
                 'pool_namespace': pool_namespace,
                 'features': self.features, 'state': self.state.value}
+
+    def set_user_metadata(self, keyname, value):
+        self.metadata_mgr.add_section(MetadataManager.USER_METADATA_SECTION)
+        self.metadata_mgr.update_section(MetadataManager.USER_METADATA_SECTION, keyname, str(value))
+        self.metadata_mgr.flush()
+
+    def get_user_metadata(self, keyname):
+        try:
+            value = self.metadata_mgr.get_option(MetadataManager.USER_METADATA_SECTION, keyname)
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "key '{0}' does not exist.".format(keyname))
+            raise VolumeException(-me.args[0], me.args[1])
+        return value
+
+    def list_user_metadata(self):
+        return self.metadata_mgr.list_all_options_from_section(MetadataManager.USER_METADATA_SECTION)
+
+    def remove_user_metadata(self, keyname):
+        try:
+            ret = self.metadata_mgr.remove_option(MetadataManager.USER_METADATA_SECTION, keyname)
+            if not ret:
+                raise VolumeException(-errno.ENOENT, "key '{0}' does not exist.".format(keyname))
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "subvolume metadata not does not exist")
+            raise VolumeException(-me.args[0], me.args[1])

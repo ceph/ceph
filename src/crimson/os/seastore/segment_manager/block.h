@@ -112,7 +112,7 @@ class BlockSegmentManager final : public SegmentManager {
 public:
   mount_ret mount() final;
 
-  mkfs_ret mkfs(segment_manager_config_t) final;
+  mkfs_ret mkfs(device_config_t) final;
 
   close_ertr::future<> close();
 
@@ -146,7 +146,7 @@ public:
     return device_id;
   }
   secondary_device_set_t& get_secondary_devices() final {
-    return superblock.secondary_devices;
+    return superblock.config.secondary_devices;
   }
   // public so tests can bypass segment interface when simpler
   Segment::write_ertr::future<> segment_write(
@@ -154,14 +154,8 @@ public:
     ceph::bufferlist bl,
     bool ignore_check=false);
 
-  device_spec_t get_device_spec() const final {
-    return {superblock.magic,
-	    superblock.dtype,
-	    get_device_id()};
-  }
-
   magic_t get_magic() const final {
-    return superblock.magic;
+    return superblock.config.spec.magic;
   }
 
 private:
@@ -222,7 +216,7 @@ private:
   }
 
   const seastore_meta_t &get_meta() const {
-    return superblock.meta;
+    return superblock.config.meta;
   }
 
   std::vector<segment_state_t> segment_state;

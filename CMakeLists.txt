@@ -20,6 +20,12 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
+if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  set(default_build_type "Debug")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+endif()
+
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
   FIND_PACKAGE(Threads)
@@ -157,6 +163,7 @@ if(LINUX)
 elseif(FREEBSD)
   set(HAVE_UDEV OFF)
   set(HAVE_LIBAIO OFF)
+  set(HAVE_LIBDML OFF)
   set(HAVE_BLKID OFF)
   set(HAVE_KEYUTILS OFF)
 else()
@@ -231,6 +238,10 @@ CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system libur
 
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
+if(WITH_BLUESTORE_PMEM)
+  find_package(dml)
+  set(HAVE_LIBDML ${DML_FOUND})
+endif()
 
 CMAKE_DEPENDENT_OPTION(WITH_RBD_MIGRATION_FORMAT_QCOW_V1
   "Enable librbd QCOW v1 migration format support" ON
@@ -330,9 +341,11 @@ and then jemalloc. If neither of then is found. use the one in libc.")
 if(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     find_package(gperftools 2.6.2 REQUIRED)
+    set(ALLOC_LIBS gperftools::${ALLOCATOR})
     set(HAVE_LIBTCMALLOC ON)
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
     find_package(JeMalloc REQUIRED)
+    set(ALLOC_LIBS JeMalloc::JeMalloc)
     set(HAVE_JEMALLOC 1)
   elseif(NOT ALLOCATOR STREQUAL "libc")
     message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
@@ -345,8 +358,10 @@ else(ALLOCATOR)
   endif()
   if(gperftools_FOUND)
     set(ALLOCATOR tcmalloc)
+    set(ALLOC_LIBS gperftools::tcmalloc)
   elseif(JeMalloc_FOUND)
     set(ALLOCATOR jemalloc)
+    set(ALLOC_LIBS JeMalloc::JeMalloc)
   else()
     if(NOT FREEBSD)
       # FreeBSD already has jemalloc as its default allocator
@@ -355,6 +370,13 @@ else(ALLOCATOR)
     set(ALLOCATOR "libc")
   endif(gperftools_FOUND)
 endif(ALLOCATOR)
+if(NOT ALLOCATOR STREQUAL "libc")
+  add_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-calloc>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
+endif()
 
 # Mingw generates incorrect entry points when using "-pie".
 if(WIN32 OR (HAVE_LIBTCMALLOC AND WITH_STATIC_LIBSTDCXX))
@@ -463,12 +485,8 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 if(NOT WIN32)
 # Please specify 3.[0-7] if you want to build with a certain version of python3.
 set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
-if(NOT WITH_PYTHON3 STREQUAL "3")
-  set(find_python3_exact "EXACT")
-endif()
-find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
+find_package(Python3 ${WITH_PYTHON3} EXACT REQUIRED
   COMPONENTS Interpreter Development)
-unset(find_python3_exact)
 
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
