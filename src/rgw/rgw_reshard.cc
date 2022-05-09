@@ -587,9 +587,10 @@ int RGWBucketReshard::do_reshard(int num_shards,
   for (int i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
     marker.clear();
+    const std::string null_object_filter; // empty string since we're not filtering by object
     while (is_truncated) {
       entries.clear();
-      ret = store->getRados()->bi_list(bucket, i, string(), marker, max_entries, &entries, &is_truncated);
+      ret = store->getRados()->bi_list(bucket, i, null_object_filter, marker, max_entries, &entries, &is_truncated);
       if (ret < 0 && ret != -ENOENT) {
 	derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
 	return ret;

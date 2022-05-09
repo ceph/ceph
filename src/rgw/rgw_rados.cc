@@ -8052,9 +8052,9 @@ int RGWRados::bi_put(rgw_bucket& bucket, rgw_obj& obj, rgw_cls_bi_entry& entry)
   return bi_put(bs, entry);
 }
 
-int RGWRados::bi_list(rgw_bucket& bucket, const string& obj_name, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+int RGWRados::bi_list(rgw_bucket& bucket, const string& obj_name_filter, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
 {
-  rgw_obj obj(bucket, obj_name);
+  rgw_obj obj(bucket, obj_name_filter);
   BucketShard bs(this);
   int ret = bs.init(bucket, obj, nullptr /* no RGWBucketInfo */);
   if (ret < 0) {
@@ -8063,7 +8063,7 @@ int RGWRados::bi_list(rgw_bucket& bucket, const string& obj_name, const string& 
   }
 
   auto& ref = bs.bucket_obj.get_ref();
-  ret = cls_rgw_bi_list(ref.pool.ioctx(), ref.obj.oid, obj_name, marker, max, entries, is_truncated);
+  ret = cls_rgw_bi_list(ref.pool.ioctx(), ref.obj.oid, obj_name_filter, marker, max, entries, is_truncated);
   if (ret == -ENOENT) {
     *is_truncated = false;
   }
@@ -8073,14 +8073,27 @@ int RGWRados::bi_list(rgw_bucket& bucket, const string& obj_name, const string& 
   return 0;
 }
 
-int RGWRados::bi_list(BucketShard& bs, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+int RGWRados::bi_list(BucketShard& bs, const string& obj_name_filter, const string& marker, uint32_t max,
+		      list<rgw_cls_bi_entry> *entries, bool *is_truncated)
 {
   auto& ref = bs.bucket_obj.get_ref();
-  int ret = cls_rgw_bi_list(ref.pool.ioctx(), ref.obj.oid, filter_obj, marker, max, entries, is_truncated);
+  int ret = cls_rgw_bi_list(ref.pool.ioctx(), ref.obj.oid, obj_name_filter, marker, max, entries, is_truncated);
   if (ret < 0)
     return ret;
 
   return 0;
+}
+
+int RGWRados::bi_list(rgw_bucket& bucket, int shard_id, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+{
+  BucketShard bs(this);
+  int ret = bs.init(bucket, shard_id, nullptr /* no RGWBucketInfo */);
+  if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return bi_list(bs, filter_obj, marker, max, entries, is_truncated);
 }
 
 int RGWRados::bi_remove(BucketShard& bs)
@@ -8096,18 +8109,6 @@ int RGWRados::bi_remove(BucketShard& bs)
   }
 
   return 0;
-}
-
-int RGWRados::bi_list(rgw_bucket& bucket, int shard_id, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
-{
-  BucketShard bs(this);
-  int ret = bs.init(bucket, shard_id, nullptr /* no RGWBucketInfo */);
-  if (ret < 0) {
-    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
-    return ret;
-  }
-
-  return bi_list(bs, filter_obj, marker, max, entries, is_truncated);
 }
 
 int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
@@ -8426,7 +8427,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   // (key=candidate, value=index into results_trackers); as we consume
   // entries from shards, we replace them with the next entries in the
   // shards until we run out
-  map<string, size_t> candidates;
+  std::map<std::string, size_t> candidates;
   size_t tracker_idx = 0;
   for (auto& t : results_trackers) {
     // it's important that the values in the map refer to the index

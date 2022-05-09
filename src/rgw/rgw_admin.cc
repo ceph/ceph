@@ -6600,6 +6600,7 @@ next:
 
       do {
         entries.clear();
+	// if object is specified, we use that as a filter to only retrieve some some entries
         ret = store->getRados()->bi_list(bs, object, marker, max_entries, &entries, &is_truncated);
         if (ret < 0) {
           cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
