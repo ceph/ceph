@@ -545,6 +545,9 @@ seastar::future<> OSD::start_asok_admin()
     // PG commands
     asok->register_command(make_asok_hook<pg::QueryCommand>(*this));
     asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this));
+    // ops commands
+    asok->register_command(make_asok_hook<DumpInFlightOpsHook>(
+      std::as_const(get_shard_services().registry)));
   });
 }
 
@@ -1409,28 +1412,29 @@ seastar::future<> OSD::consume_map(epoch_t epoch)
 }
 
 
-blocking_future<Ref<PG>>
+seastar::future<Ref<PG>>
 OSD::get_or_create_pg(
+  PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
   spg_t pgid,
   epoch_t epoch,
   std::unique_ptr<PGCreateInfo> info)
 {
   if (info) {
-    auto [fut, creating] = pg_map.wait_for_pg(pgid);
+    auto [fut, creating] = pg_map.wait_for_pg(std::move(trigger), pgid);
     if (!creating) {
       pg_map.set_creating(pgid);
       (void)handle_pg_create_info(std::move(info));
     }
     return std::move(fut);
   } else {
-    return make_ready_blocking_future<Ref<PG>>(pg_map.get_pg(pgid));
+    return seastar::make_ready_future<Ref<PG>>(pg_map.get_pg(pgid));
   }
 }
 
-blocking_future<Ref<PG>> OSD::wait_for_pg(
-  spg_t pgid)
+seastar::future<Ref<PG>> OSD::wait_for_pg(
+  PGMap::PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
 {
-  return pg_map.wait_for_pg(pgid).first;
+  return pg_map.wait_for_pg(std::move(trigger), pgid).first;
 }
 
 Ref<PG> OSD::get_pg(spg_t pgid)

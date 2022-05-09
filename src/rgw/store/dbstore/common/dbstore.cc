@@ -65,8 +65,10 @@ int DB::createGC(const DoutPrefixProvider *dpp) {
 }
 
 int DB::stopGC() {
-  if (gc_worker)
+  if (gc_worker) {
+    gc_worker->signal_stop();
     gc_worker->join();
+  }
   return 0;
 }
 
@@ -2040,6 +2042,8 @@ int DB::delete_stale_objs(const DoutPrefixProvider *dpp, const std::string& buck
 
 void *DB::GC::entry() {
   do {
+    std::unique_lock<std::mutex> lk(mtx);
+
     ldpp_dout(dpp, 2) << " DB GC started " << dendl;
     int max = 100;
     RGWUserBuckets buckets;
@@ -2071,15 +2075,18 @@ void *DB::GC::entry() {
         user_marker = user.id;
 
         /* XXX: If using locks, unlock here and reacquire in the next iteration */
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        cv.wait_for(lk, std::chrono::milliseconds(100));
+	if (stop_signalled) {
+	  goto done;
+	}
       }
     } while(is_truncated);
 
     bucket_marker.clear();
-    std::this_thread::sleep_for(std::chrono::milliseconds(gc_interval*10));
+    cv.wait_for(lk, std::chrono::milliseconds(gc_interval*10));
+  } while(! stop_signalled);
 
-  } while(1);
-
+done:
   return nullptr;
 }
 

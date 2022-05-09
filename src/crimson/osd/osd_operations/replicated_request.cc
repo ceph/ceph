@@ -8,6 +8,7 @@
 
 #include "crimson/osd/osd.h"
 #include "crimson/osd/osd_connection_priv.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/pg.h"
 
 namespace {
@@ -61,13 +62,19 @@ seastar::future<> RepRequest::start()
   logger().debug("{} start", *this);
   IRef ref = this;
 
-  return with_blocking_future(handle.enter(cp().await_map))
-  .then([this]() {
-    return with_blocking_future(osd.osdmap_gate.wait_for_map(req->get_min_epoch()));
+  return enter_stage<>(cp().await_map).then([this] {
+    return with_blocking_event<OSD_OSDMapGate::OSDMapBlocker::BlockingEvent>(
+      [this] (auto&& trigger) {
+        return osd.osdmap_gate.wait_for_map(std::move(trigger),
+					    req->get_min_epoch());
+      });
   }).then([this](epoch_t epoch) {
-    return with_blocking_future(handle.enter(cp().get_pg));
+    return enter_stage<>(cp().get_pg);
   }).then([this] {
-    return with_blocking_future(osd.wait_for_pg(req->get_spg()));
+    return with_blocking_event<PGMap::PGCreationBlockingEvent>(
+      [this] (auto&& trigger) {
+        return osd.wait_for_pg(std::move(trigger), req->get_spg());
+      });
   }).then([this, ref=std::move(ref)](Ref<PG> pg) {
     return interruptor::with_interruption([this, ref, pg] {
 	return pg->handle_rep_op(std::move(req));

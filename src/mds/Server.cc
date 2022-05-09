@@ -3893,8 +3893,6 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   if (!ref)
     return;
 
-  mdr->getattr_caps = mask;
-
   /*
    * if client currently holds the EXCL cap on a field, do not rdlock
    * it; client's stat() will result in valid info if _either_ EXCL

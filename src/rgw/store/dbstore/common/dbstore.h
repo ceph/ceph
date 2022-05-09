@@ -9,6 +9,8 @@
 #include <string>
 #include <stdio.h>
 #include <iostream>
+#include <mutex>
+#include <condition_variable>
 // this seems safe to use, at least for now--arguably, we should
 // prefer header-only fmt, in general
 #undef FMT_HEADER_ONLY
@@ -1668,6 +1670,9 @@ class DB {
        * gc_obj_min_wait: Min. time to wait before deleting any data post its creation.
        *                    
        */
+      std::mutex mtx;
+      std::condition_variable cv;
+      bool stop_signalled = false;
       uint32_t gc_interval = 24*60*60; //sec ; default: 24*60*60
       uint32_t gc_obj_min_wait = 60*60; //60*60sec default
       std::string bucket_marker;
@@ -1678,7 +1683,13 @@ class DB {
             dpp(_dpp), db(_db) {}
 
       void *entry() override;
- 
+
+      void signal_stop() {
+	std::lock_guard<std::mutex> lk_guard(mtx);
+	stop_signalled = true;
+	cv.notify_one();
+      }
+
       friend class DB;
     };
     std::unique_ptr<DB::GC> gc_worker;

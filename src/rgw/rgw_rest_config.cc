@@ -51,8 +51,8 @@ void RGWOp_ZoneGroupMap_Get::send_response() {
     RGWRegionMap region_map;
     region_map.regions = zonegroup_map.zonegroups;
     region_map.master_region = zonegroup_map.master_zonegroup;
-    region_map.bucket_quota = zonegroup_map.bucket_quota;
-    region_map.user_quota = zonegroup_map.user_quota;
+    region_map.quota.bucket_quota = zonegroup_map.quota.bucket_quota;
+    region_map.quota.user_quota = zonegroup_map.quota.user_quota;
     encode_json("region-map", region_map, s->formatter);
   } else {
     encode_json("zonegroup-map", zonegroup_map, s->formatter);

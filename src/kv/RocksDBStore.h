@@ -353,32 +353,16 @@ public:
     public KeyValueDB::WholeSpaceIteratorImpl {
   protected:
     rocksdb::Iterator *dbiter;
-    const KeyValueDB::IteratorBounds bounds;
-    const rocksdb::Slice iterate_lower_bound;
-    const rocksdb::Slice iterate_upper_bound;
   public:
     explicit RocksDBWholeSpaceIteratorImpl(const RocksDBStore* db,
                                            rocksdb::ColumnFamilyHandle* cf,
-                                           const KeyValueDB::IteratorOpts opts,
-                                           KeyValueDB::IteratorBounds bounds_) :
-      bounds(std::move(bounds_)),
-      iterate_lower_bound(make_slice(bounds.lower_bound)),
-      iterate_upper_bound(make_slice(bounds.upper_bound))
+                                           const KeyValueDB::IteratorOpts opts)
       {
         rocksdb::ReadOptions options = rocksdb::ReadOptions();
         if (opts & ITERATOR_NOCACHE)
           options.fill_cache=false;
-        if (db->cct->_conf->osd_rocksdb_iterator_bounds_enabled) {
-          if (bounds.lower_bound) {
-            options.iterate_lower_bound = &iterate_lower_bound;
-          }
-          if (bounds.upper_bound) {
-            options.iterate_upper_bound = &iterate_upper_bound;
-          }
-        }
         dbiter = db->db->NewIterator(options, cf);
     }
-    //virtual ~RocksDBWholeSpaceIteratorImpl() { }
     ~RocksDBWholeSpaceIteratorImpl() override;
 
     int seek_to_first() override;
@@ -533,7 +517,7 @@ err:
     return nullptr;
   }
 
-  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0, IteratorBounds bounds = IteratorBounds()) override;
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
 private:
   WholeSpaceIterator get_default_cf_iterator();
 

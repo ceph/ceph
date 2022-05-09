@@ -178,8 +178,7 @@ protected:
   rgw::sal::Store* store;
   RGWCORSConfiguration bucket_cors;
   bool cors_exist;
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
   int op_ret;
   int do_aws4_auth_completion();
 

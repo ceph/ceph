@@ -651,13 +651,12 @@ seastar::future<struct stat> SeaStore::stat(
   );
 }
 
-auto
+SeaStore::get_attr_errorator::future<ceph::bufferlist>
 SeaStore::omap_get_header(
-  CollectionRef c,
+  CollectionRef ch,
   const ghobject_t& oid)
-  -> read_errorator::future<bufferlist>
 {
-  return seastar::make_ready_future<bufferlist>();
+  return get_attr(ch, oid, OMAP_HEADER_XATTR_KEY);
 }
 
 SeaStore::read_errorator::future<SeaStore::omap_values_t>
@@ -1309,8 +1308,9 @@ SeaStore::tm_ret SeaStore::_omap_set_header(
 {
   LOG_PREFIX(SeaStore::_omap_set_header);
   DEBUGT("{} {} bytes", *ctx.transaction, *onode, header.length());
-  assert(0 == "not supported yet");
-  return tm_iertr::now();
+  std::map<std::string, bufferlist> to_set;
+  to_set[OMAP_HEADER_XATTR_KEY] = header;
+  return _setattrs(ctx, onode,std::move(to_set));
 }
 
 SeaStore::tm_ret SeaStore::_omap_clear(
@@ -1319,29 +1319,32 @@ SeaStore::tm_ret SeaStore::_omap_clear(
 {
   LOG_PREFIX(SeaStore::_omap_clear);
   DEBUGT("{} {} keys", *ctx.transaction, *onode);
-  if (auto omap_root = onode->get_layout().omap_root.get(
-    onode->get_metadata_hint(device->get_block_size()));
-    omap_root.is_null()) {
-    return seastar::now();
-  } else {
-    return seastar::do_with(
-      BtreeOMapManager(*transaction_manager),
-      onode->get_layout().omap_root.get(
-        onode->get_metadata_hint(device->get_block_size())),
-      [&ctx, &onode](
-      auto &omap_manager,
-      auto &omap_root) {
-      return omap_manager.omap_clear(
-        omap_root,
-        *ctx.transaction)
-      .si_then([&] {
-        if (omap_root.must_update()) {
-          onode->get_mutable_layout(*ctx.transaction
-          ).omap_root.update(omap_root);
-        }
+  return _xattr_rmattr(ctx, onode, std::string(OMAP_HEADER_XATTR_KEY))
+    .si_then([this, &ctx, &onode]() -> tm_ret {
+    if (auto omap_root = onode->get_layout().omap_root.get(
+      onode->get_metadata_hint(device->get_block_size()));
+      omap_root.is_null()) {
+      return seastar::now();
+    } else {
+      return seastar::do_with(
+        BtreeOMapManager(*transaction_manager),
+        onode->get_layout().omap_root.get(
+          onode->get_metadata_hint(device->get_block_size())),
+        [&ctx, &onode](
+        auto &omap_manager,
+        auto &omap_root) {
+        return omap_manager.omap_clear(
+          omap_root,
+          *ctx.transaction)
+        .si_then([&] {
+          if (omap_root.must_update()) {
+            onode->get_mutable_layout(*ctx.transaction
+            ).omap_root.update(omap_root);
+          }
+        });
       });
-    });
-  }
+    }
+  });
 }
 
 SeaStore::tm_ret SeaStore::_omap_rmkeys(

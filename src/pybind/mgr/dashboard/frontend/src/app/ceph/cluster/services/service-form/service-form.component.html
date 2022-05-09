@@ -652,7 +652,7 @@
           </div>
 
           <!-- ssl_key -->
-          <div *ngIf="serviceForm.controls.ssl.value && serviceForm.controls.service_type.value !== 'rgw'"
+          <div *ngIf="serviceForm.controls.ssl.value && !(['rgw', 'ingress'].includes(serviceForm.controls.service_type.value))"
                class="form-group row">
             <label class="cd-col-form-label"
                    for="ssl_key">

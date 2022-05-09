@@ -388,9 +388,9 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
 
   SQL_DECODE_BLOB_PARAM(dpp, stmt, PlacementTags, op.user.uinfo.placement_tags, sdb);
 
-  SQL_DECODE_BLOB_PARAM(dpp, stmt, BucketQuota, op.user.uinfo.bucket_quota, sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, BucketQuota, op.user.uinfo.quota.bucket_quota, sdb);
   SQL_DECODE_BLOB_PARAM(dpp, stmt, TempURLKeys, op.user.uinfo.temp_url_keys, sdb);
-  SQL_DECODE_BLOB_PARAM(dpp, stmt, UserQuota, op.user.uinfo.user_quota, sdb);
+  SQL_DECODE_BLOB_PARAM(dpp, stmt, UserQuota, op.user.uinfo.quota.user_quota, sdb);
 
   op.user.uinfo.type = sqlite3_column_int(stmt, TYPE);
 
@@ -1182,13 +1182,13 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.placement_tags, sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.bucket_quota, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.bucket_quota, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.quota.bucket_quota, sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.temp_url_keys, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.temp_url_keys, sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_quota, sdb);
-  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.user_quota, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.quota.user_quota, sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.type, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.user.uinfo.type, sdb);

@@ -1026,8 +1026,7 @@ WRITE_CLASS_ENCODER(RGWPeriodMap)
 
 struct RGWPeriodConfig
 {
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
   RGWRateLimitInfo user_ratelimit;
   RGWRateLimitInfo bucket_ratelimit;
   // rate limit unauthenticated user
@@ -1035,8 +1034,8 @@ struct RGWPeriodConfig
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    encode(bucket_quota, bl);
-    encode(user_quota, bl);
+    encode(quota.bucket_quota, bl);
+    encode(quota.user_quota, bl);
     encode(bucket_ratelimit, bl);
     encode(user_ratelimit, bl);
     encode(anon_ratelimit, bl);
@@ -1045,8 +1044,8 @@ struct RGWPeriodConfig
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    decode(bucket_quota, bl);
-    decode(user_quota, bl);
+    decode(quota.bucket_quota, bl);
+    decode(quota.user_quota, bl);
     if (struct_v >= 2) {
       decode(bucket_ratelimit, bl);
       decode(user_ratelimit, bl);
@@ -1076,8 +1075,7 @@ struct RGWRegionMap {
 
   std::string master_region;
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -1094,8 +1092,7 @@ struct RGWZoneGroupMap {
 
   std::string master_zonegroup;
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
 
   /* construct the map */
   int read(const DoutPrefixProvider *dpp, CephContext *cct, RGWSI_SysObj *sysobj_svc, optional_yield y);
@@ -1281,11 +1278,11 @@ public:
   const std::string& get_info_oid_prefix() const;
 
   void set_user_quota(RGWQuotaInfo& user_quota) {
-    period_config.user_quota = user_quota;
+    period_config.quota.user_quota = user_quota;
   }
 
   void set_bucket_quota(RGWQuotaInfo& bucket_quota) {
-    period_config.bucket_quota = bucket_quota;
+    period_config.quota.bucket_quota = bucket_quota;
   }
 
   void set_id(const std::string& _id) {
