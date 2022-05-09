@@ -1054,8 +1054,11 @@ Usage:
         if inbuf:
             if service_type or placement or unmanaged:
                 raise OrchestratorValidationError(usage)
-            content: Iterator = yaml.safe_load_all(inbuf)
+            yaml_objs: Iterator = yaml.safe_load_all(inbuf)
             specs: List[Union[ServiceSpec, HostSpec]] = []
+            # YAML '---' document separator with no content generates
+            # None entries in the output. Let's skip them silently.
+            content = [o for o in yaml_objs if o is not None]
             for s in content:
                 spec = json_to_generic_spec(s)
 
