@@ -268,6 +268,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     } else {
       /* Service token was not found in cache. Go to Keystone for validating
        * the token. The allow_expired here must always be false. */
+      ceph_assert(allow_expired == false);
       st = get_from_keystone(dpp, service_token, allow_expired);
 
       if (! st) {
