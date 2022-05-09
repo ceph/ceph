@@ -35,7 +35,7 @@ Synopsis
 
 | **ceph** **mds** [ *compat* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
 
-| **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
+| **ceph** **mon** [ *add* \| *dump* \| *enable_stretch_mode* \| *getmap* \| *remove* \| *stat* ] ...
 
 | **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
@@ -543,6 +543,15 @@ Subcommand ``getmap`` gets monmap.
 Usage::
 
 	ceph mon getmap {<int[0-]>}
+
+Subcommand ``enable_stretch_mode`` enables stretch mode, changing the peering
+rules and failure handling on all pools with <tiebreaker_mon> as the tiebreaker
+and setting <dividing_bucket> locations as the units for stretching across.
+Pools' CRUSH rule will be changed to <new_crush_rule> as well.
+
+Usage::
+
+	ceph mon enable_stretch_mode <tiebreaker_mon> <new_crush_rule> <dividing_bucket>
 
 Subcommand ``remove`` removes monitor named <name>.
 
