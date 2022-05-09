@@ -30,7 +30,6 @@
 
 using namespace std::literals;
 namespace bpo = boost::program_options;
-using config_t = crimson::common::ConfigProxy;
 using std::string;
 
 seastar::logger& logger() {
