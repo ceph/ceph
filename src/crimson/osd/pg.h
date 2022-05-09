@@ -781,6 +781,10 @@ struct PG::do_osd_ops_params_t {
   uint64_t get_features() const {
     return features;
   }
+  // Only used by InternalClientRequest, no op flags
+  bool has_flag(uint32_t flag) const {
+    return false;
+ }
   crimson::net::ConnectionRef conn;
   osd_reqid_t reqid;
   utime_t mtime;
