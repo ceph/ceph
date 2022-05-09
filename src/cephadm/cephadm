@@ -4466,7 +4466,7 @@ def _parse_yaml_docs(f: Iterable[str]) -> List[List[str]]:
     docs = []
     current_doc = []  # type: List[str]
     for line in f:
-        if '---' in line:
+        if re.search(r'^---\s+', line):
             if current_doc:
                 docs.append(current_doc)
             current_doc = []
