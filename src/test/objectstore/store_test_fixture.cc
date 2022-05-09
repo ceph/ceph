@@ -12,6 +12,9 @@
 #include "os/bluestore/BlueStore.h"
 #endif
 #include "store_test_fixture.h"
+#if defined(WITH_XSTORE)
+#include "xstore-crimson.h"
+#endif
 
 using namespace std;
 
