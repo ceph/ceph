@@ -88,9 +88,12 @@ void segments_info_t::reset()
   num_empty = 0;
   num_closed = 0;
 
-  count_open = 0;
-  count_release = 0;
-  count_close = 0;
+  count_open_journal = 0;
+  count_open_ool = 0;
+  count_release_journal = 0;
+  count_release_ool = 0;
+  count_close_journal = 0;
+  count_close_ool = 0;
 
   total_bytes = 0;
   avail_bytes_in_open = 0;
@@ -147,7 +150,7 @@ void segments_info_t::init_closed(
   } else {
     ++num_type_ool;
   }
-  // do not increment count_close;
+  // do not increment count_close_*;
 }
 
 void segments_info_t::mark_open(
@@ -174,12 +177,13 @@ void segments_info_t::mark_open(
 
     ++num_in_journal_open;
     ++num_type_journal;
+    ++count_open_journal;
   } else {
     ++num_type_ool;
+    ++count_open_ool;
   }
   ceph_assert(segment_info.written_to == 0);
   avail_bytes_in_open += get_segment_size();
-  ++count_open;
 }
 
 void segments_info_t::mark_empty(
@@ -200,11 +204,12 @@ void segments_info_t::mark_empty(
   if (type == segment_type_t::JOURNAL) {
     ceph_assert(num_type_journal > 0);
     --num_type_journal;
+    ++count_release_journal;
   } else {
     ceph_assert(num_type_ool > 0);
     --num_type_ool;
+    ++count_release_ool;
   }
-  ++count_release;
 }
 
 void segments_info_t::mark_closed(
@@ -223,12 +228,14 @@ void segments_info_t::mark_closed(
   if (segment_info.type == segment_type_t::JOURNAL) {
     ceph_assert(num_in_journal_open > 0);
     --num_in_journal_open;
+    ++count_close_journal;
+  } else {
+    ++count_close_ool;
   }
   ceph_assert(get_segment_size() >= segment_info.written_to);
   auto seg_avail_bytes = get_segment_size() - segment_info.written_to;
   ceph_assert(avail_bytes_in_open >= seg_avail_bytes);
   avail_bytes_in_open -= seg_avail_bytes;
-  ++count_close;
 }
 
 void segments_info_t::update_written_to(
@@ -457,15 +464,24 @@ void SegmentCleaner::register_metrics()
 		     [this] { return segments.get_num_closed(); },
 		     sm::description("the number of closed segments")),
 
-    sm::make_counter("segments_count_open",
-		     [this] { return segments.get_count_open(); },
-		     sm::description("the count of open segment operations")),
-    sm::make_counter("segments_count_release",
-		     [this] { return segments.get_count_release(); },
-		     sm::description("the count of release segment operations")),
-    sm::make_counter("segments_count_close",
-		     [this] { return segments.get_count_close(); },
-		     sm::description("the count of close segment operations")),
+    sm::make_counter("segments_count_open_journal",
+		     [this] { return segments.get_count_open_journal(); },
+		     sm::description("the count of open journal segment operations")),
+    sm::make_counter("segments_count_open_ool",
+		     [this] { return segments.get_count_open_ool(); },
+		     sm::description("the count of open ool segment operations")),
+    sm::make_counter("segments_count_release_journal",
+		     [this] { return segments.get_count_release_journal(); },
+		     sm::description("the count of release journal segment operations")),
+    sm::make_counter("segments_count_release_ool",
+		     [this] { return segments.get_count_release_ool(); },
+		     sm::description("the count of release ool segment operations")),
+    sm::make_counter("segments_count_close_journal",
+		     [this] { return segments.get_count_close_journal(); },
+		     sm::description("the count of close journal segment operations")),
+    sm::make_counter("segments_count_close_ool",
+		     [this] { return segments.get_count_close_ool(); },
+		     sm::description("the count of close ool segment operations")),
 
     sm::make_counter("total_bytes",
 		     [this] { return segments.get_total_bytes(); },

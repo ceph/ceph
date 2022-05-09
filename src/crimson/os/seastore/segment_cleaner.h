@@ -132,14 +132,23 @@ public:
   std::size_t get_num_closed() const {
     return num_closed;
   }
-  std::size_t get_count_open() const {
-    return count_open;
+  std::size_t get_count_open_journal() const {
+    return count_open_journal;
   }
-  std::size_t get_count_release() const {
-    return count_release;
+  std::size_t get_count_open_ool() const {
+    return count_open_ool;
   }
-  std::size_t get_count_close() const {
-    return count_close;
+  std::size_t get_count_release_journal() const {
+    return count_release_journal;
+  }
+  std::size_t get_count_release_ool() const {
+    return count_release_ool;
+  }
+  std::size_t get_count_close_journal() const {
+    return count_close_journal;
+  }
+  std::size_t get_count_close_ool() const {
+    return count_close_ool;
   }
 
   std::size_t get_total_bytes() const {
@@ -212,9 +221,12 @@ private:
   std::size_t num_empty;
   std::size_t num_closed;
 
-  std::size_t count_open;
-  std::size_t count_release;
-  std::size_t count_close;
+  std::size_t count_open_journal;
+  std::size_t count_open_ool;
+  std::size_t count_release_journal;
+  std::size_t count_release_ool;
+  std::size_t count_close_journal;
+  std::size_t count_close_ool;
 
   std::size_t total_bytes;
   std::size_t avail_bytes_in_open;
