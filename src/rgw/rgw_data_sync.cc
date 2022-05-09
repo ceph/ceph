@@ -1391,7 +1391,6 @@ public:
   }
 };
 
-#define BUCKET_SHARD_SYNC_SPAWN_WINDOW 20
 #define DATA_SYNC_MAX_ERR_ENTRIES 10
 
 class RGWDataSyncShardCR : public RGWCoroutine {
@@ -1429,7 +1428,6 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   set<string>::iterator modified_iter;
 
   uint64_t total_entries = 0;
-  static constexpr int spawn_window = BUCKET_SHARD_SYNC_SPAWN_WINDOW;
   bool *reset_backoff = nullptr;
 
   boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
@@ -1592,17 +1590,11 @@ public:
             tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
-            spawn(sync_single_entry(source_bs, iter->first, iter->first,
-                                    entry_timestamp, false), false);
+            yield_spawn_window(sync_single_entry(source_bs, iter->first, iter->first,
+                                                 entry_timestamp, false),
+                               cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
           }
           sync_marker.marker = iter->first;
-
-          drain_all_but_stack_cb(lease_stack.get(),
-                                 [&](uint64_t stack_id, int ret) {
-                                   if (ret < 0) {
-                                     tn->log(10, "a sync operation returned error");
-                                   }
-                                 });
         }
       } while (omapvals->more);
       omapvals.reset();
@@ -1747,16 +1739,10 @@ public:
           if (!marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << log_iter->log_id << ". Duplicate entry?"));
           } else {
-            spawn(sync_single_entry(source_bs, log_iter->entry.key, log_iter->log_id,
-                                    log_iter->log_timestamp, false), false);
+            yield_spawn_window(sync_single_entry(source_bs, log_iter->entry.key, log_iter->log_id,
+                                                 log_iter->log_timestamp, false),
+                               cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
           }
-
-          drain_all_but_stack_cb(lease_stack.get(),
-                                 [&](uint64_t stack_id, int ret) {
-                                   if (ret < 0) {
-                                     tn->log(10, "a sync operation returned error");
-                                   }
-                                 });
         }
 
         tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker
@@ -1777,8 +1763,7 @@ public:
   }
 
   utime_t get_idle_interval() const {
-#define INCREMENTAL_INTERVAL 20
-    ceph::timespan interval = std::chrono::seconds(INCREMENTAL_INTERVAL);
+    ceph::timespan interval = std::chrono::seconds(cct->_conf->rgw_data_sync_poll_interval);
     if (!ceph::coarse_real_clock::is_zero(error_retry_time)) {
       auto now = ceph::coarse_real_clock::now();
       if (error_retry_time > now) {
@@ -3819,7 +3804,7 @@ int RGWBucketShardFullSyncCR::operate(const DoutPrefixProvider *dpp)
                                  entry->key, &marker_tracker, zones_trace, tn),
                       false);
         }
-        drain_with_cb(BUCKET_SYNC_SPAWN_WINDOW,
+        drain_with_cb(cct->_conf->rgw_bucket_sync_spawn_window,
                       [&](uint64_t stack_id, int ret) {
                 if (ret < 0) {
                   tn->log(10, "a sync operation returned error");
@@ -4116,7 +4101,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
                   false);
           }
         // }
-        drain_with_cb(BUCKET_SYNC_SPAWN_WINDOW,
+        drain_with_cb(cct->_conf->rgw_bucket_sync_spawn_window,
                       [&](uint64_t stack_id, int ret) {
                 if (ret < 0) {
                   tn->log(10, "a sync operation returned error");

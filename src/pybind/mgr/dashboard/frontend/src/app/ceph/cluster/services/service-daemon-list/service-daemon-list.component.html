@@ -1,13 +1,7 @@
 <cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
 
 <div *ngIf="flag === 'hostDetails'; else serviceDetailsTpl">
-  <cd-table *ngIf="hasOrchestrator"
-            #daemonsTable
-            [data]="daemons"
-            [columns]="columns"
-            columnMode="flex"
-            (fetchData)="getDaemons($event)">
-  </cd-table>
+  <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
 </div>
 
 <ng-template #serviceDetailsTpl>
@@ -20,22 +14,7 @@
         <a ngbNavLink
            i18n>Details</a>
         <ng-template ngbNavContent>
-          <cd-table *ngIf="hasOrchestrator"
-                    #daemonsTable
-                    [data]="daemons"
-                    selectionType="single"
-                    [columns]="columns"
-                    columnMode="flex"
-                    identifier="daemon_id"
-                    (fetchData)="getDaemons($event)"
-                    (updateSelection)="updateSelection($event)">
-            <cd-table-actions id="service-daemon-list-actions"
-                              class="table-actions"
-                              [selection]="selection"
-                              [permission]="permissions.hosts"
-                              [tableActions]="tableActions">
-            </cd-table-actions>
-          </cd-table>
+          <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
         </ng-template>
       </li>
       <li ngbNavItem="service_events">
@@ -88,4 +67,23 @@
       <span>No data available</span>
     </div>
   </ng-template>
+</ng-template>
+
+<ng-template #serviceDaemonDetailsTpl>
+  <cd-table *ngIf="hasOrchestrator"
+            #daemonsTable
+            [data]="daemons"
+            selectionType="single"
+            [columns]="columns"
+            columnMode="flex"
+            identifier="daemon_name"
+            (fetchData)="getDaemons($event)"
+            (updateSelection)="updateSelection($event)">
+    <cd-table-actions id="service-daemon-list-actions"
+                      class="table-actions"
+                      [selection]="selection"
+                      [permission]="permissions.hosts"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+  </cd-table>
 </ng-template>

@@ -179,7 +179,6 @@ class Pool(RESTController):
         self._wait_for_pgs(pool)
 
     def _set_pool_values(self, pool, application_metadata, flags, update_existing, kwargs):
-        update_name = False
         current_pool = self._get(pool)
         if update_existing and kwargs.get('compression_mode') == 'unset':
             self._prepare_compression_removal(current_pool.get('options'), kwargs)
@@ -187,29 +186,32 @@ class Pool(RESTController):
             CephService.send_command('mon', 'osd pool set', pool=pool, var='allow_ec_overwrites',
                                      val='true')
         if application_metadata is not None:
-            def set_app(what, app):
-                CephService.send_command('mon', 'osd pool application ' + what, pool=pool, app=app,
-                                         yes_i_really_mean_it=True)
+            def set_app(app_metadata, set_app_what):
+                for app in app_metadata:
+                    CephService.send_command('mon', 'osd pool application ' + set_app_what,
+                                             pool=pool, app=app, yes_i_really_mean_it=True)
+
             if update_existing:
                 original_app_metadata = set(
                     cast(Iterable[Any], current_pool.get('application_metadata')))
             else:
                 original_app_metadata = set()
 
-            for app in original_app_metadata - set(application_metadata):
-                set_app('disable', app)
-            for app in set(application_metadata) - original_app_metadata:
-                set_app('enable', app)
-
-        def set_key(key, value):
-            CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=str(value))
+            set_app(original_app_metadata - set(application_metadata), 'disable')
+            set_app(set(application_metadata) - original_app_metadata, 'enable')
 
         quotas = {}
         quotas['max_objects'] = kwargs.pop('quota_max_objects', None)
         quotas['max_bytes'] = kwargs.pop('quota_max_bytes', None)
         self._set_quotas(pool, quotas)
+        self._set_pool_keys(pool, kwargs)
 
-        for key, value in kwargs.items():
+    def _set_pool_keys(self, pool, pool_items):
+        def set_key(key, value):
+            CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=str(value))
+
+        update_name = False
+        for key, value in pool_items.items():
             if key == 'pool':
                 update_name = True
                 destpool = value

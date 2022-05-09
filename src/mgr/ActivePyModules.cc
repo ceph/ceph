@@ -97,6 +97,7 @@ void ActivePyModules::dump_server(const std::string &hostname,
     f->open_object_section("service");
     f->dump_string("type", key.type);
     f->dump_string("id", key.name);
+    f->dump_string("ceph_version", ceph_version);
     if (!id.empty()) {
       f->dump_string("name", id);
     }

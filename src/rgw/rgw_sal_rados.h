@@ -37,23 +37,76 @@ class RadosCompletions : public Completions {
     virtual int drain() override;
 };
 
+class RadosPlacementTier: public PlacementTier {
+  RadosStore* store;
+  RGWZoneGroupPlacementTier tier;
+public:
+  RadosPlacementTier(RadosStore* _store, const RGWZoneGroupPlacementTier& _tier) : store(_store), tier(_tier) {}
+  virtual ~RadosPlacementTier() = default;
+
+  virtual const std::string& get_tier_type() { return tier.tier_type; }
+  virtual const std::string& get_storage_class() { return tier.storage_class; }
+  virtual bool retain_head_object() { return tier.retain_head_object; }
+  RGWZoneGroupPlacementTier& get_rt() { return tier; }
+};
+
+class RadosZoneGroup : public ZoneGroup {
+  RadosStore* store;
+  const RGWZoneGroup group;
+  std::string empty;
+public:
+  RadosZoneGroup(RadosStore* _store, const RGWZoneGroup& _group) : store(_store), group(_group) {}
+  virtual ~RadosZoneGroup() = default;
+
+  virtual const std::string& get_id() const override { return group.get_id(); };
+  virtual const std::string& get_name() const override { return group.get_name(); };
+  virtual int equals(const std::string& other_zonegroup) const override {
+    return group.equals(other_zonegroup);
+  };
+  /** Get the endpoint from zonegroup, or from master zone if not set */
+  virtual const std::string& get_endpoint() const override;
+  virtual bool placement_target_exists(std::string& target) const override;
+  virtual bool is_master_zonegroup() const override {
+    return group.is_master_zonegroup();
+  };
+  virtual const std::string& get_api_name() const override { return group.api_name; };
+  virtual int get_placement_target_names(std::set<std::string>& names) const override;
+  virtual const std::string& get_default_placement_name() const override {
+    return group.default_placement.name; };
+  virtual int get_hostnames(std::list<std::string>& names) const override {
+    names = group.hostnames;
+    return 0;
+  };
+  virtual int get_s3website_hostnames(std::list<std::string>& names) const override {
+    names = group.hostnames_s3website;
+    return 0;
+  };
+  virtual int get_zone_count() const override {
+    return group.zones.size();
+  }
+  virtual int get_placement_tier(const rgw_placement_rule& rule, std::unique_ptr<PlacementTier>* tier);
+  const RGWZoneGroup& get_group() { return group; }
+};
+
 class RadosZone : public Zone {
   protected:
     RadosStore* store;
+    RadosZoneGroup group;
   public:
-    RadosZone(RadosStore* _store) : store(_store) {}
+    RadosZone(RadosStore* _store, RadosZoneGroup _zg) : store(_store), group(_zg) {}
     ~RadosZone() = default;
 
-    virtual const RGWZoneGroup& get_zonegroup() override;
-    virtual int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) override;
-    virtual const RGWZoneParams& get_params() override;
+    virtual ZoneGroup& get_zonegroup() override;
+    virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
     virtual const rgw_zone_id& get_id() override;
-    virtual const RGWRealm& get_realm() override;
     virtual const std::string& get_name() const override;
     virtual bool is_writeable() override;
     virtual bool get_redirect_endpoint(std::string* endpoint) override;
     virtual bool has_zonegroup_api(const std::string& api) const override;
     virtual const std::string& get_current_period_id() override;
+    virtual const RGWAccessKey& get_system_key() override;
+    virtual const std::string& get_realm_name() override;
+    virtual const std::string& get_realm_id() override;
 };
 
 class RadosStore : public Store {
@@ -61,17 +114,18 @@ class RadosStore : public Store {
     RGWRados* rados;
     RGWUserCtl* user_ctl;
     std::string luarocks_path;
-    RadosZone zone;
+    std::unique_ptr<RadosZone> zone;
 
   public:
     RadosStore()
-      : rados(nullptr), zone(this) {
+      : rados(nullptr) {
       }
     ~RadosStore() {
       delete rados;
     }
 
-    virtual const char* get_name() const override {
+    virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
+    virtual const std::string get_name() const override {
       return "rados";
     }
     virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) override;
@@ -87,7 +141,7 @@ class RadosStore : public Store {
     virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
 					  bufferlist& in_data, JSONParser* jp, req_info& info,
 					  optional_yield y) override;
-    virtual Zone* get_zone() { return &zone; }
+    virtual Zone* get_zone() { return zone.get(); }
     virtual std::string zone_unique_id(uint64_t unique_num) override;
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
@@ -105,7 +159,7 @@ class RadosStore : public Store {
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
     virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
 				const std::map<std::string, std::string>& meta) override;
-    virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
+    virtual void get_quota(RGWQuota& quota) override;
     virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled) override;
     virtual uint64_t get_new_req_id() override { return rados->get_new_req_id(); }
@@ -163,6 +217,8 @@ class RadosStore : public Store {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
+    virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
+    virtual bool valid_placement(const rgw_placement_rule& rule) override;
 
     virtual void finalize(void) override;
 
@@ -364,6 +420,14 @@ class RadosObject : public Object {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override;
+    virtual int transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y) override;
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
@@ -396,6 +460,13 @@ class RadosObject : public Object {
 			   uint64_t* alignment = nullptr);
     void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t* max_size);
     void raw_obj_to_obj(const rgw_raw_obj& raw_obj);
+    int write_cloud_tier(const DoutPrefixProvider* dpp,
+			   optional_yield y,
+			   uint64_t olh_epoch,
+			   rgw::sal::PlacementTier* tier,
+			   bool is_multipart_upload,
+			   rgw_placement_rule& target_placement,
+			   Object* head_obj);
     RGWObjManifest* get_manifest() { return manifest; }
     RGWObjectCtx& get_ctx() { return *rados_ctx; }
 
@@ -481,7 +552,7 @@ class RadosBucket : public Bucket {
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(User* user) override;
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
-    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
+    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
     virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) override;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -795,10 +866,7 @@ class RadosLuaScriptManager : public LuaScriptManager {
   rgw_pool pool;
 
 public:
-  RadosLuaScriptManager(RadosStore* _s) : store(_s)
-  {
-    pool = store->get_zone()->get_params().log_pool;
-  }
+  RadosLuaScriptManager(RadosStore* _s);
   virtual ~RadosLuaScriptManager() = default;
 
   virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;

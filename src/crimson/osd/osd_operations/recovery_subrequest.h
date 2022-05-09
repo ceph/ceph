@@ -15,7 +15,7 @@ namespace crimson::osd {
 class OSD;
 class PG;
 
-class RecoverySubRequest final : public OperationT<RecoverySubRequest> {
+class RecoverySubRequest final : public TrackableOperationT<RecoverySubRequest> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::background_recovery_sub;
 
@@ -36,6 +36,14 @@ private:
   OSD& osd;
   crimson::net::ConnectionRef conn;
   Ref<MOSDFastDispatchOp> m;
+
+public:
+  std::tuple<
+    StartEvent,
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
+    PGMap::PGCreationBlockingEvent,
+    CompletionEvent
+  > tracking_events;
 };
 
 }

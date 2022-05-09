@@ -2965,6 +2965,19 @@ void Monitor::log_health(
   }
 }
 
+void Monitor::update_pending_metadata()
+{
+  Metadata metadata;
+  collect_metadata(&metadata);
+  size_t version_size = mon_metadata[rank]["ceph_version_short"].size();
+  const std::string current_version = mon_metadata[rank]["ceph_version_short"];
+  const std::string pending_version = metadata["ceph_version_short"];
+
+  if (current_version.compare(0, version_size, pending_version) < 0) {
+    mgr_client.update_daemon_metadata("mon", name, metadata);
+  }
+}
+
 void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
 				 MonSession *session)
 {
@@ -3424,7 +3437,15 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   // validate user's permissions for requested command
   map<string,string> param_str_map;
-  _generate_command_map(cmdmap, param_str_map);
+
+  // Catch bad_cmd_get exception if _generate_command_map() throws it
+  try {
+    _generate_command_map(cmdmap, param_str_map);
+  }
+  catch(bad_cmd_get& e) {
+    reply_command(op, -EINVAL, e.what(), 0);
+  }
+
   if (!_allowed_command(session, service, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;

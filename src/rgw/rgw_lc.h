@@ -229,7 +229,7 @@ protected:
 public:
 
   LCRule(){};
-  ~LCRule(){};
+  virtual ~LCRule() {}
 
   const std::string& get_id() const {
       return id;
@@ -498,7 +498,7 @@ public:
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);
     std::set<std::string>& get_cloud_targets() { return cloud_targets; }
-    ~LCWorker();
+    virtual ~LCWorker() override;
 
     friend class RGWRados;
     friend class RGWLC;
@@ -510,7 +510,7 @@ public:
   std::vector<std::unique_ptr<RGWLC::LCWorker>> workers;
 
   RGWLC() : cct(nullptr), store(nullptr) {}
-  ~RGWLC();
+  virtual ~RGWLC() override;
 
   void initialize(CephContext *_cct, rgw::sal::Store* _store);
   void finalize();

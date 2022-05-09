@@ -23,10 +23,13 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+#if defined(__linux__)
 #include <libgen.h>
 #include <sys/vfs.h>
 #include <sys/xattr.h>
 #include <linux/magic.h>
+#endif
 
 // ceph
 #include "common/errno.h"
@@ -57,11 +60,13 @@
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
 
+#if defined(__linux__)
 #ifndef FUSE_SUPER_MAGIC
 #define FUSE_SUPER_MAGIC 0x65735546
 #endif
 
 #define _CEPH_CLIENT_ID	"ceph.client_id"
+#endif
 
 using namespace std;
 
@@ -173,6 +178,7 @@ public:
   struct fuse_args args;
 };
 
+#if defined(__linux__)
 static int already_fuse_mounted(const char *path, bool &already_mounted)
 {
   struct statx path_statx;
@@ -242,6 +248,13 @@ static int already_fuse_mounted(const char *path, bool &already_mounted)
 
   return err;
 }
+#else // non-linux platforms
+static int already_fuse_mounted(const char *path, bool &already_mounted)
+{
+  already_mounted = false;
+  return 0;
+}
+#endif
 
 static int getgroups(fuse_req_t req, gid_t **sgids)
 {

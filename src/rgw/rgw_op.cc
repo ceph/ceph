@@ -531,19 +531,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 
     s->bucket_owner = s->bucket_acl->get_owner();
 
-    RGWZoneGroup zonegroup;
-    int r = store->get_zone()->get_zonegroup(s->bucket->get_info().zonegroup, zonegroup);
+    std::unique_ptr<rgw::sal::ZoneGroup> zonegroup;
+    int r = store->get_zone()->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
     if (!r) {
-      if (!zonegroup.endpoints.empty()) {
-	s->zonegroup_endpoint = zonegroup.endpoints.front();
-      } else {
-        // use zonegroup's master zone endpoints
-        auto z = zonegroup.zones.find(zonegroup.master_zone);
-        if (z != zonegroup.zones.end() && !z->second.endpoints.empty()) {
-          s->zonegroup_endpoint = z->second.endpoints.front();
-        }
-      }
-      s->zonegroup_name = zonegroup.get_name();
+      s->zonegroup_endpoint = zonegroup->get_endpoint();
+      s->zonegroup_name = zonegroup->get_name();
     }
     if (r < 0 && ret == 0) {
       ret = r;
@@ -571,7 +563,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     s->dest_placement.storage_class = s->info.storage_class;
     s->dest_placement.inherit_from(s->bucket->get_placement_rule());
 
-    if (!store->get_zone()->get_params().valid_placement(s->dest_placement)) {
+    if (!store->valid_placement(s->dest_placement)) {
       ldpp_dout(dpp, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
       return -EINVAL;
     }
@@ -1365,18 +1357,19 @@ int RGWOp::init_quota()
     if (r < 0)
       return r;
     user = owner_user.get();
+    
   }
 
-  store->get_quota(bucket_quota, user_quota);
+  store->get_quota(quota);
 
   if (s->bucket->get_info().quota.enabled) {
-    bucket_quota = s->bucket->get_info().quota;
-  } else if (user->get_info().bucket_quota.enabled) {
-    bucket_quota = user->get_info().bucket_quota;
+    quota.bucket_quota = s->bucket->get_info().quota;
+  } else if (user->get_info().quota.bucket_quota.enabled) {
+    quota.bucket_quota = user->get_info().quota.bucket_quota;
   }
 
-  if (user->get_info().user_quota.enabled) {
-    user_quota = user->get_info().user_quota;
+  if (user->get_info().quota.user_quota.enabled) {
+    quota.user_quota = user->get_info().quota.user_quota;
   }
 
   return 0;
@@ -1537,6 +1530,29 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   get_cors_response_headers(this, rule, req_hdrs, headers, exp_headers, max_age);
 
   return true;
+}
+
+int rgw_policy_from_attrset(const DoutPrefixProvider *dpp, CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy)
+{
+  map<string, bufferlist>::iterator aiter = attrset.find(RGW_ATTR_ACL);
+  if (aiter == attrset.end())
+    return -EIO;
+
+  bufferlist& bl = aiter->second;
+  auto iter = bl.cbegin();
+  try {
+    policy->decode(iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
+    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
+    ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";
+    s3policy->to_xml(*_dout);
+    *_dout << dendl;
+  }
+  return 0;
 }
 
 int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
@@ -2397,9 +2413,11 @@ void RGWListBuckets::execute(optional_yield y)
     /* We need to have stats for all our policies - even if a given policy
      * isn't actually used in a given account. In such situation its usage
      * stats would be simply full of zeros. */
-    for (const auto& policy : store->get_zone()->get_zonegroup().placement_targets) {
-      policies_stats.emplace(policy.second.name,
-                             decltype(policies_stats)::mapped_type());
+    std::set<std::string> targets;
+    if (store->get_zone()->get_zonegroup().get_placement_target_names(targets)) {
+      for (const auto& policy : targets) {
+	policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
+      }
     }
 
     std::map<std::string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();
@@ -2538,9 +2556,10 @@ void RGWStatAccount::execute(optional_yield y)
       /* We need to have stats for all our policies - even if a given policy
        * isn't actually used in a given account. In such situation its usage
        * stats would be simply full of zeros. */
-      for (const auto& policy : store->get_zone()->get_zonegroup().placement_targets) {
-        policies_stats.emplace(policy.second.name,
-                               decltype(policies_stats)::mapped_type());
+      std::set<std::string> names;
+      store->get_zone()->get_zonegroup().get_placement_target_names(names);
+      for (const auto& policy : names) {
+        policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
       }
 
       std::map<std::string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();
@@ -3164,7 +3183,6 @@ void RGWCreateBucket::execute(optional_yield y)
   buffer::list aclbl;
   buffer::list corsbl;
   string bucket_name = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
-  rgw_raw_obj obj(store->get_zone()->get_params().domain_root, bucket_name);
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -3181,21 +3199,22 @@ void RGWCreateBucket::execute(optional_yield y)
   }
 
   if (!relaxed_region_enforcement && !store->get_zone()->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
-      store->get_zone()->get_zonegroup().api_name != location_constraint) {
+      store->get_zone()->get_zonegroup().get_api_name() != location_constraint) {
     ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
-                     << " doesn't match zonegroup" << " (" << store->get_zone()->get_zonegroup().api_name << ")"
+                     << " doesn't match zonegroup" << " (" << store->get_zone()->get_zonegroup().get_api_name() << ")"
                      << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
     s->err.message = "The specified location-constraint is not valid";
     return;
   }
 
-  const auto& zonegroup = store->get_zone()->get_zonegroup();
+  std::set<std::string> names;
+  store->get_zone()->get_zonegroup().get_placement_target_names(names);
   if (!placement_rule.name.empty() &&
-      !zonegroup.placement_targets.count(placement_rule.name)) {
+      !names.count(placement_rule.name)) {
     ldpp_dout(this, 0) << "placement target (" << placement_rule.name << ")"
                      << " doesn't exist in the placement targets of zonegroup"
-                     << " (" << store->get_zone()->get_zonegroup().api_name << ")" << dendl;
+                     << " (" << store->get_zone()->get_zonegroup().get_api_name() << ")" << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
     s->err.message = "The specified placement target does not exist";
     return;
@@ -3424,6 +3443,11 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
+  op_ret = rgw_remove_sse_s3_bucket_key(s);
+  if (op_ret != 0) {
+      // do nothing; it will already have been logged
+  }
+
   op_ret = s->bucket->remove_bucket(this, false, false, nullptr, y);
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
@@ -3628,15 +3652,15 @@ int RGWPutObj::verify_permission(optional_yield y)
 
     constexpr auto encrypt_attr = "x-amz-server-side-encryption";
     constexpr auto s3_encrypt_attr = "s3:x-amz-server-side-encryption";
-    auto enc_header = s->info.x_meta_map.find(encrypt_attr);
-    if (enc_header != s->info.x_meta_map.end()){
+    auto enc_header = s->info.crypt_attribute_map.find(encrypt_attr);
+    if (enc_header != s->info.crypt_attribute_map.end()){
       rgw_add_to_iam_environment(s->env, s3_encrypt_attr, enc_header->second);
     }
 
     constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
     constexpr auto s3_kms_attr = "s3:x-amz-server-side-encryption-aws-kms-key-id";
-    auto kms_header = s->info.x_meta_map.find(kms_attr);
-    if (kms_header != s->info.x_meta_map.end()){
+    auto kms_header = s->info.crypt_attribute_map.find(kms_attr);
+    if (kms_header != s->info.crypt_attribute_map.end()){
       rgw_add_to_iam_environment(s->env, s3_kms_attr, kms_header->second);
     }
 
@@ -3878,7 +3902,7 @@ void RGWPutObj::execute(optional_yield y)
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    op_ret = s->bucket->check_quota(this, user_quota, bucket_quota, s->content_length, y);
+    op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
@@ -4013,7 +4037,7 @@ void RGWPutObj::execute(optional_yield y)
   // no filters by default
   rgw::sal::DataProcessor *filter = processor.get();
 
-  const auto& compression_type = store->get_zone()->get_params().get_compression_type(*pdest_placement);
+  const auto& compression_type = store->get_compression_type(*pdest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -4101,7 +4125,7 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
-  op_ret = s->bucket->check_quota(this, user_quota, bucket_quota, s->obj_size, y);
+  op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     return;
@@ -4321,7 +4345,7 @@ void RGWPostObj::execute(optional_yield y)
     ceph::buffer::list bl, aclbl;
     int len = 0;
 
-    op_ret = s->bucket->check_quota(this, user_quota, bucket_quota, s->content_length, y);
+    op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
     if (op_ret < 0) {
       return;
     }
@@ -4370,8 +4394,7 @@ void RGWPostObj::execute(optional_yield y)
     if (encrypt != nullptr) {
       filter = encrypt.get();
     } else {
-      const auto& compression_type = store->get_zone()->get_params().get_compression_type(
-          s->dest_placement);
+      const auto& compression_type = store->get_compression_type(s->dest_placement);
       if (compression_type != "none") {
         plugin = Compressor::create(s->cct, compression_type);
         if (!plugin) {
@@ -4427,7 +4450,7 @@ void RGWPostObj::execute(optional_yield y)
     s->object->set_obj_size(ofs);
 
 
-    op_ret = s->bucket->check_quota(this, user_quota, bucket_quota, s->obj_size, y);
+    op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
     if (op_ret < 0) {
       return;
     }
@@ -4603,7 +4626,7 @@ void RGWPutMetadataAccount::execute(optional_yield y)
 
   /* Handle the quota extracted at the verify_permission step. */
   if (new_quota_extracted) {
-    s->user->get_info().user_quota = std::move(new_quota);
+    s->user->get_info().quota.user_quota = std::move(new_quota);
   }
 
   /* We are passing here the current (old) user info to allow the function
@@ -5454,8 +5477,7 @@ void RGWCopyObj::execute(optional_yield y)
         return;
       }
       // enforce quota against the destination bucket owner
-      op_ret = dest_bucket->check_quota(this, user_quota, bucket_quota,
-				      astate->accounted_size, y);
+      op_ret = dest_bucket->check_quota(this, quota, astate->accounted_size, y);
       if (op_ret < 0) {
         return;
       }
@@ -5774,23 +5796,23 @@ void RGWPutLC::execute(optional_yield y)
   RGWXMLParser parser;
   RGWLifecycleConfiguration_S3 new_config(s->cct);
 
-  content_md5 = s->info.env->get("HTTP_CONTENT_MD5");
-  if (content_md5 == nullptr) {
-    op_ret = -ERR_INVALID_REQUEST;
-    s->err.message = "Missing required header for this request: Content-MD5";
-    ldpp_dout(this, 5) << s->err.message << dendl;
-    return;
-  }
+  // amazon says that Content-MD5 is required for this op specifically, but MD5
+  // is not a security primitive and FIPS mode makes it difficult to use. if the
+  // client provides the header we'll try to verify its checksum, but the header
+  // itself is no longer required
+  std::optional<std::string> content_md5_bin;
 
-  std::string content_md5_bin;
-  try {
-    content_md5_bin = rgw::from_base64(std::string_view(content_md5));
-  } catch (...) {
-    s->err.message = "Request header Content-MD5 contains character "
-                     "that is not base64 encoded.";
-    ldpp_dout(this, 5) << s->err.message << dendl;
-    op_ret = -ERR_BAD_DIGEST;
-    return;
+  content_md5 = s->info.env->get("HTTP_CONTENT_MD5");
+  if (content_md5 != nullptr) {
+    try {
+      content_md5_bin = rgw::from_base64(std::string_view(content_md5));
+    } catch (...) {
+      s->err.message = "Request header Content-MD5 contains character "
+                       "that is not base64 encoded.";
+      ldpp_dout(this, 5) << s->err.message << dendl;
+      op_ret = -ERR_BAD_DIGEST;
+      return;
+    }
   }
 
   if (!parser.init()) {
@@ -5805,21 +5827,23 @@ void RGWPutLC::execute(optional_yield y)
   char* buf = data.c_str();
   ldpp_dout(this, 15) << "read len=" << data.length() << " data=" << (buf ? buf : "") << dendl;
 
-  MD5 data_hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  data_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-  unsigned char data_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  data_hash.Update(reinterpret_cast<const unsigned char*>(buf), data.length());
-  data_hash.Final(data_hash_res);
+  if (content_md5_bin) {
+    MD5 data_hash;
+    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+    data_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+    unsigned char data_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    data_hash.Update(reinterpret_cast<const unsigned char*>(buf), data.length());
+    data_hash.Final(data_hash_res);
 
-  if (memcmp(data_hash_res, content_md5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
-    op_ret = -ERR_BAD_DIGEST;
-    s->err.message = "The Content-MD5 you specified did not match what we received.";
-    ldpp_dout(this, 5) << s->err.message
-                     << " Specified content md5: " << content_md5
-                     << ", calculated content md5: " << data_hash_res
-                     << dendl;
-    return;
+    if (memcmp(data_hash_res, content_md5_bin->c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
+      op_ret = -ERR_BAD_DIGEST;
+      s->err.message = "The Content-MD5 you specified did not match what we received.";
+      ldpp_dout(this, 5) << s->err.message
+                       << " Specified content md5: " << content_md5
+                       << ", calculated content md5: " << data_hash_res
+                       << dendl;
+      return;
+    }
   }
 
   if (!parser.parse(buf, data.length(), 1)) {
@@ -7252,9 +7276,6 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
   rgw_obj_key object_junk;
   std::tie(bucket_name, object_junk) =  *parse_path(path);
 
-  rgw_raw_obj obj(store->get_zone()->get_params().domain_root,
-                  rgw_make_bucket_entry_name(s->bucket_tenant, bucket_name));
-
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -7398,7 +7419,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  op_ret = bucket->check_quota(this, user_quota, bucket_quota, size, y);
+  op_ret = bucket->check_quota(this, quota, size, y);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -7423,8 +7444,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   /* No filters by default. */
   rgw::sal::DataProcessor *filter = processor.get();
 
-  const auto& compression_type = store->get_zone()->get_params().get_compression_type(
-      dest_placement);
+  const auto& compression_type = store->get_compression_type(dest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
   if (compression_type != "none") {
@@ -7477,7 +7497,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     return op_ret;
   }
 
-  op_ret = bucket->check_quota(this, user_quota, bucket_quota, size, y);
+  op_ret = bucket->check_quota(this, quota, size, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "quota exceeded for path=" << path << dendl;
     return op_ret;
@@ -8640,36 +8660,17 @@ void RGWPutBucketEncryption::execute(optional_yield y)
     return;
   }
 
-  if(bucket_encryption_conf.kms_master_key_id().compare("") != 0) {
-    ldpp_dout(this, 5) << "encryption not supported with sse-kms" << dendl;
-    op_ret = -ERR_NOT_IMPLEMENTED;
-    s->err.message = "SSE-KMS support is not provided";
-    return;
-  }
-
-  if(bucket_encryption_conf.sse_algorithm().compare("AES256") != 0) {
-    ldpp_dout(this, 5) << "only aes256 algorithm is supported for encryption" << dendl;
-    op_ret = -ERR_NOT_IMPLEMENTED;
-    s->err.message = "Encryption is supported only with AES256 algorithm";
-    return;
-  }
-
   op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
 
-  bufferlist key_id_bl;
-  string bucket_owner_id = s->bucket->get_info().owner.id;
-  key_id_bl.append(bucket_owner_id.c_str(), bucket_owner_id.size() + 1);
-
   bufferlist conf_bl;
   bucket_encryption_conf.encode(conf_bl);
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y, &conf_bl, &key_id_bl] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y, &conf_bl] {
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY] = conf_bl;
-    attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = key_id_bl;
     return s->bucket->merge_and_store_attrs(this, attrs, y);
   });
 }

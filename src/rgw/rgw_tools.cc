@@ -101,52 +101,6 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
-{
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  char buf[16];
-  if (shard_id) {
-    *shard_id = val % max_shards;
-  }
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
-}
-
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name)
-{
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  val ^= ceph_str_hash_linux(section.c_str(), section.size());
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
-}
-
-void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
-{
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", shard_id);
-  name = prefix + buf;
-}
-
-int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
-			    const string& str, uint32_t *perm)
-{
-  list<string> strs;
-  get_str_list(str, strs);
-  list<string>::iterator iter;
-  uint32_t v = 0;
-  for (iter = strs.begin(); iter != strs.end(); ++iter) {
-    string& s = *iter;
-    for (int i = 0; mapping[i].type_name; i++) {
-      if (s.compare(mapping[i].type_name) == 0)
-        v |= mapping[i].flag;
-    }
-  }
-
-  *perm = v;
-  return 0;
-}
-
 int rgw_put_system_obj(const DoutPrefixProvider *dpp, 
                        RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
@@ -493,7 +447,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  const auto& compression_type = store->get_zone()->get_params().get_compression_type(bucket_info.placement_rule);
+  const auto& compression_type = store->get_compression_type(bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(store->ctx(), compression_type);
     if (!plugin) {

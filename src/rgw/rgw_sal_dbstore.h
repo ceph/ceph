@@ -200,7 +200,7 @@ protected:
       virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime) override;
       virtual bool is_owner(User* user) override;
       virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) override;
-      virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
+      virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
       virtual int merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& attrs, optional_yield y) override;
       virtual int try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime) override;
       virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -232,11 +232,65 @@ protected:
       friend class DBStore;
   };
 
+  class DBPlacementTier: public PlacementTier {
+    DBStore* store;
+    RGWZoneGroupPlacementTier tier;
+  public:
+    DBPlacementTier(DBStore* _store, const RGWZoneGroupPlacementTier& _tier) : store(_store), tier(_tier) {}
+    virtual ~DBPlacementTier() = default;
+
+    virtual const std::string& get_tier_type() { return tier.tier_type; }
+    virtual const std::string& get_storage_class() { return tier.storage_class; }
+    virtual bool retain_head_object() { return tier.retain_head_object; }
+    RGWZoneGroupPlacementTier& get_rt() { return tier; }
+  };
+
+  class DBZoneGroup : public ZoneGroup {
+    DBStore* store;
+    std::unique_ptr<RGWZoneGroup> group;
+    std::string empty;
+  public:
+    DBZoneGroup(DBStore* _store, std::unique_ptr<RGWZoneGroup> _group) : store(_store), group(std::move(_group)) {}
+    virtual ~DBZoneGroup() = default;
+
+    virtual const std::string& get_id() const override { return group->get_id(); };
+    virtual const std::string& get_name() const override { return group->get_name(); };
+    virtual int equals(const std::string& other_zonegroup) const override {
+      return group->equals(other_zonegroup);
+    };
+    /** Get the endpoint from zonegroup, or from master zone if not set */
+    virtual const std::string& get_endpoint() const override;
+    virtual bool placement_target_exists(std::string& target) const override;
+    virtual bool is_master_zonegroup() const override {
+      return group->is_master_zonegroup();
+    };
+    virtual const std::string& get_api_name() const override { return group->api_name; };
+    virtual int get_placement_target_names(std::set<std::string>& names) const override;
+    virtual const std::string& get_default_placement_name() const override {
+      return group->default_placement.name; };
+    virtual int get_hostnames(std::list<std::string>& names) const override {
+      names = group->hostnames;
+      return 0;
+    };
+    virtual int get_s3website_hostnames(std::list<std::string>& names) const override {
+      names = group->hostnames_s3website;
+      return 0;
+    };
+    virtual int get_zone_count() const override {
+      /* currently only 1 zone supported */
+      return 1;
+    }
+    virtual int get_placement_tier(const rgw_placement_rule& rule,
+				   std::unique_ptr<PlacementTier>* tier) {
+      return -1;
+    }
+  };
+
   class DBZone : public Zone {
     protected:
       DBStore* store;
       RGWRealm *realm{nullptr};
-      RGWZoneGroup *zonegroup{nullptr};
+      DBZoneGroup *zonegroup{nullptr};
       RGWZone *zone_public_config{nullptr}; /* external zone params, e.g., entrypoints, log flags, etc. */  
       RGWZoneParams *zone_params{nullptr}; /* internal zone params, e.g., rados pools */
       RGWPeriod *current_period{nullptr};
@@ -244,8 +298,8 @@ protected:
 
     public:
       DBZone(DBStore* _store) : store(_store) {
-        realm = new RGWRealm();
-        zonegroup = new RGWZoneGroup();
+	realm = new RGWRealm();
+        zonegroup = new DBZoneGroup(store, std::make_unique<RGWZoneGroup>());
         zone_public_config = new RGWZone();
         zone_params = new RGWZoneParams();
         current_period = new RGWPeriod();
@@ -258,18 +312,26 @@ protected:
         info.storage_classes = sc;
         zone_params->placement_pools["default"] = info;
       }
-      ~DBZone() = default;
+      ~DBZone() {
+	delete realm;
+	delete zonegroup;
+	delete zone_public_config;
+	delete zone_params;
+	delete current_period;
+      }
 
-      virtual const RGWZoneGroup& get_zonegroup() override;
-      virtual int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) override;
-      virtual const RGWZoneParams& get_params() override;
+      virtual ZoneGroup& get_zonegroup() override;
+      virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
+      const RGWZoneParams& get_rgw_params();
       virtual const rgw_zone_id& get_id() override;
-      virtual const RGWRealm& get_realm() override;
       virtual const std::string& get_name() const override;
       virtual bool is_writeable() override;
       virtual bool get_redirect_endpoint(std::string* endpoint) override;
       virtual bool has_zonegroup_api(const std::string& api) const override;
       virtual const std::string& get_current_period_id() override;
+      virtual const RGWAccessKey& get_system_key() override;
+      virtual const std::string& get_realm_name() override;
+      virtual const std::string& get_realm_id() override;
   };
 
   class DBLuaScriptManager : public LuaScriptManager {
@@ -517,6 +579,14 @@ protected:
           uint64_t olh_epoch,
           const DoutPrefixProvider* dpp,
           optional_yield y) override;
+    virtual int transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y) override;
       virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
       virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
@@ -675,9 +745,9 @@ public:
         return *this;
       }
 
-      int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
+      virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
 
-      virtual const char* get_name() const override {
+      virtual const std::string get_name() const override {
         return "dbstore";
       }
 
@@ -719,7 +789,7 @@ public:
       virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
           const std::map<std::string, std::string>& meta) override;
       virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
-      virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) override;
+      virtual void get_quota(RGWQuota& quota) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, std::vector<rgw_bucket>& buckets, bool enabled) override;
       virtual uint64_t get_new_req_id() override { return 0; }
       virtual int get_sync_policy_handler(const DoutPrefixProvider *dpp,
@@ -778,6 +848,9 @@ public:
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
+
+      virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
+      virtual bool valid_placement(const rgw_placement_rule& rule) override;
 
       virtual void finalize(void) override;
 

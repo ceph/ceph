@@ -294,8 +294,7 @@ public:
   io_ctx(ioc), objs_container(_objs_container), max_aio(_max_aio)
   {}
 
-  virtual ~CLSRGWConcurrentIO()
-  {}
+  virtual ~CLSRGWConcurrentIO() {}
 
   int operator()();
 }; // class CLSRGWConcurrentIO
@@ -311,6 +310,7 @@ public:
 			     std::map<int, std::string>& _bucket_objs,
 			     uint32_t _max_aio) :
     CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
+  virtual ~CLSRGWIssueBucketIndexInit() override {}
 };
 
 
@@ -327,6 +327,7 @@ public:
 			      uint32_t _max_aio) :
   CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio)
   {}
+  virtual ~CLSRGWIssueBucketIndexClean() override {}
 };
 
 
@@ -338,6 +339,7 @@ public:
   CLSRGWIssueSetTagTimeout(librados::IoCtx& ioc, std::map<int, std::string>& _bucket_objs,
                      uint32_t _max_aio, uint64_t _tag_timeout) :
     CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), tag_timeout(_tag_timeout) {}
+  virtual ~CLSRGWIssueSetTagTimeout() override {}
 };
 
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
@@ -470,6 +472,7 @@ public:
                        std::map<int, cls_rgw_bi_log_list_ret>& bi_log_lists, uint32_t max_aio) :
     CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(bi_log_lists),
     marker_mgr(_marker_mgr), max(_max) {}
+  virtual ~CLSRGWIssueBILogList() override {}
 };
 
 void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
@@ -495,6 +498,7 @@ public:
       BucketIndexShardsManager& _end_marker_mgr, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
     CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio),
     start_marker_mgr(_start_marker_mgr), end_marker_mgr(_end_marker_mgr) {}
+  virtual ~CLSRGWIssueBILogTrim() override {}
 };
 
 /**
@@ -515,6 +519,7 @@ public:
 			 std::map<int, rgw_cls_check_index_ret>& bucket_objs_ret,
 			 uint32_t _max_aio) :
     CLSRGWConcurrentIO(ioc, oids, _max_aio), result(bucket_objs_ret) {}
+  virtual ~CLSRGWIssueBucketCheck() override {}
 };
 
 class CLSRGWIssueBucketRebuild : public CLSRGWConcurrentIO {
@@ -523,6 +528,7 @@ protected:
 public:
   CLSRGWIssueBucketRebuild(librados::IoCtx& io_ctx, std::map<int, std::string>& bucket_objs,
                            uint32_t max_aio) : CLSRGWConcurrentIO(io_ctx, bucket_objs, max_aio) {}
+  virtual ~CLSRGWIssueBucketRebuild() override {}
 };
 
 class CLSRGWIssueGetDirHeader : public CLSRGWConcurrentIO {
@@ -533,6 +539,7 @@ public:
   CLSRGWIssueGetDirHeader(librados::IoCtx& io_ctx, std::map<int, std::string>& oids, std::map<int, rgw_cls_list_ret>& dir_headers,
                           uint32_t max_aio) :
     CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(dir_headers) {}
+  virtual ~CLSRGWIssueGetDirHeader() override {}
 };
 
 class CLSRGWIssueSetBucketResharding : public CLSRGWConcurrentIO {
@@ -543,6 +550,7 @@ public:
   CLSRGWIssueSetBucketResharding(librados::IoCtx& ioc, std::map<int, std::string>& _bucket_objs,
                                  const cls_rgw_bucket_instance_entry& _entry,
                                  uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), entry(_entry) {}
+  virtual ~CLSRGWIssueSetBucketResharding() override {}
 };
 
 class CLSRGWIssueResyncBucketBILog : public CLSRGWConcurrentIO {
@@ -551,6 +559,7 @@ protected:
 public:
   CLSRGWIssueResyncBucketBILog(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
     CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
+  virtual ~CLSRGWIssueResyncBucketBILog() override {}
 };
 
 class CLSRGWIssueBucketBILogStop : public CLSRGWConcurrentIO {
@@ -559,6 +568,7 @@ protected:
 public:
   CLSRGWIssueBucketBILogStop(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
     CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
+  virtual ~CLSRGWIssueBucketBILogStop() override {}
 };
 
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, std::string& oid, RGWGetDirHeader_CB *ctx);

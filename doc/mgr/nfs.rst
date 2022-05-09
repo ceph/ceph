@@ -76,6 +76,17 @@ service.
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
 
+Deployment of NFS daemons and the ingress service is asynchronous: the
+command may return before the services have completely started. You may
+wish to check that these services do successfully start and stay running.
+When using cephadm orchestration, these commands check service status:
+
+.. code:: bash
+
+    $ ceph orch ls --service_name=nfs.<cluster_id>
+    $ ceph orch ls --service_name=ingress.nfs.<cluster_id>
+
+
 Ingress
 -------
 
@@ -127,6 +138,18 @@ Delete NFS Ganesha Cluster
     $ ceph nfs cluster rm <cluster_id>
 
 This deletes the deployed cluster.
+
+
+Removal of NFS daemons and the ingress service is asynchronous: the
+command may return before the services have been completely deleted. You may
+wish to check that these services are no longer reported. When using cephadm
+orchestration, these commands check service status:
+
+.. code:: bash
+
+    $ ceph orch ls --service_name=nfs.<cluster_id>
+    $ ceph orch ls --service_name=ingress.nfs.<cluster_id>
+
 
 Updating an NFS Cluster
 -----------------------

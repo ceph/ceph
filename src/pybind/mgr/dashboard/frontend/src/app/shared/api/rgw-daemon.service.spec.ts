@@ -12,7 +12,7 @@ describe('RgwDaemonService', () => {
   let httpTesting: HttpTestingController;
   let selectDaemonSpy: jasmine.Spy;
 
-  const daemonList = RgwHelper.getDaemonList();
+  const daemonList: Array<RgwDaemon> = RgwHelper.getDaemonList();
   const retrieveDaemonList = (reqDaemonList: RgwDaemon[], daemon: RgwDaemon) => {
     service
       .request((params) => of(params))
@@ -75,5 +75,16 @@ describe('RgwDaemonService', () => {
     retrieveDaemonList(noDefaultDaemonList, noDefaultDaemonList[0]);
     expect(selectDaemonSpy).toHaveBeenCalledTimes(1);
     expect(selectDaemonSpy).toHaveBeenCalledWith(noDefaultDaemonList[0]);
+  }));
+
+  it('should update default daemon if not exist in daemon list', fakeAsync(() => {
+    const tmpDaemonList = [...daemonList];
+    service.selectDaemon(tmpDaemonList[1]); // Select 'default' daemon.
+    tmpDaemonList.splice(1, 1); // Remove 'default' daemon.
+    tmpDaemonList[0].default = true; // Set new 'default' daemon.
+    service.list().subscribe();
+    const testReq = httpTesting.expectOne('api/rgw/daemon');
+    testReq.flush(tmpDaemonList);
+    expect(service['selectedDaemon'].getValue()).toEqual(tmpDaemonList[0]);
   }));
 });

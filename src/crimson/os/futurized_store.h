@@ -125,7 +125,7 @@ public:
     const std::optional<std::string> &start ///< [in] start, empty for begin
     ) = 0; ///< @return <done, values> values.empty() only if done
 
-  virtual read_errorator::future<bufferlist> omap_get_header(
+  virtual get_attr_errorator::future<bufferlist> omap_get_header(
     CollectionRef c,
     const ghobject_t& oid) = 0;
 

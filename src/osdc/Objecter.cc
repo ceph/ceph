@@ -1426,13 +1426,19 @@ void Objecter::emit_blocklist_events(const OSDMap &old_osd_map,
 
   std::set<entity_addr_t> old_set;
   std::set<entity_addr_t> new_set;
+  std::set<entity_addr_t> old_range_set;
+  std::set<entity_addr_t> new_range_set;
 
-  old_osd_map.get_blocklist(&old_set);
-  new_osd_map.get_blocklist(&new_set);
+  old_osd_map.get_blocklist(&old_set, &old_range_set);
+  new_osd_map.get_blocklist(&new_set, &new_range_set);
 
   std::set<entity_addr_t> delta_set;
   std::set_difference(
       new_set.begin(), new_set.end(), old_set.begin(), old_set.end(),
+      std::inserter(delta_set, delta_set.begin()));
+  std::set_difference(
+      new_range_set.begin(), new_range_set.end(),
+      old_range_set.begin(), old_range_set.end(),
       std::inserter(delta_set, delta_set.begin()));
   blocklist_events.insert(delta_set.begin(), delta_set.end());
 }

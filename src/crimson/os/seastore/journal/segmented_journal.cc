@@ -27,14 +27,14 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentedJournal::SegmentedJournal(
-  SegmentManager &segment_manager,
-  ExtentReader &scanner,
   SegmentProvider &segment_provider)
   : segment_provider(segment_provider),
+    segment_seq_allocator(
+      new SegmentSeqAllocator(segment_type_t::JOURNAL)),
     journal_segment_allocator("JOURNAL",
                               segment_type_t::JOURNAL,
                               segment_provider,
-                              segment_manager),
+                              *segment_seq_allocator),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
@@ -44,7 +44,7 @@ SegmentedJournal::SegmentedJournal(
                      crimson::common::get_conf<double>(
                        "seastore_journal_batch_preferred_fullness"),
                      journal_segment_allocator),
-    scanner(scanner)
+    sm_group(*segment_provider.get_segment_manager_group())
 {
 }
 
@@ -74,19 +74,18 @@ SegmentedJournal::prep_replay_segments(
     segments.begin(),
     segments.end(),
     [](const auto &lt, const auto &rt) {
-      return lt.second.journal_segment_seq <
-	rt.second.journal_segment_seq;
+      return lt.second.segment_seq <
+	rt.second.segment_seq;
     });
 
-  journal_segment_allocator.set_next_segment_seq(
-    segments.rbegin()->second.journal_segment_seq + 1);
+  segment_seq_allocator->set_next_segment_seq(
+    segments.rbegin()->second.segment_seq + 1);
   std::for_each(
     segments.begin(),
     segments.end(),
-    [this, FNAME](auto &seg)
+    [FNAME](auto &seg)
   {
     if (seg.first != seg.second.physical_segment_id ||
-        seg.first.device_id() != journal_segment_allocator.get_device_id() ||
         seg.second.get_type() != segment_type_t::JOURNAL) {
       ERROR("illegal journal segment for replay -- {}", seg.second);
       ceph_abort();
@@ -105,7 +104,7 @@ SegmentedJournal::prep_replay_segments(
 	auto& seg_addr = replay_from.as_seg_paddr();
 	return seg.first == seg_addr.get_segment_id();
       });
-    if (from->second.journal_segment_seq != journal_tail.segment_seq) {
+    if (from->second.segment_seq != journal_tail.segment_seq) {
       ERROR("journal_tail {} does not match {}",
             journal_tail, from->second);
       ceph_abort();
@@ -124,7 +123,7 @@ SegmentedJournal::prep_replay_segments(
     from, segments.end(), ret.begin(),
     [this](const auto &p) {
       auto ret = journal_seq_t{
-	p.second.journal_segment_seq,
+	p.second.segment_seq,
 	paddr_t::make_seg_paddr(
 	  p.first,
 	  journal_segment_allocator.get_block_size())
@@ -147,12 +146,14 @@ SegmentedJournal::replay_segment(
   INFO("starting at {} -- {}", seq, header);
   return seastar::do_with(
     scan_valid_records_cursor(seq),
-    ExtentReader::found_record_handler_t([=, &handler](
+    SegmentManagerGroup::found_record_handler_t(
+      [s_type=header.type, &handler, this](
       record_locator_t locator,
       const record_group_header_t& header,
       const bufferlist& mdbuf)
-      -> ExtentReader::scan_valid_records_ertr::future<>
+      -> SegmentManagerGroup::scan_valid_records_ertr::future<>
     {
+      LOG_PREFIX(Journal::replay_segment);
       auto maybe_record_deltas_list = try_decode_deltas(
           header, mdbuf, locator.record_block_base);
       if (!maybe_record_deltas_list) {
@@ -165,6 +166,7 @@ SegmentedJournal::replay_segment(
       return seastar::do_with(
         std::move(*maybe_record_deltas_list),
         [write_result=locator.write_result,
+	 s_type,
          this,
          FNAME,
          &handler](auto& record_deltas_list)
@@ -172,6 +174,7 @@ SegmentedJournal::replay_segment(
         return crimson::do_for_each(
           record_deltas_list,
           [write_result,
+	   s_type,
            this,
            FNAME,
            &handler](record_deltas_t& record_deltas)
@@ -186,6 +189,7 @@ SegmentedJournal::replay_segment(
           return crimson::do_for_each(
             record_deltas.deltas,
             [locator,
+	     s_type,
              this,
              FNAME,
              &handler](auto &p)
@@ -201,16 +205,17 @@ SegmentedJournal::replay_segment(
              */
             if (delta.paddr != P_ADDR_NULL) {
               auto& seg_addr = delta.paddr.as_seg_paddr();
-              auto delta_paddr_segment_seq = segment_provider.get_seq(seg_addr.get_segment_id());
-              auto delta_paddr_segment_type = segment_seq_to_type(delta_paddr_segment_seq);
-              auto locator_segment_seq = locator.write_result.start_seq.segment_seq;
-              if (delta_paddr_segment_type == segment_type_t::NULL_SEG ||
-                  (delta_paddr_segment_type == segment_type_t::JOURNAL &&
-                   delta_paddr_segment_seq > locator_segment_seq)) {
+              auto& seg_info = segment_provider.get_seg_info(seg_addr.get_segment_id());
+              auto delta_paddr_segment_seq = seg_info.seq;
+	      auto delta_paddr_segment_type = seg_info.type;
+              if (s_type == segment_type_t::NULL_SEG ||
+                  (delta_paddr_segment_seq != delta.ext_seq ||
+		   delta_paddr_segment_type != delta.seg_type)) {
                 SUBDEBUG(seastore_cache,
-                         "delta is obsolete, delta_paddr_segment_seq={}, locator_segment_seq={} -- {}",
+                         "delta is obsolete, delta_paddr_segment_seq={},"
+			 " delta_paddr_segment_type={} -- {}",
                          segment_seq_printer_t{delta_paddr_segment_seq},
-                         segment_seq_printer_t{locator_segment_seq},
+			 delta_paddr_segment_type,
                          delta);
                 return replay_ertr::now();
               }
@@ -225,7 +230,7 @@ SegmentedJournal::replay_segment(
       });
     }),
     [=](auto &cursor, auto &dhandler) {
-      return scanner.scan_valid_records(
+      return sm_group.scan_valid_records(
 	cursor,
 	header.segment_nonce,
 	std::numeric_limits<size_t>::max(),
@@ -240,48 +245,11 @@ SegmentedJournal::replay_segment(
   );
 }
 
-SegmentedJournal::find_journal_segments_ret
-SegmentedJournal::find_journal_segments()
-{
-  return seastar::do_with(
-    find_journal_segments_ret_bare{},
-    [this](auto &ret) -> find_journal_segments_ret {
-      return crimson::do_for_each(
-	boost::counting_iterator<device_segment_id_t>(0),
-	boost::counting_iterator<device_segment_id_t>(
-	  journal_segment_allocator.get_num_segments()),
-	[this, &ret](device_segment_id_t d_segment_id) {
-	  segment_id_t segment_id{
-	    journal_segment_allocator.get_device_id(),
-	    d_segment_id};
-	  return scanner.read_segment_header(
-	    segment_id
-	  ).safe_then([segment_id, &ret](auto &&header) {
-	    if (header.get_type() == segment_type_t::JOURNAL) {
-	      ret.emplace_back(std::make_pair(segment_id, std::move(header)));
-	    }
-	  }).handle_error(
-	    crimson::ct_error::enoent::handle([](auto) {
-	      return find_journal_segments_ertr::now();
-	    }),
-	    crimson::ct_error::enodata::handle([](auto) {
-	      return find_journal_segments_ertr::now();
-	    }),
-	    crimson::ct_error::input_output_error::pass_further{}
-	  );
-	}).safe_then([&ret]() mutable {
-	  return find_journal_segments_ret{
-	    find_journal_segments_ertr::ready_future_marker{},
-	    std::move(ret)};
-	});
-    });
-}
-
 SegmentedJournal::replay_ret SegmentedJournal::replay(
   delta_handler_t &&delta_handler)
 {
   LOG_PREFIX(Journal::replay);
-  return find_journal_segments(
+  return sm_group.find_journal_segment_headers(
   ).safe_then([this, FNAME, delta_handler=std::move(delta_handler)]
     (auto &&segment_headers) mutable -> replay_ret {
     INFO("got {} segments", segment_headers.size());

@@ -141,6 +141,129 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
+#define SSE_C_GROUP 1
+#define KMS_GROUP 2
+
+int get_encryption_defaults(req_state *s)
+{
+  int meta_sse_group = 0;
+  constexpr auto sse_c_prefix = "x-amz-server-side-encryption-customer-";
+  constexpr auto encrypt_attr = "x-amz-server-side-encryption";
+  constexpr auto context_attr = "x-amz-server-side-encryption-context";
+  constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
+  constexpr auto bucket_key_attr = "x-amz-server-side-encryption-bucket-key-enabled";
+  bool bucket_configuration_found { false };
+  bool rest_only { false };
+
+  for (auto& kv : s->info.crypt_attribute_map) {
+    if (kv.first.find(sse_c_prefix) == 0)
+      meta_sse_group |= SSE_C_GROUP;
+    else if (kv.first.find(encrypt_attr) == 0)
+      meta_sse_group |= KMS_GROUP;
+  }
+  if (meta_sse_group == (SSE_C_GROUP|KMS_GROUP)) {
+    s->err.message = "Server side error - can't do sse-c & sse-kms|sse-s3";
+    return -EINVAL;
+  }
+
+  const auto& buck_attrs = s->bucket_attrs;
+  auto aiter = buck_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+  RGWBucketEncryptionConfig bucket_encryption_conf;
+  if (aiter != buck_attrs.end()) {
+    ldpp_dout(s, 5) << "Found RGW_ATTR_BUCKET_ENCRYPTION_POLICY on "
+	    << s->bucket_name << dendl;
+
+    bufferlist::const_iterator iter{&aiter->second};
+
+    try {
+      bucket_encryption_conf.decode(iter);
+      bucket_configuration_found = true;
+    } catch (const buffer::error& e) {
+      s->err.message = "Server side error - can't decode bucket_encryption_conf";
+      ldpp_dout(s, 5) << __func__ <<  "decode bucket_encryption_conf failed" << dendl;
+      return -EINVAL;
+    }
+  }
+  if (meta_sse_group & SSE_C_GROUP) {
+    ldpp_dout(s, 20) << "get_encryption_defaults: no defaults cause sse-c forced"
+	<< dendl;
+    return 0;			// sse-c: no defaults here
+  }
+  std::string sse_algorithm { bucket_encryption_conf.sse_algorithm() };
+  auto kms_master_key_id { bucket_encryption_conf.kms_master_key_id() };
+  bool bucket_key_enabled { bucket_encryption_conf.bucket_key_enabled() };
+  bool kms_attr_seen = false;
+  if (bucket_configuration_found) {
+    ldpp_dout(s, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: "
+	  <<  sse_algorithm << dendl;
+  }
+
+  auto iter = s->info.crypt_attribute_map.find(encrypt_attr);
+  if (iter != s->info.crypt_attribute_map.end()) {
+ldpp_dout(s, 20) << "get_encryption_defaults: found encrypt_attr " << encrypt_attr << " = " << iter->second << ", setting sse_algorithm to that" << dendl;
+    rest_only = true;
+    sse_algorithm = iter->second;
+  } else if (sse_algorithm != "") {
+    rgw_set_amz_meta_header(s->info.crypt_attribute_map, encrypt_attr, sse_algorithm, OVERWRITE);
+  }
+
+  iter = s->info.crypt_attribute_map.find(kms_attr);
+  if (iter != s->info.crypt_attribute_map.end()) {
+ldpp_dout(s, 20) << "get_encryption_defaults: found kms_attr " << kms_attr << " = " << iter->second << ", setting kms_attr_seen" << dendl;
+    if (!rest_only) {
+      s->err.message = std::string("incomplete rest sse parms: ") + kms_attr + " not valid without kms";
+      ldpp_dout(s, 5) << __func__ << "argument problem: " << s->err.message << dendl;
+      return -EINVAL;
+    }
+    kms_attr_seen = true;
+  } else if (!rest_only && kms_master_key_id != "") {
+ldpp_dout(s, 20) << "get_encryption_defaults: no kms_attr, but kms_master_key_id = " << kms_master_key_id << ", settig kms_attr_seen" << dendl;
+    kms_attr_seen = true;
+    rgw_set_amz_meta_header(s->info.crypt_attribute_map, kms_attr, kms_master_key_id, OVERWRITE);
+  }
+
+  iter = s->info.crypt_attribute_map.find(bucket_key_attr);
+  if (iter != s->info.crypt_attribute_map.end()) {
+ldpp_dout(s, 20) << "get_encryption_defaults: found bucket_key_attr " << bucket_key_attr << " = " << iter->second << ", setting kms_attr_seen" << dendl;
+    if (!rest_only) {
+      s->err.message = std::string("incomplete rest sse parms: ") + bucket_key_attr + " not valid without kms";
+      ldpp_dout(s, 5) << __func__ << "argument problem: " << s->err.message << dendl;
+      return -EINVAL;
+    }
+    kms_attr_seen = true;
+  } else if (!rest_only && bucket_key_enabled) {
+ldpp_dout(s, 20) << "get_encryption_defaults: no bucket_key_attr, but bucket_key_enabled,  setting kms_attr_seen" << dendl;
+    kms_attr_seen = true;
+    rgw_set_amz_meta_header(s->info.crypt_attribute_map, bucket_key_attr, "true", OVERWRITE);
+  }
+
+  iter = s->info.crypt_attribute_map.find(context_attr);
+  if (iter != s->info.crypt_attribute_map.end()) {
+ldpp_dout(s, 20) << "get_encryption_defaults: found context_attr " << context_attr << " = " << iter->second << ", setting kms_attr_seen" << dendl;
+    if (!rest_only) {
+      s->err.message = std::string("incomplete rest sse parms: ") + context_attr + " not valid without kms";
+      ldpp_dout(s, 5) << __func__ << "argument problem: " << s->err.message << dendl;
+      return -EINVAL;
+    }
+    kms_attr_seen = true;
+  }
+
+  if (kms_attr_seen && sse_algorithm == "") {
+ldpp_dout(s, 20) << "get_encryption_defaults: kms_attr but no algorithm, defaulting to aws_kms" << dendl;
+    sse_algorithm = "aws:kms";
+  }
+for (const auto& kv: s->info.crypt_attribute_map) {
+ldpp_dout(s, 20) << "get_encryption_defaults:  final map: " << kv.first << " = " << kv.second << dendl;
+}
+ldpp_dout(s, 20) << "get_encryption_defaults:  kms_attr_seen is " << kms_attr_seen << " and sse_algorithm is " << sse_algorithm << dendl;
+  if (kms_attr_seen && sse_algorithm != "aws:kms") {
+    s->err.message = "algorithm <" + sse_algorithm + "> but got sse-kms attributes";
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
   map<string, bufferlist>::iterator iter;
   iter = attrs.find(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION);
@@ -936,9 +1059,9 @@ struct ReplicationConfiguration {
       set<rgw_zone_id> ids;
 
       for (auto& name : zone_names) {
-        rgw_zone_id id;
-        if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(name, &id)) {
-          ids.insert(std::move(id));
+	rgw_zone_id id;
+	if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(name, &id)) {
+	  ids.insert(std::move(id));
         }
       }
 
@@ -950,10 +1073,10 @@ struct ReplicationConfiguration {
       vector<string> names;
 
       for (auto& id : zone_ids) {
-        RGWZone *zone;
-        if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(id, &zone)) {
-          names.emplace_back(zone->name);
-        }
+	RGWZone *zone;
+	if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(id, &zone)) {
+	  names.emplace_back(zone->name);
+	}
       }
 
       return names;
@@ -1421,11 +1544,11 @@ void RGWGetUsage_ObjStore_S3::send_response()
 
      // send info about quota config
      auto user_info = s->user->get_info();
-     encode_json("QuotaMaxBytes", user_info.user_quota.max_size, formatter);
+     encode_json("QuotaMaxBytes", user_info.quota.user_quota.max_size, formatter);
      encode_json("QuotaMaxBuckets", user_info.max_buckets, formatter);
-     encode_json("QuotaMaxObjCount", user_info.user_quota.max_objects, formatter);
-     encode_json("QuotaMaxBytesPerBucket", user_info.bucket_quota.max_objects, formatter);
-     encode_json("QuotaMaxObjCountPerBucket", user_info.bucket_quota.max_size, formatter);
+     encode_json("QuotaMaxObjCount", user_info.quota.user_quota.max_objects, formatter);
+     encode_json("QuotaMaxBytesPerBucket", user_info.quota.bucket_quota.max_objects, formatter);
+     encode_json("QuotaMaxObjCountPerBucket", user_info.quota.bucket_quota.max_size, formatter);
      // send info about user's capacity utilization
      encode_json("TotalBytes", stats.size, formatter);
      encode_json("TotalBytesRounded", stats.size_rounded, formatter);
@@ -1900,12 +2023,12 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   end_header(s, this);
   dump_start(s);
 
-  RGWZoneGroup zonegroup;
+  std::unique_ptr<rgw::sal::ZoneGroup> zonegroup;
   string api_name;
 
-  int ret = store->get_zone()->get_zonegroup(s->bucket->get_info().zonegroup, zonegroup);
+  int ret = store->get_zone()->get_zonegroup(s->bucket->get_info().zonegroup, &zonegroup);
   if (ret >= 0) {
-    api_name = zonegroup.api_name;
+    api_name = zonegroup->get_api_name();
   } else  {
     if (s->bucket->get_info().zonegroup != "default") {
       api_name = s->bucket->get_info().zonegroup;
@@ -2150,11 +2273,11 @@ static void dump_bucket_metadata(struct req_state *s, rgw::sal::Bucket* bucket)
   // only bucket's owner is allowed to get the quota settings of the account
   if (bucket->is_owner(s->user.get())) {
     auto user_info = s->user->get_info();
-    dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.user_quota.max_size));
-    dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.user_quota.max_objects));
+    dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
+    dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.quota.user_quota.max_objects));
     dump_header(s, "X-RGW-Quota-Max-Buckets", static_cast<long long>(user_info.max_buckets));
-    dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(user_info.bucket_quota.max_size));
-    dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(user_info.bucket_quota.max_objects));
+    dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(user_info.quota.bucket_quota.max_size));
+    dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(user_info.quota.bucket_quota.max_objects));
   }
 }
 
@@ -2340,7 +2463,7 @@ void RGWDeleteBucket_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
-static inline void map_qs_metadata(struct req_state* s)
+static inline void map_qs_metadata(struct req_state* s, bool crypto_too)
 {
   /* merge S3 valid user metadata from the query-string into
    * x_meta_map, which maps them to attributes */
@@ -2349,6 +2472,9 @@ static inline void map_qs_metadata(struct req_state* s)
     std::string k = boost::algorithm::to_lower_copy(elt.first);
     if (k.find("x-amz-meta-") == /* offset */ 0) {
       rgw_add_amz_meta_header(s->info.x_meta_map, k, elt.second);
+    }
+    if (crypto_too && k.find("x-amz-server-side-encryption") == /* offset */ 0) {
+      rgw_set_amz_meta_header(s->info.crypt_attribute_map, k, elt.second, OVERWRITE);
     }
   }
 }
@@ -2360,7 +2486,12 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 
   int ret;
 
-  map_qs_metadata(s);
+  map_qs_metadata(s, true);
+  ret = get_encryption_defaults(s);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+    return ret;
+  }
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   ret = create_s3_policy(s, store, s3policy, s->owner);
@@ -2600,7 +2731,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   else
   {
     std::unique_ptr<BlockCrypt> block_crypt;
-    res = rgw_s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
+    res = rgw_s3_prepare_encrypt(s, attrs, &block_crypt, crypt_http_responses);
     if (res == 0 && block_crypt != nullptr) {
       filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
     }
@@ -2640,7 +2771,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     return op_ret;
   }
 
-  map_qs_metadata(s);
+  map_qs_metadata(s, false);
 
   ldpp_dout(this, 20) << "adding bucket to policy env: " << s->bucket->get_name()
 		    << dendl;
@@ -2696,6 +2827,20 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     env.add_var(part.name, part_str);
   } while (!done);
 
+  for (auto &p: parts) {
+    if (! boost::istarts_with(p.first, "x-amz-server-side-encryption")) {
+      continue;
+    }
+    bufferlist &d { p.second.data };
+    std::string v { rgw_trim_whitespace(std::string_view(d.c_str(), d.length())) };
+    rgw_set_amz_meta_header(s->info.crypt_attribute_map, p.first, v, OVERWRITE);
+  }
+  int r = get_encryption_defaults(s);
+  if (r < 0) {
+    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
+    return r;
+  }
+
   string object_str;
   if (!part_str(parts, "key", &object_str)) {
     err_msg = "Key not specified";
@@ -2725,7 +2870,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
 
   if (! storage_class.empty()) {
     s->dest_placement.storage_class = storage_class;
-    if (!store->get_zone()->get_params().valid_placement(s->dest_placement)) {
+    if (!store->valid_placement(s->dest_placement)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
       err_msg = "The storage class you specified is not valid";
       return -EINVAL;
@@ -2768,7 +2913,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     attrs[attr_name] = attr_bl;
   }
 
-  int r = get_policy(y);
+  r = get_policy(y);
   if (r < 0)
     return r;
 
@@ -3133,7 +3278,7 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
     rgw::sal::DataProcessor *cb)
 {
   std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt,
+  int res = rgw_s3_prepare_encrypt(s, attrs, &block_crypt,
                                    crypt_http_responses);
   if (res == 0 && block_crypt != nullptr) {
     filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
@@ -3605,7 +3750,8 @@ void RGWGetBucketEncryption_ObjStore_S3::send_response()
   dump_start(s);
 
   if (!op_ret) {
-    encode_xml("ServerSideEncryptionConfiguration", bucket_encryption_conf, s->formatter);
+    encode_xml("ServerSideEncryptionConfiguration", XMLNS_AWS_S3,
+      bucket_encryption_conf, s->formatter);
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
 }
@@ -3746,7 +3892,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
 int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
 {
   int res = 0;
-  res = rgw_s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
+  res = rgw_s3_prepare_encrypt(s, attrs, nullptr, crypt_http_responses);
   return res;
 }
 
@@ -3757,7 +3903,7 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
     return ret;
   }
 
-  map_qs_metadata(s);
+  map_qs_metadata(s, true);
 
   return do_aws4_auth_completion();
 }

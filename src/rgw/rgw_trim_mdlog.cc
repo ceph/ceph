@@ -144,7 +144,7 @@ connection_map make_peer_connections(rgw::sal::RadosStore* store,
   for (auto& g : zonegroups) {
     for (auto& z : g.second.zones) {
       std::unique_ptr<RGWRESTConn> conn{
-        new RGWRESTConn(store->ctx(), store->svc()->zone, z.first.id, z.second.endpoints, g.second.api_name)};
+        new RGWRESTConn(store->ctx(), store, z.first.id, z.second.endpoints, g.second.api_name)};
       connections.emplace(z.first.id, std::move(conn));
     }
   }

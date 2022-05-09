@@ -178,8 +178,7 @@ protected:
   rgw::sal::Store* store;
   RGWCORSConfiguration bucket_cors;
   bool cors_exist;
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
   int op_ret;
   int do_aws4_auth_completion();
 
@@ -2627,5 +2626,10 @@ inline int parse_value_and_bound(
 
   return 0;
 }
+
+int rgw_policy_from_attrset(const DoutPrefixProvider *dpp,
+                            CephContext *cct,
+                            std::map<std::string, bufferlist>& attrset,
+                            RGWAccessControlPolicy *policy);
 
 #endif /* CEPH_RGW_OP_H */

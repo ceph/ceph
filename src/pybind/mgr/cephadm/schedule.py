@@ -447,5 +447,6 @@ class HostAssignment(object):
                 continue
             in_maintenance[h.hostname] = False
         unreachable_hosts = [h.hostname for h in self.unreachable_hosts]
-        candidates = [c for c in candidates if c.hostname not in unreachable_hosts or in_maintenance[c.hostname]]
+        candidates = [
+            c for c in candidates if c.hostname not in unreachable_hosts or in_maintenance[c.hostname]]
         return candidates

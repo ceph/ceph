@@ -7,6 +7,7 @@
 
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/segment_seq_allocator.h"
 
 namespace crimson::os::seastore {
 
@@ -14,8 +15,7 @@ namespace nvme_device {
 class NVMeBlockDevice;
 }
 
-class SegmentManager;
-class ExtentReader;
+class SegmentManagerGroup;
 class SegmentProvider;
 
 class Journal {
@@ -90,10 +90,7 @@ using JournalRef = std::unique_ptr<Journal>;
 
 namespace journal {
 
-JournalRef make_segmented(
-  SegmentManager &sm,
-  ExtentReader &reader,
-  SegmentProvider &provider);
+JournalRef make_segmented(SegmentProvider &provider);
 
 }
 

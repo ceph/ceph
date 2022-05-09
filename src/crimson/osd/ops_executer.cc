@@ -476,6 +476,22 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
+  return do_execute_op(osd_op).handle_error_interruptible(
+    osd_op_errorator::all_same_way([&osd_op](auto e, auto&& e_raw)
+      -> OpsExecuter::osd_op_errorator::future<> {
+        osd_op.rval = -e.value();
+        if ((osd_op.op.flags & CEPH_OSD_OP_FLAG_FAILOK) &&
+	  e.value() != EAGAIN && e.value() != EINPROGRESS) {
+          return osd_op_errorator::now();
+        } else {
+          return std::move(e_raw);
+	}
+      }));
+}
+
+OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
+OpsExecuter::do_execute_op(OSDOp& osd_op)
+{
   // TODO: dispatch via call table?
   // TODO: we might want to find a way to unify both input and output
   // of each op.
@@ -581,6 +597,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_read_op([this, &osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_vals(os, osd_op, delta_stats);
     });
+  case CEPH_OSD_OP_OMAP_CMP:
+    return  do_read_op([this, &osd_op] (auto& backend, const auto& os) {
+      return backend.omap_cmp(os, osd_op, delta_stats);
+    });
   case CEPH_OSD_OP_OMAPGETHEADER:
     return do_read_op([this, &osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_header(os, osd_op, delta_stats);
@@ -657,6 +677,39 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     throw std::runtime_error(
       fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
   }
+}
+
+void OpsExecuter::fill_op_params_bump_pg_version()
+{
+  osd_op_params->req_id = msg->get_reqid();
+  osd_op_params->mtime = msg->get_mtime();
+  osd_op_params->at_version = pg->next_version();
+  osd_op_params->pg_trim_to = pg->get_pg_trim_to();
+  osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
+  osd_op_params->last_complete = pg->get_info().last_complete;
+  if (user_modify) {
+    osd_op_params->user_at_version = osd_op_params->at_version.version;
+  }
+}
+
+std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
+  const std::vector<OSDOp>& ops)
+{
+  std::vector<pg_log_entry_t> log_entries;
+  log_entries.emplace_back(obc->obs.exists ?
+      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
+    obc->obs.oi.soid, osd_op_params->at_version, obc->obs.oi.version,
+    osd_op_params->user_modify ? osd_op_params->at_version.version : 0,
+    osd_op_params->req_id, osd_op_params->mtime,
+    op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
+  if (op_info.allows_returnvec()) {
+    // also the per-op values are recorded in the pg log
+    log_entries.back().set_op_returns(ops);
+    logger().debug("{} op_returns: {}",
+                   __func__, log_entries.back().op_returns);
+  }
+  log_entries.back().clean_regions = std::move(osd_op_params->clean_regions);
+  return log_entries;
 }
 
 // Defined here because there is a circular dependency between OpsExecuter and PG

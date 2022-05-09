@@ -1,6 +1,8 @@
 """
-Before running this testsuite, add path to cephfs-shell module to $PATH and
-export $PATH.
+NOTE: For running this tests locally (using vstart_runner.py), export the
+path to src/tools/cephfs/cephfs-shell module to $PATH. Running
+"export PATH=$PATH:$(cd ../src/tools/cephfs && pwd)" from the build dir
+will update the environment without hassles of typing the path correctly.
 """
 from io import StringIO
 from os import path
@@ -157,6 +159,14 @@ class TestCephFSShell(CephFSTestCase):
             check_status=check_status).stdout.getvalue().strip())
 
 
+class TestGeneric(TestCephFSShell):
+
+    def test_mistyped_cmd(self):
+        with self.assertRaises(CommandFailedError) as cm:
+            self.run_cephfs_shell_cmd('lsx')
+        self.assertEqual(cm.exception.exitstatus, 127)
+
+
 class TestMkdir(TestCephFSShell):
     def test_mkdir(self):
         """
@@ -168,11 +178,11 @@ class TestMkdir(TestCephFSShell):
         o = self.mount_a.stat('d1')
         log.info("mount_a output:\n{}".format(o))
 
-    def test_mkdir_with_07000_octal_mode(self):
+    def test_mkdir_with_070000_octal_mode(self):
         """
-        Test that mkdir fails with octal mode greater than 0777
+        Test that mkdir fails with octal mode greater than 07777
         """
-        self.negtest_cephfs_shell_cmd(cmd="mkdir -m 07000 d2")
+        self.negtest_cephfs_shell_cmd(cmd="mkdir -m 070000 d2")
         try:
             self.mount_a.stat('d2')
         except CommandFailedError:
@@ -265,7 +275,14 @@ class TestRmdir(TestCephFSShell):
         """
         self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
         self.run_cephfs_shell_cmd("put - test_dir/dumpfile", stdin="Valid File")
-        self.run_cephfs_shell_cmd("rmdir" + self.dir_name)
+        # see comment below
+        # with self.assertRaises(CommandFailedError) as cm:
+        with self.assertRaises(CommandFailedError):
+            self.run_cephfs_shell_cmd("rmdir " + self.dir_name)
+        # TODO: we need to check for exit code and error message as well.
+        # skipping it for not since error codes used by cephfs-shell are not
+        # standard and they may change soon.
+        # self.assertEqual(cm.exception.exitcode, 39)
         self.mount_a.stat(self.dir_name)
 
     def test_rmdir_existing_file(self):
@@ -334,7 +351,9 @@ class TestGetAndPut(TestCephFSShell):
         self.mount_a.run_shell_payload(f"rm -rf {tempdir}")
 
         self.run_cephfs_shell_cmd('get ' + tempdirname)
-        pwd = self.get_cephfs_shell_cmd_output('!pwd')
+        # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
+        pwd = self.mount_a.run_shell('pwd', cwd=None).stdout.getvalue().\
+            strip()
         for file_ in files:
             if file_ == tempdirname:
                self.mount_a.run_shell_payload(f"stat {path.join(pwd, file_)}")
@@ -357,7 +376,9 @@ class TestGetAndPut(TestCephFSShell):
         o = self.get_cephfs_shell_cmd_output("get dump4 .")
         log.info("cephfs-shell output:\n{}".format(o))
 
-        o = self.get_cephfs_shell_cmd_output("!cat dump4")
+        # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
+        o = self.mount_a.run_shell('cat dump4', cwd=None).stdout.getvalue().\
+            strip()
         o_hash = crypt.crypt(o, '.A')
 
         # s_hash must be equal to o_hash
@@ -377,21 +398,10 @@ class TestGetAndPut(TestCephFSShell):
         o = self.mount_a.stat('dump5')
         log.info("mount_a output:\n{}".format(o))
 
-        # get dump5 should fail
         o = self.get_cephfs_shell_cmd_output("get dump5")
-        o = self.get_cephfs_shell_cmd_output("!stat dump5 || echo $?")
-        log.info("cephfs-shell output:\n{}".format(o))
-        l = o.split('\n')
-        try:
-            ret = int(l[1])
-            # verify that stat dump5 passes
-            # if ret == 1, then that implies the stat failed
-            # which implies that there was a problem with "get dump5"
-            assert(ret != 1)
-        except ValueError:
-            # we have a valid stat output; so this is good
-            # if the int() fails then that means there's a valid stat output
-            pass
+        # NOTE: cwd=None because we want to run it at CWD, not at cephfs mntpt.
+        # NOTE: following command must run successfully.
+        self.mount_a.run_shell('stat dump5', cwd=None)
 
     def test_get_to_console(self):
         """
@@ -968,6 +978,14 @@ class TestMisc(TestCephFSShell):
         o = self.get_cephfs_shell_cmd_output("help all")
         log.info("output:\n{}".format(o))
 
+    def test_chmod(self):
+        """Test chmod is allowed above o0777 """
+        
+        test_file1 = "test_file2.txt"
+        file1_content = 'A' * 102
+        self.run_cephfs_shell_cmd(f"write {test_file1}", stdin=file1_content)
+        self.run_cephfs_shell_cmd(f"chmod 01777 {test_file1}")
+        
 class TestShellOpts(TestCephFSShell):
     """
     Contains tests for shell options from conf file and shell prompt.

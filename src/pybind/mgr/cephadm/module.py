@@ -58,8 +58,10 @@ from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, 
     ClientKeyringStore, ClientKeyringSpec
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
-from .utils import CEPH_IMAGE_TYPES, forall_hosts, cephadmNoImage
+from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
+    cephadmNoImage
 from .configchecks import CephadmConfigChecks
+from .offline_watcher import OfflineHostWatcher
 
 try:
     import asyncssh
@@ -91,12 +93,12 @@ os._exit = os_exit_noop   # type: ignore
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
-DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
-DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
+DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.33.4'
+DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.3.1'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
 DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
-DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.20.0'
-DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:6.7.4'
+DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.23.0'
+DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:8.3.5'
 DEFAULT_HAPROXY_IMAGE = 'docker.io/library/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'docker.io/arcts/keepalived'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
@@ -544,11 +546,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if self.use_agent:
             self.agent_helpers._apply_agent()
 
+        self.offline_watcher = OfflineHostWatcher(self)
+        self.offline_watcher.start()
+
     def shutdown(self) -> None:
         self.log.debug('shutdown')
         self._worker_pool.close()
         self._worker_pool.join()
         self.cherrypy_thread.shutdown()
+        self.offline_watcher.shutdown()
         self.run = False
         self.event.set()
 
@@ -774,6 +780,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cache.save_host(host)
         return None
 
+    def update_watched_hosts(self) -> None:
+        # currently, we are watching hosts with nfs daemons
+        hosts_to_watch = [d.hostname for d in self.cache.get_daemons(
+        ) if d.daemon_type in RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES]
+        self.offline_watcher.set_hosts(list(set([h for h in hosts_to_watch if h is not None])))
+
     def offline_hosts_remove(self, host: str) -> None:
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
@@ -967,6 +979,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return 0, "value unchanged", ""
 
         self._validate_and_set_ssh_val('ssh_user', user, current_user)
+        current_ssh_config = self._get_ssh_config()
+        new_ssh_config = re.sub(r"(\s{2}User\s)(.*)", r"\1" + user, current_ssh_config.stdout)
+        self._set_ssh_config(new_ssh_config)
 
         msg = 'ssh user set to %s' % user
         if user != 'root':
@@ -1379,7 +1394,7 @@ Then run the following:
 
         :param host: host name
         """
-        spec.validate()
+        HostSpec.validate(spec)
         ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
@@ -2228,6 +2243,10 @@ Then run the following:
 
     @handle_orch_error
     def create_osds(self, drive_group: DriveGroupSpec) -> str:
+        hosts: List[HostSpec] = self.inventory.all_specs()
+        filtered_hosts: List[str] = drive_group.placement.filter_matching_hostspecs(hosts)
+        if not filtered_hosts:
+            return "Invalid 'host:device' spec: host not found in cluster. Please check 'ceph orch host ls' for available hosts"
         return self.osd_service.create_from_spec(drive_group)
 
     def _preview_osdspecs(self,
@@ -2663,8 +2682,8 @@ Then run the following:
         return self.upgrade.upgrade_status()
 
     @handle_orch_error
-    def upgrade_ls(self, image: Optional[str], tags: bool) -> Dict[Any, Any]:
-        return self.upgrade.upgrade_ls(image, tags)
+    def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict[Any, Any]:
+        return self.upgrade.upgrade_ls(image, tags, show_all_versions)
 
     @handle_orch_error
     def upgrade_start(self, image: str, version: str) -> str:

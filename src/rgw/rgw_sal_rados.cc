@@ -35,6 +35,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_service.h"
 #include "rgw_lc.h"
+#include "rgw_lc_tier.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
@@ -731,11 +732,11 @@ int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
   return store->getRados()->check_bucket_empty(dpp, info, y);
 }
 
-int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
 				optional_yield y, bool check_size_only)
 {
     return store->getRados()->check_quota(dpp, owner->get_id(), get_key(),
-					  user_quota, bucket_quota, obj_size, y, check_size_only);
+					  quota, obj_size, y, check_size_only);
 }
 
 int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y)
@@ -1193,6 +1194,13 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
   return rados->get_max_chunk_size(obj.pool, chunk_size, dpp);
 }
 
+int RadosStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+{
+  RadosZoneGroup zg(this, svc()->zone->get_zonegroup());
+  zone = make_unique<RadosZone>(this, zg);
+  return 0;
+}
+
 int RadosStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
 {
     return rados->log_usage(dpp, usage_info);
@@ -1220,10 +1228,10 @@ int RadosStore::register_to_service_map(const DoutPrefixProvider *dpp, const std
   return rados->register_to_service_map(dpp, daemon_type, meta);
 }
 
-void RadosStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
+void RadosStore::get_quota(RGWQuota& quota)
 {
-    bucket_quota = svc()->quota->get_bucket_quota();
-    user_quota = svc()->quota->get_user_quota();
+    quota.bucket_quota = svc()->quota->get_bucket_quota();
+    quota.user_quota = svc()->quota->get_user_quota();
 }
 
 void RadosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)
@@ -1334,7 +1342,7 @@ int RadosStore::get_roles(const DoutPrefixProvider *dpp,
 			  const std::string& tenant,
 			  vector<std::unique_ptr<RGWRole>>& roles)
 {
-  auto pool = get_zone()->get_params().roles_pool;
+  auto pool = svc()->zone->get_zone_params().roles_pool;
   std::string prefix;
 
   // List all roles if path prefix is empty
@@ -1398,7 +1406,7 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
 				   vector<std::unique_ptr<RGWOIDCProvider>>& providers)
 {
   std::string prefix = tenant + RGWOIDCProvider::oidc_url_oid_prefix;
-  auto pool = zone.get_params().oidc_pool;
+  auto pool = svc()->zone->get_zone_params().oidc_pool;
   auto obj_ctx = svc()->sysobj->init_obj_ctx();
 
   //Get the filtered objects
@@ -1471,6 +1479,16 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				 this, std::move(aio), owner,
 				 ptail_placement_rule,
 				 olh_epoch, unique_tag);
+}
+
+const std::string& RadosStore::get_compression_type(const rgw_placement_rule& rule)
+{
+      return svc()->zone->get_zone_params().get_compression_type(rule);
+}
+
+bool RadosStore::valid_placement(const rgw_placement_rule& rule)
+{
+  return svc()->zone->get_zone_params().valid_placement(rule);
 }
 
 int RadosStore::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx* ioctx)
@@ -1668,6 +1686,148 @@ int RadosObject::transition(Bucket* bucket,
 			    optional_yield y)
 {
   return store->getRados()->transition_obj(*rados_ctx, bucket, *this, placement_rule, mtime, olh_epoch, dpp, y);
+}
+
+int RadosObject::transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y)
+{
+  /* init */
+  rgw::sal::RadosPlacementTier* rtier = static_cast<rgw::sal::RadosPlacementTier*>(tier);
+  string id = "cloudid";
+  string endpoint = rtier->get_rt().t.s3.endpoint;
+  RGWAccessKey key = rtier->get_rt().t.s3.key;
+  string region = rtier->get_rt().t.s3.region;
+  HostStyle host_style = rtier->get_rt().t.s3.host_style;
+  string bucket_name = rtier->get_rt().t.s3.target_path;
+  const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
+
+  if (bucket_name.empty()) {
+    bucket_name = "rgwx-" + zonegroup.get_name() + "-" + tier->get_storage_class() +
+                    "-cloud-bucket";
+    boost::algorithm::to_lower(bucket_name);
+  }
+
+  /* Create RGW REST connection */
+  S3RESTConn conn(cct, id, { endpoint }, key, zonegroup.get_id(), region, host_style);
+
+  RGWLCCloudTierCtx tier_ctx(cct, dpp, o, store, bucket->get_info(),
+			     this, conn, bucket_name,
+			     rtier->get_rt().t.s3.target_storage_class);
+  tier_ctx.acl_mappings = rtier->get_rt().t.s3.acl_mappings;
+  tier_ctx.multipart_min_part_size = rtier->get_rt().t.s3.multipart_min_part_size;
+  tier_ctx.multipart_sync_threshold = rtier->get_rt().t.s3.multipart_sync_threshold;
+  tier_ctx.storage_class = tier->get_storage_class();
+
+  // check if target_path is already created
+  std::pair<std::set<std::string>::iterator, bool> it;
+
+  it = cloud_targets.insert(bucket_name);
+  tier_ctx.target_bucket_created = !(it.second);
+
+  ldpp_dout(dpp, 0) << "Transitioning object(" << o.key << ") to the cloud endpoint(" << endpoint << ")" << dendl;
+
+  /* Transition object to cloud end point */
+  int ret = rgw_cloud_tier_transfer_object(tier_ctx);
+
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to transfer object(" << o.key << ") to the cloud endpoint(" << endpoint << ") ret=" << ret << dendl;
+    return ret;
+
+    if (!tier_ctx.target_bucket_created) {
+      cloud_targets.erase(it.first);
+    }
+  }
+
+  if (update_object) {
+    real_time read_mtime;
+
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(get_read_op());
+    read_op->params.lastmod = &read_mtime;
+
+    ret = read_op->prepare(null_yield, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: Updating tier object(" << o.key << ") failed ret=" << ret << dendl;
+      return ret;
+    }
+
+    if (read_mtime != tier_ctx.o.meta.mtime) {
+      /* raced */
+      ldpp_dout(dpp, 0) << "ERROR: Updating tier object(" << o.key << ") failed ret=" << -ECANCELED << dendl;
+      return -ECANCELED;
+    }
+
+    rgw_placement_rule target_placement;
+    target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
+    target_placement.storage_class = tier->get_storage_class();
+
+    ret = write_cloud_tier(dpp, null_yield, tier_ctx.o.versioned_epoch,
+			   tier, tier_ctx.is_multipart_upload,
+			   target_placement, tier_ctx.obj);
+
+  }
+
+  return ret;
+}
+
+int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
+				  optional_yield y,
+				  uint64_t olh_epoch,
+				  PlacementTier* tier,
+				  bool is_multipart_upload,
+				  rgw_placement_rule& target_placement,
+				  Object* head_obj)
+{
+  rgw::sal::RadosPlacementTier* rtier = static_cast<rgw::sal::RadosPlacementTier*>(tier);
+  map<string, bufferlist> attrs = get_attrs();
+  RGWRados::Object op_target(store->getRados(), bucket, *rados_ctx, this);
+  RGWRados::Object::Write obj_op(&op_target);
+
+  obj_op.meta.modify_tail = true;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.category = RGWObjCategory::CloudTiered;
+  obj_op.meta.delete_at = real_time();
+  bufferlist blo;
+  obj_op.meta.data = &blo;
+  obj_op.meta.if_match = NULL;
+  obj_op.meta.if_nomatch = NULL;
+  obj_op.meta.user_data = NULL;
+  obj_op.meta.zones_trace = NULL;
+  obj_op.meta.delete_at = real_time();
+  obj_op.meta.olh_epoch = olh_epoch;
+
+  RGWObjManifest *pmanifest;
+  RGWObjManifest manifest;
+
+  pmanifest = &manifest;
+  RGWObjTier tier_config;
+  tier_config.name = tier->get_storage_class();
+  tier_config.tier_placement = rtier->get_rt();
+  tier_config.is_multipart_upload = is_multipart_upload;
+
+  pmanifest->set_tier_type("cloud-s3");
+  pmanifest->set_tier_config(tier_config);
+
+  /* check if its necessary */
+  pmanifest->set_head(target_placement, head_obj->get_obj(), 0);
+  pmanifest->set_tail_placement(target_placement, head_obj->get_obj().bucket);
+  pmanifest->set_obj_size(0);
+  obj_op.meta.manifest = pmanifest;
+
+  /* update storage class */
+  bufferlist bl;
+  bl.append(tier->get_storage_class());
+  attrs[RGW_ATTR_STORAGE_CLASS] = bl;
+
+  attrs.erase(RGW_ATTR_ID_TAG);
+  attrs.erase(RGW_ATTR_TAIL_TAG);
+
+  return obj_op.write_meta(dpp, 0, 0, attrs, y);
 }
 
 int RadosObject::get_max_chunk_size(const DoutPrefixProvider* dpp, rgw_placement_rule placement_rule, uint64_t* max_chunk_size, uint64_t* alignment)
@@ -2270,7 +2430,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
         ret = -ERR_INVALID_PART;
         return ret;
       } else {
-        manifest.append(dpp, obj_part.manifest, store->get_zone());
+        manifest.append(dpp, obj_part.manifest, store->svc()->zone->get_zonegroup(), store->svc()->zone->get_zone_params());
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");
@@ -2662,29 +2822,84 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
 			    if_match, if_nomatch, user_data, zones_trace, canceled, y);
 }
 
-const RGWZoneGroup& RadosZone::get_zonegroup()
+const std::string& RadosZoneGroup::get_endpoint() const
 {
-  return store->svc()->zone->get_zonegroup();
+  if (!group.endpoints.empty()) {
+      return group.endpoints.front();
+  } else {
+    // use zonegroup's master zone endpoints
+    auto z = group.zones.find(group.master_zone);
+    if (z != group.zones.end() && !z->second.endpoints.empty()) {
+      return z->second.endpoints.front();
+    }
+  }
+  return empty;
 }
 
-int RadosZone::get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup)
+bool RadosZoneGroup::placement_target_exists(std::string& target) const
 {
-  return store->svc()->zone->get_zonegroup(id, zonegroup);
+  return !!group.placement_targets.count(target);
 }
 
-const RGWZoneParams& RadosZone::get_params()
+int RadosZoneGroup::get_placement_target_names(std::set<std::string>& names) const
 {
-  return store->svc()->zone->get_zone_params();
+  for (const auto& target : group.placement_targets) {
+    names.emplace(target.second.name);
+  }
+
+  return 0;
+}
+
+int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
+				       std::unique_ptr<PlacementTier>* tier)
+{
+  std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
+  titer = group.placement_targets.find(rule.name);
+  if (titer == group.placement_targets.end()) {
+    return -ENOENT;
+  }
+
+  const auto& target_rule = titer->second;
+  std::map<std::string, RGWZoneGroupPlacementTier>::const_iterator ttier;
+  ttier = target_rule.tier_targets.find(rule.storage_class);
+  if (ttier == target_rule.tier_targets.end()) {
+    // not found
+    return -ENOENT;
+  }
+
+  PlacementTier* t;
+  t = new RadosPlacementTier(store, ttier->second);
+  if (!t)
+    return -ENOMEM;
+
+  tier->reset(t);
+  return 0;
+}
+
+ZoneGroup& RadosZone::get_zonegroup()
+{
+  return group;
+}
+
+int RadosZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup)
+{
+  ZoneGroup* zg;
+  RGWZoneGroup rzg;
+  int r = store->svc()->zone->get_zonegroup(id, rzg);
+  if (r < 0)
+    return r;
+
+  zg = new RadosZoneGroup(store, rzg);
+  if (!zg)
+    return -ENOMEM;
+
+  zonegroup->reset(zg);
+  return 0;
 }
 
 const rgw_zone_id& RadosZone::get_id()
 {
   return store->svc()->zone->zone_id();
-}
-
-const RGWRealm& RadosZone::get_realm()
-{
-  return store->svc()->zone->get_realm();
 }
 
 const std::string& RadosZone::get_name() const
@@ -2710,6 +2925,26 @@ bool RadosZone::has_zonegroup_api(const std::string& api) const
 const std::string& RadosZone::get_current_period_id()
 {
   return store->svc()->zone->get_current_period_id();
+}
+
+const RGWAccessKey& RadosZone::get_system_key()
+{
+  return store->svc()->zone->get_zone_params().system_key;
+}
+
+const std::string& RadosZone::get_realm_name()
+{
+  return store->svc()->zone->get_realm().get_name();
+}
+
+const std::string& RadosZone::get_realm_id()
+{
+  return store->svc()->zone->get_realm().get_id();
+}
+
+RadosLuaScriptManager::RadosLuaScriptManager(RadosStore* _s) : store(_s)
+{
+  pool = store->svc()->zone->get_zone_params().log_pool;
 }
 
 int RadosLuaScriptManager::get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
@@ -2764,13 +2999,13 @@ int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::strin
   bufferlist bl;
   using ceph::encode;
   encode(*this, bl);
-  return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
 }
 
 int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant)
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  auto& pool = store->get_zone()->get_params().oidc_pool;
+  auto& pool = store->svc()->zone->get_zone_params().oidc_pool;
   std::string oid = tenant + get_url_oid_prefix() + url;
   bufferlist bl;
 
@@ -2794,7 +3029,7 @@ int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string
 
 int RadosOIDCProvider::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto& pool = store->get_zone()->get_params().oidc_pool;
+  auto& pool = store->svc()->zone->get_zone_params().oidc_pool;
 
   std::string url, tenant;
   auto ret = get_tenant_url_from_arn(tenant, url);
@@ -2834,10 +3069,10 @@ int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
     encode(this->tags, bl_tags);
     map<string, bufferlist> attrs;
     attrs.emplace("tagging", bl_tags);
-    return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y, &attrs);
+    return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y, &attrs);
   }
 
-  return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
 }
 
 int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -2852,7 +3087,7 @@ int RadosRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optiona
   using ceph::encode;
   encode(nameToId, bl);
 
-  return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
 }
 
 int RadosRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
@@ -2862,7 +3097,7 @@ int RadosRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optiona
 
   bufferlist bl;
 
-  return rgw_put_system_obj(dpp, obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  return rgw_put_system_obj(dpp, obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, exclusive, nullptr, real_time(), y);
 }
 
 int RadosRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y)
@@ -2871,7 +3106,7 @@ int RadosRole::read_id(const DoutPrefixProvider *dpp, const std::string& role_na
   std::string oid = tenant + get_names_oid_prefix() + role_name;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -2895,7 +3130,7 @@ int RadosRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
   std::string oid = tenant + get_names_oid_prefix() + name;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role name from Role pool: " << name <<
       ": " << cpp_strerror(-ret) << dendl;
@@ -2922,7 +3157,7 @@ int RadosRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
   bufferlist bl;
 
   map<string, bufferlist> attrs;
-  int ret = rgw_get_system_obj(obj_ctx, store->get_zone()->get_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp, &attrs, nullptr, boost::none, true);
+  int ret = rgw_get_system_obj(obj_ctx, store->svc()->zone->get_zone_params().roles_pool, oid, bl, nullptr, nullptr, null_yield, dpp, &attrs, nullptr, boost::none, true);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed reading role info from Role pool: " << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -2996,7 +3231,7 @@ int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yi
   sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
   creation_date.assign(buf, strlen(buf));
 
-  auto& pool = store->get_zone()->get_params().roles_pool;
+  auto& pool = store->svc()->zone->get_zone_params().roles_pool;
   ret = store_info(dpp, exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR:  storing role info in Role pool: "
@@ -3044,7 +3279,7 @@ int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yi
 
 int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  auto& pool = store->get_zone()->get_params().roles_pool;
+  auto& pool = store->svc()->zone->get_zone_params().roles_pool;
 
   int ret = read_name(dpp, y);
   if (ret < 0) {

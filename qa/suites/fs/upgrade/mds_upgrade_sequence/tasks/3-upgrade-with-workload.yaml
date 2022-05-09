@@ -15,7 +15,7 @@ upgrade-tasks:
   - cephadm.shell:
       env: [sha1]
       host.a:
-        - while ceph orch upgrade status | jq '.in_progress' | grep true ; do ceph orch ps ; ceph versions ; ceph fs dump; sleep 30 ; done
+        - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph fs dump; ceph orch upgrade status ; sleep 30 ; done
         - ceph orch ps
         - ceph versions
         - echo "wait for servicemap items w/ changing names to refresh"

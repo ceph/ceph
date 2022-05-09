@@ -24,10 +24,11 @@
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
+#include "crimson/os/seastore/device.h"
+#include "crimson/os/seastore/segment_manager_group.h"
 
 namespace crimson::os::seastore {
 class Journal;
@@ -64,13 +65,11 @@ public:
   using base_iertr = Cache::base_iertr;
 
   TransactionManager(
-    SegmentManager &segment_manager,
     SegmentCleanerRef segment_cleaner,
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
-    ExtentPlacementManagerRef&& epm,
-    ExtentReader& scanner);
+    ExtentPlacementManagerRef &&epm);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -304,6 +303,7 @@ public:
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
+    ceph_assert(is_aligned(laddr_hint, (uint64_t)epm->get_block_size()));
     auto ext = cache->alloc_new_extent<T>(
       t,
       len,
@@ -329,6 +329,7 @@ public:
     extent_len_t len) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}", t, len, hint);
+    ceph_assert(is_aligned(hint, (uint64_t)epm->get_block_size()));
     return lba_manager->alloc_extent(
       t,
       hint,
@@ -408,15 +409,6 @@ public:
     paddr_t addr,
     laddr_t laddr,
     seastore_off_t len) final;
-
-  using release_segment_ret =
-    SegmentCleaner::ExtentCallbackInterface::release_segment_ret;
-  release_segment_ret release_segment(
-    segment_id_t id) final {
-    LOG_PREFIX(TransactionManager::release_segment);
-    SUBDEBUG(seastore_tm, "{}", id);
-    return segment_manager.release(id);
-  }
 
   /**
    * read_root_meta
@@ -534,22 +526,23 @@ public:
   }
 
   extent_len_t get_block_size() const {
-    return segment_manager.get_block_size();
+    return epm->get_block_size();
   }
 
   store_statfs_t store_stat() const {
     return segment_cleaner->stat();
   }
 
-  void add_segment_manager(SegmentManager* sm) {
-    LOG_PREFIX(TransactionManager::add_segment_manager);
-    SUBDEBUG(seastore_tm, "adding segment manager {}", sm->get_device_id());
-    scanner.add_segment_manager(sm);
-    epm->add_allocator(
-      device_type_t::SEGMENTED,
-      std::make_unique<SegmentedAllocator>(
-	*segment_cleaner,
-	*sm));
+  void add_device(Device* dev, bool is_primary) {
+    LOG_PREFIX(TransactionManager::add_device);
+    SUBDEBUG(seastore_tm, "adding device {}, is_primary={}",
+             dev->get_device_id(), is_primary);
+    epm->add_device(dev, is_primary);
+
+    ceph_assert(dev->get_device_type() == device_type_t::SEGMENTED);
+    auto sm = dynamic_cast<SegmentManager*>(dev);
+    ceph_assert(sm != nullptr);
+    sm_group.add_segment_manager(sm);
   }
 
   ~TransactionManager();
@@ -557,16 +550,12 @@ public:
 private:
   friend class Transaction;
 
-  // although there might be multiple devices backing seastore,
-  // only one of them are supposed to hold the journal. This
-  // segment manager is that device
-  SegmentManager &segment_manager;
   SegmentCleanerRef segment_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
-  ExtentReader& scanner;
+  SegmentManagerGroup &sm_group;
 
   WritePipeline write_pipeline;
 
@@ -585,8 +574,6 @@ public:
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
-TransactionManagerRef make_transaction_manager(
-    SegmentManager& sm,
-    bool detailed);
+TransactionManagerRef make_transaction_manager(bool detailed);
 
 }

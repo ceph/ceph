@@ -52,7 +52,7 @@ _prefix(std::ostream* _dout)
 // compression ratio.
 #define ZLIB_MEMORY_LEVEL 8
 
-int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message)
+int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message)
 {
   int ret;
   unsigned have;
@@ -114,7 +114,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, boost::
 }
 
 #if __x86_64__ && defined(HAVE_NASM_X64_AVX2)
-int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message)
+int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message)
 {
   int ret;
   unsigned have;
@@ -168,7 +168,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out, boost::
 }
 #endif
 
-int ZlibCompressor::compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message)
+int ZlibCompressor::compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message)
 {
 #ifdef HAVE_QATZIP
   if (qat_enabled)
@@ -184,7 +184,7 @@ int ZlibCompressor::compress(const bufferlist &in, bufferlist &out, boost::optio
 #endif
 }
 
-int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_size, bufferlist &out, boost::optional<int32_t> compressor_message)
+int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_size, bufferlist &out, std::optional<int32_t> compressor_message)
 {
 #ifdef HAVE_QATZIP
   if (qat_enabled)
@@ -244,7 +244,7 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
   return 0;
 }
 
-int ZlibCompressor::decompress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> compressor_message)
+int ZlibCompressor::decompress(const bufferlist &in, bufferlist &out, std::optional<int32_t> compressor_message)
 {
   auto i = std::cbegin(in);
   return decompress(i, in.length(), out, compressor_message);

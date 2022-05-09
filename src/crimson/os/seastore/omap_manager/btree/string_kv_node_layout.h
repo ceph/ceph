@@ -401,7 +401,7 @@ public:
       return get_node_key().key_off;
     }
     auto get_node_val_ptr() const {
-      auto tail = node->buf + OMAP_BLOCK_SIZE;
+      auto tail = node->buf + OMAP_INNER_BLOCK_SIZE;
       if (*this == node->iter_end())
         return tail;
       else {
@@ -416,7 +416,7 @@ public:
         return (*this - 1)->get_node_val_offset();
     }
     auto get_right_ptr_end() const {
-      return node->buf + OMAP_BLOCK_SIZE - get_right_offset_end();
+      return node->buf + OMAP_INNER_BLOCK_SIZE - get_right_offset_end();
     }
 
     void update_offset(int offset) {
@@ -438,8 +438,8 @@ public:
       static_assert(!is_const);
       assert(str.size() == get_node_key().key_len);
       assert(get_node_key().key_off >= str.size());
-      assert(get_node_key().key_off < OMAP_BLOCK_SIZE);
-      assert(str.size() < OMAP_BLOCK_SIZE);
+      assert(get_node_key().key_off < OMAP_INNER_BLOCK_SIZE);
+      assert(str.size() < OMAP_INNER_BLOCK_SIZE);
       ::memcpy(get_node_val_ptr(), str.data(), str.size());
     }
 
@@ -656,8 +656,9 @@ public:
   }
 
   uint16_t capacity() const {
-    return OMAP_BLOCK_SIZE - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))-
-                        reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
+    return OMAP_INNER_BLOCK_SIZE
+      - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))
+      - reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
   }
 
   bool is_overflow(size_t ksize) const {
@@ -1007,7 +1008,7 @@ public:
       return get_node_key().key_off;
     }
     auto get_node_val_ptr() const {
-      auto tail = node->buf + OMAP_BLOCK_SIZE;
+      auto tail = node->buf + OMAP_LEAF_BLOCK_SIZE;
       if (*this == node->iter_end())
         return tail;
       else {
@@ -1022,7 +1023,7 @@ public:
         return (*this - 1)->get_node_val_offset();
     }
     auto get_right_ptr_end() const {
-      return node->buf + OMAP_BLOCK_SIZE - get_right_offset_end();
+      return node->buf + OMAP_LEAF_BLOCK_SIZE - get_right_offset_end();
     }
 
     void update_offset(int offset) {
@@ -1262,8 +1263,9 @@ public:
   }
 
   uint32_t capacity() const {
-    return OMAP_BLOCK_SIZE - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))-
-                        reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
+    return OMAP_LEAF_BLOCK_SIZE
+      - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))
+      - reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
   }
 
   bool is_overflow(size_t ksize, size_t vsize) const {

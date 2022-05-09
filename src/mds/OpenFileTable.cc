@@ -1090,7 +1090,7 @@ void OpenFileTable::_prefetch_dirfrags()
       ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
 
-    if (!(++num_opening_dirfrags % 1000))
+    if (!(++num_opening_dirfrags % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -1166,7 +1166,7 @@ void OpenFileTable::_prefetch_inodes()
       mdcache->open_ino(ino, pool, fin, false);
     }
 
-    if (!(num_opening_inodes % 1000))
+    if (!(num_opening_inodes % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 

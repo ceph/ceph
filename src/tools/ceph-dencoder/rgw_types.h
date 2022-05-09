@@ -42,6 +42,12 @@ TYPE(rgw_bucket_entry_ver)
 TYPE(cls_rgw_obj_key)
 TYPE(rgw_bucket_olh_log_entry)
 TYPE(rgw_usage_log_entry)
+TYPE(rgw_cls_bi_entry)
+TYPE(rgw_bucket_olh_entry)
+TYPE(rgw_usage_data)
+TYPE(rgw_usage_log_info)
+TYPE(rgw_user_bucket)
+TYPE(cls_rgw_lc_entry)
 
 #include "cls/rgw/cls_rgw_ops.h"
 TYPE(rgw_cls_tag_timeout_op)
@@ -150,5 +156,8 @@ TYPE(RGWUploadPartInfo)
 TYPE(rgw_data_sync_info)
 TYPE(rgw_data_sync_marker)
 TYPE(rgw_data_sync_status)
+
+#include "rgw/rgw_bucket_encryption.h"
+TYPE(RGWBucketEncryptionConfig)
 
 #endif

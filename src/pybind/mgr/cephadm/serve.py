@@ -513,7 +513,7 @@ class CephadmServe:
                                             f"Failed to apply {len(self.mgr.apply_spec_fails)} service(s): {','.join(x[0] for x in self.mgr.apply_spec_fails)}",
                                             len(self.mgr.apply_spec_fails),
                                             warnings)
-
+        self.mgr.update_watched_hosts()
         return r
 
     def _apply_service_config(self, spec: ServiceSpec) -> None:
@@ -1196,11 +1196,15 @@ class CephadmServe:
         with set_exception_subject('service', daemon.service_id(), overwrite=True):
 
             self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
-
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
-            args = ['--name', name, '--force']
-            self.log.info('Removing daemon %s from %s' % (name, host))
+            dd = self.mgr.cache.get_daemon(daemon.daemon_name)
+            if dd.ports:
+                args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
+            else:
+                args = ['--name', name, '--force']
+
+            self.log.info('Removing daemon %s from %s -- ports %s' % (name, host, dd.ports))
             out, err, code = self.mgr.wait_async(self._run_cephadm(
                 host, name, 'rm-daemon', args))
             if not code:

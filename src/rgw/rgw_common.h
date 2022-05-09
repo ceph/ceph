@@ -748,9 +748,8 @@ struct RGWUserInfo
   __u8 system;
   rgw_placement_rule default_placement;
   std::list<std::string> placement_tags;
-  RGWQuotaInfo bucket_quota;
   std::map<int, std::string> temp_url_keys;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
   uint32_t type;
   std::set<std::string> mfa_ids;
   std::string assumed_role_arn;
@@ -811,9 +810,9 @@ struct RGWUserInfo
      encode(system, bl);
      encode(default_placement, bl);
      encode(placement_tags, bl);
-     encode(bucket_quota, bl);
+     encode(quota.bucket_quota, bl);
      encode(temp_url_keys, bl);
-     encode(user_quota, bl);
+     encode(quota.user_quota, bl);
      encode(user_id.tenant, bl);
      encode(admin, bl);
      encode(type, bl);
@@ -879,13 +878,13 @@ struct RGWUserInfo
       decode(placement_tags, bl); /* tags of allowed placement rules */
     }
     if (struct_v >= 14) {
-      decode(bucket_quota, bl);
+      decode(quota.bucket_quota, bl);
     }
     if (struct_v >= 15) {
      decode(temp_url_keys, bl);
     }
     if (struct_v >= 16) {
-      decode(user_quota, bl);
+      decode(quota.user_quota, bl);
     }
     if (struct_v >= 17) {
       decode(user_id.tenant, bl);
@@ -1225,6 +1224,7 @@ struct req_info {
   const RGWEnv *env;
   RGWHTTPArgs args;
   meta_map_t x_meta_map;
+  meta_map_t crypt_attribute_map;
 
   std::string host;
   const char *method;
@@ -2055,6 +2055,15 @@ void rgw_add_amz_meta_header(
   const std::string& k,
   const std::string& v);
 
+enum rgw_set_action_if_set {
+  DISCARD=0, OVERWRITE, APPEND
+};
+
+bool rgw_set_amz_meta_header(
+  meta_map_t& x_meta_map,
+  const std::string& k,
+  const std::string& v, rgw_set_action_if_set f);
+
 extern std::string rgw_string_unquote(const std::string& s);
 extern void parse_csv_string(const std::string& ival, std::vector<std::string>& ovals);
 extern int parse_key_value(std::string& in_str, std::string& key, std::string& val);
@@ -2066,6 +2075,10 @@ parse_key_value(const std::string_view& in_str,
 extern boost::optional<std::pair<std::string_view,std::string_view>>
 parse_key_value(const std::string_view& in_str);
 
+struct rgw_name_to_flag {
+  const char *type_name;
+  uint32_t flag;
+};
 
 /** time parsing */
 extern int parse_time(const char *time_str, real_time *time);
@@ -2406,3 +2419,11 @@ int decode_bl(bufferlist& bl, T& t)
   }
   return 0;
 }
+
+extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);
+
+boost::intrusive_ptr<CephContext>
+rgw_global_init(const std::map<std::string,std::string> *defaults,
+		    std::vector < const char* >& args,
+		    uint32_t module_type, code_environment_t code_env,
+		    int flags);

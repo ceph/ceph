@@ -811,6 +811,11 @@ class TestCephadm(object):
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
             assert out == "Created no osd(s) on host test; already created?"
+            bad_dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='invalid_hsot'),
+                                    data_devices=DeviceSelection(paths=['']))
+            c = cephadm_module.create_osds(bad_dg)
+            out = wait(cephadm_module, c)
+            assert "Invalid 'host:device' spec: host not found in cluster" in out
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_noncollocated_osd(self, cephadm_module):
@@ -855,29 +860,54 @@ class TestCephadm(object):
             assert isinstance(f1[1], DriveSelection)
 
     @pytest.mark.parametrize(
-        "devices, preview, exp_command",
+        "devices, preview, exp_commands",
         [
             # no preview and only one disk, prepare is used due the hack that is in place.
-            (['/dev/sda'], False, "lvm batch --no-auto /dev/sda --yes --no-systemd"),
+            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --yes --no-systemd"]),
             # no preview and multiple disks, uses batch
             (['/dev/sda', '/dev/sdb'], False,
-             "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"]),
             # preview and only one disk needs to use batch again to generate the preview
-            (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"),
+            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"]),
             # preview and multiple disks work the same
             (['/dev/sda', '/dev/sdb'], True,
-             "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"]),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    def test_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_command):
+    def test_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_commands):
         with with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(service_id='test.spec', placement=PlacementSpec(
                 host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
-            assert out in exp_command
+            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands) for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
+
+    @pytest.mark.parametrize(
+        "devices, preview, exp_commands",
+        [
+            # one data device, no preview
+            (['/dev/sda'], False, ["raw prepare --bluestore --data /dev/sda"]),
+            # multiple data devices, no preview
+            (['/dev/sda', '/dev/sdb'], False,
+             ["raw prepare --bluestore --data /dev/sda", "raw prepare --bluestore --data /dev/sdb"]),
+            # one data device, preview
+            (['/dev/sda'], True, ["raw prepare --bluestore --data /dev/sda --report --format json"]),
+            # multiple data devices, preview
+            (['/dev/sda', '/dev/sdb'], True,
+             ["raw prepare --bluestore --data /dev/sda --report --format json", "raw prepare --bluestore --data /dev/sdb --report --format json"]),
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_raw_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_commands):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(service_id='test.spec', method='raw', placement=PlacementSpec(
+                host_pattern='test'), data_devices=DeviceSelection(paths=devices))
+            ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
+            preview = preview
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
+            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands) for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([

@@ -11,7 +11,8 @@
 #include "include/buffer.h"
 
 #include "crimson/common/errorator.h"
-#include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/segment_manager_group.h"
+#include "crimson/os/seastore/segment_seq_allocator.h"
 
 namespace crimson::os::seastore {
   class SegmentProvider;
@@ -32,28 +33,20 @@ class SegmentAllocator {
   SegmentAllocator(std::string name,
                    segment_type_t type,
                    SegmentProvider &sp,
-                   SegmentManager &sm);
+                   SegmentSeqAllocator &ssa);
 
   const std::string& get_name() const {
     return print_name;
   }
 
-  device_id_t get_device_id() const {
-    return segment_manager.get_device_id();
-  }
-
   seastore_off_t get_block_size() const {
-    return segment_manager.get_block_size();
+    return sm_group.get_block_size();
   }
 
   extent_len_t get_max_write_length() const {
-    return segment_manager.get_segment_size() -
-           p2align(ceph::encoded_sizeof_bounded<segment_header_t>(),
-                   size_t(segment_manager.get_block_size()));
-  }
-
-  device_segment_id_t get_num_segments() const {
-    return segment_manager.get_num_segments();
+    return sm_group.get_segment_size() -
+           sm_group.get_rounded_header_length() -
+           sm_group.get_rounded_tail_length();
   }
 
   bool can_write() const {
@@ -75,13 +68,13 @@ class SegmentAllocator {
     return written_to;
   }
 
-  void set_next_segment_seq(segment_seq_t);
-
   // returns true iff the current segment has insufficient space
   bool needs_roll(std::size_t length) const {
     assert(can_write());
-    auto write_capacity = current_segment->get_write_capacity()
-      - segment_manager.get_rounded_tail_length();
+    assert(current_segment->get_write_capacity() ==
+           sm_group.get_segment_size());
+    auto write_capacity = current_segment->get_write_capacity() -
+                          sm_group.get_rounded_tail_length();
     return length + written_to > std::size_t(write_capacity);
   }
 
@@ -112,8 +105,6 @@ class SegmentAllocator {
     current_segment.reset();
     written_to = 0;
 
-    // segment type related special handling
-    reset_segment_seq();
     current_segment_nonce = 0;
   }
 
@@ -121,60 +112,16 @@ class SegmentAllocator {
   using close_segment_ertr = base_ertr;
   close_segment_ertr::future<> close_segment(bool is_rolling);
 
-  /*
-   * segment type related special handling
-   */
-
-  void reset_segment_seq() {
-    if (type == segment_type_t::JOURNAL) {
-      next_segment_seq = 0;
-    } else { // OOL
-      next_segment_seq = OOL_SEG_SEQ;
-    }
-  }
-
-  segment_seq_t get_current_segment_seq() const {
-    segment_seq_t ret;
-    if (type == segment_type_t::JOURNAL) {
-      assert(next_segment_seq != 0);
-      ret = next_segment_seq - 1;
-    } else { // OOL
-      ret = next_segment_seq;
-    }
-    assert(segment_seq_to_type(ret) == type);
-    return ret;
-  }
-
-  segment_seq_t get_new_segment_seq_and_increment() {
-    segment_seq_t new_segment_seq;
-    if (type == segment_type_t::JOURNAL) {
-      new_segment_seq = next_segment_seq++;
-      auto meta = segment_manager.get_meta();
-      current_segment_nonce = ceph_crc32c(
-        new_segment_seq,
-        reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
-        sizeof(meta.seastore_id.uuid));
-    } else { // OOL
-      new_segment_seq = next_segment_seq;
-      assert(current_segment_nonce == 0);
-    }
-    assert(new_segment_seq == get_current_segment_seq());
-    ceph_assert(segment_seq_to_type(new_segment_seq) == type);
-    return new_segment_seq;
-  }
-
   const std::string name;
   // device id is not available during construction,
   // so generate the print_name later.
   std::string print_name;
   const segment_type_t type; // JOURNAL or OOL
   SegmentProvider &segment_provider;
-  SegmentManager &segment_manager;
+  SegmentManagerGroup &sm_group;
   SegmentRef current_segment;
   seastore_off_t written_to;
-
-  // segment type related special handling
-  segment_seq_t next_segment_seq;
+  SegmentSeqAllocator &segment_seq_allocator;
   segment_nonce_t current_segment_nonce;
   //3. journal tail written to both segment_header_t and segment_tail_t
 };

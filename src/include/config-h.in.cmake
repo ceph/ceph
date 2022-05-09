@@ -84,6 +84,9 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
+/* Defined if you have libdml */
+#cmakedefine HAVE_LIBDML
+
 /* Defined if you have libzbd */
 #cmakedefine HAVE_LIBZBD
 

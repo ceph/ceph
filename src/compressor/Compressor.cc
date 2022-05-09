@@ -41,7 +41,7 @@ const char* Compressor::get_comp_alg_name(int a) {
   return p->first;
 }
 
-boost::optional<Compressor::CompressionAlgorithm>
+std::optional<Compressor::CompressionAlgorithm>
 Compressor::get_comp_alg_type(std::string_view s) {
 
   auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
@@ -61,7 +61,7 @@ const char *Compressor::get_comp_mode_name(int m) {
     default: return "???";
   }
 }
-boost::optional<Compressor::CompressionMode>
+std::optional<Compressor::CompressionMode>
 Compressor::get_comp_mode_type(std::string_view s) {
   if (s == "force")
     return COMP_FORCE;
@@ -71,7 +71,7 @@ Compressor::get_comp_mode_type(std::string_view s) {
     return COMP_PASSIVE;
   if (s == "none")
     return COMP_NONE;
-  return boost::optional<CompressionMode>();
+  return {};
 }
 
 CompressorRef Compressor::create(CephContext *cct, const std::string &type)

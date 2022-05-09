@@ -178,9 +178,9 @@ class ScrubQueue {
   struct ScrubJob final : public RefCountedObject {
 
     /**
-     *  a time scheduled for scrub, and a deadline: The scrub could be delayed if
-     * system load is too high (but not if after the deadline),or if trying to
-     * scrub out of scrub hours.
+     *  a time scheduled for scrub, and a deadline: The scrub could be delayed
+     * if system load is too high (but not if after the deadline),or if trying
+     * to scrub out of scrub hours.
      */
     scrub_schedule_t schedule;
 
@@ -354,8 +354,8 @@ class ScrubQueue {
    * (read - with higher value) configuration element
    * (osd_scrub_extended_sleep).
    */
-  double scrub_sleep_time(
-    bool must_scrub) const;  /// \todo (future) return milliseconds
+  double scrub_sleep_time(bool must_scrub) const;  /// \todo (future) return
+						   /// milliseconds
 
   /**
    *  called every heartbeat to update the "daily" load average
@@ -450,7 +450,8 @@ class ScrubQueue {
    */
   void move_failed_pgs(utime_t now_is);
 
-  Scrub::schedule_result_t select_from_group(ScrubQContainer& group,
-					     const Scrub::ScrubPreconds& preconds,
-					     utime_t now_is);
+  Scrub::schedule_result_t select_from_group(
+    ScrubQContainer& group,
+    const Scrub::ScrubPreconds& preconds,
+    utime_t now_is);
 };

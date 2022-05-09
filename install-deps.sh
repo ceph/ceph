@@ -23,6 +23,10 @@ export LC_ALL=en_US.UTF-8 # the following is vulnerable to i18n
 
 ARCH=$(uname -m)
 
+function in_jenkins() {
+    test -n "$JENKINS_HOME"
+}
+
 function munge_ceph_spec_in {
     local with_seastar=$1
     shift
@@ -67,6 +71,7 @@ function munge_debian_control {
 }
 
 function ensure_decent_gcc_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Start ensure_decent_gcc_on_ubuntu() in install-deps.sh"
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
     local old=$(gcc -dumpfullversion -dumpversion)
@@ -125,9 +130,12 @@ ENDOFKEY
     # cmake uses the latter by default
     $SUDO ln -nsf /usr/bin/gcc /usr/bin/${ARCH}-linux-gnu-gcc
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
+
+    in_jenkins && echo "CI_DEBUG: End ensure_decent_gcc_on_ubuntu() in install-deps.sh"
 }
 
 function ensure_python3_sphinx_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
     local sphinx_command=/usr/bin/sphinx-build
     # python-sphinx points $sphinx_command to
     # ../share/sphinx/scripts/python2/sphinx-build when it's installed
@@ -138,6 +146,7 @@ function ensure_python3_sphinx_on_ubuntu {
 }
 
 function install_pkg_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Running install_pkg_on_ubuntu() in install-deps.sh"
     local project=$1
     shift
     local sha1=$1
@@ -154,6 +163,7 @@ function install_pkg_on_ubuntu {
 	for pkg in $pkgs; do
 	    if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
 		missing_pkgs+=" $pkg"
+                in_jenkins && echo "CI_DEBUG: missing_pkgs=$missing_pkgs"
 	    fi
 	done
     fi
@@ -166,6 +176,7 @@ function install_pkg_on_ubuntu {
 }
 
 function install_boost_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Running install_boost_on_ubuntu() in install-deps.sh"
     local ver=1.75
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
@@ -206,6 +217,7 @@ function install_boost_on_ubuntu {
 }
 
 function install_libzbd_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Running install_libzbd_on_ubuntu() in install-deps.sh"
     local codename=$1
     local project=libzbd
     local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
@@ -218,6 +230,7 @@ function install_libzbd_on_ubuntu {
 }
 
 function install_libpmem_on_ubuntu {
+    in_jenkins && echo "CI_DEBUG: Running install_libpmem_on_ubuntu() in install-deps.sh"
     local codename=$1
     local project=pmem
     local sha1=7c18b4b1413ae965ea8bcbfc69eb9784f9212319
@@ -336,6 +349,7 @@ else
         fi
         touch $DIR/status
 
+        in_jenkins && echo "CI_DEBUG: Running munge_debian_control() in install-deps.sh"
 	backports=""
 	control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
@@ -358,10 +372,19 @@ else
 	    build_profiles+=",pkg.ceph.jaeger"
 	fi
 
+        in_jenkins && cat <<EOF
+CI_DEBUG: for_make_check=$for_make_check
+CI_DEBUG: with_seastar=$with_seastar
+CI_DEBUG: with_jaeger=$with_jaeger
+CI_DEBUG: build_profiles=$build_profiles
+CI_DEBUG: Now running 'mk-build-deps' and installing ceph-build-deps package
+EOF
+
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
 	      --build-profiles "${build_profiles#,}" \
 	      --install --remove \
 	      --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
+        in_jenkins && echo "CI_DEBUG: Removing ceph-build-deps"
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
 
@@ -443,6 +466,7 @@ else
 fi
 
 function populate_wheelhouse() {
+    in_jenkins && echo "CI_DEBUG: Running populate_wheelhouse() in install-deps.sh"
     local install=$1
     shift
 
@@ -460,6 +484,7 @@ function populate_wheelhouse() {
 }
 
 function activate_virtualenv() {
+    in_jenkins && echo "CI_DEBUG: Running activate_virtualenv() in install-deps.sh"
     local top_srcdir=$1
     local env_dir=$top_srcdir/install-deps-python3
 
@@ -475,6 +500,7 @@ function activate_virtualenv() {
 }
 
 function preload_wheels_for_tox() {
+    in_jenkins && echo "CI_DEBUG: Running preload_wheels_for_tox() in install-deps.sh"
     local ini=$1
     shift
     pushd . > /dev/null
@@ -517,3 +543,5 @@ if $for_make_check; then
     rm -rf $XDG_CACHE_HOME
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
+
+in_jenkins && echo "CI_DEBUG: End install-deps.sh" || true

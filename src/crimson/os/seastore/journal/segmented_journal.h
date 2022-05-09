@@ -11,23 +11,20 @@
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/journal.h"
-#include "crimson/os/seastore/extent_reader.h"
+#include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/osd/exceptions.h"
 #include "segment_allocator.h"
+#include "crimson/os/seastore/segment_seq_allocator.h"
 
 namespace crimson::os::seastore::journal {
-
 /**
  * Manages stream of atomically written records to a SegmentManager.
  */
 class SegmentedJournal : public Journal {
 public:
-  SegmentedJournal(
-    SegmentManager &segment_manager,
-    ExtentReader& scanner,
-    SegmentProvider& cleaner);
+  SegmentedJournal(SegmentProvider &segment_provider);
   ~SegmentedJournal() {}
 
   open_for_write_ret open_for_write() final;
@@ -53,19 +50,11 @@ private:
   );
 
   SegmentProvider& segment_provider;
+  SegmentSeqAllocatorRef segment_seq_allocator;
   SegmentAllocator journal_segment_allocator;
   RecordSubmitter record_submitter;
-  ExtentReader& scanner;
+  SegmentManagerGroup &sm_group;
   WritePipeline* write_pipeline = nullptr;
-
-  /// read journal segment headers from scanner
-  using find_journal_segments_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using find_journal_segments_ret_bare = std::vector<
-    std::pair<segment_id_t, segment_header_t>>;
-  using find_journal_segments_ret = find_journal_segments_ertr::future<
-    find_journal_segments_ret_bare>;
-  find_journal_segments_ret find_journal_segments();
 
   /// return ordered vector of segments to replay
   using replay_segments_t = std::vector<

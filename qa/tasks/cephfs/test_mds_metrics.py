@@ -100,6 +100,24 @@ class TestMDSMetrics(CephFSTestCase):
                     break
         return done, metrics
 
+    def _setup_fs(self, fs_name):
+        fs_a = self.mds_cluster.newfs(name=fs_name)
+        
+        self.mds_cluster.mds_restart()
+
+        # Wait for filesystem to go healthy
+        fs_a.wait_for_daemons()
+        
+        # Reconfigure client auth caps
+        for mount in self.mounts:
+            self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+                'auth', 'caps', f"client.{mount.client_id}",
+                'mds', 'allow',
+                'mon', 'allow r',
+                'osd', f'allow rw pool={fs_a.get_data_pool_name()}')
+
+        return fs_a
+
     # basic check to verify if we get back metrics from each active mds rank
 
     def test_metrics_from_rank(self):
@@ -402,16 +420,17 @@ class TestMDSMetrics(CephFSTestCase):
         # validate
         valid, metrics = self._get_metrics(self.verify_mds_metrics(
             active_mds_count=1, client_count=TestMDSMetrics.CLIENTS_REQUIRED), 30)
-        log.debug("metrics={0}".format(metrics))
+        log.debug(f'metrics={metrics}')
         self.assertTrue(valid)
 
-        global_metrics = metrics['global_metrics']
+        #mount_a and mount_b are the clients mounted for TestMDSMetrics. So get their
+        #entries from the global_metrics.
+        client_a_name = f'client.{self.mount_a.get_global_id()}'
+        client_b_name = f'client.{self.mount_b.get_global_id()}'
 
-        #TestMDSMetrics.CLIENTS_REQUIRED clients are mounted here. So they should be
-        #the first two entries in the global_metrics and won't be culled later on.
-        gm_keys_list = list(global_metrics.keys())
-        client1_metrics = global_metrics[gm_keys_list[0]]
-        client2_metrics = global_metrics[gm_keys_list[1]]
+        global_metrics = metrics['global_metrics']
+        client_a_metrics = global_metrics[client_a_name]
+        client_b_metrics = global_metrics[client_b_name]
 
         #fail rank0 mds
         self.fs.rank_fail(rank=0)
@@ -435,18 +454,60 @@ class TestMDSMetrics(CephFSTestCase):
         try:
             valid, metrics_new = self._get_metrics(self.verify_mds_metrics(
                 active_mds_count=1, client_count=TestMDSMetrics.CLIENTS_REQUIRED), 30)
-            log.debug("metrics={0}".format(metrics_new))
+            log.debug(f'metrics={metrics_new}')
             self.assertTrue(valid)
 
             global_metrics = metrics_new['global_metrics']
-            client1_metrics_new = global_metrics[gm_keys_list[0]]
-            client2_metrics_new = global_metrics[gm_keys_list[1]]
+            client_a_metrics_new = global_metrics[client_a_name]
+            client_b_metrics_new = global_metrics[client_b_name]
 
             #the metrics should be different for the test to succeed.
-            self.assertNotEqual(client1_metrics, client1_metrics_new)
-            self.assertNotEqual(client2_metrics, client2_metrics_new)
+            self.assertNotEqual(client_a_metrics, client_a_metrics_new)
+            self.assertNotEqual(client_b_metrics, client_b_metrics_new)
         except MaxWhileTries:
             raise RuntimeError("Failed to fetch `ceph fs perf stats` metrics")
         finally:
             # cleanup test directories
             self._cleanup_test_dirs()
+
+    def test_client_metrics_and_metadata(self):
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        self.mds_cluster.mon_manager.raw_cluster_cmd("fs", "flag", "set",
+            "enable_multiple", "true",
+            "--yes-i-really-mean-it")
+            
+        #creating filesystem
+        fs_a = self._setup_fs(fs_name = "fs1")
+
+        # Mount a client on fs_a
+        self.mount_a.mount_wait(cephfs_name=fs_a.name)
+        self.mount_a.write_n_mb("pad.bin", 1)
+        self.mount_a.write_n_mb("test.bin", 2)
+        self.mount_a.path_to_ino("test.bin")
+        self.mount_a.create_files()
+
+        #creating another filesystem
+        fs_b = self._setup_fs(fs_name = "fs2")
+
+        # Mount a client on fs_b
+        self.mount_b.mount_wait(cephfs_name=fs_b.name)
+        self.mount_b.write_n_mb("test.bin", 1)
+        self.mount_b.path_to_ino("test.bin")
+        self.mount_b.create_files()
+
+        # validate
+        valid, metrics = self._get_metrics(
+            self.verify_mds_metrics(client_count=TestMDSMetrics.CLIENTS_REQUIRED), 30)
+        log.debug(f"metrics={metrics}")
+        self.assertTrue(valid)
+        
+        client_metadata = metrics['client_metadata']
+
+        for i in client_metadata:
+            if not (client_metadata[i]['hostname']):
+                raise RuntimeError("hostname not found!")
+            if not (client_metadata[i]['valid_metrics']):
+                raise RuntimeError("valid_metrics not found!")
+

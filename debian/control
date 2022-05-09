@@ -78,7 +78,7 @@ Build-Depends: automake,
                libxmlsec1-nss <pkg.ceph.check>,
                libxmlsec1-openssl <pkg.ceph.check>,
                libxmlsec1-dev <pkg.ceph.check>,
-               ninja-build <pkg.ceph.check>,
+               ninja-build,
                nlohmann-json3-dev <pkg.ceph.jaeger>,
                patch,
                pkg-config,
@@ -350,7 +350,7 @@ Depends: ceph-mgr (= ${binary:Version}),
          ${python:Depends},
          openssh-client,
          python3-jinja2,
-         python3-cherrypy
+         python3-cherrypy3
 Description: cephadm orchestrator module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,

@@ -487,7 +487,7 @@ struct lc_op_ctx {
   const DoutPrefixProvider *dpp;
   WorkQ* wq;
 
-  RGWZoneGroupPlacementTier tier = {};
+  std::unique_ptr<rgw::sal::PlacementTier> tier;
 
   lc_op_ctx(op_env& env, rgw_bucket_dir_entry& o,
 	    boost::optional<std::string> next_key_name,
@@ -1025,20 +1025,22 @@ public:
       return false;
     }
     if (o.is_delete_marker()) {
-      std::string nkn;
-      if (oc.next_key_name) nkn = *oc.next_key_name;
-      if (oc.next_has_same_name(o.key.name)) {
-	ldpp_dout(dpp, 7) << __func__ << "(): dm-check SAME: key=" << o.key
-		       << " next_key_name: %%" << nkn << "%% "
-		       << oc.wq->thr_name() << dendl;
-	return false;
-      } else {
-	ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
-			 << " next_key_name: %%" << nkn << "%% "
-			 << oc.wq->thr_name() << dendl;
+      if (oc.next_key_name) {
+	std::string nkn = *oc.next_key_name;
+	if (oc.next_has_same_name(o.key.name)) {
+	  ldpp_dout(dpp, 7) << __func__ << "(): dm-check SAME: key=" << o.key
+			   << " next_key_name: %%" << nkn << "%% "
+			   << oc.wq->thr_name() << dendl;
+	  return false;
+	} else {
+	  ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
+			   << " next_key_name: %%" << nkn << "%% "
+			   << oc.wq->thr_name() << dendl;
         *exp_time = real_clock::now();
         return true;
+	}
       }
+      return false;
     }
 
     auto& mtime = o.meta.mtime;
@@ -1248,26 +1250,6 @@ public:
     return need_to_process;
   }
 
-  /* find out if the the storage class is remote cloud */
-  int get_tier_target(const RGWZoneGroup &zonegroup, const rgw_placement_rule& rule,
-                      RGWZoneGroupPlacementTier &tier) {
-    std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
-    titer = zonegroup.placement_targets.find(rule.name);
-    if (titer == zonegroup.placement_targets.end()) {
-      return -ENOENT;
-    }
-
-    const auto& target_rule = titer->second;
-    std::map<std::string, RGWZoneGroupPlacementTier>::const_iterator ttier;
-    ttier = target_rule.tier_targets.find(rule.storage_class);
-    if (ttier != target_rule.tier_targets.end()) {
-      tier = ttier->second;
-    } else { // not found
-      return -ENOENT;
-    }
-    return 0;
-  }
-
   int delete_tier_obj(lc_op_ctx& oc) {
     int ret = 0;
 
@@ -1283,137 +1265,15 @@ public:
     return ret;
   }
 
-  int update_tier_obj(lc_op_ctx& oc, RGWLCCloudTierCtx& tier_ctx) {
-
-    map<string, bufferlist> attrs;
-    int r = 0;
-
-    real_time read_mtime;
-
-    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(oc.obj->get_read_op());
-
-    read_op->params.lastmod = &read_mtime;
-
-    r = read_op->prepare(null_yield, oc.dpp);
-    if (r < 0) {
-      return r;
-    }
-
-    if (read_mtime != tier_ctx.o.meta.mtime) {
-      /* raced */
-      return -ECANCELED;
-    }
-
-    attrs = oc.obj->get_attrs();
-    
-    /* TODO dang - need to replace this with something zipper */
-    rgw::sal::RadosStore *rados = static_cast<rgw::sal::RadosStore*>(oc.store);
-    RGWRados::Object op_target(rados->getRados(), oc.bucket, oc.rctx, oc.obj.get());
-    RGWRados::Object::Write obj_op(&op_target);
-
-    obj_op.meta.modify_tail = true;
-    obj_op.meta.flags = PUT_OBJ_CREATE;
-    obj_op.meta.category = RGWObjCategory::CloudTiered;
-    obj_op.meta.delete_at = real_time();
-    bufferlist blo;
-    obj_op.meta.data = &blo;
-    obj_op.meta.if_match = NULL;
-    obj_op.meta.if_nomatch = NULL;
-    obj_op.meta.user_data = NULL;
-    obj_op.meta.zones_trace = NULL;
-    obj_op.meta.delete_at = real_time();
-    obj_op.meta.olh_epoch = tier_ctx.o.versioned_epoch;
-    
-    RGWObjManifest *pmanifest; 
-    RGWObjManifest manifest;
-
-    pmanifest = &manifest;
-    RGWObjTier tier_config;
-    tier_config.name = oc.tier.storage_class;
-    tier_config.tier_placement = oc.tier;
-    tier_config.is_multipart_upload = tier_ctx.is_multipart_upload;
-
-    pmanifest->set_tier_type("cloud-s3");
-    pmanifest->set_tier_config(tier_config);
-
-    /* check if its necessary */
-    rgw_placement_rule target_placement;
-    target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
-    target_placement.storage_class = oc.tier.storage_class;
-    pmanifest->set_head(target_placement, tier_ctx.obj->get_obj(), 0);
-
-    pmanifest->set_tail_placement(target_placement, tier_ctx.obj->get_obj().bucket);
-
-    pmanifest->set_obj_size(0);
-
-    obj_op.meta.manifest = pmanifest;
-
-    /* update storage class */
-    bufferlist bl;
-    bl.append(oc.tier.storage_class);
-    attrs[RGW_ATTR_STORAGE_CLASS] = bl;
-
-    attrs.erase(RGW_ATTR_ID_TAG);
-    attrs.erase(RGW_ATTR_TAIL_TAG);
-
-    r = obj_op.write_meta(oc.dpp, 0, 0, attrs, null_yield);
-    if (r < 0) {
-      return r;
-    }
-
-    return 0;
-  }
-
   int transition_obj_to_cloud(lc_op_ctx& oc) {
-    /* init */
-    string id = "cloudid";
-    string endpoint = oc.tier.t.s3.endpoint;
-    RGWAccessKey key = oc.tier.t.s3.key;
-    string region = oc.tier.t.s3.region;
-    HostStyle host_style = oc.tier.t.s3.host_style;
-    string bucket_name = oc.tier.t.s3.target_path;
-    const RGWZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
-    bool delete_object;
-   
     /* If CurrentVersion object, remove it & create delete marker */
-    delete_object = (!oc.tier.retain_head_object ||
+    bool delete_object = (!oc.tier->retain_head_object() ||
                      (oc.o.is_current() && oc.bucket->versioned()));
 
-    if (bucket_name.empty()) {
-      bucket_name = "rgwx-" + zonegroup.get_name() + "-" + oc.tier.storage_class +
-                    "-cloud-bucket";
-      boost::algorithm::to_lower(bucket_name);
-    }
-
-    /* Create RGW REST connection */
-    S3RESTConn conn(oc.cct, oc.store, id, { endpoint }, key, region, host_style);
-
-    RGWLCCloudTierCtx tier_ctx(oc.cct, oc.dpp, oc.o, oc.store, oc.bucket->get_info(),
-                        oc.obj.get(), conn, bucket_name,
-                        oc.tier.t.s3.target_storage_class);
-    tier_ctx.acl_mappings = oc.tier.t.s3.acl_mappings;
-    tier_ctx.multipart_min_part_size = oc.tier.t.s3.multipart_min_part_size;
-    tier_ctx.multipart_sync_threshold = oc.tier.t.s3.multipart_sync_threshold;
-    tier_ctx.storage_class = oc.tier.storage_class;
-
-    // check if target_path is already created
-    std::set<std::string>& cloud_targets = oc.env.worker->get_cloud_targets();
-    std::pair<std::set<std::string>::iterator, bool> it;
-
-    it = cloud_targets.insert(bucket_name);
-    tier_ctx.target_bucket_created = !(it.second);
-
-    ldpp_dout(oc.dpp, 0) << "Transitioning object(" << oc.o.key << ") to the cloud endpoint(" << endpoint << ")" << dendl;
-
-    /* Transition object to cloud end point */
-    int ret = rgw_cloud_tier_transfer_object(tier_ctx);
-
+    int ret = oc.obj->transition_to_cloud(oc.bucket, oc.tier.get(), oc.o,
+					  oc.env.worker->get_cloud_targets(), oc.cct,
+					  !delete_object, oc.dpp, null_yield);
     if (ret < 0) {
-      ldpp_dout(oc.dpp, 0) << "ERROR: failed to transfer object(" << oc.o.key << ") to the cloud endpoint(" << endpoint << ") ret=" << ret << dendl;
-
-      if (!tier_ctx.target_bucket_created) {
-        cloud_targets.erase(it.first);
-      }
       return ret;
     }
 
@@ -1421,12 +1281,6 @@ public:
       ret = delete_tier_obj(oc);
       if (ret < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: Deleting tier object(" << oc.o.key << ") failed ret=" << ret << dendl;
-        return ret;
-      }
-    } else {
-      ret = update_tier_obj(oc, tier_ctx);
-      if (ret < 0) {
-        ldpp_dout(oc.dpp, 0) << "ERROR: Updating tier object(" << oc.o.key << ") failed ret=" << ret << dendl;
         return ret;
       }
     }
@@ -1445,15 +1299,15 @@ public:
     }
 
     std::string tier_type = ""; 
-    const RGWZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
+    rgw::sal::ZoneGroup& zonegroup = oc.store->get_zone()->get_zonegroup();
 
     rgw_placement_rule target_placement;
     target_placement.inherit_from(oc.bucket->get_placement_rule());
     target_placement.storage_class = transition.storage_class;
 
-    r = get_tier_target(zonegroup, target_placement, oc.tier);
+    r = zonegroup.get_placement_tier(target_placement, &oc.tier);
 
-    if (!r && oc.tier.tier_type == "cloud-s3") {
+    if (!r && oc.tier->get_tier_type() == "cloud-s3") {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
       if (!oc.o.is_current() &&
           !pass_object_lock_check(oc.store, oc.obj.get(), oc.dpp)) {
@@ -1477,8 +1331,7 @@ public:
         return r;
       }
     } else {
-      if (!oc.store->get_zone()->get_params().
-  	    valid_placement(target_placement)) {
+      if (!oc.store->valid_placement(target_placement)) {
         ldpp_dout(oc.dpp, 0) << "ERROR: non existent dest placement: "
 	  		     << target_placement
                              << " bucket="<< oc.bucket
@@ -1952,7 +1805,7 @@ static inline void get_lc_oid(CephContext *cct,
   return;
 }
 
-static std::string get_lc_shard_name(const rgw_bucket& bucket){
+static std::string get_bucket_lc_key(const rgw_bucket& bucket){
   return string_join_reserve(':', bucket.tenant, bucket.name, bucket.marker);
 }
 
@@ -1968,9 +1821,9 @@ int RGWLC::process(LCWorker* worker,
      * can be processed without traversing any state entries (we
      * do need the entry {pro,epi}logue which update the state entry
      * for this bucket) */
-    auto bucket_entry_marker = get_lc_shard_name(optional_bucket->get_key());
-    auto index = get_lc_index(store->ctx(), bucket_entry_marker);
-    ret = process_bucket(index, max_secs, worker, bucket_entry_marker, once);
+    auto bucket_lc_key = get_bucket_lc_key(optional_bucket->get_key());
+    auto index = get_lc_index(store->ctx(), bucket_lc_key);
+    ret = process_bucket(index, max_secs, worker, bucket_lc_key, once);
     return ret;
   } else {
     /* generate an index-shard sequence unrelated to any other
@@ -2531,14 +2384,13 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
 			   const F& f) {
   CephContext *cct = store->ctx();
 
-  string shard_id = get_lc_shard_name(bucket);
-
+  auto bucket_lc_key = get_bucket_lc_key(bucket);
   string oid; 
-  get_lc_oid(cct, shard_id, &oid);
+  get_lc_oid(cct, bucket_lc_key, &oid);
 
   /* XXX it makes sense to take shard_id for a bucket_id? */
   rgw::sal::Lifecycle::LCEntry entry;
-  entry.bucket = shard_id;
+  entry.bucket = bucket_lc_key;
   entry.status = lc_uninitial;
   int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
 
@@ -2644,9 +2496,9 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
     return 0;    // No entry, nothing to fix
   }
 
-  auto shard_name = get_lc_shard_name(bucket->get_key());
+  auto bucket_lc_key = get_bucket_lc_key(bucket->get_key());
   std::string lc_oid;
-  get_lc_oid(store->ctx(), shard_name, &lc_oid);
+  get_lc_oid(store->ctx(), bucket_lc_key, &lc_oid);
 
   rgw::sal::Lifecycle::LCEntry entry;
   // There are multiple cases we need to encounter here
@@ -2654,7 +2506,7 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
   // 2. entry doesn't exist, which usually happens when reshard has happened prior to update and next LC process has already dropped the update
   // 3. entry exists matching the current bucket id which was after a reshard (needs to be updated to the marker)
   // We are not dropping the old marker here as that would be caught by the next LC process update
-  int ret = sal_lc->get_entry(lc_oid, shard_name, entry);
+  int ret = sal_lc->get_entry(lc_oid, bucket_lc_key, entry);
   if (ret == 0) {
     ldpp_dout(dpp, 5) << "Entry already exists, nothing to do" << dendl;
     return ret; // entry is already existing correctly set to marker

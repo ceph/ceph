@@ -106,6 +106,8 @@ def handle_clone_pending(fs_client, volspec, volname, index, groupname, subvolna
             next_state = SubvolumeOpSm.transition(SubvolumeTypes.TYPE_CLONE,
                                                   SubvolumeStates.STATE_PENDING,
                                                   SubvolumeActions.ACTION_CANCELLED)
+            update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname,
+                                        VolumeException(-errno.EINTR, "user interrupted clone operation"))
         else:
             next_state = SubvolumeOpSm.transition(SubvolumeTypes.TYPE_CLONE,
                                                   SubvolumeStates.STATE_PENDING,
@@ -184,7 +186,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                 raise VolumeException(-e.args[0], e.args[1])
     cptree(source_path, dst_path)
     if should_cancel():
-        raise VolumeException(-errno.EINTR, "clone operation interrupted")
+        raise VolumeException(-errno.EINTR, "user interrupted clone operation")
 
 def set_quota_on_clone(fs_handle, clone_volumes_pair):
     src_path = clone_volumes_pair[1].snapshot_data_path(clone_volumes_pair[2])
@@ -225,6 +227,14 @@ def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
             set_quota_on_clone(fs_handle, clone_volumes)
 
+def update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname, ve):
+    with open_volume_lockless(fs_client, volname) as fs_handle:
+        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
+            if ve.errno == -errno.EINTR:
+                clone_volumes[0].add_clone_failure(-ve.errno, "user interrupted clone operation")
+            else:
+                clone_volumes[0].add_clone_failure(-ve.errno, ve.error_str)
+
 def log_clone_failure(volname, groupname, subvolname, ve):
     if ve.errno == -errno.EINTR:
         log.info("Clone cancelled: ({0}, {1}, {2})".format(volname, groupname, subvolname))
@@ -240,6 +250,7 @@ def handle_clone_in_progress(fs_client, volspec, volname, index, groupname, subv
                                               SubvolumeStates.STATE_INPROGRESS,
                                               SubvolumeActions.ACTION_SUCCESS)
     except VolumeException as ve:
+        update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname, ve)
         log_clone_failure(volname, groupname, subvolname, ve)
         next_state = get_next_state_on_error(ve.errno)
     except OpSmException as oe:
@@ -349,6 +360,7 @@ class Cloner(AsyncJobs):
                                                   clone_state,
                                                   SubvolumeActions.ACTION_CANCELLED)
             clone_subvolume.state = (next_state, True)
+            clone_subvolume.add_clone_failure(errno.EINTR, "user interrupted clone operation")
             s_subvolume.detach_snapshot(s_snapname, track_idx.decode('utf-8'))
 
     def cancel_job(self, volname, job):

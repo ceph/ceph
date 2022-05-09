@@ -77,6 +77,22 @@ function expect_false()
         if eval "$@"; then return 1; else return 0; fi
 }
 
+# expect_return_code $expected_code $command ...
+function expect_return_code()
+{
+  set -x
+  local expected_code="$1"
+  shift
+  local command="$@"
+
+  set +e
+  eval "$command"
+  local return_code="$?"
+  set -e
+
+  if [ ! "$return_code" -eq "$expected_code" ]; then return 1; else return 0; fi
+}
+
 function is_available()
 {
     local name="$1"
@@ -370,6 +386,10 @@ $CEPHADM unit --fsid $FSID --name mon.a -- disable
 expect_false $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
 $CEPHADM unit --fsid $FSID --name mon.a -- enable
 $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
+$CEPHADM unit --fsid $FSID --name mon.a -- status
+$CEPHADM unit --fsid $FSID --name mon.a -- stop
+expect_return_code 3 $CEPHADM unit --fsid $FSID --name mon.a -- status
+$CEPHADM unit --fsid $FSID --name mon.a -- start
 
 ## shell
 $CEPHADM shell --fsid $FSID -- true

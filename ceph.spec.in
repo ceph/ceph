@@ -36,7 +36,11 @@
 %bcond_with rbd_rwl_cache
 %endif
 %if 0%{?fedora} || 0%{?rhel}
+%if 0%{?rhel} < 9
 %bcond_with system_pmdk
+%else
+%bcond_without system_pmdk
+%endif
 %bcond_without selinux
 %if 0%{?rhel} >= 8
 %bcond_with cephfs_java
@@ -186,9 +190,13 @@ BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
 %if 0%{with seastar} && 0%{?rhel}
-BuildRequires:	gcc-toolset-9-gcc-c++ >= 9.2.1-2.3
+BuildRequires:	gcc-toolset-10-gcc-c++ >= 10.3.1-1.2
+%else
+%if 0%{?suse_version}
+BuildRequires:	gcc11-c++
 %else
 BuildRequires:	gcc-c++
+%endif
 %endif
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
@@ -262,7 +270,11 @@ BuildRequires:	socat
 %if 0%{with zbd}
 BuildRequires:  libzbd-devel
 %endif
+%if 0%{?suse_version}
+BuildRequires:  libthrift-devel >= 0.13.0
+%else
 BuildRequires:  thrift-devel >= 0.13.0
+%endif
 BuildRequires:  re2-devel
 %if 0%{with jaeger}
 BuildRequires:  bison
@@ -300,10 +312,10 @@ BuildRequires:  libasan
 BuildRequires:  libatomic
 %endif
 %if 0%{?rhel}
-BuildRequires:  gcc-toolset-9-annobin
-BuildRequires:  gcc-toolset-9-libubsan-devel
-BuildRequires:  gcc-toolset-9-libasan-devel
-BuildRequires:  gcc-toolset-9-libatomic-devel
+BuildRequires:  gcc-toolset-10-annobin
+BuildRequires:  gcc-toolset-10-libubsan-devel
+BuildRequires:  gcc-toolset-10-libasan-devel
+BuildRequires:  gcc-toolset-10-libatomic-devel
 %endif
 %endif
 #################################################################################
@@ -321,6 +333,7 @@ BuildRequires:	libbz2-devel
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:  libopenssl-devel
+BuildRequires:  ninja
 BuildRequires:  openldap2-devel
 #BuildRequires:  krb5
 #BuildRequires:  krb5-devel
@@ -340,6 +353,7 @@ BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libibverbs-devel
 BuildRequires:  librdmacm-devel
+BuildRequires:  ninja-build
 BuildRequires:  openldap-devel
 #BuildRequires:  krb5-devel
 BuildRequires:  openssl-devel
@@ -356,7 +370,6 @@ BuildRequires:	golang
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	golang-github-prometheus
 BuildRequires:	libtool-ltdl-devel
-BuildRequires:	ninja-build
 BuildRequires:	xmlsec1
 BuildRequires:	xmlsec1-devel
 %ifarch x86_64
@@ -376,7 +389,6 @@ BuildRequires:	golang-github-prometheus-prometheus
 BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
-BuildRequires:	ninja
 BuildRequires:	python%{python3_pkgversion}-CherryPy
 BuildRequires:	python%{python3_pkgversion}-PyJWT
 BuildRequires:	python%{python3_pkgversion}-Routes
@@ -1235,7 +1247,7 @@ This package provides Ceph default alerts for Prometheus.
 %endif
 
 %if 0%{with seastar} && 0%{?rhel}
-. /opt/rh/gcc-toolset-9/enable
+. /opt/rh/gcc-toolset-10/enable
 %endif
 
 %if 0%{with cephfs_java}
@@ -1270,6 +1282,10 @@ env | sort
 mkdir -p %{_vpath_builddir}
 pushd %{_vpath_builddir}
 cmake .. \
+%if 0%{?suse_version}
+    -DCMAKE_C_COMPILER=gcc-11 \
+    -DCMAKE_CXX_COMPILER=g++-11 \
+%endif
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
     -DCMAKE_INSTALL_LIBEXECDIR:PATH=%{_libexecdir} \
@@ -1282,6 +1298,9 @@ cmake .. \
     -DWITH_MANPAGE:BOOL=ON \
     -DWITH_PYTHON3:STRING=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND:BOOL=OFF \
+%if 0%{?suse_version}
+    -DWITH_RADOSGW_SELECT_PARQUET:BOOL=OFF \
+%endif
 %if 0%{without ceph_test_package}
     -DWITH_TESTS:BOOL=OFF \
 %endif
@@ -1352,8 +1371,8 @@ cmake .. \
 %if 0%{with system_arrow}
     -DWITH_SYSTEM_ARROW:BOOL=ON \
 %endif
-%if 0%{without system_utf8proc}
-    -DWITH_SYSTEM_UTF8PROC:BOOL=OFF \
+%if 0%{with system_utf8proc}
+    -DWITH_SYSTEM_UTF8PROC:BOOL=ON \
 %endif
     -DWITH_GRAFANA:BOOL=ON
 
@@ -1467,6 +1486,9 @@ install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml %{buildroot}/etc/p
 
 %clean
 rm -rf %{buildroot}
+# built binaries are no longer necessary at this point,
+# but are consuming ~17GB of disk in the build environment
+rm -rf %{_vpath_builddir}
 
 #################################################################################
 # files and systemd scriptlets
@@ -1567,7 +1589,7 @@ exit 0
 %{_mandir}/man8/cephadm.8*
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm/.ssh
-%attr(0600,cephadm,cephadm) %{_sharedstatedir}/cephadm/.ssh/authorized_keys
+%config(noreplace) %attr(0600,cephadm,cephadm) %{_sharedstatedir}/cephadm/.ssh/authorized_keys
 
 %files common
 %dir %{_docdir}/ceph
