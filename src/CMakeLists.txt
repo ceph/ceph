@@ -429,6 +429,21 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crush_objs>)
+
+if(WITH_SEASTAR)
+  set(ceph_common_minor_objs
+    $<TARGET_OBJECTS:common-auth-objs>
+    $<TARGET_OBJECTS:common-common-minor-objs>
+    $<TARGET_OBJECTS:common-options-objs>
+    $<TARGET_OBJECTS:common-msg-objs>
+    $<TARGET_OBJECTS:common_buffer_obj>
+    $<TARGET_OBJECTS:common_texttable_obj>
+    $<TARGET_OBJECTS:compressor_objs>
+    $<TARGET_OBJECTS:common-objs>
+    $<TARGET_OBJECTS:common_mountcephfs_objs>
+    $<TARGET_OBJECTS:crush_objs>)
+endif()
+
 set(ceph_common_deps
   json_spirit erasure_code arch crc32
   ${LIB_RESOLV}
@@ -509,6 +524,11 @@ else()
 endif()
 
 target_link_libraries(ceph-common ${ceph_common_deps})
+if(WITH_SEASTAR)
+  add_library(ceph-common-minor ${CEPH_SHARED} ${ceph_common_minor_objs})
+  target_link_libraries(ceph-common-minor ${ceph_common_deps})
+endif()
+
 if(ENABLE_COVERAGE)
   target_link_libraries(ceph-common gcov)
 endif(ENABLE_COVERAGE)
@@ -529,6 +549,12 @@ if(NOT APPLE AND NOT FREEBSD)
     TARGET ceph-common
     APPEND APPEND_STRING
     PROPERTY LINK_FLAGS "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions")
+  if(WITH_SEASTAR)
+    set_property(
+      TARGET ceph-common-minor
+      APPEND APPEND_STRING
+      PROPERTY LINK_FLAGS "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions")
+  endif()
 endif()
 
 if(MINGW)
@@ -539,6 +565,14 @@ if(MINGW)
 else()
   install(
     TARGETS ceph-common
+    LIBRARY
+    DESTINATION ${CEPH_INSTALL_PKGLIBDIR}
+    NAMELINK_SKIP)
+endif()
+
+if(WITH_SEASTAR)
+  install(
+    TARGETS ceph-common-minor
     LIBRARY
     DESTINATION ${CEPH_INSTALL_PKGLIBDIR}
     NAMELINK_SKIP)

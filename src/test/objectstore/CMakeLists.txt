@@ -19,13 +19,21 @@ endif()
 
 target_link_libraries(ceph_test_objectstore
   os
-  ceph-common
   ${UNITTEST_LIBS}
-  global
+  global-raw
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   )
+if(WITH_SEASTAR)
+  target_link_libraries(ceph_test_objectstore
+    xstore-classic
+    ceph-common-minor
+)
+else()
+  target_link_libraries(ceph_test_objectstore
+    ceph-common)
+endif()
 install(TARGETS ceph_test_objectstore
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 

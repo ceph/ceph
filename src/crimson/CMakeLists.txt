@@ -1,4 +1,4 @@
-add_library(crimson::cflags INTERFACE IMPORTED)
+add_library(crimson::cflags INTERFACE IMPORTED GLOBAL)
 set(crimson_cflag_definitions "WITH_SEASTAR=1")
 # disable concepts to address https://github.com/boostorg/asio/issues/312
 if((CMAKE_CXX_COMPILER_ID STREQUAL GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 10) OR
@@ -24,102 +24,132 @@ set(crimson_common_srcs
   common/throttle.cc
   common/tri_mutex.cc)
 
+# Components of vanilla ceph imported to crimson.
+# These sources will be removed from a ceph-common library to form ceph-common-minor library.
+# The ceph-common-minor library is used when making crimson binaries, that links also crimson-common.
+# The ceph-common library is used when making non-crimson binaries.
+set(crimson_ceph_imported_srcs
+  auth/Crypto.cc
+  common/admin_socket_client.cc
+  common/bit_str.cc
+  common/bloom_filter.cc
+  common/buffer.cc
+  common/buffer_seastar.cc
+  common/ceph_argparse.cc
+  common/ceph_context.cc
+  common/ceph_crypto.cc
+  common/ceph_hash.cc
+  common/ceph_time.cc
+  common/ceph_strings.cc
+  common/ceph_releases.cc
+  common/cmdparse.cc
+  common/compat.cc
+  common/code_environment.cc
+  common/config_values.cc
+  common/dout.cc
+  common/entity_name.cc
+  common/environment.cc
+  common/errno.cc
+  common/escape.cc
+  common/hex.cc
+  common/fs_types.cc
+  common/ceph_json.cc
+  common/histogram.cc
+  common/hobject.cc
+  common/hostname.cc
+  common/ipaddr.cc
+  common/mempool.cc
+  common/options.cc
+  common/perf_counters.cc
+  common/perf_histogram.cc
+  common/page.cc
+  common/pick_address.cc
+  common/snap_types.cc
+  common/signal.cc
+  common/str_list.cc
+  common/str_map.cc
+  common/strtol.cc
+  common/reverse.c
+  common/types.cc
+  common/utf8.c
+  common/version.cc
+  common/BackTrace.cc
+  common/ConfUtils.cc
+  common/DecayCounter.cc
+  common/HTMLFormatter.cc
+  common/Formatter.cc
+  common/Graylog.cc
+  common/Journald.cc
+  common/ostream_temp.cc
+  common/LogEntry.cc
+  common/TextTable.cc
+  common/Thread.cc
+  common/PluginRegistry.cc
+  common/RefCountedObj.cc
+  common/util.cc
+  compressor/Compressor.cc
+  crush/builder.c
+  crush/mapper.c
+  crush/crush.c
+  crush/hash.c
+  crush/CrushWrapper.cc
+  crush/CrushCompiler.cc
+  crush/CrushTester.cc
+  crush/CrushLocation.cc
+  global/global_context.cc
+  global/pidfile.cc
+  librbd/Features.cc
+  librbd/io/IoOperations.cc
+  log/Log.cc
+  mgr/ServiceMap.cc
+  mds/inode_backtrace.cc
+  mds/mdstypes.cc
+  mds/cephfs_features.cc
+  mds/FSMap.cc
+  mds/FSMapUser.cc
+  mds/MDSMap.cc
+  msg/msg_types.cc
+  msg/Message.cc
+  mon/PGMap.cc
+  mon/MonCap.cc
+  mon/MonMap.cc
+  osd/osd_types.cc
+  osd/ECMsgTypes.cc
+  osd/HitSet.cc
+  osd/OSDMap.cc
+  osd/PGPeeringEvent.cc
+  xxHash/xxhash.c
+)
+
+#Sources that are compiled for both libcrimson-common libceph-common.
+#This is necessary when we replace ceph:: classes with crimson:: counterparts
+set(crimson_ceph_used_twice_srcs
+  common/config.cc
+  common/common_init.cc
+)
+
+#Switch name from "imported" to "exported" to make better sense for other modules.
+set(crimson_ceph_exported_srcs "${crimson_ceph_imported_srcs}" PARENT_SCOPE)
+
+#cuts out from variable 'local_srcs' values that are present in 'exported_srcs'
+#it selects only those that match 'filter', removing 'filter' prefix
+function(remove_exported local_srcs filter exported_srcs)
+  set(to_remove ${${exported_srcs}})
+  list(FILTER to_remove INCLUDE REGEX ${filter})
+  list(TRANSFORM to_remove REPLACE ${filter} "")
+  list(REMOVE_ITEM ${local_srcs} ${to_remove})
+endfunction()
+
+#we compile from crimson subdir, so we need to prepend full path
+list(TRANSFORM crimson_ceph_imported_srcs PREPEND "${PROJECT_SOURCE_DIR}/src/")
+list(TRANSFORM crimson_ceph_used_twice_srcs PREPEND "${PROJECT_SOURCE_DIR}/src/")
+
 # the specialized version of ceph-common, where
 #  - the logging is sent to Seastar backend
 #  - and the template parameter of lock_policy is SINGLE
 add_library(crimson-common STATIC
-  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
-  ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
-  ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
-  ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
-  ${PROJECT_SOURCE_DIR}/src/common/buffer.cc
-  ${PROJECT_SOURCE_DIR}/src/common/buffer_seastar.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_hash.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_time.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_strings.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_releases.cc
-  ${PROJECT_SOURCE_DIR}/src/common/cmdparse.cc
-  ${PROJECT_SOURCE_DIR}/src/common/common_init.cc
-  ${PROJECT_SOURCE_DIR}/src/common/compat.cc
-  ${PROJECT_SOURCE_DIR}/src/common/code_environment.cc
-  ${PROJECT_SOURCE_DIR}/src/common/config.cc
-  ${PROJECT_SOURCE_DIR}/src/common/config_values.cc
-  ${PROJECT_SOURCE_DIR}/src/common/dout.cc
-  ${PROJECT_SOURCE_DIR}/src/common/entity_name.cc
-  ${PROJECT_SOURCE_DIR}/src/common/environment.cc
-  ${PROJECT_SOURCE_DIR}/src/common/errno.cc
-  ${PROJECT_SOURCE_DIR}/src/common/escape.cc
-  ${PROJECT_SOURCE_DIR}/src/common/hex.cc
-  ${PROJECT_SOURCE_DIR}/src/common/fs_types.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_json.cc
-  ${PROJECT_SOURCE_DIR}/src/common/histogram.cc
-  ${PROJECT_SOURCE_DIR}/src/common/hobject.cc
-  ${PROJECT_SOURCE_DIR}/src/common/hostname.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ipaddr.cc
-  ${PROJECT_SOURCE_DIR}/src/common/mempool.cc
-  ${PROJECT_SOURCE_DIR}/src/common/options.cc
-  ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
-  ${PROJECT_SOURCE_DIR}/src/common/perf_histogram.cc
-  ${PROJECT_SOURCE_DIR}/src/common/page.cc
-  ${PROJECT_SOURCE_DIR}/src/common/pick_address.cc
-  ${PROJECT_SOURCE_DIR}/src/common/snap_types.cc
-  ${PROJECT_SOURCE_DIR}/src/common/signal.cc
-  ${PROJECT_SOURCE_DIR}/src/common/str_list.cc
-  ${PROJECT_SOURCE_DIR}/src/common/str_map.cc
-  ${PROJECT_SOURCE_DIR}/src/common/strtol.cc
-  ${PROJECT_SOURCE_DIR}/src/common/reverse.c
-  ${PROJECT_SOURCE_DIR}/src/common/types.cc
-  ${PROJECT_SOURCE_DIR}/src/common/utf8.c
-  ${PROJECT_SOURCE_DIR}/src/common/version.cc
-  ${PROJECT_SOURCE_DIR}/src/common/BackTrace.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ConfUtils.cc
-  ${PROJECT_SOURCE_DIR}/src/common/DecayCounter.cc
-  ${PROJECT_SOURCE_DIR}/src/common/HTMLFormatter.cc
-  ${PROJECT_SOURCE_DIR}/src/common/Formatter.cc
-  ${PROJECT_SOURCE_DIR}/src/common/Graylog.cc
-  ${PROJECT_SOURCE_DIR}/src/common/Journald.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ostream_temp.cc
-  ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
-  ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
-  ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
-  ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
-  ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
-  ${PROJECT_SOURCE_DIR}/src/common/util.cc
-  ${PROJECT_SOURCE_DIR}/src/compressor/Compressor.cc
-  ${PROJECT_SOURCE_DIR}/src/crush/builder.c
-  ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
-  ${PROJECT_SOURCE_DIR}/src/crush/crush.c
-  ${PROJECT_SOURCE_DIR}/src/crush/hash.c
-  ${PROJECT_SOURCE_DIR}/src/crush/CrushWrapper.cc
-  ${PROJECT_SOURCE_DIR}/src/crush/CrushCompiler.cc
-  ${PROJECT_SOURCE_DIR}/src/crush/CrushTester.cc
-  ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
-  ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
-  ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
-  ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
-  ${PROJECT_SOURCE_DIR}/src/librbd/io/IoOperations.cc
-  ${PROJECT_SOURCE_DIR}/src/log/Log.cc
-  ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc
-  ${PROJECT_SOURCE_DIR}/src/mds/inode_backtrace.cc
-  ${PROJECT_SOURCE_DIR}/src/mds/mdstypes.cc
-  ${PROJECT_SOURCE_DIR}/src/mds/cephfs_features.cc
-  ${PROJECT_SOURCE_DIR}/src/mds/FSMap.cc
-  ${PROJECT_SOURCE_DIR}/src/mds/FSMapUser.cc
-  ${PROJECT_SOURCE_DIR}/src/mds/MDSMap.cc
-  ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
-  ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
-  ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
-  ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc
-  ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/osd_types.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/ECMsgTypes.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/HitSet.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
-  ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
+  ${crimson_ceph_imported_srcs}
+  ${crimson_ceph_used_twice_srcs}
   ${crimson_common_srcs}
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:common-options-objs>)

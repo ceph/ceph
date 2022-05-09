@@ -102,6 +102,11 @@ set(common_srcs
   util.cc
   version.cc)
 
+if(WITH_SEASTAR)
+  set(common_minor_srcs ${common_srcs})
+  remove_exported(common_minor_srcs "^common/" crimson_ceph_exported_srcs)
+endif()
+
 if(WITH_SYSTEMD)
   list(APPEND common_srcs
     Journald.cc)
@@ -150,6 +155,13 @@ else()
     dns_resolve.cc
     linux_version.c
     SubProcess.cc)
+  if(WITH_SEASTAR)
+    list(APPEND common_minor_srcs
+      blkdev.cc
+      dns_resolve.cc
+      linux_version.c
+      SubProcess.cc)
+  endif()
 endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/common/version.cc
@@ -180,6 +192,11 @@ endif()
 
 add_library(common-common-objs OBJECT
   ${common_srcs})
+if(WITH_SEASTAR)
+  add_library(common-common-minor-objs OBJECT
+    ${common_minor_srcs})
+endif()
+
 # Let's not rely on the default system headers and point Cmake to the
 # retrieved OpenSSL location. This is especially important when cross
 # compiling (e.g. targeting Windows).
