@@ -650,6 +650,11 @@ private:
     uint64_t projected_count = 0;
     uint64_t projected_used_bytes_sum = 0;
 
+    uint64_t closed_journal_used_bytes = 0;
+    uint64_t closed_journal_total_bytes = 0;
+    uint64_t closed_ool_used_bytes = 0;
+    uint64_t closed_ool_total_bytes = 0;
+
     uint64_t io_blocking_num = 0;
     uint64_t io_count = 0;
     uint64_t io_blocked_count = 0;

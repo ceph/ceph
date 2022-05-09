@@ -517,6 +517,14 @@ void SegmentCleaner::register_metrics()
 		     sm::description("rewritten bytes due to reclaim")),
     sm::make_counter("reclaimed_segment_bytes", stats.reclaimed_segment_bytes,
 		     sm::description("rewritten bytes due to reclaim")),
+    sm::make_counter("closed_journal_used_bytes", stats.closed_journal_used_bytes,
+		     sm::description("used bytes when close a journal segment")),
+    sm::make_counter("closed_journal_total_bytes", stats.closed_journal_total_bytes,
+		     sm::description("total bytes of closed journal segments")),
+    sm::make_counter("closed_ool_used_bytes", stats.closed_ool_used_bytes,
+		     sm::description("used bytes when close a ool segment")),
+    sm::make_counter("closed_ool_total_bytes", stats.closed_ool_total_bytes,
+		     sm::description("total bytes of closed ool segments")),
 
     sm::make_gauge("available_ratio",
                    [this] { return segments.get_available_ratio(); },
@@ -631,6 +639,14 @@ void SegmentCleaner::close_segment(segment_id_t segment)
   LOG_PREFIX(SegmentCleaner::close_segment);
   auto old_usage = calc_utilization(segment);
   segments.mark_closed(segment);
+  auto &seg_info = segments[segment];
+  if (seg_info.type == segment_type_t::JOURNAL) {
+    stats.closed_journal_used_bytes += space_tracker->get_usage(segment);
+    stats.closed_journal_total_bytes += segments.get_segment_size();
+  } else {
+    stats.closed_ool_used_bytes += space_tracker->get_usage(segment);
+    stats.closed_ool_total_bytes += segments.get_segment_size();
+  }
   auto new_usage = calc_utilization(segment);
   adjust_segment_util(old_usage, new_usage);
   INFO("closed, should_block_on_gc {}, projected_avail_ratio {}, "
