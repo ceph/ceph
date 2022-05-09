@@ -15,8 +15,9 @@
 class DaemonMetricCollector {
 public:
   void main();
+  void set_sock_dir(std::string sock_path);
   std::string get_metrics();
-  static const char *SOCKETDIR;
+  std::string SOCKETDIR = "/var/run/ceph/";
 
 private:
   std::map<std::string, AdminSocketClient> clients;

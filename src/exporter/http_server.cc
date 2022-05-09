@@ -1,5 +1,7 @@
 #include "http_server.h"
 #include "common/hostname.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
 #include "exporter/DaemonMetricCollector.h"
 
 #include <boost/asio.hpp>
@@ -134,32 +136,18 @@ void http_server(tcp::acceptor &acceptor, tcp::socket &socket) {
   });
 }
 
-std::string dns_lookup(std::string hostname) {
-  boost::asio::io_service io_service;
-  boost::asio::ip::tcp::resolver resolver(io_service);
-  boost::asio::ip::tcp::resolver::query query(hostname, "9926");
-  boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
-  boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
-  std::string ip_address = endpoint.address().to_string();
-
-  return ip_address;
-}
-
-void http_server_thread_entrypoint(std::string cert_path, std::string key_path,
-                                   std::string tls_options) {
+void http_server_thread_entrypoint(std::string exporter_addrs, std::string exporter_port) {
   try {
-    std::string hostname = ceph_get_short_hostname();
-
-    std::string ip_address = dns_lookup(hostname);
-    auto const address = net::ip::make_address(ip_address);
-    unsigned short port = 9926;
+    exporter_addrs = !exporter_addrs.empty() ? exporter_addrs : g_conf().get_val<std::string>("exporter_addrs");
+    auto const address = net::ip::make_address(exporter_addrs);
+    unsigned short port = g_conf().get_val<int64_t>("exporter_port");
 
     net::io_context ioc{1};
 
     tcp::acceptor acceptor{ioc, {address, port}};
     tcp::socket socket{ioc};
     http_server(acceptor, socket);
-    std::cout << "Http server started" << std::endl;
+    std::cout << "Http server running on " << std::quoted(exporter_addrs + ":" + exporter_port) << std::endl;
     ioc.run();
   } catch (std::exception const &e) {
     std::cerr << "Error: " << e.what() << std::endl;
