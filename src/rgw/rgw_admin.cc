@@ -28,8 +28,6 @@ extern "C" {
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
 
-#include "global/global_init.h"
-
 #include "include/utime.h"
 #include "include/str_list.h"
 
@@ -1540,9 +1538,9 @@ int set_user_bucket_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
 {
   RGWUserInfo& user_info = op_state.get_user_info();
 
-  set_quota_info(user_info.bucket_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
+  set_quota_info(user_info.quota.bucket_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
-  op_state.set_bucket_quota(user_info.bucket_quota);
+  op_state.set_bucket_quota(user_info.quota.bucket_quota);
 
   string err;
   int r = user.modify(dpp(), op_state, null_yield, &err);
@@ -1558,9 +1556,9 @@ int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
 {
   RGWUserInfo& user_info = op_state.get_user_info();
 
-  set_quota_info(user_info.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
+  set_quota_info(user_info.quota.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
-  op_state.set_user_quota(user_info.user_quota);
+  op_state.set_user_quota(user_info.quota.user_quota);
 
   string err;
   int r = user.modify(dpp(), op_state, null_yield, &err);
@@ -3370,8 +3368,8 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-                         CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = rgw_global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			     CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
@@ -4246,12 +4244,36 @@ int main(int argc, const char **argv)
     bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
     bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end()) && !bypass_gc;
 
+    std::string rgw_store = "rados";
+    // Get the store backend
+    const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+#ifdef WITH_RADOSGW_DBSTORE
+    if (config_store == "dbstore") {
+      rgw_store = "dbstore";
+    }
+#endif
+
+#ifdef WITH_RADOSGW_MOTR
+    if (config_store == "motr") {
+      rgw_store = "motr";
+    }
+#endif
+
     if (raw_storage_op) {
-      store = StoreManager::get_raw_storage(dpp(), g_ceph_context, "rados");
+      store = StoreManager::get_raw_storage(dpp(),
+					    g_ceph_context,
+					    rgw_store);
     } else {
-      store = StoreManager::get_storage(dpp(), g_ceph_context, "rados", false, false, false,
-					   false, false,
-					   need_cache && g_conf()->rgw_cache_enabled, need_gc);
+      store = StoreManager::get_storage(dpp(),
+					g_ceph_context,
+					rgw_store,
+					false,
+					false,
+					false,
+					false,
+					false,
+					need_cache && g_conf()->rgw_cache_enabled,
+					need_gc);
     }
     if (!store) {
       cerr << "couldn't init storage provider" << std::endl;
@@ -4639,19 +4661,19 @@ int main(int argc, const char **argv)
 
         formatter->open_object_section("period_config");
         if (quota_scope == "bucket") {
-          set_quota_info(period_config.bucket_quota, opt_cmd,
+          set_quota_info(period_config.quota.bucket_quota, opt_cmd,
                          max_size, max_objects,
                          have_max_size, have_max_objects);
-          encode_json("bucket quota", period_config.bucket_quota, formatter.get());
+          encode_json("bucket quota", period_config.quota.bucket_quota, formatter.get());
         } else if (quota_scope == "user") {
-          set_quota_info(period_config.user_quota, opt_cmd,
+          set_quota_info(period_config.quota.user_quota, opt_cmd,
                          max_size, max_objects,
                          have_max_size, have_max_objects);
-          encode_json("user quota", period_config.user_quota, formatter.get());
+          encode_json("user quota", period_config.quota.user_quota, formatter.get());
         } else if (quota_scope.empty() && opt_cmd == OPT::GLOBAL_QUOTA_GET) {
           // if no scope is given for GET, print both
-          encode_json("bucket quota", period_config.bucket_quota, formatter.get());
-          encode_json("user quota", period_config.user_quota, formatter.get());
+          encode_json("bucket quota", period_config.quota.bucket_quota, formatter.get());
+          encode_json("user quota", period_config.quota.user_quota, formatter.get());
         } else {
           cerr << "ERROR: invalid quota scope specification. Please specify "
               "either --quota-scope=bucket, or --quota-scope=user" << std::endl;
@@ -7725,6 +7747,8 @@ next:
     rgw_obj_index_key index_key;
     key.get_index_key(&index_key);
     oid_list.push_back(index_key);
+
+    // note: under rados this removes directly from rados index objects
     ret = bucket->remove_objs_from_index(dpp(), oid_list);
     if (ret < 0) {
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;

@@ -4,7 +4,7 @@ if(NOT GPERF)
 endif()
 
 if(WITH_RADOSGW_SELECT_PARQUET)
-  set(ARROW_LIBRARIES Arrow::Parquet)
+  set(ARROW_LIBRARIES Arrow::Arrow Arrow::Parquet)
   add_definitions(-D_ARROW_EXIST)
   message("-- arrow is installed, radosgw/s3select-op is able to process parquet objects")
 endif(WITH_RADOSGW_SELECT_PARQUET)

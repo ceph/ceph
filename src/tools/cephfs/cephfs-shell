@@ -393,6 +393,7 @@ class CephFSShell(Cmd):
         self.umask = '2'
 
     def default(self, line):
+        self.exit_code = 127
         perror('Unrecognized command')
 
     def set_prompt(self):
@@ -507,10 +508,9 @@ class CephFSShell(Cmd):
             except ValueError:
                 res = re.match('((u?g?o?)|(a?))(=)(r?w?x?)', values)
                 if res is None:
-                    parser.error("invalid mode: %s\n"
+                    parser.error(f"invalid mode: {values}\n"
                                  "mode must be a numeric octal literal\n"
-                                 "or   ((u?g?o?)|(a?))(=)(r?w?x?)" %
-                                 values)
+                                 "or   ((u?g?o?)|(a?))(=)(r?w?x?)")
                 else:
                     # we are supporting only assignment of mode and not + or -
                     # as is generally available with the chmod command
@@ -524,9 +524,8 @@ class CephFSShell(Cmd):
                         parser.error("need assignment operator between user "
                                      "and mode specifiers")
                     if val[4] == '':
-                        parser.error("invalid mode: %s\n"
-                                     "mode must be combination of: r | w | x" %
-                                     values)
+                        parser.error(f"invalid mode: {values}\n"
+                                     "mode must be combination of: r | w | x")
                     users = ''
                     if val[2] is None:
                         users = val[1]
@@ -552,11 +551,11 @@ class CephFSShell(Cmd):
                         o_mode |= t_mode
 
             if o_mode < 0:
-                parser.error("invalid mode: %s\n"
-                             "mode cannot be negative" % values)
-            if o_mode > 0o777:
-                parser.error("invalid mode: %s\n"
-                             "mode cannot be greater than octal 0777" % values)
+                parser.error(f"invalid mode: {values}\n"
+                             "mode cannot be negative")
+            if o_mode > 0o7777:
+                parser.error(f"invalid mode: {values}\n"
+                             "mode cannot be greater than octal 07777")
 
             setattr(namespace, self.dest, str(oct(o_mode)))
 
@@ -1002,15 +1001,15 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    chmod_parser = argparse.ArgumentParser(description='Create Directory.')
+    chmod_parser = argparse.ArgumentParser(description='Change permission of a file/directory.')
     chmod_parser.add_argument('mode', type=str, action=ModeAction, help='Mode')
     chmod_parser.add_argument('paths', type=str, action=path_to_bytes,
-                              help='Name of the file', nargs='+')
+                              help='Path of the file/directory', nargs='+')
 
     @with_argparser(chmod_parser)
     def do_chmod(self, args):
         """
-        Change permission of a file
+        Change permission of a file/directory
         """
         for path in args.paths:
             mode = int(args.mode, base=8)

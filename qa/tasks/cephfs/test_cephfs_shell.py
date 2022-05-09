@@ -163,6 +163,14 @@ class TestCephFSShell(CephFSTestCase):
             check_status=check_status).stdout.getvalue().strip())
 
 
+class TestGeneric(TestCephFSShell):
+
+    def test_mistyped_cmd(self):
+        with self.assertRaises(CommandFailedError) as cm:
+            self.run_cephfs_shell_cmd('lsx')
+        self.assertEqual(cm.exception.exitstatus, 127)
+
+
 class TestMkdir(TestCephFSShell):
     def test_mkdir(self):
         """
@@ -174,11 +182,11 @@ class TestMkdir(TestCephFSShell):
         o = self.mount_a.stat('d1')
         log.info("mount_a output:\n{}".format(o))
 
-    def test_mkdir_with_07000_octal_mode(self):
+    def test_mkdir_with_070000_octal_mode(self):
         """
-        Test that mkdir fails with octal mode greater than 0777
+        Test that mkdir fails with octal mode greater than 07777
         """
-        self.negtest_cephfs_shell_cmd(cmd="mkdir -m 07000 d2")
+        self.negtest_cephfs_shell_cmd(cmd="mkdir -m 070000 d2")
         try:
             self.mount_a.stat('d2')
         except CommandFailedError:
@@ -271,9 +279,16 @@ class TestRmdir(TestCephFSShell):
         Test that rmdir does not delete directory containing file
         """
         self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
-        self.run_cephfs_shell_cmd("put - test_dir/dumpfile",
-                                  stdin="Valid File")
-        self.run_cephfs_shell_cmd("rmdir" + self.dir_name)
+
+        self.run_cephfs_shell_cmd("put - test_dir/dumpfile", stdin="Valid File")
+        # see comment below
+        # with self.assertRaises(CommandFailedError) as cm:
+        with self.assertRaises(CommandFailedError):
+            self.run_cephfs_shell_cmd("rmdir " + self.dir_name)
+        # TODO: we need to check for exit code and error message as well.
+        # skipping it for not since error codes used by cephfs-shell are not
+        # standard and they may change soon.
+        # self.assertEqual(cm.exception.exitcode, 39)
         self.mount_a.stat(self.dir_name)
 
     def test_rmdir_existing_file(self):
@@ -1002,6 +1017,14 @@ class TestMisc(TestCephFSShell):
         log.info("output:\n{}".format(o))
 
 
+    def test_chmod(self):
+        """Test chmod is allowed above o0777 """
+        
+        test_file1 = "test_file2.txt"
+        file1_content = 'A' * 102
+        self.run_cephfs_shell_cmd(f"write {test_file1}", stdin=file1_content)
+        self.run_cephfs_shell_cmd(f"chmod 01777 {test_file1}")
+        
 class TestShellOpts(TestCephFSShell):
     """
     Contains tests for shell options from conf file and shell prompt.

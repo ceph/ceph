@@ -17,7 +17,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_cyanstore);
   }
 }
 
@@ -322,7 +322,7 @@ CyanStore::omap_get_values(CollectionRef ch,
 auto
 CyanStore::omap_get_header(CollectionRef ch,
 			   const ghobject_t& oid)
-  -> read_errorator::future<ceph::bufferlist>
+  -> get_attr_errorator::future<ceph::bufferlist>
 {
   auto c = static_cast<Collection*>(ch.get());
   auto o = c->get_object(oid);
@@ -330,7 +330,7 @@ CyanStore::omap_get_header(CollectionRef ch,
     return crimson::ct_error::enoent::make();
   }
 
-  return read_errorator::make_ready_future<ceph::bufferlist>(
+  return get_attr_errorator::make_ready_future<ceph::bufferlist>(
     o->omap_header);
 }
 

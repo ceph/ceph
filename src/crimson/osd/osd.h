@@ -37,7 +37,6 @@ class MOSDMap;
 class MOSDRepOpReply;
 class MOSDRepOp;
 class MOSDScrub2;
-class OSDMap;
 class OSDMeta;
 class Heartbeat;
 
@@ -210,7 +209,7 @@ private:
   seastar::future<> start_asok_admin();
 
 public:
-  OSDMapGate osdmap_gate;
+  OSD_OSDMapGate osdmap_gate;
 
   ShardServices &get_shard_services() {
     return shard_services;
@@ -237,12 +236,13 @@ private:
   friend class RemotePeeringEvent;
 
 public:
-  blocking_future<Ref<PG>> get_or_create_pg(
+  seastar::future<Ref<PG>> get_or_create_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&&,
     spg_t pgid,
     epoch_t epoch,
     std::unique_ptr<PGCreateInfo> info);
-  blocking_future<Ref<PG>> wait_for_pg(
-    spg_t pgid);
+  seastar::future<Ref<PG>> wait_for_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&&, spg_t pgid);
   Ref<PG> get_pg(spg_t pgid);
   seastar::future<> send_beacon();
 

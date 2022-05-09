@@ -28,6 +28,30 @@ Alternative usage:
     python ~/git/ceph/qa/tasks/vstart_runner.py tasks.mgr.dashboard.test_health
     python ~/git/ceph/qa/tasks/vstart_runner.py tasks.mgr.dashboard.test_rgw
 
+Following are few important notes that might save some investigation around
+vstart_runner.py -
+
+* If using the FUSE client, ensure that the fuse package is installed and
+  enabled on the system and that "user_allow_other" is added to /etc/fuse.conf.
+
+* If using the kernel client, the user must have the ability to run commands
+  with passwordless sudo access.
+
+* A failure on the kernel client may crash the host, so it's recommended to
+  use this functionality within a virtual machine.
+
+* "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments are
+  overridden by vstart_runner.py. Former two usually have no applicability
+  for test runs on developer's machines and see note point on "omit_sudo"
+  to know more about overriding of "sudo".
+
+* "omit_sudo" is re-set to False unconditionally in cases of commands
+  "passwd" and "chown".
+
+* The presence of binary file named after the first argument in the command
+  arguments received by the method LocalRemote.run() is checked for in
+  <ceph-repo-root>/build/bin/. If present, the first argument is replaced with
+  the path to binary file.
 """
 
 from io import StringIO
@@ -50,7 +74,7 @@ import logging
 
 from unittest import suite, loader
 
-from teuthology.orchestra.run import Raw, quote, PIPE
+from teuthology.orchestra.run import quote, PIPE
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
@@ -103,6 +127,13 @@ def respawn_in_path(lib_path, python_paths):
 
     for p in python_paths:
         sys.path.insert(0, p)
+
+
+def launch_subprocess(args, cwd=None, env=None, shell=True,
+                      executable='/bin/bash'):
+    return subprocess.Popen(args, cwd=cwd, env=env, shell=shell,
+                            executable=executable, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, stdin=subprocess.PIPE)
 
 
 # Let's use some sensible defaults
@@ -167,11 +198,12 @@ def rm_nonascii_chars(var):
     return var
 
 class LocalRemoteProcess(object):
-    def __init__(self, args, subproc, check_status, stdout, stderr):
+    def __init__(self, args, subproc, check_status, stdout, stderr, usr_args):
         self.args = args
         self.subproc = subproc
         self.stdout = stdout
         self.stderr = stderr
+        self.usr_args = usr_args
         # this variable is meant for instance of this class named fuse_daemon.
         # child process of the command launched with sudo must be killed,
         # since killing parent process alone has no impact on the child
@@ -202,6 +234,7 @@ class LocalRemoteProcess(object):
             # Avoid calling communicate() on a dead process because it'll
             # give you stick about std* already being closed
             if self.check_status and self.exitstatus != 0:
+                # TODO: print self.args or self.usr_args in exception msg?
                 raise CommandFailedError(self.args, self.exitstatus)
             else:
                 return
@@ -218,6 +251,7 @@ class LocalRemoteProcess(object):
             sys.stderr.write(err.decode())
 
         if self.check_status and self.exitstatus != 0:
+            # TODO: print self.args or self.usr_args in exception msg?
             raise CommandFailedError(self.args, self.exitstatus)
 
     @property
@@ -239,14 +273,14 @@ class LocalRemoteProcess(object):
     def kill(self):
         log.debug("kill ")
         if self.subproc.pid and not self.finished:
-            log.debug("kill: killing pid {0} ({1})".format(
-                self.subproc.pid, self.args))
+            log.debug(f"kill: killing pid {self.subproc.pid} "
+                      f"({self.usr_args})")
             if self.fuse_pid != -1:
                 safe_kill(self.fuse_pid)
             else:
                 safe_kill(self.subproc.pid)
         else:
-            log.debug("kill: already terminated ({0})".format(self.args))
+            log.debug(f"kill: already terminated ({self.usr_args})")
 
     @property
     def stdin(self):
@@ -360,49 +394,65 @@ class LocalRemote(object):
         """
         self.write_file(path, data, sudo=True, **kwargs)
 
-    def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
-        # Since Python's shell simulation can only work when commands are
-        # provided as a list of argumensts...
-        if isinstance(args, str):
-            args = args.split()
+    # XXX: omit_sudo is re-set to False even in cases of commands like passwd
+    # and chown.
+    # XXX: "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments
+    # are overridden. Former two usually have no applicability for test runs
+    # on developer's machines and see note point on "omit_sudo" to know more
+    # about overriding of "sudo".
+    # XXX: the presence of binary file named after the first argument is
+    # checked in build/bin/, if present the first argument is replaced with
+    # the path to binary file.
+    def _perform_checks_and_adjustments(self, args, omit_sudo, shell):
+        if isinstance(args, list):
+            args = quote(args)
 
+        assert isinstance(args, str)
+
+        first_arg = args[ : args.find(' ')]
+        if '/' not in first_arg:
+            local_bin = os.path.join(BIN_PREFIX, first_arg)
+            if os.path.exists(local_bin):
+                args = args.replace(first_arg, local_bin, 1)
+
+        # we're intentionally logging the command before overriding to avoid
+        # this clutter in the log.
+        log.debug('> ' + args)
+
+        args = args.replace('None/archive/ceph-coverage', '')
+
+        prefix = """
+adjust-ulimits() {
+    "$@"
+}
+ceph-coverage() {
+    "$@"
+}
+"""
         # We'll let sudo be a part of command even omit flag says otherwise in
         # cases of commands which can normally be ran only by root.
-        try:
-            if args[args.index('sudo') + 1] in ['-u', 'passwd', 'chown']:
-                omit_sudo = False
-        except ValueError:
-            pass
-
-        # Quotes wrapping a command argument don't work fine in Python's shell
-        # simulation if the arguments contains spaces too. E.g. '"ls"' is OK
-        # but "ls /" isn't.
-        errmsg = "Don't surround arguments commands by quotes if it " + \
-                 "contains spaces.\nargs - %s" % (args)
-        for arg in args:
-            if isinstance(arg, Raw):
-                continue
-
-            if arg and (arg[0] in ['"', "'"] or arg[-1] in ['"', "'"]) and \
-               (arg.find(' ') != -1 and 0 < arg.find(' ') < len(arg) - 1):
-                raise RuntimeError(errmsg)
-
-        # ['sudo', '-u', 'user', '-s', 'path-to-shell', '-c', 'ls', 'a']
-        # and ['sudo', '-u', user, '-s', path_to_shell, '-c', 'ls a'] are
-        # treated differently by Python's shell simulation. Only latter has
-        # the desired effect.
-        errmsg = 'The entire command to executed as other user should be a ' +\
-                 'single argument.\nargs - %s' % (args)
-        if 'sudo' in args and '-u' in args and '-c' in args and \
-           args.count('-c') == 1:
-            if args.index('-c') != len(args) - 2 and \
-               args[args.index('-c') + 2].find('-') == -1:
-                raise RuntimeError(errmsg)
+        last_arg = args[args.rfind(' ') + 1 : ]
+        # XXX: should sudo be omitted/allowed by default in cases similar to
+        # that of "exec sudo" as well?
+        if 'sudo' in args:
+            for x in ('passwd', 'chown'):
+                if x == first_arg or x == last_arg or f' {x} ' in args:
+                    omit_sudo = False
 
         if omit_sudo:
-            args = [a for a in args if a != "sudo"]
+            prefix = prefix + """
+sudo() {
+    "$@"
+}
+"""
+        # usr_args = args passed by the user/caller of this method
+        usr_args, args = args, prefix + args
+        log.info('helper tools like adjust-ulimits , ceph-coverage and '
+                 '"archive/coverage" were found it cmd args. they have been'
+                 'omitted before execution, check vstart_runner.py for more '
+                 'details.')
 
-        return args
+        return args, usr_args
 
     # Wrapper to keep the interface exactly same as that of
     # teuthology.remote.run.
@@ -415,49 +465,10 @@ class LocalRemote(object):
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
                 env=None, timeout=None, omit_sudo=True, shell=True):
-        args = self._perform_checks_and_return_list_of_args(args, omit_sudo)
+        args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo,
+                                                              shell)
 
-        # We have to use shell=True if any run.Raw was present, e.g. &&
-        if not shell:
-            shell = any([a for a in args if isinstance(a, Raw)])
-
-        # Filter out helper tools that don't exist in a vstart environment
-        args = [a for a in args if a not in ('adjust-ulimits',
-                                             'ceph-coverage')]
-
-        # Adjust binary path prefix if given a bare program name
-        if not isinstance(args[0], Raw) and "/" not in args[0]:
-            # If they asked for a bare binary name, and it exists
-            # in our built tree, use the one there.
-            local_bin = os.path.join(BIN_PREFIX, args[0])
-            if os.path.exists(local_bin):
-                args = [local_bin] + args[1:]
-
-        log.debug('> ' +
-                 ' '.join([str(a.value) if isinstance(a, Raw) else a for a in args]))
-
-        if shell:
-            subproc = subprocess.Popen(quote(args),
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       stdin=subprocess.PIPE,
-                                       cwd=cwd,
-                                       env=env,
-                                       shell=True)
-        else:
-            # Sanity check that we've got a list of strings
-            for arg in args:
-                if not isinstance(arg, str):
-                    raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
-                        arg, arg.__class__
-                    ))
-
-            subproc = subprocess.Popen(args,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       stdin=subprocess.PIPE,
-                                       cwd=cwd,
-                                       env=env)
+        subproc = launch_subprocess(args, cwd, env, shell)
 
         if stdin:
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
@@ -469,11 +480,11 @@ class LocalRemote(object):
             elif isinstance(stdin, StringIO):
                 subproc.stdin.write(bytes(stdin.getvalue(),encoding='utf8'))
             else:
-                subproc.stdin.write(stdin)
+                subproc.stdin.write(stdin.getvalue())
 
         proc = LocalRemoteProcess(
             args, subproc, check_status,
-            stdout, stderr
+            stdout, stderr, usr_args
         )
 
         if wait:
@@ -602,7 +613,8 @@ def safe_kill(pid):
     os.kill annoyingly raises exception if process already dead.  Ignore it.
     """
     try:
-        return os.kill(pid, signal.SIGKILL)
+        return remote.run(args=f'sudo kill -{signal.SIGKILL.value} {pid}',
+                          omit_sudo=False)
     except OSError as e:
         if e.errno == errno.ESRCH:
             # Raced with process termination
@@ -773,7 +785,11 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
 class LocalCephManager(CephManager):
-    def __init__(self):
+    def __init__(self, ctx=None):
+        self.ctx = ctx
+        if self.ctx:
+            self.cluster = self.ctx.config['cluster']
+
         # Deliberately skip parent init, only inheriting from it to get
         # util methods like osd_dump that sit on top of raw_cluster_cmd
         self.controller = LocalRemote()
@@ -795,18 +811,7 @@ class LocalCephManager(CephManager):
         self.cephadm = False
         self.rook = False
         self.testdir = None
-        self.run_cluster_cmd_prefix = [CEPH_CMD]
-        # XXX: Ceph API test CI job crashes because "ceph -w" process launched
-        # by run_ceph_w() crashes when shell is set to True.
-        # See https://tracker.ceph.com/issues/49644.
-        #
-        # The 2 possible workaround this are either setting "shell" to "False"
-        # when command "ceph -w" is executed or to prepend "exec sudo" to
-        # command arguments. We are going with latter since former would make
-        # it necessary to pass "shell" parameter to run() method. This leads
-        # to incompatibility with the method teuthology.orchestra.run's run()
-        # since it doesn't accept "shell" as parameter.
-        self.run_ceph_w_prefix = ['exec', 'sudo', CEPH_CMD]
+        self.run_ceph_w_prefix = self.run_cluster_cmd_prefix = [CEPH_CMD]
 
     def find_remote(self, daemon_type, daemon_id):
         """
@@ -829,7 +834,7 @@ class LocalCephCluster(CephCluster):
     def __init__(self, ctx):
         # Deliberately skip calling CephCluster constructor
         self._ctx = ctx
-        self.mon_manager = LocalCephManager()
+        self.mon_manager = LocalCephManager(ctx=self._ctx)
         self._conf = defaultdict(dict)
 
     @property
@@ -949,7 +954,7 @@ class LocalFilesystem(LocalMDSCluster, Filesystem):
         self.fs_config = fs_config
         self.ec_profile = fs_config.get('ec_profile')
 
-        self.mon_manager = LocalCephManager()
+        self.mon_manager = LocalCephManager(ctx=self._ctx)
 
         self.client_remote = LocalRemote()
 
@@ -1003,7 +1008,7 @@ class LocalContext(object):
         self.daemons = DaemonGroup()
         if not hasattr(self, 'managers'):
             self.managers = {}
-        self.managers[self.config['cluster']] = LocalCephManager()
+        self.managers[self.config['cluster']] = LocalCephManager(ctx=self)
 
         # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
         # tests that want to look these up via ctx can do so.
@@ -1354,7 +1359,8 @@ def exec_test():
         if 'ceph-fuse' in line or 'ceph-mds' in line:
             pid = int(line.split()[0])
             log.warning("Killing stray process {0}".format(line))
-            os.kill(pid, signal.SIGKILL)
+            remote.run(args=f'sudo kill -{signal.SIGKILL.value} {pid}',
+                       omit_sudo=False)
 
     # Fire up the Ceph cluster if the user requested it
     if opt_create_cluster or opt_create_cluster_only:

@@ -198,6 +198,10 @@ global_init(const std::map<std::string,std::string> *defaults,
   // manually. If they have, update them.
   if (g_ceph_context->get_init_flags() != flags) {
     g_ceph_context->set_init_flags(flags);
+    if (flags & (CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
+		 CINIT_FLAG_NO_MON_CONFIG)) {
+      g_conf()->no_mon_config = true;
+    }
   }
 
   #ifndef _WIN32

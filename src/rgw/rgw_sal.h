@@ -352,7 +352,7 @@ class Store {
     virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
 					const std::map<std::string, std::string>& meta) = 0;
     /** Get default quota info.  Used as fallback if a user or bucket has no quota set*/
-    virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) = 0;
+    virtual void get_quota(RGWQuota& quota) = 0;
     /** Get global rate limit configuration*/
     virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) = 0;
     /** Enable or disable a set of bucket.  e.g. if a User is suspended */
@@ -726,7 +726,7 @@ class Bucket {
     /** Check in the backing store if this bucket is empty */
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Chec k if the given size fits within the quota */
-    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
+    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
     /** Set the attributes in attrs, leaving any other existing attrs set, and
      * write them to the backing store; a merge operation */
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) = 0;

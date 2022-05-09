@@ -11,6 +11,7 @@
 #include "crimson/osd/osd.h"
 #include "common/Formatter.h"
 #include "crimson/osd/osd_operation_sequencer.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
 
@@ -42,6 +43,10 @@ void ClientRequest::print(std::ostream &lhs) const
 
 void ClientRequest::dump_detail(Formatter *f) const
 {
+  logger().debug("{}: dumping", *this);
+  std::apply([f] (auto... event) {
+    (..., event.dump(f));
+  }, tracking_events);
 }
 
 ClientRequest::ConnectionPipeline &ClientRequest::cp()
@@ -77,17 +82,22 @@ seastar::future<> ClientRequest::start()
 {
   logger().debug("{}: start", *this);
 
+  track_event<StartEvent>();
   return seastar::repeat([this, opref=IRef{this}]() mutable {
       logger().debug("{}: in repeat", *this);
-      return with_blocking_future(handle.enter(cp().await_map))
-      .then([this]() {
-	return with_blocking_future(
-	    osd.osdmap_gate.wait_for_map(
-	      m->get_min_epoch()));
+      return enter_stage<>(cp().await_map).then([this]() {
+	return with_blocking_event<OSD_OSDMapGate::OSDMapBlocker::BlockingEvent>(
+	  [this](auto&& trigger) {
+	  return osd.osdmap_gate.wait_for_map(std::move(trigger),
+			                      m->get_min_epoch());
+	});
       }).then([this](epoch_t epoch) {
-	return with_blocking_future(handle.enter(cp().get_pg));
+	return enter_stage<>(cp().get_pg);
       }).then([this] {
-	return with_blocking_future(osd.wait_for_pg(m->get_spg()));
+	return with_blocking_event<PGMap::PGCreationBlockingEvent>(
+	  [this] (auto&& trigger) {
+	  return osd.wait_for_pg(std::move(trigger), m->get_spg());
+	});
       }).then([this](Ref<PG> pgref) mutable {
 	return interruptor::with_interruption([this, pgref]() mutable {
           epoch_t same_interval_since = pgref->get_interval_start_epoch();
@@ -104,17 +114,21 @@ seastar::future<> ClientRequest::start()
                   return interruptor::now();
               });
             }
-            return with_blocking_future_interruptible<interruptor::condition>(
-              handle.enter(pp(pg).await_map)
-            ).then_interruptible([this, &pg] {
-              return with_blocking_future_interruptible<interruptor::condition>(
-                pg.osdmap_gate.wait_for_map(m->get_min_epoch()));
-            }).then_interruptible([this, &pg](auto map) {
-              return with_blocking_future_interruptible<interruptor::condition>(
-                handle.enter(pp(pg).wait_for_active));
+	    return enter_stage<interruptor>(
+	      pp(pg).await_map
+	    ).then_interruptible([this, &pg] {
+	      return with_blocking_event<PG_OSDMapGate::OSDMapBlocker::BlockingEvent>(
+		[this, &pg] (auto&& trigger) {
+                  return pg.osdmap_gate.wait_for_map(std::move(trigger),
+						     m->get_min_epoch());
+		});
+            }).then_interruptible([this, &pg](auto&&) {
+              return enter_stage<>(pp(pg).wait_for_active);
             }).then_interruptible([this, &pg]() {
-              return with_blocking_future_interruptible<interruptor::condition>(
-                pg.wait_for_active_blocker.wait());
+	      return with_blocking_event<PGActivationBlocker::BlockingEvent>(
+		[&pg] (auto&& trigger) {
+                return pg.wait_for_active_blocker.wait(std::move(trigger));
+	      });
             }).then_interruptible([this, pgref=std::move(pgref)]() mutable {
               if (is_pg_op()) {
                 return process_pg_op(pgref).then_interruptible([this] {
@@ -144,6 +158,8 @@ seastar::future<> ClientRequest::start()
           }
 	}, pgref);
       });
+    }).then([this] {
+      track_event<CompletionEvent>();
     });
 }
 
@@ -160,9 +176,9 @@ ClientRequest::process_pg_op(
 ClientRequest::interruptible_future<ClientRequest::seq_mode_t>
 ClientRequest::process_op(Ref<PG> &pg)
 {
-  return with_blocking_future_interruptible<interruptor::condition>(
-      handle.enter(pp(*pg).recover_missing))
-  .then_interruptible(
+  return enter_stage<interruptor>(
+    pp(*pg).recover_missing
+  ).then_interruptible(
     [this, pg]() mutable {
     return do_recover_missing(pg, m->get_hobj());
   }).then_interruptible([this, pg]() mutable {
@@ -177,8 +193,7 @@ ClientRequest::process_op(Ref<PG> &pg)
           return seastar::make_ready_future<seq_mode_t>(seq_mode_t::OUT_OF_ORDER);
         });
       } else {
-        return with_blocking_future_interruptible<interruptor::condition>(
-            handle.enter(pp(*pg).get_obc)).then_interruptible(
+        return enter_stage<interruptor>(pp(*pg).get_obc).then_interruptible(
           [this, pg]() mutable -> PG::load_obc_iertr::future<seq_mode_t> {
           logger().debug("{}: got obc lock", *this);
           op_info.set_from_op(&*m, *pg->get_osdmap());
@@ -187,9 +202,8 @@ ClientRequest::process_op(Ref<PG> &pg)
           return seastar::do_with(seq_mode_t{}, [this, &pg] (seq_mode_t& mode) {
             return pg->with_locked_obc(m->get_hobj(), op_info,
                                        [this, pg, &mode](auto obc) mutable {
-              return with_blocking_future_interruptible<interruptor::condition>(
-                handle.enter(pp(*pg).process)
-              ).then_interruptible([this, pg, obc, &mode]() mutable {
+              return enter_stage<interruptor>(pp(*pg).process).then_interruptible(
+              [this, pg, obc, &mode]() mutable {
                 return do_process(pg, obc).then_interruptible([&mode] (seq_mode_t _mode) {
                   mode = _mode;
                   return seastar::now();
@@ -255,21 +269,18 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
 
   return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
     [this, pg](auto submitted, auto all_completed) mutable {
-    return submitted.then_interruptible(
-      [this, pg] {
-        return with_blocking_future_interruptible<interruptor::condition>(
-            handle.enter(pp(*pg).wait_repop));
+    return submitted.then_interruptible([this, pg] {
+      return enter_stage<interruptor>(pp(*pg).wait_repop);
     }).then_interruptible(
       [this, pg, all_completed=std::move(all_completed)]() mutable {
       return all_completed.safe_then_interruptible(
         [this, pg](MURef<MOSDOpReply> reply) {
-        return with_blocking_future_interruptible<interruptor::condition>(
-            handle.enter(pp(*pg).send_reply)).then_interruptible(
-              [this, reply=std::move(reply)]() mutable{
-              return conn->send(std::move(reply)).then([] {
-                return seastar::make_ready_future<seq_mode_t>(seq_mode_t::IN_ORDER);
-              });
-            });
+        return enter_stage<interruptor>(pp(*pg).send_reply).then_interruptible(
+          [this, reply=std::move(reply)]() mutable {
+          return conn->send(std::move(reply)).then([] {
+            return seastar::make_ready_future<seq_mode_t>(seq_mode_t::IN_ORDER);
+          });
+        });
       }, crimson::ct_error::eagain::handle([this, pg]() mutable {
         return process_op(pg);
       }));

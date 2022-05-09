@@ -14,6 +14,13 @@ module.exports = (on, _config) => {
       return launchOptions;
     }
   });
+
+  on('task', {
+    log({ message, optional }) {
+      optional ? console.log(message, optional) : console.log(message);
+      return null;
+    },
+  });
 };
 
 require('@applitools/eyes-cypress')(module);

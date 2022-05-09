@@ -7,7 +7,6 @@
  */
 #include "common/version.h"
 #include "include/Context.h"
-
 #include "osd/osd_types.h"
 
 namespace Scrub {
@@ -90,13 +89,13 @@ struct ScrubMachineListener {
 
   virtual void replica_handling_done() = 0;
 
-  /// the version of 'scrub_clear_state()' that does not try to invoke FSM services
-  /// (thus can be called from FSM reactions)
+  /// the version of 'scrub_clear_state()' that does not try to invoke FSM
+  /// services (thus can be called from FSM reactions)
   virtual void clear_pgscrub_state() = 0;
 
   /*
-   * Send an 'InternalSchedScrub' FSM event either immediately, or - if 'm_need_sleep'
-   * is asserted - after a configuration-dependent timeout.
+   * Send an 'InternalSchedScrub' FSM event either immediately, or - if
+   * 'm_need_sleep' is asserted - after a configuration-dependent timeout.
    */
   virtual void add_delayed_scheduling() = 0;
 
@@ -113,8 +112,8 @@ struct ScrubMachineListener {
   /**
    * Prepare a MOSDRepScrubMap message carrying the requested scrub map
    * @param was_preempted - were we preempted?
-   * @return the message, and the current value of 'm_replica_min_epoch' (which is
-   *     used when sending the message, but will be overwritten before that).
+   * @return the message, and the current value of 'm_replica_min_epoch' (which
+   * is used when sending the message, but will be overwritten before that).
    */
   [[nodiscard]] virtual MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) = 0;
