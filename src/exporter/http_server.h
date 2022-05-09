@@ -2,4 +2,4 @@
 
 #include <string>
 
-void http_server_thread_entrypoint(std::string cert_path, std::string key_path, std::string tls_options);
+void http_server_thread_entrypoint(std::string exporter_addrs, std::string exporter_port);
