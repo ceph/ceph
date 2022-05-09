@@ -545,9 +545,17 @@ Usage::
 	ceph mon getmap {<int[0-]>}
 
 Subcommand ``enable_stretch_mode`` enables stretch mode, changing the peering
-rules and failure handling on all pools with <tiebreaker_mon> as the tiebreaker
-and setting <dividing_bucket> locations as the units for stretching across.
-Pools' CRUSH rule will be changed to <new_crush_rule> as well.
+rules and failure handling on all pools. For a given PG to successfully peer
+and be marked active, min_size replicas will now need to be active under all
+(currently two) CRUSH buckets of type <dividing_bucket>.
+
+`tiebreaker_mon` is the tiebreaker mon to use if a network split happens.
+
+`dividing_bucket` is the bucket type to set for locations for stretching across.
+This will typically be datacenter or other CRUSH hierarchy bucket type that
+denotes physically or logically distant subdivisions.
+
+`new_crush_rule` will be set as CRUSH rule for all pools.
 
 Usage::
 
