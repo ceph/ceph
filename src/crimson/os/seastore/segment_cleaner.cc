@@ -80,8 +80,9 @@ void segments_info_t::reset()
   segment_size = 0;
 
   journal_segment_id = NULL_SEG_ID;
-  // the number of in-journal closed segments
-  num_in_journal = 0;
+  num_in_journal_open = 0;
+  num_type_journal = 0;
+  num_type_ool = 0;
 
   num_open = 0;
   num_empty = 0;
@@ -142,7 +143,9 @@ void segments_info_t::init_closed(
   if (type == segment_type_t::JOURNAL) {
     // init_closed won't initialize journal_segment_id
     ceph_assert(get_journal_head() == JOURNAL_SEQ_NULL);
-    ++num_in_journal;
+    ++num_type_journal;
+  } else {
+    ++num_type_ool;
   }
   // do not increment count_close;
 }
@@ -168,6 +171,11 @@ void segments_info_t::mark_open(
       ceph_assert(last_journal_segment.seq + 1 == seq);
     }
     journal_segment_id = segment;
+
+    ++num_in_journal_open;
+    ++num_type_journal;
+  } else {
+    ++num_type_ool;
   }
   ceph_assert(segment_info.written_to == 0);
   avail_bytes_in_open += get_segment_size();
@@ -190,8 +198,11 @@ void segments_info_t::mark_empty(
   --num_closed;
   ++num_empty;
   if (type == segment_type_t::JOURNAL) {
-    ceph_assert(num_in_journal > 0);
-    --num_in_journal;
+    ceph_assert(num_type_journal > 0);
+    --num_type_journal;
+  } else {
+    ceph_assert(num_type_ool > 0);
+    --num_type_ool;
   }
   ++count_release;
 }
@@ -210,7 +221,8 @@ void segments_info_t::mark_closed(
   --num_open;
   ++num_closed;
   if (segment_info.type == segment_type_t::JOURNAL) {
-    ++num_in_journal;
+    ceph_assert(num_in_journal_open > 0);
+    --num_in_journal_open;
   }
   ceph_assert(get_segment_size() >= segment_info.written_to);
   auto seg_avail_bytes = get_segment_size() - segment_info.written_to;
@@ -427,8 +439,14 @@ void SegmentCleaner::register_metrics()
 		     [this] { return segments.get_segment_size(); },
 		     sm::description("the bytes of a segment")),
     sm::make_counter("segments_in_journal",
-		     [this] { return segments.get_num_in_journal(); },
+		     [this] { return get_segments_in_journal(); },
 		     sm::description("the number of segments in journal")),
+    sm::make_counter("segments_type_journal",
+		     [this] { return segments.get_num_type_journal(); },
+		     sm::description("the number of segments typed journal")),
+    sm::make_counter("segments_type_ool",
+		     [this] { return segments.get_num_type_ool(); },
+		     sm::description("the number of segments typed out-of-line")),
     sm::make_counter("segments_open",
 		     [this] { return segments.get_num_open(); },
 		     sm::description("the number of open segments")),
@@ -456,10 +474,10 @@ void SegmentCleaner::register_metrics()
 		     [this] { return segments.get_available_bytes(); },
 		     sm::description("the size of the space is available")),
     sm::make_counter("unavailable_unreclaimable_bytes",
-		     [this] { return segments.get_unavailable_unreclaimable_bytes(); },
+		     [this] { return get_unavailable_unreclaimable_bytes(); },
 		     sm::description("the size of the space is unavailable and unreclaimable")),
     sm::make_counter("unavailable_reclaimable_bytes",
-		     [this] { return segments.get_unavailable_reclaimable_bytes(); },
+		     [this] { return get_unavailable_reclaimable_bytes(); },
 		     sm::description("the size of the space is unavailable and reclaimable")),
     sm::make_counter("used_bytes", stats.used_bytes,
 		     sm::description("the size of the space occupied by live extents")),

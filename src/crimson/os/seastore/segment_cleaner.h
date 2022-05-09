@@ -114,12 +114,14 @@ public:
     assert(segment_size > 0);
     return segment_size;
   }
-  std::size_t get_num_in_journal() const {
-    assert(num_in_journal <= num_closed);
-    return num_in_journal;
+  std::size_t get_num_in_journal_open() const {
+    return num_in_journal_open;
   }
-  std::size_t get_num_reclaimable() const {
-    return num_closed - get_num_in_journal();
+  std::size_t get_num_type_journal() const {
+    return num_type_journal;
+  }
+  std::size_t get_num_type_ool() const {
+    return num_type_ool;
   }
   std::size_t get_num_open() const {
     return num_open;
@@ -140,32 +142,20 @@ public:
     return count_close;
   }
 
-  /*
-   * Space classification
-   * - total = available + unavailable (unreclaimable + reclaimable)
-   *   - available: the available space for write, including open segments
-   *   - unreclaimable: in journal or still open, cannot be reclaimed
-   *   - reclaimable: closed and non-empty segments, can be reclaimed
-   */
   std::size_t get_total_bytes() const {
     return total_bytes;
   }
+  /// the available space that is writable, including in open segments
   std::size_t get_available_bytes() const {
     return num_empty * get_segment_size() + avail_bytes_in_open;
   }
+  /// the unavailable space that is not writable
   std::size_t get_unavailable_bytes() const {
     assert(total_bytes >= get_available_bytes());
     return total_bytes - get_available_bytes();
   }
-  std::size_t get_unavailable_unreclaimable_bytes() const {
-    auto ret = (num_open + get_num_in_journal()) * get_segment_size();
-    assert(ret >= avail_bytes_in_open);
-    return ret - avail_bytes_in_open;
-  }
-  std::size_t get_unavailable_reclaimable_bytes() const {
-    auto ret = get_num_reclaimable() * get_segment_size();
-    assert(ret + get_unavailable_unreclaimable_bytes() == get_unavailable_bytes());
-    return ret;
+  std::size_t get_available_bytes_in_open() const {
+    return avail_bytes_in_open;
   }
   double get_available_ratio() const {
     return (double)get_available_bytes() / (double)total_bytes;
@@ -214,7 +204,9 @@ private:
   std::size_t segment_size;
 
   segment_id_t journal_segment_id;
-  std::size_t num_in_journal;
+  std::size_t num_in_journal_open;
+  std::size_t num_type_journal;
+  std::size_t num_type_ool;
 
   std::size_t num_open;
   std::size_t num_empty;
@@ -933,7 +925,7 @@ private:
 	max_benefit_cost);
       return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
     } else {
-      ceph_assert(segments.get_num_reclaimable() == 0);
+      ceph_assert(get_segments_reclaimable() == 0);
       // see gc_should_reclaim_space()
       ceph_abort("impossible!");
       return JOURNAL_SEQ_NULL;
@@ -1105,8 +1097,51 @@ private:
     std::vector<CachedExtentRef> &extents);
 
   /*
+   * Segments calculations
+   */
+  std::size_t get_segments_in_journal() const {
+    if (!init_complete) {
+      return 0;
+    }
+    if (journal_tail_committed == JOURNAL_SEQ_NULL) {
+      return segments.get_num_type_journal();
+    }
+    auto journal_head = segments.get_journal_head();
+    assert(journal_head != JOURNAL_SEQ_NULL);
+    assert(journal_head.segment_seq >= journal_tail_committed.segment_seq);
+    return journal_head.segment_seq + 1 - journal_tail_committed.segment_seq;
+  }
+  std::size_t get_segments_in_journal_closed() const {
+    auto in_journal = get_segments_in_journal();
+    auto in_journal_open = segments.get_num_in_journal_open();
+    if (in_journal >= in_journal_open) {
+      return in_journal - in_journal_open;
+    } else {
+      return 0;
+    }
+  }
+  std::size_t get_segments_reclaimable() const {
+    assert(segments.get_num_closed() >= get_segments_in_journal_closed());
+    return segments.get_num_closed() - get_segments_in_journal_closed();
+  }
+
+  /*
    * Space calculations
    */
+  /// the unavailable space that is not reclaimable yet
+  std::size_t get_unavailable_unreclaimable_bytes() const {
+    auto ret = (segments.get_num_open() + get_segments_in_journal_closed()) *
+               segments.get_segment_size();
+    assert(ret >= segments.get_available_bytes_in_open());
+    return ret - segments.get_available_bytes_in_open();
+  }
+  /// the unavailable space that can be reclaimed
+  std::size_t get_unavailable_reclaimable_bytes() const {
+    auto ret = get_segments_reclaimable() * segments.get_segment_size();
+    ceph_assert(ret + get_unavailable_unreclaimable_bytes() == segments.get_unavailable_bytes());
+    return ret;
+  }
+  /// the unavailable space that is not alive
   std::size_t get_unavailable_unused_bytes() const {
     assert(segments.get_unavailable_bytes() > stats.used_bytes);
     return segments.get_unavailable_bytes() - stats.used_bytes;
@@ -1138,7 +1173,7 @@ private:
     if (get_dirty_tail_limit() > journal_tail_target) {
       return true;
     }
-    if (segments.get_num_reclaimable() == 0) {
+    if (get_segments_reclaimable() == 0) {
       return false;
     }
     auto aratio = get_projected_available_ratio();
@@ -1178,7 +1213,7 @@ private:
 	segments.get_num_empty(),
 	segments.get_num_open(),
 	segments.get_num_closed(),
-	segments.get_num_in_journal(),
+	get_segments_in_journal(),
 	segments.get_total_bytes(),
 	segments.get_available_bytes(),
 	segments.get_unavailable_bytes(),
@@ -1265,7 +1300,7 @@ private:
    * Encapsulates logic for whether gc should be reclaiming segment space.
    */
   bool gc_should_reclaim_space() const {
-    if (segments.get_num_reclaimable() == 0) {
+    if (get_segments_reclaimable() == 0) {
       return false;
     }
     auto aratio = segments.get_available_ratio();
