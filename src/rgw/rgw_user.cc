@@ -283,6 +283,7 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("placement_tags", info.placement_tags, f);
   encode_json("bucket_quota", info.quota.bucket_quota, f);
   encode_json("user_quota", info.quota.user_quota, f);
+  encode_json("tenant_quota", info.quota.tenant_quota, f);
   encode_json("temp_url_keys", info.temp_url_keys, f);
 
   string user_source_type;
@@ -2018,6 +2019,9 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   if (op_state.has_user_quota())
     user_info.quota.user_quota = op_state.get_user_quota();
+  
+  if (op_state.has_tenant_quota())
+    user_info.quota.tenant_quota = op_state.get_tenant_quota();
 
   if (op_state.has_suspension_op()) {
     __u8 suspended = op_state.get_suspension_status();

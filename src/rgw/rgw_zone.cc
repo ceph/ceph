@@ -2068,6 +2068,7 @@ int RGWZoneGroupMap::read(const DoutPrefixProvider *dpp, CephContext *cct, RGWSI
 
   quota.bucket_quota = period.get_config().quota.bucket_quota;
   quota.user_quota = period.get_config().quota.user_quota;
+  quota.tenant_quota = period.get_config().quota.tenant_quota;
   zonegroups = period.get_map().zonegroups;
   zonegroups_by_api = period.get_map().zonegroups_by_api;
   master_zonegroup = period.get_map().master_zonegroup;
@@ -2081,6 +2082,7 @@ void RGWRegionMap::encode(bufferlist& bl) const {
   encode(master_region, bl);
   encode(quota.bucket_quota, bl);
   encode(quota.user_quota, bl);
+  encode(quota.tenant_quota, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2092,6 +2094,9 @@ void RGWRegionMap::decode(bufferlist::const_iterator& bl) {
     decode(quota.bucket_quota, bl);
   if (struct_v >= 3)
     decode(quota.user_quota, bl);
+  if (struct_v >= 4)
+    decode(quota.tenant_quota, bl);
+    
   DECODE_FINISH(bl);
 }
 
@@ -2101,6 +2106,7 @@ void RGWZoneGroupMap::encode(bufferlist& bl) const {
   encode(master_zonegroup, bl);
   encode(quota.bucket_quota, bl);
   encode(quota.user_quota, bl);
+  encode(quota.tenant_quota, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2112,6 +2118,8 @@ void RGWZoneGroupMap::decode(bufferlist::const_iterator& bl) {
     decode(quota.bucket_quota, bl);
   if (struct_v >= 3)
     decode(quota.user_quota, bl);
+  if (struct_v >= 4)
+    decode(quota.tenant_quota, bl);
   DECODE_FINISH(bl);
 
   zonegroups_by_api.clear();
@@ -2756,6 +2764,7 @@ void RGWPeriodConfig::dump(Formatter *f) const
 {
   encode_json("bucket_quota", quota.bucket_quota, f);
   encode_json("user_quota", quota.user_quota, f);
+  encode_json("tenant_quota", quota.tenant_quota, f);
   encode_json("user_ratelimit", user_ratelimit, f);
   encode_json("bucket_ratelimit", bucket_ratelimit, f);
   encode_json("anonymous_ratelimit", anon_ratelimit, f);
@@ -2765,6 +2774,7 @@ void RGWPeriodConfig::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
+  JSONDecoder::decode_json("tenant_quota", quota.tenant_quota, obj);
   JSONDecoder::decode_json("user_ratelimit", user_ratelimit, obj);
   JSONDecoder::decode_json("bucket_ratelimit", bucket_ratelimit, obj);
   JSONDecoder::decode_json("anonymous_ratelimit", anon_ratelimit, obj);
@@ -2776,6 +2786,7 @@ void RGWRegionMap::dump(Formatter *f) const
   encode_json("master_region", master_region, f);
   encode_json("bucket_quota", quota.bucket_quota, f);
   encode_json("user_quota", quota.user_quota, f);
+  encode_json("tenant_quota", quota.tenant_quota, f);
 }
 
 void RGWRegionMap::decode_json(JSONObj *obj)
@@ -2784,6 +2795,7 @@ void RGWRegionMap::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("master_region", master_region, obj);
   JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
+  JSONDecoder::decode_json("tenant_quota", quota.tenant_quota, obj);
 }
 
 void RGWZoneGroupMap::dump(Formatter *f) const
@@ -2792,6 +2804,7 @@ void RGWZoneGroupMap::dump(Formatter *f) const
   encode_json("master_zonegroup", master_zonegroup, f);
   encode_json("bucket_quota", quota.bucket_quota, f);
   encode_json("user_quota", quota.user_quota, f);
+  encode_json("tenant_quota", quota.tenant_quota, f);
 }
 
 void RGWZoneGroupMap::decode_json(JSONObj *obj)
@@ -2809,5 +2822,6 @@ void RGWZoneGroupMap::decode_json(JSONObj *obj)
 
   JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
+  JSONDecoder::decode_json("tenant_quota", quota.tenant_quota, obj);
 }
 

@@ -908,7 +908,7 @@ public:
                   uint64_t num_objs,
                   uint64_t size, optional_yield y) override {
 
-    if (!quota.bucket_quota.enabled && !quota.user_quota.enabled) {
+    if (!quota.bucket_quota.enabled && !quota.user_quota.enabled && !quota.tenant_quota.enabled) {
       return 0;
     }
 

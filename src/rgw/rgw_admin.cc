@@ -1343,6 +1343,7 @@ bool set_ratelimit_info(RGWRateLimitInfo& ratelimit, OPT opt_cmd, int64_t max_re
 void set_quota_info(RGWQuotaInfo& quota, OPT opt_cmd, int64_t max_size, int64_t max_objects,
                     bool have_max_size, bool have_max_objects)
 {
+
   switch (opt_cmd) {
     case OPT::QUOTA_ENABLE:
     case OPT::GLOBAL_QUOTA_ENABLE:
@@ -1559,6 +1560,24 @@ int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
   set_quota_info(user_info.quota.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
   op_state.set_user_quota(user_info.quota.user_quota);
+
+  string err;
+  int r = user.modify(dpp(), op_state, null_yield, &err);
+  if (r < 0) {
+    cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
+    return -r;
+  }
+  return 0;
+}
+
+int set_tenant_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
+                   bool have_max_size, bool have_max_objects)
+{
+  RGWUserInfo& user_info = op_state.get_user_info();
+
+  set_quota_info(user_info.quota.tenant_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
+  
+  op_state.set_tenant_quota(user_info.quota.tenant_quota);
 
   string err;
   int r = user.modify(dpp(), op_state, null_yield, &err);
@@ -4670,10 +4689,17 @@ int main(int argc, const char **argv)
                          max_size, max_objects,
                          have_max_size, have_max_objects);
           encode_json("user quota", period_config.quota.user_quota, formatter.get());
+        } else if (quota_scope == "tenant") {
+          set_quota_info(period_config.quota.tenant_quota, opt_cmd,
+                         max_size, max_objects,
+                         have_max_size, have_max_objects);
+          encode_json("tenant quota", period_config.quota.tenant_quota, formatter.get());
         } else if (quota_scope.empty() && opt_cmd == OPT::GLOBAL_QUOTA_GET) {
           // if no scope is given for GET, print both
           encode_json("bucket quota", period_config.quota.bucket_quota, formatter.get());
           encode_json("user quota", period_config.quota.user_quota, formatter.get());
+          encode_json("tenant quota", period_config.quota.tenant_quota, formatter.get());
+
         } else {
           cerr << "ERROR: invalid quota scope specification. Please specify "
               "either --quota-scope=bucket, or --quota-scope=user" << std::endl;
@@ -9534,7 +9560,10 @@ next:
         return set_user_bucket_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
       } else if (quota_scope == "user") {
         return set_user_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
-      } else {
+      } else if (quota_scope == "tenant") {
+        return set_tenant_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
+      }
+       else {
         cerr << "ERROR: invalid quota scope specification. Please specify either --quota-scope=bucket, or --quota-scope=user" << std::endl;
         return EINVAL;
       }

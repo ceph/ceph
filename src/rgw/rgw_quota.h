@@ -93,6 +93,7 @@ WRITE_CLASS_ENCODER(RGWQuotaInfo)
 struct RGWQuota {
     RGWQuotaInfo user_quota;
     RGWQuotaInfo bucket_quota;
+    RGWQuotaInfo tenant_quota;
 };
 
 

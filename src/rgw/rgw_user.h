@@ -173,6 +173,7 @@ struct RGWUserAdminOpState {
 
   bool bucket_quota_specified{false};
   bool user_quota_specified{false};
+  bool tenant_quota_specified{false};
   bool bucket_ratelimit_specified{false};
   bool user_ratelimit_specified{false};
 
@@ -342,6 +343,11 @@ struct RGWUserAdminOpState {
     user_quota_specified = true;
   }
 
+  void set_tenant_quota(RGWQuotaInfo& quotas) {
+    quota.tenant_quota = quotas;
+    tenant_quota_specified = true;
+  }
+
   void set_bucket_ratelimit(RGWRateLimitInfo& ratelimit) {
     bucket_ratelimit = ratelimit;
     bucket_ratelimit_specified = true;
@@ -387,6 +393,7 @@ struct RGWUserAdminOpState {
   bool will_generate_subuser() { return gen_subuser; }
   bool has_bucket_quota() { return bucket_quota_specified; }
   bool has_user_quota() { return user_quota_specified; }
+  bool has_tenant_quota() { return tenant_quota_specified; }
   void set_populated() { populated = true; }
   void clear_populated() { populated = false; }
   void set_initialized() { initialized = true; }
@@ -404,6 +411,7 @@ struct RGWUserAdminOpState {
   uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return quota.bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return quota.user_quota; }
+  RGWQuotaInfo& get_tenant_quota() { return quota.tenant_quota; }
   std::set<std::string>& get_mfa_ids() { return mfa_ids; }
 
   rgw::sal::User* get_user() { return user.get(); }

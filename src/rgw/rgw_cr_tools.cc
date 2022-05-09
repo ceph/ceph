@@ -85,6 +85,10 @@ int RGWUserCreateCR::Request::_send_request(const DoutPrefixProvider *dpp)
     if (quota.user_quota.enabled) {
       op_state.set_user_quota(quota.user_quota);
     }
+
+    if (quota.tenant_quota.enabled) {
+      op_state.set_tenant_quota(quota.tenant_quota);
+    }
   }
 
   RGWNullFlusher flusher;

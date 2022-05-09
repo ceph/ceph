@@ -1036,6 +1036,7 @@ struct RGWPeriodConfig
     ENCODE_START(2, 1, bl);
     encode(quota.bucket_quota, bl);
     encode(quota.user_quota, bl);
+    encode(quota.tenant_quota, bl);
     encode(bucket_ratelimit, bl);
     encode(user_ratelimit, bl);
     encode(anon_ratelimit, bl);
@@ -1046,6 +1047,7 @@ struct RGWPeriodConfig
     DECODE_START(2, bl);
     decode(quota.bucket_quota, bl);
     decode(quota.user_quota, bl);
+    decode(quota.tenant_quota, bl);
     if (struct_v >= 2) {
       decode(bucket_ratelimit, bl);
       decode(user_ratelimit, bl);
@@ -1283,6 +1285,10 @@ public:
 
   void set_bucket_quota(RGWQuotaInfo& bucket_quota) {
     period_config.quota.bucket_quota = bucket_quota;
+  }
+
+  void set_tenant_quota(RGWQuotaInfo& tenant_quota) {
+    period_config.quota.tenant_quota = tenant_quota;
   }
 
   void set_id(const std::string& _id) {

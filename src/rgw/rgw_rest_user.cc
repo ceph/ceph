@@ -787,15 +787,18 @@ struct UserQuotas {
   explicit UserQuotas(RGWUserInfo& info){
     quota.bucket_quota = info.quota.bucket_quota;
     quota.user_quota = info.quota.user_quota;
+    quota.tenant_quota = info.quota.tenant_quota;
   }
 
   void dump(Formatter *f) const {
     encode_json("bucket_quota", quota.bucket_quota, f);
     encode_json("user_quota", quota.user_quota, f);
+    encode_json("tenant_quota", quota.tenant_quota, f);
   }
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
     JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
+    JSONDecoder::decode_json("tenant_quota", quota.tenant_quota, obj);
   }
 };
 
@@ -834,8 +837,9 @@ void RGWOp_Quota_Info::execute(optional_yield y)
   bool show_all = quota_type.empty();
   bool show_bucket = show_all || (quota_type == "bucket");
   bool show_user = show_all || (quota_type == "user");
-
-  if (!(show_all || show_bucket || show_user)) {
+  bool show_tenant = show_all || (quota_type == "tenant");
+  
+  if (!(show_all || show_bucket || show_user || show_tenant)) {
     op_ret = -EINVAL;
     return;
   }
@@ -864,8 +868,10 @@ void RGWOp_Quota_Info::execute(optional_yield y)
     encode_json("quota", quotas, s->formatter);
   } else if (show_user) {
     encode_json("user_quota", info.quota.user_quota, s->formatter);
-  } else {
+  } else if (show_bucket) {
     encode_json("bucket_quota", info.quota.bucket_quota, s->formatter);
+  } else {
+    encode_json("tenant_quota", info.quota.tenant_quota, s->formatter);
   }
 
   flusher.flush();
@@ -953,8 +959,9 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   bool set_all = quota_type.empty();
   bool set_bucket = set_all || (quota_type == "bucket");
   bool set_user = set_all || (quota_type == "user");
+  bool set_tenant = set_all || (quota_type == "tenant");
 
-  if (!(set_all || set_bucket || set_user)) {
+  if (!(set_all || set_bucket || set_user || set_tenant)) {
     ldpp_dout(this, 20) << "invalid quota type" << dendl;
     op_ret = -EINVAL;
     return;
@@ -1000,6 +1007,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
 
     op_state.set_user_quota(quotas.quota.user_quota);
     op_state.set_bucket_quota(quotas.quota.bucket_quota);
+    op_state.set_tenant_quota(quotas.quota.tenant_quota);
   } else {
     RGWQuotaInfo quota;
 
@@ -1027,8 +1035,10 @@ void RGWOp_Quota_Set::execute(optional_yield y)
       RGWQuotaInfo *old_quota;
       if (set_user) {
         old_quota = &info.quota.user_quota;
-      } else {
+      } else if (set_bucket) {
         old_quota = &info.quota.bucket_quota;
+      } else {
+        old_quota = &info.quota.tenant_quota;
       }
 
       RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
@@ -1044,8 +1054,10 @@ void RGWOp_Quota_Set::execute(optional_yield y)
 
     if (set_user) {
       op_state.set_user_quota(quota);
-    } else {
+    } else if (set_bucket) {
       op_state.set_bucket_quota(quota);
+    } else {
+      op_state.set_tenant_quota(quota);
     }
   }
 

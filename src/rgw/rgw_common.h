@@ -813,6 +813,7 @@ struct RGWUserInfo
      encode(quota.bucket_quota, bl);
      encode(temp_url_keys, bl);
      encode(quota.user_quota, bl);
+     encode(quota.tenant_quota, bl);
      encode(user_id.tenant, bl);
      encode(admin, bl);
      encode(type, bl);
@@ -887,23 +888,26 @@ struct RGWUserInfo
       decode(quota.user_quota, bl);
     }
     if (struct_v >= 17) {
+      decode(quota.tenant_quota, bl);
+    }
+    if (struct_v >= 18) {
       decode(user_id.tenant, bl);
     } else {
       user_id.tenant.clear();
     }
-    if (struct_v >= 18) {
+    if (struct_v >= 19) {
       decode(admin, bl);
     }
-    if (struct_v >= 19) {
+    if (struct_v >= 20) {
       decode(type, bl);
     }
-    if (struct_v >= 20) {
+    if (struct_v >= 21) {
       decode(mfa_ids, bl);
     }
-    if (struct_v >= 21) {
+    if (struct_v >= 22) {
       decode(assumed_role_arn, bl);
     }
-    if (struct_v >= 22) {
+    if (struct_v >= 23) {
       decode(user_id.ns, bl);
     } else {
       user_id.ns.clear();
