@@ -17,3 +17,8 @@ target_link_libraries(global-static common)
 add_library(global STATIC
   $<TARGET_OBJECTS:libglobal_objs>)
 target_link_libraries(global ceph-common ${EXTRALIBS})
+
+#global that does not include ceph-common
+add_library(global-raw STATIC
+  $<TARGET_OBJECTS:libglobal_objs>)
+target_link_libraries(global ${EXTRALIBS})
