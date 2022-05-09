@@ -350,9 +350,8 @@ OpsLogFile::OpsLogFile(CephContext* cct, std::string& path, uint64_t max_data_si
 
 void OpsLogFile::flush()
 {
-  std::scoped_lock flush_lock(flush_mutex);
   {
-    std::scoped_lock log_lock(log_mutex);
+    std::scoped_lock log_lock(mutex);
     assert(flush_buffer.empty());
     flush_buffer.swap(log_buffer);
     data_size = 0;
@@ -380,7 +379,7 @@ void OpsLogFile::flush()
 }
 
 void* OpsLogFile::entry() {
-  std::unique_lock lock(log_mutex);
+  std::unique_lock lock(mutex);
   while (!stopped) {
     if (!log_buffer.empty()) {
       lock.unlock();
@@ -388,8 +387,9 @@ void* OpsLogFile::entry() {
       lock.lock();
       continue;
     }
-    cond_flush.wait(lock);
+    cond.wait(lock);
   }
+  lock.unlock();
   flush();
   return NULL;
 }
@@ -401,7 +401,8 @@ void OpsLogFile::start() {
 
 void OpsLogFile::stop() {
   {
-    cond_flush.notify_one();
+    std::unique_lock lock(mutex);
+    cond.notify_one();
     stopped = true;
   }
   join();
@@ -417,14 +418,14 @@ OpsLogFile::~OpsLogFile()
 
 int OpsLogFile::log_json(struct req_state* s, bufferlist& bl)
 {
-  std::unique_lock lock(log_mutex);
+  std::unique_lock lock(mutex);
   if (data_size + bl.length() >= max_data_size) {
     ldout(s->cct, 0) << "ERROR: RGW ops log file buffer too full, dropping log for txn: " << s->trans_id << dendl;
     return -1;
   }
   log_buffer.push_back(bl);
   data_size += bl.length();
-  cond_flush.notify_all();
+  cond.notify_all();
   return 0;
 }
 
