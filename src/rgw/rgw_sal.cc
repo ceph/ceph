@@ -54,10 +54,16 @@ int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
 
 RGWBucketList::~RGWBucketList()
 {
+  clear();
+}
+
+void RGWBucketList::clear()
+{
   for (auto itr = buckets.begin(); itr != buckets.end(); itr++) {
     delete itr->second;
   }
   buckets.clear();
+  truncated = false;
 }
 
 RGWBucket* RGWRadosUser::add_bucket(rgw_bucket& bucket,

@@ -154,7 +154,7 @@ public:
     buckets[bucket->ent.bucket.name] = bucket;
   }
   size_t count() const { return buckets.size(); }
-  void clear() { buckets.clear(); truncated = false; }
+  void clear();
 }; // class RGWBucketList
 
 class RGWObject {
