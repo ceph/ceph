@@ -15,7 +15,7 @@ class ElasticSearchService(CephadmService):
 
 class JaegerAgentService(CephadmService):
     TYPE = 'jaeger-agent'
-    DEFAULT_SERVICE_PORT = 6831
+    DEFAULT_SERVICE_PORT = 6799
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type

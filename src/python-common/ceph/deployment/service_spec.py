@@ -1393,7 +1393,7 @@ class TracingSpec(ServiceSpec):
 
     def get_port(self) -> int:
         return {'elasticsearch': 9200,
-                'jaeger-agent': 6831,
+                'jaeger-agent': 6799,
                 'jaeger-collector': 14250,
                 'jaeger-query': 16686}[self.service_type]
 
