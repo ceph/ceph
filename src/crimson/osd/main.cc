@@ -30,7 +30,6 @@
 
 using namespace std::literals;
 namespace bpo = boost::program_options;
-using std::string;
 
 seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_osd);
@@ -70,7 +69,7 @@ using crimson::common::local_conf;
 
 seastar::future<> make_keyring()
 {
-  const auto path = local_conf().get_val<string>("keyring");
+  const auto path = local_conf().get_val<std::string>("keyring");
   return seastar::file_exists(path).then([path](bool exists) {
     KeyRing keyring;
     EntityName name{local_conf()->name};
@@ -189,9 +188,9 @@ int main(int argc, const char* argv[])
     ("no-mon-config", "do not retrieve configuration from monitors on boot")
     ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
      "Prometheus port. Set to zero to disable")
-    ("prometheus_address", bpo::value<string>()->default_value("0.0.0.0"),
+    ("prometheus_address", bpo::value<std::string>()->default_value("0.0.0.0"),
      "Prometheus listening address")
-    ("prometheus_prefix", bpo::value<string>()->default_value("osd"),
+    ("prometheus_prefix", bpo::value<std::string>()->default_value("osd"),
      "Prometheus metrics prefix");
 
   auto [config_proxy_args, seastar_n_early_args] = partition_args(argc, argv);
@@ -262,9 +261,9 @@ int main(int argc, const char* argv[])
             }));
 
             seastar::prometheus::config prom_config;
-            prom_config.prefix = config["prometheus_prefix"].as<string>();
+            prom_config.prefix = config["prometheus_prefix"].as<std::string>();
             seastar::prometheus::start(prom_server, prom_config).get();
-            seastar::net::inet_address prom_addr(config["prometheus_address"].as<string>());
+            seastar::net::inet_address prom_addr(config["prometheus_address"].as<std::string>());
             prom_server.listen(seastar::socket_address{prom_addr, prom_port})
               .handle_exception([=] (auto ep) {
               std::cerr << seastar::format("Could not start Prometheus API server on {}:{}: {}\n",
