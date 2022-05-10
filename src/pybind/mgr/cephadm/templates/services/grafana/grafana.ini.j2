@@ -12,6 +12,8 @@
   cert_key = /etc/grafana/certs/cert_key
   http_port = {{ http_port }}
   http_addr = {{ http_addr }}
+[snapshots]
+  external_enabled = false
 [security]
 {% if not initial_admin_password %}
   disable_initial_admin_creation = true
