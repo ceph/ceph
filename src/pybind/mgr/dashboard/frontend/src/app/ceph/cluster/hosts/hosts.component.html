@@ -47,15 +47,9 @@
 
 <ng-template #servicesTpl
              let-value="value">
-  <span *ngFor="let service of value; last as isLast">
-    <a class="service-link"
-       [routerLink]="[service.cdLink]"
-       [queryParams]="cdParams"
-       *ngIf="service.canRead">{{ service.type }}.{{ service.id }}</a>
-    <span *ngIf="!service.canRead">
-      {{ service.type }}.{{ service.id }}
-    </span>
-    <ng-container *ngIf="!isLast">, </ng-container>
+  <span *ngFor="let instance of value; last as isLast">
+    <span class="badge badge-background-primary" >{{ instance }}</span>
+    <ng-container *ngIf="!isLast">&nbsp;</ng-container>
   </span>
 </ng-template>
 
