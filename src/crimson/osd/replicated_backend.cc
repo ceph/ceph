@@ -21,10 +21,9 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      pg_shard_t whoami,
                                      ReplicatedBackend::CollectionRef coll,
                                      crimson::osd::ShardServices& shard_services)
-  : PGBackend{whoami.shard, coll, &shard_services.get_store()},
+  : PGBackend{whoami.shard, coll, shard_services},
     pgid{pgid},
-    whoami{whoami},
-    shard_services{shard_services}
+    whoami{whoami}
 {}
 
 ReplicatedBackend::ll_read_ierrorator::future<ceph::bufferlist>
