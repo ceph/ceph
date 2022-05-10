@@ -80,14 +80,6 @@ private:
 				eversion_t last_complete);
   friend class ReplicatedRecoveryBackend;
   friend class crimson::osd::UrgentRecovery;
-  seastar::future<> handle_pull(Ref<MOSDPGPull> m);
-  seastar::future<> handle_push(Ref<MOSDPGPush> m);
-  seastar::future<> handle_push_reply(Ref<MOSDPGPushReply> m);
-  seastar::future<> handle_recovery_delete(Ref<MOSDPGRecoveryDelete> m);
-  seastar::future<> handle_recovery_delete_reply(
-      Ref<MOSDPGRecoveryDeleteReply> m);
-  seastar::future<> handle_pull_response(Ref<MOSDPGPush> m);
-  seastar::future<> handle_scan(MOSDPGScan& m);
 
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
