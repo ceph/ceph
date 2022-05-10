@@ -1773,6 +1773,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
+  bool check_previously_completed(const DoutPrefixProvider* dpp, const RGWMultiCompleteUpload* parts);
   void complete() override;
 
   virtual int get_params() = 0;
