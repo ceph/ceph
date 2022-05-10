@@ -1079,6 +1079,14 @@ class TestMonitoring(object):
         version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
+    def test_prometheus_external_url(self):
+        ctx = cd.CephadmContext()
+        daemon_type = 'prometheus'
+        daemon_id = 'home'
+        fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
+        args = cd.get_daemon_args(ctx, fsid, daemon_type, daemon_id)
+        assert any([x.startswith('--web.external-url=http://') for x in args])
+
     @mock.patch('cephadm.call')
     def test_get_version_node_exporter(self, _call):
         ctx = cd.CephadmContext()
