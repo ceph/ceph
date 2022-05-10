@@ -876,17 +876,17 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
 
   int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
 
-  if (ret < 0) {
-    if (ret == -ENOENT) {
-      *is_truncated = false;
-      ret = 0;
-    } else {
-      lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << dendl;
-      if (ret == -EACCES) {
-        lderr(store->ctx()) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
-                          << ". Fix the pool access permissions of your client" << dendl;
-      }
-    } 
+  if (ret == -ENOENT) {
+    // these shard objects aren't created until we actually write something to
+    // them, so treat ENOENT as a successful empty listing
+    *is_truncated = false;
+    ret = 0;
+  } else if (ret == -EACCES) {
+    lderr(store->ctx()) << "ERROR: access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
+                      << ". Fix the pool access permissions of your client" << dendl;
+  } else if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid="
+        << logshard_oid << " marker=" << marker << " " << cpp_strerror(ret) << dendl;
   }
 
   return ret;
