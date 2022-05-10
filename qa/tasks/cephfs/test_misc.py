@@ -4,6 +4,7 @@ from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
 import errno
+import platform
 import time
 import json
 import logging
@@ -28,6 +29,24 @@ class TestMisc(CephFSTestCase):
         # the process is stuck in uninterruptible sleep, just kill the mount
         self.mount_a.umount_wait(force=True)
         p.wait()
+
+    def test_fuse_mount_on_already_mounted_path(self):
+        if platform.system() != "Linux":
+            self.skipTest("Require Linux platform")
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client")
+
+        # Try to mount already mounted path
+        # expecting EBUSY error
+        try:
+            mount_cmd = ['sudo'] + self.mount_a._mount_bin + [self.mount_a.hostfs_mntpt]
+            self.mount_a.client_remote.run(args=mount_cmd, stderr=StringIO(),
+                    stdout=StringIO(), timeout=60, omit_sudo=False)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EBUSY)
+        else:
+            self.fail("Expected EBUSY")
 
     def test_getattr_caps(self):
         """
