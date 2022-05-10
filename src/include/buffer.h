@@ -1286,6 +1286,23 @@ inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
   return l;
 }
 
+static inline
+void copy_bufferlist_to_iovec(const struct iovec *iov, unsigned iovcnt,
+                              bufferlist *bl, int64_t r)
+{
+  auto iter = bl->cbegin();
+  for (unsigned j = 0, resid = r; j < iovcnt && resid > 0; j++) {
+         /*
+          * This piece of code aims to handle the case that bufferlist
+          * does not have enough data to fill in the iov
+          */
+         const auto round_size = std::min<unsigned>(resid, iov[j].iov_len);
+         iter.copy(round_size, reinterpret_cast<char*>(iov[j].iov_base));
+         resid -= round_size;
+         /* iter is self-updating */
+  }
+}
+
 } // namespace buffer
 
 } // namespace ceph
