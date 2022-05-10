@@ -940,7 +940,6 @@ int RGWSI_User_RADOS::read_stats_async(RGWSI_MetaBackend::Context *ctx,
   RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(_cb);
   int r = cls_user_get_header_async(user_str, cb);
   if (r < 0) {
-    _cb->put();
     delete cb;
     return r;
   }
