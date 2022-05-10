@@ -654,8 +654,10 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
         self.client_remote.run(args=f'mkdir -p -v {self.hostfs_mntpt}')
 
     def _run_mount_cmd(self, mntopts, check_status):
-        super(type(self), self)._run_mount_cmd(mntopts, check_status)
-        self._set_fuse_daemon_pid(check_status)
+        retval = super(type(self), self)._run_mount_cmd(mntopts, check_status)
+        if retval is None: # None represents success
+            self._set_fuse_daemon_pid(check_status)
+        return retval
 
     def _get_mount_cmd(self, mntopts):
         mount_cmd = super(type(self), self)._get_mount_cmd(mntopts)
