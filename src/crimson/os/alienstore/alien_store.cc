@@ -159,8 +159,10 @@ seastar::future<> AlienStore::umount()
     return tp->submit([this] {
       return store->umount();
     });
-  }).then([] (int r) {
+  }).then([this] (int r) {
     assert(r == 0);
+    // revive op_gate in case we would like to mount again
+    op_gate = seastar::gate();
     return seastar::now();
   });
 }
