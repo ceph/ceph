@@ -10652,6 +10652,28 @@ void Client::C_Readahead::finish(int r) {
   }
 }
 
+void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
+{
+  if(f->readahead.get_min_readahead_size() > 0) {
+    pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->size);
+    if (readahead_extent.second > 0) {
+      ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
+		     << " (caller wants " << off << "~" << len << ")" << dendl;
+      Context *onfinish2 = new C_Readahead(this, f);
+      int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
+				       readahead_extent.first, readahead_extent.second,
+				       NULL, 0, onfinish2);
+      if (r2 == 0) {
+	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
+	get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
+      } else {
+	ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
+	delete onfinish2;
+      }
+    }
+  }
+}
+
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -10688,24 +10710,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     update_read_io_size(bl->length());
   }
 
-  if(f->readahead.get_min_readahead_size() > 0) {
-    pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->size);
-    if (readahead_extent.second > 0) {
-      ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
-		     << " (caller wants " << off << "~" << len << ")" << dendl;
-      Context *onfinish2 = new C_Readahead(this, f);
-      int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-				       readahead_extent.first, readahead_extent.second,
-				       NULL, 0, onfinish2);
-      if (r2 == 0) {
-	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
-	get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
-      } else {
-	ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
-	delete onfinish2;
-      }
-    }
-  }
+  do_readahead(f, in, off, len);
 
   return r;
 }
@@ -10851,17 +10856,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
           return r;
 
         client_lock.unlock();
-        auto iter = bl.cbegin();
-        for (unsigned j = 0, resid = r; j < iovcnt && resid > 0; j++) {
-               /*
-                * This piece of code aims to handle the case that bufferlist
-                * does not have enough data to fill in the iov
-                */
-               const auto round_size = std::min<unsigned>(resid, iov[j].iov_len);
-               iter.copy(round_size, reinterpret_cast<char*>(iov[j].iov_base));
-               resid -= round_size;
-               /* iter is self-updating */
-        }
+        copy_bufferlist_to_iovec(iov, iovcnt, &bl, r);
         client_lock.lock();
         return r;
     }
@@ -10881,6 +10876,53 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     if (!fh)
       return -CEPHFS_EBADF;
     return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true);
+}
+
+int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
+                               int64_t offset, uint64_t size, Inode *in)
+{
+  utime_t lat;
+  uint64_t totalwritten;
+  int64_t r;
+
+  update_write_io_size(size);
+  // time
+  lat = ceph_clock_now();
+  lat -= start;
+
+  ++nr_write_request;
+  update_io_stat_write(lat);
+
+  if (fpos) {
+    lock_fh_pos(f);
+    f->pos = fpos;
+    unlock_fh_pos(f);
+  }
+  totalwritten = size;
+  r = (int64_t)totalwritten;
+
+  // extend file?
+  if (totalwritten + offset > in->size) {
+    in->size = totalwritten + offset;
+    in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+
+    if (is_quota_bytes_approaching(in, f->actor_perms)) {
+      check_caps(in, CHECK_CAPS_NODELAY);
+    } else if (is_max_size_approaching(in)) {
+      check_caps(in, 0);
+    }
+
+    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
+  } else {
+    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->size << dendl;
+  }
+
+  // mtime
+  in->mtime = in->ctime = ceph_clock_now();
+  in->change_attr++;
+  in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+
+  return r;
 }
 
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
@@ -10960,8 +11002,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     }
   }
 
-  utime_t lat;
-  uint64_t totalwritten;
   int want, have;
   if (f->mode & CEPH_FILE_MODE_LAZY)
     want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO;
@@ -11062,42 +11102,8 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // if we get here, write was successful, update client metadata
 success:
-  update_write_io_size(size);
-  // time
-  lat = ceph_clock_now();
-  lat -= start;
 
-  ++nr_write_request;
-  update_io_stat_write(lat);
-
-  if (fpos) {
-    lock_fh_pos(f);
-    f->pos = fpos;
-    unlock_fh_pos(f);
-  }
-  totalwritten = size;
-  r = (int64_t)totalwritten;
-
-  // extend file?
-  if (totalwritten + offset > in->size) {
-    in->size = totalwritten + offset;
-    in->mark_caps_dirty(CEPH_CAP_FILE_WR);
-
-    if (is_quota_bytes_approaching(in, f->actor_perms)) {
-      check_caps(in, CHECK_CAPS_NODELAY);
-    } else if (is_max_size_approaching(in)) {
-      check_caps(in, 0);
-    }
-
-    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
-  } else {
-    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->size << dendl;
-  }
-
-  // mtime
-  in->mtime = in->ctime = ceph_clock_now();
-  in->change_attr++;
-  in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+  r = _write_success(f, start, fpos, offset, size, in);
 
 done:
 
