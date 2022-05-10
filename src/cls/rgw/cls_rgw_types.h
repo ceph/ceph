@@ -1123,16 +1123,22 @@ struct cls_rgw_obj {
   cls_rgw_obj(std::string& _p, cls_rgw_obj_key& _k) : pool(_p), key(_k) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 2, bl);
     encode(pool, bl);
-    encode(key.name, bl);
+    {
+      // v1 and v2 encoded 'key.name' here. v2 duplicated this in 'key'. v3
+      // encodes an empty string here so that v2 can still decode it, but
+      // is no longer compatible with v1 encodings that don't include 'key'
+      std::string empty;
+      encode(empty, bl);
+    }
     encode(loc, bl);
     encode(key, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(pool, bl);
     decode(key.name, bl);
     decode(loc, bl);
