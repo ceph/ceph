@@ -4617,6 +4617,7 @@ BlueStore::~BlueStore()
   ceph_assert(bluefs == NULL);
   ceph_assert(fsid_fd < 0);
   ceph_assert(path_fd < 0);
+  new_coll_map.clear();
   for (auto i : onode_cache_shards) {
     delete i;
   }
