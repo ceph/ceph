@@ -516,6 +516,9 @@ public:
   const blk_paddr_t& as_blk_paddr() const;
 
   paddr_t operator-(paddr_t rhs) const;
+  paddr_t operator+(int32_t o) const {
+    return add_offset(o);
+  }
 
   bool is_delayed() const {
     return get_device_id() == DEVICE_ID_DELAYED;
@@ -859,14 +862,22 @@ enum class extent_types_t : uint8_t {
   COLL_BLOCK = 6,
   OBJECT_DATA_BLOCK = 7,
   RETIRED_PLACEHOLDER = 8,
-  RBM_ALLOC_INFO = 9,
+  // the following two types are not extent types,
+  // they are just used to indicates paddr allocation deltas
+  ALLOC_INFO = 9,
+  ALLOC_TAIL = 10,
   // Test Block Types
-  TEST_BLOCK = 10,
-  TEST_BLOCK_PHYSICAL = 11,
+  TEST_BLOCK = 11,
+  TEST_BLOCK_PHYSICAL = 12,
+  BACKREF_INTERNAL = 13,
+  BACKREF_LEAF = 14,
   // None and the number of valid extent_types_t
-  NONE = 12,
+  NONE = 15,
 };
+using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
+
+constexpr size_t BACKREF_NODE_SIZE = 4096;
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
@@ -881,10 +892,21 @@ constexpr bool is_logical_type(extent_types_t type) {
   }
 }
 
+constexpr bool is_retired_placeholder(extent_types_t type)
+{
+  return type == extent_types_t::RETIRED_PLACEHOLDER;
+}
+
 constexpr bool is_lba_node(extent_types_t type)
 {
   return type == extent_types_t::LADDR_INTERNAL ||
     type == extent_types_t::LADDR_LEAF;
+}
+
+constexpr bool is_backref_node(extent_types_t type)
+{
+  return type == extent_types_t::BACKREF_INTERNAL ||
+    type == extent_types_t::BACKREF_LEAF;
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
@@ -1197,6 +1219,7 @@ public:
 };
 
 using lba_root_t = phy_tree_root_t;
+using backref_root_t = phy_tree_root_t;
 
 /**
  * root_t
@@ -1209,6 +1232,7 @@ struct __attribute__((packed)) root_t {
 
   static constexpr int MAX_META_LENGTH = 1024;
 
+  backref_root_t backref_root;
   lba_root_t lba_root;
   laddr_le_t onode_root;
   coll_root_le_t collection_root;
@@ -1221,6 +1245,7 @@ struct __attribute__((packed)) root_t {
 
   void adjust_addrs_from_base(paddr_t base) {
     lba_root.adjust_addrs_from_base(base);
+    backref_root.adjust_addrs_from_base(base);
   }
 
   meta_t get_meta() {
@@ -1243,19 +1268,44 @@ struct __attribute__((packed)) root_t {
   }
 };
 
+struct alloc_blk_t {
+  alloc_blk_t(
+    paddr_t paddr,
+    laddr_t laddr,
+    extent_len_t len,
+    extent_types_t type)
+    : paddr(paddr), laddr(laddr), len(len), type(type)
+  {}
+
+  explicit alloc_blk_t() = default;
+
+  paddr_t paddr = P_ADDR_NULL;
+  laddr_t laddr = L_ADDR_NULL;
+  extent_len_t len = 0;
+  extent_types_t type = extent_types_t::ROOT;
+  DENC(alloc_blk_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.paddr, p);
+    denc(v.laddr, p);
+    denc(v.len, p);
+    denc(v.type, p);
+    DENC_FINISH(p);
+  }
+};
+
 // use absolute address
-struct rbm_alloc_delta_t {
+struct alloc_delta_t {
   enum class op_types_t : uint8_t {
     NONE = 0,
     SET = 1,
     CLEAR = 2
   };
-  std::vector<std::pair<paddr_t, size_t>> alloc_blk_ranges;
+  std::vector<alloc_blk_t> alloc_blk_ranges;
   op_types_t op = op_types_t::NONE;
 
-  rbm_alloc_delta_t() = default;
+  alloc_delta_t() = default;
 
-  DENC(rbm_alloc_delta_t, v, p) {
+  DENC(alloc_delta_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.alloc_blk_ranges, p);
     denc(v.op, p);
@@ -1302,6 +1352,7 @@ struct segment_header_t {
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
+  journal_seq_t alloc_replay_from;
   segment_nonce_t segment_nonce;
 
   segment_type_t type;
@@ -1315,6 +1366,7 @@ struct segment_header_t {
     denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
+    denc(v.alloc_replay_from, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
     DENC_FINISH(p);
@@ -1327,6 +1379,7 @@ struct segment_tail_t {
   segment_id_t physical_segment_id; // debugging
 
   journal_seq_t journal_tail;
+  journal_seq_t alloc_replay_from;
   segment_nonce_t segment_nonce;
 
   segment_type_t type;
@@ -1343,6 +1396,7 @@ struct segment_tail_t {
     denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.journal_tail, p);
+    denc(v.alloc_replay_from, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
     denc(v.last_modified, p);
@@ -1728,7 +1782,8 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::record_group_header_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::extent_info_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_header_t)
-WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::rbm_alloc_delta_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_blk_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
 
 template<>

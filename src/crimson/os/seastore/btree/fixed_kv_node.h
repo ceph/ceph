@@ -425,6 +425,12 @@ struct FixedKVLeafNode
     this->resolve_relative_addrs(base);
   }
 
+  std::ostream &print_detail(std::ostream &out) const
+  {
+    return out << ", size=" << this->get_size()
+	       << ", meta=" << this->get_meta();
+  }
+
   constexpr static size_t get_min_capacity() {
     return (node_layout_t::get_capacity() - 1) / 2;
   }

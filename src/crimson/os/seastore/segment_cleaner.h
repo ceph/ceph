@@ -11,6 +11,7 @@
 #include "osd/osd_types.h"
 
 #include "crimson/common/log.h"
+#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -191,6 +192,10 @@ public:
 
   virtual segment_id_t allocate_segment(
       segment_seq_t seq, segment_type_t type) = 0;
+
+  virtual journal_seq_t get_dirty_extents_replay_from() const = 0;
+
+  virtual journal_seq_t get_alloc_info_replay_from() const = 0;
 
   virtual void close_segment(segment_id_t) = 0;
 
@@ -432,7 +437,9 @@ public:
     size_t reclaim_bytes_stride = 0;
 
     /// Number of bytes of journal entries to rewrite per cycle
-    size_t journal_rewrite_per_cycle = 0;
+    size_t journal_rewrite_dirty_per_cycle = 0;
+
+    size_t journal_rewrite_backref_per_cycle = 0;
 
     static config_t get_default() {
       return config_t{
@@ -442,8 +449,9 @@ public:
 	  .8,   // reclaim_ratio_hard_limit
 	  .6,   // reclaim_ratio_gc_threshhold
 	  .2,   // available_ratio_hard_limit
-	  1<<25,// reclaim 64MB per gc cycle
-	  1<<25 // rewrite 64MB of journal entries per gc cycle
+	  1<<20,// reclaim 1MB per gc cycle
+	  1<<20,// rewrite 1MB of journal entries per gc cycle
+	  1<<24 // create 16MB of backref extents per gc cycle
 	};
     }
   };
@@ -541,7 +549,8 @@ public:
     using submit_transaction_direct_ret =
       submit_transaction_direct_iertr::future<>;
     virtual submit_transaction_direct_ret submit_transaction_direct(
-      Transaction &t) = 0;
+      Transaction &t,
+      std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
   };
 
 private:
@@ -549,6 +558,8 @@ private:
   const config_t config;
 
   SegmentManagerGroupRef sm_group;
+  BackrefManager &backref_manager;
+  Cache &cache;
 
   SpaceTrackerIRef space_tracker;
   segments_info_t segments;
@@ -576,6 +587,12 @@ private:
   /// target journal_tail for next fresh segment
   journal_seq_t journal_tail_target;
 
+  /// target replay_from for dirty extents
+  journal_seq_t dirty_extents_replay_from;
+
+  /// target replay_from for alloc infos
+  journal_seq_t alloc_info_replay_from;
+
   /// most recently committed journal_tail
   journal_seq_t journal_tail_committed;
 
@@ -593,6 +610,8 @@ public:
   SegmentCleaner(
     config_t config,
     SegmentManagerGroupRef&& sm_group,
+    BackrefManager &backref_manager,
+    Cache &cache,
     bool detailed = false);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {
@@ -630,7 +649,20 @@ public:
     return sm_group.get();
   }
 
-  void update_journal_tail_target(journal_seq_t target);
+  journal_seq_t get_dirty_extents_replay_from() const final {
+    return dirty_extents_replay_from;
+  }
+
+  journal_seq_t get_alloc_info_replay_from() const final {
+    return alloc_info_replay_from;
+  }
+
+  void update_journal_tail_target(
+    journal_seq_t dirty_replay_from,
+    journal_seq_t alloc_replay_from);
+
+  void update_alloc_info_replay_from(
+    journal_seq_t alloc_replay_from);
 
   void init_mkfs(journal_seq_t head) {
     journal_tail_target = head;
@@ -683,18 +715,32 @@ public:
 
     gc_process.maybe_wake_on_space_used();
     assert(ret > 0);
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
+      "{} segment {} new len: {}~{}, live_bytes: {}",
+      __func__,
+      seg_addr.get_segment_id(),
+      addr,
+      len,
+      space_tracker->get_usage(seg_addr.get_segment_id()));
   }
 
   void mark_space_free(
     paddr_t addr,
-    extent_len_t len) {
-    if (!init_complete)
+    extent_len_t len,
+    const bool force = false) {
+    if (!init_complete && !force)
       return;
 
     ceph_assert(stats.used_bytes >= len);
     stats.used_bytes -= len;
     auto& seg_addr = addr.as_seg_paddr();
 
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
+      "{} segment {} free len: {}~{}",
+      __func__,
+      seg_addr.get_segment_id(),
+      addr,
+      len);
     auto old_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
     [[maybe_unused]] auto ret = space_tracker->release(
       seg_addr.get_segment_id(),
@@ -704,6 +750,13 @@ public:
     adjust_segment_util(old_usage, new_usage);
     maybe_wake_gc_blocked_io();
     assert(ret >= 0);
+    crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
+      "{} segment {} free len: {}~{}, live_bytes: {}",
+      __func__,
+      seg_addr.get_segment_id(),
+      addr,
+      len,
+      space_tracker->get_usage(seg_addr.get_segment_id()));
   }
 
   SpaceTrackerIRef get_empty_space_tracker() const {
@@ -806,6 +859,12 @@ private:
     Transaction &t,
     journal_seq_t limit);
 
+  using trim_backrefs_iertr = work_iertr;
+  using trim_backrefs_ret = trim_backrefs_iertr::future<journal_seq_t>;
+  trim_backrefs_ret trim_backrefs(
+    Transaction &t,
+    journal_seq_t limit);
+
   journal_seq_t get_dirty_tail() const {
     auto ret = journal_head;
     ret.segment_seq -= std::min(
@@ -823,9 +882,12 @@ private:
   }
 
   // GC status helpers
-  std::unique_ptr<
-    SegmentManagerGroup::scan_extents_cursor
-    > scan_cursor;
+  std::optional<paddr_t> next_reclaim_pos;
+
+  bool final_reclaim() {
+    return next_reclaim_pos->as_seg_paddr().get_segment_off()
+      + config.reclaim_bytes_stride >= (size_t)segments.get_segment_size();
+  }
 
   /**
    * GCProcess
@@ -915,6 +977,26 @@ private:
   using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
   gc_reclaim_space_ret gc_reclaim_space();
 
+  using retrieve_backref_extents_iertr = work_iertr;
+  using retrieve_backref_extents_ret =
+    retrieve_backref_extents_iertr::future<>;
+  retrieve_backref_extents_ret _retrieve_backref_extents(
+    Transaction &t,
+    std::set<
+      Cache::backref_extent_buf_entry_t,
+      Cache::backref_extent_buf_entry_t::cmp_t> &&backref_extents,
+    std::vector<CachedExtentRef> &extents);
+
+  using retrieve_live_extents_iertr = work_iertr;
+  using retrieve_live_extents_ret =
+    retrieve_live_extents_iertr::future<journal_seq_t>;
+  retrieve_live_extents_ret _retrieve_live_extents(
+    Transaction &t,
+    std::set<
+      backref_buf_entry_t,
+      backref_buf_entry_t::cmp_t> &&backrefs,
+    std::vector<CachedExtentRef> &extents);
+
   size_t get_bytes_used_current_segment() const {
     auto& seg_addr = journal_head.offset.as_seg_paddr();
     return seg_addr.get_segment_off();
@@ -923,18 +1005,6 @@ private:
   size_t get_bytes_available_current_segment() const {
     auto segment_size = segments.get_segment_size();
     return segment_size - get_bytes_used_current_segment();
-  }
-
-  /**
-   * get_bytes_scanned_current_segment
-   *
-   * Returns the number of bytes from the current gc segment that
-   * have been scanned.
-   */
-  size_t get_bytes_scanned_current_segment() const {
-    if (!scan_cursor)
-      return 0;
-    return scan_cursor->get_segment_offset();
   }
 
   /// Returns free space available for writes

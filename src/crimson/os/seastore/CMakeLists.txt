@@ -9,6 +9,9 @@ set(crimson_seastore_srcs
   cache.cc
   lba_manager.cc
   segment_cleaner.cc
+  backref_manager.cc
+  backref/backref_tree_node.cc
+  backref/btree_backref_manager.cc
   lba_manager/btree/btree_lba_manager.cc
   lba_manager/btree/lba_btree_node.cc
   omap_manager.cc

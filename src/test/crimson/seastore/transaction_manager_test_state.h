@@ -130,6 +130,8 @@ class TMTestState : public EphemeralTestState {
 protected:
   TransactionManagerRef tm;
   LBAManager *lba_manager;
+  BackrefManager *backref_manager;
+  Cache* cache;
   SegmentCleaner *segment_cleaner;
 
   TMTestState() : EphemeralTestState(1) {}
@@ -146,6 +148,8 @@ protected:
     }
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
+    backref_manager = tm->get_backref_manager();
+    cache = tm->get_cache();
   }
 
   virtual void _destroy() override {

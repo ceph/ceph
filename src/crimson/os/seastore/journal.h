@@ -80,6 +80,8 @@ public:
   using delta_handler_t = std::function<
     replay_ret(const record_locator_t&,
 	       const delta_info_t&,
+	       const journal_seq_t, // journal seq from which
+				    // alloc delta should replayed
 	       seastar::lowres_system_clock::time_point last_modified)>;
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
