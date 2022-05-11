@@ -876,7 +876,7 @@ struct denc_traits<ceph::buffer::list> {
 template<typename A, typename B>
 struct denc_traits<
   std::pair<A, B>,
-  std::enable_if_t<denc_supported<A> && denc_supported<B>>> {
+  std::enable_if_t<denc_supported<std::remove_const_t<A>> && denc_supported<B>>> {
   typedef denc_traits<A> a_traits;
   typedef denc_traits<B> b_traits;
 
@@ -908,14 +908,14 @@ struct denc_traits<
   }
 
   static void decode(std::pair<A,B>& v, ceph::buffer::ptr::const_iterator& p, uint64_t f=0) {
-    denc(v.first, p, f);
+    denc(const_cast<std::remove_const_t<A>&>(v.first), p, f);
     denc(v.second, p, f);
   }
   template<typename AA=A>
   static std::enable_if_t<!!sizeof(AA) && !need_contiguous>
   decode(std::pair<A,B>& v, ceph::buffer::list::const_iterator& p,
 	 uint64_t f = 0) {
-    denc(v.first, p);
+    denc(const_cast<std::remove_const_t<AA>&>(v.first), p);
     denc(v.second, p);
   }
 };
@@ -1116,8 +1116,7 @@ struct denc_traits<
 namespace _denc {
   template<typename Container>
   struct maplike_details : public container_details_base<Container> {
-    using T = std::pair<typename Container::key_type,
-			typename Container::mapped_type>;
+    using T = typename Container::value_type;
     template<typename ...Args>
     static void insert(Container& c, Args&& ...args) {
       c.emplace_hint(c.cend(), std::forward<Args>(args)...);
