@@ -112,6 +112,17 @@ struct snap_info {
   struct snap_metadata *snap_metadata;
 };
 
+struct ceph_ll_io_info {
+  void (*callback) (struct ceph_ll_io_info *cb_info);
+  void *priv; // private for caller
+  struct Fh *fh;
+  const struct iovec *iov;
+  int iovcnt;
+  int64_t off;
+  int64_t result;
+  bool write;
+};
+
 /* setattr mask bits (up to an int in size) */
 #ifndef CEPH_SETATTR_MODE
 #define CEPH_SETATTR_MODE		(1 << 0)
@@ -1879,6 +1890,8 @@ int64_t ceph_ll_readv(struct ceph_mount_info *cmount, struct Fh *fh,
 		      const struct iovec *iov, int iovcnt, int64_t off);
 int64_t ceph_ll_writev(struct ceph_mount_info *cmount, struct Fh *fh,
 		       const struct iovec *iov, int iovcnt, int64_t off);
+int64_t ceph_ll_async_readv_writev(struct ceph_mount_info *cmount,
+				   struct ceph_ll_io_info *io_info);
 int ceph_ll_close(struct ceph_mount_info *cmount, struct Fh* filehandle);
 int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
 /**
