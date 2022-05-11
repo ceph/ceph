@@ -299,6 +299,8 @@ struct RGWUserAdminOpState {
 
   void set_user_info(RGWUserInfo& user_info);
 
+  void set_user_version_tracker(RGWObjVersionTracker& objv_tracker);
+
   void set_max_buckets(int32_t mb) {
     max_buckets = mb;
     max_buckets_specified = true;

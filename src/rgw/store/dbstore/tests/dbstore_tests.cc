@@ -268,7 +268,7 @@ TEST_F(DBStoreTest, StoreUser) {
   uinfo.access_keys["id2"] = k2;
 
   /* non exclusive create..should create new one */
-  ret = db->store_user(dpp, uinfo, true, &attrs, &objv_tracker, &old_uinfo);
+  ret = db->store_user(dpp, uinfo, false, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(old_uinfo.user_email, "");
   ASSERT_EQ(objv_tracker.read_version.ver, 1);
@@ -305,7 +305,7 @@ TEST_F(DBStoreTest, GetUserQueryByUserID) {
   uinfo.user_id.tenant = "tenant";
   uinfo.user_id.id = "user_id2";
 
-  ret = db->get_user(dpp, "user_id", "", uinfo, &attrs, &objv);
+  ret = db->get_user(dpp, "user_id", "user_id2", uinfo, &attrs, &objv);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(uinfo.user_id.tenant, "tenant");
   ASSERT_EQ(uinfo.user_email, "user2_new@dbstore.com");
@@ -629,7 +629,6 @@ TEST_F(DBStoreTest, RemoveUserAPI) {
   ret = db->remove_user(dpp, uinfo, &objv);
   ASSERT_EQ(ret, -125);
 
-  /* invalid version number...should fail */
   objv.read_version.ver = 2;
   ret = db->remove_user(dpp, uinfo, &objv);
   ASSERT_EQ(ret, 0);

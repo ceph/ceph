@@ -37,15 +37,20 @@ not_found:
 }
 
 /* Create DBStore instance */
-DB *DBStoreManager::createDB(string tenant) {
+DB *DBStoreManager::createDB(std::string tenant) {
   DB *dbs = nullptr;
   pair<map<string, DB*>::iterator,bool> ret;
+  const auto& db_path = g_conf().get_val<std::string>("dbstore_db_dir");
+  const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix");
+
+  std::string db_full_path = db_path + "/" + db_name + "-" + tenant;
+   ldout(cct, 0) << "DB initialization full db_path("<<db_full_path<<")" << dendl;
 
   /* Create the handle */
 #ifdef SQLITE_ENABLED
-  dbs = new SQLiteDB(tenant, cct);
+  dbs = new SQLiteDB(db_full_path, cct);
 #else
-  dbs = new DB(tenant, cct);
+  dbs = new DB(db_full_path, cct);
 #endif
 
   /* API is DB::Initialize(string logfile, int loglevel);
