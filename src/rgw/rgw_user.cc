@@ -421,6 +421,11 @@ void RGWUserAdminOpState::set_user_info(RGWUserInfo& user_info)
   user->get_info() = user_info;
 }
 
+void RGWUserAdminOpState::set_user_version_tracker(RGWObjVersionTracker& objv_tracker)
+{
+  user->get_version_tracker() = objv_tracker;
+}
+
 const rgw_user& RGWUserAdminOpState::get_user_id()
 {
   return user->get_id();
@@ -1515,6 +1520,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     op_state.set_user_info(user->get_info());
     op_state.set_populated();
     op_state.objv = user->get_version_tracker();
+    op_state.set_user_version_tracker(user->get_version_tracker());
 
     old_info = user->get_info();
     set_populated();
@@ -1568,6 +1574,8 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
 
   ret = user->store_user(dpp, y, false, pold_info);
   op_state.objv = user->get_version_tracker();
+  op_state.set_user_version_tracker(user->get_version_tracker());
+
   if (ret < 0) {
     set_err_msg(err_msg, "unable to store user info");
     return ret;
@@ -1717,6 +1725,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   RGWUserInfo& user_info = op_state.get_user_info();
   user_info.user_id = new_user->get_id();
   op_state.objv = user->get_version_tracker();
+  op_state.set_user_version_tracker(user->get_version_tracker());
 
   rename_swift_keys(new_user->get_id(), user_info.swift_keys);
 

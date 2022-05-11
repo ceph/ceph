@@ -156,7 +156,7 @@ namespace rgw::sal {
   int DBUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   {
     int ret;
-    ret = store->getDB()->get_user(dpp, string("user_id"), "", info, &attrs,
+    ret = store->getDB()->get_user(dpp, string("user_id"), get_id().id, info, &attrs,
         &objv_tracker);
     return ret;
   }
@@ -196,7 +196,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDB()->get_user(dpp, string("user_id"), "", info, &attrs,
+    ret = store->getDB()->get_user(dpp, string("user_id"), get_id().id, info, &attrs,
         &objv_tracker);
 
     return ret;
@@ -1660,7 +1660,7 @@ namespace rgw::sal {
   int DBStore::get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
   {
     /* Swift keys and subusers are not supported for now */
-    return 0;
+    return -ENOTSUP;
   }
 
   std::string DBStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)
