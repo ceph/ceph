@@ -14,6 +14,10 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/btree/btree_range_pin.h"
 
+namespace crimson::os::seastore::lba_manager::btree {
+struct lba_map_val_t;
+}
+
 namespace crimson::os::seastore {
 
 template <typename node_key_t>
@@ -31,6 +35,7 @@ template <
   typename node_val_t,
   typename internal_node_t,
   typename leaf_node_t,
+  typename pin_t,
   size_t node_size>
 class FixedKVBtree {
   static constexpr size_t MAX_DEPTH = 16;
@@ -39,6 +44,7 @@ class FixedKVBtree {
     node_val_t,
     internal_node_t,
     leaf_node_t,
+    pin_t,
     node_size>;
 public:
   using InternalNodeRef = TCachedExtentRef<internal_node_t>;
@@ -52,7 +58,7 @@ public:
   using iterator_fut = base_iertr::future<iterator>;
 
   using mapped_space_visitor_t = std::function<
-    void(paddr_t, extent_len_t)>;
+    void(paddr_t, extent_len_t, depth_t)>;
 
   class iterator {
   public:
@@ -167,7 +173,11 @@ public:
     node_val_t get_val() const {
       assert(!is_end());
       auto ret = leaf.node->iter_idx(leaf.pos).get_val();
-      ret.paddr = ret.paddr.maybe_relative_to(leaf.node->get_paddr());
+      if constexpr (
+        std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
+                       node_val_t>) {
+        ret.paddr = ret.paddr.maybe_relative_to(leaf.node->get_paddr());
+      }
       return ret;
     }
 
@@ -184,13 +194,13 @@ public:
       return leaf.pos == 0;
     }
 
-    PhysicalNodePinRef<node_key_t> get_pin() const {
+    PhysicalNodePinRef<node_key_t, typename pin_t::val_type> get_pin() const {
       assert(!is_end());
       auto val = get_val();
       auto key = get_key();
-      return std::make_unique<BtreeNodePin<node_key_t>>(
+      return std::make_unique<pin_t>(
 	leaf.node,
-	val.paddr,
+	val,
 	fixed_kv_node_meta_t<node_key_t>{ key, key + val.len, 0 });
     }
 
@@ -305,7 +315,7 @@ public:
       c.trans,
       node_size);
     root_leaf->set_size(0);
-    fixed_kv_node_meta_t<node_key_t> meta{0, L_ADDR_MAX, 1};
+    fixed_kv_node_meta_t<node_key_t> meta{min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, 1};
     root_leaf->set_meta(meta);
     root_leaf->pin.set_range(meta);
     c.trans.get_lba_tree_stats().depth = 1u;
@@ -423,7 +433,7 @@ public:
     return lower_bound(c, 0);
   }
   iterator_fut end(op_context_t<node_key_t> c) const {
-    return upper_bound(c, L_ADDR_MAX);
+    return upper_bound(c, min_max_t<node_key_t>::max);
   }
 
   using iterate_repeat_ret_inner = base_iertr::future<
@@ -496,7 +506,7 @@ public:
       "inserting laddr {} at iter {}",
       c.trans,
       laddr,
-      iter.is_end() ? L_ADDR_MAX : iter.get_key());
+      iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
     return seastar::do_with(
       iter,
       [this, c, laddr, val](auto &ret) {
@@ -567,7 +577,7 @@ public:
       seastore_lba_details,
       "update element at {}",
       c.trans,
-      iter.is_end() ? L_ADDR_MAX : iter.get_key());
+      iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
     if (!iter.leaf.node->is_pending()) {
       CachedExtentRef mut = c.cache.duplicate_for_write(
         c.trans, iter.leaf.node
@@ -602,7 +612,7 @@ public:
       seastore_lba_details,
       "remove element at {}",
       c.trans,
-      iter.is_end() ? L_ADDR_MAX : iter.get_key());
+      iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
     assert(!iter.is_end());
     ++(c.trans.get_lba_tree_stats().num_erases);
     return seastar::do_with(
@@ -748,7 +758,7 @@ public:
     node_key_t laddr,
     seastore_off_t len)
   {
-    LOG_PREFIX(FixedKVBtree::get_leaf_if_live);
+    LOG_PREFIX(FixedKVBtree::get_internal_if_live);
     return lower_bound(
       c, laddr
     ).si_then([FNAME, c, addr, laddr, len](auto iter) {
@@ -793,7 +803,9 @@ public:
     CachedExtentRef e) {
     LOG_PREFIX(FixedKVBtree::rewrite_extent);
     assert(e->get_type() == extent_types_t::LADDR_INTERNAL ||
-           e->get_type() == extent_types_t::LADDR_LEAF);
+           e->get_type() == extent_types_t::LADDR_LEAF ||
+           e->get_type() == extent_types_t::BACKREF_INTERNAL ||
+           e->get_type() == extent_types_t::BACKREF_LEAF);
     
     auto do_rewrite = [&](auto &fixed_kv_extent) {
       auto n_fixed_kv_extent = c.cache.template alloc_new_extent<
@@ -874,7 +886,7 @@ public:
       if (depth == iter.get_depth()) {
         SUBDEBUGT(seastore_lba_details, "update at root", c.trans);
 
-        if (laddr != 0) {
+        if (laddr != min_max_t<node_key_t>::min) {
           SUBERRORT(
             seastore_lba_details,
             "updating root laddr {} at depth {} from {} to {},"
@@ -1006,8 +1018,11 @@ private:
         offset,
         *ret);
       // This can only happen during init_cached_extent
+      // or when backref extent being rewritten by gc space reclaiming
       if (c.pins && !ret->is_pending() && !ret->pin.is_linked()) {
-        assert(ret->is_dirty());
+        assert(ret->is_dirty()
+          || (is_backref_node(ret->get_type())
+            && ret->is_clean()));
         init_internal(*ret);
       }
       auto meta = ret->get_meta();
@@ -1063,8 +1078,11 @@ private:
         offset,
         *ret);
       // This can only happen during init_cached_extent
+      // or when backref extent being rewritten by gc space reclaiming
       if (c.pins && !ret->is_pending() && !ret->pin.is_linked()) {
-        assert(ret->is_dirty());
+        assert(ret->is_dirty()
+          || (is_backref_node(ret->get_type())
+            && ret->is_clean()));
         init_leaf(*ret);
       }
       auto meta = ret->get_meta();
@@ -1092,22 +1110,28 @@ private:
 	c,
 	root.get_depth(),
 	root.get_location(),
-	0,
-	L_ADDR_MAX
+	min_max_t<node_key_t>::min,
+	min_max_t<node_key_t>::max
       ).si_then([this, visitor, &iter](InternalNodeRef root_node) {
 	iter.get_internal(root.get_depth()).node = root_node;
-	if (visitor) (*visitor)(root_node->get_paddr(), root_node->get_length());
+	if (visitor) (*visitor)(
+          root_node->get_paddr(),
+          root_node->get_length(),
+          root.get_depth());
 	return lookup_root_iertr::now();
       });
     } else {
       return get_leaf_node(
 	c,
 	root.get_location(),
-	0,
-	L_ADDR_MAX
-      ).si_then([visitor, &iter](LeafNodeRef root_node) {
+	min_max_t<node_key_t>::min,
+	min_max_t<node_key_t>::max
+      ).si_then([visitor, &iter, this](LeafNodeRef root_node) {
 	iter.leaf.node = root_node;
-	if (visitor) (*visitor)(root_node->get_paddr(), root_node->get_length());
+	if (visitor) (*visitor)(
+          root_node->get_paddr(),
+          root_node->get_length(),
+          root.get_depth());
 	return lookup_root_iertr::now();
       });
     }
@@ -1144,7 +1168,7 @@ private:
       auto node_iter = f(*node);
       assert(node_iter != node->end());
       entry.pos = node_iter->get_offset();
-      if (visitor) (*visitor)(node->get_paddr(), node->get_length());
+      if (visitor) (*visitor)(node->get_paddr(), node->get_length(), depth);
       return seastar::now();
     });
   }
@@ -1177,7 +1201,7 @@ private:
       iter.leaf.node = node;
       auto node_iter = f(*node);
       iter.leaf.pos = node_iter->get_offset();
-      if (visitor) (*visitor)(node->get_paddr(), node->get_length());
+      if (visitor) (*visitor)(node->get_paddr(), node->get_length(), 1);
       return seastar::now();
     });
   }
@@ -1363,12 +1387,13 @@ private:
     if (split_from == iter.get_depth()) {
       auto nroot = c.cache.template alloc_new_extent<internal_node_t>(
         c.trans, node_size);
-      fixed_kv_node_meta_t<node_key_t> meta{0, L_ADDR_MAX, iter.get_depth() + 1};
+      fixed_kv_node_meta_t<node_key_t> meta{
+        min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
       nroot->set_meta(meta);
       nroot->pin.set_range(meta);
       nroot->journal_insert(
         nroot->begin(),
-        L_ADDR_MIN,
+        min_max_t<node_key_t>::min,
         root.get_location(),
         nullptr);
       iter.internal.push_back({nroot, 0});
@@ -1556,8 +1581,8 @@ private:
     op_context_t<node_key_t> c,
     depth_t depth,
     paddr_t addr,
-    laddr_t begin,
-    laddr_t end) {
+    node_key_t begin,
+    node_key_t end) {
     assert(depth == 1);
     return get_leaf_node(c, addr, begin, end);
   }
@@ -1568,8 +1593,8 @@ private:
     op_context_t<node_key_t> c,
     depth_t depth,
     paddr_t addr,
-    laddr_t begin,
-    laddr_t end) {
+    node_key_t begin,
+    node_key_t end) {
     return get_internal_node(c, depth, addr, begin, end);
   }
 
@@ -1684,6 +1709,7 @@ template <
   typename node_val_t,
   typename internal_node_t,
   typename leaf_node_t,
+  typename pin_t,
   size_t node_size>
 struct is_fixed_kv_tree<
   FixedKVBtree<
@@ -1691,6 +1717,7 @@ struct is_fixed_kv_tree<
     node_val_t,
     internal_node_t,
     leaf_node_t,
+    pin_t,
     node_size>> : std::true_type {};
 
 template <typename T>

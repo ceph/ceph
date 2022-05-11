@@ -201,7 +201,7 @@ split_ret split_pin_left(context_t ctx, LBAPinRef &pin, laddr_t offset)
     return get_iertr::make_ready_future<split_ret_bare>(
       std::nullopt,
       std::nullopt);
-  } else if (pin->get_paddr().is_zero()) {
+  } else if (pin->get_val().is_zero()) {
     /* Zero extent unaligned, return largest aligned zero extent to
      * the left and the gap between aligned_offset and offset to prepend. */
     auto aligned_offset = p2align(offset, (uint64_t)ctx.tm.get_block_size());
@@ -242,7 +242,7 @@ split_ret split_pin_right(context_t ctx, LBAPinRef &pin, laddr_t end)
     return get_iertr::make_ready_future<split_ret_bare>(
       std::nullopt,
       std::nullopt);
-  } else if (pin->get_paddr().is_zero()) {
+  } else if (pin->get_val().is_zero()) {
     auto aligned_end = p2roundup(end, (uint64_t)ctx.tm.get_block_size());
     assert_aligned(aligned_end);
     ceph_assert(aligned_end >= end);
@@ -351,7 +351,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	auto pin_offset = pin.get_key() -
 	  object_data.get_reserved_data_base();
 	if ((pin.get_key() == (object_data.get_reserved_data_base() + size)) ||
-	  (pin.get_paddr().is_zero())) {
+	  (pin.get_val().is_zero())) {
 	  /* First pin is exactly at the boundary or is a zero pin.  Either way,
 	   * remove all pins and add a single zero pin to the end. */
 	  to_write.emplace_back(
@@ -692,7 +692,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		    laddr_t end = std::min(
 		      pin->get_key() + pin->get_length(),
 		      loffset + len);
-		    if (pin->get_paddr().is_zero()) {
+		    if (pin->get_val().is_zero()) {
 		      ceph_assert(end > current); // See LBAManager::get_mappings
 		      ret.append_zero(end - current);
 		      current = end;
@@ -762,7 +762,7 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
 	ceph_assert(pins.size() >= 1);
         ceph_assert((*pins.begin())->get_key() <= loffset);
 	for (auto &&i: pins) {
-	  if (!(i->get_paddr().is_zero())) {
+	  if (!(i->get_val().is_zero())) {
 	    auto ret_left = std::max(i->get_key(), loffset);
 	    auto ret_right = std::min(
 	      i->get_key() + i->get_length(),

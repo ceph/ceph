@@ -16,11 +16,89 @@
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
+
+class SegmentCleaner;
+
+struct backref_buf_entry_t {
+  backref_buf_entry_t(
+    const paddr_t paddr,
+    const laddr_t laddr,
+    const extent_len_t len,
+    const extent_types_t type,
+    const journal_seq_t seq)
+    : paddr(paddr),
+      laddr(laddr),
+      len(len),
+      type(type),
+      seq(seq)
+  {}
+  backref_buf_entry_t(alloc_blk_t alloc_blk)
+    : paddr(alloc_blk.paddr),
+      laddr(alloc_blk.laddr),
+      len(alloc_blk.len),
+      type(alloc_blk.type)
+  {}
+  const paddr_t paddr = P_ADDR_NULL;
+  const laddr_t laddr = L_ADDR_NULL;
+  const extent_len_t len = 0;
+  const extent_types_t type =
+    extent_types_t::ROOT;
+  const journal_seq_t seq;
+  friend bool operator< (
+    const backref_buf_entry_t &l,
+    const backref_buf_entry_t &r) {
+    return l.paddr < r.paddr;
+  }
+  friend bool operator> (
+    const backref_buf_entry_t &l,
+    const backref_buf_entry_t &r) {
+    return l.paddr > r.paddr;
+  }
+  friend bool operator== (
+    const backref_buf_entry_t &l,
+    const backref_buf_entry_t &r) {
+    return l.paddr == r.paddr;
+  }
+  using hook_t =
+    boost::intrusive::set_member_hook<
+      boost::intrusive::link_mode<
+	boost::intrusive::auto_unlink>>;
+  hook_t backref_set_hook;
+  using backref_set_member_options = boost::intrusive::member_hook<
+    backref_buf_entry_t,
+    hook_t,
+    &backref_buf_entry_t::backref_set_hook>;
+  using set_t = boost::intrusive::set<
+    backref_buf_entry_t,
+    backref_set_member_options,
+    boost::intrusive::constant_time_size<false>>;
+  struct cmp_t {
+    using is_transparent = paddr_t;
+    bool operator()(
+      const backref_buf_entry_t &l,
+      const backref_buf_entry_t &r) const {
+      return l.paddr < r.paddr;
+    }
+    bool operator()(const paddr_t l, const backref_buf_entry_t &r) const {
+      return l < r.paddr;
+    }
+    bool operator()(const backref_buf_entry_t &l, const paddr_t r) const {
+      return l.paddr < r;
+    }
+  };
+};
+
+using backref_buf_entry_ref =
+  std::unique_ptr<backref_buf_entry_t>;
+
+struct backref_buffer_t {
+  std::map<journal_seq_t, std::vector<backref_buf_entry_ref>> backrefs;
+};
+using backref_buffer_ref = std::unique_ptr<backref_buffer_t>;
 
 /**
  * Cache
@@ -448,6 +526,12 @@ private:
     }
   }
 
+  backref_buffer_ref backref_buffer;
+  std::list<backref_buffer_ref> backref_bufs_to_flush;
+  // backrefs that needs to be inserted into the backref tree
+  backref_buf_entry_t::set_t backref_inserted_set;
+  backref_buf_entry_t::set_t backref_remove_set; // backrefs needs to be removed
+					      // from the backref tree
 public:
   /**
    * get_extent_by_type
@@ -483,6 +567,107 @@ public:
       t, type, offset, laddr, length, [](CachedExtent &) {});
   }
 
+  std::set<
+    backref_buf_entry_t,
+    backref_buf_entry_t::cmp_t> get_backrefs_in_range(
+    paddr_t start,
+    paddr_t end) {
+    auto start_iter = backref_inserted_set.lower_bound(
+      start,
+      backref_buf_entry_t::cmp_t());
+    auto end_iter = backref_inserted_set.upper_bound(
+      end,
+      backref_buf_entry_t::cmp_t());
+    std::set<
+      backref_buf_entry_t,
+      backref_buf_entry_t::cmp_t> res;
+    for (auto it = start_iter;
+	 it != end_iter;
+	 it++) {
+      res.emplace(it->paddr, it->laddr, it->len, it->type, it->seq);
+    }
+    return res;
+  }
+
+  std::set<
+    backref_buf_entry_t,
+    backref_buf_entry_t::cmp_t> get_del_backrefs_in_range(
+    paddr_t start,
+    paddr_t end) {
+    LOG_PREFIX(Cache::get_del_backrefs_in_range);
+    SUBDEBUG(seastore_cache, "total {} del_backrefs", backref_remove_set.size());
+    auto start_iter = backref_remove_set.lower_bound(
+      start,
+      backref_buf_entry_t::cmp_t());
+    auto end_iter = backref_remove_set.upper_bound(
+      end,
+      backref_buf_entry_t::cmp_t());
+    std::set<
+      backref_buf_entry_t,
+      backref_buf_entry_t::cmp_t> res;
+    for (auto it = start_iter;
+	 it != end_iter;
+	 it++) {
+      res.emplace(it->paddr, it->laddr, it->len, it->type, it->seq);
+    }
+    SUBDEBUG(seastore_cache, "{} del_backrefs in range", res.size());
+    return res;
+  }
+
+  backref_buf_entry_t get_del_backref(
+    paddr_t addr) {
+    auto it = backref_remove_set.find(addr, backref_buf_entry_t::cmp_t());
+    assert(it != backref_remove_set.end());
+    return *it;
+  }
+
+  const backref_buf_entry_t::set_t& get_backrefs() {
+    return backref_inserted_set;
+  }
+
+  const backref_buf_entry_t::set_t& get_del_backrefs() {
+    return backref_remove_set;
+  }
+
+  backref_buffer_ref& get_newest_backref_buffer() {
+    return backref_buffer;
+  }
+
+  std::list<backref_buffer_ref>& get_backref_bufs_to_flush() {
+    return backref_bufs_to_flush;
+  }
+
+  void trim_backref_bufs(const journal_seq_t &trim_to) {
+    LOG_PREFIX(Cache::trim_backref_bufs);
+    SUBDEBUG(seastore_cache, "trimming to {}", trim_to);
+    auto &backref_bufs = get_backref_bufs_to_flush();
+    for (auto iter = backref_bufs.begin();
+	 iter != backref_bufs.end();) {
+      auto &backref_buf = *iter;
+      assert(backref_buf);
+      if (!backref_buf->backrefs.empty()
+	  && backref_buf->backrefs.rbegin()->first > trim_to) {
+	auto iter2 = backref_buf->backrefs.upper_bound(trim_to);
+	SUBDEBUG(seastore_cache, "trim backref up to {}", iter2->first);
+	backref_buf->backrefs.erase(
+	  backref_buf->backrefs.begin(), iter2);
+	break;
+      } else {
+	if (!backref_buf->backrefs.empty()) {
+	  SUBDEBUG(seastore_cache, "trim backref buf {}",
+	    backref_buf->backrefs.rbegin()->first);
+	}
+	iter = backref_bufs.erase(iter);
+      }
+    }
+    if (backref_bufs.empty() && backref_buffer) {
+      assert(backref_buffer->backrefs.rbegin()->first >= trim_to);
+      auto iter = backref_buffer->backrefs.upper_bound(trim_to);
+      SUBDEBUG(seastore_cache, "trim backref buffer up to {}", iter->first);
+      backref_buffer->backrefs.erase(
+        backref_buffer->backrefs.begin(), iter);
+    }
+  }
 
   /**
    * alloc_new_extent
@@ -599,6 +784,8 @@ public:
     journal_seq_t seq,
     paddr_t record_block_base,
     const delta_info_t &delta,
+    const journal_seq_t &, // journal seq from which alloc
+			   // delta should be replayed
     seastar::lowres_system_clock::time_point& last_modified);
 
   /**
@@ -721,15 +908,40 @@ public:
     journal_seq_t seq,
     size_t max_bytes);
 
+  std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {
+    LOG_PREFIX(Cache::get_oldest_backref_dirty_from);
+    journal_seq_t backref_oldest = JOURNAL_SEQ_NULL;
+    if (backref_bufs_to_flush.empty()) {
+      if (backref_buffer && !backref_buffer->backrefs.empty()) {
+	backref_oldest = backref_buffer->backrefs.begin()->first;
+      }
+    } else {
+      auto &oldest_buf = backref_bufs_to_flush.front();
+      backref_oldest = oldest_buf->backrefs.begin()->first;
+    }
+    if (backref_oldest == JOURNAL_SEQ_NULL) {
+      SUBDEBUG(seastore_cache, "backref_oldest: null");
+      return std::nullopt;
+    } else {
+      SUBDEBUG(seastore_cache, "backref_oldest: {}",
+	backref_oldest);
+      return backref_oldest;
+    }
+  }
+
   /// returns std::nullopt if no dirty extents or get_dirty_from() for oldest
   std::optional<journal_seq_t> get_oldest_dirty_from() const {
+    LOG_PREFIX(Cache::get_oldest_dirty_from);
     if (dirty.empty()) {
+      SUBDEBUG(seastore_cache, "oldest: null");
       return std::nullopt;
     } else {
       auto oldest = dirty.begin()->get_dirty_from();
       if (oldest == JOURNAL_SEQ_NULL) {
+	SUBDEBUG(seastore_cache, "oldest: null");
 	return std::nullopt;
       } else {
+	SUBDEBUG(seastore_cache, "oldest: {}", oldest);
 	return oldest;
       }
     }
@@ -737,6 +949,84 @@ public:
 
   /// Dump live extents
   void dump_contents();
+
+  void force_roll_backref_buffer() {
+    may_roll_backref_buffer(P_ADDR_NULL, true);
+  }
+  void may_roll_backref_buffer(
+    const paddr_t &final_block_start,
+    bool force_roll = false) {
+    if (force_roll) {
+      if (backref_buffer) {
+	backref_bufs_to_flush.emplace_back(std::move(backref_buffer));
+      }
+      return;
+    }
+    if (backref_buffer && !backref_buffer->backrefs.empty()) {
+      auto &[seq, backref_list] = *backref_buffer->backrefs.rbegin();
+      if (backref_list.empty())
+	return;
+      auto &last_seg_paddr = seq.offset.as_seg_paddr();
+      if (last_seg_paddr.get_segment_id() !=
+	  final_block_start.as_seg_paddr().get_segment_id()) {
+	// journal segment rolled
+	backref_bufs_to_flush.emplace_back(std::move(backref_buffer));
+      }
+    }
+  }
+
+  struct backref_extent_buf_entry_t {
+    backref_extent_buf_entry_t(
+      paddr_t paddr,
+      extent_types_t type)
+      : paddr(paddr), type(type) {}
+    paddr_t paddr = P_ADDR_NULL;
+    extent_types_t type = extent_types_t::ROOT;
+    struct cmp_t {
+      using is_transparent = paddr_t;
+      bool operator()(
+	const backref_extent_buf_entry_t &l,
+	const backref_extent_buf_entry_t &r) const {
+	return l.paddr < r.paddr;
+      }
+      bool operator()(
+	const paddr_t &l,
+	const backref_extent_buf_entry_t &r) const {
+	return l < r.paddr;
+      }
+      bool operator()(
+	const backref_extent_buf_entry_t &l,
+	const paddr_t &r) const {
+	return l.paddr < r;
+      }
+    };
+  };
+
+  void add_backref_extent(paddr_t paddr, extent_types_t type) {
+    assert(!paddr.is_relative());
+    auto [iter, inserted] = backref_extents.emplace(paddr, type);
+    assert(inserted);
+  }
+
+  void remove_backref_extent(paddr_t paddr) {
+    auto iter = backref_extents.find(paddr);
+    if (iter != backref_extents.end())
+      backref_extents.erase(iter);
+  }
+
+  std::set<
+    backref_extent_buf_entry_t,
+    backref_extent_buf_entry_t::cmp_t> get_backref_extents_in_range(
+    paddr_t start,
+    paddr_t end) {
+    auto start_iter = backref_extents.lower_bound(start);
+    auto end_iter = backref_extents.upper_bound(end);
+    std::set<
+      backref_extent_buf_entry_t,
+      backref_extent_buf_entry_t::cmp_t> res;
+    res.insert(start_iter, end_iter);
+    return res;
+  }
 
 private:
   ExtentPlacementManager& epm;
@@ -751,6 +1041,10 @@ private:
    * holds refs to dirty extents.  Ordered by CachedExtent::get_dirty_from().
    */
   CachedExtent::list dirty;
+
+  std::set<
+    backref_extent_buf_entry_t,
+    backref_extent_buf_entry_t::cmp_t> backref_extents;
 
   /**
    * lru
@@ -981,6 +1275,10 @@ private:
       lru.move_to_top(ext);
     }
   }
+
+  void backref_batch_update(
+    std::vector<backref_buf_entry_ref> &&,
+    const journal_seq_t &);
 
   /// Add extent to extents handling dirty and refcounting
   void add_extent(CachedExtentRef ref);

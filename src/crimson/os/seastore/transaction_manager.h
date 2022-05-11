@@ -25,6 +25,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/device.h"
@@ -69,7 +70,8 @@ public:
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
-    ExtentPlacementManagerRef &&epm);
+    ExtentPlacementManagerRef &&epm,
+    BackrefManagerRef&& backref_manager);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -154,7 +156,7 @@ public:
     auto &pref = *pin;
     return cache->get_extent<T>(
       t,
-      pref.get_paddr(),
+      pref.get_val(),
       pref.get_length(),
       [this, pin=std::move(pin)](T &extent) mutable {
 	assert(!extent.has_pin());
@@ -191,7 +193,7 @@ public:
     return get_pin(
       t, offset
     ).si_then([this, FNAME, &t, offset, length] (auto pin) {
-      if (length != pin->get_length() || !pin->get_paddr().is_real()) {
+      if (length != pin->get_length() || !pin->get_val().is_real()) {
         SUBERRORT(seastore_tm,
             "offset {} len {} got wrong pin {}",
             t, offset, length, *pin);
@@ -215,7 +217,7 @@ public:
     return get_pin(
       t, offset
     ).si_then([this, FNAME, &t, offset] (auto pin) {
-      if (!pin->get_paddr().is_real()) {
+      if (!pin->get_val().is_real()) {
         SUBERRORT(seastore_tm,
             "offset {} got wrong pin {}",
             t, offset, *pin);
@@ -380,7 +382,8 @@ public:
   /// SegmentCleaner::ExtentCallbackInterface
   using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
   submit_transaction_direct_ret submit_transaction_direct(
-    Transaction &t) final;
+    Transaction &t,
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
 
   /**
    * flush
@@ -555,6 +558,7 @@ private:
   LBAManagerRef lba_manager;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
+  BackrefManagerRef backref_manager;
   SegmentManagerGroup &sm_group;
 
   WritePipeline write_pipeline;
@@ -570,6 +574,14 @@ public:
 
   auto get_lba_manager() {
     return lba_manager.get();
+  }
+
+  auto get_backref_manager() {
+    return backref_manager.get();
+  }
+
+  auto get_cache() {
+    return cache.get();
   }
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
