@@ -56,7 +56,7 @@ void PGLog::IndexedLog::split_out_child(
 void PGLog::IndexedLog::trim(
   CephContext* cct,
   eversion_t s,
-  set<eversion_t> *trimmed,
+  set<string> *trimmed,
   set<string>* trimmed_dups,
   eversion_t *write_from_dups)
 {
@@ -76,7 +76,7 @@ void PGLog::IndexedLog::trim(
       break;
     lgeneric_subdout(cct, osd, 20) << "trim " << e << dendl;
     if (trimmed)
-      trimmed->emplace(e.version);
+      trimmed->insert(e.get_key_name());
 
     unindex(e);         // remove from index,
 
@@ -131,10 +131,8 @@ void PGLog::IndexedLog::trim(
     }
   }
 
-  while (!dups.empty()) {
+  while (dups.size() > cct->_conf->osd_pg_log_dups_tracked) {
     const auto& e = *dups.begin();
-    if (e.version.version >= earliest_dup_version)
-      break;
     lgeneric_subdout(cct, osd, 20) << "trim dup " << e << dendl;
     if (trimmed_dups)
       trimmed_dups->insert(e.get_key_name());
@@ -681,7 +679,7 @@ void PGLog::write_log_and_missing(
     eversion_t::max(),
     eversion_t(),
     eversion_t(),
-    set<eversion_t>(),
+    set<string>(),
     set<string>(),
     missing,
     true, require_rollback, false,
@@ -815,7 +813,7 @@ void PGLog::_write_log_and_missing(
   eversion_t dirty_to,
   eversion_t dirty_from,
   eversion_t writeout_from,
-  set<eversion_t> &&trimmed,
+  set<string> &&trimmed,
   set<string> &&trimmed_dups,
   const pg_missing_tracker_t &missing,
   bool touch_log,
@@ -829,8 +827,7 @@ void PGLog::_write_log_and_missing(
   ) {
   set<string> to_remove;
   to_remove.swap(trimmed_dups);
-  for (auto& t : trimmed) {
-    string key = t.get_key_name();
+  for (auto& key : trimmed) {
     if (log_keys_debug) {
       auto it = log_keys_debug->find(key);
       ceph_assert(it != log_keys_debug->end());
