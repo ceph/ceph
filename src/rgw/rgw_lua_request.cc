@@ -41,6 +41,80 @@ int RequestLog(lua_State* L)
   return ONE_RETURNVAL;
 }
 
+int SetAttribute(lua_State* L)  {
+  auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+
+  if (!s->trace || !s->trace->IsRecording()) {
+    return 0;
+  }
+
+  auto key = luaL_checkstring(L, 1);
+  int value_type = lua_type(L, 2);
+
+  switch (value_type) {
+    case LUA_TSTRING:
+      s->trace->SetAttribute(key, lua_tostring(L, 2));
+      break;
+
+    case LUA_TNUMBER:
+      if (lua_isinteger(L, 2)) {
+        s->trace->SetAttribute(key, static_cast<int64_t>(lua_tointeger(L, 2)));
+      } else {
+        s->trace->SetAttribute(key, static_cast<double>(lua_tonumber(L, 2)));
+      }
+      break;
+
+    default:
+      luaL_error(L, "unsupported value type for SetAttribute");
+  }
+  return 0;
+}
+
+int AddEvent(lua_State* L)  {
+  auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(1)));
+
+  if (!s->trace || !s->trace->IsRecording()) {
+    return 0;
+  }
+
+  int args = lua_gettop(L);
+  if (args == 1) {
+    auto log = luaL_checkstring(L, 1);
+    s->trace->AddEvent(log);
+  } else if(args == 2) {
+    auto event_name = luaL_checkstring(L, 1);
+    std::unordered_map<const char*, jspan_attribute> event_values;
+    lua_pushnil(L);
+    while (lua_next(L, 2) != 0) {
+      if (lua_type(L, -2) != LUA_TSTRING) {
+        // skip pair if key is not a string
+        lua_pop(L, 1);
+        continue;
+      }
+
+      auto key = luaL_checkstring(L, -2);
+      int value_type = lua_type(L, -1);
+      switch (value_type) {
+        case LUA_TSTRING:
+          event_values.emplace(key, lua_tostring(L, -1));
+          break;
+
+        case LUA_TNUMBER:
+          if (lua_isinteger(L, -1)) {
+            event_values.emplace(key, static_cast<int64_t>(lua_tointeger(L, -1)));
+          } else {
+            event_values.emplace(key, static_cast<double>(lua_tonumber(L, -1)));
+          }
+          break;
+      }
+      lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    s->trace->AddEvent(event_name, event_values);
+  }
+  return 0;
+}
+
 struct ResponseMetaTable : public EmptyMetaTable {
   static std::string TableName() {return "Response";} 
   static std::string Name() {return TableName() + "Meta";}
@@ -159,6 +233,12 @@ struct TraceMetaTable : public EmptyMetaTable {
 
     if (strcasecmp(index, "Enable") == 0) {
       lua_pushboolean(L, s->trace_enabled);
+    } else if(strcasecmp(index, "SetAttribute") == 0) {
+        lua_pushlightuserdata(L, s);
+        lua_pushcclosure(L, SetAttribute, ONE_UPVAL);
+    } else if(strcasecmp(index, "AddEvent") == 0) {
+        lua_pushlightuserdata(L, s);
+        lua_pushcclosure(L, AddEvent, ONE_UPVAL);
     } else {
       return error_unknown_field(L, index, TableName());
     }
