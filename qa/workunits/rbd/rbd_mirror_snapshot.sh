@@ -138,6 +138,11 @@ rename_image ${CLUSTER2} ${POOL} ${new_name} ${image}
 mirror_image_snapshot ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
+testlog "waiting..."
+sleep 2m
+rbd mirror pool status mirror --verbose --cluster cluster1
+rbd mirror pool status mirror --verbose --cluster cluster2
+
 testlog "TEST: test trash move restore"
 image_id=$(get_image_id ${CLUSTER2} ${POOL} ${image})
 trash_move ${CLUSTER2} ${POOL} ${image}
