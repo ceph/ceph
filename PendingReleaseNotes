@@ -1,3 +1,9 @@
+15.2.16
+-------
+
+* A health warning will now be reported if the ``require-osd-release`` flag is not
+  set to the appropriate release after a cluster upgrade.
+
 15.2.14
 -------
 
