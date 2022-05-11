@@ -1245,6 +1245,178 @@ protected:
   struct initialize_state_t initialize_state;
 
 private:
+  class C_Read_Finisher : public Context {
+  public:
+    bool iofinished;
+    void finish_io(int r);
+
+    C_Read_Finisher(Client *clnt, Context *onfinish, Context *iofinish,
+                    bool is_read_async, int have_caps, bool movepos,
+                    utime_t start, Fh *f, Inode *in, uint64_t fpos,
+                    int64_t offset, uint64_t size)
+      : clnt(clnt), onfinish(onfinish), iofinish(iofinish),
+        is_read_async(is_read_async), have_caps(have_caps), f(f), in(in),
+        start(start), fpos(fpos), offset(offset), size(size), movepos(movepos) {
+      iofinished = false;
+    }
+
+    void finish(int r) override {
+      // We need to override finish, but have nothing to do.
+    }
+
+  private:
+    Client *clnt;
+    Context *onfinish;
+    Context *iofinish;
+    bool is_read_async;
+    int have_caps;
+    Fh *f;
+    Inode *in;
+    utime_t start;
+    uint64_t fpos;
+    int64_t offset;
+    uint64_t size;
+    bool movepos;
+  };
+
+  struct CRF_iofinish : public Context {
+    Client::C_Read_Finisher *CRF;
+
+    CRF_iofinish()
+      : CRF(nullptr) {}
+
+    void finish(int r) override {
+      CRF->finish_io(r);
+    }
+
+    // For _read_async, we may not finish in one go, so be prepared for multiple
+    // calls to complete. All the handling though is in C_Read_Finisher.
+    void complete(int r) override {
+      finish(r);
+      if (CRF->iofinished)
+        delete this;
+    }
+  };
+
+  class C_Read_Sync_NonBlocking : public Context {
+  // When operating in non-blocking mode, what used to be done by _read_sync
+  // still needs to be handled, but it needs to be handled without blocking
+  // while still following the semantics. Note that _read_sync is actually
+  // asynchronous. it just uses condition variables to wait. Now instead, we use
+  // this Context class to synchronize the steps.
+  //
+  // The steps will be accomplished by complete/finish being called to complete
+  // each step, with complete only releasing this object once all is finally
+  // complete.
+  public:
+    C_Read_Sync_NonBlocking(Client *clnt, Context *onfinish, Fh *f, Inode *in,
+                            uint64_t fpos, uint64_t off, uint64_t len,
+                            bufferlist *bl, Filer *filer, int have_caps)
+      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), bl(bl),
+        filer(filer), have_caps(have_caps)
+    {
+      left = len;
+      wanted = len;
+      read = 0;
+      pos = off;
+      fini = false;
+    }
+
+    void retry();
+
+  private:
+    Client *clnt;
+    Context *onfinish;
+    Fh *f;
+    Inode *in;
+    uint64_t off;
+    uint64_t len;
+    int left;
+    int wanted;
+    bufferlist *bl;
+    bufferlist tbl;
+    Filer *filer;
+    int have_caps;
+    int read;
+    uint64_t pos;
+    bool fini;
+
+    void finish(int r) override;
+
+    void complete(int r) override
+    {
+      finish(r);
+      if (fini)
+        delete this;
+    }
+  };
+
+  class C_Read_Async_Finisher : public Context {
+  public:
+    C_Read_Async_Finisher(Client *clnt, Context *onfinish, Fh *f, Inode *in,
+                          uint64_t fpos, uint64_t off, uint64_t len)
+      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len) {}
+
+  private:
+    Client *clnt;
+    Context *onfinish;
+    Fh *f;
+    Inode *in;
+    uint64_t off;
+    uint64_t len;
+
+    void finish(int r) override;
+  };
+
+  class C_Write_Finisher : public Context {
+  public:
+    void finish_io(int r);
+    void finish_onuninline(int r);
+
+    C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
+                     bool is_file_write, utime_t start, Fh *f, Inode *in,
+                     uint64_t fpos, int64_t offset, uint64_t size)
+      : clnt(clnt), onfinish(onfinish),
+        is_file_write(is_file_write), start(start), f(f), in(in), fpos(fpos),
+        offset(offset), size(size) {
+      iofinished_r = 0;
+      onuninlinefinished_r = 0;
+      iofinished = false;
+      onuninlinefinished = dont_need_uninline;
+    }
+
+    void finish(int r) override {
+      // We need to override finish, but have nothing to do.
+    }
+
+  private:
+    Client *clnt;
+    Context *onfinish;
+    bool is_file_write;
+    utime_t start;
+    Fh *f;
+    Inode *in;
+    uint64_t fpos;
+    int64_t offset;
+    uint64_t size;
+    int64_t iofinished_r;
+    int64_t onuninlinefinished_r;
+    bool iofinished;
+    bool onuninlinefinished;
+    bool try_complete();
+  };
+
+  struct CWF_iofinish : public Context {
+    C_Write_Finisher *CWF;
+
+    CWF_iofinish()
+      : CWF(nullptr) {}
+
+    void finish(int r) override {
+      CWF->finish_io(r);
+    }
+  };
+
   struct C_Readahead : public Context {
     C_Readahead(Client *c, Fh *f);
     ~C_Readahead() override;
@@ -1331,7 +1503,8 @@ private:
   std::pair<int, bool> _do_remount(bool retry_on_error);
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
-  int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
+  int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
+                  Context *onfinish);
 
   bool _dentry_valid(const Dentry *dn);
 
@@ -1399,17 +1572,21 @@ private:
               std::string alternate_name);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
-  int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
+  int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
+  		Context *onfinish = nullptr);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
           int64_t offset, uint64_t size, Inode *in);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
-          const struct iovec *iov, int iovcnt);
+          const struct iovec *iov, int iovcnt, Context *onfinish = nullptr);
   int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                  unsigned iovcnt, int64_t offset,
-                                 bool write, bool clamp_to_int);
+                                 bool write, bool clamp_to_int,
+                                 Context *onfinish = nullptr,
+                                 bufferlist *blp = nullptr);
   int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt,
-                      int64_t offset, bool write);
+                      int64_t offset, bool write, Context *onfinish = nullptr,
+                      bufferlist *blp = nullptr);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _fsync(Inode *in, bool syncdataonly);
