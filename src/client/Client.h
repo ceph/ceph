@@ -646,6 +646,10 @@ public:
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
   int64_t ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off);
   int64_t ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off);
+  int64_t ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov, int iovcnt,
+                            int64_t offset, bool write,
+                            Context *onfinish = nullptr,
+                            bufferlist *blp = nullptr);
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);

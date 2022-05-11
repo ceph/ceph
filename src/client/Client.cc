@@ -15511,6 +15511,19 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
 }
 
+int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
+                                  int iovcnt, int64_t offset, bool write,
+                                  Context *onfinish, bufferlist *bl)
+{
+    RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+    if (!mref_reader.is_state_satisfied())
+      return -CEPHFS_ENOTCONN;
+
+    std::scoped_lock cl(client_lock);
+    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
+    				  onfinish, bl);
+}
+
 int Client::ll_flush(Fh *fh)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
