@@ -211,6 +211,11 @@ endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
 endif()
+if(WITH_RADOSGW_ARROW_FLIGHT)
+  # list(APPEND radosgw_srcs rgw_flight.cc rgw_flight_frontend.cc)
+  list(APPEND librgw_common_srcs rgw_flight.cc rgw_flight_frontend.cc)
+endif(WITH_RADOSGW_ARROW_FLIGHT)
+
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 
@@ -245,6 +250,7 @@ target_link_libraries(rgw_common
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
+    ${ARROW_FLIGHT_LIBRARIES}
     ${ALLOC_LIBS}
   PUBLIC
     ${LUA_LIBRARIES}
@@ -368,6 +374,7 @@ target_link_libraries(rgw_a
     common_utf8 global
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
+    ${ARROW_FLIGHT_LIBRARIES}
     OATH::OATH
   PUBLIC
     rgw_common
@@ -394,6 +401,13 @@ set(radosgw_srcs
 
 add_executable(radosgw ${radosgw_srcs})
 
+if(WITH_RADOSGW_ARROW_FLIGHT)
+  # target_compile_definitions(radosgw PUBLIC WITH_ARROW_FLIGHT)
+  target_compile_definitions(rgw_common PUBLIC WITH_ARROW_FLIGHT)
+  target_include_directories(radosgw PUBLIC "../arrow/cpp/src")
+  # target_include_directories(radosgw PUBLIC Arrow::Arrow)
+endif(WITH_RADOSGW_ARROW_FLIGHT)
+
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
@@ -414,6 +428,13 @@ set(radosgw_admin_srcs
   rgw_admin.cc
   rgw_sync_checkpoint.cc
   rgw_orphan.cc)
+
+# this is unsatisfying and hopefully temporary; ARROW should not be
+# part of radosgw_admin
+if(WITH_RADOSGW_ARROW_FLIGHT)
+  list(APPEND radosgw_admin_srcs rgw_flight.cc)
+endif(WITH_RADOSGW_ARROW_FLIGHT)
+
 add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
@@ -422,6 +443,13 @@ target_link_libraries(radosgw-admin ${rgw_libs} librados
   global ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+
+# this is unsatisfying and hopefully temporary; ARROW should not be
+# part of radosgw_admin
+if(WITH_RADOSGW_ARROW_FLIGHT)
+  target_link_libraries(radosgw-admin ${ARROW_LIBRARIES} ${ARROW_FLIGHT_LIBRARIES})
+endif(WITH_RADOSGW_ARROW_FLIGHT)
+
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs

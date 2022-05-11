@@ -66,6 +66,11 @@
 
 #include "compressor/Compressor.h"
 
+#ifdef WITH_ARROW_FLIGHT
+#include "rgw_flight.h"
+#include "rgw_flight_frontend.h"
+#endif
+
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
@@ -2149,6 +2154,9 @@ void RGWGetObj::execute(optional_yield y)
   RGWGetObj_CB cb(this);
   RGWGetObj_Filter* filter = (RGWGetObj_Filter *)&cb;
   boost::optional<RGWGetObj_Decompress> decompress;
+#ifdef WITH_ARROW_FLIGHT
+  boost::optional<rgw::flight::FlightGetObj_Filter> flight_filter;
+#endif
   std::unique_ptr<RGWGetObj_Filter> decrypt;
   std::unique_ptr<RGWGetObj_Filter> run_lua;
   map<string, bufferlist>::iterator attr_iter;
@@ -2226,6 +2234,16 @@ void RGWGetObj::execute(optional_yield y)
   if (op_ret < 0) {
     goto done_err;
   }
+
+#ifdef WITH_ARROW_FLIGHT
+  if (ofs == 0) {
+    rgw::flight::FlightKey key = rgw::flight::propose_flight(s);
+    ldpp_dout(this, 0) << "ERIC: added arrow flight with key=" << key << dendl;
+
+    flight_filter.emplace(key, filter);
+    filter = &*flight_filter;
+  }
+#endif
 
   op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (op_ret < 0) {

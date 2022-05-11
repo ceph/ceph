@@ -128,6 +128,7 @@ public:
   }
 
   int get_params(optional_yield y) override;
+//  void execute(optional_yield y) override;
 };
 
 class RGWGetObjTags_ObjStore : public RGWGetObjTags {
