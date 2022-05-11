@@ -12,6 +12,10 @@ extern "C" {
 #include <liboath/oath.h>
 }
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
 
@@ -645,6 +649,7 @@ enum class OPT {
   BUCKET_RESHARD,
   BUCKET_CHOWN,
   BUCKET_RADOS_LIST,
+  BUCKET_SHARD_OBJECTS,
   POLICY,
   POOL_ADD,
   POOL_RM,
@@ -861,6 +866,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket chown", OPT::BUCKET_CHOWN },
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
+  { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
+  { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
   { "policy", OPT::POLICY },
   { "pool add", OPT::POOL_ADD },
   { "pool rm", OPT::POOL_RM },
@@ -4247,6 +4254,7 @@ int main(int argc, const char **argv)
 			 OPT::BUCKET_SYNC_INFO,
 			 OPT::BUCKET_SYNC_STATUS,
 			 OPT::BUCKET_SYNC_MARKERS,
+			 OPT::BUCKET_SHARD_OBJECTS,
 			 OPT::LOG_LIST,
 			 OPT::LOG_SHOW,
 			 OPT::USAGE_SHOW,
@@ -6976,6 +6984,51 @@ int main(int argc, const char **argv)
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
       return -r;
+    }
+  }
+
+  if (opt_cmd == OPT::BUCKET_SHARD_OBJECTS) {
+    const auto prefix = opt_prefix ? *opt_prefix : "obj"s;
+    if (!num_shards_specified) {
+      cerr << "ERROR: num-shards must be specified."
+	   << std::endl;
+      return EINVAL;
+    }
+
+    if (specified_shard_id) {
+      if (shard_id >= num_shards) {
+	cerr << "ERROR: shard-id must be less than num-shards."
+	     << std::endl;
+	return EINVAL;
+      }
+      std::string obj;
+      uint64_t ctr = 0;
+      int shard;
+      do {
+	obj = fmt::format("{}{:0>20}", prefix, ctr);
+	shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj, num_shards);
+	++ctr;
+      } while (shard != shard_id);
+
+      formatter->open_object_section("shard_obj");
+      encode_json("obj", obj, formatter.get());
+      formatter->close_section();
+      formatter->flush(cout);
+    } else {
+      std::vector<std::string> objs(num_shards);
+      for (uint64_t ctr = 0, shardsleft = num_shards; shardsleft > 0; ++ctr) {
+	auto key = fmt::format("{}{:0>20}", prefix, ctr);
+	auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
+	if (objs[shard].empty()) {
+	  objs[shard] = std::move(key);
+	  --shardsleft;
+	}
+      }
+
+      formatter->open_object_section("shard_objs");
+      encode_json("objs", objs, formatter.get());
+      formatter->close_section();
+      formatter->flush(cout);
     }
   }
 
