@@ -1889,76 +1889,48 @@ struct object_stat_sum_t {
    * WARNING: be sure to update operator==, floor, and split when
    * adding/removing fields!
    **************************************************************************/
-  int64_t num_bytes;    // in bytes
-  int64_t num_objects;
-  int64_t num_object_clones;
-  int64_t num_object_copies;  // num_objects * num_replicas
-  int64_t num_objects_missing_on_primary;
-  int64_t num_objects_degraded;
-  int64_t num_objects_unfound;
-  int64_t num_rd;
-  int64_t num_rd_kb;
-  int64_t num_wr;
-  int64_t num_wr_kb;
-  int64_t num_scrub_errors;	// total deep and shallow scrub errors
-  int64_t num_objects_recovered;
-  int64_t num_bytes_recovered;
-  int64_t num_keys_recovered;
-  int64_t num_shallow_scrub_errors;
-  int64_t num_deep_scrub_errors;
-  int64_t num_objects_dirty;
-  int64_t num_whiteouts;
-  int64_t num_objects_omap;
-  int64_t num_objects_hit_set_archive;
-  int64_t num_objects_misplaced;
-  int64_t num_bytes_hit_set_archive;
-  int64_t num_flush;
-  int64_t num_flush_kb;
-  int64_t num_evict;
-  int64_t num_evict_kb;
-  int64_t num_promote;
-  int32_t num_flush_mode_high;  // 1 when in high flush mode, otherwise 0
-  int32_t num_flush_mode_low;   // 1 when in low flush mode, otherwise 0
-  int32_t num_evict_mode_some;  // 1 when in evict some mode, otherwise 0
-  int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
-  int64_t num_objects_pinned;
-  int64_t num_objects_missing;
-  int64_t num_legacy_snapsets; ///< upper bound on pre-luminous-style SnapSets
-  int64_t num_large_omap_objects = 0;
-  int64_t num_objects_manifest = 0;
-  int64_t num_omap_bytes = 0;
-  int64_t num_omap_keys = 0;
-  int64_t num_objects_repaired = 0;
+  int64_t num_bytes{0};    // in bytes
+  int64_t num_objects{0};
+  int64_t num_object_clones{0};
+  int64_t num_object_copies{0};  // num_objects * num_replicas
+  int64_t num_objects_missing_on_primary{0};
+  int64_t num_objects_degraded{0};
+  int64_t num_objects_unfound{0};
+  int64_t num_rd{0};
+  int64_t num_rd_kb{0};
+  int64_t num_wr{0};
+  int64_t num_wr_kb{0};
+  int64_t num_scrub_errors{0};	// total deep and shallow scrub errors
+  int64_t num_objects_recovered{0};
+  int64_t num_bytes_recovered{0};
+  int64_t num_keys_recovered{0};
+  int64_t num_shallow_scrub_errors{0};
+  int64_t num_deep_scrub_errors{0};
+  int64_t num_objects_dirty{0};
+  int64_t num_whiteouts{0};
+  int64_t num_objects_omap{0};
+  int64_t num_objects_hit_set_archive{0};
+  int64_t num_objects_misplaced{0};
+  int64_t num_bytes_hit_set_archive{0};
+  int64_t num_flush{0};
+  int64_t num_flush_kb{0};
+  int64_t num_evict{0};
+  int64_t num_evict_kb{0};
+  int64_t num_promote{0};
+  int32_t num_flush_mode_high{0};  // 1 when in high flush mode, otherwise 0
+  int32_t num_flush_mode_low{0};   // 1 when in low flush mode, otherwise 0
+  int32_t num_evict_mode_some{0};  // 1 when in evict some mode, otherwise 0
+  int32_t num_evict_mode_full{0};  // 1 when in evict full mode, otherwise 0
+  int64_t num_objects_pinned{0};
+  int64_t num_objects_missing{0};
+  int64_t num_legacy_snapsets{0}; ///< upper bound on pre-luminous-style SnapSets
+  int64_t num_large_omap_objects{0};
+  int64_t num_objects_manifest{0};
+  int64_t num_omap_bytes{0};
+  int64_t num_omap_keys{0};
+  int64_t num_objects_repaired{0};
 
-  object_stat_sum_t()
-    : num_bytes(0),
-      num_objects(0), num_object_clones(0), num_object_copies(0),
-      num_objects_missing_on_primary(0), num_objects_degraded(0),
-      num_objects_unfound(0),
-      num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
-      num_scrub_errors(0),
-      num_objects_recovered(0),
-      num_bytes_recovered(0),
-      num_keys_recovered(0),
-      num_shallow_scrub_errors(0),
-      num_deep_scrub_errors(0),
-      num_objects_dirty(0),
-      num_whiteouts(0),
-      num_objects_omap(0),
-      num_objects_hit_set_archive(0),
-      num_objects_misplaced(0),
-      num_bytes_hit_set_archive(0),
-      num_flush(0),
-      num_flush_kb(0),
-      num_evict(0),
-      num_evict_kb(0),
-      num_promote(0),
-      num_flush_mode_high(0), num_flush_mode_low(0),
-      num_evict_mode_some(0), num_evict_mode_full(0),
-      num_objects_pinned(0),
-      num_objects_missing(0),
-      num_legacy_snapsets(0)
-  {}
+  object_stat_sum_t() = default;
 
   void floor(int64_t f) {
 #define FLOOR(x) if (x < f) x = f
