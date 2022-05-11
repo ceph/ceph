@@ -63,7 +63,8 @@ public:
   using rep_op_fut_t =
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
-  PGBackend(shard_id_t shard, CollectionRef coll, crimson::os::FuturizedStore* store);
+  PGBackend(shard_id_t shard, CollectionRef coll,
+            crimson::osd::ShardServices &shard_services);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
@@ -337,6 +338,7 @@ public:
 protected:
   const shard_id_t shard;
   CollectionRef coll;
+  crimson::osd::ShardServices &shard_services;
   crimson::os::FuturizedStore* store;
   bool stopping = false;
   std::optional<peering_info_t> peering;
