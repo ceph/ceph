@@ -69,7 +69,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	  [this, &t, &ret](auto &&pin) {
 	    logger().debug(
 	      "read_extents: get_extent {}~{}",
-	      pin->get_paddr(),
+	      pin->get_val(),
 	      pin->get_length());
 	    return tm->pin_to_extent<TestBlock>(
 	      t,
