@@ -153,23 +153,21 @@ public:
   }
 };
 
-auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+auto g_cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
 
-CctCleaner cleaner(cct);
+CctCleaner cleaner(g_cct);
+
+#define DEFINE_REQ_STATE RGWEnv e; req_state s(g_cct, &e, 0);
 
 TEST(TestRGWLua, EmptyScript)
 {
   const std::string script;
 
-  RGWEnv e;
-  uint64_t id = 0;
-  req_state s(cct, &e, id); 
+  DEFINE_REQ_STATE;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", script);
   ASSERT_EQ(rc, 0);
 }
-
-#define DEFINE_REQ_STATE RGWEnv e; req_state s(cct, &e, 0);
 
 TEST(TestRGWLua, SyntaxError)
 {
@@ -268,7 +266,7 @@ TEST(TestRGWLua, SetResponse)
   ASSERT_EQ(rc, 0);
 }
 
-TEST(TestRGWLua, SetRGWId)
+TEST(TestRGWLua, RGWIdNotWriteable)
 {
   const std::string script = R"(
     assert(Request.RGWId == "foo")
@@ -480,7 +478,7 @@ TEST(TestRGWLua, Acl)
   ACLOwner owner;
   owner.set_id(rgw_user("jack", "black"));
   owner.set_name("jack black");
-  s.user_acl.reset(new RGWAccessControlPolicy(cct));
+  s.user_acl.reset(new RGWAccessControlPolicy(g_cct));
   s.user_acl->set_owner(owner);
   ACLGrant grant1, grant2, grant3, grant4, grant5;
   grant1.set_canon(rgw_user("jane", "doe"), "her grant", 1);
@@ -648,15 +646,18 @@ TEST(TestRGWLua, OpsLog)
 }
 
 class TestBackground : public rgw::lua::Background {
+  const unsigned read_time;
 protected:
   int read_script() override {
     // don't read the object from the store
+    std::this_thread::sleep_for(std::chrono::seconds(read_time));
     return 0;
   }
 
 public:
-  TestBackground(const std::string& script) : 
-    rgw::lua::Background(nullptr, nullptr, nullptr, "") {
+  TestBackground(const std::string& script, unsigned read_time = 0) : 
+    rgw::lua::Background(nullptr, g_cct, "", 1 /*run every second*/),
+    read_time(read_time) {
       // the script is passed in the constructor
       rgw_script = script;
     }
@@ -666,7 +667,7 @@ public:
   }
 };
 
-TEST(TestRGWLua, Background)
+TEST(TestRGWLuaBackground, Start)
 {
   {
     // ctr and dtor without running
@@ -676,56 +677,175 @@ TEST(TestRGWLua, Background)
     // ctr and dtor with running
     TestBackground lua_background("");
     lua_background.start();
-    // let the background context run for 5 seconds
-    std::this_thread::sleep_for(std::chrono::seconds(5));
   }
 }
 
-TEST(TestRGWLua, BackgroundScript)
+
+constexpr auto wait_time = std::chrono::seconds(2);
+
+TEST(TestRGWLuaBackground, Script)
 {
   const std::string script = R"(
     local key = "hello"
     local value = "world"
     RGW[key] = value
-    print(RGW[key] == value)
   )";
 
   TestBackground lua_background(script);
   lua_background.start();
-  // let the background context run for 5 seconds
-  std::this_thread::sleep_for(std::chrono::seconds(5));
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(lua_background.get_table_value("hello"), "world");
 }
 
-TEST(TestRGWLua, BackgroundRequestScript)
+TEST(TestRGWLuaBackground, RequestScript)
 {
   const std::string background_script = R"(
     local key = "hello"
     local value = "from background"
-    -- set the value only if not set
-    if RGW[key] == nil then 
-      RGW[key] = value
-    end
-    print("from background:", RGW[key])
+    RGW[key] = value
   )";
 
   TestBackground lua_background(background_script);
   lua_background.start();
-  // let the background context run for 5 seconds
-  std::this_thread::sleep_for(std::chrono::seconds(5));
+  std::this_thread::sleep_for(wait_time);
 
   const std::string request_script = R"(
     local key = "hello"
+    assert(RGW[key] == "from background") 
     local value = "from request"
-    print("from request (before setting):", RGW[key])
     RGW[key] = value
-    print("from request (after setting):", RGW[key])
   )";
 
   DEFINE_REQ_STATE;
 
+  // to make sure test is consistent we have to puase the background
+  lua_background.pause();
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
-  // let the background context run for 5 seconds
-  std::this_thread::sleep_for(std::chrono::seconds(5));
+  EXPECT_EQ(lua_background.get_table_value("hello"), "from request");
+  // now we resume and let the background set the value
+  lua_background.resume(nullptr);
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(lua_background.get_table_value("hello"), "from background");
+}
+
+TEST(TestRGWLuaBackground, Pause)
+{
+  const std::string script = R"(
+    local key = "hello"
+    local value = "1"
+    if RGW[key] then
+      RGW[key] = value..RGW[key]
+    else
+      RGW[key] = value
+    end
+  )";
+
+  TestBackground lua_background(script);
+  lua_background.start();
+  std::this_thread::sleep_for(wait_time);
+  const auto value_len = lua_background.get_table_value("hello").size();
+  EXPECT_GT(value_len, 0);
+  lua_background.pause();
+  std::this_thread::sleep_for(wait_time);
+  // no change in len
+  EXPECT_EQ(value_len, lua_background.get_table_value("hello").size());
+}
+
+TEST(TestRGWLuaBackground, PauseWhileReading)
+{
+  const std::string script = R"(
+    local key = "hello"
+    local value = "world"
+    RGW[key] = value
+    if RGW[key] then
+      RGW[key] = value..RGW[key]
+    else
+      RGW[key] = value
+    end
+  )";
+
+  constexpr auto long_wait_time = std::chrono::seconds(6);
+  TestBackground lua_background(script, 2);
+  lua_background.start();
+  std::this_thread::sleep_for(long_wait_time);
+  const auto value_len = lua_background.get_table_value("hello").size();
+  EXPECT_GT(value_len, 0);
+  lua_background.pause();
+  std::this_thread::sleep_for(long_wait_time);
+  // one execution might occur after pause
+  EXPECT_TRUE(value_len + 1 >= lua_background.get_table_value("hello").size());
+}
+
+TEST(TestRGWLuaBackground, ReadWhilePaused)
+{
+  const std::string script = R"(
+    local key = "hello"
+    local value = "world"
+    RGW[key] = value
+  )";
+
+  TestBackground lua_background(script);
+  lua_background.pause();
+  lua_background.start();
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(lua_background.get_table_value("hello"), "");
+  lua_background.resume(nullptr);
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(lua_background.get_table_value("hello"), "world");
+}
+
+TEST(TestRGWLuaBackground, PauseResume)
+{
+  const std::string script = R"(
+    local key = "hello"
+    local value = "1"
+    if RGW[key] then
+      RGW[key] = value..RGW[key]
+    else
+      RGW[key] = value
+    end
+  )";
+
+  TestBackground lua_background(script);
+  lua_background.start();
+  std::this_thread::sleep_for(wait_time);
+  const auto value_len = lua_background.get_table_value("hello").size();
+  EXPECT_GT(value_len, 0);
+  lua_background.pause();
+  std::this_thread::sleep_for(wait_time);
+  // no change in len
+  EXPECT_EQ(value_len, lua_background.get_table_value("hello").size());
+  lua_background.resume(nullptr);
+  std::this_thread::sleep_for(wait_time);
+  // should be a change in len
+  EXPECT_GT(lua_background.get_table_value("hello").size(), value_len);
+}
+
+TEST(TestRGWLuaBackground, MultipleStarts)
+{
+  const std::string script = R"(
+    local key = "hello"
+    local value = "1"
+    if RGW[key] then
+      RGW[key] = value..RGW[key]
+    else
+      RGW[key] = value
+    end
+  )";
+
+  TestBackground lua_background(script);
+  lua_background.start();
+  std::this_thread::sleep_for(wait_time);
+  const auto value_len = lua_background.get_table_value("hello").size();
+  EXPECT_GT(value_len, 0);
+  lua_background.start();
+  lua_background.shutdown();
+  lua_background.shutdown();
+  std::this_thread::sleep_for(wait_time);
+  lua_background.start();
+  std::this_thread::sleep_for(wait_time);
+  // should be a change in len
+  EXPECT_GT(lua_background.get_table_value("hello").size(), value_len);
 }
 
