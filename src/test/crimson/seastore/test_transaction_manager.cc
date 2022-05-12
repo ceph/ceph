@@ -58,6 +58,7 @@ struct transaction_manager_test_t :
 
   std::random_device rd;
   std::mt19937 gen;
+  tm_make_config_t tm_config;
 
   transaction_manager_test_t(std::size_t num_devices)
     : TMTestState(num_devices), gen(rd()) {
@@ -72,16 +73,14 @@ struct transaction_manager_test_t :
     return static_cast<char>(std::uniform_int_distribution<>(0, 255)(gen));
   }
 
-  bool for_segmented() {
-    std::string j_type = GetParam();
-    return j_type == "segmented";
-  }
   seastar::future<> set_up_fut() final {
     std::string j_type = GetParam();
     if (j_type == "segmented") {
-      return tm_setup();
+      return tm_setup(tm_config);
     } else if (j_type == "circularbounded") {
-      return tm_setup(journal_type::CIRCULARBOUNDED_JOURNAL);
+      tm_config.j_type = journal_type::CIRCULARBOUNDED_JOURNAL;
+      tm_config.default_placement_hint = placement_hint_t::REWRITE;
+      return tm_setup(tm_config);
     } else {
       ceph_assert(0 == "no support");
     }
@@ -625,7 +624,7 @@ struct transaction_manager_test_t :
 		[&, this](auto) {
 		  return tm->alloc_extent<TestBlock>(
 		    *(t.t), L_ADDR_MIN, size,
-		    for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE
+		    tm_config.default_placement_hint
 		  ).si_then([&, this](auto extent) {
 		    extent->set_contents(get_random_contents());
 		    EXPECT_FALSE(
@@ -668,7 +667,7 @@ struct transaction_manager_test_t :
                 t,
                 i * BSIZE,
                 BSIZE,
-		for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+		tm_config.default_placement_hint);
               ASSERT_EQ(i * BSIZE, extent->get_laddr());
               if (try_submit_transaction(std::move(t)))
                 break;
@@ -736,7 +735,7 @@ TEST_P(tm_single_device_test_t, basic)
 	ADDR,
 	SIZE,
 	'a',
-	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	tm_config.default_placement_hint);
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -758,7 +757,7 @@ TEST_P(tm_single_device_test_t, mutate)
 	ADDR,
 	SIZE,
 	'a',
-	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	tm_config.default_placement_hint);
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -800,7 +799,7 @@ TEST_P(tm_single_device_test_t, allocate_lba_conflict)
       ADDR,
       SIZE,
       'a',
-      for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+      tm_config.default_placement_hint);
     ASSERT_EQ(ADDR, extent->get_laddr());
     check_mappings(t);
     check();
@@ -810,7 +809,7 @@ TEST_P(tm_single_device_test_t, allocate_lba_conflict)
       ADDR2,
       SIZE,
       'a',
-      for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+      tm_config.default_placement_hint);
     ASSERT_EQ(ADDR2, extent2->get_laddr());
     check_mappings(t2);
     extent2.reset();
@@ -831,7 +830,7 @@ TEST_P(tm_single_device_test_t, mutate_lba_conflict)
 	  t,
 	  laddr_t(i * SIZE),
 	  SIZE,
-	  for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	  tm_config.default_placement_hint);
       }
       check_mappings(t);
       submit_transaction(std::move(t));
@@ -874,7 +873,7 @@ TEST_P(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
 	  t,
 	  laddr_t(i * SIZE),
 	  SIZE,
-	  for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	  tm_config.default_placement_hint);
       }
       submit_transaction(std::move(t));
     }
@@ -905,7 +904,7 @@ TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 	ADDR,
 	SIZE,
 	'a',
-	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	tm_config.default_placement_hint);
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       dec_ref(t, ADDR);
@@ -916,7 +915,7 @@ TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 	ADDR,
 	SIZE,
 	'a',
-	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	tm_config.default_placement_hint);
 
       submit_transaction(std::move(t));
       check();
@@ -937,7 +936,7 @@ TEST_P(tm_single_device_test_t, split_merge_read_same_transaction)
 	  t,
 	  laddr_t(i * SIZE),
 	  SIZE,
-	  for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	  tm_config.default_placement_hint);
       }
       check_mappings(t);
       submit_transaction(std::move(t));
@@ -969,7 +968,7 @@ TEST_P(tm_single_device_test_t, inc_dec_ref)
 	ADDR,
 	SIZE,
 	'a',
-	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	tm_config.default_placement_hint);
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -1016,7 +1015,7 @@ TEST_P(tm_single_device_test_t, cause_lba_split)
 	i * SIZE,
 	SIZE,
 	(char)(i & 0xFF),
-	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	tm_config.default_placement_hint);
       ASSERT_EQ(i * SIZE, extent->get_laddr());
       submit_transaction(std::move(t));
     }
@@ -1037,7 +1036,7 @@ TEST_P(tm_single_device_test_t, random_writes)
 	t,
 	i * BSIZE,
 	BSIZE,
-	for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	tm_config.default_placement_hint);
       ASSERT_EQ(i * BSIZE, extent->get_laddr());
       submit_transaction(std::move(t));
     }
@@ -1056,7 +1055,7 @@ TEST_P(tm_single_device_test_t, random_writes)
 	    t,
 	    TOTAL + (k * PADDING_SIZE),
 	    PADDING_SIZE,
-	    for_segmented() ? placement_hint_t::HOT : placement_hint_t::REWRITE);
+	    tm_config.default_placement_hint);
 	  dec_ref(t, padding->get_laddr());
 	}
 	submit_transaction(std::move(t));

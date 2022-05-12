@@ -26,7 +26,7 @@ protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
   std::unique_ptr<nvme_device::NVMeBlockDevice> rb_device;
-  journal_type j_type = journal_type::SEGMENT_JOURNAL;
+  tm_make_config_t tm_config;
 
   EphemeralTestState(std::size_t num_segment_managers) {
     assert(num_segment_managers > 0);
@@ -62,13 +62,14 @@ protected:
     _mount().handle_error(crimson::ct_error::assert_all{}).get0();
   }
 
-  seastar::future<> tm_setup(journal_type j_type = journal_type::SEGMENT_JOURNAL) {
-    this->j_type = j_type;
+  seastar::future<> tm_setup(
+    tm_make_config_t config = tm_make_config_t::get_default()) {
+    tm_config = config;
     segment_manager = segment_manager::create_test_ephemeral();
     for (auto &sec_sm : secondary_segment_managers) {
       sec_sm = segment_manager::create_test_ephemeral();
     }
-    if (j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
+    if (tm_config.j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
       auto config =
 	journal::CircularBoundedJournal::mkfs_config_t::get_default();
       rb_device.reset(new nvme_device::TestMemory(config.total_size));
@@ -121,7 +122,7 @@ protected:
       for (auto &sec_sm : secondary_segment_managers) {
         sec_sm.reset();
       }
-      if (j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
+      if (tm_config.j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
 	rb_device.reset();
       }
     });
@@ -154,11 +155,9 @@ protected:
   TMTestState(std::size_t num_devices) : EphemeralTestState(num_devices) {}
 
   virtual void _init() override {
-    tm_make_config_t config;
-    config.cbjournal = j_type == journal_type::SEGMENT_JOURNAL ? false : true;
-    tm = make_transaction_manager(config);
+    tm = make_transaction_manager(tm_config);
     tm->add_device(segment_manager.get(), true);
-    if (j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
+    if (tm_config.j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
       tm->add_device(rb_device.get(), false);
       static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
 	add_device(rb_device.get());
@@ -201,7 +200,7 @@ protected:
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
-    if (j_type == journal_type::SEGMENT_JOURNAL) {
+    if (tm_config.j_type == journal_type::SEGMENT_JOURNAL) {
       return tm->mkfs(
       ).handle_error(
 	crimson::ct_error::assert_all{"Error in mkfs"}
