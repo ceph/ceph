@@ -2418,14 +2418,19 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
   utime_t time(max_lock_secs, 0);
 
   int ret;
+  uint16_t retries{0};
 
+  // due to reports of starvation trying to save lifecycle policy, try hard
   do {
     ret = lock->try_lock(dpp, time, null_yield);
     if (ret == -EBUSY || ret == -EEXIST) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
-          << oid << ", sleep 5, try again" << dendl;
-      sleep(5); // XXX: return retryable error
-      continue;
+			<< oid << ", retry in 100ms, ret=" << ret << dendl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      // the typical S3 client will time out in 60s
+      if(retries++ < 500) {
+	continue;
+      }
     }
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
