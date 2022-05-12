@@ -212,7 +212,8 @@ CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
   if (get_written_to() +
       ceph::encoded_sizeof_bounded<record_group_header_t>() > get_journal_end()) {
     // not enough space between written_to and the end of journal,
-    // so that update used size to increase the amount of the remaing space
+    // so that set written_to to the beginning of cbjournal to append 
+    // the record at the start address of cbjournal
     // |        cbjournal      |
     // 	          v            v
     //      written_to <-> the end of journal
