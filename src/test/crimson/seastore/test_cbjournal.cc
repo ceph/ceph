@@ -397,6 +397,7 @@ TEST_F(cbjournal_test_t, update_header)
     update_journal_tail(entries.front().addr, record_total_size);
     cbj->write_header().unsafe_get0();
     auto [update_header, update_buf2] = *(cbj->read_header(0).unsafe_get0());
+    cbj->close().unsafe_get0();
     replay();
 
     ASSERT_EQ(update_header.journal_tail, update_header.journal_tail);
@@ -437,6 +438,7 @@ TEST_F(cbjournal_test_t, replay)
        { generate_delta(20), generate_delta(21) }
        });
     ASSERT_EQ(avail - record_total_size, get_available_size());
+    cbj->close().unsafe_get0();
     replay();
   });
 }
@@ -463,6 +465,7 @@ TEST_F(cbjournal_test_t, replay_after_reset)
     auto old_written_to = get_written_to();
     auto old_used_size = get_used_size();
     set_written_to(4096);
+    cbj->close().unsafe_get0();
     replay();
     ASSERT_EQ(old_written_to, get_written_to());
     ASSERT_EQ(old_used_size,
