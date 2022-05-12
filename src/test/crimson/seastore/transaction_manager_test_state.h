@@ -122,9 +122,7 @@ protected:
       for (auto &sec_sm : secondary_segment_managers) {
         sec_sm.reset();
       }
-      if (tm_config.j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
-	rb_device.reset();
-      }
+      rb_device.reset();
     });
   }
 };
