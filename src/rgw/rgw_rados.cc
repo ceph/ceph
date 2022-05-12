@@ -5270,19 +5270,23 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
   store->remove_rgw_head_obj(op);
 
   auto& ioctx = ref.pool.ioctx();
+  BucketShard *bs = nullptr;
+  index_op.get_bucket_shard(&bs, dpp);
+  auto& index_ref = bs->bucket_obj.get_ref();
+
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, null_yield);
 
   /* raced with another operation, object state is indeterminate */
   const bool need_invalidate = (r == -ECANCELED);
 
-  int64_t poolid = ioctx.get_id();
+  int64_t poolid = index_ref.pool.ioctx().get_id();
   if (r >= 0) {
     tombstone_cache_t *obj_tombstone_cache = store->get_tombstone_cache();
     if (obj_tombstone_cache) {
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    r = index_op.complete_del(dpp, poolid, ioctx.get_last_version(), state->mtime, params.remove_objs);
+    r = index_op.complete_del(dpp, poolid, index_ref.pool.ioctx().get_last_version(), state->mtime, params.remove_objs);
     
     int ret = target->complete_atomic_modification(dpp);
     if (ret < 0) {
