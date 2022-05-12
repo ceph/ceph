@@ -259,7 +259,7 @@ void PG::on_activate(interval_set<snapid_t>)
 
 void PG::on_activate_complete()
 {
-  wait_for_active_blocker.on_active();
+  wait_for_active_blocker.unblock();
 
   if (peering_state.needs_recovery()) {
     logger().info("{}: requesting recovery",
@@ -1180,12 +1180,20 @@ seastar::future<> PG::stop()
 }
 
 void PG::on_change(ceph::os::Transaction &t) {
-  logger().debug("{}, {}", __func__, *this);
+  logger().debug("{} {}:", *this, __func__);
   for (auto& obc : obc_set_accessing) {
     obc.interrupt(::crimson::common::actingset_changed(is_primary()));
   }
   recovery_backend->on_peering_interval_change(t);
   backend->on_actingset_changed({ is_primary() });
+  wait_for_active_blocker.unblock();
+  if (is_primary()) {
+    logger().debug("{} {}: requeueing", *this, __func__);
+    client_request_orderer.requeue(shard_services, this);
+  } else {
+    logger().debug("{} {}: dropping requests", *this, __func__);
+    client_request_orderer.clear_and_cancel();
+  }
 }
 
 bool PG::can_discard_op(const MOSDOp& m) const {
