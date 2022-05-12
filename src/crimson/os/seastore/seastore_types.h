@@ -684,14 +684,11 @@ struct blk_paddr_t : public paddr_t {
 
   paddr_t add_relative(paddr_t o) const {
     seastore_off_t off;
-    if (o.get_addr_type() == addr_types_t::SEGMENT) {
-      // segment addr is allocated when alloc_new_extent is called.
-      // But, if random block device is used,
-      // this eventually can be converted to blk addr after submit_record().
-      off = o.as_seg_paddr().get_segment_off();
-    } else {
-      off = o.as_blk_paddr().get_block_off();
-    }
+    ceph_assert(o.get_addr_type() == addr_types_t::SEGMENT);
+    // segment addr is allocated when alloc_new_extent is called.
+    // But, if random block device is used,
+    // segment-based relative addr needs to be added to block addr
+    off = o.as_seg_paddr().get_segment_off();
     return add_offset(off);
   }
 
