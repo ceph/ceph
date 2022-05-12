@@ -159,11 +159,14 @@ set(librgw_common_srcs
   rgw_oidc_provider.cc
   rgw_datalog.cc
   cls_fifo_legacy.cc
-  rgw_lua_utils.cc
-  rgw_lua.cc
   rgw_bucket_encryption.cc
   rgw_tracer.cc)
 
+if(WITH_RADOSGW_LUA)
+  list(APPEND librgw_common_srcs
+    rgw_lua_utils.cc
+    rgw_lua.cc)
+endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
@@ -215,12 +218,10 @@ target_link_libraries(rgw_common
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
   PUBLIC
-    ${LUA_LIBRARIES}
     spawn)
 target_include_directories(rgw_common
   PUBLIC "services"
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-  PUBLIC "${LUA_INCLUDE_DIR}")
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
   target_link_libraries(rgw_common
@@ -238,6 +239,12 @@ if(WITH_OPENLDAP)
   target_link_libraries(rgw_common
     PRIVATE
       OpenLDAP::OpenLDAP)
+endif()
+if(WITH_RADOSGW_LUA)
+  target_include_directories(rgw_common
+    PUBLIC "${LUA_INCLUDE_DIR}")
+  target_link_libraries(rgw_common
+    PUBLIC ${LUA_LIBRARIES})
 endif()
 if(WITH_RADOSGW_LUA_PACKAGES)
   target_link_libraries(rgw_common
@@ -274,7 +281,6 @@ set(rgw_a_srcs
   rgw_http_client_curl.cc
   rgw_loadgen.cc
   rgw_log.cc
-  rgw_lua_request.cc
   rgw_period_pusher.cc
   rgw_realm_reloader.cc
   rgw_realm_watcher.cc
@@ -295,6 +301,11 @@ set(rgw_a_srcs
   rgw_opa.cc
   rgw_sts.cc
   rgw_rest_sts.cc)
+
+if(WITH_RADOSGW_LUA)
+  list(APPEND rgw_a_srcs
+    rgw_lua_request.cc)
+endif()
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)

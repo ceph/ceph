@@ -16,8 +16,10 @@
 #include "rgw_client_io.h"
 #include "rgw_opa.h"
 #include "rgw_perf_counters.h"
+#ifdef WITH_RADOSGW_LUA
 #include "rgw_lua.h"
 #include "rgw_lua_request.h"
+#endif  // WITH_RADOSGW_LUA
 #include "rgw_tracer.h"
 #include "rgw_ratelimit.h"
 
@@ -327,6 +329,7 @@ int process_request(rgw::sal::Store* const store,
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler, yield);
     goto done;
   }
+#ifdef WITH_RADOSGW_LUA
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     std::string script;
@@ -342,6 +345,7 @@ int process_request(rgw::sal::Store* const store,
       }
     }
   }
+#endif  // WITH_RADOSGW_LUA
   std::tie(ret,c) = schedule_request(scheduler, s, op);
   if (ret < 0) {
     if (ret == -EAGAIN) {
@@ -412,6 +416,7 @@ done:
     if (s->object) {
       s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
     }
+#ifdef WITH_RADOSGW_LUA
     std::string script;
     auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
     if (rc == -ENOENT) {
@@ -424,6 +429,7 @@ done:
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }
     }
+#endif  // WITH_RADOSGW_LUA
   }
 
   try {

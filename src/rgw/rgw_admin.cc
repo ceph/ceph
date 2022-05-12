@@ -57,7 +57,9 @@ extern "C" {
 #include "rgw_pubsub.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_checkpoint.h"
+#ifdef WITH_RADOSGW_LUA
 #include "rgw_lua.h"
+#endif  // WITH_RADOSGW_LUA
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -290,12 +292,21 @@ void usage()
   cout << "  subscription rm            remove a pubsub subscription\n";
   cout << "  subscription pull          show events in a pubsub subscription\n";
   cout << "  subscription ack           ack (remove) an events in a pubsub subscription\n";
+#ifdef WITH_RADOSGW_LUA
   cout << "  script put                 upload a lua script to a context\n";
   cout << "  script get                 get the lua script of a context\n";
   cout << "  script rm                  remove the lua scripts of a context\n";
   cout << "  script-package add         add a lua package to the scripts allowlist\n";
   cout << "  script-package rm          remove a lua package from the scripts allowlist\n";
   cout << "  script-package list        get the lua packages allowlist\n";
+#else  // WITH_RADOSGW_LUA
+  cout << "  script put                 (disabled) upload a lua script to a context\n";
+  cout << "  script get                 (disabled) get the lua script of a context\n";
+  cout << "  script rm                  (disabled) remove the lua scripts of a context\n";
+  cout << "  script-package add         (disabled) add a lua package to the scripts allowlist\n";
+  cout << "  script-package rm          (disabled) remove a lua package from the scripts allowlist\n";
+  cout << "  script-package list        (disabled) get the lua packages allowlist\n";
+#endif  // WITH_RADOSGW_LUA
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)\n";
@@ -455,7 +466,11 @@ void usage()
   cout << "   --event-id                event id in a pubsub subscription\n";
   cout << "\nScript options:\n";
   cout << "   --context                 context in which the script runs. one of: preRequest, postRequest\n";
+#ifdef WITH_RADOSGW_LUA
   cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
+#else  // WITH_RADOSGW_LUA
+  cout << "   --package                 (disabled) name of the lua package that should be added/removed to/from the allowlist\n";
+#endif  // WITH_RADOSGW_LUA
   cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
   cout << "\nradoslist options:\n";
   cout << "   --rgw-obj-fs              the field separator that will separate the rados\n";
@@ -10012,8 +10027,8 @@ next:
       return -ret;
     }
   }
-
   if (opt_cmd == OPT::SCRIPT_PUT) {
+#ifdef WITH_RADOSGW_LUA
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
@@ -10044,9 +10059,14 @@ next:
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
     }
+#else  // WITH_RADOSGW_LUA
+    cerr << "ERROR: adding lua scripts is disabled" << std::endl;
+    return EPERM;
+#endif  // WITH_RADOSGW_LUA
   }
 
   if (opt_cmd == OPT::SCRIPT_GET) {
+#ifdef WITH_RADOSGW_LUA
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
@@ -10067,9 +10087,14 @@ next:
     } else {
       std::cout << script << std::endl;
     }
+#else  // WITH_RADOSGW_LUA
+    cerr << "ERROR: getting lua scripts is disabled" << std::endl;
+    return EPERM;
+#endif  // WITH_RADOSGW_LUA
   }
-  
+
   if (opt_cmd == OPT::SCRIPT_RM) {
+#ifdef WITH_RADOSGW_LUA
     if (!str_script_ctx) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
@@ -10084,9 +10109,14 @@ next:
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
       return -rc;
     }
+#else  // WITH_RADOSGW_LUA
+    cerr << "ERROR: removing lua script is disabled" << std::endl;
+    return EPERM;
+#endif  // WITH_RADOSGW_LUA
   }
 
   if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
+#ifdef WITH_RADOSGW_LUA
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
       cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
@@ -10101,9 +10131,14 @@ next:
     cerr << "ERROR: adding lua packages is not permitted" << std::endl;
     return EPERM;
 #endif
+#else  // WITH_RADOSGW_LUA
+    cerr << "Error: adding lua packages is disabled" << std::endl;
+    return EPERM;
+#endif  // WITH_RADOSGW_LUA
   }
 
   if (opt_cmd == OPT::SCRIPT_PACKAGE_RM) {
+#ifdef WITH_RADOSGW_LUA
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
       cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
@@ -10122,9 +10157,14 @@ next:
     cerr << "ERROR: removing lua packages in not permitted" << std::endl;
     return EPERM;
 #endif
+#else  // WITH_RADOSGW_LUA
+    cerr << "Error: removing lua packages is disabled" << std::endl;
+    return EPERM;
+#endif  // WITH_RADOSGW_LUA
   }
 
   if (opt_cmd == OPT::SCRIPT_PACKAGE_LIST) {
+#ifdef WITH_RADOSGW_LUA
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     rgw::lua::packages_t packages;
     const auto rc = rgw::lua::list_packages(dpp(), static_cast<rgw::sal::RadosStore*>(store), null_yield, packages);
@@ -10142,6 +10182,10 @@ next:
     cerr << "ERROR: listing lua packages in not permitted" << std::endl;
     return EPERM;
 #endif
+#else  // WITH_RADOSGW_LUA
+    cerr << "Error: listing lua packages is disabled" << std::endl;
+    return EPERM;
+#endif  // WITH_RADOSGW_LUA
   }
 
   return 0;

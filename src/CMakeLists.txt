@@ -552,7 +552,7 @@ endif(${WITH_LTTNG})
 add_subdirectory(global)
 
 # RGW also support Lua scripting
-if(WITH_CEPHFS OR WITH_RADOSGW)
+if((WITH_CEPHFS OR WITH_RADOSGW) AND WITH_RADOSGW_LUA)
   find_package(Lua 5.3 REQUIRED)
 endif()
 
