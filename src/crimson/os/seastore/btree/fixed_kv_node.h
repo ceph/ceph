@@ -217,7 +217,7 @@ struct FixedKVInternalNode
     LOG_PREFIX(FixedKVInternalNode::resolve_relative_addrs);
     for (auto i: *this) {
       if (i->get_val().is_relative()) {
-	paddr_t updated = base.add_relative(i->get_val());
+	auto updated = base.add_relative(i->get_val());
 	SUBTRACE(seastore_fixedkv_tree, "{} -> {}", i->get_val(), updated);
 	i->set_val(updated);
       }
