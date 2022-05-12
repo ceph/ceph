@@ -1,5 +1,6 @@
 local g = import 'grafonnet/grafana.libsonnet';
 local u = import 'utils.libsonnet';
+local c = (import '../mixin.libsonnet')._config;
 
 {
   grafanaDashboards+:: {
@@ -84,7 +85,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '10s',
         16,
-        [],
+        c.dashboardTags,
         '',
         {
           refresh_intervals: ['5s', '10s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -117,6 +118,12 @@ local u = import 'utils.libsonnet';
       .addTemplate(
         g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
       )
+      .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
       .addPanels([
         OsdOverviewGraphPanel(
           { '@95%ile': '#e0752d' },
@@ -125,7 +132,12 @@ local u = import 'utils.libsonnet';
           'ms',
           null,
           '0',
-          'avg (irate(ceph_osd_op_r_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000)',
+          |||
+            avg (
+              rate(ceph_osd_op_r_latency_sum{%(matchers)s}[$__rate_interval]) /
+                on (ceph_daemon) rate(ceph_osd_op_r_latency_count{%(matchers)s}[$__rate_interval]) * 1000
+            )
+          ||| % u.matchers(),
           'AVG read',
           0,
           0,
@@ -137,22 +149,22 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 max(
-                  irate(ceph_osd_op_r_latency_sum[1m]) /
-                  on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000
+                  rate(ceph_osd_op_r_latency_sum{%(matchers)s}[$__rate_interval]) /
+                  on (ceph_daemon) rate(ceph_osd_op_r_latency_count{%(matchers)s}[$__rate_interval]) * 1000
                 )
-              |||,
+              ||| % u.matchers(),
               'MAX read'
             ),
             u.addTargetSchema(
               |||
                 quantile(0.95,
                   (
-                    irate(ceph_osd_op_r_latency_sum[1m]) /
-                      on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m])
+                    rate(ceph_osd_op_r_latency_sum{%(matchers)s}[$__rate_interval]) /
+                      on (ceph_daemon) rate(ceph_osd_op_r_latency_count{%(matchers)s}[$__rate_interval])
                       * 1000
                   )
                 )
-              |||,
+              ||| % u.matchers(),
               '@95%ile'
             ),
           ],
@@ -175,13 +187,13 @@ local u = import 'utils.libsonnet';
               topk(10,
                 (sort(
                   (
-                    irate(ceph_osd_op_r_latency_sum[1m]) /
-                      on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) *
+                    rate(ceph_osd_op_r_latency_sum{%(matchers)s}[$__rate_interval]) /
+                      on (ceph_daemon) rate(ceph_osd_op_r_latency_count{%(matchers)s}[$__rate_interval]) *
                       1000
                   )
                 ))
               )
-            |||,
+            ||| % u.matchers(),
             '',
             'table',
             1,
@@ -199,11 +211,11 @@ local u = import 'utils.libsonnet';
           '0',
           |||
             avg(
-              irate(ceph_osd_op_w_latency_sum[1m]) /
-                on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m])
+              rate(ceph_osd_op_w_latency_sum{%(matchers)s}[$__rate_interval]) /
+                on (ceph_daemon) rate(ceph_osd_op_w_latency_count{%(matchers)s}[$__rate_interval])
                 * 1000
             )
-          |||,
+          ||| % u.matchers(),
           'AVG write',
           12,
           0,
@@ -215,20 +227,20 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 max(
-                  irate(ceph_osd_op_w_latency_sum[1m]) /
-                    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *
+                  rate(ceph_osd_op_w_latency_sum{%(matchers)s}[$__rate_interval]) /
+                    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{%(matchers)s}[$__rate_interval]) *
                     1000
                 )
-              |||, 'MAX write'
+              ||| % u.matchers(), 'MAX write'
             ),
             u.addTargetSchema(
               |||
                 quantile(0.95, (
-                  irate(ceph_osd_op_w_latency_sum[1m]) /
-                    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *
+                  rate(ceph_osd_op_w_latency_sum{%(matchers)s}[$__rate_interval]) /
+                    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{%(matchers)s}[$__rate_interval]) *
                     1000
                 ))
-              |||, '@95%ile write'
+              ||| % u.matchers(), '@95%ile write'
             ),
           ],
         ),
@@ -251,12 +263,12 @@ local u = import 'utils.libsonnet';
             |||
               topk(10,
                 (sort(
-                  (irate(ceph_osd_op_w_latency_sum[1m]) /
-                    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *
+                  (rate(ceph_osd_op_w_latency_sum{%(matchers)s}[$__rate_interval]) /
+                    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{%(matchers)s}[$__rate_interval]) *
                     1000)
                 ))
               )
-            |||,
+            ||| % u.matchers(),
             '',
             'table',
             1,
@@ -267,50 +279,50 @@ local u = import 'utils.libsonnet';
           {}, '', 'OSD Types Summary'
         )
         .addTarget(
-          u.addTargetSchema('count by (device_class) (ceph_osd_metadata)', '{{device_class}}')
+          u.addTargetSchema('count by (device_class) (ceph_osd_metadata{%(matchers)s})' % u.matchers(), '{{device_class}}')
         ) + { gridPos: { x: 0, y: 8, w: 4, h: 8 } },
         OsdOverviewPieChartPanel(
           { 'Non-Encrypted': '#E5AC0E' }, '', 'OSD Objectstore Types'
         )
         .addTarget(
           u.addTargetSchema(
-            'count(ceph_bluefs_wal_total_bytes)', 'bluestore', 'time_series', 2
+            'count(ceph_bluefs_wal_total_bytes{%(matchers)s})' % u.matchers(), 'bluestore', 'time_series', 2
           )
         )
         .addTarget(
           u.addTargetSchema(
-            'absent(ceph_bluefs_wal_total_bytes)*count(ceph_osd_metadata)', 'filestore', 'time_series', 2
+            'absent(ceph_bluefs_wal_total_bytes%(matchers)s) * count(ceph_osd_metadata{%(matchers)s})' % u.matchers(), 'filestore', 'time_series', 2
           )
         ) + { gridPos: { x: 4, y: 8, w: 4, h: 8 } },
         OsdOverviewPieChartPanel(
           {}, 'The pie chart shows the various OSD sizes used within the cluster', 'OSD Size Summary'
         )
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes < 1099511627776)', '<1TB', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} < 1099511627776)' % u.matchers(), '<1TB', 'time_series', 2
         ))
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes >= 1099511627776 < 2199023255552)', '<2TB', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} >= 1099511627776 < 2199023255552)' % u.matchers(), '<2TB', 'time_series', 2
         ))
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes >= 2199023255552 < 3298534883328)', '<3TB', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} >= 2199023255552 < 3298534883328)' % u.matchers(), '<3TB', 'time_series', 2
         ))
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes >= 3298534883328 < 4398046511104)', '<4TB', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} >= 3298534883328 < 4398046511104)' % u.matchers(), '<4TB', 'time_series', 2
         ))
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes >= 4398046511104 < 6597069766656)', '<6TB', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} >= 4398046511104 < 6597069766656)' % u.matchers(), '<6TB', 'time_series', 2
         ))
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes >= 6597069766656 < 8796093022208)', '<8TB', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} >= 6597069766656 < 8796093022208)' % u.matchers(), '<8TB', 'time_series', 2
         ))
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes >= 8796093022208 < 10995116277760)', '<10TB', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} >= 8796093022208 < 10995116277760)' % u.matchers(), '<10TB', 'time_series', 2
         ))
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes >= 10995116277760 < 13194139533312)', '<12TB', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} >= 10995116277760 < 13194139533312)' % u.matchers(), '<12TB', 'time_series', 2
         ))
         .addTarget(u.addTargetSchema(
-          'count(ceph_osd_stat_bytes >= 13194139533312)', '<12TB+', 'time_series', 2
+          'count(ceph_osd_stat_bytes{%(matchers)s} >= 13194139533312)' % u.matchers(), '<12TB+', 'time_series', 2
         )) + { gridPos: { x: 8, y: 8, w: 4, h: 8 } },
         g.graphPanel.new(bars=true,
                          datasource='$datasource',
@@ -324,7 +336,7 @@ local u = import 'utils.libsonnet';
                          min='0',
                          nullPointMode='null')
         .addTarget(u.addTargetSchema(
-          'ceph_osd_numpg', 'PGs per OSD', 'time_series', 1, true
+          'ceph_osd_numpg{%(matchers)s}' % u.matchers(), 'PGs per OSD', 'time_series', 1, true
         )) + { gridPos: { x: 12, y: 8, w: 8, h: 8 } },
         OsdOverviewSingleStatPanel(
           ['#d44a3a', '#299c46'],
@@ -338,11 +350,11 @@ local u = import 'utils.libsonnet';
           false,
           '.75',
           |||
-            sum(ceph_bluestore_onode_hits) / (
-              sum(ceph_bluestore_onode_hits) +
-              sum(ceph_bluestore_onode_misses)
+            sum(ceph_bluestore_onode_hits{%(matchers)s}) / (
+              sum(ceph_bluestore_onode_hits{%(matchers)s}) +
+              sum(ceph_bluestore_onode_misses{%(matchers)s})
             )
-          |||,
+          ||| % u.matchers(),
           20,
           8,
           4,
@@ -358,7 +370,7 @@ local u = import 'utils.libsonnet';
           'short',
           null,
           null,
-          'round(sum(irate(ceph_pool_rd[30s])))',
+          'round(sum(rate(ceph_pool_rd{%(matchers)s}[$__rate_interval])))' % u.matchers(),
           'Reads',
           0,
           17,
@@ -366,7 +378,7 @@ local u = import 'utils.libsonnet';
           8
         )
         .addTargets([u.addTargetSchema(
-          'round(sum(irate(ceph_pool_wr[30s])))', 'Writes'
+          'round(sum(rate(ceph_pool_wr{%(matchers)s}[$__rate_interval])))' % u.matchers(), 'Writes'
         )]),
       ]),
     'osd-device-details.json':
@@ -409,7 +421,7 @@ local u = import 'utils.libsonnet';
         'now-3h',
         '',
         16,
-        [],
+        c.dashboardTags,
         '',
         {
           refresh_intervals: ['5s', '10s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -440,9 +452,15 @@ local u = import 'utils.libsonnet';
                               label='Data Source')
       )
       .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
+      .addTemplate(
         u.addTemplateSchema('osd',
                             '$datasource',
-                            'label_values(ceph_osd_metadata,ceph_daemon)',
+                            'label_values(ceph_osd_metadata{%(matchers)s}, ceph_daemon)' % u.matchers(),
                             1,
                             false,
                             1,
@@ -459,13 +477,13 @@ local u = import 'utils.libsonnet';
           's',
           'Read (-) / Write (+)',
           |||
-            irate(ceph_osd_op_r_latency_sum{ceph_daemon=~"$osd"}[1m]) /
-              on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m])
-          |||,
+            rate(ceph_osd_op_r_latency_sum{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval]) /
+              on (ceph_daemon) rate(ceph_osd_op_r_latency_count{%(matchers)s}[$__rate_interval])
+          ||| % u.matchers(),
           |||
-            irate(ceph_osd_op_w_latency_sum{ceph_daemon=~"$osd"}[1m]) /
-              on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m])
-          |||,
+            rate(ceph_osd_op_w_latency_sum{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval]) /
+              on (ceph_daemon) rate(ceph_osd_op_w_latency_count{%(matchers)s}[$__rate_interval])
+          ||| % u.matchers(),
           'read',
           'write',
           0,
@@ -484,8 +502,8 @@ local u = import 'utils.libsonnet';
           '',
           'short',
           'Read (-) / Write (+)',
-          'irate(ceph_osd_op_r{ceph_daemon=~"$osd"}[1m])',
-          'irate(ceph_osd_op_w{ceph_daemon=~"$osd"}[1m])',
+          'rate(ceph_osd_op_r{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval])' % u.matchers(),
+          'rate(ceph_osd_op_w{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval])' % u.matchers(),
           'Reads',
           'Writes',
           6,
@@ -501,8 +519,8 @@ local u = import 'utils.libsonnet';
           '',
           'bytes',
           'Read (-) / Write (+)',
-          'irate(ceph_osd_op_r_out_bytes{ceph_daemon=~"$osd"}[1m])',
-          'irate(ceph_osd_op_w_in_bytes{ceph_daemon=~"$osd"}[1m])',
+          'rate(ceph_osd_op_r_out_bytes{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval])' % u.matchers(),
+          'rate(ceph_osd_op_w_in_bytes{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval])' % u.matchers(),
           'Read Bytes',
           'Write Bytes',
           12,
@@ -522,28 +540,30 @@ local u = import 'utils.libsonnet';
           |||
             (
               label_replace(
-                irate(node_disk_read_time_seconds_total[1m]) / irate(node_disk_reads_completed_total[1m]),
+                rate(node_disk_read_time_seconds_total{%(clusterMatcher)s}[$__rate_interval]) /
+                  rate(node_disk_reads_completed_total{%(clusterMatcher)s}[$__rate_interval]),
                 "instance", "$1", "instance", "([^:.]*).*"
               ) and on (instance, device) label_replace(
                 label_replace(
-                  ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                  ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
                   "device", "$1", "device", "/dev/(.*)"
                 ), "instance", "$1", "instance", "([^:.]*).*"
               )
             )
-          |||,
+          ||| % u.matchers(),
           |||
             (
               label_replace(
-                irate(node_disk_write_time_seconds_total[1m]) / irate(node_disk_writes_completed_total[1m]),
+                rate(node_disk_write_time_seconds_total{%(clusterMatcher)s}[$__rate_interval]) /
+                  rate(node_disk_writes_completed_total{%(clusterMatcher)s}[$__rate_interval]),
                 "instance", "$1", "instance", "([^:.]*).*") and on (instance, device)
                 label_replace(
                   label_replace(
-                    ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"
+                    ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"
                   ), "instance", "$1", "instance", "([^:.]*).*"
                 )
               )
-          |||,
+          ||| % u.matchers(),
           '{{instance}}/{{device}} Reads',
           '{{instance}}/{{device}} Writes',
           0,
@@ -561,26 +581,26 @@ local u = import 'utils.libsonnet';
           'Read (-) / Write (+)',
           |||
             label_replace(
-              irate(node_disk_writes_completed_total[1m]),
+              rate(node_disk_writes_completed_total{%(clusterMatcher)s}[$__rate_interval]),
               "instance", "$1", "instance", "([^:.]*).*"
             ) and on (instance, device) label_replace(
               label_replace(
-                ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
                 "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^:.]*).*"
             )
-          |||,
+          ||| % u.matchers(),
           |||
             label_replace(
-              irate(node_disk_reads_completed_total[1m]),
+              rate(node_disk_reads_completed_total{%(clusterMatcher)s}[$__rate_interval]),
               "instance", "$1", "instance", "([^:.]*).*"
             ) and on (instance, device) label_replace(
               label_replace(
-                ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
                 "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^:.]*).*"
             )
-          |||,
+          ||| % u.matchers(),
           '{{device}} on {{instance}} Writes',
           '{{device}} on {{instance}} Reads',
           6,
@@ -598,24 +618,24 @@ local u = import 'utils.libsonnet';
           'Read (-) / Write (+)',
           |||
             label_replace(
-              irate(node_disk_read_bytes_total[1m]), "instance", "$1", "instance", "([^:.]*).*"
+              rate(node_disk_read_bytes_total{%(clusterMatcher)s}[$__rate_interval]), "instance", "$1", "instance", "([^:.]*).*"
             ) and on (instance, device) label_replace(
               label_replace(
-                ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
                 "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^:.]*).*"
             )
-          |||,
+          ||| % u.matchers(),
           |||
             label_replace(
-              irate(node_disk_written_bytes_total[1m]), "instance", "$1", "instance", "([^:.]*).*"
+              rate(node_disk_written_bytes_total{%(clusterMatcher)s}[$__rate_interval]), "instance", "$1", "instance", "([^:.]*).*"
             ) and on (instance, device) label_replace(
               label_replace(
-                ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
                 "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^:.]*).*"
             )
-          |||,
+          ||| % u.matchers(),
           '{{instance}} {{device}} Reads',
           '{{instance}} {{device}} Writes',
           12,
@@ -643,14 +663,14 @@ local u = import 'utils.libsonnet';
         .addTarget(u.addTargetSchema(
           |||
             label_replace(
-              irate(node_disk_io_time_seconds_total[1m]),
+              rate(node_disk_io_time_seconds_total{%(clusterMatcher)s}[$__rate_interval]),
               "instance", "$1", "instance", "([^:.]*).*"
             ) and on (instance, device) label_replace(
               label_replace(
-                ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"
+                ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^:.]*).*"
             )
-          |||,
+          ||| % u.matchers(),
           '{{device}} on {{instance}}'
         )) + { gridPos: { x: 18, y: 11, w: 6, h: 9 } },
       ]),

@@ -1,5 +1,6 @@
 local g = import 'grafonnet/grafana.libsonnet';
 local u = import 'utils.libsonnet';
+local c = (import '../mixin.libsonnet')._config;
 
 {
   grafanaDashboards+:: {
@@ -85,7 +86,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '15s',
         22,
-        [],
+        c.dashboardTags,
         '',
         {
           refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -104,10 +105,13 @@ local u = import 'utils.libsonnet';
         )
       )
       .addTemplate(
-        g.template.datasource('datasource',
-                              'prometheus',
-                              'Dashboard1',
-                              label='Data Source')
+        g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
+      )
+      .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
       )
       .addTemplate(
         g.template.custom(label='TopK',
@@ -121,7 +125,7 @@ local u = import 'utils.libsonnet';
           'Pools',
           '',
           'avg',
-          'count(ceph_pool_metadata)',
+          'count(ceph_pool_metadata{%(matchers)s})' % u.matchers(),
           true,
           'table',
           0,
@@ -134,7 +138,7 @@ local u = import 'utils.libsonnet';
           'Pools with Compression',
           'Count of the pools that have compression enabled',
           'current',
-          'count(ceph_pool_metadata{compression_mode!="none"})',
+          'count(ceph_pool_metadata{%(matchers)s, compression_mode!="none"})' % u.matchers(),
           null,
           '',
           3,
@@ -147,7 +151,7 @@ local u = import 'utils.libsonnet';
           'Total Raw Capacity',
           'Total raw capacity available to the cluster',
           'current',
-          'sum(ceph_osd_stat_bytes)',
+          'sum(ceph_osd_stat_bytes{%(matchers)s})' % u.matchers(),
           null,
           '',
           6,
@@ -160,7 +164,7 @@ local u = import 'utils.libsonnet';
           'Raw Capacity Consumed',
           'Total raw capacity consumed by user data and associated overheads (metadata + redundancy)',
           'current',
-          'sum(ceph_pool_bytes_used)',
+          'sum(ceph_pool_bytes_used{%(matchers)s})' % u.matchers(),
           true,
           '',
           9,
@@ -173,7 +177,7 @@ local u = import 'utils.libsonnet';
           'Logical Stored ',
           'Total of client data stored in the cluster',
           'current',
-          'sum(ceph_pool_stored)',
+          'sum(ceph_pool_stored{%(matchers)s})' % u.matchers(),
           true,
           '',
           12,
@@ -186,7 +190,12 @@ local u = import 'utils.libsonnet';
           'Compression Savings',
           'A compression saving is determined as the data eligible to be compressed minus the capacity used to store the data after compression',
           'current',
-          'sum(ceph_pool_compress_under_bytes - ceph_pool_compress_bytes_used)',
+          |||
+            sum(
+              ceph_pool_compress_under_bytes{%(matchers)s} -
+                ceph_pool_compress_bytes_used{%(matchers)s}
+            )
+          ||| % u.matchers(),
           null,
           '',
           15,
@@ -201,10 +210,10 @@ local u = import 'utils.libsonnet';
           'current',
           |||
             (
-              sum(ceph_pool_compress_under_bytes > 0) /
-                sum(ceph_pool_stored_raw and ceph_pool_compress_under_bytes > 0)
+              sum(ceph_pool_compress_under_bytes{%(matchers)s} > 0) /
+                sum(ceph_pool_stored_raw{%(matchers)s} and ceph_pool_compress_under_bytes{%(matchers)s} > 0)
             ) * 100
-          |||,
+          ||| % u.matchers(),
           null,
           'table',
           18,
@@ -217,7 +226,12 @@ local u = import 'utils.libsonnet';
           'Compression Factor',
           'This factor describes the average ratio of data eligible to be compressed divided by the data actually stored. It does not account for data written that was ineligible for compression (too small, or compression yield too low)',
           'current',
-          'sum(ceph_pool_compress_under_bytes > 0) / sum(ceph_pool_compress_bytes_used > 0)',
+          |||
+            sum(
+              ceph_pool_compress_under_bytes{%(matchers)s} > 0)
+                / sum(ceph_pool_compress_bytes_used{%(matchers)s} > 0
+            )
+          ||| % u.matchers(),
           null,
           '',
           21,
@@ -258,72 +272,98 @@ local u = import 'utils.libsonnet';
           [
             u.addTargetSchema(
               |||
-                (ceph_pool_compress_under_bytes / ceph_pool_compress_bytes_used > 0) and on(pool_id) (
-                  ((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100 > 0.5
+                (
+                  ceph_pool_compress_under_bytes{%(matchers)s} /
+                    ceph_pool_compress_bytes_used{%(matchers)s} > 0
+                ) and on(pool_id) (
+                  (
+                    (ceph_pool_compress_under_bytes{%(matchers)s} > 0) /
+                      ceph_pool_stored_raw{%(matchers)s}
+                  ) * 100 > 0.5
                 )
-              |||,
+              ||| % u.matchers(),
               'A',
               'table',
               1,
               true
             ),
             u.addTargetSchema(
-              'ceph_pool_max_avail * on(pool_id) group_left(name) ceph_pool_metadata',
+              |||
+                ceph_pool_max_avail{%(matchers)s} *
+                  on(pool_id) group_left(name) ceph_pool_metadata{%(matchers)s}
+              ||| % u.matchers(),
               'B',
               'table',
               1,
               true
             ),
             u.addTargetSchema(
-              '((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100',
+              |||
+                (
+                  (ceph_pool_compress_under_bytes{%(matchers)s} > 0) /
+                    ceph_pool_stored_raw{%(matchers)s}
+                ) * 100
+              ||| % u.matchers(),
               'C',
               'table',
               1,
               true
             ),
             u.addTargetSchema(
-              '(ceph_pool_percent_used * on(pool_id) group_left(name) ceph_pool_metadata)',
+              |||
+                ceph_pool_percent_used{%(matchers)s} *
+                  on(pool_id) group_left(name) ceph_pool_metadata{%(matchers)s}
+              ||| % u.matchers(),
               'D',
               'table',
               1,
               true
             ),
             u.addTargetSchema(
-              '(ceph_pool_compress_under_bytes - ceph_pool_compress_bytes_used > 0)',
+              |||
+                ceph_pool_compress_under_bytes{%(matchers)s} -
+                  ceph_pool_compress_bytes_used{%(matchers)s} > 0
+              ||| % u.matchers(),
               'E',
               'table',
               1,
               true
             ),
             u.addTargetSchema(
-              'delta(ceph_pool_stored[5d])', 'F', 'table', 1, true
+              'delta(ceph_pool_stored{%(matchers)s}[5d])' % u.matchers(), 'F', 'table', 1, true
             ),
             u.addTargetSchema(
-              'rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])',
+              |||
+                rate(ceph_pool_rd{%(matchers)s}[$__rate_interval])
+                  + rate(ceph_pool_wr{%(matchers)s}[$__rate_interval])
+              ||| % u.matchers(),
               'G',
               'table',
               1,
               true
             ),
             u.addTargetSchema(
-              'rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])',
+              |||
+                rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
+                  rate(ceph_pool_wr_bytes{%(matchers)s}[$__rate_interval])
+              ||| % u.matchers(),
               'H',
               'table',
               1,
               true
             ),
             u.addTargetSchema(
-              'ceph_pool_metadata', 'I', 'table', 1, true
+              'ceph_pool_metadata{%(matchers)s}' % u.matchers(), 'I', 'table', 1, true
             ),
             u.addTargetSchema(
-              'ceph_pool_stored * on(pool_id) group_left ceph_pool_metadata',
+              'ceph_pool_stored{%(matchers)s} * on(pool_id) group_left ceph_pool_metadata{%(matchers)s}' % u.matchers(),
               'J',
               'table',
               1,
               true
             ),
             u.addTargetSchema(
-              'ceph_pool_metadata{compression_mode!="none"}', 'K', 'table', 1, true
+              'ceph_pool_metadata{%(matchers)s, compression_mode!="none"}' % u.matchers(), 'K', 'table', 1, true
             ),
             u.addTargetSchema('', 'L', '', '', null),
           ]
@@ -336,10 +376,12 @@ local u = import 'utils.libsonnet';
           |||
             topk($topk,
               round(
-                (rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])),
-                1
-              ) * on(pool_id) group_left(instance,name) ceph_pool_metadata)
-          |||,
+                (
+                  rate(ceph_pool_rd{%(matchers)s}[$__rate_interval]) +
+                    rate(ceph_pool_wr{%(matchers)s}[$__rate_interval])
+                ), 1
+              ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s})
+          ||| % u.matchers(),
           '{{name}} ',
           0,
           9,
@@ -350,10 +392,10 @@ local u = import 'utils.libsonnet';
           u.addTargetSchema(
             |||
               topk($topk,
-                rate(ceph_pool_wr[30s]) +
-                  on(pool_id) group_left(instance,name) ceph_pool_metadata
+                rate(ceph_pool_wr{%(matchers)s}[$__rate_interval]) +
+                  on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s}
               )
-            |||,
+            ||| % u.matchers(),
             '{{name}} - write'
           )
         ),
@@ -364,10 +406,12 @@ local u = import 'utils.libsonnet';
           'Throughput',
           |||
             topk($topk,
-              (rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])) *
-                on(pool_id) group_left(instance, name) ceph_pool_metadata
+              (
+                rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
+                  rate(ceph_pool_wr_bytes{%(matchers)s}[$__rate_interval])
+              ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s}
             )
-          |||,
+          ||| % u.matchers(),
           '{{name}}',
           12,
           9,
@@ -379,7 +423,7 @@ local u = import 'utils.libsonnet';
           'Historical view of capacity usage, to help identify growth and trends in pool consumption',
           'bytes',
           'Capacity Used',
-          'ceph_pool_bytes_used * on(pool_id) group_right ceph_pool_metadata',
+          'ceph_pool_bytes_used{%(matchers)s} * on(pool_id) group_right ceph_pool_metadata{%(matchers)s}' % u.matchers(),
           '{{name}}',
           0,
           17,
@@ -450,7 +494,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '15s',
         22,
-        [],
+        c.dashboardTags,
         '',
         {
           refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -478,15 +522,18 @@ local u = import 'utils.libsonnet';
         )
       )
       .addTemplate(
-        g.template.datasource('datasource',
-                              'prometheus',
-                              'Prometheus admin.virt1.home.fajerski.name:9090',
-                              label='Data Source')
+        g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
+      )
+      .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
       )
       .addTemplate(
         u.addTemplateSchema('pool_name',
                             '$datasource',
-                            'label_values(ceph_pool_metadata,name)',
+                            'label_values(ceph_pool_metadata{%(matchers)s}, name)' % u.matchers(),
                             1,
                             false,
                             1,
@@ -505,9 +552,9 @@ local u = import 'utils.libsonnet';
           true,
           '.7,.8',
           |||
-            (ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)) *
-              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
-          |||,
+            (ceph_pool_stored{%(matchers)s} / (ceph_pool_stored{%(matchers)s} + ceph_pool_max_avail{%(matchers)s})) *
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+          ||| % u.matchers(),
           'time_series',
           0,
           0,
@@ -517,7 +564,7 @@ local u = import 'utils.libsonnet';
         PoolDetailSingleStatPanel(
           's',
           'Time till full',
-          'Time till pool is full assuming the average fill rate of the last 6 hours',
+          'Time till pool is full assuming the average fill rate of the last 4 hours',
           false,
           100,
           false,
@@ -525,9 +572,9 @@ local u = import 'utils.libsonnet';
           '',
           'current',
           |||
-            (ceph_pool_max_avail / deriv(ceph_pool_stored[6h])) *
-              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"} > 0
-          |||,
+            (ceph_pool_max_avail{%(matchers)s} / deriv(ceph_pool_stored{%(matchers)s}[6h])) *
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"} > 0
+          ||| % u.matchers(),
           'time_series',
           7,
           0,
@@ -545,9 +592,9 @@ local u = import 'utils.libsonnet';
           'ops',
           'Objects out(-) / in(+) ',
           |||
-            deriv(ceph_pool_objects[1m]) *
-              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
-          |||,
+            deriv(ceph_pool_objects{%(matchers)s}[1m]) *
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+          ||| % u.matchers(),
           'Objects per second',
           12,
           0,
@@ -564,9 +611,9 @@ local u = import 'utils.libsonnet';
           'iops',
           'Read (-) / Write (+)',
           |||
-            irate(ceph_pool_rd[1m]) *
-              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
-          |||,
+            rate(ceph_pool_rd{%(matchers)s}[$__rate_interval]) *
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+          ||| % u.matchers(),
           'reads',
           0,
           7,
@@ -577,9 +624,9 @@ local u = import 'utils.libsonnet';
         .addTarget(
           u.addTargetSchema(
             |||
-              irate(ceph_pool_wr[1m]) *
-                on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
-            |||,
+              rate(ceph_pool_wr{%(matchers)s}[$__rate_interval]) *
+                on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+            ||| % u.matchers(),
             'writes'
           )
         ),
@@ -593,9 +640,9 @@ local u = import 'utils.libsonnet';
           'Bps',
           'Read (-) / Write (+)',
           |||
-            irate(ceph_pool_rd_bytes[1m]) +
-              on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name"}
-          |||,
+            rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+          ||| % u.matchers(),
           'reads',
           12,
           7,
@@ -606,9 +653,9 @@ local u = import 'utils.libsonnet';
         .addTarget(
           u.addTargetSchema(
             |||
-              irate(ceph_pool_wr_bytes[1m]) +
-                on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
-            |||,
+              rate(ceph_pool_wr_bytes{%(matchers)s}[$__rate_interval]) +
+                on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+            ||| % u.matchers(),
             'writes'
           )
         ),
@@ -622,9 +669,9 @@ local u = import 'utils.libsonnet';
           'short',
           'Objects',
           |||
-            ceph_pool_objects *
-              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name"}
-          |||,
+            ceph_pool_objects{%(matchers)s} *
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+          ||| % u.matchers(),
           'Number of Objects',
           0,
           14,

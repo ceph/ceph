@@ -80,7 +80,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_bytes_sum[30s]))",
+               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_bytes_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{source_zone}}",
@@ -166,7 +166,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_bytes_count[30s]))",
+               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_bytes_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{source_zone}}",
@@ -252,7 +252,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_poll_latency_sum[30s]))",
+               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_poll_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{source_zone}}",
@@ -338,7 +338,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_errors[30s]))",
+               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_errors{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{source_zone}}",
@@ -387,30 +387,11 @@
    "schemaVersion": 16,
    "style": "dark",
    "tags": [
+      "ceph-mixin",
       "overview"
    ],
    "templating": {
       "list": [
-         {
-            "allValue": null,
-            "current": { },
-            "datasource": "$datasource",
-            "hide": 0,
-            "includeAll": true,
-            "label": "",
-            "multi": false,
-            "name": "rgw_servers",
-            "options": [ ],
-            "query": "prometehus",
-            "refresh": 1,
-            "regex": "",
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-         },
          {
             "current": {
                "text": "default",
@@ -424,6 +405,66 @@
             "refresh": 1,
             "regex": "",
             "type": "datasource"
+         },
+         {
+            "allValue": ".+",
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 2,
+            "includeAll": true,
+            "label": "cluster",
+            "multi": true,
+            "name": "cluster",
+            "options": [ ],
+            "query": "label_values(ceph_osd_metadata, cluster)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": ".+",
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "job",
+            "multi": true,
+            "name": "job",
+            "options": [ ],
+            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster\"}, job)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "",
+            "multi": false,
+            "name": "rgw_servers",
+            "options": [ ],
+            "query": "label_values(ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"}, ceph_daemon)",
+            "refresh": 1,
+            "regex": "RGW Server",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
          }
       ]
    },

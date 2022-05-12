@@ -99,14 +99,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rgw_get_initial_lat_sum[30s]) /\n  rate(ceph_rgw_get_initial_lat_count[30s]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata\n",
+               "expr": "rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n  rate(ceph_rgw_get_initial_lat_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GET AVG",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_put_initial_lat_sum[30s]) /\n  rate(ceph_rgw_put_initial_lat_count[30s]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata\n",
+               "expr": "rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n  rate(ceph_rgw_put_initial_lat_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUT AVG",
@@ -192,7 +192,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (rgw_host) (\n  label_replace(\n    rate(ceph_rgw_req[30s]) *\n      on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n    \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n  )\n)\n",
+               "expr": "sum by (rgw_host) (\n  label_replace(\n    rate(ceph_rgw_req{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n      on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"},\n    \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n  )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -278,7 +278,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n  rate(ceph_rgw_get_initial_lat_sum[30s]) /\n    rate(ceph_rgw_get_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
+               "expr": "label_replace(\n  rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n    rate(ceph_rgw_get_initial_lat_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -364,14 +364,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(rate(ceph_rgw_get_b[30s]))",
+               "expr": "sum(rate(ceph_rgw_get_b{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GETs",
                "refId": "A"
             },
             {
-               "expr": "sum(rate(ceph_rgw_put_b[30s]))",
+               "expr": "sum(rate(ceph_rgw_put_b{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUTs",
@@ -457,7 +457,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(sum by (instance_id) (\n  rate(ceph_rgw_get_b[30s]) +\n    rate(ceph_rgw_put_b[30s])) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
+               "expr": "label_replace(sum by (instance_id) (\n  rate(ceph_rgw_get_b{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) +\n    rate(ceph_rgw_put_b{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval])) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -543,7 +543,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n  rate(ceph_rgw_put_initial_lat_sum[30s]) /\n    rate(ceph_rgw_put_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
+               "expr": "label_replace(\n  rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n    rate(ceph_rgw_put_initial_lat_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -673,14 +673,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(\n  irate(\n    haproxy_frontend_http_responses_total{code=~\"$code\", instance=~\"$ingress_service\", proxy=~\"frontend\"}[5m]\n  )\n) by (code)\n",
+               "expr": "sum(\n  rate(\n    haproxy_frontend_http_responses_total{code=~\"$code\", job=~\"$job_haproxy\", instance=~\"$ingress_service\", proxy=~\"frontend\"}[$__rate_interval]\n  )\n) by (code)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Frontend {{ code }}",
                "refId": "A"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_backend_http_responses_total{code=~\"$code\", instance=~\"$ingress_service\", proxy=~\"backend\"}[5m]\n  )\n) by (code)\n",
+               "expr": "sum(\n  rate(\n    haproxy_backend_http_responses_total{code=~\"$code\", job=~\"$job_haproxy\", instance=~\"$ingress_service\", proxy=~\"backend\"}[$__rate_interval]\n  )\n) by (code)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Backend {{ code }}",
@@ -777,49 +777,49 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(\n  irate(\n    haproxy_frontend_http_requests_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_frontend_http_requests_total{proxy=~\"frontend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Requests",
                "refId": "A"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_backend_response_errors_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_backend_response_errors_total{proxy=~\"backend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Response errors",
                "refId": "B"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_frontend_request_errors_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_frontend_request_errors_total{proxy=~\"frontend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Requests errors",
                "refId": "C"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_backend_redispatch_warnings_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_backend_redispatch_warnings_total{proxy=~\"backend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Backend redispatch",
                "refId": "D"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_backend_retry_warnings_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_backend_retry_warnings_total{proxy=~\"backend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Backend retry",
                "refId": "E"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_frontend_requests_denied_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_frontend_requests_denied_total{proxy=~\"frontend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Request denied",
                "refId": "F"
             },
             {
-               "expr": "sum(\n  haproxy_backend_current_queue{proxy=~\"backend\", instance=~\"$ingress_service\"}\n) by (instance)\n",
+               "expr": "sum(\n  haproxy_backend_current_queue{proxy=~\"backend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Backend Queued",
@@ -912,21 +912,21 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(\n  irate(\n    haproxy_frontend_connections_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_frontend_connections_total{proxy=~\"frontend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Front",
                "refId": "A"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_backend_connection_attempts_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_backend_connection_attempts_total{proxy=~\"backend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Back",
                "refId": "B"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_backend_connection_errors_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_backend_connection_errors_total{proxy=~\"backend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Back errors",
@@ -1019,28 +1019,28 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(\n  irate(\n    haproxy_frontend_bytes_in_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  ) * 8\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_frontend_bytes_in_total{proxy=~\"frontend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  ) * 8\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "IN Front",
                "refId": "A"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_frontend_bytes_out_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  ) * 8\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_frontend_bytes_out_total{proxy=~\"frontend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  ) * 8\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "OUT Front",
                "refId": "B"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_backend_bytes_in_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  ) * 8\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_backend_bytes_in_total{proxy=~\"backend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  ) * 8\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "IN Back",
                "refId": "C"
             },
             {
-               "expr": "sum(\n  irate(\n    haproxy_backend_bytes_out_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  ) * 8\n) by (instance)\n",
+               "expr": "sum(\n  rate(\n    haproxy_backend_bytes_out_total{proxy=~\"backend\", job=~\"$job_haproxy\", instance=~\"$ingress_service\"}[$__rate_interval]\n  ) * 8\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "OUT Back",
@@ -1089,10 +1089,65 @@
    "schemaVersion": 16,
    "style": "dark",
    "tags": [
+      "ceph-mixin",
       "overview"
    ],
    "templating": {
       "list": [
+         {
+            "current": {
+               "text": "default",
+               "value": "default"
+            },
+            "hide": 0,
+            "label": "Data Source",
+            "name": "datasource",
+            "options": [ ],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "type": "datasource"
+         },
+         {
+            "allValue": ".+",
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 2,
+            "includeAll": true,
+            "label": "cluster",
+            "multi": true,
+            "name": "cluster",
+            "options": [ ],
+            "query": "label_values(ceph_osd_metadata, cluster)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": ".+",
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "job",
+            "multi": true,
+            "name": "job",
+            "options": [ ],
+            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster\"}, job)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
          {
             "allValue": null,
             "current": { },
@@ -1103,9 +1158,9 @@
             "multi": false,
             "name": "rgw_servers",
             "options": [ ],
-            "query": "label_values(ceph_rgw_metadata, ceph_daemon)",
+            "query": "label_values(ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"}, ceph_daemon)",
             "refresh": 1,
-            "regex": "",
+            "regex": "RGW Server",
             "sort": 1,
             "tagValuesQuery": "",
             "tags": [ ],
@@ -1123,9 +1178,29 @@
             "multi": false,
             "name": "code",
             "options": [ ],
-            "query": "label_values(haproxy_server_http_responses_total{instance=~\"$ingress_service\"}, code)",
+            "query": "label_values(haproxy_server_http_responses_total{job=~\"$job_haproxy\", instance=~\"$ingress_service\"}, code)",
             "refresh": 1,
             "regex": "",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": ".+",
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "job haproxy",
+            "multi": true,
+            "name": "job_haproxy",
+            "options": [ ],
+            "query": "label_values(haproxy_server_status, job)",
+            "refresh": 1,
+            "regex": "(.*)",
             "sort": 1,
             "tagValuesQuery": "",
             "tags": [ ],
@@ -1143,7 +1218,7 @@
             "multi": false,
             "name": "ingress_service",
             "options": [ ],
-            "query": "label_values(haproxy_server_status, instance)",
+            "query": "label_values(haproxy_server_status{job=~\"$job_haproxy\"}, instance)",
             "refresh": 1,
             "regex": "",
             "sort": 1,
@@ -1152,20 +1227,6 @@
             "tagsQuery": "",
             "type": "query",
             "useTags": false
-         },
-         {
-            "current": {
-               "text": "default",
-               "value": "default"
-            },
-            "hide": 0,
-            "label": "Data Source",
-            "name": "datasource",
-            "options": [ ],
-            "query": "prometheus",
-            "refresh": 1,
-            "regex": "",
-            "type": "datasource"
          }
       ]
    },

@@ -1,5 +1,6 @@
 local g = import 'grafonnet/grafana.libsonnet';
 local u = import 'utils.libsonnet';
+local c = (import '../mixin.libsonnet')._config;
 
 {
   grafanaDashboards+:: {
@@ -16,7 +17,7 @@ local u = import 'utils.libsonnet';
                            null,
                            0,
                            1,
-                           '$Datasource')
+                           '$datasource')
         .addTargets(
           [
             u.addTargetSchema(expr1,
@@ -32,7 +33,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         false,
         16,
-        [],
+        c.dashboardTags,
         '',
         {
           refresh_intervals: ['5s', '10s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -57,11 +58,17 @@ local u = import 'utils.libsonnet';
         type='panel', id='graph', name='Graph', version='5.0.0'
       )
       .addTemplate(
-        g.template.datasource('Datasource', 'prometheus', 'default', label=null)
+        g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
       )
       .addTemplate(
-        u.addTemplateSchema('Pool',
-                            '$Datasource',
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
+      .addTemplate(
+        u.addTemplateSchema('pool',
+                            '$datasource',
                             'label_values(pool)',
                             1,
                             false,
@@ -70,8 +77,8 @@ local u = import 'utils.libsonnet';
                             '')
       )
       .addTemplate(
-        u.addTemplateSchema('Image',
-                            '$Datasource',
+        u.addTemplateSchema('image',
+                            '$datasource',
                             'label_values(image)',
                             1,
                             false,
@@ -83,8 +90,9 @@ local u = import 'utils.libsonnet';
         RbdDetailsPanel(
           'IOPS',
           'iops',
-          'irate(ceph_rbd_write_ops{pool="$Pool", image="$Image"}[30s])',
-          'irate(ceph_rbd_read_ops{pool="$Pool", image="$Image"}[30s])',
+          'rate(ceph_rbd_write_ops{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])' % u.matchers()
+          ,
+          'rate(ceph_rbd_read_ops{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])' % u.matchers(),
           0,
           0,
           8,
@@ -93,8 +101,8 @@ local u = import 'utils.libsonnet';
         RbdDetailsPanel(
           'Throughput',
           'Bps',
-          'irate(ceph_rbd_write_bytes{pool="$Pool", image="$Image"}[30s])',
-          'irate(ceph_rbd_read_bytes{pool="$Pool", image="$Image"}[30s])',
+          'rate(ceph_rbd_write_bytes{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])' % u.matchers(),
+          'rate(ceph_rbd_read_bytes{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])' % u.matchers(),
           8,
           0,
           8,
@@ -104,13 +112,13 @@ local u = import 'utils.libsonnet';
           'Average Latency',
           'ns',
           |||
-            irate(ceph_rbd_write_latency_sum{pool="$Pool", image="$Image"}[30s]) /
-              irate(ceph_rbd_write_latency_count{pool="$Pool", image="$Image"}[30s])
-          |||,
+            rate(ceph_rbd_write_latency_sum{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval]) /
+              rate(ceph_rbd_write_latency_count{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])
+          ||| % u.matchers(),
           |||
-            irate(ceph_rbd_read_latency_sum{pool="$Pool", image="$Image"}[30s]) /
-              irate(ceph_rbd_read_latency_count{pool="$Pool", image="$Image"}[30s])
-          |||,
+            rate(ceph_rbd_read_latency_sum{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval]) /
+              rate(ceph_rbd_read_latency_count{%(matchers)s, pool="$pool", image="$image"}[$__rate_interval])
+          ||| % u.matchers(),
           16,
           0,
           8,
@@ -168,7 +176,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '30s',
         16,
-        ['overview'],
+        c.dashboardTags + ['overview'],
         '',
         {
           refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -199,17 +207,20 @@ local u = import 'utils.libsonnet';
         type='panel', id='table', name='Table', version='5.0.0'
       )
       .addTemplate(
-        g.template.datasource('datasource',
-                              'prometheus',
-                              'default',
-                              label='Data Source')
+        g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
+      )
+      .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
       )
       .addPanels([
         RbdOverviewPanel(
           'IOPS',
           'short',
-          'round(sum(irate(ceph_rbd_write_ops[30s])))',
-          'round(sum(irate(ceph_rbd_read_ops[30s])))',
+          'round(sum(rate(ceph_rbd_write_ops{%(matchers)s}[$__rate_interval])))' % u.matchers(),
+          'round(sum(rate(ceph_rbd_read_ops{%(matchers)s}[$__rate_interval])))' % u.matchers(),
           'Writes',
           'Reads',
           0,
@@ -220,8 +231,8 @@ local u = import 'utils.libsonnet';
         RbdOverviewPanel(
           'Throughput',
           'Bps',
-          'round(sum(irate(ceph_rbd_write_bytes[30s])))',
-          'round(sum(irate(ceph_rbd_read_bytes[30s])))',
+          'round(sum(rate(ceph_rbd_write_bytes{%(matchers)s}[$__rate_interval])))' % u.matchers(),
+          'round(sum(rate(ceph_rbd_read_bytes{%(matchers)s}[$__rate_interval])))' % u.matchers(),
           'Write',
           'Read',
           8,
@@ -234,16 +245,16 @@ local u = import 'utils.libsonnet';
           'ns',
           |||
             round(
-              sum(irate(ceph_rbd_write_latency_sum[30s])) /
-                sum(irate(ceph_rbd_write_latency_count[30s]))
+              sum(rate(ceph_rbd_write_latency_sum{%(matchers)s}[$__rate_interval])) /
+                sum(rate(ceph_rbd_write_latency_count{%(matchers)s}[$__rate_interval]))
             )
-          |||,
+          ||| % u.matchers(),
           |||
             round(
-              sum(irate(ceph_rbd_read_latency_sum[30s])) /
-                sum(irate(ceph_rbd_read_latency_count[30s]))
+              sum(rate(ceph_rbd_read_latency_sum{%(matchers)s}[$__rate_interval])) /
+                sum(rate(ceph_rbd_read_latency_count{%(matchers)s}[$__rate_interval]))
             )
-          |||,
+          ||| % u.matchers(),
           'Write',
           'Read',
           16,
@@ -270,12 +281,12 @@ local u = import 'utils.libsonnet';
               topk(10,
                 (
                   sort((
-                    irate(ceph_rbd_write_ops[30s]) +
-                      on (image, pool, namespace) irate(ceph_rbd_read_ops[30s])
+                    rate(ceph_rbd_write_ops{%(matchers)s}[$__rate_interval]) +
+                      on (image, pool, namespace) rate(ceph_rbd_read_ops{%(matchers)s}[$__rate_interval])
                   ))
                 )
               )
-            |||,
+            ||| % u.matchers(),
             '',
             'table',
             1,
@@ -301,11 +312,12 @@ local u = import 'utils.libsonnet';
               topk(10,
                 sort(
                   sum(
-                    irate(ceph_rbd_read_bytes[30s]) + irate(ceph_rbd_write_bytes[30s])
+                    rate(ceph_rbd_read_bytes{%(matchers)s}[$__rate_interval]) +
+                      rate(ceph_rbd_write_bytes{%(matchers)s}[$__rate_interval])
                   ) by (pool, image, namespace)
                 )
               )
-            |||,
+            ||| % u.matchers(),
             '',
             'table',
             1,
@@ -330,11 +342,13 @@ local u = import 'utils.libsonnet';
             |||
               topk(10,
                 sum(
-                  irate(ceph_rbd_write_latency_sum[30s]) / clamp_min(irate(ceph_rbd_write_latency_count[30s]), 1) +
-                    irate(ceph_rbd_read_latency_sum[30s]) / clamp_min(irate(ceph_rbd_read_latency_count[30s]), 1)
+                  rate(ceph_rbd_write_latency_sum{%(matchers)s}[$__rate_interval]) /
+                    clamp_min(rate(ceph_rbd_write_latency_count{%(matchers)s}[$__rate_interval]), 1) +
+                    rate(ceph_rbd_read_latency_sum{%(matchers)s}[$__rate_interval]) /
+                    clamp_min(rate(ceph_rbd_read_latency_count{%(matchers)s}[$__rate_interval]), 1)
                 ) by (pool, image, namespace)
               )
-            |||,
+            ||| % u.matchers(),
             '',
             'table',
             1,
