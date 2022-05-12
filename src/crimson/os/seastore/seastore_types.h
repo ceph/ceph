@@ -692,6 +692,7 @@ struct blk_paddr_t : public paddr_t {
     return add_offset(off);
   }
 
+  // all blk_paddr_t are absolute, relative addrs are always segmented
   paddr_t maybe_relative_to(paddr_t base) const {
     return *this;
   }
