@@ -879,7 +879,7 @@ public:
     return space_tracker->equals(tracker);
   }
 
-  void set_disable_trim(bool val){
+  void set_disable_trim(bool val) {
     disable_trim = val;
   }
 
