@@ -1,16 +1,21 @@
 #include "DaemonMetricCollector.h"
 #include "common/admin_socket_client.h"
+#include "common/hostname.h"
 #include "common/perf_counters.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
+#include "common/split.h"
 #include "include/common_fwd.h"
+#include "util.h"
 
 #include <boost/json/src.hpp>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <regex>
 #include <string>
 #include <utility>
+#include <chrono>
 
 using json_object = boost::json::object;
 using json_value = boost::json::value;
@@ -71,8 +76,16 @@ std::string quote(std::string value) { return "\"" + value + "\""; }
 bool is_hyphen(char ch) { return ch == '-'; }
 
 void DaemonMetricCollector::dump_asok_metrics() {
+  BlockTimer timer(__FILE__, __FUNCTION__);
+
   std::stringstream ss;
+  std::vector<std::pair<std::string, int>> daemon_pids;
   for (auto &[daemon_name, sock_client] : clients) {
+    bool ok;
+    sock_client.ping(&ok);
+    if (!ok) {
+      continue;
+    }
     std::string perf_dump_response = asok_request(sock_client, "perf dump");
     if (perf_dump_response.size() == 0) {
       continue;
@@ -81,6 +94,17 @@ void DaemonMetricCollector::dump_asok_metrics() {
     if (perf_schema_response.size() == 0) {
       continue;
     }
+    std::string config_show = asok_request(sock_client, "config show");
+    json_object pid_file_json = boost::json::parse(config_show).as_object();
+    std::string pid_path =
+        boost_string_to_std(pid_file_json["pid_file"].as_string());
+    std::string pid_str = read_file_to_string(pid_path);
+    std::cout << daemon_name << std::endl;
+    std::cout << pid_str << std::endl;
+    if (!pid_path.size()) {
+      continue;
+    }
+    daemon_pids.push_back({daemon_name, std::stoi(pid_str)});
     json_object dump = boost::json::parse(perf_dump_response).as_object();
     json_object schema = boost::json::parse(perf_schema_response).as_object();
     for (auto &perf : schema) {
@@ -107,8 +131,66 @@ void DaemonMetricCollector::dump_asok_metrics() {
       }
     }
   }
+  // get time spent on this function
+  timer.stop();
+  std::string scrap_desc(
+      "Time spent scraping and transforming perfcounters to metrics");
+  std::string scrap_labels("host=");
+  std::string host = ceph_get_hostname();
+  scrap_labels += quote(host);
+  add_metric(ss, timer.get_ms(), "ceph_exporter_scrape_time", scrap_desc,
+             "gauge", scrap_labels);
+
   const std::lock_guard<std::mutex> lock(metrics_mutex);
   metrics = ss.str();
+  metrics += get_process_metrics(daemon_pids);
+}
+
+std::vector<std::string> read_proc_stat_file(std::string path) {
+  std::string stat = read_file_to_string(path);
+  std::vector<std::string> strings;
+  auto parts = ceph::split(stat);
+  strings.assign(parts.begin(), parts.end());
+  return strings;
+}
+
+std::string DaemonMetricCollector::get_process_metrics(
+    std::vector<std::pair<std::string, int>> daemon_pids) {
+  std::string path("/proc");
+  std::stringstream ss;
+  for (auto &[daemon_name, pid] : daemon_pids) {
+    std::string stat_path("/proc/" + std::to_string(pid) + "/stat");
+    std::vector<std::string> stats = read_proc_stat_file(stat_path);
+    unsigned long utime = std::stoul(stats[13]);
+    unsigned long stime = std::stoul(stats[14]);
+    std::vector<std::string> uptimes = read_proc_stat_file("/proc/uptime");
+
+    int clk_tck = sysconf(_SC_CLK_TCK);
+    double starttime = std::stoull(stats[STAT_START_TIME]) / (double)clk_tck;
+    double usage_time = (utime + stime) / (double)clk_tck;
+    double uptime = std::stod(uptimes[UPTIME_SYSTEM]);
+    double elapsed_time = uptime - starttime;
+    double usage = usage_time * 100 / elapsed_time;
+
+    std::string labels = "ceph_daemon=";
+    labels += quote(daemon_name);
+    add_metric(ss, usage, "ceph_exporter_cpu_usage", "CPU usage of a daemon",
+               "gauge", labels);
+
+    std::string statm_path("/proc/" + std::to_string(pid) + "/statm");
+    std::vector<std::string> mem_stats = read_proc_stat_file(statm_path);
+
+    int vm_size = std::stoi(mem_stats[0]);
+    int resident_size = std::stoi(mem_stats[1]);
+    double mem_usage = resident_size / (double)vm_size;
+    add_metric(ss, vm_size, "ceph_exporter_vm_size", "dec",
+               "Virtual memory used in a daemon", labels);
+    add_metric(ss, resident_size, "ceph_exporter_resident_size",
+               "Resident memory in a daemon", "gauge", labels);
+    add_metric(ss, mem_usage, "ceph_exporter_mem_usage",
+               "Memory usage of daemon", "gauge", labels);
+  }
+  return ss.str();
 }
 
 std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
@@ -116,7 +198,7 @@ std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
   std::string request("{\"prefix\": \"" + command + "\"}");
   std::string response;
   std::string err = asok.do_request(request, &response);
-  if (err.length() > 0) {
+  if (err.length() > 0 || response.substr(0, 5) == "ERROR") {
     return "";
   }
   return response;
