@@ -1,5 +1,6 @@
 local g = import 'grafonnet/grafana.libsonnet';
 local u = import 'utils.libsonnet';
+local c = (import '../mixin.libsonnet')._config;
 
 {
   grafanaDashboards+:: {
@@ -28,7 +29,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '15s',
         16,
-        [],
+        c.dashboardTags,
         '',
         {
           refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -56,9 +57,15 @@ local u = import 'utils.libsonnet';
         g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
       )
       .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
+      .addTemplate(
         u.addTemplateSchema('mds_servers',
                             '$datasource',
-                            'label_values(ceph_mds_inodes, ceph_daemon)',
+                            'label_values(ceph_mds_inodes{%(matchers)s}, ceph_daemon)' % u.matchers(),
                             1,
                             true,
                             1,
@@ -71,7 +78,7 @@ local u = import 'utils.libsonnet';
           'MDS Workload - $mds_servers',
           'none',
           'Reads(-) / Writes (+)',
-          'sum(rate(ceph_objecter_op_r{ceph_daemon=~"($mds_servers).*"}[1m]))',
+          'sum(rate(ceph_objecter_op_r{%(matchers)s, ceph_daemon=~"($mds_servers).*"}[$__rate_interval]))' % u.matchers(),
           'Read Ops',
           0,
           1,
@@ -79,7 +86,7 @@ local u = import 'utils.libsonnet';
           9
         )
         .addTarget(u.addTargetSchema(
-          'sum(rate(ceph_objecter_op_w{ceph_daemon=~"($mds_servers).*"}[1m]))',
+          'sum(rate(ceph_objecter_op_w{%(matchers)s, ceph_daemon=~"($mds_servers).*"}[$__rate_interval]))' % u.matchers(),
           'Write Ops'
         ))
         .addSeriesOverride(
@@ -89,7 +96,7 @@ local u = import 'utils.libsonnet';
           'Client Request Load - $mds_servers',
           'none',
           'Client Requests',
-          'ceph_mds_server_handle_client_request{ceph_daemon=~"($mds_servers).*"}',
+          'ceph_mds_server_handle_client_request{%(matchers)s, ceph_daemon=~"($mds_servers).*"}' % u.matchers(),
           '{{ceph_daemon}}',
           12,
           1,

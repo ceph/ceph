@@ -104,7 +104,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "count(sum by (hostname) (ceph_osd_metadata))",
+               "expr": "count(sum by (hostname) (ceph_osd_metadata{job=~\"$job\", cluster=~\"$cluster\"}))",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -187,7 +187,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "avg(1 - (\n  avg by(instance) (\n    irate(node_cpu_seconds_total{mode=\\'idle\\',instance=~\\\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\\\"}[1m]) or\n    irate(node_cpu{mode=\\'idle\\',instance=~\\\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\\\"}[1m])\n  )\n))\n",
+               "expr": "avg(1 - (\n  avg by(instance) (\n    rate(node_cpu_seconds_total{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[$__rate_interval]) or\n    rate(node_cpu{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[$__rate_interval])\n  )\n))\n",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -270,7 +270,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "avg ((\n  (\n    node_memory_MemTotal{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n    node_memory_MemTotal_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}\n  ) - ((\n    node_memory_MemFree{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n    node_memory_MemFree_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}) +\n    (\n      node_memory_Cached{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n      node_memory_Cached_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}\n    ) + (\n      node_memory_Buffers{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n      node_memory_Buffers_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}\n    ) + (\n      node_memory_Slab{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n      node_memory_Slab_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}\n    )\n  )\n)\n(\n  node_memory_MemTotal{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n   node_memory_MemTotal_bytes{instance=~\"($osd_hosts|$rgw_hosts|$mon_hosts|$mds_hosts).*\"}\n))\n",
+               "expr": "avg ((\n  (\n    node_memory_MemTotal{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n    node_memory_MemTotal_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}\n  ) - ((\n    node_memory_MemFree{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n    node_memory_MemFree_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}) +\n    (\n      node_memory_Cached{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n      node_memory_Cached_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}\n    ) + (\n      node_memory_Buffers{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n      node_memory_Buffers_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}\n    ) + (\n      node_memory_Slab{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n      node_memory_Slab_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}\n    )\n  )\n) / (\n  node_memory_MemTotal{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"} or\n   node_memory_MemTotal_bytes{instance=~\"($osd_hosts|$rgw_hosts|$mon_hosts|$mds_hosts).*\"}\n))\n",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -353,7 +353,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum ((\n  irate(node_disk_reads_completed{instance=~\"($osd_hosts).*\"}[5m]) or\n  irate(node_disk_reads_completed_total{instance=~\"($osd_hosts).*\"}[5m])\n) + (\n  irate(node_disk_writes_completed{instance=~\"($osd_hosts).*\"}[5m]) or\n  irate(node_disk_writes_completed_total{instance=~\"($osd_hosts).*\"}[5m])\n))\n",
+               "expr": "sum ((\n  rate(node_disk_reads_completed{instance=~\"($osd_hosts).*\"}[$__rate_interval]) or\n  rate(node_disk_reads_completed_total{instance=~\"($osd_hosts).*\"}[$__rate_interval])\n) + (\n  rate(node_disk_writes_completed{instance=~\"($osd_hosts).*\"}[$__rate_interval]) or\n  rate(node_disk_writes_completed_total{instance=~\"($osd_hosts).*\"}[$__rate_interval])\n))\n",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -436,7 +436,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "avg (\n  label_replace(\n    (irate(node_disk_io_time_ms[5m]) / 10 ) or\n      (irate(node_disk_io_time_seconds_total[5m]) * 100),\n    \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  ) * on(instance, device) group_left(ceph_daemon) label_replace(\n    label_replace(\n      ceph_disk_occupation_human{instance=~\"($osd_hosts).*\"},\n      \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n    ), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  )\n)\n",
+               "expr": "avg (\n  label_replace(\n    (rate(node_disk_io_time_ms[$__rate_interval]) / 10 ) or\n      (rate(node_disk_io_time_seconds_total[$__rate_interval]) * 100),\n    \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  ) * on(instance, device) group_left(ceph_daemon) label_replace(\n    label_replace(\n      ceph_disk_occupation_human{job=~\"$job\", cluster=~\"$cluster\", instance=~\"($osd_hosts).*\"},\n      \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n    ), \"instance\", \"$1\", \"instance\", \"([^.:]*).*\"\n  )\n)\n",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -519,7 +519,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum (\n        (\n                irate(node_network_receive_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m]) or\n                irate(node_network_receive_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m])\n        ) unless on (device, instance)\n        label_replace((bonding_slaves > 0), \"device\", \"$1\", \"master\", \"(.+)\")\n) +\nsum (\n        (\n                irate(node_network_transmit_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m]) or\n                irate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m])\n        ) unless on (device, instance)\n        label_replace((bonding_slaves > 0), \"device\", \"$1\", \"master\", \"(.+)\")\n        )\n",
+               "expr": "sum (\n  (\n    rate(node_network_receive_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[$__rate_interval]) or\n    rate(node_network_receive_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[$__rate_interval])\n  ) unless on (device, instance)\n  label_replace((bonding_slaves > 0), \"device\", \"$1\", \"master\", \"(.+)\")\n) +\nsum (\n  (\n    rate(node_network_transmit_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[$__rate_interval]) or\n    rate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[$__rate_interval])\n  ) unless on (device, instance)\n  label_replace((bonding_slaves > 0), \"device\", \"$1\", \"master\", \"(.+)\")\n)\n",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -583,7 +583,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "topk(10,\n  100 * (\n    1 - (\n      avg by(instance) (\n        irate(node_cpu_seconds_total{mode=\\'idle\\',instance=~\\\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\\\"}[1m]) or\n          irate(node_cpu{mode=\\'idle\\',instance=~\\\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\\\"}[1m])\n      )\n    )\n  )\n)\n",
+               "expr": "topk(10,\n  100 * (\n    1 - (\n      avg by(instance) (\n        rate(node_cpu_seconds_total{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[$__rate_interval]) or\n          rate(node_cpu{mode='idle',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[$__rate_interval])\n      )\n    )\n  )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{instance}}",
@@ -669,7 +669,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "topk(10, (sum by(instance) (\n(\n        irate(node_network_receive_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m]) or\n        irate(node_network_receive_bytes_total{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m])\n) +\n(\n        irate(node_network_transmit_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m]) or\n        irate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m])\n) unless on (device, instance)\n        label_replace((bonding_slaves > 0), \"device\", \"$1\", \"master\", \"(.+)\"))\n))\n",
+               "expr": "topk(10, (sum by(instance) (\n(\n  rate(node_network_receive_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[$__rate_interval]) or\n  rate(node_network_receive_bytes_total{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[$__rate_interval])\n) +\n(\n  rate(node_network_transmit_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[$__rate_interval]) or\n  rate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[$__rate_interval])\n) unless on (device, instance)\n  label_replace((bonding_slaves > 0), \"device\", \"$1\", \"master\", \"(.+)\"))\n))\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{instance}}",
@@ -717,7 +717,9 @@
    "rows": [ ],
    "schemaVersion": 16,
    "style": "dark",
-   "tags": [ ],
+   "tags": [
+      "ceph-mixin"
+   ],
    "templating": {
       "list": [
          {
@@ -735,6 +737,46 @@
             "type": "datasource"
          },
          {
+            "allValue": ".+",
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 2,
+            "includeAll": true,
+            "label": "cluster",
+            "multi": true,
+            "name": "cluster",
+            "options": [ ],
+            "query": "label_values(ceph_osd_metadata, cluster)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": ".+",
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "job",
+            "multi": true,
+            "name": "job",
+            "options": [ ],
+            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster\"}, job)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
             "allValue": null,
             "current": { },
             "datasource": "$datasource",
@@ -744,7 +786,7 @@
             "multi": false,
             "name": "osd_hosts",
             "options": [ ],
-            "query": "label_values(ceph_disk_occupation, exported_instance)",
+            "query": "label_values(ceph_disk_occupation{job=~\"$job\", cluster=~\"$cluster\"}, exported_instance)",
             "refresh": 1,
             "regex": "([^.]*).*",
             "sort": 1,
@@ -764,7 +806,7 @@
             "multi": false,
             "name": "mon_hosts",
             "options": [ ],
-            "query": "label_values(ceph_mon_metadata, ceph_daemon)",
+            "query": "label_values(ceph_mon_metadata{job=~\"$job\", cluster=~\"$cluster\"}, ceph_daemon)",
             "refresh": 1,
             "regex": "mon.(.*)",
             "sort": 1,
@@ -784,7 +826,7 @@
             "multi": false,
             "name": "mds_hosts",
             "options": [ ],
-            "query": "label_values(ceph_mds_inodes, ceph_daemon)",
+            "query": "label_values(ceph_mds_inodes{job=~\"$job\", cluster=~\"$cluster\"}, ceph_daemon)",
             "refresh": 1,
             "regex": "mds.(.*)",
             "sort": 1,
@@ -804,7 +846,7 @@
             "multi": false,
             "name": "rgw_hosts",
             "options": [ ],
-            "query": "label_values(ceph_rgw_metadata, ceph_daemon)",
+            "query": "label_values(ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"}, ceph_daemon)",
             "refresh": 1,
             "regex": "rgw.(.*)",
             "sort": 1,

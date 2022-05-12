@@ -1,5 +1,6 @@
 local g = import 'grafonnet/grafana.libsonnet';
 local u = import 'utils.libsonnet';
+local c = (import '../mixin.libsonnet')._config;
 
 {
   grafanaDashboards+:: {
@@ -46,7 +47,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '10s',
         16,
-        [],
+        c.dashboardTags,
         '',
         {
           refresh_intervals: ['5s', '10s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -80,9 +81,15 @@ local u = import 'utils.libsonnet';
                               label='Data Source')
       )
       .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
+      .addTemplate(
         u.addTemplateSchema('osd_hosts',
                             '$datasource',
-                            'label_values(ceph_disk_occupation, exported_instance)',
+                            'label_values(ceph_disk_occupation{%(matchers)s}, exported_instance)' % u.matchers(),
                             1,
                             true,
                             1,
@@ -92,7 +99,7 @@ local u = import 'utils.libsonnet';
       .addTemplate(
         u.addTemplateSchema('mon_hosts',
                             '$datasource',
-                            'label_values(ceph_mon_metadata, ceph_daemon)',
+                            'label_values(ceph_mon_metadata{%(matchers)s}, ceph_daemon)' % u.matchers(),
                             1,
                             true,
                             1,
@@ -102,7 +109,7 @@ local u = import 'utils.libsonnet';
       .addTemplate(
         u.addTemplateSchema('mds_hosts',
                             '$datasource',
-                            'label_values(ceph_mds_inodes, ceph_daemon)',
+                            'label_values(ceph_mds_inodes{%(matchers)s}, ceph_daemon)' % u.matchers(),
                             1,
                             true,
                             1,
@@ -112,7 +119,7 @@ local u = import 'utils.libsonnet';
       .addTemplate(
         u.addTemplateSchema('rgw_hosts',
                             '$datasource',
-                            'label_values(ceph_rgw_metadata, ceph_daemon)',
+                            'label_values(ceph_rgw_metadata{%(matchers)s}, ceph_daemon)' % u.matchers(),
                             1,
                             true,
                             1,
@@ -125,7 +132,7 @@ local u = import 'utils.libsonnet';
           'OSD Hosts',
           '',
           'current',
-          'count(sum by (hostname) (ceph_osd_metadata))',
+          'count(sum by (hostname) (ceph_osd_metadata{%(matchers)s}))' % u.matchers(),
           true,
           0,
           0,
@@ -140,8 +147,8 @@ local u = import 'utils.libsonnet';
           |||
             avg(1 - (
               avg by(instance) (
-                irate(node_cpu_seconds_total{mode=\'idle\',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]) or
-                irate(node_cpu{mode=\'idle\',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m])
+                rate(node_cpu_seconds_total{mode='idle',instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*"}[$__rate_interval]) or
+                rate(node_cpu{mode='idle',instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*"}[$__rate_interval])
               )
             ))
           |||,
@@ -175,8 +182,7 @@ local u = import 'utils.libsonnet';
                   node_memory_Slab_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*"}
                 )
               )
-            )
-            (
+            ) / (
               node_memory_MemTotal{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*"} or
                node_memory_MemTotal_bytes{instance=~"($osd_hosts|$rgw_hosts|$mon_hosts|$mds_hosts).*"}
             ))
@@ -194,11 +200,11 @@ local u = import 'utils.libsonnet';
           'current',
           |||
             sum ((
-              irate(node_disk_reads_completed{instance=~"($osd_hosts).*"}[5m]) or
-              irate(node_disk_reads_completed_total{instance=~"($osd_hosts).*"}[5m])
+              rate(node_disk_reads_completed{instance=~"($osd_hosts).*"}[$__rate_interval]) or
+              rate(node_disk_reads_completed_total{instance=~"($osd_hosts).*"}[$__rate_interval])
             ) + (
-              irate(node_disk_writes_completed{instance=~"($osd_hosts).*"}[5m]) or
-              irate(node_disk_writes_completed_total{instance=~"($osd_hosts).*"}[5m])
+              rate(node_disk_writes_completed{instance=~"($osd_hosts).*"}[$__rate_interval]) or
+              rate(node_disk_writes_completed_total{instance=~"($osd_hosts).*"}[$__rate_interval])
             ))
           |||,
           true,
@@ -215,17 +221,17 @@ local u = import 'utils.libsonnet';
           |||
             avg (
               label_replace(
-                (irate(node_disk_io_time_ms[5m]) / 10 ) or
-                  (irate(node_disk_io_time_seconds_total[5m]) * 100),
+                (rate(node_disk_io_time_ms[$__rate_interval]) / 10 ) or
+                  (rate(node_disk_io_time_seconds_total[$__rate_interval]) * 100),
                 "instance", "$1", "instance", "([^.:]*).*"
               ) * on(instance, device) group_left(ceph_daemon) label_replace(
                 label_replace(
-                  ceph_disk_occupation_human{instance=~"($osd_hosts).*"},
+                  ceph_disk_occupation_human{%(matchers)s, instance=~"($osd_hosts).*"},
                   "device", "$1", "device", "/dev/(.*)"
                 ), "instance", "$1", "instance", "([^.:]*).*"
               )
             )
-          |||,
+          ||| % u.matchers(),
           true,
           16,
           0,
@@ -239,19 +245,19 @@ local u = import 'utils.libsonnet';
           'current',
           |||
             sum (
-                    (
-                            irate(node_network_receive_bytes{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[1m]) or
-                            irate(node_network_receive_bytes_total{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[1m])
-                    ) unless on (device, instance)
-                    label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
+              (
+                rate(node_network_receive_bytes{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[$__rate_interval]) or
+                rate(node_network_receive_bytes_total{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[$__rate_interval])
+              ) unless on (device, instance)
+              label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
             ) +
             sum (
-                    (
-                            irate(node_network_transmit_bytes{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[1m]) or
-                            irate(node_network_transmit_bytes_total{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[1m])
-                    ) unless on (device, instance)
-                    label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
-                    )
+              (
+                rate(node_network_transmit_bytes{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[$__rate_interval]) or
+                rate(node_network_transmit_bytes_total{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[$__rate_interval])
+              ) unless on (device, instance)
+              label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
+            )
           |||
           ,
           true,
@@ -269,8 +275,8 @@ local u = import 'utils.libsonnet';
               100 * (
                 1 - (
                   avg by(instance) (
-                    irate(node_cpu_seconds_total{mode=\'idle\',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m]) or
-                      irate(node_cpu{mode=\'idle\',instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\"}[1m])
+                    rate(node_cpu_seconds_total{mode='idle',instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*"}[$__rate_interval]) or
+                      rate(node_cpu{mode='idle',instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*"}[$__rate_interval])
                   )
                 )
               )
@@ -286,14 +292,14 @@ local u = import 'utils.libsonnet';
           'Network Load - Top 10 Hosts', 'Top 10 hosts by network load', 'Bps', |||
             topk(10, (sum by(instance) (
             (
-                    irate(node_network_receive_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[1m]) or
-                    irate(node_network_receive_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[1m])
+              rate(node_network_receive_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval]) or
+              rate(node_network_receive_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval])
             ) +
             (
-                    irate(node_network_transmit_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[1m]) or
-                    irate(node_network_transmit_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[1m])
+              rate(node_network_transmit_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval]) or
+              rate(node_network_transmit_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval])
             ) unless on (device, instance)
-                    label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)"))
+              label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)"))
             ))
           |||
           , '{{instance}}', 12, 5, 12, 9
@@ -357,7 +363,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '10s',
         16,
-        ['overview'],
+        c.dashboardTags + ['overview'],
         '',
         {
           refresh_intervals: ['5s', '10s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -382,7 +388,20 @@ local u = import 'utils.libsonnet';
         g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
       )
       .addTemplate(
-        u.addTemplateSchema('ceph_hosts', '$datasource', 'label_values(node_scrape_collector_success, instance) ', 1, false, 3, 'Hostname', '([^.:]*).*')
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
+      .addTemplate(
+        u.addTemplateSchema('ceph_hosts',
+                            '$datasource',
+                            'label_values({%(clusterMatcher)s}, instance)' % u.matchers(),
+                            1,
+                            false,
+                            3,
+                            'Hostname',
+                            '([^.:]*).*')
       )
       .addPanels([
         u.addRowSchema(false, true, '$ceph_hosts System Overview') + { gridPos: { x: 0, y: 0, w: 24, h: 1 } },
@@ -391,7 +410,7 @@ local u = import 'utils.libsonnet';
           'OSDs',
           '',
           'current',
-          "count(sum by (ceph_daemon) (ceph_osd_metadata{hostname='$ceph_hosts'}))",
+          "count(sum by (ceph_daemon) (ceph_osd_metadata{%(matchers)s, hostname='$ceph_hosts'}))" % u.matchers(),
           0,
           1,
           3,
@@ -412,12 +431,12 @@ local u = import 'utils.libsonnet';
           '% Utilization',
           |||
             sum by (mode) (
-              irate(node_cpu{instance=~"($ceph_hosts)([\\\\.:].*)?", mode=~"(irq|nice|softirq|steal|system|user|iowait)"}[1m]) or
-              irate(node_cpu_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?", mode=~"(irq|nice|softirq|steal|system|user|iowait)"}[1m])
+              rate(node_cpu{instance=~"($ceph_hosts)([\\\\.:].*)?", mode=~"(irq|nice|softirq|steal|system|user|iowait)"}[$__rate_interval]) or
+              rate(node_cpu_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?", mode=~"(irq|nice|softirq|steal|system|user|iowait)"}[$__rate_interval])
             ) / (
               scalar(
-                sum(irate(node_cpu{instance=~"($ceph_hosts)([\\\\.:].*)?"}[1m]) or
-                irate(node_cpu_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[1m]))
+                sum(rate(node_cpu{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]) or
+                rate(node_cpu_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]))
               ) * 100
             )
           |||,
@@ -519,9 +538,9 @@ local u = import 'utils.libsonnet';
           'Send (-) / Receive (+)',
           |||
             sum by (device) (
-              irate(
-                node_network_receive_bytes{instance=~"($ceph_hosts)([\\\\.:].*)?",device!="lo"}[1m]) or
-                irate(node_network_receive_bytes_total{instance=~"($ceph_hosts)([\\\\.:].*)?",device!="lo"}[1m]
+              rate(
+                node_network_receive_bytes{instance=~"($ceph_hosts)([\\\\.:].*)?",device!="lo"}[$__rate_interval]) or
+                rate(node_network_receive_bytes_total{instance=~"($ceph_hosts)([\\\\.:].*)?",device!="lo"}[$__rate_interval]
               )
             )
           |||,
@@ -536,8 +555,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum by (device) (
-                  irate(node_network_transmit_bytes{instance=~"($ceph_hosts)([\\\\.:].*)?",device!="lo"}[1m]) or
-                  irate(node_network_transmit_bytes_total{instance=~"($ceph_hosts)([\\\\.:].*)?",device!="lo"}[1m])
+                  rate(node_network_transmit_bytes{instance=~"($ceph_hosts)([\\\\.:].*)?",device!="lo"}[$__rate_interval]) or
+                  rate(node_network_transmit_bytes_total{instance=~"($ceph_hosts)([\\\\.:].*)?",device!="lo"}[$__rate_interval])
                 )
               |||,
               '{{device}}.tx'
@@ -555,8 +574,8 @@ local u = import 'utils.libsonnet';
           'pps',
           'Send (-) / Receive (+)',
           |||
-            irate(node_network_receive_drop{instance=~"$ceph_hosts([\\\\.:].*)?"}[1m]) or
-              irate(node_network_receive_drop_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[1m])
+            rate(node_network_receive_drop{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval]) or
+              rate(node_network_receive_drop_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval])
           |||,
           '{{device}}.rx',
           21,
@@ -568,8 +587,8 @@ local u = import 'utils.libsonnet';
           [
             u.addTargetSchema(
               |||
-                irate(node_network_transmit_drop{instance=~"$ceph_hosts([\\\\.:].*)?"}[1m]) or
-                  irate(node_network_transmit_drop_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[1m])
+                rate(node_network_transmit_drop{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval]) or
+                  rate(node_network_transmit_drop_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval])
               |||,
               '{{device}}.tx'
             ),
@@ -588,10 +607,10 @@ local u = import 'utils.libsonnet';
           'current',
           |||
             sum(
-              ceph_osd_stat_bytes and
-                on (ceph_daemon) ceph_disk_occupation{instance=~"($ceph_hosts)([\\\\.:].*)?"}
+              ceph_osd_stat_bytes{%(matchers)s} and
+                on (ceph_daemon) ceph_disk_occupation{%(matchers)s, instance=~"($ceph_hosts)([\\\\.:].*)?"}
             )
-          |||,
+          ||| % u.matchers(),
           0,
           6,
           3,
@@ -605,8 +624,8 @@ local u = import 'utils.libsonnet';
           'pps',
           'Send (-) / Receive (+)',
           |||
-            irate(node_network_receive_errs{instance=~"$ceph_hosts([\\\\.:].*)?"}[1m]) or
-              irate(node_network_receive_errs_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[1m])
+            rate(node_network_receive_errs{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval]) or
+              rate(node_network_receive_errs_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval])
           |||,
           '{{device}}.rx',
           21,
@@ -617,8 +636,8 @@ local u = import 'utils.libsonnet';
         .addTargets(
           [u.addTargetSchema(
             |||
-              irate(node_network_transmit_errs{instance=~"$ceph_hosts([\\\\.:].*)?"}[1m]) or
-                irate(node_network_transmit_errs_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[1m])
+              rate(node_network_transmit_errs{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval]) or
+                rate(node_network_transmit_errs_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval])
             |||,
             '{{device}}.tx'
           )]
@@ -642,15 +661,15 @@ local u = import 'utils.libsonnet';
           |||
             label_replace(
               (
-                irate(node_disk_writes_completed{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m]) or
-                irate(node_disk_writes_completed_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m])
+                rate(node_disk_writes_completed{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]) or
+                rate(node_disk_writes_completed_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval])
               ), "instance", "$1", "instance", "([^:.]*).*"
             ) * on(instance, device) group_left(ceph_daemon) label_replace(
               label_replace(
-                ceph_disk_occupation_human, "device", "$1", "device", "/dev/(.*)"
+                ceph_disk_occupation_human{%(matchers)s}, "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^:.]*).*"
             )
-          |||,
+          ||| % u.matchers(),
           '{{device}}({{ceph_daemon}}) writes',
           0,
           12,
@@ -663,15 +682,15 @@ local u = import 'utils.libsonnet';
               |||
                 label_replace(
                   (
-                    irate(node_disk_reads_completed{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m]) or
-                    irate(node_disk_reads_completed_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m])
+                    rate(node_disk_reads_completed{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]) or
+                    rate(node_disk_reads_completed_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval])
                   ), "instance", "$1", "instance", "([^:.]*).*"
                 ) * on(instance, device) group_left(ceph_daemon) label_replace(
                   label_replace(
-                    ceph_disk_occupation_human,"device", "$1", "device", "/dev/(.*)"
+                    ceph_disk_occupation_human{%(matchers)s},"device", "$1", "device", "/dev/(.*)"
                   ), "instance", "$1", "instance", "([^:.]*).*"
                 )
-              |||,
+              ||| % u.matchers(),
               '{{device}}({{ceph_daemon}}) reads'
             ),
           ]
@@ -689,14 +708,14 @@ local u = import 'utils.libsonnet';
           |||
             label_replace(
               (
-                irate(node_disk_bytes_written{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m]) or
-                irate(node_disk_written_bytes_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m])
+                rate(node_disk_bytes_written{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]) or
+                rate(node_disk_written_bytes_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval])
               ), "instance", "$1", "instance", "([^:.]*).*") * on(instance, device)
               group_left(ceph_daemon) label_replace(
-                label_replace(ceph_disk_occupation_human, "device", "$1", "device", "/dev/(.*)"),
+                label_replace(ceph_disk_occupation_human{%(matchers)s}, "device", "$1", "device", "/dev/(.*)"),
                 "instance", "$1", "instance", "([^:.]*).*"
               )
-          |||,
+          ||| % u.matchers(),
           '{{device}}({{ceph_daemon}}) write',
           12,
           12,
@@ -708,15 +727,15 @@ local u = import 'utils.libsonnet';
             |||
               label_replace(
                 (
-                  irate(node_disk_bytes_read{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m]) or
-                  irate(node_disk_read_bytes_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m])
+                  rate(node_disk_bytes_read{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]) or
+                  rate(node_disk_read_bytes_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval])
                 ),
                 "instance", "$1", "instance", "([^:.]*).*") * on(instance, device)
                 group_left(ceph_daemon) label_replace(
-                  label_replace(ceph_disk_occupation_human, "device", "$1", "device", "/dev/(.*)"),
+                  label_replace(ceph_disk_occupation_human{%(matchers)s}, "device", "$1", "device", "/dev/(.*)"),
                   "instance", "$1", "instance", "([^:.]*).*"
                 )
-            |||,
+            ||| % u.matchers(),
             '{{device}}({{ceph_daemon}}) read'
           )]
         )
@@ -732,10 +751,10 @@ local u = import 'utils.libsonnet';
           '',
           |||
             max by(instance, device) (label_replace(
-              (irate(node_disk_write_time_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m])) /
-                clamp_min(irate(node_disk_writes_completed_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m]), 0.001) or
-                (irate(node_disk_read_time_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m])) /
-                  clamp_min(irate(node_disk_reads_completed_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m]), 0.001),
+              (rate(node_disk_write_time_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval])) /
+                clamp_min(rate(node_disk_writes_completed_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]), 0.001) or
+                (rate(node_disk_read_time_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval])) /
+                  clamp_min(rate(node_disk_reads_completed_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]), 0.001),
               "instance", "$1", "instance", "([^:.]*).*"
             )) * on(instance, device) group_left(ceph_daemon) label_replace(
               label_replace(
@@ -743,7 +762,7 @@ local u = import 'utils.libsonnet';
                 "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^:.]*).*"
             )
-          |||,
+          ||| % u.matchers(),
           '{{device}}({{ceph_daemon}})',
           0,
           21,
@@ -760,14 +779,14 @@ local u = import 'utils.libsonnet';
           |||
             label_replace(
               (
-                (irate(node_disk_io_time_ms{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m]) / 10) or
-                irate(node_disk_io_time_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[5m]) * 100
+                (rate(node_disk_io_time_ms{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]) / 10) or
+                rate(node_disk_io_time_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]) * 100
               ), "instance", "$1", "instance", "([^:.]*).*"
             ) * on(instance, device) group_left(ceph_daemon) label_replace(
-              label_replace(ceph_disk_occupation_human{instance=~"($ceph_hosts)([\\\\.:].*)?"},
+              label_replace(ceph_disk_occupation_human{%(matchers)s, instance=~"($ceph_hosts)([\\\\.:].*)?"},
               "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*"
             )
-          |||,
+          ||| % u.matchers(),
           '{{device}}({{ceph_daemon}})',
           12,
           21,
