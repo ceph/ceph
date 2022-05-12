@@ -94,7 +94,7 @@ class MMonGetPurgedSnapsReply;
 
 class OSD;
 
-class OSDService {
+class OSDService : public Scrub::ScrubSchedListener {
   using OpSchedulerItem = ceph::osd::scheduler::OpSchedulerItem;
 public:
   OSD *osd;
@@ -147,7 +147,7 @@ public:
     superblock = block;
   }
 
-  int get_nodeid() const { return whoami; }
+  int get_nodeid() const final { return whoami; }
 
   std::atomic<epoch_t> max_oldest_map;
 private:
@@ -290,7 +290,9 @@ public:
    * @param allow_requested_repair_only
    * @return a Scrub::attempt_t detailing either a success, or the failure reason.
    */
-  Scrub::schedule_result_t initiate_a_scrub(spg_t pgid, bool allow_requested_repair_only);
+  Scrub::schedule_result_t initiate_a_scrub(
+    spg_t pgid,
+    bool allow_requested_repair_only) final;
 
 
  private:

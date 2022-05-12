@@ -503,7 +503,10 @@ void PgScrubber::on_primary_change(const requested_scrub_t& request_flags)
 	   << dendl;
 
   if (is_primary()) {
-    auto suggested = determine_scrub_time(request_flags);
+    auto suggested = m_osds->get_scrub_services().determine_scrub_time(
+      request_flags,
+      m_pg->info,
+      m_pg->get_pgpool().info.opts);
     m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
   } else {
     m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
@@ -534,49 +537,14 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
   }
 
   if (is_primary() && m_scrub_job) {
-    auto suggested = determine_scrub_time(request_flags);
+    auto suggested = m_osds->get_scrub_services().determine_scrub_time(
+      request_flags,
+      m_pg->info,
+      m_pg->get_pgpool().info.opts);
     m_osds->get_scrub_services().update_job(m_scrub_job, suggested);
   }
 
   dout(15) << __func__ << " done " << registration_state() << dendl;
-}
-
-ScrubQueue::sched_params_t PgScrubber::determine_scrub_time(
-  const requested_scrub_t& request_flags) const
-{
-  ScrubQueue::sched_params_t res;
-
-  if (!is_primary()) {
-    return res;	 // with ok_to_scrub set to 'false'
-  }
-
-  if (request_flags.must_scrub || request_flags.need_auto) {
-
-    // Set the smallest time that isn't utime_t()
-    res.proposed_time = PgScrubber::scrub_must_stamp();
-    res.is_must = ScrubQueue::must_scrub_t::mandatory;
-    // we do not need the interval data in this case
-
-  } else if (m_pg->info.stats.stats_invalid &&
-	     m_pg->get_cct()->_conf->osd_scrub_invalid_stats) {
-    res.proposed_time = ceph_clock_now();
-    res.is_must = ScrubQueue::must_scrub_t::mandatory;
-
-  } else {
-    res.proposed_time = m_pg->info.history.last_scrub_stamp;
-    res.min_interval =
-      m_pg->get_pgpool().info.opts.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
-    res.max_interval =
-      m_pg->get_pgpool().info.opts.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
-  }
-
-  dout(15) << __func__ << " suggested: " << res.proposed_time
-	   << " hist: " << m_pg->info.history.last_scrub_stamp
-	   << " v:" << m_pg->info.stats.stats_invalid << " / "
-	   << m_pg->cct->_conf->osd_scrub_invalid_stats << " must:"
-	   << (res.is_must == ScrubQueue::must_scrub_t::mandatory ? "y" : "n")
-	   << " pool min: " << res.min_interval << dendl;
-  return res;
 }
 
 void PgScrubber::scrub_requested(scrub_level_t scrub_level,
