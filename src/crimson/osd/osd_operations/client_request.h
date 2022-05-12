@@ -3,6 +3,11 @@
 
 #pragma once
 
+#include <seastar/core/future.hh>
+
+#include <boost/intrusive/list.hpp>
+#include <boost/intrusive_ptr.hpp>
+
 #include "osd/osd_op_util.h"
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
@@ -18,6 +23,7 @@
 namespace crimson::osd {
 class PG;
 class OSD;
+class ShardServices;
 
 class ClientRequest final : public PhasedOperationT<ClientRequest>,
                             private CommonClientRequest {
@@ -25,23 +31,10 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   crimson::net::ConnectionRef conn;
   Ref<MOSDOp> m;
   OpInfo op_info;
+  seastar::promise<> on_complete;
+  unsigned instance_id = 0;
 
 public:
-  class ConnectionPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name =
-        "ClientRequest::ConnectionPipeline::await_map";
-    } await_map;
-
-    struct GetPG : OrderedExclusivePhaseT<GetPG> {
-      static constexpr auto type_name =
-        "ClientRequest::ConnectionPipeline::get_pg";
-    } get_pg;
-
-    friend class ClientRequest;
-    friend class LttngBackend;
-  };
-
   class PGPipeline : public CommonPGPipeline {
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
@@ -56,6 +49,34 @@ public:
     friend class LttngBackend;
   };
 
+  using ordering_hook_t = boost::intrusive::list_member_hook<>;
+  ordering_hook_t ordering_hook;
+  class Orderer {
+    using list_t = boost::intrusive::list<
+      ClientRequest,
+      boost::intrusive::member_hook<
+	ClientRequest,
+	typename ClientRequest::ordering_hook_t,
+	&ClientRequest::ordering_hook>
+      >;
+    list_t list;
+
+  public:
+    void add_request(ClientRequest &request) {
+      assert(!request.ordering_hook.is_linked());
+      intrusive_ptr_add_ref(&request);
+      list.push_back(request);
+    }
+    void remove_request(ClientRequest &request) {
+      assert(request.ordering_hook.is_linked());
+      list.erase(list_t::s_iterator_to(request));
+      intrusive_ptr_release(&request);
+    }
+    void requeue(ShardServices &shard_services, Ref<PG> pg);
+    void clear_and_cancel();
+  };
+  void complete_request();
+
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
 
   ClientRequest(OSD &osd, crimson::net::ConnectionRef, Ref<MOSDOp> &&m);
@@ -64,10 +85,21 @@ public:
   void print(std::ostream &) const final;
   void dump_detail(Formatter *f) const final;
 
+  static constexpr bool can_create() { return false; }
+  spg_t get_pgid() const {
+    return m->get_spg();
+  }
+  ConnectionPipeline &get_connection_pipeline();
+  PipelineHandle &get_handle() { return handle; }
+  epoch_t get_epoch() const { return m->get_min_epoch(); }
+
+  seastar::future<> with_pg_int(
+    ShardServices &shard_services, Ref<PG> pg);
 public:
-  seastar::future<> start();
   bool same_session_and_pg(const ClientRequest& other_op) const;
 
+  seastar::future<> with_pg(
+    ShardServices &shard_services, Ref<PG> pgref);
 private:
   template <typename FuncT>
   interruptible_future<> with_sequencer(FuncT&& func);
@@ -92,12 +124,6 @@ private:
   ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
 
-  class OpSequencer& sequencer;
-  // a tombstone used currently by OpSequencer. In the future it's supposed
-  // to be replaced with a reusage of OpTracking facilities.
-  bool finished = false;
-  friend class OpSequencer;
-
   template <typename Errorator>
   using interruptible_errorator =
     ::crimson::interruptible::interruptible_errorator<
@@ -109,6 +135,7 @@ private:
 public:
   std::tuple<
     StartEvent,
+    ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
     ConnectionPipeline::GetPG::BlockingEvent,

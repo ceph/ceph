@@ -360,8 +360,8 @@ public:
     boost::intrusive::constant_time_size<false>>;
 
   template <typename T, typename... Args>
-  typename T::IRef create_operation(Args&&... args) {
-    typename T::IRef op = new T(std::forward<Args>(args)...);
+  auto create_operation(Args&&... args) {
+    boost::intrusive_ptr<T> op = new T(std::forward<Args>(args)...);
     do_register(&*op);
     return op;
   }

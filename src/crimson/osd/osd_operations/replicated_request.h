@@ -8,8 +8,7 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
-
-class MOSDRepOp;
+#include "messages/MOSDRepOp.h"
 
 namespace ceph {
   class Formatter;
@@ -17,22 +16,13 @@ namespace ceph {
 
 namespace crimson::osd {
 
+class ShardServices;
+
 class OSD;
 class PG;
 
 class RepRequest final : public PhasedOperationT<RepRequest> {
 public:
-  class ConnectionPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name =
-	"RepRequest::ConnectionPipeline::await_map";
-    } await_map;
-    struct GetPG : OrderedExclusivePhaseT<GetPG> {
-      static constexpr auto type_name =
-	"RepRequest::ConnectionPipeline::get_pg";
-    } get_pg;
-    friend RepRequest;
-  };
   class PGPipeline {
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "RepRequest::PGPipeline::await_map";
@@ -43,24 +33,33 @@ public:
     friend RepRequest;
   };
   static constexpr OperationTypeCode type = OperationTypeCode::replicated_request;
-  RepRequest(OSD&, crimson::net::ConnectionRef&&, Ref<MOSDRepOp>&&);
+  RepRequest(crimson::net::ConnectionRef&&, Ref<MOSDRepOp>&&);
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
-  seastar::future<> start();
+
+  static constexpr bool can_create() { return false; }
+  spg_t get_pgid() const {
+    return req->get_spg();
+  }
+  ConnectionPipeline &get_connection_pipeline();
+  PipelineHandle &get_handle() { return handle; }
+  epoch_t get_epoch() const { return req->get_min_epoch(); }
+
+  seastar::future<> with_pg(
+    ShardServices &shard_services, Ref<PG> pg);
 
   std::tuple<
+    ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
-    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
     ConnectionPipeline::GetPG::BlockingEvent,
-    PGMap::PGCreationBlockingEvent
+    PGMap::PGCreationBlockingEvent,
+    OSD_OSDMapGate::OSDMapBlocker::BlockingEvent
   > tracking_events;
 
 private:
-  ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
 
-  OSD &osd;
   crimson::net::ConnectionRef conn;
   Ref<MOSDRepOp> req;
 };
