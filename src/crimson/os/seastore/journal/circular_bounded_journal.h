@@ -83,7 +83,7 @@ public:
   ~CircularBoundedJournal() {}
 
   open_for_write_ret open_for_write() final;
-  open_for_write_ret open_for_write(rbm_abs_addr start);
+  open_for_write_ret open_device_read_header(rbm_abs_addr start);
   close_ertr::future<> close() final;
 
   journal_type get_type() final {
@@ -306,8 +306,8 @@ private:
   /**
    * initialized
    *
-   * true after open_read_header, set to false in close(). Indicates that device is open
-   * and in-memory header is valid.
+   * true after open_device_read_header, set to false in close().
+   * Indicates that device is open and in-memory header is valid.
    */
   bool init = false;
   segment_seq_t cur_segment_seq = 0; // segment seq to track the sequence to written records

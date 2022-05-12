@@ -94,7 +94,7 @@ ceph::bufferlist CircularBoundedJournal::encode_header()
 
 CircularBoundedJournal::open_for_write_ret CircularBoundedJournal::open_for_write()
 {
-  return open_for_write(CBJOURNAL_START_ADDRESS);
+  return open_device_read_header(CBJOURNAL_START_ADDRESS);
 }
 
 CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
@@ -112,7 +112,7 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
 }
 
 CircularBoundedJournal::open_for_write_ret
-CircularBoundedJournal::open_for_write(rbm_abs_addr start)
+CircularBoundedJournal::open_device_read_header(rbm_abs_addr start)
 {
   LOG_PREFIX(CircularBoundedJournal::open_for_write);
   if (init) {
@@ -338,7 +338,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
    * read records from last applied record prior to written_to, and replay
    */
   LOG_PREFIX(CircularBoundedJournal::replay);
-  auto fut = open_for_write(CBJOURNAL_START_ADDRESS);
+  auto fut = open_device_read_header(CBJOURNAL_START_ADDRESS);
   return fut.safe_then([this, FNAME, delta_handler=std::move(delta_handler)] (auto addr) {
     return seastar::do_with(
       rbm_abs_addr(get_journal_tail()),
