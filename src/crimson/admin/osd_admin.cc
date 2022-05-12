@@ -248,9 +248,6 @@ private:
     case data_type::COUNTER:
       f->dump_unsigned(value_name, v.ui());
       break;
-    case data_type::DERIVE:
-      f->dump_int(value_name, v.i());
-      break;
     case data_type::HISTOGRAM: {
       f->open_object_section(value_name);
       auto&& h = v.get_histogram();
