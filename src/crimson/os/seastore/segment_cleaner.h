@@ -690,7 +690,14 @@ private:
 
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
 
-  bool disable_trim = false; // for test
+  /**
+   * disable_trim
+   *
+   * added to enable unit testing of CircularBoundedJournal before
+   * proper support is added to SegmentCleaner.
+   * Should be removed once proper support is added. TODO
+   */
+  bool disable_trim = false;
 public:
   SegmentCleaner(
     config_t config,
