@@ -1,5 +1,6 @@
 local g = import 'grafonnet/grafana.libsonnet';
 local u = import 'utils.libsonnet';
+local c = (import '../mixin.libsonnet')._config;
 
 {
   grafanaDashboards+:: {
@@ -18,8 +19,13 @@ local u = import 'utils.libsonnet';
                            1,
                            '$datasource')
         .addTargets(
-          [u.addTargetSchema('sum by (source_zone) (rate(%s[30s]))' % rgwMetric,
-                             '{{source_zone}}')]
+          [
+            u.addTargetSchema(
+              'sum by (source_zone) (rate(%(rgwMetric)s{%(matchers)s}[$__rate_interval]))'
+              % (u.matchers() + { rgwMetric: rgwMetric }),
+              '{{source_zone}}'
+            ),
+          ]
         ) + { gridPos: { x: x, y: y, w: w, h: h } };
 
       u.dashboardSchema(
@@ -29,7 +35,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '15s',
         16,
-        ['overview'],
+        c.dashboardTags + ['overview'],
         '',
         {
           refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -54,10 +60,25 @@ local u = import 'utils.libsonnet';
         type='panel', id='graph', name='Graph', version='5.0.0'
       )
       .addTemplate(
-        u.addTemplateSchema('rgw_servers', '$datasource', 'prometehus', 1, true, 1, '', '')
+        g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
       )
       .addTemplate(
-        g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
+      .addTemplate(
+        u.addTemplateSchema(
+          'rgw_servers',
+          '$datasource',
+          'label_values(ceph_rgw_metadata{%(matchers)s}, ceph_daemon)' % u.matchers(),
+          1,
+          true,
+          1,
+          '',
+          'RGW Server'
+        )
       )
       .addPanels([
         RgwSyncOverviewPanel(
@@ -152,7 +173,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '15s',
         16,
-        ['overview'],
+        c.dashboardTags + ['overview'],
         '',
         {
           refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -177,22 +198,34 @@ local u = import 'utils.libsonnet';
         type='panel', id='graph', name='Graph', version='5.0.0'
       )
       .addTemplate(
+        g.template.datasource('datasource',
+                              'prometheus',
+                              'default',
+                              label='Data Source')
+      )
+      .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
+      .addTemplate(
         u.addTemplateSchema(
           'rgw_servers',
           '$datasource',
-          'label_values(ceph_rgw_metadata, ceph_daemon)',
+          'label_values(ceph_rgw_metadata{%(matchers)s}, ceph_daemon)' % u.matchers(),
           1,
           true,
           1,
           '',
-          ''
+          'RGW Server'
         )
       )
       .addTemplate(
         u.addTemplateSchema(
           'code',
           '$datasource',
-          'label_values(haproxy_server_http_responses_total{instance=~"$ingress_service"}, code)',
+          'label_values(haproxy_server_http_responses_total{job=~"$job_haproxy", instance=~"$ingress_service"}, code)',
           1,
           true,
           1,
@@ -202,21 +235,29 @@ local u = import 'utils.libsonnet';
       )
       .addTemplate(
         u.addTemplateSchema(
+          'job_haproxy',
+          '$datasource',
+          'label_values(haproxy_server_status, job)',
+          1,
+          true,
+          1,
+          'job haproxy',
+          '(.*)',
+          multi=true,
+          allValues='.+',
+        ),
+      )
+      .addTemplate(
+        u.addTemplateSchema(
           'ingress_service',
           '$datasource',
-          'label_values(haproxy_server_status, instance)',
+          'label_values(haproxy_server_status{job=~"$job_haproxy"}, instance)',
           1,
           true,
           1,
           'Ingress Service',
           ''
         )
-      )
-      .addTemplate(
-        g.template.datasource('datasource',
-                              'prometheus',
-                              'default',
-                              label='Data Source')
       )
       .addPanels([
         u.addRowSchema(false,
@@ -231,10 +272,10 @@ local u = import 'utils.libsonnet';
           's',
           'short',
           |||
-            rate(ceph_rgw_get_initial_lat_sum[30s]) /
-              rate(ceph_rgw_get_initial_lat_count[30s]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
-          |||,
+            rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
+              rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s}
+          ||| % u.matchers(),
           'GET AVG',
           0,
           1,
@@ -244,10 +285,10 @@ local u = import 'utils.libsonnet';
           [
             u.addTargetSchema(
               |||
-                rate(ceph_rgw_put_initial_lat_sum[30s]) /
-                  rate(ceph_rgw_put_initial_lat_count[30s]) *
-                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
-              |||,
+                rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
+                  rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s}
+              ||| % u.matchers(),
               'PUT AVG'
             ),
           ]
@@ -260,12 +301,12 @@ local u = import 'utils.libsonnet';
           |||
             sum by (rgw_host) (
               label_replace(
-                rate(ceph_rgw_req[30s]) *
-                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,
+                rate(ceph_rgw_req{%(matchers)s}[$__rate_interval]) *
+                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
                 "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
               )
             )
-          |||,
+          ||| % u.matchers(),
           '{{rgw_host}}',
           8,
           1,
@@ -279,12 +320,12 @@ local u = import 'utils.libsonnet';
           'short',
           |||
             label_replace(
-              rate(ceph_rgw_get_initial_lat_sum[30s]) /
-                rate(ceph_rgw_get_initial_lat_count[30s]) *
-                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,
+              rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
+                rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
               "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
             )
-          |||,
+          ||| % u.matchers(),
           '{{rgw_host}}',
           15,
           1,
@@ -296,14 +337,14 @@ local u = import 'utils.libsonnet';
           'Total bytes transferred in/out of all radosgw instances within the cluster',
           'bytes',
           'short',
-          'sum(rate(ceph_rgw_get_b[30s]))',
+          'sum(rate(ceph_rgw_get_b{%(matchers)s}[$__rate_interval]))' % u.matchers(),
           'GETs',
           0,
           8,
           8,
           6
         ).addTargets(
-          [u.addTargetSchema('sum(rate(ceph_rgw_put_b[30s]))',
+          [u.addTargetSchema('sum(rate(ceph_rgw_put_b{%(matchers)s}[$__rate_interval]))' % u.matchers(),
                              'PUTs')]
         ),
         RgwOverviewPanel(
@@ -313,12 +354,12 @@ local u = import 'utils.libsonnet';
           'short',
           |||
             label_replace(sum by (instance_id) (
-              rate(ceph_rgw_get_b[30s]) +
-                rate(ceph_rgw_put_b[30s])) *
-                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,
+              rate(ceph_rgw_get_b{%(matchers)s}[$__rate_interval]) +
+                rate(ceph_rgw_put_b{%(matchers)s}[$__rate_interval])) *
+                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
               "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
             )
-          |||,
+          ||| % u.matchers(),
           '{{rgw_host}}',
           8,
           8,
@@ -332,12 +373,12 @@ local u = import 'utils.libsonnet';
           'short',
           |||
             label_replace(
-              rate(ceph_rgw_put_initial_lat_sum[30s]) /
-                rate(ceph_rgw_put_initial_lat_count[30s]) *
-                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,
+              rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
+                rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+                on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
               "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
             )
-          |||,
+          ||| % u.matchers(),
           '{{rgw_host}}',
           15,
           8,
@@ -354,8 +395,8 @@ local u = import 'utils.libsonnet';
           'short',
           |||
             sum(
-              irate(
-                haproxy_frontend_http_responses_total{code=~"$code", instance=~"$ingress_service", proxy=~"frontend"}[5m]
+              rate(
+                haproxy_frontend_http_responses_total{code=~"$code", job=~"$job_haproxy", instance=~"$ingress_service", proxy=~"frontend"}[$__rate_interval]
               )
             ) by (code)
           |||,
@@ -377,8 +418,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_backend_http_responses_total{code=~"$code", instance=~"$ingress_service", proxy=~"backend"}[5m]
+                  rate(
+                    haproxy_backend_http_responses_total{code=~"$code", job=~"$job_haproxy", instance=~"$ingress_service", proxy=~"backend"}[$__rate_interval]
                   )
                 ) by (code)
               |||, 'Backend {{ code }}'
@@ -404,8 +445,8 @@ local u = import 'utils.libsonnet';
           'short',
           |||
             sum(
-              irate(
-                haproxy_frontend_http_requests_total{proxy=~"frontend", instance=~"$ingress_service"}[5m]
+              rate(
+                haproxy_frontend_http_requests_total{proxy=~"frontend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
               )
             ) by (instance)
           |||,
@@ -427,8 +468,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_backend_response_errors_total{proxy=~"backend",instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_backend_response_errors_total{proxy=~"backend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   )
                 ) by (instance)
               |||, 'Response errors', 'time_series', 2
@@ -436,8 +477,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_frontend_request_errors_total{proxy=~"frontend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_frontend_request_errors_total{proxy=~"frontend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   )
                 ) by (instance)
               |||, 'Requests errors'
@@ -445,8 +486,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_backend_redispatch_warnings_total{proxy=~"backend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_backend_redispatch_warnings_total{proxy=~"backend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   )
                 ) by (instance)
               |||, 'Backend redispatch', 'time_series', 2
@@ -454,8 +495,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_backend_retry_warnings_total{proxy=~"backend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_backend_retry_warnings_total{proxy=~"backend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   )
                 ) by (instance)
               |||, 'Backend retry', 'time_series', 2
@@ -463,8 +504,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_frontend_requests_denied_total{proxy=~"frontend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_frontend_requests_denied_total{proxy=~"frontend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   )
                 ) by (instance)
               |||, 'Request denied', 'time_series', 2
@@ -472,7 +513,7 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  haproxy_backend_current_queue{proxy=~"backend", instance=~"$ingress_service"}
+                  haproxy_backend_current_queue{proxy=~"backend", job=~"$job_haproxy", instance=~"$ingress_service"}
                 ) by (instance)
               |||, 'Backend Queued', 'time_series', 2
             ),
@@ -495,8 +536,8 @@ local u = import 'utils.libsonnet';
           'short',
           |||
             sum(
-              irate(
-                haproxy_frontend_connections_total{proxy=~"frontend", instance=~"$ingress_service"}[5m]
+              rate(
+                haproxy_frontend_connections_total{proxy=~"frontend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
               )
             ) by (instance)
           |||,
@@ -518,8 +559,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_backend_connection_attempts_total{proxy=~"backend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_backend_connection_attempts_total{proxy=~"backend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   )
                 ) by (instance)
               |||, 'Back'
@@ -527,8 +568,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_backend_connection_errors_total{proxy=~"backend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_backend_connection_errors_total{proxy=~"backend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   )
                 ) by (instance)
               |||, 'Back errors'
@@ -548,8 +589,8 @@ local u = import 'utils.libsonnet';
           'short',
           |||
             sum(
-              irate(
-                haproxy_frontend_bytes_in_total{proxy=~"frontend", instance=~"$ingress_service"}[5m]
+              rate(
+                haproxy_frontend_bytes_in_total{proxy=~"frontend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
               ) * 8
             ) by (instance)
           |||,
@@ -571,8 +612,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_frontend_bytes_out_total{proxy=~"frontend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_frontend_bytes_out_total{proxy=~"frontend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   ) * 8
                 ) by (instance)
               |||, 'OUT Front', 'time_series', 2
@@ -580,8 +621,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_backend_bytes_in_total{proxy=~"backend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_backend_bytes_in_total{proxy=~"backend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   ) * 8
                 ) by (instance)
               |||, 'IN Back', 'time_series', 2
@@ -589,8 +630,8 @@ local u = import 'utils.libsonnet';
             u.addTargetSchema(
               |||
                 sum(
-                  irate(
-                    haproxy_backend_bytes_out_total{proxy=~"backend", instance=~"$ingress_service"}[5m]
+                  rate(
+                    haproxy_backend_bytes_out_total{proxy=~"backend", job=~"$job_haproxy", instance=~"$ingress_service"}[$__rate_interval]
                   ) * 8
                 ) by (instance)
               |||, 'OUT Back', 'time_series', 2
@@ -641,7 +682,7 @@ local u = import 'utils.libsonnet';
         'now-1h',
         '15s',
         16,
-        ['overview'],
+        c.dashboardTags + ['overview'],
         '',
         {
           refresh_intervals: ['5s', '10s', '15s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
@@ -678,9 +719,15 @@ local u = import 'utils.libsonnet';
                               label='Data Source')
       )
       .addTemplate(
+        u.addClusterTemplate()
+      )
+      .addTemplate(
+        u.addJobTemplate()
+      )
+      .addTemplate(
         u.addTemplateSchema('rgw_servers',
                             '$datasource',
-                            'label_values(ceph_rgw_metadata, ceph_daemon)',
+                            'label_values(ceph_rgw_metadata{%(matchers)s}, ceph_daemon)' % u.matchers(),
                             1,
                             true,
                             1,
@@ -697,14 +744,16 @@ local u = import 'utils.libsonnet';
           'short',
           |||
             sum by (instance_id) (
-              rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s])
-            ) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+              rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
+                rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval])
+            ) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           |||
             sum by (instance_id) (
-              rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s])
-            ) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+              rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
+                rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval])
+            ) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           'GET {{ceph_daemon}}',
           'PUT {{ceph_daemon}}',
           0,
@@ -719,13 +768,14 @@ local u = import 'utils.libsonnet';
           'bytes',
           'short',
           |||
-            rate(ceph_rgw_get_b[30s]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+            rate(ceph_rgw_get_b{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           |||
-            rate(ceph_rgw_put_b[30s]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+            rate(ceph_rgw_put_b{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon)
+              ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           'GETs {{ceph_daemon}}',
           'PUTs {{ceph_daemon}}',
           6,
@@ -746,13 +796,13 @@ local u = import 'utils.libsonnet';
           'short',
           'short',
           |||
-            rate(ceph_rgw_failed_req[30s]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+            rate(ceph_rgw_failed_req{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s,ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           |||
-            rate(ceph_rgw_get[30s]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+            rate(ceph_rgw_get{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           'Requests Failed {{ceph_daemon}}',
           'GETs {{ceph_daemon}}',
           13,
@@ -764,18 +814,21 @@ local u = import 'utils.libsonnet';
           [
             u.addTargetSchema(
               |||
-                rate(ceph_rgw_put[30s]) *
-                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-              |||,
+                rate(ceph_rgw_put{%(matchers)s}[$__rate_interval]) *
+                  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+              ||| % u.matchers(),
               'PUTs {{ceph_daemon}}'
             ),
             u.addTargetSchema(
               |||
                 (
-                  rate(ceph_rgw_req[30s]) -
-                    (rate(ceph_rgw_get[30s]) + rate(ceph_rgw_put[30s]))
-                ) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-              |||,
+                  rate(ceph_rgw_req{%(matchers)s}[$__rate_interval]) -
+                    (
+                      rate(ceph_rgw_get{%(matchers)s}[$__rate_interval]) +
+                        rate(ceph_rgw_put{%(matchers)s}[$__rate_interval])
+                    )
+                ) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+              ||| % u.matchers(),
               'Other {{ceph_daemon}}'
             ),
           ]
@@ -791,33 +844,36 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(u.addTargetSchema(
           |||
-            rate(ceph_rgw_failed_req[30s]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+            rate(ceph_rgw_failed_req{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           'Failures {{ceph_daemon}}'
         ))
         .addTarget(u.addTargetSchema(
           |||
-            rate(ceph_rgw_get[30s]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+            rate(ceph_rgw_get{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           'GETs {{ceph_daemon}}'
         ))
         .addTarget(u.addTargetSchema(
           |||
-            rate(ceph_rgw_put[30s]) *
-              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+            rate(ceph_rgw_put{%(matchers)s}[$__rate_interval]) *
+              on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           'PUTs {{ceph_daemon}}'
         ))
         .addTarget(u.addTargetSchema(
           |||
             (
-              rate(ceph_rgw_req[30s]) -
-                (rate(ceph_rgw_get[30s]) + rate(ceph_rgw_put[30s]))
+              rate(ceph_rgw_req{%(matchers)s}[$__rate_interval]) -
+                (
+                  rate(ceph_rgw_get{%(matchers)s}[$__rate_interval]) +
+                    rate(ceph_rgw_put{%(matchers)s}[$__rate_interval])
+                )
             ) * on (instance_id) group_left (ceph_daemon)
-              ceph_rgw_metadata{ceph_daemon=~"$rgw_servers"}
-          |||,
+              ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
+          ||| % u.matchers(),
           'Other (DELETE,LIST) {{ceph_daemon}}'
         )) + { gridPos: { x: 20, y: 1, w: 4, h: 8 } },
       ]),

@@ -1,4 +1,5 @@
 local g = import 'grafonnet/grafana.libsonnet';
+local c = (import '../mixin.libsonnet')._config;
 
 {
   dashboardSchema(title,
@@ -72,7 +73,10 @@ local g = import 'grafonnet/grafana.libsonnet';
                     includeAll,
                     sort,
                     label,
-                    regex)::
+                    regex,
+                    hide='',
+                    multi=false,
+                    allValues=null)::
     g.template.new(name=name,
                    datasource=datasource,
                    query=query,
@@ -80,7 +84,10 @@ local g = import 'grafonnet/grafana.libsonnet';
                    includeAll=includeAll,
                    sort=sort,
                    label=label,
-                   regex=regex),
+                   regex=regex,
+                   hide=hide,
+                   multi=multi,
+                   allValues=allValues),
 
   addAnnotationSchema(builtIn,
                       datasource,
@@ -170,4 +177,43 @@ local g = import 'grafonnet/grafana.libsonnet';
       unit: unit,
       valueMaps: valueMaps,
     },
+
+  matchers()::
+    local jobMatcher = 'job=~"$job"';
+    local clusterMatcher = '%s=~"$cluster"' % c.clusterLabel;
+    {
+      // Common labels
+      jobMatcher: jobMatcher,
+      clusterMatcher: clusterMatcher,
+      matchers: '%s, %s' % [jobMatcher, clusterMatcher],
+    },
+
+  addClusterTemplate()::
+    $.addTemplateSchema(
+      'cluster',
+      '$datasource',
+      'label_values(ceph_osd_metadata, cluster)',
+      1,
+      true,
+      1,
+      'cluster',
+      '(.*)',
+      if !c.showMultiCluster then 'variable' else '',
+      multi=true,
+      allValues='.+',
+    ),
+
+  addJobTemplate()::
+    $.addTemplateSchema(
+      'job',
+      '$datasource',
+      'label_values(ceph_osd_metadata{%(clusterMatcher)s}, job)' % $.matchers(),
+      1,
+      true,
+      1,
+      'job',
+      '(.*)',
+      multi=true,
+      allValues='.+',
+    ),
 }
