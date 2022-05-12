@@ -593,11 +593,14 @@ using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
 struct tm_make_config_t {
   bool detailed = true;
-  bool cbjournal = false;
+  journal_type j_type = journal_type::SEGMENT_JOURNAL;
+  placement_hint_t default_placement_hint =
+    placement_hint_t::HOT;
   static tm_make_config_t get_default() {
     return tm_make_config_t {
       true,
-      false
+      journal_type::SEGMENT_JOURNAL,
+      placement_hint_t::HOT
     };
   }
 };
