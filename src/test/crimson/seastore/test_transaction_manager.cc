@@ -74,10 +74,7 @@ struct transaction_manager_test_t :
 
   bool for_segmented() {
     std::string j_type = GetParam();
-    if (j_type == "segmented") {
-      return true;
-    }
-    return false;
+    return j_type == "segmented";
   }
   seastar::future<> set_up_fut() final {
     std::string j_type = GetParam();
