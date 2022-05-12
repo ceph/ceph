@@ -278,6 +278,7 @@ class ScrubQueue {
   };
 
   friend class TestOSDScrub;
+  friend class ScrubSchedTestWrapper; ///< unit-tests structure
 
   using ScrubJobRef = ceph::ref_t<ScrubJob>;
   using ScrubQContainer = std::vector<ScrubJobRef>;
