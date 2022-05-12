@@ -22,7 +22,6 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", journal_tail=" << header.journal_tail
 	     << ", applied_to="<< header.applied_to
 	     << ", written_to=" << header.written_to
-	     << ", flsg=" << header.flag
 	     << ", header_checksum=" << header.header_checksum
              << ")";
 }
