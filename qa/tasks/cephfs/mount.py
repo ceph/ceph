@@ -701,7 +701,7 @@ class CephFSMount(object):
         return p.stdout.getvalue().strip()
 
     def run_shell(self, args, timeout=300, **kwargs):
-        kwargs.pop('omit_sudo', False)
+        omit_sudo = kwargs.pop('omit_sudo', False)
         sudo = kwargs.pop('sudo', False)
         cwd = kwargs.pop('cwd', self.mountpoint)
         stdout = kwargs.pop('stdout', StringIO())
@@ -715,7 +715,7 @@ class CephFSMount(object):
 
         return self.client_remote.run(args=args, cwd=cwd, timeout=timeout,
                                       stdout=stdout, stderr=stderr,
-                                      omit_sudo=False, **kwargs)
+                                      omit_sudo=omit_sudo, **kwargs)
 
     def run_shell_payload(self, payload, **kwargs):
         return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
