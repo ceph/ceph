@@ -78,7 +78,7 @@ struct transaction_manager_test_t :
     if (j_type == "segmented") {
       return tm_setup(tm_config);
     } else if (j_type == "circularbounded") {
-      tm_config.j_type = journal_type::CIRCULARBOUNDED_JOURNAL;
+      tm_config.j_type = journal_type_t::CIRCULARBOUNDED_JOURNAL;
       tm_config.default_placement_hint = placement_hint_t::REWRITE;
       return tm_setup(tm_config);
     } else {

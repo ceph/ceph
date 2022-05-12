@@ -86,8 +86,8 @@ public:
   open_for_write_ret open_device_read_header(rbm_abs_addr start);
   close_ertr::future<> close() final;
 
-  journal_type get_type() final {
-    return journal_type::CIRCULARBOUNDED_JOURNAL;
+  journal_type_t get_type() final {
+    return journal_type_t::CIRCULARBOUNDED_JOURNAL;
   }
 
   submit_record_ret submit_record(
