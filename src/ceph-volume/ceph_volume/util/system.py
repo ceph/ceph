@@ -322,10 +322,11 @@ def get_mounts(devices=False, paths=False, realpath=False):
         else:
             device = fields[0]
         path = os.path.realpath(fields[1])
-        filesystem = fields[2]
+        # filesystem = fields[2]
         # only care about actual existing devices
         if not os.path.exists(device) or not device.startswith('/'):
-            if device not in do_not_skip and filesystem != 'zfs':
+            # if device not in do_not_skip and filesystem != 'zfs':
+            if device not in do_not_skip:
                 continue
         if device in devices_mounted.keys():
             devices_mounted[device].append(path)

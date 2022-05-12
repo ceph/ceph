@@ -81,7 +81,6 @@ def fake_proc(tmpdir, monkeypatch):
             debugfs /sys/kernel/debug debugfs rw,relatime 0 0
             hugetlbfs /dev/hugepages hugetlbfs rw,seclabel,relatime 0 0
             mqueue /dev/mqueue mqueue rw,seclabel,relatime 0 0
-            rpool/var/lib/docker/abcd /var/lib/docker/zfs/graph/edfg zfs rw,relatime,xattr,posixacl 0 0
             sunrpc /far/lib/nfs/rpc_pipefs rpc_pipefs rw,relatime 0 0
             /dev/sde4 /two/field/path
             nfsd /proc/fs/nfsd nfsd rw,relatime 0 0
@@ -110,8 +109,8 @@ class TestPathIsMounted(object):
     def test_is_mounted_at_destination(self, fake_proc):
         assert system.path_is_mounted('/boot', destination='/dev/sdc2') is True
 
-    def test_zfs_is_mounted_at_destination(self, fake_proc):
-        assert system.path_is_mounted('/var/lib/docker/zfs/graph/edfg') is True
+    # def test_zfs_is_mounted_at_destination(self, fake_proc):
+    #     assert system.path_is_mounted('/var/lib/docker/zfs/graph/edfg') is True
 
 
 class TestDeviceIsMounted(object):
@@ -140,11 +139,11 @@ class TestDeviceIsMounted(object):
         result = system.device_is_mounted('/dev/sda1', destination='/symlink/lib/ceph/osd/ceph-0')
         assert result is True
 
-    def test_zfs_is_mounted(self, fake_proc):
-        assert system.device_is_mounted('rpool/var/lib/docker/abcd') is True
+    # def test_zfs_is_mounted(self, fake_proc):
+    #     assert system.device_is_mounted('rpool/var/lib/docker/abcd') is True
 
-    def test_zfs_is_mounted_at_destination(self, fake_proc):
-        assert system.device_is_mounted('rpool/var/lib/docker/abcd', destination='/var/lib/docker/zfs/graph/edfg') is True
+    # def test_zfs_is_mounted_at_destination(self, fake_proc):
+    #     assert system.device_is_mounted('rpool/var/lib/docker/abcd', destination='/var/lib/docker/zfs/graph/edfg') is True
 
 
 class TestGetMounts(object):
