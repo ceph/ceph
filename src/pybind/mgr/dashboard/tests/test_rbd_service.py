@@ -11,7 +11,8 @@ except ImportError:
     import unittest.mock as mock
 
 from .. import mgr
-from ..services.rbd import RbdConfiguration, RbdService, get_image_spec, parse_image_spec
+from ..services.rbd import RbdConfiguration, RBDSchedulerInterval, RbdService, \
+    get_image_spec, parse_image_spec
 
 
 class ImageNotFoundStub(Exception):
@@ -139,3 +140,21 @@ class RbdServiceTest(unittest.TestCase):
             'pool_name': 'test_pool',
             'namespace': ''
         }]))
+
+    def test_valid_interval(self):
+        test_cases = [
+            ('15m', False),
+            ('1h', False),
+            ('5d', False),
+            ('m', True),
+            ('d', True),
+            ('1s', True),
+            ('11', True),
+            ('1m1', True),
+        ]
+        for interval, error in test_cases:
+            if error:
+                with self.assertRaises(ValueError):
+                    RBDSchedulerInterval(interval)
+            else:
+                self.assertEqual(str(RBDSchedulerInterval(interval)), interval)
