@@ -225,10 +225,7 @@ ScrubQueue::sched_params_t ScrubQueue::determine_scrub_time(
   const pool_opts_t pool_conf) const
 {
   ScrubQueue::sched_params_t res;
-
-  //dout(15) << fmt::format(": requested_scrub_t: {}", request_flags) << dendl; // RRR
   dout(15) << ": requested_scrub_t: {}" <<  request_flags << dendl; 
-
 
   if (request_flags.must_scrub || request_flags.need_auto) {
 
