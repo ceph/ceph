@@ -215,7 +215,6 @@ public:
     // address to represent where last appllied record is written
     rbm_abs_addr applied_to = 0;
 
-    uint64_t flag = 0;       // represent features (reserved)
     checksum_t header_checksum = 0;       // checksum of entire cbj_header_t
 
     device_id_t device_id;
@@ -232,7 +231,6 @@ public:
       denc(v.written_to, p);
       denc(v.applied_to, p);
 
-      denc(v.flag, p);
       denc(v.header_checksum, p);
       denc(v.device_id, p);
 
