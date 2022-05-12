@@ -636,6 +636,7 @@ TransactionManager::~TransactionManager() {}
 
 TransactionManagerRef make_transaction_manager(tm_make_config_t config)
 {
+  LOG_PREFIX(make_transaction_manager);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
@@ -654,6 +655,8 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
     journal = journal::make_circularbounded(
       nullptr, "");
     segment_cleaner->set_disable_trim(true);
+    ERROR("disabling journal trimming since support for CircularBoundedJournal\
+	  hasn't been added yet");
   }
   epm->init_ool_writers(
       *segment_cleaner,
