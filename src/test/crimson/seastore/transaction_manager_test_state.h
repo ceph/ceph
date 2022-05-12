@@ -69,7 +69,7 @@ protected:
     for (auto &sec_sm : secondary_segment_managers) {
       sec_sm = segment_manager::create_test_ephemeral();
     }
-    if (tm_config.j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
+    if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
       auto config =
 	journal::CircularBoundedJournal::mkfs_config_t::get_default();
       rb_device.reset(new nvme_device::TestMemory(config.total_size));
@@ -155,7 +155,7 @@ protected:
   virtual void _init() override {
     tm = make_transaction_manager(tm_config);
     tm->add_device(segment_manager.get(), true);
-    if (tm_config.j_type == journal_type::CIRCULARBOUNDED_JOURNAL) {
+    if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
       tm->add_device(rb_device.get(), false);
       static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
 	add_device(rb_device.get());
@@ -198,7 +198,7 @@ protected:
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
-    if (tm_config.j_type == journal_type::SEGMENT_JOURNAL) {
+    if (tm_config.j_type == journal_type_t::SEGMENT_JOURNAL) {
       return tm->mkfs(
       ).handle_error(
 	crimson::ct_error::assert_all{"Error in mkfs"}

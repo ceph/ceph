@@ -649,7 +649,7 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
     *cache,
     config.detailed);
   JournalRef journal;
-  if (config.j_type == journal_type::SEGMENT_JOURNAL) {
+  if (config.j_type == journal_type_t::SEGMENT_JOURNAL) {
     journal = journal::make_segmented(*segment_cleaner);
   } else {
     journal = journal::make_circularbounded(
