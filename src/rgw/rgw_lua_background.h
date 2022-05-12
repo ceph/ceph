@@ -3,6 +3,7 @@
 #include "rgw_common.h"
 #include <string>
 #include "rgw_lua_utils.h"
+#include "rgw_realm_reloader.h"
 
 namespace rgw::lua {
 
@@ -32,19 +33,24 @@ struct RGWTable : StringMapMetaTable<BackgroundMap,
     }
 };
 
-class Background {
+class Background : public RGWRealmReloader::Pauser {
 
 private:
   BackgroundMap rgw_map;
   bool stopped = false;
   bool started = false;
-  int execute_interval = INIT_EXECUTE_INTERVAL;
-  const DoutPrefixProvider* const dpp;
-  rgw::sal::Store* const store;
+  bool paused = false;
+  int execute_interval;
+  const DoutPrefix dp;
+  rgw::sal::Store* store;
   CephContext* const cct;
   const std::string luarocks_path;
   std::thread runner;
-  std::mutex m_mutex;
+  mutable std::mutex table_mutex;
+  std::mutex cond_mutex;
+  std::mutex pause_mutex;
+  std::condition_variable cond;
+  static const std::string empty_table_value;
 
   void run();
 
@@ -53,20 +59,20 @@ protected:
   virtual int read_script();
 
 public:
-  Background(const DoutPrefixProvider* dpp,
-      rgw::sal::Store* store,
+  Background(rgw::sal::Store* store,
       CephContext* cct,
-      const std::string& luarocks_path) :
-    dpp(dpp),
-    store(store),
-    cct(cct),
-    luarocks_path(luarocks_path) {}
+      const std::string& luarocks_path,
+      int execute_interval = INIT_EXECUTE_INTERVAL);
 
     virtual ~Background() = default;
     void start();
-    void stop();
     void shutdown();
     void create_background_metatable(lua_State* L);
+    const std::string& get_table_value(const std::string& key) const;
+    void put_table_value(const std::string& key, const std::string& value);
+    
+    void pause() override;
+    void resume(rgw::sal::Store* _store) override;
 };
 
 } //namepsace lua
