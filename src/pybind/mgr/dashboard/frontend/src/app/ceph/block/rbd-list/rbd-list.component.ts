@@ -2,6 +2,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
+import { Observable, Subscriber } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -26,6 +27,7 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { RbdFormEditRequestModel } from '../rbd-form/rbd-form-edit-request.model';
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
 import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RBDImageFormat, RbdModel } from './rbd-model';
@@ -50,6 +52,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   parentTpl: TemplateRef<any>;
   @ViewChild('nameTpl')
   nameTpl: TemplateRef<any>;
+  @ViewChild('mirroringTpl', { static: true })
+  mirroringTpl: TemplateRef<any>;
   @ViewChild('flattenTpl', { static: true })
   flattenTpl: TemplateRef<any>;
   @ViewChild('deleteTpl', { static: true })
@@ -89,6 +93,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         metadata['dest_image_name']
       )
   };
+  remove_scheduling: boolean;
 
   private createRbdFromTaskImageSpec(imageSpecStr: string): RbdModel {
     const imageSpec = ImageSpec.fromString(imageSpecStr);
@@ -180,13 +185,24 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         this.getInvalidNameDisable(selection) ||
         selection.first().image_format === RBDImageFormat.V1
     };
+    const removeSchedulingAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      click: () => this.removeSchedulingModal(),
+      name: this.actionLabels.REMOVE_SCHEDULING,
+      disable: (selection: CdTableSelection) =>
+        this.getRemovingStatusDesc(selection) ||
+        this.getInvalidNameDisable(selection) ||
+        selection.first().schedule_info === undefined
+    };
     this.tableActions = [
       addAction,
       editAction,
       copyAction,
       flattenAction,
       deleteAction,
-      moveAction
+      moveAction,
+      removeSchedulingAction
     ];
   }
 
@@ -250,6 +266,12 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         prop: 'parent',
         flexGrow: 2,
         cellTemplate: this.parentTpl
+      },
+      {
+        name: $localize`Mirroring`,
+        prop: 'mirror_mode',
+        flexGrow: 3,
+        cellTemplate: this.mirroringTpl
       }
     ];
 
@@ -345,6 +367,19 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       this.tableStatus = new TableStatusViewCache();
     }
 
+    images.forEach((image) => {
+      if (image.schedule_info !== undefined) {
+        let scheduling: any[] = [];
+        const scheduleStatus = 'scheduled';
+        let nextSnapshotDate = +new Date(image.schedule_info.schedule_time);
+        const offset = new Date().getTimezoneOffset();
+        nextSnapshotDate = nextSnapshotDate + Math.abs(offset) * 60000;
+        scheduling.push(image.mirror_mode, scheduleStatus, nextSnapshotDate);
+        image.mirror_mode = scheduling;
+        scheduling = [];
+      }
+    });
+
     return images;
   }
 
@@ -427,6 +462,44 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     };
 
     this.modalRef = this.modalService.show(ConfirmationModalComponent, initialState);
+  }
+
+  editRequest() {
+    const request = new RbdFormEditRequestModel();
+    request.remove_scheduling = !request.remove_scheduling;
+    return request;
+  }
+
+  removeSchedulingModal() {
+    const imageName = this.selection.first().name;
+
+    const imageSpec = new ImageSpec(
+      this.selection.first().pool_name,
+      this.selection.first().namespace,
+      this.selection.first().name
+    );
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      actionDescription: 'remove scheduling on',
+      itemDescription: $localize`image`,
+      itemNames: [`${imageName}`],
+      submitActionObservable: () =>
+        new Observable((observer: Subscriber<any>) => {
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('rbd/edit', {
+                image_spec: imageSpec.toString()
+              }),
+              call: this.rbdService.update(imageSpec, this.editRequest())
+            })
+            .subscribe({
+              error: (resp) => observer.error(resp),
+              complete: () => {
+                this.modalRef.close();
+              }
+            });
+        })
+    });
   }
 
   hasSnapshots() {

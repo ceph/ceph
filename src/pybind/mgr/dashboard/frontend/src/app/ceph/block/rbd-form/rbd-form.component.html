@@ -68,7 +68,8 @@
                     name="pool"
                     class="form-control"
                     formControlName="pool"
-                    *ngIf="mode !== 'editing' && poolPermission.read">
+                    *ngIf="mode !== 'editing' && poolPermission.read"
+                    (change)="setPoolMirrorMode()">
               <option *ngIf="pools === null"
                       [ngValue]="null"
                       i18n>Loading...</option>
@@ -235,6 +236,62 @@
                          html="{{ feature.helperHtml }}">
               </cd-helper>
             </div>
+          </div>
+        </div>
+
+        <!-- Mirroring -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="mirroring"
+                     name="mirroring"
+                     (change)="setMirrorMode()"
+                     formControlName="mirroring">
+              <label class="custom-control-label"
+                     for="mirroring">Mirroring</label>
+              <cd-helper *ngIf="mirroring === false && this.currentPoolName">
+                <span i18n>You need to enable a <b>mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
+              </cd-helper>
+            </div>
+            <div *ngIf="mirroring">
+              <div class="custom-control custom-radio ml-2"
+                   *ngFor="let option of mirroringOptions">
+                <input type="radio"
+                       class="custom-control-input"
+                       [id]="option"
+                       [value]="option"
+                       name="mirroringMode"
+                       (change)="setExclusiveLock()"
+                       formControlName="mirroringMode"
+                       [attr.disabled]="(poolMirrorMode === 'pool' && option === 'snapshot') ? true : null">
+                <label class="custom-control-label"
+                       [for]="option">{{ option | titlecase }}</label>
+                <cd-helper *ngIf="poolMirrorMode === 'pool' && option === 'snapshot'">
+                  <span i18n>You need to enable <b>image mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
+                </cd-helper>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="rbdForm.getValue('mirroringMode') === 'snapshot' && mirroring">
+          <label class="cd-col-form-label"
+                 i18n>Schedule Interval
+          <cd-helper i18n-html
+                     html="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively.">
+          </cd-helper></label>
+          <div class="cd-col-form-input">
+            <input id="schedule"
+                   name="schedule"
+                   class="form-control"
+                   type="text"
+                   formControlName="schedule"
+                   i18n-placeholder
+                   placeholder="e.g., 12h or 1d or 10m"
+                   [attr.disabled]="(mode === rbdFormMode.editing) ? true : null">
           </div>
         </div>
 
