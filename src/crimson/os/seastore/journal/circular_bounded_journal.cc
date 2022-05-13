@@ -22,7 +22,6 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", journal_tail=" << header.journal_tail
 	     << ", applied_to="<< header.applied_to
 	     << ", written_to=" << header.written_to
-	     << ", header_checksum=" << header.header_checksum
              << ")";
 }
 
@@ -89,6 +88,16 @@ ceph::bufferlist CircularBoundedJournal::encode_header()
 {
   bufferlist bl;
   encode(header, bl);
+  auto header_crc_filler = bl.append_hole(sizeof(checksum_t));
+  auto bliter = bl.cbegin();
+  auto header_crc = bliter.crc32c(
+    ceph::encoded_sizeof_bounded<cbj_header_t>(),
+    -1);
+  ceph_le32 header_crc_le;
+  header_crc_le = header_crc;
+  header_crc_filler.copy_in(
+    sizeof(checksum_t),
+    reinterpret_cast<const char *>(&header_crc_le));
   return bl;
 }
 
@@ -326,6 +335,14 @@ CircularBoundedJournal::read_header(rbm_abs_addr start)
       ERROR("read_header: unable to read header block");
       return crimson::ct_error::enoent::make();
     }
+    auto bliter = bl.cbegin();
+    auto test_crc = bliter.crc32c(
+      ceph::encoded_sizeof_bounded<cbj_header_t>(),
+      -1);
+    ceph_le32 recorded_crc_le;
+    decode(recorded_crc_le, bliter);
+    uint32_t recorded_crc = recorded_crc_le;
+    ceph_assert(test_crc == recorded_crc);
     return read_header_ret(
       read_header_ertr::ready_future_marker{},
       std::make_pair(cbj_header, bl)
@@ -561,6 +578,7 @@ CircularBoundedJournal::write_header()
     DEBUG("unable to encode header block from underlying deivce");
     return crimson::ct_error::input_output_error::make();
   }
+  ceph_assert(bl.length() + sizeof(checksum_t) < get_block_size());
   DEBUG(
     "sync header of CircularBoundedJournal, length {}",
     bl.length());
