@@ -17,6 +17,7 @@
 #include "common/Formatter.h"
 #include "rgw_formats.h"
 #include "rgw_metadata.h"
+#include "rgw_sal_fwd.h"
 
 #define RGW_USER_ANON_ID "anonymous"
 
@@ -31,9 +32,6 @@ class RGWBucketCtl;
 class RGWUserBuckets;
 
 class RGWGetUserStats_CB;
-namespace rgw { namespace sal {
-class Store;
-} }
 
 /**
  * A string wrapper that includes encode/decode functions

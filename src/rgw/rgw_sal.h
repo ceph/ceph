@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "rgw_sal_fwd.h"
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
 #include "common/tracer.h"
@@ -201,22 +202,10 @@ namespace rgw { namespace sal {
 
 #define RGW_SAL_VERSION 1
 
-class User;
-class Bucket;
-class Object;
-class BucketList;
-class MultipartUpload;
 struct MPSerializer;
-class Lifecycle;
-class Notification;
 class GCChain;
-class Writer;
-class Zone;
-class LuaScriptManager;
 class RGWOIDCProvider;
 class RGWRole;
-class PlacementTier;
-struct RGWRoleInfo;
 
 enum AttrsMod {
   ATTRSMOD_NONE    = 0,
@@ -269,7 +258,7 @@ class Completions {
 };
 
 /** A list of key-value attributes */
-using Attrs = std::map<std::string, ceph::buffer::list>;
+  using Attrs = std::map<std::string, ceph::buffer::list>;
 
 /**
  * @brief Base singleton representing a Store or stacking layer
