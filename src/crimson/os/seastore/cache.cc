@@ -1257,8 +1257,6 @@ void Cache::complete_commit(
   SUBTRACET(seastore_t, "final_block_start={}, seq={}",
             t, final_block_start, seq);
 
-  may_roll_backref_buffer(final_block_start);
-
   std::vector<backref_buf_entry_ref> backref_list;
   t.for_each_fresh_block([&](const CachedExtentRef &i) {
     bool is_inline = false;
@@ -1412,7 +1410,6 @@ Cache::close_ertr::future<> Cache::close()
     dirty.erase(i++);
     intrusive_ptr_release(ptr);
   }
-  backref_bufs_to_flush.clear();
   backref_extents.clear();
   backref_buffer.reset();
   assert(stats.dirty_bytes == 0);
@@ -1448,7 +1445,6 @@ Cache::replay_delta(
 	journal_seq, alloc_replay_from, delta);
       return replay_delta_ertr::now();
     }
-    may_roll_backref_buffer(journal_seq.offset);
     alloc_delta_t alloc_delta;
     decode(alloc_delta, delta.bl);
     std::vector<backref_buf_entry_ref> backref_list;

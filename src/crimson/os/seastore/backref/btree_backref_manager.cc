@@ -213,60 +213,24 @@ BtreeBackrefManager::batch_insert_from_cache(
   DEBUGT("insert up to {}", t, limit);
   return seastar::do_with(
     limit,
-    cache.get_backref_bufs_to_flush().begin(),
     JOURNAL_SEQ_NULL,
-    [this, &t, max](auto &limit, auto &iter, auto &inserted_to) {
-    return trans_intr::repeat(
-      [&iter, this, &limit, &t, max, &inserted_to]()
-      -> batch_insert_iertr::future<seastar::stop_iteration> {
-      if (iter == cache.get_backref_bufs_to_flush().end())
-	return seastar::make_ready_future<seastar::stop_iteration>(
-	  seastar::stop_iteration::yes);
-      auto &bbr = *iter;
-      LOG_PREFIX(BtreeBackrefManager::batch_insert_from_cache);
-      DEBUGT("backref buffer starting seq: {}", t, bbr->backrefs.begin()->first);
-      if (bbr->backrefs.begin()->first <= limit) {
-	return batch_insert(
-	  t,
-	  bbr,
-	  limit,
-	  max
-	).si_then([max, &iter, &inserted_to, &t](auto new_inserted_to) {
-	  assert(inserted_to == JOURNAL_SEQ_NULL
-	    || new_inserted_to >= inserted_to);
-	  inserted_to = new_inserted_to;
-	  if (t.get_num_fresh_backref() * BACKREF_NODE_SIZE < max) {
-	    iter++;
-	    return seastar::make_ready_future<seastar::stop_iteration>(
-	      seastar::stop_iteration::no);
-	  } else {
-	    return seastar::make_ready_future<seastar::stop_iteration>(
-	      seastar::stop_iteration::yes);
-	  }
-	});
-      } else {
-	return seastar::make_ready_future<seastar::stop_iteration>(
-	  seastar::stop_iteration::yes);
-      }
-    }).si_then([&inserted_to, this, &iter, &limit, &t, max] {
-      auto &backref_buffer = cache.get_newest_backref_buffer();
-      if (iter == cache.get_backref_bufs_to_flush().end()
-	  && backref_buffer) {
-	return batch_insert(
-	  t,
-	  backref_buffer,
-	  limit,
-	  max
-	).si_then([&inserted_to](auto new_inserted_to) {
-	  assert(inserted_to == JOURNAL_SEQ_NULL
-	    || new_inserted_to >= inserted_to);
-	  return seastar::make_ready_future<journal_seq_t>(
-	    std::move(new_inserted_to));
-	});
-      }
-      return batch_insert_iertr::make_ready_future<journal_seq_t>(
-	std::move(inserted_to));
-    });
+    [this, &t, max](auto &limit, auto &inserted_to) {
+    auto &backref_buffer = cache.get_backref_buffer();
+    if (backref_buffer) {
+      return batch_insert(
+	t,
+	backref_buffer,
+	limit,
+	max
+      ).si_then([&inserted_to](auto new_inserted_to) {
+	assert(inserted_to == JOURNAL_SEQ_NULL
+	  || new_inserted_to >= inserted_to);
+	return seastar::make_ready_future<journal_seq_t>(
+	  std::move(new_inserted_to));
+      });
+    }
+    return batch_insert_iertr::make_ready_future<journal_seq_t>(
+      std::move(inserted_to));
   });
 }
 
