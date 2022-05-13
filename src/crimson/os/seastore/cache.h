@@ -635,12 +635,11 @@ public:
   void trim_backref_bufs(const journal_seq_t &trim_to) {
     LOG_PREFIX(Cache::trim_backref_bufs);
     SUBDEBUG(seastore_cache, "trimming to {}", trim_to);
-    if (backref_buffer) {
+    if (backref_buffer && !backref_buffer->backrefs.empty()) {
       assert(backref_buffer->backrefs.rbegin()->first >= trim_to);
       auto iter = backref_buffer->backrefs.upper_bound(trim_to);
-      SUBDEBUG(seastore_cache, "trim backref buffer up to {}", iter->first);
       backref_buffer->backrefs.erase(
-        backref_buffer->backrefs.begin(), iter);
+	backref_buffer->backrefs.begin(), iter);
     }
   }
 
