@@ -796,8 +796,7 @@ public:
 
   void mark_space_free(
     paddr_t addr,
-    extent_len_t len,
-    bool force = false);
+    extent_len_t len);
 
   SpaceTrackerIRef get_empty_space_tracker() const {
     return space_tracker->make_empty();

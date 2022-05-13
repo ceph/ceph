@@ -102,6 +102,8 @@ public:
     paddr_t start,
     paddr_t end) = 0;
 
+  virtual bool backref_should_be_removed(paddr_t paddr) = 0;
+
   using retrieve_backref_extents_iertr = trans_iertr<
     crimson::errorator<
       crimson::ct_error::input_output_error>
