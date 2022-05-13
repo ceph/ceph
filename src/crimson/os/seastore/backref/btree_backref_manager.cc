@@ -218,17 +218,17 @@ BtreeBackrefManager::merge_cached_backrefs(
     auto &backref_buffer = cache.get_backref_buffer();
     if (backref_buffer) {
       return seastar::do_with(
-	backref_buffer->backrefs.begin(),
+	backref_buffer->backrefs_by_seq.begin(),
 	JOURNAL_SEQ_NULL,
 	[this, &t, &limit, &backref_buffer, max](auto &iter, auto &inserted_to) {
 	return trans_intr::repeat(
 	  [&iter, this, &t, &limit, &backref_buffer, max, &inserted_to]()
 	  -> merge_cached_backrefs_iertr::future<seastar::stop_iteration> {
-	  if (iter == backref_buffer->backrefs.end())
+	  if (iter == backref_buffer->backrefs_by_seq.end())
 	    return seastar::make_ready_future<seastar::stop_iteration>(
 	      seastar::stop_iteration::yes);
 	  auto &seq = iter->first;
-	  auto &backref_list = iter->second;
+	  auto &backref_list = iter->second.br_list;
 	  LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
 	  DEBUGT("seq {}, limit {}, num_fresh_backref {}"
 	    , t, seq, limit, t.get_num_fresh_backref());
@@ -238,22 +238,22 @@ BtreeBackrefManager::merge_cached_backrefs(
 	      backref_list,
 	      [this, &t](auto &backref) {
 	      LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
-	      if (backref->laddr != L_ADDR_NULL) {
+	      if (backref.laddr != L_ADDR_NULL) {
 		DEBUGT("new mapping: {}~{} -> {}",
-		  t, backref->paddr, backref->len, backref->laddr);
+		  t, backref.paddr, backref.len, backref.laddr);
 		return new_mapping(
 		  t,
-		  backref->paddr,
-		  backref->len,
-		  backref->laddr,
-		  backref->type).si_then([](auto &&pin) {
+		  backref.paddr,
+		  backref.len,
+		  backref.laddr,
+		  backref.type).si_then([](auto &&pin) {
 		  return seastar::now();
 		});
 	      } else {
-		DEBUGT("remove mapping: {}", t, backref->paddr);
+		DEBUGT("remove mapping: {}", t, backref.paddr);
 		return remove_mapping(
 		  t,
-		  backref->paddr).si_then([](auto&&) {
+		  backref.paddr).si_then([](auto&&) {
 		  return seastar::now();
 		}).handle_error_interruptible(
 		  crimson::ct_error::input_output_error::pass_further(),
@@ -500,6 +500,10 @@ BtreeBackrefManager::retrieve_backref_extents(
       extents.emplace_back(std::move(ext));
     });
   });
+}
+
+bool BtreeBackrefManager::backref_should_be_removed(paddr_t paddr) {
+  return cache.backref_should_be_removed(paddr);
 }
 
 } // namespace crimson::os::seastore::backref

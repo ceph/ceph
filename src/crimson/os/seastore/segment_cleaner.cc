@@ -1271,11 +1271,10 @@ void SegmentCleaner::mark_space_used(
 
 void SegmentCleaner::mark_space_free(
   paddr_t addr,
-  extent_len_t len,
-  bool force)
+  extent_len_t len)
 {
   LOG_PREFIX(SegmentCleaner::mark_space_free);
-  if (!init_complete && !force) {
+  if (!init_complete) {
     return;
   }
   if (addr.get_addr_type() != addr_types_t::SEGMENT) {

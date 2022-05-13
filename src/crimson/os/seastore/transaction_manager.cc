@@ -134,7 +134,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    t,
 		    addr,
 		    len);
-		  if (addr.is_real()) {
+		  if (addr.is_real() &&
+		      !backref_manager->backref_should_be_removed(addr)) {
 		    segment_cleaner->mark_space_used(
 		      addr,
 		      len ,
@@ -161,14 +162,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		      backref.len,
 		      seastar::lowres_system_clock::time_point(),
 		      seastar::lowres_system_clock::time_point(),
-		      true);
-		  }
-		  auto &del_backrefs = backref_manager->get_cached_backref_removals();
-		  DEBUG("marking {} backrefs free", del_backrefs.size());
-		  for (auto &del_backref : del_backrefs) {
-		    segment_cleaner->mark_space_free(
-		      del_backref.paddr,
-		      del_backref.len,
 		      true);
 		  }
 		  return seastar::now();

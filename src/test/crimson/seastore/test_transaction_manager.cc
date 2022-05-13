@@ -402,8 +402,9 @@ struct transaction_manager_test_t :
       [this, &tracker](auto &t) {
 	return backref_manager->scan_mapped_space(
 	  t,
-	  [&tracker](auto offset, auto len, depth_t) {
-	    if (offset.get_addr_type() == addr_types_t::SEGMENT) {
+	  [&tracker, this](auto offset, auto len, depth_t) {
+	    if (offset.get_addr_type() == addr_types_t::SEGMENT &&
+		!backref_manager->backref_should_be_removed(offset)) {
 	      logger().debug("check_usage: tracker alloc {}~{}",
 		offset, len);
 	      tracker->allocate(
@@ -421,17 +422,6 @@ struct transaction_manager_test_t :
 		  backref.paddr.as_seg_paddr().get_segment_id(),
 		  backref.paddr.as_seg_paddr().get_segment_off(),
 		  backref.len);
-	      }
-	    }
-	    auto &del_backrefs = backref_manager->get_cached_backref_removals();
-	    for (auto &del_backref : del_backrefs) {
-	      if (del_backref.paddr.get_addr_type() == addr_types_t::SEGMENT) {
-		logger().debug("check_usage: by backref, tracker release {}~{}",
-		  del_backref.paddr, del_backref.len);
-		tracker->release(
-		  del_backref.paddr.as_seg_paddr().get_segment_id(),
-		  del_backref.paddr.as_seg_paddr().get_segment_off(),
-		  del_backref.len);
 	      }
 	    }
 	    return seastar::now();
