@@ -27,6 +27,10 @@ Notable Changes
 * A health warning will now be reported if the ``require-osd-release`` flag is not
   set to the appropriate release after a cluster upgrade.
 
+* CephFS: Upgrading Ceph Metadata Servers when using multiple active MDSs requires
+  ensuring no pending stray entries which are directories are present for active
+  ranks except rank 0. See :ref:`upgrading_from_octopus_or_nautilus`.
+
 Changelog
 ---------
 
@@ -1293,6 +1297,8 @@ CephFS distributed file system
   through a new ``ceph-dokan`` utility which operates via the Dokan userspace
   API, similar to FUSE. For more information, see :ref:`ceph-dokan`.
 
+
+.. _upgrading_from_octopus_or_nautilus:
 
 Upgrading from Octopus or Nautilus
 ----------------------------------
