@@ -28,14 +28,16 @@ TransactionManager::TransactionManager(
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef &&epm,
-  BackrefManagerRef&& backref_manager)
+  BackrefManagerRef&& backref_manager,
+  tm_make_config_t config)
   : segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
     backref_manager(std::move(backref_manager)),
-    sm_group(*segment_cleaner->get_segment_manager_group())
+    sm_group(*segment_cleaner->get_segment_manager_group()),
+    config(config)
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -668,7 +670,8 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
     std::move(cache),
     std::move(lba_manager),
     std::move(epm),
-    std::move(backref_manager));
+    std::move(backref_manager),
+    config);
 }
 
 }
