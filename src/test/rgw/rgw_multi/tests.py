@@ -1590,3 +1590,75 @@ def test_bucket_sync_run_basic_incremental():
             secondary.zone.start()
 
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def trash_bucket(zone, bucket_name):
+    """
+    Remove objects through radosgw-admin, zapping bilog to prevent the deletes
+    from replicating.
+    """
+    objs = get_obj_names(zone, bucket_name, 10000)
+    # Delete the objects
+    for obj in objs:
+        cmd = ['object', 'rm'] + zone.zone_args()
+        cmd += ['--bucket', bucket_name]
+        cmd += ['--object', obj]
+        zone.cluster.admin(cmd)
+
+    # Zap the bilog
+    cmd = ['bilog', 'trim'] + zone.zone_args()
+    cmd += ['--bucket', bucket_name]
+    zone.cluster.admin(cmd)
+
+@attr('bucket_reshard')
+def test_zap_init_bucket_sync_run():
+    """
+    Create several generations of objects, trash them, then run bucket sync init
+    and bucket sync run.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # Write zeroth generation
+    for obj in range(1, 6):
+        k = new_key(primary, bucket.name, f'obj{obj * 11}')
+        k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # Write several more generations
+    generations = [17, 19, 23, 29, 31, 37]
+    for num_shards in generations:
+        reshard_bucket(primary.zone, bucket.name, num_shards)
+        for obj in range(1, 6):
+            k = new_key(primary, bucket.name, f'obj{obj * num_shards}')
+            k.set_contents_from_string('foo')
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+
+    # Stop gateways, trash bucket, init, sync, and restart for every secondary
+    for secondary in zonegroup_conns.rw_zones[1:]:
+        try:
+            secondary.zone.stop()
+
+            trash_bucket(secondary.zone, bucket.name)
+
+            cmd = ['bucket', 'sync', 'init'] + secondary.zone.zone_args()
+            cmd += ['--bucket', bucket.name]
+            cmd += ['--source-zone', primary.name]
+            secondary.zone.cluster.admin(cmd)
+
+            cmd = ['bucket', 'sync', 'run'] + secondary.zone.zone_args()
+            cmd += ['--bucket', bucket.name, '--source-zone', primary.name]
+            secondary.zone.cluster.admin(cmd)
+
+            bucket_keys_eq(primary.zone, secondary.zone, bucket.name)
+
+        finally:
+            # Do this as a finally so we bring the zone back up even on error.
+            secondary.zone.start()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
