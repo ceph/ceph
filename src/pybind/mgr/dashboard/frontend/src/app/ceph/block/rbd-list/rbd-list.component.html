@@ -24,7 +24,7 @@
   </cd-rbd-details>
 </cd-table>
 
-<ng-template #usageNotAvailableTooltipTpl>
+<ng-template #scheduleStatus>
   <div i18n
        [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
 </ng-template>
@@ -54,6 +54,18 @@
   <span *ngIf="value">{{ value.pool_name }}<span
           *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}@{{ value.snap_name }}</span>
   <span *ngIf="!value">-</span>
+</ng-template>
+
+<ng-template #mirroringTpl
+             let-value="value">
+  <span *ngIf="value.length === 3; else probb"
+        class="badge badge-info">{{ value[0] }}</span>&nbsp;
+  <span *ngIf="value.length === 3"
+        class="badge badge-info"
+        [ngbTooltip]="'Next scheduled snapshot on' + ' ' + (value[2] | cdDate)">{{ value[1] }}</span>
+  <ng-template #probb>
+    <span class="badge badge-info">{{ value }}</span>
+  </ng-template>
 </ng-template>
 
 <ng-template #flattenTpl

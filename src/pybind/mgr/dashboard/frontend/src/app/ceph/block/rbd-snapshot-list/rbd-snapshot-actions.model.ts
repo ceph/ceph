@@ -34,27 +34,31 @@ export class RbdSnapshotActionsModel {
     this.rename = {
       permission: 'update',
       icon: Icons.edit,
-      name: actionLabels.RENAME
+      name: actionLabels.RENAME,
+      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
     };
     this.protect = {
       permission: 'update',
       icon: Icons.lock,
       visible: (selection: CdTableSelection) =>
         selection.hasSingleSelection && !selection.first().is_protected,
-      name: actionLabels.PROTECT
+      name: actionLabels.PROTECT,
+      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
     };
     this.unprotect = {
       permission: 'update',
       icon: Icons.unlock,
       visible: (selection: CdTableSelection) =>
         selection.hasSingleSelection && selection.first().is_protected,
-      name: actionLabels.UNPROTECT
+      name: actionLabels.UNPROTECT,
+      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
     };
     this.clone = {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        this.getCloneDisableDesc(selection, this.featuresName),
+        this.getCloneDisableDesc(selection, this.featuresName) ||
+        this.disableForMirrorSnapshot(selection),
       icon: Icons.clone,
       name: actionLabels.CLONE
     };
@@ -62,21 +66,29 @@ export class RbdSnapshotActionsModel {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        !selection.hasSingleSelection || selection.first().cdExecuting,
+        !selection.hasSingleSelection ||
+        selection.first().cdExecuting ||
+        this.disableForMirrorSnapshot(selection),
       icon: Icons.copy,
       name: actionLabels.COPY
     };
     this.rollback = {
       permission: 'update',
       icon: Icons.undo,
-      name: actionLabels.ROLLBACK
+      name: actionLabels.ROLLBACK,
+      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
     };
     this.deleteSnap = {
       permission: 'delete',
       icon: Icons.destroy,
       disable: (selection: CdTableSelection) => {
         const first = selection.first();
-        return !selection.hasSingleSelection || first.cdExecuting || first.is_protected;
+        return (
+          !selection.hasSingleSelection ||
+          first.cdExecuting ||
+          first.is_protected ||
+          this.disableForMirrorSnapshot(selection)
+        );
       },
       name: actionLabels.DELETE
     };
@@ -107,5 +119,13 @@ export class RbdSnapshotActionsModel {
     }
 
     return true;
+  }
+
+  disableForMirrorSnapshot(selection: CdTableSelection) {
+    return (
+      selection.hasSingleSelection &&
+      selection.first().mirror_mode === 'snapshot' &&
+      selection.first().name.includes('.mirror.')
+    );
   }
 }
