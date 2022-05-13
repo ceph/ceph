@@ -1092,9 +1092,13 @@ Upgrading non-cephadm clusters
 
 #. Upgrade all CephFS MDS daemons. For each CephFS file system,
 
-   #. Disable standby_replay:
+   #. Disable FSMap sanity checks::
 
-   # ceph fs set <fs_name> allow_standby_replay false
+        # ceph config set mon mon_mds_skip_sanity true
+
+   #. Disable standby_replay::
+
+        # ceph fs set <fs_name> allow_standby_replay false
 
    #. Reduce the number of ranks to 1.  (Make note of the original
       number of MDS daemons first if you plan to restore it later.)::
@@ -1127,6 +1131,10 @@ Upgrading non-cephadm clusters
    #. Restore the original value of ``max_mds`` for the volume::
 
 	# ceph fs set <fs_name> max_mds <original_max_mds>
+
+   #. Remove `mon_mds_skip_sanity` setting::
+
+        # ceph config rm mon mon_mds_skip_sanity
 
 #. Upgrade all radosgw daemons by upgrading packages and restarting
    daemons on all hosts::
