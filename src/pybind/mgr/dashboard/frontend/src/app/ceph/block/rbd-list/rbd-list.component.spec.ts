@@ -314,11 +314,19 @@ describe('RbdListComponent', () => {
 
     expect(tableActions).toEqual({
       'create,update,delete': {
-        actions: ['Create', 'Edit', 'Copy', 'Flatten', 'Delete', 'Move to Trash'],
+        actions: [
+          'Create',
+          'Edit',
+          'Copy',
+          'Flatten',
+          'Delete',
+          'Move to Trash',
+          'Remove Scheduling'
+        ],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,update': {
-        actions: ['Create', 'Edit', 'Copy', 'Flatten'],
+        actions: ['Create', 'Edit', 'Copy', 'Flatten', 'Remove Scheduling'],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,delete': {
@@ -330,11 +338,11 @@ describe('RbdListComponent', () => {
         primary: { multiple: 'Create', executing: 'Copy', single: 'Copy', no: 'Create' }
       },
       'update,delete': {
-        actions: ['Edit', 'Flatten', 'Delete', 'Move to Trash'],
+        actions: ['Edit', 'Flatten', 'Delete', 'Move to Trash', 'Remove Scheduling'],
         primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       update: {
-        actions: ['Edit', 'Flatten'],
+        actions: ['Edit', 'Flatten', 'Remove Scheduling'],
         primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       delete: {
