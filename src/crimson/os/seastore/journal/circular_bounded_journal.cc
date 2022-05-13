@@ -21,7 +21,6 @@ std::ostream &operator<<(std::ostream &out,
 	     << ", size=" << header.size
 	     << ", journal_tail=" << header.journal_tail
 	     << ", applied_to="<< header.applied_to
-	     << ", written_to=" << header.written_to
              << ")";
 }
 
@@ -43,12 +42,12 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
     head.block_size = config.block_size;
     head.size = config.total_size - device->get_block_size();
     head.journal_tail = device->get_block_size();
-    head.written_to = head.journal_tail;
     head.applied_to = head.journal_tail;
     head.device_id = config.device_id;
     start_dev_addr = config.start;
     encode(head, bl);
     header = head;
+    written_to = head.journal_tail;
     DEBUG(
       "initialize header block in CircularBoundedJournal, length {}",
       bl.length());
