@@ -974,6 +974,19 @@ recovering OSDs).  (This is optional, but recommended.)
   <= 16.2.6, because this can lead to data corruption, details in
   https://tracker.ceph.com/issues/53062.
 
+.. note::
+   When using multiple active Ceph Metadata Servers, ensure that there are
+   no pending stray entries which are directories for active ranks except rank 0 as
+   starting an upgrade (which sets `max_mds` to 1) could crash the Ceph
+   Metadata Server. The following command should return zero (0) stray entries
+   for all stray directories::
+
+     # for idx in {0..9}; do ceph tell mds.<rank> dump tree ~mdsdir/stray$idx| jq '.[] | select (.nlink == 0 and .dir_layout.dir_hash > 0) | .stray_prior_path' | wc -l; done
+
+   Ensure that all active ranks except rank 0 are checked for absence of stray
+   entries which are directories (using the above command). Details are captured
+   in http://tracker.ceph.com/issues/53597.
+
 Upgrading cephadm clusters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
