@@ -17,11 +17,9 @@
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 #include "services/svc_meta_be.h"
+#include "rgw_sal_fwd.h"
 
 
-namespace rgw { namespace sal {
-class Store;
-} }
 class RGWCoroutine;
 class JSONObj;
 struct RGWObjVersionTracker;

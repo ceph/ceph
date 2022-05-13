@@ -38,6 +38,7 @@
 #include "common/Throttle.h"
 #include "common/ceph_mutex.h"
 #include "rgw_cache.h"
+#include "rgw_sal_fwd.h"
 
 struct D3nDataCache;
 
@@ -303,7 +304,6 @@ class RGWCoroutinesManagerRegistry;
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
 namespace rgw { namespace sal {
-  class Store;
   class RadosStore;
   class MPRadosSerializer;
   class LCRadosSerializer;
