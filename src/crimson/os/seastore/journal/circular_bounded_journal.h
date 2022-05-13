@@ -215,8 +215,6 @@ public:
     // address to represent where last appllied record is written
     rbm_abs_addr applied_to = 0;
 
-    checksum_t header_checksum = 0;       // checksum of entire cbj_header_t
-
     device_id_t device_id;
 
     DENC(cbj_header_t, v, p) {
@@ -231,7 +229,6 @@ public:
       denc(v.written_to, p);
       denc(v.applied_to, p);
 
-      denc(v.header_checksum, p);
       denc(v.device_id, p);
 
       DENC_FINISH(p);
