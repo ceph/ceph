@@ -102,18 +102,16 @@ ceph::bufferlist CircularBoundedJournal::encode_header()
 
 CircularBoundedJournal::open_for_write_ret CircularBoundedJournal::open_for_write()
 {
-  if (initialized) {
-    paddr_t paddr = convert_abs_addr_to_paddr(
-      get_written_to(),
-      header.device_id);
-    return open_for_write_ret(
-      open_for_write_ertr::ready_future_marker{},
-      journal_seq_t{
-	cur_segment_seq,
-	paddr
-      });
-  }
-  return open_device_read_header(CBJOURNAL_START_ADDRESS);
+  ceph_assert(initialized);
+  paddr_t paddr = convert_abs_addr_to_paddr(
+    get_written_to(),
+    header.device_id);
+  return open_for_write_ret(
+    open_for_write_ertr::ready_future_marker{},
+    journal_seq_t{
+      cur_segment_seq,
+      paddr
+  });
 }
 
 CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()

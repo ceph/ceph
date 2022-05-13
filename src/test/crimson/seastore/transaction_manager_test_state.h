@@ -208,10 +208,14 @@ protected:
       return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->mkfs(
 	config
       ).safe_then([this]() {
-	return tm->mkfs(
-	).handle_error(
-	  crimson::ct_error::assert_all{"Error in mkfs"}
-	);
+	return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
+	  open_device_read_header(journal::CBJOURNAL_START_ADDRESS
+	).safe_then([this](auto addr) {
+	  return tm->mkfs(
+	  ).handle_error(
+	    crimson::ct_error::assert_all{"Error in mkfs"}
+	  );
+	});
       }).handle_error(
 	crimson::ct_error::assert_all{"Error in mkfs"}
       );
