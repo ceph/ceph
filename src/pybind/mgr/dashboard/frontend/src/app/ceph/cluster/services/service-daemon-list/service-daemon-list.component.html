@@ -84,8 +84,40 @@
     </li>
   </ul>
   <ng-template #noEventsAvailable>
-    <div *ngIf="events?.length === 0">
+    <div *ngIf="events?.length === 0"
+         class="list-group-item">
       <span>No data available</span>
     </div>
   </ng-template>
 </ng-template>
+
+<ng-template #serviceDaemonDetailsTpl>
+  <cd-table *ngIf="hasOrchestrator"
+            #daemonsTable
+            [data]="daemons"
+            selectionType="single"
+            [columns]="columns"
+            columnMode="flex"
+            identifier="daemon_name"
+            (fetchData)="getDaemons($event)"
+            (updateSelection)="updateSelection($event)">
+    <cd-table-actions id="service-daemon-list-actions"
+                      class="table-actions"
+                      [selection]="selection"
+                      [permission]="permissions.hosts"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+  </cd-table>
+</ng-template>
+
+<ng-template #cpuTpl
+             let-row="row">
+  <cd-usage-bar [total]="total"
+                [calculatePerc]="false"
+                [used]="row.cpu_percentage"
+                [isBinary]="false"
+                [warningThreshold]="warningThreshold"
+                [errorThreshold]="errorThreshold">
+  </cd-usage-bar>
+</ng-template>
+
