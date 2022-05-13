@@ -275,7 +275,7 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
     // Create a new bucket: (1) Add a key/value pair in the
     // bucket instance index. (2) Create a new bucket index.
     MotrBucket* mbucket = static_cast<MotrBucket*>(bucket.get());
-    ret = mbucket->put_info(dpp, y, ceph::real_time())? :
+    ret = mbucket->put_info(dpp, true, ceph::real_time())? :
           mbucket->create_bucket_index() ? :
           mbucket->create_multipart_indices();
     if (ret < 0)
@@ -721,9 +721,6 @@ int MotrBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::re
   bufferlist bl;
   struct MotrBucketInfo mbinfo;
   string tenant_bkt_name = get_bucket_name(info.bucket.tenant, info.bucket.name);
-  
-  // Set exclusive to false for put bucket tags
-  exclusive = (attrs.find(RGW_ATTR_TAGS) == attrs.end());
 
   ldpp_dout(dpp, 20) << "put_info(): bucket_id=" << info.bucket.bucket_id << dendl;
   mbinfo.info = info;
@@ -901,7 +898,8 @@ int MotrBucket::merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& new_
   for (auto& it : new_attrs)
     attrs[it.first] = it.second;
 
-  return put_info(dpp, y, ceph::real_time());
+  // Call put_info with false to update the attributes
+  return put_info(dpp, false, ceph::real_time());
 }
 
 int MotrBucket::try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime)
