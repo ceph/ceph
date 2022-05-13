@@ -456,4 +456,78 @@ void BtreeBackrefManager::complete_transaction(
   }
 }
 
+Cache::backref_buf_entry_query_set_t
+BtreeBackrefManager::get_cached_backrefs_in_range(
+  paddr_t start,
+  paddr_t end)
+{
+  return cache.get_backrefs_in_range(start, end);
+}
+
+Cache::backref_buf_entry_query_set_t
+BtreeBackrefManager::get_cached_backref_removals_in_range(
+  paddr_t start,
+  paddr_t end)
+{
+  return cache.get_del_backrefs_in_range(start, end);
+}
+
+const backref_buf_entry_t::set_t&
+BtreeBackrefManager::get_cached_backref_removals()
+{
+  return cache.get_del_backrefs();
+}
+
+const backref_buf_entry_t::set_t&
+BtreeBackrefManager::get_cached_backrefs()
+{
+  return cache.get_backrefs();
+}
+
+backref_buf_entry_t
+BtreeBackrefManager::get_cached_backref_removal(paddr_t addr)
+{
+  return cache.get_del_backref(addr);
+}
+
+Cache::backref_extent_buf_entry_query_set_t
+BtreeBackrefManager::get_cached_backref_extents_in_range(
+  paddr_t start,
+  paddr_t end)
+{
+  return cache.get_backref_extents_in_range(start, end);
+}
+
+void BtreeBackrefManager::cache_new_backref_extent(
+  paddr_t paddr,
+  extent_types_t type)
+{
+  return cache.add_backref_extent(paddr, type);
+}
+
+BtreeBackrefManager::retrieve_backref_extents_ret
+BtreeBackrefManager::retrieve_backref_extents(
+  Transaction &t,
+  Cache::backref_extent_buf_entry_query_set_t &&backref_extents,
+  std::vector<CachedExtentRef> &extents)
+{
+  return trans_intr::parallel_for_each(
+    backref_extents,
+    [this, &extents, &t](auto &ent) {
+    // only the gc fiber which is single can rewrite backref extents,
+    // so it must be alive
+    assert(is_backref_node(ent.type));
+    LOG_PREFIX(BtreeBackrefManager::retrieve_backref_extents);
+    DEBUGT("getting backref extent of type {} at {}",
+      t,
+      ent.type,
+      ent.paddr);
+    return cache.get_extent_by_type(
+      t, ent.type, ent.paddr, L_ADDR_NULL, BACKREF_NODE_SIZE
+    ).si_then([&extents](auto ext) {
+      extents.emplace_back(std::move(ext));
+    });
+  });
+}
+
 } // namespace crimson::os::seastore::backref
