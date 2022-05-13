@@ -102,7 +102,7 @@ ceph::bufferlist CircularBoundedJournal::encode_header()
 
 CircularBoundedJournal::open_for_write_ret CircularBoundedJournal::open_for_write()
 {
-  if (init) {
+  if (initialized) {
     paddr_t paddr = convert_abs_addr_to_paddr(
       get_written_to(),
       header.device_id);
@@ -120,7 +120,7 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
 {
   return write_header(
   ).safe_then([this]() -> close_ertr::future<> {
-    init = false;
+    initialized = false;
     return device->close();
   }).handle_error(
     open_for_write_ertr::pass_further{},
@@ -134,7 +134,7 @@ CircularBoundedJournal::open_for_write_ret
 CircularBoundedJournal::open_device_read_header(rbm_abs_addr start)
 {
   LOG_PREFIX(CircularBoundedJournal::open_for_write);
-  ceph_assert(!init);
+  ceph_assert(!initialized);
   return _open_device(path
   ).safe_then([this, start, FNAME]() {
     return read_header(start
@@ -150,7 +150,7 @@ CircularBoundedJournal::open_device_read_header(rbm_abs_addr start)
 	get_written_to(),
 	header.device_id);
       start_dev_addr = start;
-      init = true;
+      initialized = true;
       return open_for_write_ret(
 	open_for_write_ertr::ready_future_marker{},
 	journal_seq_t{

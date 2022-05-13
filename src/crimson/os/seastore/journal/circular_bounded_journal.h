@@ -303,7 +303,7 @@ private:
    * true after open_device_read_header, set to false in close().
    * Indicates that device is open and in-memory header is valid.
    */
-  bool init = false;
+  bool initialized = false;
   segment_seq_t cur_segment_seq = 0; // segment seq to track the sequence to written records
   rbm_abs_addr start_dev_addr = 0; // cbjournal start address in device
   // start address where the newest record will be written
