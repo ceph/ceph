@@ -403,7 +403,6 @@ TEST_F(cbjournal_test_t, update_header)
     ASSERT_EQ(update_header.journal_tail, update_header.journal_tail);
     ASSERT_EQ(header.block_size, update_header.block_size);
     ASSERT_EQ(header.size, update_header.size);
-    ASSERT_EQ(header.written_to + record_total_size, update_header.written_to);
   });
 }
 
