@@ -371,10 +371,9 @@ struct transaction_manager_test_t :
     test_transaction_t &t,
     laddr_t hint,
     extent_len_t len,
-    char contents,
-    placement_hint_t p_hint = placement_hint_t::HOT) {
+    char contents) {
     auto extent = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->alloc_extent<TestBlock>(trans, hint, len, p_hint);
+      return tm->alloc_extent<TestBlock>(trans, hint, len);
     }).unsafe_get0();
     extent->set_contents(contents);
     EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
@@ -386,14 +385,12 @@ struct transaction_manager_test_t :
   TestBlockRef alloc_extent(
     test_transaction_t &t,
     laddr_t hint,
-    extent_len_t len,
-    placement_hint_t p_hint = placement_hint_t::HOT) {
+    extent_len_t len) {
     return alloc_extent(
       t,
       hint,
       len,
-      get_random_contents(),
-      p_hint);
+      get_random_contents());
   }
 
   bool check_usage() {
@@ -623,8 +620,7 @@ struct transaction_manager_test_t :
 		boost::make_counting_iterator(num),
 		[&, this](auto) {
 		  return tm->alloc_extent<TestBlock>(
-		    *(t.t), L_ADDR_MIN, size,
-		    tm_config.default_placement_hint
+		    *(t.t), L_ADDR_MIN, size
 		  ).si_then([&, this](auto extent) {
 		    extent->set_contents(get_random_contents());
 		    EXPECT_FALSE(
@@ -666,8 +662,7 @@ struct transaction_manager_test_t :
               auto extent = alloc_extent(
                 t,
                 i * BSIZE,
-                BSIZE,
-		tm_config.default_placement_hint);
+                BSIZE);
               ASSERT_EQ(i * BSIZE, extent->get_laddr());
               if (try_submit_transaction(std::move(t)))
                 break;
@@ -734,8 +729,7 @@ TEST_P(tm_single_device_test_t, basic)
 	t,
 	ADDR,
 	SIZE,
-	'a',
-	tm_config.default_placement_hint);
+	'a');
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -756,8 +750,7 @@ TEST_P(tm_single_device_test_t, mutate)
 	t,
 	ADDR,
 	SIZE,
-	'a',
-	tm_config.default_placement_hint);
+	'a');
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -798,8 +791,7 @@ TEST_P(tm_single_device_test_t, allocate_lba_conflict)
       t,
       ADDR,
       SIZE,
-      'a',
-      tm_config.default_placement_hint);
+      'a');
     ASSERT_EQ(ADDR, extent->get_laddr());
     check_mappings(t);
     check();
@@ -808,8 +800,7 @@ TEST_P(tm_single_device_test_t, allocate_lba_conflict)
       t2,
       ADDR2,
       SIZE,
-      'a',
-      tm_config.default_placement_hint);
+      'a');
     ASSERT_EQ(ADDR2, extent2->get_laddr());
     check_mappings(t2);
     extent2.reset();
@@ -829,8 +820,7 @@ TEST_P(tm_single_device_test_t, mutate_lba_conflict)
 	auto extent = alloc_extent(
 	  t,
 	  laddr_t(i * SIZE),
-	  SIZE,
-	  tm_config.default_placement_hint);
+	  SIZE);
       }
       check_mappings(t);
       submit_transaction(std::move(t));
@@ -872,8 +862,7 @@ TEST_P(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
 	auto extent = alloc_extent(
 	  t,
 	  laddr_t(i * SIZE),
-	  SIZE,
-	  tm_config.default_placement_hint);
+	  SIZE);
       }
       submit_transaction(std::move(t));
     }
@@ -903,8 +892,7 @@ TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 	t,
 	ADDR,
 	SIZE,
-	'a',
-	tm_config.default_placement_hint);
+	'a');
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       dec_ref(t, ADDR);
@@ -914,8 +902,7 @@ TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 	t,
 	ADDR,
 	SIZE,
-	'a',
-	tm_config.default_placement_hint);
+	'a');
 
       submit_transaction(std::move(t));
       check();
@@ -935,8 +922,7 @@ TEST_P(tm_single_device_test_t, split_merge_read_same_transaction)
 	auto extent = alloc_extent(
 	  t,
 	  laddr_t(i * SIZE),
-	  SIZE,
-	  tm_config.default_placement_hint);
+	  SIZE);
       }
       check_mappings(t);
       submit_transaction(std::move(t));
@@ -967,8 +953,7 @@ TEST_P(tm_single_device_test_t, inc_dec_ref)
 	t,
 	ADDR,
 	SIZE,
-	'a',
-	tm_config.default_placement_hint);
+	'a');
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
       check();
@@ -1014,8 +999,7 @@ TEST_P(tm_single_device_test_t, cause_lba_split)
 	t,
 	i * SIZE,
 	SIZE,
-	(char)(i & 0xFF),
-	tm_config.default_placement_hint);
+	(char)(i & 0xFF));
       ASSERT_EQ(i * SIZE, extent->get_laddr());
       submit_transaction(std::move(t));
     }
@@ -1035,8 +1019,7 @@ TEST_P(tm_single_device_test_t, random_writes)
       auto extent = alloc_extent(
 	t,
 	i * BSIZE,
-	BSIZE,
-	tm_config.default_placement_hint);
+	BSIZE);
       ASSERT_EQ(i * BSIZE, extent->get_laddr());
       submit_transaction(std::move(t));
     }
@@ -1054,8 +1037,7 @@ TEST_P(tm_single_device_test_t, random_writes)
 	  auto padding = alloc_extent(
 	    t,
 	    TOTAL + (k * PADDING_SIZE),
-	    PADDING_SIZE,
-	    tm_config.default_placement_hint);
+	    PADDING_SIZE);
 	  dec_ref(t, padding->get_laddr());
 	}
 	submit_transaction(std::move(t));
