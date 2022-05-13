@@ -1183,6 +1183,35 @@ private:
       (double)segments.get_total_bytes();
   }
 
+  /*
+   * Journal sizes
+   */
+  std::size_t get_dirty_journal_size() const {
+    auto journal_head = segments.get_journal_head();
+    if (journal_head == JOURNAL_SEQ_NULL ||
+        dirty_extents_replay_from == JOURNAL_SEQ_NULL) {
+      return 0;
+    }
+    return (journal_head.segment_seq - dirty_extents_replay_from.segment_seq) *
+           segments.get_segment_size() +
+           journal_head.offset.as_seg_paddr().get_segment_off() -
+           segments.get_segment_size() -
+           dirty_extents_replay_from.offset.as_seg_paddr().get_segment_off();
+  }
+
+  std::size_t get_alloc_journal_size() const {
+    auto journal_head = segments.get_journal_head();
+    if (journal_head == JOURNAL_SEQ_NULL ||
+        alloc_info_replay_from == JOURNAL_SEQ_NULL) {
+      return 0;
+    }
+    return (journal_head.segment_seq - alloc_info_replay_from.segment_seq) *
+           segments.get_segment_size() +
+           journal_head.offset.as_seg_paddr().get_segment_off() -
+           segments.get_segment_size() -
+           alloc_info_replay_from.offset.as_seg_paddr().get_segment_off();
+  }
+
   /**
    * should_block_on_gc
    *

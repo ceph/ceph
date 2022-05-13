@@ -501,6 +501,13 @@ void SegmentCleaner::register_metrics()
 		     [this] { return get_unavailable_unused_bytes(); },
 		     sm::description("the size of the space is unavailable and not alive")),
 
+    sm::make_counter("dirty_journal_bytes",
+		     [this] { return get_dirty_journal_size(); },
+		     sm::description("the size of the journal for dirty extents")),
+    sm::make_counter("alloc_journal_bytes",
+		     [this] { return get_alloc_journal_size(); },
+		     sm::description("the size of the journal for alloc info")),
+
     sm::make_counter("projected_count", stats.projected_count,
 		    sm::description("the number of projected usage reservations")),
     sm::make_counter("projected_used_bytes_sum", stats.projected_used_bytes_sum,
