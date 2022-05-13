@@ -99,14 +99,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata",
+               "expr": "rate(ceph_rgw_get_initial_lat_sum[30s]) /\n  rate(ceph_rgw_get_initial_lat_count[30s]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GET AVG",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata",
+               "expr": "rate(ceph_rgw_put_initial_lat_sum[30s]) /\n  rate(ceph_rgw_put_initial_lat_count[30s]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUT AVG",
@@ -192,7 +192,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (rgw_host) (label_replace(rate(ceph_rgw_req[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata, \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"))",
+               "expr": "sum by (rgw_host) (\n  label_replace(\n    rate(ceph_rgw_req[30s]) *\n      on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n    \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n  )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -278,7 +278,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n    rate(ceph_rgw_get_initial_lat_sum[30s]) /\n    rate(ceph_rgw_get_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n\"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\")",
+               "expr": "label_replace(\n  rate(ceph_rgw_get_initial_lat_sum[30s]) /\n    rate(ceph_rgw_get_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -457,7 +457,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(sum by (instance_id) (\n    rate(ceph_rgw_get_b[30s]) + \n    rate(ceph_rgw_put_b[30s])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata, \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\")",
+               "expr": "label_replace(sum by (instance_id) (\n  rate(ceph_rgw_get_b[30s]) +\n    rate(ceph_rgw_put_b[30s])) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -543,7 +543,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n    rate(ceph_rgw_put_initial_lat_sum[30s]) /\n    rate(ceph_rgw_put_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n\"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\")",
+               "expr": "label_replace(\n  rate(ceph_rgw_put_initial_lat_sum[30s]) /\n    rate(ceph_rgw_put_initial_lat_count[30s]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata,\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -673,14 +673,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(irate(haproxy_frontend_http_responses_total{code=~\"$code\",instance=~\"$ingress_service\",proxy=~\"frontend\"}[5m])) by (code)",
+               "expr": "sum(\n  irate(\n    haproxy_frontend_http_responses_total{code=~\"$code\", instance=~\"$ingress_service\", proxy=~\"frontend\"}[5m]\n  )\n) by (code)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Frontend {{ code }}",
                "refId": "A"
             },
             {
-               "expr": "sum(irate(haproxy_backend_http_responses_total{code=~\"$code\",instance=~\"$ingress_service\",proxy=~\"backend\"}[5m])) by (code)",
+               "expr": "sum(\n  irate(\n    haproxy_backend_http_responses_total{code=~\"$code\", instance=~\"$ingress_service\", proxy=~\"backend\"}[5m]\n  )\n) by (code)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Backend {{ code }}",
@@ -777,49 +777,49 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(irate(haproxy_frontend_http_requests_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_frontend_http_requests_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Requests",
                "refId": "A"
             },
             {
-               "expr": "sum(irate(haproxy_backend_response_errors_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_backend_response_errors_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Response errors",
                "refId": "B"
             },
             {
-               "expr": "sum(irate(haproxy_frontend_request_errors_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_frontend_request_errors_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Requests errors",
                "refId": "C"
             },
             {
-               "expr": "sum(irate(haproxy_backend_redispatch_warnings_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_backend_redispatch_warnings_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Backend redispatch",
                "refId": "D"
             },
             {
-               "expr": "sum(irate(haproxy_backend_retry_warnings_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_backend_retry_warnings_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Backend retry",
                "refId": "E"
             },
             {
-               "expr": "sum(irate(haproxy_frontend_requests_denied_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_frontend_requests_denied_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Request denied",
                "refId": "F"
             },
             {
-               "expr": "sum(haproxy_backend_current_queue{proxy=~\"backend\",instance=~\"$ingress_service\"}) by (instance)",
+               "expr": "sum(\n  haproxy_backend_current_queue{proxy=~\"backend\", instance=~\"$ingress_service\"}\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "Backend Queued",
@@ -912,21 +912,21 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(irate(haproxy_frontend_connections_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_frontend_connections_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Front",
                "refId": "A"
             },
             {
-               "expr": "sum(irate(haproxy_backend_connection_attempts_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_backend_connection_attempts_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Back",
                "refId": "B"
             },
             {
-               "expr": "sum(irate(haproxy_backend_connection_errors_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_backend_connection_errors_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  )\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Back errors",
@@ -1019,28 +1019,28 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(irate(haproxy_frontend_bytes_in_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])*8) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_frontend_bytes_in_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  ) * 8\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "IN Front",
                "refId": "A"
             },
             {
-               "expr": "sum(irate(haproxy_frontend_bytes_out_total{proxy=~\"frontend\",instance=~\"$ingress_service\"}[5m])*8) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_frontend_bytes_out_total{proxy=~\"frontend\", instance=~\"$ingress_service\"}[5m]\n  ) * 8\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "OUT Front",
                "refId": "B"
             },
             {
-               "expr": "sum(irate(haproxy_backend_bytes_in_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])*8) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_backend_bytes_in_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  ) * 8\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "IN Back",
                "refId": "C"
             },
             {
-               "expr": "sum(irate(haproxy_backend_bytes_out_total{proxy=~\"backend\",instance=~\"$ingress_service\"}[5m])*8) by (instance)",
+               "expr": "sum(\n  irate(\n    haproxy_backend_bytes_out_total{proxy=~\"backend\", instance=~\"$ingress_service\"}[5m]\n  ) * 8\n) by (instance)\n",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "OUT Back",

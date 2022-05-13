@@ -135,11 +135,25 @@ local u = import 'utils.libsonnet';
         .addTargets(
           [
             u.addTargetSchema(
-              'max (irate(ceph_osd_op_r_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000)',
+              |||
+                max(
+                  irate(ceph_osd_op_r_latency_sum[1m]) /
+                  on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000
+                )
+              |||,
               'MAX read'
             ),
             u.addTargetSchema(
-              'quantile(0.95,\n  (irate(ceph_osd_op_r_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000)\n)', '@95%ile'
+              |||
+                quantile(0.95,
+                  (
+                    irate(ceph_osd_op_r_latency_sum[1m]) /
+                      on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m])
+                      * 1000
+                  )
+                )
+              |||,
+              '@95%ile'
             ),
           ],
         ),
@@ -157,7 +171,21 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(
           u.addTargetSchema(
-            'topk(10,\n  (sort(\n    (irate(ceph_osd_op_r_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000)\n  ))\n)\n\n', '', 'table', 1, true
+            |||
+              topk(10,
+                (sort(
+                  (
+                    irate(ceph_osd_op_r_latency_sum[1m]) /
+                      on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) *
+                      1000
+                  )
+                ))
+              )
+            |||,
+            '',
+            'table',
+            1,
+            true
           )
         ) + { gridPos: { x: 8, y: 0, w: 4, h: 8 } },
         OsdOverviewGraphPanel(
@@ -169,7 +197,13 @@ local u = import 'utils.libsonnet';
           'ms',
           null,
           '0',
-          'avg (irate(ceph_osd_op_w_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000)',
+          |||
+            avg(
+              irate(ceph_osd_op_w_latency_sum[1m]) /
+                on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m])
+                * 1000
+            )
+          |||,
           'AVG write',
           12,
           0,
@@ -179,11 +213,22 @@ local u = import 'utils.libsonnet';
         .addTargets(
           [
             u.addTargetSchema(
-              'max (irate(ceph_osd_op_w_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000)',
-              'MAX write'
+              |||
+                max(
+                  irate(ceph_osd_op_w_latency_sum[1m]) /
+                    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *
+                    1000
+                )
+              |||, 'MAX write'
             ),
             u.addTargetSchema(
-              'quantile(0.95,\n (irate(ceph_osd_op_w_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000)\n)', '@95%ile write'
+              |||
+                quantile(0.95, (
+                  irate(ceph_osd_op_w_latency_sum[1m]) /
+                    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *
+                    1000
+                ))
+              |||, '@95%ile write'
             ),
           ],
         ),
@@ -203,7 +248,15 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(
           u.addTargetSchema(
-            'topk(10,\n  (sort(\n    (irate(ceph_osd_op_w_latency_sum[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000)\n  ))\n)\n\n',
+            |||
+              topk(10,
+                (sort(
+                  (irate(ceph_osd_op_w_latency_sum[1m]) /
+                    on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) *
+                    1000)
+                ))
+              )
+            |||,
             '',
             'table',
             1,
@@ -271,7 +324,7 @@ local u = import 'utils.libsonnet';
                          min='0',
                          nullPointMode='null')
         .addTarget(u.addTargetSchema(
-          'ceph_osd_numpg\n', 'PGs per OSD', 'time_series', 1, true
+          'ceph_osd_numpg', 'PGs per OSD', 'time_series', 1, true
         )) + { gridPos: { x: 12, y: 8, w: 8, h: 8 } },
         OsdOverviewSingleStatPanel(
           ['#d44a3a', '#299c46'],
@@ -284,7 +337,12 @@ local u = import 'utils.libsonnet';
           true,
           false,
           '.75',
-          'sum(ceph_bluestore_onode_hits)/(sum(ceph_bluestore_onode_hits) + sum(ceph_bluestore_onode_misses))',
+          |||
+            sum(ceph_bluestore_onode_hits) / (
+              sum(ceph_bluestore_onode_hits) +
+              sum(ceph_bluestore_onode_misses)
+            )
+          |||,
           20,
           8,
           4,
@@ -400,8 +458,14 @@ local u = import 'utils.libsonnet';
           '',
           's',
           'Read (-) / Write (+)',
-          'irate(ceph_osd_op_r_latency_sum{ceph_daemon=~"$osd"}[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m])',
-          'irate(ceph_osd_op_w_latency_sum{ceph_daemon=~"$osd"}[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m])',
+          |||
+            irate(ceph_osd_op_r_latency_sum{ceph_daemon=~"$osd"}[1m]) /
+              on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m])
+          |||,
+          |||
+            irate(ceph_osd_op_w_latency_sum{ceph_daemon=~"$osd"}[1m]) /
+              on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m])
+          |||,
           'read',
           'write',
           0,
@@ -455,8 +519,31 @@ local u = import 'utils.libsonnet';
           '',
           's',
           'Read (-) / Write (+)',
-          '(label_replace(irate(node_disk_read_time_seconds_total[1m]) / irate(node_disk_reads_completed_total[1m]), "instance", "$1", "instance", "([^:.]*).*") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*"))',
-          '(label_replace(irate(node_disk_write_time_seconds_total[1m]) / irate(node_disk_writes_completed_total[1m]), "instance", "$1", "instance", "([^:.]*).*") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*"))',
+          |||
+            (
+              label_replace(
+                irate(node_disk_read_time_seconds_total[1m]) / irate(node_disk_reads_completed_total[1m]),
+                "instance", "$1", "instance", "([^:.]*).*"
+              ) and on (instance, device) label_replace(
+                label_replace(
+                  ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                  "device", "$1", "device", "/dev/(.*)"
+                ), "instance", "$1", "instance", "([^:.]*).*"
+              )
+            )
+          |||,
+          |||
+            (
+              label_replace(
+                irate(node_disk_write_time_seconds_total[1m]) / irate(node_disk_writes_completed_total[1m]),
+                "instance", "$1", "instance", "([^:.]*).*") and on (instance, device)
+                label_replace(
+                  label_replace(
+                    ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"
+                  ), "instance", "$1", "instance", "([^:.]*).*"
+                )
+              )
+          |||,
           '{{instance}}/{{device}} Reads',
           '{{instance}}/{{device}} Writes',
           0,
@@ -472,8 +559,28 @@ local u = import 'utils.libsonnet';
           '',
           'short',
           'Read (-) / Write (+)',
-          'label_replace(irate(node_disk_writes_completed_total[1m]), "instance", "$1", "instance", "([^:.]*).*") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*")',
-          'label_replace(irate(node_disk_reads_completed_total[1m]), "instance", "$1", "instance", "([^:.]*).*") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*")',
+          |||
+            label_replace(
+              irate(node_disk_writes_completed_total[1m]),
+              "instance", "$1", "instance", "([^:.]*).*"
+            ) and on (instance, device) label_replace(
+              label_replace(
+                ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                "device", "$1", "device", "/dev/(.*)"
+              ), "instance", "$1", "instance", "([^:.]*).*"
+            )
+          |||,
+          |||
+            label_replace(
+              irate(node_disk_reads_completed_total[1m]),
+              "instance", "$1", "instance", "([^:.]*).*"
+            ) and on (instance, device) label_replace(
+              label_replace(
+                ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                "device", "$1", "device", "/dev/(.*)"
+              ), "instance", "$1", "instance", "([^:.]*).*"
+            )
+          |||,
           '{{device}} on {{instance}} Writes',
           '{{device}} on {{instance}} Reads',
           6,
@@ -489,8 +596,26 @@ local u = import 'utils.libsonnet';
           '',
           'Bps',
           'Read (-) / Write (+)',
-          'label_replace(irate(node_disk_read_bytes_total[1m]), "instance", "$1", "instance", "([^:.]*).*") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*")',
-          'label_replace(irate(node_disk_written_bytes_total[1m]), "instance", "$1", "instance", "([^:.]*).*") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*")',
+          |||
+            label_replace(
+              irate(node_disk_read_bytes_total[1m]), "instance", "$1", "instance", "([^:.]*).*"
+            ) and on (instance, device) label_replace(
+              label_replace(
+                ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                "device", "$1", "device", "/dev/(.*)"
+              ), "instance", "$1", "instance", "([^:.]*).*"
+            )
+          |||,
+          |||
+            label_replace(
+              irate(node_disk_written_bytes_total[1m]), "instance", "$1", "instance", "([^:.]*).*"
+            ) and on (instance, device) label_replace(
+              label_replace(
+                ceph_disk_occupation_human{ceph_daemon=~"$osd"},
+                "device", "$1", "device", "/dev/(.*)"
+              ), "instance", "$1", "instance", "([^:.]*).*"
+            )
+          |||,
           '{{instance}} {{device}} Reads',
           '{{instance}} {{device}} Writes',
           12,
@@ -516,7 +641,16 @@ local u = import 'utils.libsonnet';
           '$datasource'
         )
         .addTarget(u.addTargetSchema(
-          'label_replace(irate(node_disk_io_time_seconds_total[1m]), "instance", "$1", "instance", "([^:.]*).*") and on (instance, device) label_replace(label_replace(ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*")',
+          |||
+            label_replace(
+              irate(node_disk_io_time_seconds_total[1m]),
+              "instance", "$1", "instance", "([^:.]*).*"
+            ) and on (instance, device) label_replace(
+              label_replace(
+                ceph_disk_occupation_human{ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"
+              ), "instance", "$1", "instance", "([^:.]*).*"
+            )
+          |||,
           '{{device}} on {{instance}}'
         )) + { gridPos: { x: 18, y: 11, w: 6, h: 9 } },
       ]),
