@@ -275,9 +275,8 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
     // Create a new bucket: (1) Add a key/value pair in the
     // bucket instance index. (2) Create a new bucket index.
     MotrBucket* mbucket = static_cast<MotrBucket*>(bucket.get());
-	
-	// "put_info" accepts boolean value mentioning whether to create new or update existing. 
-    // "yield" is not a boolean flag, hence explicitly passing true to create a new record.
+    // "put_info" accepts boolean value mentioning whether to create new or update existing. 
+    // "yield" is not a boolean flag hence explicitly passing true to create a new record.
     ret = mbucket->put_info(dpp, true, ceph::real_time())? :
           mbucket->create_bucket_index() ? :
           mbucket->create_multipart_indices();
@@ -901,8 +900,8 @@ int MotrBucket::merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& new_
   for (auto& it : new_attrs)
     attrs[it.first] = it.second;
 
-  // "merge_and_store_attrs" is meant to updating existing metadata, 
-  // hence explicitly passing false. Passing "yield" was incorrect
+  // "put_info" is meant to update existing metadata, by
+  // explicitly passing false. Passing "yield" was incorrect
   return put_info(dpp, false, ceph::real_time());
 }
 
