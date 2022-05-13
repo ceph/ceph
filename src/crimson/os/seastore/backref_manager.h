@@ -97,6 +97,38 @@ public:
 					//   created by this insertion
   ) = 0;
 
+  virtual Cache::backref_buf_entry_query_set_t
+  get_cached_backrefs_in_range(
+    paddr_t start,
+    paddr_t end) = 0;
+
+  virtual Cache::backref_buf_entry_query_set_t
+  get_cached_backref_removals_in_range(
+    paddr_t start,
+    paddr_t end) = 0;
+
+  virtual const backref_buf_entry_t::set_t& get_cached_backref_removals() = 0;
+  virtual const backref_buf_entry_t::set_t& get_cached_backrefs() = 0;
+  virtual backref_buf_entry_t get_cached_backref_removal(paddr_t addr) = 0;
+
+  virtual Cache::backref_extent_buf_entry_query_set_t
+  get_cached_backref_extents_in_range(
+    paddr_t start,
+    paddr_t end) = 0;
+
+  using retrieve_backref_extents_iertr = trans_iertr<
+    crimson::errorator<
+      crimson::ct_error::input_output_error>
+    >;
+  using retrieve_backref_extents_ret =
+    retrieve_backref_extents_iertr::future<>;
+  virtual retrieve_backref_extents_ret retrieve_backref_extents(
+    Transaction &t,
+    Cache::backref_extent_buf_entry_query_set_t &&backref_extents,
+    std::vector<CachedExtentRef> &extents) = 0;
+
+  virtual void cache_new_backref_extent(paddr_t paddr, extent_types_t type) = 0;
+
   /**
    * insert new mappings directly from Cache
    */

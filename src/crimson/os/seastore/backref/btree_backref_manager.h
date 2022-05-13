@@ -105,6 +105,33 @@ public:
     auto *bpin = reinterpret_cast<BtreeBackrefPin*>(&pin);
     pin_set.retire(bpin->get_range_pin());
   }
+
+  Cache::backref_buf_entry_query_set_t
+  get_cached_backrefs_in_range(
+    paddr_t start,
+    paddr_t end) final;
+
+  Cache::backref_buf_entry_query_set_t
+  get_cached_backref_removals_in_range(
+    paddr_t start,
+    paddr_t end) final;
+
+  const backref_buf_entry_t::set_t& get_cached_backref_removals() final;
+  const backref_buf_entry_t::set_t& get_cached_backrefs() final;
+  backref_buf_entry_t get_cached_backref_removal(paddr_t addr) final;
+
+  Cache::backref_extent_buf_entry_query_set_t
+  get_cached_backref_extents_in_range(
+    paddr_t start,
+    paddr_t end) final;
+
+  retrieve_backref_extents_ret retrieve_backref_extents(
+    Transaction &t,
+    Cache::backref_extent_buf_entry_query_set_t &&backref_extents,
+    std::vector<CachedExtentRef> &extents) final;
+
+  void cache_new_backref_extent(paddr_t paddr, extent_types_t type) final;
+
 private:
   SegmentManagerGroup &sm_group;
   Cache &cache;
