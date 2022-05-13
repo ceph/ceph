@@ -103,8 +103,14 @@ local u = import 'utils.libsonnet';
         RbdDetailsPanel(
           'Average Latency',
           'ns',
-          'irate(ceph_rbd_write_latency_sum{pool="$Pool", image="$Image"}[30s]) / irate(ceph_rbd_write_latency_count{pool="$Pool", image="$Image"}[30s])',
-          'irate(ceph_rbd_read_latency_sum{pool="$Pool", image="$Image"}[30s]) / irate(ceph_rbd_read_latency_count{pool="$Pool", image="$Image"}[30s])',
+          |||
+            irate(ceph_rbd_write_latency_sum{pool="$Pool", image="$Image"}[30s]) /
+              irate(ceph_rbd_write_latency_count{pool="$Pool", image="$Image"}[30s])
+          |||,
+          |||
+            irate(ceph_rbd_read_latency_sum{pool="$Pool", image="$Image"}[30s]) /
+              irate(ceph_rbd_read_latency_count{pool="$Pool", image="$Image"}[30s])
+          |||,
           16,
           0,
           8,
@@ -226,8 +232,18 @@ local u = import 'utils.libsonnet';
         RbdOverviewPanel(
           'Average Latency',
           'ns',
-          'round(sum(irate(ceph_rbd_write_latency_sum[30s])) / sum(irate(ceph_rbd_write_latency_count[30s])))',
-          'round(sum(irate(ceph_rbd_read_latency_sum[30s])) / sum(irate(ceph_rbd_read_latency_count[30s])))',
+          |||
+            round(
+              sum(irate(ceph_rbd_write_latency_sum[30s])) /
+                sum(irate(ceph_rbd_write_latency_count[30s]))
+            )
+          |||,
+          |||
+            round(
+              sum(irate(ceph_rbd_read_latency_sum[30s])) /
+                sum(irate(ceph_rbd_read_latency_count[30s]))
+            )
+          |||,
           'Write',
           'Read',
           16,
@@ -250,7 +266,16 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(
           u.addTargetSchema(
-            'topk(10, (sort((irate(ceph_rbd_write_ops[30s]) + on (image, pool, namespace) irate(ceph_rbd_read_ops[30s])))))',
+            |||
+              topk(10,
+                (
+                  sort((
+                    irate(ceph_rbd_write_ops[30s]) +
+                      on (image, pool, namespace) irate(ceph_rbd_read_ops[30s])
+                  ))
+                )
+              )
+            |||,
             '',
             'table',
             1,
@@ -272,7 +297,15 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(
           u.addTargetSchema(
-            'topk(10, sort(sum(irate(ceph_rbd_read_bytes[30s]) + irate(ceph_rbd_write_bytes[30s])) by (pool, image, namespace)))',
+            |||
+              topk(10,
+                sort(
+                  sum(
+                    irate(ceph_rbd_read_bytes[30s]) + irate(ceph_rbd_write_bytes[30s])
+                  ) by (pool, image, namespace)
+                )
+              )
+            |||,
             '',
             'table',
             1,
@@ -294,7 +327,14 @@ local u = import 'utils.libsonnet';
         )
         .addTarget(
           u.addTargetSchema(
-            'topk(10,\n  sum(\n    irate(ceph_rbd_write_latency_sum[30s]) / clamp_min(irate(ceph_rbd_write_latency_count[30s]), 1) +\n    irate(ceph_rbd_read_latency_sum[30s]) / clamp_min(irate(ceph_rbd_read_latency_count[30s]), 1)\n  ) by (pool, image, namespace)\n)',
+            |||
+              topk(10,
+                sum(
+                  irate(ceph_rbd_write_latency_sum[30s]) / clamp_min(irate(ceph_rbd_write_latency_count[30s]), 1) +
+                    irate(ceph_rbd_read_latency_sum[30s]) / clamp_min(irate(ceph_rbd_read_latency_count[30s]), 1)
+                ) by (pool, image, namespace)
+              )
+            |||,
             '',
             'table',
             1,

@@ -528,7 +528,7 @@
             "#d44a3a"
          ],
          "datasource": "$datasource",
-         "description": "Indicates how suitable the data is within the pools that are/have been enabled for compression - averaged across all pools holding compressed data\n",
+         "description": "Indicates how suitable the data is within the pools that are/have been enabled for compression - averaged across all pools holding compressed data",
          "format": "percent",
          "gauge": {
             "maxValue": 100,
@@ -580,7 +580,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "(sum(ceph_pool_compress_under_bytes > 0) / sum(ceph_pool_stored_raw and ceph_pool_compress_under_bytes > 0)) * 100",
+               "expr": "(\n  sum(ceph_pool_compress_under_bytes > 0) /\n    sum(ceph_pool_stored_raw and ceph_pool_compress_under_bytes > 0)\n) * 100\n",
                "format": "table",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -1053,7 +1053,7 @@
          ],
          "targets": [
             {
-               "expr": "(ceph_pool_compress_under_bytes / ceph_pool_compress_bytes_used > 0) and on(pool_id) (((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100 > 0.5)",
+               "expr": "(ceph_pool_compress_under_bytes / ceph_pool_compress_bytes_used > 0) and on(pool_id) (\n  ((ceph_pool_compress_under_bytes > 0) / ceph_pool_stored_raw) * 100 > 0.5\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1197,14 +1197,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "topk($topk,round((rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])),1) * on(pool_id) group_left(instance,name) ceph_pool_metadata) ",
+               "expr": "topk($topk,\n  round(\n    (rate(ceph_pool_rd[30s]) + rate(ceph_pool_wr[30s])),\n    1\n  ) * on(pool_id) group_left(instance,name) ceph_pool_metadata)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}} ",
                "refId": "A"
             },
             {
-               "expr": "topk($topk,rate(ceph_pool_wr[30s]) + on(pool_id) group_left(instance,name) ceph_pool_metadata) ",
+               "expr": "topk($topk,\n  rate(ceph_pool_wr[30s]) +\n    on(pool_id) group_left(instance,name) ceph_pool_metadata\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}} - write",
@@ -1290,7 +1290,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "topk($topk,(rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])) * on(pool_id) group_left(instance,name) ceph_pool_metadata)",
+               "expr": "topk($topk,\n  (rate(ceph_pool_rd_bytes[30s]) + rate(ceph_pool_wr_bytes[30s])) *\n    on(pool_id) group_left(instance, name) ceph_pool_metadata\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}}",
