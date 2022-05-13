@@ -206,6 +206,8 @@ paths:
                   type: string
                 features:
                   type: string
+                mirror_mode:
+                  type: string
                 name:
                   type: string
                 namespace:
@@ -213,6 +215,9 @@ paths:
                 obj_size:
                   type: integer
                 pool_name:
+                  type: string
+                schedule_interval:
+                  default: ''
                   type: string
                 size:
                   type: integer
@@ -549,6 +554,9 @@ paths:
                   type: string
                 primary:
                   type: string
+                remove_scheduling:
+                  default: false
+                  type: boolean
                 resync:
                   default: false
                   type: boolean
@@ -557,9 +565,6 @@ paths:
                   type: string
                 size:
                   type: integer
-                start_time:
-                  default: ''
-                  type: string
               type: object
       responses:
         '200':
