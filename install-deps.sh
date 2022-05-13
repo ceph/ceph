@@ -294,6 +294,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
+    [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
     motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
     source /etc/os-release
@@ -341,6 +342,9 @@ else
 	fi
 	if $with_seastar; then
 	    build_profiles+=",pkg.ceph.crimson"
+	fi
+	if $with_pmem; then
+	    build_profiles+=",pkg.ceph.pmdk"
 	fi
 
         in_jenkins && cat <<EOF
