@@ -408,7 +408,7 @@ struct transaction_manager_test_t :
 		len);
 	    }
 	  }).si_then([&tracker, this] {
-	    auto &backrefs = cache->get_backrefs();
+	    auto &backrefs = backref_manager->get_cached_backrefs();
 	    for (auto &backref : backrefs) {
 	      if (backref.paddr.get_addr_type() == addr_types_t::SEGMENT) {
 		logger().debug("check_usage: by backref, tracker alloc {}~{}",
@@ -419,7 +419,7 @@ struct transaction_manager_test_t :
 		  backref.len);
 	      }
 	    }
-	    auto &del_backrefs = cache->get_del_backrefs();
+	    auto &del_backrefs = backref_manager->get_cached_backref_removals();
 	    for (auto &del_backref : del_backrefs) {
 	      if (del_backref.paddr.get_addr_type() == addr_types_t::SEGMENT) {
 		logger().debug("check_usage: by backref, tracker release {}~{}",

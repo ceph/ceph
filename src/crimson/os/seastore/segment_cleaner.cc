@@ -390,13 +390,11 @@ SegmentCleaner::SegmentCleaner(
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
-  Cache &cache,
   bool detailed)
   : detailed(detailed),
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
-    cache(cache),
     ool_segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::OOL)),
     gc_process(*this)
@@ -769,33 +767,6 @@ SegmentCleaner::gc_trim_journal_ret SegmentCleaner::gc_trim_journal()
   });
 }
 
-SegmentCleaner::retrieve_backref_extents_ret
-SegmentCleaner::_retrieve_backref_extents(
-  Transaction &t,
-  std::set<
-    Cache::backref_extent_buf_entry_t,
-    Cache::backref_extent_buf_entry_t::cmp_t> &&backref_extents,
-  std::vector<CachedExtentRef> &extents)
-{
-  return trans_intr::parallel_for_each(
-    backref_extents,
-    [this, &extents, &t](auto &ent) {
-    // only the gc fiber which is single can rewrite backref extents,
-    // so it must be alive
-    assert(is_backref_node(ent.type));
-    LOG_PREFIX(SegmentCleaner::_retrieve_backref_extents);
-    DEBUGT("getting backref extent of type {} at {}",
-      t,
-      ent.type,
-      ent.paddr);
-    return cache.get_extent_by_type(
-      t, ent.type, ent.paddr, L_ADDR_NULL, BACKREF_NODE_SIZE
-    ).si_then([&extents](auto ext) {
-      extents.emplace_back(std::move(ext));
-    });
-  });
-}
-
 SegmentCleaner::retrieve_live_extents_ret
 SegmentCleaner::_retrieve_live_extents(
   Transaction &t,
@@ -822,7 +793,7 @@ SegmentCleaner::_retrieve_live_extents(
       ).si_then([this, FNAME, &extents, &ent, &seq, &t](auto ext) {
 	if (!ext) {
 	  DEBUGT("addr {} dead, skipping", t, ent.paddr);
-	  auto backref = cache.get_del_backref(ent.paddr);
+	  auto backref = backref_manager.get_cached_backref_removal(ent.paddr);
 	  if (seq == JOURNAL_SEQ_NULL || seq < backref.seq) {
 	    seq = backref.seq;
 	  }
@@ -872,10 +843,11 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
       reclaimed = 0;
       runs++;
       return seastar::do_with(
-	cache.get_backref_extents_in_range(
+	backref_manager.get_cached_backref_extents_in_range(
 	  *next_reclaim_pos, end_paddr),
-	cache.get_backrefs_in_range(*next_reclaim_pos, end_paddr),
-	cache.get_del_backrefs_in_range(
+	backref_manager.get_cached_backrefs_in_range(
+	  *next_reclaim_pos, end_paddr),
+	backref_manager.get_cached_backref_removals_in_range(
 	  *next_reclaim_pos, end_paddr),
 	JOURNAL_SEQ_NULL,
 	[this, segment_id, &reclaimed, end_paddr]
@@ -920,7 +892,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 	      std::vector<CachedExtentRef>(),
 	      [this, &backref_extents, &backrefs, &reclaimed, &t, &seq]
 	      (auto &extents) {
-	      return _retrieve_backref_extents(
+	      return backref_manager.retrieve_backref_extents(
 		t, std::move(backref_extents), extents
 	      ).si_then([this, &extents, &t, &backrefs] {
 		return _retrieve_live_extents(
@@ -958,8 +930,9 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
       [&reclaimed, this, pavail_ratio, start, &runs, end_paddr] {
       LOG_PREFIX(SegmentCleaner::gc_reclaim_space);
 #ifndef NDEBUG
-      auto ndel_backrefs = cache.get_del_backrefs_in_range(
-	*next_reclaim_pos, end_paddr);
+      auto ndel_backrefs =
+	backref_manager.get_cached_backref_removals_in_range(
+	  *next_reclaim_pos, end_paddr);
       if (!ndel_backrefs.empty()) {
 	for (auto &del_br : ndel_backrefs) {
 	  ERROR("unexpected del_backref {}~{} {} {}",

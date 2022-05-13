@@ -639,7 +639,6 @@ private:
 
   SegmentManagerGroupRef sm_group;
   BackrefManager &backref_manager;
-  Cache &cache;
 
   SpaceTrackerIRef space_tracker;
   segments_info_t segments;
@@ -716,7 +715,6 @@ public:
     config_t config,
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
-    Cache &cache,
     bool detailed = false);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {
@@ -1027,15 +1025,6 @@ private:
   using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
   gc_reclaim_space_ret gc_reclaim_space();
 
-  using retrieve_backref_extents_iertr = work_iertr;
-  using retrieve_backref_extents_ret =
-    retrieve_backref_extents_iertr::future<>;
-  retrieve_backref_extents_ret _retrieve_backref_extents(
-    Transaction &t,
-    std::set<
-      Cache::backref_extent_buf_entry_t,
-      Cache::backref_extent_buf_entry_t::cmp_t> &&backref_extents,
-    std::vector<CachedExtentRef> &extents);
 
   using retrieve_live_extents_iertr = work_iertr;
   using retrieve_live_extents_ret =
