@@ -5975,7 +5975,7 @@ bool MDCache::open_undef_inodes_dirfrags()
       } else if (!p.first) {
         p.second.push_back(dn->key());
       }
-         }
+    }
   }
 
   if (fetch_queue.empty())
@@ -5997,10 +5997,11 @@ bool MDCache::open_undef_inodes_dirfrags()
       continue;
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
       ceph_assert(diri->dirfragtree.is_leaf(dir->get_frag()));
-    if (p.second.first)
+    if (p.second.first || p.second.second.empty()) {
       dir->fetch(gather.new_sub());
-    else
+    } else {
       dir->fetch_keys(p.second.second, gather.new_sub());
+    }
   }
   ceph_assert(gather.has_subs());
   gather.activate();
