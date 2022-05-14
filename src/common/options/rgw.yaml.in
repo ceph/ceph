@@ -3011,7 +3011,7 @@ options:
   long_desc: In multisite, radosgw will occasionally broadcast new entries in its
     data changes log to peer zones, so they can prioritize sync of some
     of the most recent changes. Can be disabled with 0.
-  default: 200
+  default: 0
   services:
   - rgw
   with_legacy: true
