@@ -83,6 +83,12 @@ TYPE(cls_rgw_reshard_remove_op)
 TYPE(cls_rgw_set_bucket_resharding_op)
 TYPE(cls_rgw_clear_bucket_resharding_op)
 TYPE(cls_rgw_lc_obj_head)
+TYPE(rgw_cls_bucket_update_stats_op)
+TYPE(rgw_cls_obj_remove_op)
+TYPE(rgw_cls_obj_store_pg_ver_op)
+TYPE(rgw_cls_obj_check_attrs_prefix)
+TYPE(rgw_cls_obj_check_mtime)
+
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
