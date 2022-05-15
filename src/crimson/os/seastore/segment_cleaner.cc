@@ -809,6 +809,31 @@ SegmentCleaner::_retrieve_live_extents(
   });
 }
 
+SegmentCleaner::retrieve_backref_mappings_ret
+SegmentCleaner::retrieve_backref_mappings(
+  paddr_t start_paddr,
+  paddr_t end_paddr)
+{
+  return seastar::do_with(
+    backref_pin_list_t(),
+    [this, start_paddr, end_paddr](auto &pin_list) {
+    return repeat_eagain([this, start_paddr, end_paddr, &pin_list] {
+      return ecb->with_transaction_intr(
+	Transaction::src_t::READ,
+	"get_backref_mappings",
+	[this, start_paddr, end_paddr](auto &t) {
+	return backref_manager.get_mappings(
+	  t, start_paddr, end_paddr
+	);
+      }).safe_then([&pin_list](auto&& list) {
+	pin_list = std::move(list);
+      });
+    }).safe_then([&pin_list] {
+      return seastar::make_ready_future<backref_pin_list_t>(std::move(pin_list));
+    });
+  });
+}
+
 SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 {
   if (!next_reclaim_pos) {
@@ -838,90 +863,96 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
     [this, segment_id, pavail_ratio, start, end_paddr](
       auto &reclaimed,
       auto &runs) {
-    return repeat_eagain(
-      [this, &reclaimed, segment_id, &runs, end_paddr]() mutable {
-      reclaimed = 0;
-      runs++;
+    return retrieve_backref_mappings(
+      *next_reclaim_pos,
+      end_paddr
+    ).safe_then([this, &reclaimed, segment_id, &runs, end_paddr](auto pin_list) {
       return seastar::do_with(
-	backref_manager.get_cached_backref_extents_in_range(
-	  *next_reclaim_pos, end_paddr),
-	backref_manager.get_cached_backrefs_in_range(
-	  *next_reclaim_pos, end_paddr),
-	backref_manager.get_cached_backref_removals_in_range(
-	  *next_reclaim_pos, end_paddr),
-	JOURNAL_SEQ_NULL,
-	[this, segment_id, &reclaimed, end_paddr]
-	(auto &backref_extents, auto &backrefs, auto &del_backrefs, auto &seq) {
-	return ecb->with_transaction_intr(
-	  Transaction::src_t::CLEANER_RECLAIM,
-	  "reclaim_space",
-	  [segment_id, this, &backref_extents, &backrefs, &seq,
-	  &del_backrefs, &reclaimed, end_paddr](auto &t) {
-	  return backref_manager.get_mappings(
-	    t, *next_reclaim_pos, end_paddr
-	  ).si_then(
-	    [segment_id, this, &backref_extents, &backrefs, &seq,
-	    &del_backrefs, &reclaimed, &t](auto pin_list) {
-	    LOG_PREFIX(SegmentCleaner::gc_reclaim_space);
-	    DEBUG("{} backrefs, {} del_backrefs, {} pins",
-	      backrefs.size(), del_backrefs.size(), pin_list.size());
-	    for (auto &br : backrefs) {
-	      if (seq == JOURNAL_SEQ_NULL
-		  || (br.seq != JOURNAL_SEQ_NULL && br.seq > seq))
-		seq = br.seq;
-	    }
-	    for (auto &pin : pin_list) {
-	      backrefs.emplace(
-		pin->get_key(),
-		pin->get_val(),
-		pin->get_length(),
-		pin->get_type(),
-		journal_seq_t());
-	    }
-	    for (auto &del_backref : del_backrefs) {
-	      INFO("del_backref {}~{} {} {}",
-		del_backref.paddr, del_backref.len, del_backref.type, del_backref.seq);
-	      auto it = backrefs.find(del_backref.paddr);
-	      if (it != backrefs.end())
-		backrefs.erase(it);
-	      if (seq == JOURNAL_SEQ_NULL
-		  || (del_backref.seq != JOURNAL_SEQ_NULL && del_backref.seq > seq))
-		seq = del_backref.seq;
-	    }
-	    return seastar::do_with(
-	      std::vector<CachedExtentRef>(),
-	      [this, &backref_extents, &backrefs, &reclaimed, &t, &seq]
-	      (auto &extents) {
-	      return backref_manager.retrieve_backref_extents(
-		t, std::move(backref_extents), extents
-	      ).si_then([this, &extents, &t, &backrefs] {
-		return _retrieve_live_extents(
-		  t, std::move(backrefs), extents);
-	      }).si_then([this, &seq, &t](auto nseq) {
-		if (nseq != JOURNAL_SEQ_NULL && nseq > seq)
-		  seq = nseq;
-		auto fut = BackrefManager::batch_insert_iertr::now();
-		if (seq != JOURNAL_SEQ_NULL) {
-		  fut = backref_manager.batch_insert_from_cache(
-		    t, seq, std::numeric_limits<uint64_t>::max()
-		  ).si_then([](auto) {
-		    return BackrefManager::batch_insert_iertr::now();
+	std::move(pin_list),
+	[this, &reclaimed, segment_id, &runs, end_paddr](auto &pin_list) {
+	return repeat_eagain(
+	  [this, &reclaimed, segment_id, &runs, end_paddr, &pin_list]() mutable {
+	  reclaimed = 0;
+	  runs++;
+	  return seastar::do_with(
+	    backref_manager.get_cached_backref_extents_in_range(
+	      *next_reclaim_pos, end_paddr),
+	    backref_manager.get_cached_backrefs_in_range(
+	      *next_reclaim_pos, end_paddr),
+	    backref_manager.get_cached_backref_removals_in_range(
+	      *next_reclaim_pos, end_paddr),
+	    JOURNAL_SEQ_NULL,
+	    [this, segment_id, &reclaimed, &pin_list](
+	      auto &backref_extents,
+	      auto &backrefs,
+	      auto &del_backrefs,
+	      auto &seq) {
+	    return ecb->with_transaction_intr(
+	      Transaction::src_t::CLEANER_RECLAIM,
+	      "reclaim_space",
+	      [segment_id, this, &backref_extents, &backrefs, &seq,
+	      &del_backrefs, &reclaimed, &pin_list](auto &t) {
+	      LOG_PREFIX(SegmentCleaner::gc_reclaim_space);
+	      DEBUG("{} backrefs, {} del_backrefs, {} pins",
+		backrefs.size(), del_backrefs.size(), pin_list.size());
+	      for (auto &br : backrefs) {
+		if (seq == JOURNAL_SEQ_NULL
+		    || (br.seq != JOURNAL_SEQ_NULL && br.seq > seq))
+		  seq = br.seq;
+	      }
+	      for (auto &pin : pin_list) {
+		backrefs.emplace(
+		  pin->get_key(),
+		  pin->get_val(),
+		  pin->get_length(),
+		  pin->get_type(),
+		  journal_seq_t());
+	      }
+	      for (auto &del_backref : del_backrefs) {
+		INFO("del_backref {}~{} {} {}",
+		  del_backref.paddr, del_backref.len, del_backref.type, del_backref.seq);
+		auto it = backrefs.find(del_backref.paddr);
+		if (it != backrefs.end())
+		  backrefs.erase(it);
+		if (seq == JOURNAL_SEQ_NULL
+		    || (del_backref.seq != JOURNAL_SEQ_NULL && del_backref.seq > seq))
+		  seq = del_backref.seq;
+	      }
+	      return seastar::do_with(
+		std::vector<CachedExtentRef>(),
+		[this, &backref_extents, &backrefs, &reclaimed, &t, &seq]
+		(auto &extents) {
+		return backref_manager.retrieve_backref_extents(
+		  t, std::move(backref_extents), extents
+		).si_then([this, &extents, &t, &backrefs] {
+		  return _retrieve_live_extents(
+		    t, std::move(backrefs), extents);
+		}).si_then([this, &seq, &t](auto nseq) {
+		  if (nseq != JOURNAL_SEQ_NULL && nseq > seq)
+		    seq = nseq;
+		  auto fut = BackrefManager::batch_insert_iertr::now();
+		  if (seq != JOURNAL_SEQ_NULL) {
+		    fut = backref_manager.batch_insert_from_cache(
+		      t, seq, std::numeric_limits<uint64_t>::max()
+		    ).si_then([](auto) {
+		      return BackrefManager::batch_insert_iertr::now();
+		    });
+		  }
+		  return fut;
+		}).si_then([&extents, this, &t, &reclaimed] {
+		  return trans_intr::do_for_each(
+		    extents,
+		    [this, &t, &reclaimed](auto &ext) {
+		    reclaimed += ext->get_length();
+		    return ecb->rewrite_extent(t, ext);
 		  });
-		}
-		return fut;
-	      }).si_then([&extents, this, &t, &reclaimed] {
-		return trans_intr::do_for_each(
-		  extents,
-		  [this, &t, &reclaimed](auto &ext) {
-		  reclaimed += ext->get_length();
-		  return ecb->rewrite_extent(t, ext);
 		});
+	      }).si_then([this, &t, segment_id, &seq] {
+		if (final_reclaim())
+		  t.mark_segment_to_release(segment_id);
+		return ecb->submit_transaction_direct(
+		  t, std::make_optional<journal_seq_t>(std::move(seq)));
 	      });
-	    }).si_then([this, &t, segment_id, &seq] {
-	      if (final_reclaim())
-		t.mark_segment_to_release(segment_id);
-	      return ecb->submit_transaction_direct(
-		t, std::make_optional<journal_seq_t>(std::move(seq)));
 	    });
 	  });
 	});

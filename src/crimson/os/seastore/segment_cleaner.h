@@ -1036,6 +1036,13 @@ private:
       backref_buf_entry_t::cmp_t> &&backrefs,
     std::vector<CachedExtentRef> &extents);
 
+  using retrieve_backref_mappings_ertr = work_ertr;
+  using retrieve_backref_mappings_ret =
+    retrieve_backref_mappings_ertr::future<backref_pin_list_t>;
+  retrieve_backref_mappings_ret retrieve_backref_mappings(
+    paddr_t start_paddr,
+    paddr_t end_paddr);
+
   /*
    * Segments calculations
    */
