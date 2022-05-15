@@ -64,13 +64,7 @@ public:
     laddr_t val,
     extent_types_t type) final;
 
-  batch_insert_ret batch_insert(
-    Transaction &t,
-    backref_buffer_ref &bbr,
-    const journal_seq_t &limit,
-    const uint64_t max) final;
-
-  batch_insert_ret batch_insert_from_cache(
+  merge_cached_backrefs_ret merge_cached_backrefs(
     Transaction &t,
     const journal_seq_t &limit,
     const uint64_t max) final;

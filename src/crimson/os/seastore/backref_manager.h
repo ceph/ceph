@@ -83,20 +83,6 @@ public:
     Transaction &t,
     CachedExtentRef e) = 0;
 
-  /**
-   * insert new paddr_t -> laddr_t mappings in batches
-   */
-  using batch_insert_iertr = base_iertr;
-  using batch_insert_ret = batch_insert_iertr::future<journal_seq_t>;
-  virtual batch_insert_ret batch_insert(
-    Transaction &t,			///< Transaction that commits the updates
-    backref_buffer_ref &bbr,		///< the set of backref mappings to be inserted
-    const journal_seq_t &limit,		///< the journal seq upper bound that the insertion
-					//   shouldn't cross
-    const uint64_t max			///< maximum fresh backref extents that can be
-					//   created by this insertion
-  ) = 0;
-
   virtual Cache::backref_buf_entry_query_set_t
   get_cached_backrefs_in_range(
     paddr_t start,
@@ -130,9 +116,11 @@ public:
   virtual void cache_new_backref_extent(paddr_t paddr, extent_types_t type) = 0;
 
   /**
-   * insert new mappings directly from Cache
+   * merge in-cache paddr_t -> laddr_t mappings to the on-disk backref tree
    */
-  virtual batch_insert_ret batch_insert_from_cache(
+  using merge_cached_backrefs_iertr = base_iertr;
+  using merge_cached_backrefs_ret = merge_cached_backrefs_iertr::future<journal_seq_t>;
+  virtual merge_cached_backrefs_ret merge_cached_backrefs(
     Transaction &t,
     const journal_seq_t &limit,
     const uint64_t max) = 0;

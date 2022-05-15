@@ -652,7 +652,7 @@ SegmentCleaner::trim_backrefs_ret SegmentCleaner::trim_backrefs(
   Transaction &t,
   journal_seq_t limit)
 {
-  return backref_manager.batch_insert_from_cache(
+  return backref_manager.merge_cached_backrefs(
     t,
     limit,
     config.rewrite_backref_bytes_per_cycle
@@ -930,12 +930,12 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 		}).si_then([this, &seq, &t](auto nseq) {
 		  if (nseq != JOURNAL_SEQ_NULL && nseq > seq)
 		    seq = nseq;
-		  auto fut = BackrefManager::batch_insert_iertr::now();
+		  auto fut = BackrefManager::merge_cached_backrefs_iertr::now();
 		  if (seq != JOURNAL_SEQ_NULL) {
-		    fut = backref_manager.batch_insert_from_cache(
+		    fut = backref_manager.merge_cached_backrefs(
 		      t, seq, std::numeric_limits<uint64_t>::max()
 		    ).si_then([](auto) {
-		      return BackrefManager::batch_insert_iertr::now();
+		      return BackrefManager::merge_cached_backrefs_iertr::now();
 		    });
 		  }
 		  return fut;
