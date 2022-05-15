@@ -527,6 +527,9 @@ struct rgw_cls_obj_remove_op {
     decode(keep_attr_prefixes, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_obj_remove_op *>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_remove_op)
 
@@ -544,6 +547,9 @@ struct rgw_cls_obj_store_pg_ver_op {
     decode(attr, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_obj_store_pg_ver_op *>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_store_pg_ver_op)
 
@@ -566,6 +572,9 @@ struct rgw_cls_obj_check_attrs_prefix {
     decode(fail_if_exist, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_obj_check_attrs_prefix *>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_check_attrs_prefix)
 
@@ -595,6 +604,9 @@ struct rgw_cls_obj_check_mtime {
     }
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_cls_obj_check_mtime *>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_check_mtime)
 

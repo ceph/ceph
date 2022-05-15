@@ -388,6 +388,82 @@ void rgw_cls_bucket_update_stats_op::dump(Formatter *f) const
   encode_json("stats", s, f);
 }
 
+void rgw_cls_obj_remove_op::dump(Formatter *f) const {
+  list<std::string> k;
+  for (auto& entry : keep_attr_prefixes) {
+    k.push_back(entry);
+  }
+  ::encode_json("keep_attr_prefix", k, f);
+}
+
+void rgw_cls_obj_remove_op::generate_test_instances(list<rgw_cls_obj_remove_op *>& o) {
+  rgw_cls_obj_remove_op *r = new rgw_cls_obj_remove_op;
+  r->keep_attr_prefixes.push_back("111");
+  r->keep_attr_prefixes.push_back("222");
+  o.push_back(r);
+
+  o.push_back(new rgw_cls_obj_remove_op);
+}
+
+void rgw_cls_obj_store_pg_ver_op::dump(Formatter *f) const {
+  ::encode_json("attr", attr, f);
+}
+
+void rgw_cls_obj_store_pg_ver_op::generate_test_instances(list<rgw_cls_obj_store_pg_ver_op *>& o){
+  rgw_cls_obj_store_pg_ver_op *r = new rgw_cls_obj_store_pg_ver_op;
+  r->attr = "test";
+  o.push_back(r);
+
+  o.push_back(new rgw_cls_obj_store_pg_ver_op);
+}
+
+void rgw_cls_obj_check_attrs_prefix::dump(Formatter *f) const {
+  ::encode_json("check_prefix", check_prefix, f);
+  ::encode_json("fail_if_exist", fail_if_exist, f);
+}
+
+void rgw_cls_obj_check_attrs_prefix::generate_test_instances(list<rgw_cls_obj_check_attrs_prefix *>& o){
+  rgw_cls_obj_check_attrs_prefix *r = new rgw_cls_obj_check_attrs_prefix;
+  r->check_prefix = "test_prefix";
+  r->fail_if_exist = true;
+  o.push_back(r);
+
+  o.push_back(new rgw_cls_obj_check_attrs_prefix);
+}
+
+void rgw_cls_obj_check_mtime::dump(Formatter *f) const {
+  ::encode_json("mtime", mtime, f);
+  ::encode_json("type", int(type), f);
+  ::encode_json("high_precision_time", high_precision_time, f);
+}
+
+void rgw_cls_obj_check_mtime::generate_test_instances(list<rgw_cls_obj_check_mtime *>& o) {
+  rgw_cls_obj_check_mtime *r = new rgw_cls_obj_check_mtime;
+
+  struct tm tm1;  
+  time_t time1;  
+  sscanf("20220516140000", "%4d%2d%2d%2d%2d%2d",      
+          &tm1.tm_year,   
+          &tm1.tm_mon,   
+          &tm1.tm_mday,   
+          &tm1.tm_hour,   
+          &tm1.tm_min,  
+          &tm1.tm_sec);
+
+  tm1.tm_year -= 1900;
+  tm1.tm_mon--;
+  tm1.tm_isdst = -1;
+  time1 = mktime(&tm1);
+  
+
+  r->mtime = ceph::real_clock::from_time_t(time1);
+  r->type = RGWCheckMTimeType::CLS_RGW_CHECK_TIME_MTIME_LT;
+  r->high_precision_time = true;
+  o.push_back(r);
+
+  o.push_back(new rgw_cls_obj_check_mtime);
+}
+
 void cls_rgw_bi_log_list_op::dump(Formatter *f) const
 {
   f->dump_string("marker", marker);
