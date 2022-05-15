@@ -203,13 +203,13 @@ BtreeBackrefManager::new_mapping(
     });
 }
 
-BtreeBackrefManager::batch_insert_ret
-BtreeBackrefManager::batch_insert_from_cache(
+BtreeBackrefManager::merge_cached_backrefs_ret
+BtreeBackrefManager::merge_cached_backrefs(
   Transaction &t,
   const journal_seq_t &limit,
   const uint64_t max)
 {
-  LOG_PREFIX(BtreeBackrefManager::batch_insert_from_cache);
+  LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
   DEBUGT("insert up to {}", t, limit);
   return seastar::do_with(
     limit,
@@ -217,19 +217,64 @@ BtreeBackrefManager::batch_insert_from_cache(
     [this, &t, max](auto &limit, auto &inserted_to) {
     auto &backref_buffer = cache.get_backref_buffer();
     if (backref_buffer) {
-      return batch_insert(
-	t,
-	backref_buffer,
-	limit,
-	max
-      ).si_then([&inserted_to](auto new_inserted_to) {
-	assert(inserted_to == JOURNAL_SEQ_NULL
-	  || new_inserted_to >= inserted_to);
-	return seastar::make_ready_future<journal_seq_t>(
-	  std::move(new_inserted_to));
+      return seastar::do_with(
+	backref_buffer->backrefs.begin(),
+	JOURNAL_SEQ_NULL,
+	[this, &t, &limit, &backref_buffer, max](auto &iter, auto &inserted_to) {
+	return trans_intr::repeat(
+	  [&iter, this, &t, &limit, &backref_buffer, max, &inserted_to]()
+	  -> merge_cached_backrefs_iertr::future<seastar::stop_iteration> {
+	  if (iter == backref_buffer->backrefs.end())
+	    return seastar::make_ready_future<seastar::stop_iteration>(
+	      seastar::stop_iteration::yes);
+	  auto &seq = iter->first;
+	  auto &backref_list = iter->second;
+	  LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
+	  DEBUGT("seq {}, limit {}, num_fresh_backref {}"
+	    , t, seq, limit, t.get_num_fresh_backref());
+	  if (seq <= limit && t.get_num_fresh_backref() * BACKREF_NODE_SIZE < max) {
+	    inserted_to = seq;
+	    return trans_intr::do_for_each(
+	      backref_list,
+	      [this, &t](auto &backref) {
+	      LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
+	      if (backref->laddr != L_ADDR_NULL) {
+		DEBUGT("new mapping: {}~{} -> {}",
+		  t, backref->paddr, backref->len, backref->laddr);
+		return new_mapping(
+		  t,
+		  backref->paddr,
+		  backref->len,
+		  backref->laddr,
+		  backref->type).si_then([](auto &&pin) {
+		  return seastar::now();
+		});
+	      } else {
+		DEBUGT("remove mapping: {}", t, backref->paddr);
+		return remove_mapping(
+		  t,
+		  backref->paddr).si_then([](auto&&) {
+		  return seastar::now();
+		}).handle_error_interruptible(
+		  crimson::ct_error::input_output_error::pass_further(),
+		  crimson::ct_error::assert_all("no enoent possible")
+		);
+	      }
+	    }).si_then([&iter] {
+	      iter++;
+	      return seastar::make_ready_future<seastar::stop_iteration>(
+		seastar::stop_iteration::no);
+	    });
+	  }
+	  return seastar::make_ready_future<seastar::stop_iteration>(
+	    seastar::stop_iteration::yes);
+	}).si_then([&inserted_to] {
+	  return seastar::make_ready_future<journal_seq_t>(
+	    std::move(inserted_to));
+	});
       });
     }
-    return batch_insert_iertr::make_ready_future<journal_seq_t>(
+    return merge_cached_backrefs_iertr::make_ready_future<journal_seq_t>(
       std::move(inserted_to));
   });
 }
@@ -270,71 +315,6 @@ BtreeBackrefManager::scan_mapped_space(
 	    &visitor);
 	});
     });
-}
-
-BtreeBackrefManager::batch_insert_ret
-BtreeBackrefManager::batch_insert(
-  Transaction &t,
-  backref_buffer_ref &bbr,
-  const journal_seq_t &limit,
-  const uint64_t max)
-{
-  return seastar::do_with(
-    bbr->backrefs.begin(),
-    JOURNAL_SEQ_NULL,
-    [this, &t, &limit, &bbr, max](auto &iter, auto &inserted_to) {
-    return trans_intr::repeat(
-      [&iter, this, &t, &limit, &bbr, max, &inserted_to]()
-      -> batch_insert_iertr::future<seastar::stop_iteration> {
-      if (iter == bbr->backrefs.end())
-	return seastar::make_ready_future<seastar::stop_iteration>(
-	  seastar::stop_iteration::yes);
-      auto &seq = iter->first;
-      auto &backref_list = iter->second;
-      LOG_PREFIX(BtreeBackrefManager::batch_insert);
-      DEBUGT("seq {}, limit {}, num_fresh_backref {}"
-	, t, seq, limit, t.get_num_fresh_backref());
-      if (seq <= limit && t.get_num_fresh_backref() * BACKREF_NODE_SIZE < max) {
-	inserted_to = seq;
-	return trans_intr::do_for_each(
-	  backref_list,
-	  [this, &t](auto &backref) {
-	  LOG_PREFIX(BtreeBackrefManager::batch_insert);
-	  if (backref->laddr != L_ADDR_NULL) {
-	    DEBUGT("new mapping: {}~{} -> {}",
-	      t, backref->paddr, backref->len, backref->laddr);
-	    return new_mapping(
-	      t,
-	      backref->paddr,
-	      backref->len,
-	      backref->laddr,
-	      backref->type).si_then([](auto &&pin) {
-	      return seastar::now();
-	    });
-	  } else {
-	    DEBUGT("remove mapping: {}", t, backref->paddr);
-	    return remove_mapping(
-	      t,
-	      backref->paddr).si_then([](auto&&) {
-	      return seastar::now();
-	    }).handle_error_interruptible(
-	      crimson::ct_error::input_output_error::pass_further(),
-	      crimson::ct_error::assert_all("no enoent possible")
-	    );
-	  }
-	}).si_then([&iter] {
-	  iter++;
-	  return seastar::make_ready_future<seastar::stop_iteration>(
-	    seastar::stop_iteration::no);
-	});
-      }
-      return seastar::make_ready_future<seastar::stop_iteration>(
-	seastar::stop_iteration::yes);
-    }).si_then([&inserted_to] {
-      return seastar::make_ready_future<journal_seq_t>(
-	std::move(inserted_to));
-    });
-  });
 }
 
 BtreeBackrefManager::base_iertr::future<> _init_cached_extent(
