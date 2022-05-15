@@ -10393,12 +10393,13 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
   uint64_t fpos = 0;
-
-  if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
-    return -CEPHFS_EFBIG;
-
-  //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode.get();
+
+  if ( (uint64_t)(offset+size) > mdsmap->get_max_filesize() && //exceeds config
+       (uint64_t)(offset+size) > in->size ) { //exceeds filesize 
+      return -CEPHFS_EFBIG;              
+	}
+  //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
 
   if (objecter->osdmap_pool_full(in->layout.pool_id)) {
     return -CEPHFS_ENOSPC;
