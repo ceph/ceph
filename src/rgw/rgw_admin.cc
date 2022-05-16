@@ -8176,7 +8176,7 @@ next:
 
     formatter->open_array_section("keys");
     int ret = store->list_users(dpp(), metadata_key, marker, max_entries, handle, &truncated, users);
-     if (ret < 0 && ret != ENOENT) {
+     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }

@@ -3693,13 +3693,25 @@ int MotrStore::list_users(const DoutPrefixProvider* dpp, const std::string& meta
                         bool* truncated, std::list<std::string>& users)
 {
   int rc;
+  bufferlist bl;
   if (max_entries <= 0 or max_entries > 1000) {
     max_entries = 1000; 
   }
   vector<string> keys(max_entries + 1);
   vector<bufferlist> vals(max_entries + 1);
+  
+  if(!(marker.empty())){
+    rc = do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
+                                  M0_IC_GET, marker, bl);
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: Invalid marker. " << rc << dendl;
+      return rc;
+    }
+    else {
+      keys[0] = marker;
+    }
+  }
 
-  keys[0] = marker;
   rc = next_query_by_name(RGW_MOTR_USERS_IDX_NAME, keys, vals);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << "ERROR: NEXT query failed. " << rc << dendl;
