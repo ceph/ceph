@@ -29,9 +29,8 @@ metrics are for a particular MDS rank (e.g., number of subtrees handled by an MD
 Once enabled, Ceph Filesystem metrics can be fetched via::
 
   $ ceph fs perf stats
-  {"version": 1, "global_counters": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease"], "counters": [], "client_metadata": {"client.614146": {"IP": "10.1.1.100", "hostname"  : "ceph-host1", "root": "/", "mount_point": "/mnt/cephfs", "valid_metrics": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease"]}}, "global_metrics": {"client.614146": [[0,  0], [0, 0], [0, 0], [0, 0], [0, 0]]}, "metrics": {"delayed_ranks": [], "mds.0": {"client.614146": []}}}
 
-Details of the JSON command output are as follows:
+The output format is JSON and contains fields as follows:
 
 - `version`: Version of stats output
 - `global_counters`: List of global performance metrics
