@@ -7953,7 +7953,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
       return;
 
-    if (!check_fragment_space(mdr, destdn->get_dir()))
+    if (!linkmerge && !check_fragment_space(mdr, destdn->get_dir()))
       return;
 
     if (!check_access(mdr, srci, MAY_WRITE))
