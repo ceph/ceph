@@ -645,6 +645,35 @@ void Cache::register_metrics()
       }
     );
   }
+
+  /**
+   * rewrite version
+   */
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "version_count_dirty",
+        stats.committed_dirty_version.num,
+        sm::description("total number of rewrite-dirty extents")
+      ),
+      sm::make_counter(
+        "version_sum_dirty",
+        stats.committed_dirty_version.version,
+        sm::description("sum of the version from rewrite-dirty extents")
+      ),
+      sm::make_counter(
+        "version_count_reclaim",
+        stats.committed_reclaim_version.num,
+        sm::description("total number of rewrite-reclaim extents")
+      ),
+      sm::make_counter(
+        "version_sum_reclaim",
+        stats.committed_reclaim_version.version,
+        sm::description("sum of the version from rewrite-reclaim extents")
+      ),
+    }
+  );
 }
 
 void Cache::add_extent(CachedExtentRef ref)
@@ -1246,6 +1275,15 @@ record_t Cache::prepare_record(
   efforts.ool_record_data_bytes += ool_stats.get_data_bytes();
   efforts.inline_record_metadata_bytes +=
     (record.size.get_raw_mdlength() - record.get_delta_size());
+
+  auto &rewrite_version_stats = t.get_rewrite_version_stats();
+  if (trans_src == Transaction::src_t::CLEANER_TRIM) {
+    stats.committed_dirty_version.increment_stat(rewrite_version_stats);
+  } else if (trans_src == Transaction::src_t::CLEANER_RECLAIM) {
+    stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
+  } else {
+    assert(rewrite_version_stats.is_clear());
+  }
 
   return record;
 }
