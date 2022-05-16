@@ -339,7 +339,12 @@ CircularBoundedJournal::read_header(rbm_abs_addr start)
     ceph_le32 recorded_crc_le;
     decode(recorded_crc_le, bliter);
     uint32_t recorded_crc = recorded_crc_le;
-    ceph_assert(test_crc == recorded_crc);
+    if (test_crc != recorded_crc) {
+      ERROR("read_header: error, header crc mismatch.");
+      return read_header_ret(
+	read_header_ertr::ready_future_marker{},
+	std::nullopt);
+    }
     return read_header_ret(
       read_header_ertr::ready_future_marker{},
       std::make_pair(cbj_header, bl)
