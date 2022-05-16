@@ -29,9 +29,8 @@ metrics are for a particular MDS rank (e.g., number of subtrees handled by an MD
 Once enabled, Ceph Filesystem metrics can be fetched via::
 
   $ ceph fs perf stats
-  {"version": 1, "global_counters": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease", "opened_files", "pinned_icaps", "opened_inodes", "avg_read_latency", "stdev_read_latency", "avg_write_latency", "stdev_write_latency", "avg_metadata_latency", "stdev_metadata_latency"], "counters": [], "client_metadata": {"client.324130": {"IP": "192.168.1.100", "hostname": "ceph-host1", "root": "/", "mount_point": "/mnt/cephfs", "valid_metrics": ["cap_hit", "read_latency", "write_latency", "metadata_latency", "dentry_lease, "opened_files", "pinned_icaps", "opened_inodes", "avg_read_latency", "stdev_read_latency", "avg_write_latency", "stdev_write_latency", "avg_metadata_latency", "stdev_metadata_latency"]}}, "global_metrics": {"client.324130": [[309785, 1280], [0, 0], [197, 519015022], [88, 279074768], [12, 70147], [0, 3], [3, 3], [0, 3], [0, 0], [0, 0], [0, 11699223], [0, 88245], [0, 6596951], [0, 9539]]}, "metrics": {"delayed_ranks": [], "mds.0": {"client.324130": []}}}
 
-Details of the JSON command output are as follows:
+The output format is JSON and contains fields as follows:
 
 - `version`: Version of stats output
 - `global_counters`: List of global performance metrics
