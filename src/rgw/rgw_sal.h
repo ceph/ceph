@@ -78,7 +78,7 @@ protected:
   std::map<RGWObjCategory, RGWStorageStats>* stats;
 public:
   explicit RGWGetBucketStats_CB(const rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
-  ~RGWGetBucketStats_CB() override {}
+  virtual ~RGWGetBucketStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(std::map<RGWObjCategory, RGWStorageStats>* _stats) {
     stats = _stats;
@@ -91,7 +91,7 @@ protected:
   RGWStorageStats stats;
 public:
   explicit RGWGetUserStats_CB(const rgw_user& _user) : user(_user) {}
-  ~RGWGetUserStats_CB() override {}
+  virtual ~RGWGetUserStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(RGWStorageStats& _stats) {
     stats = _stats;

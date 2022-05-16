@@ -119,7 +119,7 @@ protected:
   ESQueryCompiler *compiler;
 public:
   ESQueryNode(ESQueryCompiler *_compiler) : compiler(_compiler) {}
-  virtual ~ESQueryNode() {}
+  ~ESQueryNode() {}
 
   virtual bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) = 0;
 
@@ -149,7 +149,7 @@ public:
     *pnode = this;
     return true;
   }
-  virtual ~ESQueryNode_Bool() {
+  ~ESQueryNode_Bool() {
     delete first;
     delete second;
   }
@@ -169,7 +169,7 @@ public:
 class ESQueryNodeLeafVal {
 public:
   ESQueryNodeLeafVal() = default;
-  virtual ~ESQueryNodeLeafVal() {}
+  ~ESQueryNodeLeafVal() {}
 
   virtual bool init(const string& str_val, string *perr) = 0;
   virtual void encode_json(const string& field, Formatter *f) const  = 0;

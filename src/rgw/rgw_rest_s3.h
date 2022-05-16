@@ -630,7 +630,7 @@ public:
     : RGWHandler_REST(),
       auth_registry(auth_registry) {
   }
-  ~RGWHandler_Auth_S3() override = default;
+  virtual ~RGWHandler_Auth_S3() override = default;
 
   static int validate_bucket_name(const std::string& bucket);
   static int validate_object_name(const std::string& bucket);

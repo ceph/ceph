@@ -261,15 +261,6 @@ void RGWObjectCtx::invalidate(const rgw_obj& obj) {
   }
 }
 
-void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
-{
-  write_version.ver = 1;
-#define TAG_LEN 24
-
-  write_version.tag.clear();
-  append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
-}
-
 class RGWMetaNotifierManager : public RGWCoroutinesManager {
   RGWRados* store;
   RGWHTTPManager http_manager;

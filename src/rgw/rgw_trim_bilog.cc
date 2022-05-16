@@ -60,7 +60,7 @@ enum TrimNotifyType {
 WRITE_RAW_ENCODER(TrimNotifyType);
 
 struct TrimNotifyHandler {
-  virtual ~TrimNotifyHandler() = default;
+  ~TrimNotifyHandler() = default;
 
   virtual void handle(bufferlist::const_iterator& input, bufferlist& output) = 0;
 };
@@ -101,7 +101,7 @@ struct TrimCounters {
 
   /// server interface to query the hottest buckets
   struct Server {
-    virtual ~Server() = default;
+    ~Server() = default;
 
     virtual void get_bucket_counters(int count, Vector& counters) = 0;
     virtual void reset_bucket_counters() = 0;
@@ -347,7 +347,7 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
 
 /// Interface to communicate with the trim manager about completed operations
 struct BucketTrimObserver {
-  virtual ~BucketTrimObserver() = default;
+  ~BucketTrimObserver() = default;
 
   virtual void on_bucket_trimmed(std::string&& bucket_instance) = 0;
   virtual bool trimmed_recently(const std::string_view& bucket_instance) = 0;

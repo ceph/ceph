@@ -402,7 +402,7 @@ struct es_index_settings {
 };
 
 struct es_index_config_base {
-  virtual ~es_index_config_base() {}
+  ~es_index_config_base() {}
   virtual void dump(Formatter *f) const = 0;
 };
 

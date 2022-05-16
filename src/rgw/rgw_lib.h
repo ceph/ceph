@@ -126,7 +126,7 @@ namespace rgw {
     int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
 
     RGWHandler_Lib() {}
-    ~RGWHandler_Lib() override {}
+    virtual ~RGWHandler_Lib() override {}
     static int init_from_header(rgw::sal::Store* store,
 				struct req_state *s);
   }; /* RGWHandler_Lib */
