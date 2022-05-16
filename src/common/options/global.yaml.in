@@ -2758,6 +2758,14 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: osd_pg_init_with_backfill
+  type: bool
+  level: advanced
+  default: true
+  long_desc: This happens when the newly created(caused by adding or deleting osd)
+    pg has its pglog (head, tail) that is emtpy pglog (0,0), but it still continuous
+    with the authoritative log(0, 3000), In this case, we use backfill instead of recovery.
+  with_legacy: true
 - name: osd_map_dedup
   type: bool
   level: advanced
