@@ -609,7 +609,7 @@ int cls_rgw_gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& mark
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_rgw_lc_get_head(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_lc_obj_head& head);
 int cls_rgw_lc_put_head(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_lc_obj_head& head);
-int cls_rgw_lc_get_next_entry(librados::IoCtx& io_ctx, const std::string& oid, std::string& marker, cls_rgw_lc_entry& entry);
+int cls_rgw_lc_get_next_entry(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, cls_rgw_lc_entry& entry);
 int cls_rgw_lc_rm_entry(librados::IoCtx& io_ctx, const std::string& oid, const cls_rgw_lc_entry& entry);
 int cls_rgw_lc_set_entry(librados::IoCtx& io_ctx, const std::string& oid, const cls_rgw_lc_entry& entry);
 int cls_rgw_lc_get_entry(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, cls_rgw_lc_entry& entry);

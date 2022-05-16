@@ -1341,7 +1341,7 @@ MotrAtomicWriter::MotrAtomicWriter(const DoutPrefixProvider *dpp,
           const rgw_placement_rule *_ptail_placement_rule,
           uint64_t _olh_epoch,
           const std::string& _unique_tag) :
-        Writer(dpp, y),
+        StoreWriter(dpp, y),
         store(_store),
               owner(_owner),
               ptail_placement_rule(_ptail_placement_rule),

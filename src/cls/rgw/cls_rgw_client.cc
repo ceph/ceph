@@ -965,7 +965,7 @@ int cls_rgw_lc_put_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& h
   return r;
 }
 
-int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker,
+int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, const string& marker,
 			      cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
