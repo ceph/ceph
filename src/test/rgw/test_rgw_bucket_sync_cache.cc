@@ -22,16 +22,16 @@ static rgw_bucket_shard make_key(const std::string& tenant,
                                  const std::string& bucket, int shard)
 {
   auto key = rgw_bucket_key{tenant, bucket};
-  return rgw_bucket_shard{key, shard};
+  return rgw_bucket_shard{std::move(key), shard};
 }
 
 TEST(BucketSyncCache, ReturnCachedPinned)
 {
   auto cache = Cache::create(0);
   const auto key = make_key("", "1", 0);
-  auto h1 = cache->get(key); // pin
+  auto h1 = cache->get(key, std::nullopt); // pin
   h1->counter = 1;
-  auto h2 = cache->get(key);
+  auto h2 = cache->get(key, std::nullopt);
   EXPECT_EQ(1, h2->counter);
 }
 
@@ -39,8 +39,8 @@ TEST(BucketSyncCache, ReturnNewUnpinned)
 {
   auto cache = Cache::create(0);
   const auto key = make_key("", "1", 0);
-  cache->get(key)->counter = 1; // pin+unpin
-  EXPECT_EQ(0, cache->get(key)->counter);
+  cache->get(key, std::nullopt)->counter = 1; // pin+unpin
+  EXPECT_EQ(0, cache->get(key, std::nullopt)->counter);
 }
 
 TEST(BucketSyncCache, DistinctTenant)
@@ -48,8 +48,8 @@ TEST(BucketSyncCache, DistinctTenant)
   auto cache = Cache::create(2);
   const auto key1 = make_key("a", "bucket", 0);
   const auto key2 = make_key("b", "bucket", 0);
-  cache->get(key1)->counter = 1;
-  EXPECT_EQ(0, cache->get(key2)->counter);
+  cache->get(key1, std::nullopt)->counter = 1;
+  EXPECT_EQ(0, cache->get(key2, std::nullopt)->counter);
 }
 
 TEST(BucketSyncCache, DistinctShards)
@@ -57,8 +57,8 @@ TEST(BucketSyncCache, DistinctShards)
   auto cache = Cache::create(2);
   const auto key1 = make_key("", "bucket", 0);
   const auto key2 = make_key("", "bucket", 1);
-  cache->get(key1)->counter = 1;
-  EXPECT_EQ(0, cache->get(key2)->counter);
+  cache->get(key1, std::nullopt)->counter = 1;
+  EXPECT_EQ(0, cache->get(key2, std::nullopt)->counter);
 }
 
 TEST(BucketSyncCache, DontEvictPinned)
@@ -68,11 +68,11 @@ TEST(BucketSyncCache, DontEvictPinned)
   const auto key1 = make_key("", "1", 0);
   const auto key2 = make_key("", "2", 0);
 
-  auto h1 = cache->get(key1);
-  EXPECT_EQ(key1, h1->key);
-  auto h2 = cache->get(key2);
-  EXPECT_EQ(key2, h2->key);
-  EXPECT_EQ(key1, h1->key); // h1 unchanged
+  auto h1 = cache->get(key1, std::nullopt);
+  EXPECT_EQ(key1, h1->key.first);
+  auto h2 = cache->get(key2, std::nullopt);
+  EXPECT_EQ(key2, h2->key.first);
+  EXPECT_EQ(key1, h1->key.first); // h1 unchanged
 }
 
 TEST(BucketSyncCache, HandleLifetime)
@@ -82,9 +82,9 @@ TEST(BucketSyncCache, HandleLifetime)
   Handle h; // test that handles keep the cache referenced
   {
     auto cache = Cache::create(0);
-    h = cache->get(key);
+    h = cache->get(key, std::nullopt);
   }
-  EXPECT_EQ(key, h->key);
+  EXPECT_EQ(key, h->key.first);
 }
 
 TEST(BucketSyncCache, TargetSize)
@@ -96,15 +96,15 @@ TEST(BucketSyncCache, TargetSize)
   const auto key3 = make_key("", "3", 0);
 
   // fill cache up to target_size=2
-  cache->get(key1)->counter = 1;
-  cache->get(key2)->counter = 2;
+  cache->get(key1, std::nullopt)->counter = 1;
+  cache->get(key2, std::nullopt)->counter = 2;
   // test that each unpinned entry is still cached
-  EXPECT_EQ(1, cache->get(key1)->counter);
-  EXPECT_EQ(2, cache->get(key2)->counter);
+  EXPECT_EQ(1, cache->get(key1, std::nullopt)->counter);
+  EXPECT_EQ(2, cache->get(key2, std::nullopt)->counter);
   // overflow the cache and recycle key1
-  cache->get(key3)->counter = 3;
+  cache->get(key3, std::nullopt)->counter = 3;
   // test that the oldest entry was recycled
-  EXPECT_EQ(0, cache->get(key1)->counter);
+  EXPECT_EQ(0, cache->get(key1, std::nullopt)->counter);
 }
 
 TEST(BucketSyncCache, HandleMoveAssignEmpty)
@@ -116,12 +116,12 @@ TEST(BucketSyncCache, HandleMoveAssignEmpty)
 
   Handle j1;
   {
-    auto h1 = cache->get(key1);
+    auto h1 = cache->get(key1, std::nullopt);
     j1 = std::move(h1); // assign over empty handle
-    EXPECT_EQ(key1, j1->key);
+    EXPECT_EQ(key1, j1->key.first);
   }
-  auto h2 = cache->get(key2);
-  EXPECT_EQ(key1, j1->key); // j1 stays pinned
+  auto h2 = cache->get(key2, std::nullopt);
+  EXPECT_EQ(key1, j1->key.first); // j1 stays pinned
 }
 
 TEST(BucketSyncCache, HandleMoveAssignExisting)
@@ -132,14 +132,14 @@ TEST(BucketSyncCache, HandleMoveAssignExisting)
   Handle h1;
   {
     auto cache1 = Cache::create(0);
-    h1 = cache1->get(key1);
+    h1 = cache1->get(key1, std::nullopt);
   } // j1 has the last ref to cache1
   {
     auto cache2 = Cache::create(0);
-    auto h2 = cache2->get(key2);
+    auto h2 = cache2->get(key2, std::nullopt);
     h1 = std::move(h2); // assign over existing handle
   }
-  EXPECT_EQ(key2, h1->key);
+  EXPECT_EQ(key2, h1->key.first);
 }
 
 TEST(BucketSyncCache, HandleCopyAssignEmpty)
@@ -151,12 +151,12 @@ TEST(BucketSyncCache, HandleCopyAssignEmpty)
 
   Handle j1;
   {
-    auto h1 = cache->get(key1);
+    auto h1 = cache->get(key1, std::nullopt);
     j1 = h1; // assign over empty handle
     EXPECT_EQ(&*h1, &*j1);
   }
-  auto h2 = cache->get(key2);
-  EXPECT_EQ(key1, j1->key); // j1 stays pinned
+  auto h2 = cache->get(key2, std::nullopt);
+  EXPECT_EQ(key1, j1->key.first); // j1 stays pinned
 }
 
 TEST(BucketSyncCache, HandleCopyAssignExisting)
@@ -167,13 +167,13 @@ TEST(BucketSyncCache, HandleCopyAssignExisting)
   Handle h1;
   {
     auto cache1 = Cache::create(0);
-    h1 = cache1->get(key1);
+    h1 = cache1->get(key1, std::nullopt);
   } // j1 has the last ref to cache1
   {
     auto cache2 = Cache::create(0);
-    auto h2 = cache2->get(key2);
+    auto h2 = cache2->get(key2, std::nullopt);
     h1 = h2; // assign over existing handle
     EXPECT_EQ(&*h1, &*h2);
   }
-  EXPECT_EQ(key2, h1->key);
+  EXPECT_EQ(key2, h1->key.first);
 }
