@@ -17,6 +17,7 @@
 #define CEPH_MMDSPEERREQUEST_H
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "messages/MMDSOp.h"
 
 class MMDSPeerRequest final : public MMDSOp {

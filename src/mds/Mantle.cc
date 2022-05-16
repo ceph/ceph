@@ -13,6 +13,7 @@
  */
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "MDSRank.h"
 #include "Mantle.h"
 #include "msg/Messenger.h"

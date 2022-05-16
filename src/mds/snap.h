@@ -19,6 +19,7 @@
 #include <string_view>
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "common/snap_types.h"
 
 #include "Capability.h"

@@ -16,6 +16,7 @@
 
 #include "gtest/gtest.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/inode_backtrace.h"
 
 TEST(inode_t, compare_equal)

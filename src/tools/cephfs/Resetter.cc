@@ -17,6 +17,7 @@
 #include "mds/JournalPointer.h"
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/MDCache.h"
 #include "mon/MonClient.h"
 #include "mds/events/EResetJournal.h"

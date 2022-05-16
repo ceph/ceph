@@ -18,6 +18,7 @@
 #include <string_view>
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "snap.h"
 #include "include/xlist.h"
 #include "include/elist.h"

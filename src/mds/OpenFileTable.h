@@ -16,6 +16,7 @@
 #define OPEN_FILE_TABLE_H
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "Anchor.h"
 
 #include "MDSContext.h"

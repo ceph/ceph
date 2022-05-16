@@ -16,6 +16,7 @@
 #define JOURNAL_FILTER_H
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/LogEvent.h"
 #include "mds/PurgeQueue.h"
 

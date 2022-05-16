@@ -20,6 +20,7 @@
 #include "mds/CInode.h"
 #include "mds/CDir.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "messages/MMDSOp.h"
 
 // sent from replica to auth

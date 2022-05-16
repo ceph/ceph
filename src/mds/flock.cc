@@ -4,6 +4,7 @@
 
 #include "common/debug.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/flock.h"
 
 #define dout_subsys ceph_subsys_mds

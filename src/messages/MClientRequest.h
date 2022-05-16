@@ -37,6 +37,7 @@
 
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "include/ceph_features.h"
 #include "messages/MMDSOp.h"
 

@@ -10,6 +10,7 @@
 #include "include/types.h"
 #include "common/entity_name.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 static const __u8 MON_CAP_R     = (1 << 1);      // read
 static const __u8 MON_CAP_W     = (1 << 2);      // write

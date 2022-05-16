@@ -37,6 +37,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "Session.h"
 
 using namespace TOPNSPC::common;

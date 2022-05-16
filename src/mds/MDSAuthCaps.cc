@@ -23,6 +23,7 @@
 #include "common/debug.h"
 #include "MDSAuthCaps.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "include/ipaddr.h"
 
 #define dout_subsys ceph_subsys_mds

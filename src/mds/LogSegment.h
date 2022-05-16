@@ -20,6 +20,7 @@
 #include "include/Context.h"
 #include "MDSContext.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"

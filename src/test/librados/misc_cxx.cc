@@ -17,6 +17,7 @@
 #include "include/stringify.h"
 #include "common/Checksummer.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"

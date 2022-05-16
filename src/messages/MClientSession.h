@@ -17,6 +17,7 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 class MClientSession final : public SafeMessage {
 private:

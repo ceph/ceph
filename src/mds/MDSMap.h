@@ -35,6 +35,7 @@
 #include "common/config.h"
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/cephfs_features.h"
 
 static inline const auto MDS_FEATURE_INCOMPAT_BASE = CompatSet::Feature(1, "base v0.20");

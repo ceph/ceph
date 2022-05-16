@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/LogEvent.h"
 #include "mds/events/EMetaBlob.h"
 

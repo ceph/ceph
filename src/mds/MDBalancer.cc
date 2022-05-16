@@ -14,6 +14,7 @@
 
 #include "include/compat.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 #include "mon/MonClient.h"
 #include "MDBalancer.h"

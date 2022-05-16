@@ -14,6 +14,7 @@
 #include "messages/MMDSPing.h"
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 class MDSRank;
 

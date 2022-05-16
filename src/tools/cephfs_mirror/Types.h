@@ -11,6 +11,7 @@
 #include "include/rados/librados.hpp"
 #include "include/cephfs/libcephfs.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 namespace cephfs {
 namespace mirror {

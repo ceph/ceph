@@ -11,6 +11,7 @@
 #include "common/errno.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/LogEvent.h"
 #include "mds/InoTable.h"
 #include "mds/CDentry.h"

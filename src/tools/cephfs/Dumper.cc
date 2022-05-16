@@ -22,6 +22,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/LogEvent.h"
 #include "mds/JournalPointer.h"
 #include "osdc/Journaler.h"

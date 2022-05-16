@@ -5,6 +5,7 @@
 #include "include/xlist.h"
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "Inode.h"
 #include "InodeRef.h"
 #include "Dir.h"

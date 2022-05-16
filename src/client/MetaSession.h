@@ -9,6 +9,7 @@
 #include "include/xlist.h"
 #include "mds/MDSMap.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "messages/MClientCapRelease.h"
 
 struct Cap;

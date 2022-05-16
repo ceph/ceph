@@ -7,6 +7,7 @@
 
 #include "common/debug.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 inline std::ostream& operator<<(std::ostream& out, const ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length

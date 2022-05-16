@@ -17,6 +17,7 @@
 
 #include <string_view>
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "messages/MMDSOp.h"
 
 class MCacheExpire final : public MMDSOp {

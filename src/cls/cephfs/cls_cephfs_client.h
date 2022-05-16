@@ -3,6 +3,7 @@
 
 #include "include/rados/librados_fwd.hpp"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "cls_cephfs.h"
 
 class AccumulateArgs;

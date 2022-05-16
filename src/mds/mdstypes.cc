@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "MDSContext.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"

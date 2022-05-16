@@ -19,6 +19,7 @@
 #include <string_view>
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 class FSMapUser {
 public:

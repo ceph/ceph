@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/FSMap.h"
 
 /**

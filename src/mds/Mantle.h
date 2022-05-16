@@ -23,6 +23,7 @@
 #include <string>
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 class Mantle {
   public:

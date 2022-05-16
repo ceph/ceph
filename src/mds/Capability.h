@@ -25,6 +25,7 @@
 #include "common/config.h"
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 
 /*

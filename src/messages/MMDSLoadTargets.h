@@ -17,6 +17,7 @@
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
 

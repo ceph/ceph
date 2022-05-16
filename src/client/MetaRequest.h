@@ -9,6 +9,7 @@
 #include "include/xlist.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
 

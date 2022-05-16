@@ -19,6 +19,7 @@
 #include "common/ref.h"
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 class BatchOp {
 public:

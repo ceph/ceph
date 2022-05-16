@@ -9,6 +9,7 @@
 #include "include/denc.h"
 #include "include/utime.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 enum UpdateType : uint32_t {
   UPDATE_TYPE_REFRESH = 0,

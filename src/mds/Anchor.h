@@ -19,6 +19,7 @@
 
 #include "include/types.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "include/buffer.h"
 
 /*

@@ -3,6 +3,7 @@
 #include "gtest/gtest.h"
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "include/buffer.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"

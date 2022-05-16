@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <include/fs_types.h>
 #include <mds/mdstypes.h>
+#include "include/cephfs/sharedtypes.h"
 #include <include/cephfs/libcephfs.h>
 
 #define MAX_CEPH_FILES	1000

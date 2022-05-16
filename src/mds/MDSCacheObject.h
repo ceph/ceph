@@ -13,6 +13,7 @@
 #include "include/xlist.h"
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "MDSContext.h"
 #include "include/elist.h"
 

@@ -13,6 +13,7 @@
 
 #include "mds/flock.h"
 #include "mds/mdstypes.h" // hrm
+#include "include/cephfs/sharedtypes.h"
 
 #include "osdc/ObjectCacher.h"
 

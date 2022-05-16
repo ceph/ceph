@@ -18,6 +18,7 @@
 #include "mgr/MDSPerfMetricTypes.h"
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "MDSMap.h"
 #include "MDSPinger.h"
 

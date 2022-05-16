@@ -18,6 +18,7 @@
 
 #include "include/encoding.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 class Objecter;
 

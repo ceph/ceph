@@ -17,6 +17,7 @@
 
 #include "common/errno.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "mds/events/EUpdate.h"
 #include "mds/LogEvent.h"
 #include "JournalScanner.h"

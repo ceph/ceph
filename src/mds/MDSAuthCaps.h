@@ -24,6 +24,7 @@
 #include "common/debug.h"
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 // unix-style capabilities
 enum {

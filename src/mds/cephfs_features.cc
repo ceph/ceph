@@ -4,6 +4,7 @@
 #include <array>
 #include "cephfs_features.h"
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 static const std::array feature_names
 {

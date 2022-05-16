@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 namespace ceph {
   class Formatter;

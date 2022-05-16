@@ -19,6 +19,7 @@
 #include <string_view>
 
 #include "mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 #include "include/random.h"
 
 class CDir;

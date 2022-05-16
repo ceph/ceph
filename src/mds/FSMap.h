@@ -33,6 +33,7 @@
 #include "include/common_fwd.h"
 #include "common/Formatter.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/sharedtypes.h"
 
 class health_check_map_t;
 
