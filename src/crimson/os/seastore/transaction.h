@@ -319,6 +319,7 @@ public:
     retired_set.clear();
     no_release_delta_retired_set.clear();
     onode_tree_stats = {};
+    omap_tree_stats = {};
     lba_tree_stats = {};
     backref_tree_stats = {};
     ool_write_stats = {};
@@ -337,15 +338,20 @@ public:
     uint64_t depth = 0;
     uint64_t num_inserts = 0;
     uint64_t num_erases = 0;
+    uint64_t num_updates = 0;
 
     bool is_clear() const {
       return (depth == 0 &&
               num_inserts == 0 &&
-              num_erases == 0);
+              num_erases == 0 &&
+              num_updates == 0);
     }
   };
   tree_stats_t& get_onode_tree_stats() {
     return onode_tree_stats;
+  }
+  tree_stats_t& get_omap_tree_stats() {
+    return omap_tree_stats;
   }
   tree_stats_t& get_lba_tree_stats() {
     return lba_tree_stats;
@@ -435,6 +441,7 @@ private:
 
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
+  tree_stats_t omap_tree_stats; // exclude omap tree depth
   tree_stats_t lba_tree_stats;
   tree_stats_t backref_tree_stats;
   ool_write_stats_t ool_write_stats;

@@ -318,7 +318,7 @@ public:
     fixed_kv_node_meta_t<node_key_t> meta{min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, 1};
     root_leaf->set_meta(meta);
     root_leaf->pin.set_range(meta);
-    c.trans.get_lba_tree_stats().depth = 1u;
+    get_tree_stats<self_type>(c.trans).depth = 1u;
     return phy_tree_root_t{root_leaf->get_paddr(), 1u};
   }
 
@@ -518,7 +518,7 @@ public:
               interruptible::ready_future_marker{},
               std::make_pair(ret, false));
           } else {
-            ++(c.trans.get_lba_tree_stats().num_inserts);
+            ++(get_tree_stats<self_type>(c.trans).num_inserts);
             return handle_split(
               c, ret
             ).si_then([c, laddr, val, &ret] {
@@ -584,6 +584,7 @@ public:
       );
       iter.leaf.node = mut->cast<leaf_node_t>();
     }
+    ++(get_tree_stats<self_type>(c.trans).num_updates);
     iter.leaf.node->update(
       iter.leaf.node->iter_idx(iter.leaf.pos),
       val);
@@ -614,7 +615,7 @@ public:
       c.trans,
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
     assert(!iter.is_end());
-    ++(c.trans.get_lba_tree_stats().num_erases);
+    ++(get_tree_stats<self_type>(c.trans).num_erases);
     return seastar::do_with(
       iter,
       [this, c](auto &ret) {
@@ -1400,7 +1401,7 @@ private:
 
       root.set_location(nroot->get_paddr());
       root.set_depth(iter.get_depth());
-      c.trans.get_lba_tree_stats().depth = iter.get_depth();
+      get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
       root_dirty = true;
     }
 
