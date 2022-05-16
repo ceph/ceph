@@ -3893,6 +3893,7 @@ void PeeringState::init(
   const vector<int>& newacting, int new_acting_primary,
   const pg_history_t& history,
   const PastIntervals& pi,
+  bool backfill,
   ObjectStore::Transaction &t)
 {
   psdout(10) << "init role " << role << " up "
@@ -3919,6 +3920,13 @@ void PeeringState::init(
 
   if (!perform_deletes_during_peering()) {
     pg_log.set_missing_may_contain_deletes();
+  }
+
+  if (backfill) {
+    psdout(10) << __func__ << ": Setting backfill" << dendl;
+    info.set_last_backfill(hobject_t());
+    info.last_complete = info.last_update;
+    pg_log.mark_log_for_rewrite();
   }
 
   on_new_interval();

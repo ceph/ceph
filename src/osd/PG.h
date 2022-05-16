@@ -383,6 +383,7 @@ public:
     int acting_primary,
     const pg_history_t& history,
     const PastIntervals& pim,
+    bool backfill,
     ObjectStore::Transaction &t);
 
   /// read existing pg state off disk

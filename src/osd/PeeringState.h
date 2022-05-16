@@ -1737,6 +1737,7 @@ public:
     const std::vector<int>& newacting, int new_acting_primary,
     const pg_history_t& history,
     const PastIntervals& pi,
+    bool backfill,
     ObjectStore::Transaction &t);
 
   /// Init pg instance from disk state
