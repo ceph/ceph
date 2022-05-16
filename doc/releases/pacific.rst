@@ -337,6 +337,7 @@ Changelog
 * test: fix wrong alarm (HitSetWrite) (`pr#45319 <https://github.com/ceph/ceph/pull/45319>`_, Myoungwon Oh)
 * test: increase retry duration when calculating manifest ref. count (`pr#44202 <https://github.com/ceph/ceph/pull/44202>`_, Myoungwon Oh)
 * tools/rbd: expand where option rbd_default_map_options can be set (`pr#45181 <https://github.com/ceph/ceph/pull/45181>`_, Christopher Hoffman, Ilya Dryomov)
+* Wip doc pr 46109 backport to pacific (`pr#46117 <https://github.com/ceph/ceph/pull/46117>`_, Ville Ojamo)
 
 
 v16.2.7 Pacific   
