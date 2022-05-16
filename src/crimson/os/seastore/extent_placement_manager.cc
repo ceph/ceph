@@ -88,8 +88,7 @@ SegmentedOolWriter::do_write(
   if (t.get_src() == Transaction::src_t::MUTATE) {
     commit_type = record_commit_type_t::MODIFY;
   } else {
-    assert(t.get_src() == Transaction::src_t::CLEANER_TRIM ||
-           t.get_src() == Transaction::src_t::CLEANER_RECLAIM);
+    assert(is_cleaner_transaction(t.get_src()));
     commit_type = record_commit_type_t::REWRITE;
   }
   record.commit_time = commit_time.time_since_epoch().count();

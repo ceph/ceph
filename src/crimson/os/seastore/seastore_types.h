@@ -772,9 +772,36 @@ struct journal_seq_t {
     denc(v.offset, p);
     DENC_FINISH(p);
   }
+
+  bool operator==(const journal_seq_t &o) const { return cmp(o) == 0; }
+  bool operator!=(const journal_seq_t &o) const { return cmp(o) != 0; }
+  bool operator<(const journal_seq_t &o) const { return cmp(o) < 0; }
+  bool operator<=(const journal_seq_t &o) const { return cmp(o) <= 0; }
+  bool operator>(const journal_seq_t &o) const { return cmp(o) > 0; }
+  bool operator>=(const journal_seq_t &o) const { return cmp(o) >= 0; }
+
+private:
+  int cmp(const journal_seq_t &other) const {
+    if (segment_seq > other.segment_seq) {
+      return 1;
+    } else if (segment_seq < other.segment_seq) {
+      return -1;
+    }
+    auto &seg_paddr = offset.as_seg_paddr();
+    auto &o_seg_paddr = other.offset.as_seg_paddr();
+    if (seg_paddr.get_segment_off() > o_seg_paddr.get_segment_off()) {
+      return 1;
+    } else if (seg_paddr.get_segment_off() < o_seg_paddr.get_segment_off()) {
+      return -1;
+    }
+    if (seg_paddr.get_segment_id() > o_seg_paddr.get_segment_id()) {
+      return 1;
+    } else if (seg_paddr.get_segment_id() < o_seg_paddr.get_segment_id()) {
+      return -1;
+    }
+    return 0;
+  }
 };
-WRITE_CMP_OPERATORS_2(journal_seq_t, segment_seq, offset)
-WRITE_EQ_OPERATORS_2(journal_seq_t, segment_seq, offset)
 
 std::ostream &operator<<(std::ostream &out, const journal_seq_t &seq);
 

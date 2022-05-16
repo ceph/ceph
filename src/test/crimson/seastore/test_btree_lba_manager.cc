@@ -75,7 +75,7 @@ struct btree_test_base :
 
   void update_journal_tail_committed(journal_seq_t committed) final {}
 
-  void update_segment_avail_bytes(paddr_t offset) final {}
+  void update_segment_avail_bytes(segment_type_t, paddr_t) final {}
 
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
 
