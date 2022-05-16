@@ -897,9 +897,8 @@ int MotrBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_qu
 
 int MotrBucket::merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& new_attrs, optional_yield y)
 {
-  for (auto& it : new_attrs)
-    attrs[it.first] = it.second;
-
+  // Assign updated bucket attributes map to attrs map variable
+  attrs = new_attrs;
   // "put_info" second bool argument is meant to update existing metadata,
   // which is not needed here. So explicitly passing false.
   return put_info(dpp, false, ceph::real_time());
