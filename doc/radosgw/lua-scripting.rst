@@ -290,6 +290,10 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.User.Id``                                | string   | triggering user id                                           | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.Trace``                                  | table    | info on trace                                                | no       | no        | no       |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.Trace.Enable``                           | boolean  | tracing is enabled                                           | no       | yes       | no       |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 
 Request Functions
 --------------------
@@ -423,4 +427,27 @@ Then, do a restart for the radosgw and upload the following script to the `postR
     assert(s:send(json.encode(msg).."\n"))
     assert(s:close())
   end
+
+
+- Trace only requests of specific bucket
+
+Tracing is disabled by default, so we should enable tracing for this specific bucket
+
+.. code-block:: lua
+
+  if Request.Bucket.Name == "my-bucket" then
+      Request.Trace.Enable = true
+  end
+
+
+If `tracing is enabled <https://docs.ceph.com/en/latest/jaegertracing/#how-to-enable-tracing-in-ceph/>`_ on the RGW, the value of Request.Trace.Enable is true, so we should disable tracing for all other requests that do not match the bucket name.
+In the `preRequest` context:
+
+.. code-block:: lua
+
+  if Request.Bucket.Name ~= "my-bucket" then
+      Request.Trace.Enable = false
+  end
+
+Note that changing `Request.Trace.Enable` does not change the tracer's state, but disables or enables the tracing for the request only.
 
