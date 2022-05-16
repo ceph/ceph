@@ -61,6 +61,16 @@ TEST(BucketSyncCache, DistinctShards)
   EXPECT_EQ(0, cache->get(key2, std::nullopt)->counter);
 }
 
+TEST(BucketSyncCache, DistinctGen)
+{
+  auto cache = Cache::create(2);
+  const auto key = make_key("", "bucket", 0);
+  std::optional<uint64_t> gen1; // empty
+  std::optional<uint64_t> gen2 = 5;
+  cache->get(key, gen1)->counter = 1;
+  EXPECT_EQ(0, cache->get(key, gen2)->counter);
+}
+
 TEST(BucketSyncCache, DontEvictPinned)
 {
   auto cache = Cache::create(0);
