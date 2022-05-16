@@ -653,8 +653,10 @@ skip_upmap:
     for (auto p = pools.begin(); p != pools.end(); ++p) {
       if (pool != -1 && p->first != pool)
 	continue;
-      if (pg_num > 0) 
+      if (pg_num > 0) {
         p->second.set_pg_num(pg_num);
+        p->second.set_pgp_num(pg_num);
+      }
       
       cout << "pool " << p->first
 	   << " pg_num " << p->second.get_pg_num() << std::endl;
