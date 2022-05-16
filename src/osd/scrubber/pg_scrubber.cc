@@ -565,9 +565,9 @@ ScrubQueue::sched_params_t PgScrubber::determine_scrub_time(
   } else {
     res.proposed_time = m_pg->info.history.last_scrub_stamp;
     res.min_interval =
-      m_pg->get_pool().info.opts.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
+      m_pg->get_pgpool().info.opts.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
     res.max_interval =
-      m_pg->get_pool().info.opts.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
+      m_pg->get_pgpool().info.opts.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
   }
 
   dout(15) << __func__ << " suggested: " << res.proposed_time
@@ -1022,7 +1022,6 @@ void PgScrubber::on_init()
 
   m_be = std::make_unique<ScrubBackend>(
     *this,
-    *(m_pg->get_pgbackend()),
     *m_pg,
     m_pg_whoami,
     m_is_repair,
@@ -1048,7 +1047,6 @@ void PgScrubber::on_replica_init()
 {
   m_be = std::make_unique<ScrubBackend>(
     *this,
-    *(m_pg->get_pgbackend()),
     *m_pg,
     m_pg_whoami,
     m_is_repair,
@@ -1191,11 +1189,59 @@ int PgScrubber::build_scrub_map_chunk(ScrubMap& map,
   // finish
   dout(20) << __func__ << " finishing" << dendl;
   ceph_assert(pos.done());
-  m_be->repair_oinfo_oid(map);
+  repair_oinfo_oid(map);
 
   dout(20) << __func__ << " done, got " << map.objects.size() << " items"
 	   << dendl;
   return 0;
+}
+
+/// \todo consider moving repair_oinfo_oid() back to the backend
+void PgScrubber::repair_oinfo_oid(ScrubMap& smap)
+{
+  for (auto i = smap.objects.rbegin(); i != smap.objects.rend(); ++i) {
+
+    const hobject_t& hoid = i->first;
+    ScrubMap::object& o = i->second;
+
+    if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
+      continue;
+    }
+    bufferlist bl;
+    bl.push_back(o.attrs[OI_ATTR]);
+    object_info_t oi;
+    try {
+      oi.decode(bl);
+    } catch (...) {
+      continue;
+    }
+
+    if (oi.soid != hoid) {
+      ObjectStore::Transaction t;
+      OSDriver::OSTransaction _t(m_pg->osdriver.get_transaction(&t));
+
+      m_osds->clog->error()
+        << "osd." << m_pg_whoami << " found object info error on pg " << m_pg_id
+        << " oid " << hoid << " oid in object info: " << oi.soid
+        << "...repaired";
+      // Fix object info
+      oi.soid = hoid;
+      bl.clear();
+      encode(oi,
+             bl,
+             m_pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+
+      bufferptr bp(bl.c_str(), bl.length());
+      o.attrs[OI_ATTR] = bp;
+
+      t.setattr(m_pg->coll, ghobject_t(hoid), OI_ATTR, bl);
+      int r = m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t));
+      if (r != 0) {
+        derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
+             << dendl;
+      }
+    }
+  }
 }
 
 
@@ -2282,8 +2328,9 @@ const OSDMapRef& PgScrubber::get_osdmap() const
   return m_pg->get_osdmap();
 }
 
-ostream& operator<<(ostream& out, const PgScrubber& scrubber)
-{
+LoggerSinkSet& PgScrubber::get_logger() const { return*m_osds->clog.get(); }
+
+ostream &operator<<(ostream &out, const PgScrubber &scrubber) {
   return out << scrubber.m_flags;
 }
 

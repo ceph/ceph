@@ -215,7 +215,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     curmap,
     this,
     this),
-  pool(recovery_state.get_pool()),
+  pool(recovery_state.get_pgpool()),
   info(recovery_state.get_info())
 {
 #ifdef PG_DEBUG_REFS
