@@ -42,8 +42,15 @@ jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   return noop_tracer->StartSpan(trace_name);
 }
 
+jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled) {
+  if (trace_is_enabled) {
+    return tracer->StartSpan(trace_name);
+  }
+  return noop_tracer->StartSpan(trace_name);
+}
+
 jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan& parent_span) {
-  if (is_enabled() && parent_span) {
+  if (is_enabled() && parent_span->IsRecording()) {
     const auto parent_ctx = parent_span->GetContext();
     return add_span(span_name, parent_ctx);
   }

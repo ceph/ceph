@@ -1840,7 +1840,6 @@ public:
   RGWInitMultipart() {}
 
   void init(rgw::sal::Store* store, struct req_state *s, RGWHandler *h) override {
-    multipart_trace = tracing::rgw::tracer.start_trace(tracing::rgw::MULTIPART);
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }

@@ -328,6 +328,7 @@ int process_request(rgw::sal::Store* const store,
     goto done;
   }
   {
+    s->trace_enabled = tracing::rgw::tracer.is_enabled();
     std::string script;
     auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
     if (rc == -ENOENT) {
@@ -383,8 +384,9 @@ int process_request(rgw::sal::Store* const store,
       goto done;
     }
 
+
     const auto trace_name = std::string(op->name()) + " " + s->trans_id;
-    s->trace = tracing::rgw::tracer.start_trace(trace_name);
+    s->trace = tracing::rgw::tracer.start_trace(trace_name, s->trace_enabled);
     s->trace->SetAttribute(tracing::rgw::OP, op->name());
     s->trace->SetAttribute(tracing::rgw::TYPE, tracing::rgw::REQUEST);
 
