@@ -331,7 +331,7 @@ void PG::prepare_write(pg_info_t &info,
   }
   pglog.write_log_and_missing(
     t, &km, coll_ref->get_cid(), pgmeta_oid,
-    peering_state.get_pool().info.require_rollback());
+    peering_state.get_pgpool().info.require_rollback());
   if (!km.empty()) {
     t.omap_setkeys(coll_ref->get_cid(), pgmeta_oid, km);
   }
@@ -628,7 +628,7 @@ PG::do_osd_ops_execute(
     // check for full
     if ((ox->delta_stats.num_bytes > 0 ||
       ox->delta_stats.num_objects > 0) &&
-      get_pool().info.has_flag(pg_pool_t::FLAG_FULL)) {
+      get_pgpool().info.has_flag(pg_pool_t::FLAG_FULL)) {
       const auto& m = ox->get_message();
       if (m.get_reqid().name.is_mds() ||   // FIXME: ignore MDS for now
         m.has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
@@ -636,7 +636,7 @@ PG::do_osd_ops_execute(
       } else if (m.has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
         // they tried, they failed.
         logger().info(" full, replying to FULL_TRY op");
-        if (get_pool().info.has_flag(pg_pool_t::FLAG_FULL_QUOTA))
+        if (get_pgpool().info.has_flag(pg_pool_t::FLAG_FULL_QUOTA))
           return interruptor::make_ready_future<OpsExecuter::rep_op_fut_tuple>(
             seastar::now(),
             OpsExecuter::osd_op_ierrorator::future<>(
