@@ -1,7 +1,8 @@
 local g = import 'grafonnet/grafana.libsonnet';
-local c = (import '../mixin.libsonnet')._config;
 
 {
+  _config:: error 'must provide _config',
+
   dashboardSchema(title,
                   description,
                   uid,
@@ -180,7 +181,7 @@ local c = (import '../mixin.libsonnet')._config;
 
   matchers()::
     local jobMatcher = 'job=~"$job"';
-    local clusterMatcher = '%s=~"$cluster"' % c.clusterLabel;
+    local clusterMatcher = '%s=~"$cluster"' % $._config.clusterLabel;
     {
       // Common labels
       jobMatcher: jobMatcher,
@@ -198,7 +199,7 @@ local c = (import '../mixin.libsonnet')._config;
       1,
       'cluster',
       '(.*)',
-      if !c.showMultiCluster then 'variable' else '',
+      if !$._config.showMultiCluster then 'variable' else '',
       multi=true,
       allValues='.+',
     ),
