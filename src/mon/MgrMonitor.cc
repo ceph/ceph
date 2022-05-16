@@ -1144,9 +1144,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
   string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
-  string prefix;
-  cmd_getval(cmdmap, "prefix", prefix);
-
+  const auto prefix = cmd_getval_or<string>(cmdmap, "prefix", string{});
   int r = 0;
 
   if (prefix == "mgr fail") {
@@ -1274,6 +1272,9 @@ out:
   getline(ss, rs);
 
   if (r >= 0) {
+    if (prefix == "mgr fail" && is_writeable()) {
+      propose_pending();
+    }
     // success.. delay reply
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
