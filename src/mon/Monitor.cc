@@ -2170,7 +2170,7 @@ void Monitor::start_election()
 
 void Monitor::win_standalone_election()
 {
-  dout(1) << "win_standalone_election" << dendl;
+  dout(10) << "win_standalone_election" << dendl;
 
   // bump election epoch, in case the previous epoch included other
   // monitors; we need to be able to make the distinction.
@@ -2183,6 +2183,8 @@ void Monitor::win_standalone_election()
 
   map<int,Metadata> metadata;
   collect_metadata(&metadata[0]);
+  dout(10) << "metadata:" << dendl;
+  print_mon_metadata(metadata);
 
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
@@ -2259,10 +2261,13 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
     dout(10) << "mon_metadata:" << dendl;
     print_mon_metadata(mon_metadata);
     map<int,Metadata> m = metadata;
-    for (unsigned rank = 0; rank < monmap->size(); ++rank) {
-      if (m.count(rank) == 0 &&
-	  mon_metadata.count(rank)) {
-	m[rank] = mon_metadata[rank];
+    dout(10) << "m:" << dendl;
+    print_mon_metadata(m);
+    set<int> removed_ranks = monmap->removed_ranks;
+    for (unsigned rank = 0; rank < monmap->size(); ++rank) { 
+      if (m.count(rank) == 0 && mon_metadata.count(rank) &&
+          removed_ranks.count(rank) == 0) {
+        m[rank] = mon_metadata[rank];
       }
     }
     dout(10) << "m:" << dendl;
@@ -5410,18 +5415,21 @@ void Monitor::handle_mon_get_map(MonOpRequestRef op)
 }
 
 void Monitor::print_mon_metadata(map<int,Metadata> &metadata) {
-  std::string output = "metadata:\n";
+  std::string output;
   for (auto &[key, value] : metadata) {
     const Metadata& m = value;
     output += "mon.";
     output += to_string(key);
     output += "\n";
     for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
-        output += p->first.c_str();
-        output += ": ";
-        output += p->second;
-        output += "\n";
+        if (p->first.c_str() == "addrs" && p->first.c_str() == "hostname") {
+          output += p->first.c_str();
+          output += ": ";
+          output += p->second;
+          output += "\n";
+        }
     }
+    output += "\n";
   }
   dout(10) << output << dendl;
 } 
@@ -5434,6 +5442,7 @@ int Monitor::load_metadata()
     return r;
   auto it = bl.cbegin();
   decode(mon_metadata, it);
+  dout(10) << "mon_metadata:"<< dendl;
   print_mon_metadata(mon_metadata);
   pending_metadata = mon_metadata;
   return 0;
