@@ -10,8 +10,6 @@
 #include <vector>
 #include <fstream>
 
-#define dout_subsys ceph_subsys_rgw
-
 namespace rgw { namespace sal {
   class Store;
 } }
@@ -184,7 +182,7 @@ public:
   OpsLogFile(CephContext* cct, std::string& path, uint64_t max_data_size);
   ~OpsLogFile() override;
   CephContext *get_cct() const override { return cct; }
-  unsigned get_subsys() const override { return dout_subsys; }
+  unsigned get_subsys() const override;
   std::ostream& gen_prefix(std::ostream& out) const override { return out << "rgw OpsLogFile: "; }
   void reopen();
   void start();
