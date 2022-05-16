@@ -1068,7 +1068,7 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
       "motr.rgw.bucket." + tenant_bkt_name + ".multiparts";
   key_vec[0].clear();
   key_vec[0].assign(marker.begin(), marker.end());
-  rc = store->next_query_by_name(bucket_multipart_iname, key_vec, val_vec);
+  rc = store->next_query_by_name(bucket_multipart_iname, key_vec, val_vec, prefix, delim);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << "ERROR: NEXT query failed. " << rc << dendl;
     return rc;
@@ -1080,9 +1080,11 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
   int ocount = 0;
   rgw_obj_key last_obj_key;
   *is_truncated = false;
+
   for (const auto& bl: val_vec) {
+    
     if (bl.length() == 0)
-      break;
+      continue;
 
     if((marker != "") && (ocount == 0))
     {
