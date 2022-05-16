@@ -1,11 +1,14 @@
+import ipaddress
 import logging
 import os
+import socket
 from typing import List, Any, Tuple, Dict
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +109,21 @@ class AlertmanagerService(CephadmService):
         proto = None  # http: or https:
         url = mgr_map.get('services', {}).get('dashboard', None)
         if url:
-            dashboard_urls.append(url)
-            proto = url.split('/')[0]
-            port = url.split('/')[2].split(':')[1]
+            p_result = urlparse(url.rstrip('/'))
+            hostname = socket.getfqdn(p_result.hostname)
+
+            try:
+                ip = ipaddress.ip_address(hostname)
+            except ValueError:
+                pass
+            else:
+                if ip.version == 6:
+                    hostname = f'[{hostname}]'
+
+            dashboard_urls.append(
+                f'{p_result.scheme}://{hostname}:{p_result.port}{"/" if not p_result.path.startswith("/") else ""}{p_result.path}')
+            proto = p_result.scheme
+            port = p_result.port
         # scan all mgrs to generate deps and to get standbys too.
         # assume that they are all on the same port as the active mgr.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
@@ -120,7 +135,7 @@ class AlertmanagerService(CephadmService):
             if dd.daemon_id == self.mgr.get_mgr_id():
                 continue
             addr = self._inventory_get_fqdn(dd.hostname)
-            dashboard_urls.append('%s//%s:%s/' % (proto, addr.split(':')[0],
+            dashboard_urls.append('%s://%s:%s/' % (proto, addr.split(':')[0],
                                                   port))
 
         context = {

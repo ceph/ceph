@@ -700,6 +700,7 @@ class TestCephadm(object):
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
+    @mock.patch("mgr_module.MgrModule.get", lambda _, __: {"services": {"dashboard": "http://192.168.0.123:8080"}})
     def test_daemon_add(self, spec: ServiceSpec, meth, cephadm_module):
         with with_host(cephadm_module, 'test'):
             with with_daemon(cephadm_module, spec, meth, 'test'):
@@ -865,6 +866,7 @@ class TestCephadm(object):
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
+    @mock.patch("mgr_module.MgrModule.get", lambda _, __: {"services": {"dashboard": "http://192.168.0.123:8080"}})
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec, meth, 'test'):
