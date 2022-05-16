@@ -20,15 +20,14 @@ SET_SUBSYS(seastore_cleaner);
 namespace crimson::os::seastore {
 
 void segment_info_t::set_open(
-    segment_seq_t _seq, segment_type_t _type, std::size_t seg_size)
+    segment_seq_t _seq, segment_type_t _type)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
-  ceph_assert(seg_size > 0);
   state = Segment::segment_state_t::OPEN;
   seq = _seq;
   type = _type;
-  open_avail_bytes = seg_size;
+  written_to = 0;
 }
 
 void segment_info_t::set_empty()
@@ -38,7 +37,7 @@ void segment_info_t::set_empty()
   type = segment_type_t::NULL_SEG;
   last_modified = {};
   last_rewritten = {};
-  open_avail_bytes = 0;
+  written_to = 0;
 }
 
 void segment_info_t::set_closed()
@@ -48,14 +47,14 @@ void segment_info_t::set_closed()
 }
 
 void segment_info_t::init_closed(
-    segment_seq_t _seq, segment_type_t _type)
+    segment_seq_t _seq, segment_type_t _type, std::size_t seg_size)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   state = Segment::segment_state_t::CLOSED;
   seq = _seq;
   type = _type;
-  open_avail_bytes = 0;
+  written_to = seg_size;
 }
 
 std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
@@ -69,7 +68,7 @@ std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
         << ", type=" << info.type
         << ", last_modified=" << info.last_modified.time_since_epoch()
         << ", last_rewritten=" << info.last_rewritten.time_since_epoch()
-        << ", open_avail_bytes=" << info.open_avail_bytes;
+        << ", written_to=" << info.written_to;
   }
   return out << ")";
 }
@@ -80,17 +79,24 @@ void segments_info_t::reset()
 
   segment_size = 0;
 
-  num_in_journal = 0;
+  journal_segment_id = NULL_SEG_ID;
+  num_in_journal_open = 0;
+  num_type_journal = 0;
+  num_type_ool = 0;
+
   num_open = 0;
   num_empty = 0;
   num_closed = 0;
 
-  count_open = 0;
-  count_release = 0;
-  count_close = 0;
+  count_open_journal = 0;
+  count_open_ool = 0;
+  count_release_journal = 0;
+  count_release_ool = 0;
+  count_close_journal = 0;
+  count_close_ool = 0;
 
   total_bytes = 0;
-  avail_bytes = 0;
+  avail_bytes_in_open = 0;
 }
 
 void segments_info_t::add_segment_manager(
@@ -122,7 +128,6 @@ void segments_info_t::add_segment_manager(
   num_empty += nsegments;
 
   total_bytes += sm_size;
-  avail_bytes += sm_size;
 }
 
 void segments_info_t::init_closed(
@@ -134,16 +139,18 @@ void segments_info_t::init_closed(
        segment, segment_seq_printer_t{seq}, type,
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
-  segment_info.init_closed(seq, type);
+  segment_info.init_closed(seq, type, get_segment_size());
   ceph_assert(num_empty > 0);
   --num_empty;
   ++num_closed;
   if (type == segment_type_t::JOURNAL) {
-    ++num_in_journal;
+    // init_closed won't initialize journal_segment_id
+    ceph_assert(get_journal_head() == JOURNAL_SEQ_NULL);
+    ++num_type_journal;
+  } else {
+    ++num_type_ool;
   }
-  ceph_assert(avail_bytes >= get_segment_size());
-  avail_bytes -= get_segment_size();
-  // do not increment count_close;
+  // do not increment count_close_*;
 }
 
 void segments_info_t::mark_open(
@@ -155,14 +162,28 @@ void segments_info_t::mark_open(
        segment, segment_seq_printer_t{seq}, type,
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
-  segment_info.set_open(seq, type, get_segment_size());
+  segment_info.set_open(seq, type);
   ceph_assert(num_empty > 0);
   --num_empty;
   ++num_open;
   if (type == segment_type_t::JOURNAL) {
-    ++num_in_journal;
+    if (journal_segment_id != NULL_SEG_ID) {
+      auto& last_journal_segment = segments[journal_segment_id];
+      ceph_assert(last_journal_segment.is_closed());
+      ceph_assert(last_journal_segment.type == segment_type_t::JOURNAL);
+      ceph_assert(last_journal_segment.seq + 1 == seq);
+    }
+    journal_segment_id = segment;
+
+    ++num_in_journal_open;
+    ++num_type_journal;
+    ++count_open_journal;
+  } else {
+    ++num_type_ool;
+    ++count_open_ool;
   }
-  ++count_open;
+  ceph_assert(segment_info.written_to == 0);
+  avail_bytes_in_open += get_segment_size();
 }
 
 void segments_info_t::mark_empty(
@@ -181,11 +202,14 @@ void segments_info_t::mark_empty(
   --num_closed;
   ++num_empty;
   if (type == segment_type_t::JOURNAL) {
-    ceph_assert(num_in_journal > 0);
-    --num_in_journal;
+    ceph_assert(num_type_journal > 0);
+    --num_type_journal;
+    ++count_release_journal;
+  } else {
+    ceph_assert(num_type_ool > 0);
+    --num_type_ool;
+    ++count_release_ool;
   }
-  avail_bytes += get_segment_size();
-  ++count_release;
 }
 
 void segments_info_t::mark_closed(
@@ -201,36 +225,46 @@ void segments_info_t::mark_closed(
   ceph_assert(num_open > 0);
   --num_open;
   ++num_closed;
-  ceph_assert(avail_bytes >= segment_info.open_avail_bytes);
-  avail_bytes -= segment_info.open_avail_bytes;
-  ++count_close;
+  if (segment_info.type == segment_type_t::JOURNAL) {
+    ceph_assert(num_in_journal_open > 0);
+    --num_in_journal_open;
+    ++count_close_journal;
+  } else {
+    ++count_close_ool;
+  }
+  ceph_assert(get_segment_size() >= segment_info.written_to);
+  auto seg_avail_bytes = get_segment_size() - segment_info.written_to;
+  ceph_assert(avail_bytes_in_open >= seg_avail_bytes);
+  avail_bytes_in_open -= seg_avail_bytes;
 }
 
 void segments_info_t::update_written_to(
+    segment_type_t type,
     paddr_t offset)
 {
   LOG_PREFIX(segments_info_t::update_written_to);
   auto& saddr = offset.as_seg_paddr();
   auto& segment_info = segments[saddr.get_segment_id()];
   if (!segment_info.is_open()) {
-    ERROR("segment is not open, not updating, offset={}, {}",
-          offset, segment_info);
-    // FIXME
-    return;
-  }
-
-  auto new_avail = get_segment_size() - saddr.get_segment_off();
-  if (segment_info.open_avail_bytes < new_avail) {
-    ERROR("open_avail_bytes should not increase! offset={}, {}",
-          offset, segment_info);
+    ERROR("segment is not open, not updating, type={}, offset={}, {}",
+          type, offset, segment_info);
     ceph_abort();
   }
 
-  DEBUG("offset={}, {}", offset, segment_info);
-  auto avail_deduction = segment_info.open_avail_bytes - new_avail;
-  ceph_assert(avail_bytes >= avail_deduction);
-  avail_bytes -= avail_deduction;
-  segment_info.open_avail_bytes = new_avail;
+  auto new_written_to = static_cast<std::size_t>(saddr.get_segment_off());
+  ceph_assert(new_written_to <= get_segment_size());
+  if (segment_info.written_to > new_written_to) {
+    ERROR("written_to should not decrease! type={}, offset={}, {}",
+          type, offset, segment_info);
+    ceph_abort();
+  }
+
+  DEBUG("type={}, offset={}, {}", type, offset, segment_info);
+  ceph_assert(type == segment_info.type);
+  auto avail_deduction = new_written_to - segment_info.written_to;
+  ceph_assert(avail_bytes_in_open >= avail_deduction);
+  avail_bytes_in_open -= avail_deduction;
+  segment_info.written_to = new_written_to;
 }
 
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
@@ -387,20 +421,23 @@ SegmentCleaner::SegmentCleaner(
     ool_segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::OOL)),
     gc_process(*this)
-{}
+{
+  config.validate();
+}
 
 void SegmentCleaner::register_metrics()
 {
   namespace sm = seastar::metrics;
-  stats.segment_util.buckets.resize(11);
-  for (int i = 0; i < 11; i++) {
+  stats.segment_util.buckets.resize(UTIL_BUCKETS);
+  std::size_t i;
+  for (i = 0; i < UTIL_BUCKETS; ++i) {
     stats.segment_util.buckets[i].upper_bound = ((double)(i + 1)) / 10;
-    if (!i) {
-      stats.segment_util.buckets[i].count = segments.get_num_segments();
-    } else {
-      stats.segment_util.buckets[i].count = 0;
-    }
+    stats.segment_util.buckets[i].count = 0;
   }
+  // NOTE: by default the segments are empty
+  i = get_bucket_index(UTIL_STATE_EMPTY);
+  stats.segment_util.buckets[i].count = segments.get_num_segments();
+
   metrics.add_group("segment_cleaner", {
     sm::make_counter("segments_number",
 		     [this] { return segments.get_num_segments(); },
@@ -409,8 +446,14 @@ void SegmentCleaner::register_metrics()
 		     [this] { return segments.get_segment_size(); },
 		     sm::description("the bytes of a segment")),
     sm::make_counter("segments_in_journal",
-		     [this] { return segments.get_num_in_journal(); },
+		     [this] { return get_segments_in_journal(); },
 		     sm::description("the number of segments in journal")),
+    sm::make_counter("segments_type_journal",
+		     [this] { return segments.get_num_type_journal(); },
+		     sm::description("the number of segments typed journal")),
+    sm::make_counter("segments_type_ool",
+		     [this] { return segments.get_num_type_ool(); },
+		     sm::description("the number of segments typed out-of-line")),
     sm::make_counter("segments_open",
 		     [this] { return segments.get_num_open(); },
 		     sm::description("the number of open segments")),
@@ -420,34 +463,76 @@ void SegmentCleaner::register_metrics()
     sm::make_counter("segments_closed",
 		     [this] { return segments.get_num_closed(); },
 		     sm::description("the number of closed segments")),
-    sm::make_counter("segments_count_open",
-		     [this] { return segments.get_count_open(); },
-		     sm::description("the count of open segment operations")),
-    sm::make_counter("segments_count_release",
-		     [this] { return segments.get_count_release(); },
-		     sm::description("the count of release segment operations")),
-    sm::make_counter("segments_count_close",
-		     [this] { return segments.get_count_close(); },
-		     sm::description("the count of close segment operations")),
+
+    sm::make_counter("segments_count_open_journal",
+		     [this] { return segments.get_count_open_journal(); },
+		     sm::description("the count of open journal segment operations")),
+    sm::make_counter("segments_count_open_ool",
+		     [this] { return segments.get_count_open_ool(); },
+		     sm::description("the count of open ool segment operations")),
+    sm::make_counter("segments_count_release_journal",
+		     [this] { return segments.get_count_release_journal(); },
+		     sm::description("the count of release journal segment operations")),
+    sm::make_counter("segments_count_release_ool",
+		     [this] { return segments.get_count_release_ool(); },
+		     sm::description("the count of release ool segment operations")),
+    sm::make_counter("segments_count_close_journal",
+		     [this] { return segments.get_count_close_journal(); },
+		     sm::description("the count of close journal segment operations")),
+    sm::make_counter("segments_count_close_ool",
+		     [this] { return segments.get_count_close_ool(); },
+		     sm::description("the count of close ool segment operations")),
+
     sm::make_counter("total_bytes",
 		     [this] { return segments.get_total_bytes(); },
 		     sm::description("the size of the space")),
     sm::make_counter("available_bytes",
 		     [this] { return segments.get_available_bytes(); },
 		     sm::description("the size of the space is available")),
-
-    sm::make_counter("accumulated_blocked_ios", stats.accumulated_blocked_ios,
-		     sm::description("accumulated total number of ios that were blocked by gc")),
-    sm::make_counter("reclaim_rewrite_bytes", stats.reclaim_rewrite_bytes,
-		     sm::description("rewritten bytes due to reclaim")),
-    sm::make_counter("reclaiming_bytes", stats.reclaiming_bytes,
-		     sm::description("bytes being reclaimed")),
-    sm::make_counter("ios_blocking", stats.ios_blocking,
-		     sm::description("IOs that are blocking on space usage")),
+    sm::make_counter("unavailable_unreclaimable_bytes",
+		     [this] { return get_unavailable_unreclaimable_bytes(); },
+		     sm::description("the size of the space is unavailable and unreclaimable")),
+    sm::make_counter("unavailable_reclaimable_bytes",
+		     [this] { return get_unavailable_reclaimable_bytes(); },
+		     sm::description("the size of the space is unavailable and reclaimable")),
     sm::make_counter("used_bytes", stats.used_bytes,
 		     sm::description("the size of the space occupied by live extents")),
-    sm::make_counter("projected_used_bytes", stats.projected_used_bytes,
-		     sm::description("the size of the space going to be occupied by new extents")),
+    sm::make_counter("unavailable_unused_bytes",
+		     [this] { return get_unavailable_unused_bytes(); },
+		     sm::description("the size of the space is unavailable and not alive")),
+
+    sm::make_counter("projected_count", stats.projected_count,
+		    sm::description("the number of projected usage reservations")),
+    sm::make_counter("projected_used_bytes_sum", stats.projected_used_bytes_sum,
+		    sm::description("the sum of the projected usage in bytes")),
+
+    sm::make_counter("io_count", stats.io_count,
+		    sm::description("the sum of IOs")),
+    sm::make_counter("io_blocked_count", stats.io_blocked_count,
+		    sm::description("IOs that are blocked by gc")),
+    sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
+		     sm::description("the sum of blocking IOs")),
+
+    sm::make_counter("reclaimed_bytes", stats.reclaimed_bytes,
+		     sm::description("rewritten bytes due to reclaim")),
+    sm::make_counter("reclaimed_segment_bytes", stats.reclaimed_segment_bytes,
+		     sm::description("rewritten bytes due to reclaim")),
+    sm::make_counter("closed_journal_used_bytes", stats.closed_journal_used_bytes,
+		     sm::description("used bytes when close a journal segment")),
+    sm::make_counter("closed_journal_total_bytes", stats.closed_journal_total_bytes,
+		     sm::description("total bytes of closed journal segments")),
+    sm::make_counter("closed_ool_used_bytes", stats.closed_ool_used_bytes,
+		     sm::description("used bytes when close a ool segment")),
+    sm::make_counter("closed_ool_total_bytes", stats.closed_ool_total_bytes,
+		     sm::description("total bytes of closed ool segments")),
+
+    sm::make_gauge("available_ratio",
+                   [this] { return segments.get_available_ratio(); },
+                   sm::description("ratio of available space to total space")),
+    sm::make_gauge("reclaim_ratio",
+                   [this] { return get_reclaim_ratio(); },
+                   sm::description("ratio of reclaimable space to unavailable space")),
+
     sm::make_histogram("segment_utilization_distribution",
 		       [this]() -> seastar::metrics::histogram& {
 		         return stats.segment_util;
@@ -468,12 +553,15 @@ segment_id_t SegmentCleaner::allocate_segment(
     auto seg_id = it->first;
     auto& segment_info = it->second;
     if (segment_info.is_empty()) {
+      auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type);
+      auto new_usage = calc_utilization(seg_id);
+      adjust_segment_util(old_usage, new_usage);
       INFO("opened, should_block_on_gc {}, projected_avail_ratio {}, "
-           "projected_reclaim_ratio {}",
+           "reclaim_ratio {}",
            should_block_on_gc(),
            get_projected_available_ratio(),
-           get_projected_reclaim_ratio());
+           get_reclaim_ratio());
       return seg_id;
     }
   }
@@ -486,25 +574,24 @@ void SegmentCleaner::update_journal_tail_target(
   journal_seq_t dirty_replay_from,
   journal_seq_t alloc_replay_from)
 {
-  logger().debug(
-    "{}: {}, current dirty_extents_replay_from {}",
-    __func__,
-    dirty_replay_from,
-    dirty_extents_replay_from);
+  LOG_PREFIX(SegmentCleaner::update_journal_tail_target);
   if (dirty_extents_replay_from == JOURNAL_SEQ_NULL
       || dirty_replay_from > dirty_extents_replay_from) {
+    DEBUG("dirty_extents_replay_from={} => {}",
+          dirty_extents_replay_from, dirty_replay_from);
     dirty_extents_replay_from = dirty_replay_from;
   }
 
   update_alloc_info_replay_from(alloc_replay_from);
 
   journal_seq_t target = std::min(dirty_replay_from, alloc_replay_from);
-  logger().debug(
-    "{}: {}, current tail target {}",
-    __func__,
-    target,
-    journal_tail_target);
-  if (journal_tail_target == JOURNAL_SEQ_NULL || target > journal_tail_target) {
+  ceph_assert(target != JOURNAL_SEQ_NULL);
+  auto journal_head = segments.get_journal_head();
+  ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+              journal_head >= target);
+  if (journal_tail_target == JOURNAL_SEQ_NULL ||
+      target > journal_tail_target) {
+    DEBUG("journal_tail_target={} => {}", journal_tail_target, target);
     journal_tail_target = target;
   }
   gc_process.maybe_wake_on_space_used();
@@ -514,33 +601,35 @@ void SegmentCleaner::update_journal_tail_target(
 void SegmentCleaner::update_alloc_info_replay_from(
   journal_seq_t alloc_replay_from)
 {
-  logger().debug(
-    "{}: {}, current alloc_info_replay_from {}",
-    __func__,
-    alloc_replay_from,
-    alloc_info_replay_from);
+  LOG_PREFIX(SegmentCleaner::update_alloc_info_replay_from);
   if (alloc_info_replay_from == JOURNAL_SEQ_NULL
       || alloc_replay_from > alloc_info_replay_from) {
+    DEBUG("alloc_info_replay_from={} => {}",
+          alloc_info_replay_from, alloc_replay_from);
     alloc_info_replay_from = alloc_replay_from;
   }
 }
 
 void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 {
+  LOG_PREFIX(SegmentCleaner::update_journal_tail_committed);
+  if (committed == JOURNAL_SEQ_NULL) {
+    return;
+  }
+  auto journal_head = segments.get_journal_head();
+  ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
+              journal_head >= committed);
+
   if (journal_tail_committed == JOURNAL_SEQ_NULL ||
       committed > journal_tail_committed) {
-    logger().debug(
-      "{}: update journal_tail_committed {}",
-      __func__,
-      committed);
+    DEBUG("update journal_tail_committed={} => {}",
+          journal_tail_committed, committed);
     journal_tail_committed = committed;
   }
   if (journal_tail_target == JOURNAL_SEQ_NULL ||
       committed > journal_tail_target) {
-    logger().debug(
-      "{}: update journal_tail_target {}",
-      __func__,
-      committed);
+    DEBUG("update journal_tail_target={} => {}",
+          journal_tail_target, committed);
     journal_tail_target = committed;
   }
 }
@@ -548,13 +637,23 @@ void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 void SegmentCleaner::close_segment(segment_id_t segment)
 {
   LOG_PREFIX(SegmentCleaner::close_segment);
-  ceph_assert(init_complete);
+  auto old_usage = calc_utilization(segment);
   segments.mark_closed(segment);
+  auto &seg_info = segments[segment];
+  if (seg_info.type == segment_type_t::JOURNAL) {
+    stats.closed_journal_used_bytes += space_tracker->get_usage(segment);
+    stats.closed_journal_total_bytes += segments.get_segment_size();
+  } else {
+    stats.closed_ool_used_bytes += space_tracker->get_usage(segment);
+    stats.closed_ool_total_bytes += segments.get_segment_size();
+  }
+  auto new_usage = calc_utilization(segment);
+  adjust_segment_util(old_usage, new_usage);
   INFO("closed, should_block_on_gc {}, projected_avail_ratio {}, "
-       "projected_reclaim_ratio {}",
+       "reclaim_ratio {}",
        should_block_on_gc(),
        get_projected_available_ratio(),
-       get_projected_reclaim_ratio());
+       get_reclaim_ratio());
 }
 
 SegmentCleaner::trim_backrefs_ret SegmentCleaner::trim_backrefs(
@@ -564,7 +663,7 @@ SegmentCleaner::trim_backrefs_ret SegmentCleaner::trim_backrefs(
   return backref_manager.batch_insert_from_cache(
     t,
     limit,
-    config.journal_rewrite_backref_per_cycle
+    config.rewrite_backref_bytes_per_cycle
   );
 }
 
@@ -575,7 +674,7 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
   return ecb->get_next_dirty_extents(
     t,
     limit,
-    config.journal_rewrite_dirty_per_cycle
+    config.rewrite_dirty_bytes_per_cycle
   ).si_then([=, &t](auto dirty_list) {
     LOG_PREFIX(SegmentCleaner::rewrite_dirty);
     DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
@@ -596,13 +695,13 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
 SegmentCleaner::gc_cycle_ret SegmentCleaner::GCProcess::run()
 {
   return seastar::do_until(
-    [this] { return stopping; },
+    [this] { return is_stopping(); },
     [this] {
       return maybe_wait_should_run(
       ).then([this] {
 	cleaner.log_gc_state("GCProcess::run");
 
-	if (stopping) {
+	if (is_stopping()) {
 	  return seastar::now();
 	} else {
 	  return cleaner.do_gc_cycle();
@@ -766,7 +865,7 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
       segment_id.device_segment_id() + 1};
     end_paddr = paddr_t::make_seg_paddr(next_segment_id, 0);
   } else {
-    end_paddr = seg_paddr + config.reclaim_bytes_stride;
+    end_paddr = seg_paddr + config.reclaim_bytes_per_cycle;
   }
 
   double pavail_ratio = get_projected_available_ratio();
@@ -883,12 +982,13 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
       auto d = seastar::lowres_system_clock::now() - start;
       INFO("duration: {}, pavail_ratio before: {}, repeats: {}", d, pavail_ratio, runs);
       if (final_reclaim()) {
-	stats.reclaim_rewrite_bytes += stats.reclaiming_bytes;
+	stats.reclaimed_bytes += stats.reclaiming_bytes;
+	stats.reclaimed_segment_bytes += segments.get_segment_size();
 	stats.reclaiming_bytes = 0;
 	next_reclaim_pos.reset();
       } else {
 	next_reclaim_pos =
-	  paddr_t(*next_reclaim_pos + config.reclaim_bytes_stride);
+	  paddr_t(*next_reclaim_pos + config.reclaim_bytes_per_cycle);
       }
     });
   });
@@ -903,7 +1003,6 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   stats = {};
   journal_tail_target = JOURNAL_SEQ_NULL;
   journal_tail_committed = JOURNAL_SEQ_NULL;
-  journal_head = JOURNAL_SEQ_NULL;
   dirty_extents_replay_from = JOURNAL_SEQ_NULL;
   alloc_info_replay_from = JOURNAL_SEQ_NULL;
   
@@ -1082,13 +1181,17 @@ SegmentCleaner::maybe_release_segment(Transaction &t)
     INFOT("releasing segment {}", t, to_release);
     return sm_group->release_segment(to_release
     ).safe_then([this, FNAME, &t, to_release] {
+      auto old_usage = calc_utilization(to_release);
+      ceph_assert(old_usage == 0);
       segments.mark_empty(to_release);
+      auto new_usage = calc_utilization(to_release);
+      adjust_segment_util(old_usage, new_usage);
       INFOT("released, should_block_on_gc {}, projected_avail_ratio {}, "
-           "projected_reclaim_ratio {}",
+           "reclaim_ratio {}",
            t,
            should_block_on_gc(),
            get_projected_available_ratio(),
-           get_projected_reclaim_ratio());
+           get_reclaim_ratio());
       if (space_tracker->get_usage(to_release) != 0) {
         space_tracker->dump_usage(to_release);
         ceph_abort();
@@ -1098,6 +1201,15 @@ SegmentCleaner::maybe_release_segment(Transaction &t)
   } else {
     return SegmentManager::release_ertr::now();
   }
+}
+
+void SegmentCleaner::complete_init()
+{
+  LOG_PREFIX(SegmentCleaner::complete_init);
+  INFO("done, start GC");
+  ceph_assert(segments.get_journal_head() != JOURNAL_SEQ_NULL);
+  init_complete = true;
+  gc_process.start();
 }
 
 }
