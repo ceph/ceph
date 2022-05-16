@@ -64,6 +64,34 @@ void MissingLoc::add_batch_sources_info(
   }
 }
 
+bool MissingLoc::add_source_info_for_one_unfound(
+  const pg_shard_t fromosd,
+  const hobject_t &soid,
+  const pg_missing_item &missing)
+{
+  bool found_missing = false;
+
+  ldout(cct, 0) << __func__ << " search_for_missing " << soid
+		<< " " << missing.need << " is on osd."
+		<< fromosd << dendl;
+
+  auto p = missing_loc.find(soid);
+  if (p == missing_loc.end()) {
+    p = missing_loc.emplace(soid, set<pg_shard_t>()).first;
+  } else {
+    _dec_count(p->second);
+  }
+  p->second.insert(fromosd);
+  _inc_count(p->second);
+
+  ldout(cct, 0) << __func__ << " source osd=" << p->second
+		<< " missing=" << missing << dendl;
+
+  found_missing = true;
+
+  return found_missing;
+}
+
 bool MissingLoc::add_source_info(
   pg_shard_t fromosd,
   const pg_info_t &oinfo,

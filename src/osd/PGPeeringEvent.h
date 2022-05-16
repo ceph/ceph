@@ -98,6 +98,16 @@ struct MLogRec : boost::statechart::event< MLogRec > {
   void print(std::ostream *out) const;
 };
 
+struct RecoverUnfoundObject : boost::statechart::event< RecoverUnfoundObject > {
+  set<pg_shard_t> peers;
+  hobject_t object;
+  pg_missing_item missing;
+  RecoverUnfoundObject(set<pg_shard_t> peers,
+		       const hobject_t object,
+		       const pg_missing_item missing);
+  void print(std::ostream *out) const;
+};
+
 struct MNotifyRec : boost::statechart::event< MNotifyRec > {
   spg_t pgid;
   pg_shard_t from;

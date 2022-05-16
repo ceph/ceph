@@ -958,6 +958,7 @@ protected:
   friend class C_OSD_RepopCommit;
   void repop_all_committed(RepGather *repop);
   void eval_repop(RepGather*);
+  void eval_read_repop(RepGather*);
   void issue_repop(RepGather *repop, OpContext *ctx);
   RepGather *new_repop(
     OpContext *ctx,
@@ -1930,6 +1931,43 @@ public:
   void kick_object_context_blocked(ObjectContextRef obc);
 
   void maybe_force_recovery();
+
+  void find_object_source(
+    const std::set<pg_shard_t> might_have_unfound,
+    ObcLockManager &&manager,
+    const hobject_t &object,
+    const pg_missing_item &missing_item,
+    std::optional<std::function<void(void)> > &&_on_complete,
+    OpRequestRef op,
+    int r = 0);
+
+  struct QueryObjectInfoCtx {
+    boost::intrusive_ptr<RepGather> repop;
+    set<pg_shard_t> waiting_on;
+    hobject_t object;
+    pg_missing_item missing;
+    map<pg_shard_t, object_info_t> result;
+  };
+
+  void cancel_query_object_info();
+  map<ceph_tid_t, QueryObjectInfoCtx> query_object_info_ctx_waiting_on;
+
+  bool is_same_op_for_one_unfound_object(
+    const hobject_t &object,
+    const pg_missing_item &missing,
+    const object_info_t &oi,
+    const pg_shard_t &peer,
+    map<pg_shard_t, object_info_t> &auth_locations);
+
+  void check_query_object_info(QueryObjectInfoCtx &query_obj_ctx);
+
+  void do_query_object_info(
+    OpRequestRef op,
+    ThreadPool::TPHandle &handle);
+
+  void find_unfound_object(
+    const string objname,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish);
 
   void mark_all_unfound_lost(
     int what,

@@ -15,3 +15,16 @@ void MLogRec::print(std::ostream *out) const
   *out << "MLogRec from " << from << " ";
   msg->inner_print(*out);
 }
+
+RecoverUnfoundObject::RecoverUnfoundObject(
+  set<pg_shard_t> peers,
+  const hobject_t object,
+  const pg_missing_item missing)
+  : peers(peers), object(object), missing(missing) {}
+
+void RecoverUnfoundObject::print(std::ostream *out) const
+{
+  *out << "RecoverUnfoundObject object " << object
+       << " missing " << missing
+       << " peers " << peers << " ";
+}

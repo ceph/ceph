@@ -278,6 +278,7 @@ void PeeringState::purge_strays()
     }
     peer_missing.erase(*p);
     peer_info.erase(*p);
+    peer_activate.erase(*p);
     missing_loc.remove_stray_recovery_sources(*p);
     peer_purged.insert(*p);
     removed = true;
@@ -347,6 +348,9 @@ void PeeringState::remove_down_peer_info(const OSDMapRef &osdmap)
       peer_missing.erase(p->first);
       peer_log_requested.erase(p->first);
       peer_missing_requested.erase(p->first);
+      peer_activate.erase(p->first);
+      if (!is_acting(p->first) && !is_up(p->first))
+	pl->cancel_query_object_info();
       peer_info.erase(p++);
       removed = true;
     } else
@@ -872,6 +876,7 @@ void PeeringState::clear_primary_state()
   peer_log_requested.clear();
   peer_missing_requested.clear();
   peer_info.clear();
+  peer_activate.clear();
   peer_bytes.clear();
   peer_missing.clear();
   peer_last_complete_ondisk.clear();
@@ -2221,8 +2226,73 @@ bool PeeringState::search_for_missing(
       get_osdmap_epoch(),  // fixme: use lower epoch?
       get_osdmap_epoch(),
       tinfo);
+    peer_activate[from] = true;
   }
   return found_missing;
+}
+
+bool PeeringState::discover_unfound_missing(
+  const set<pg_shard_t> peers,
+  const hobject_t &object,
+  const pg_missing_item &missing,
+  PeeringCtxWrapper &ctx)
+{
+  std::set<pg_shard_t>::const_iterator m = peers.begin();
+  std::set<pg_shard_t>::const_iterator mend = peers.end();
+
+  for (; m != mend; ++m) {
+    pg_shard_t peer(*m);
+
+    if (!get_osdmap()->exists(peer.osd)) {
+      psdout(0) << __func__ << " skipping not exists osd." << peer
+		<< ", object=" << object << ", missing=" << missing << dendl;
+      continue;
+    }
+
+    if (!get_osdmap()->is_up(peer.osd)) {
+      psdout(0) << __func__ << " skipping down osd." << peer
+		<< ", object=" << object << ", missing=" << missing << dendl;
+      continue;
+    }
+
+    if (acting_recovery_backfill.count(peer)) {
+      psdout(0) << __func__ << " skipping up/acting osd." << peer
+		<< ", already activate, object=" << object
+		<< ", missing=" << missing << dendl;
+      continue;
+    }
+
+    /* send info to active stray osd that not active during peering */
+    ceph_assert(peer_info.count(peer));
+
+    if (peer_activate.count(peer)) {
+      psdout(0) << __func__ << " skipping stray osd." << peer
+		<< ", already activate, object=" << object
+		<< ", missing=" << missing << dendl;
+      continue;
+    }
+
+    pg_info_t tinfo(peer_info[peer]);
+
+    tinfo.pgid.shard = pg_whoami.shard;
+
+    psdout(0) << __func__ << " to activate osd." << peer
+              << " unfound object=" << object
+              << " missing=" << missing
+              << " tinfo=" << tinfo
+              << dendl;
+
+    ctx.send_info(
+      peer.osd,
+      spg_t(info.pgid.pgid, peer.shard),
+      get_osdmap_epoch(),
+      get_osdmap_epoch(),
+      tinfo);
+
+    peer_activate[peer] = true;
+  }
+
+  return true;
 }
 
 bool PeeringState::discover_all_missing(
@@ -2322,6 +2392,11 @@ void PeeringState::build_might_have_unfound()
     might_have_unfound.insert(p->first);
 
   psdout(15) << __func__ << ": built " << might_have_unfound << dendl;
+}
+
+const std::set<pg_shard_t> PeeringState::get_might_have_unfound()
+{
+  return might_have_unfound;
 }
 
 void PeeringState::activate(
@@ -2468,6 +2543,7 @@ void PeeringState::activate(
 	    get_osdmap_epoch(),
 	    info,
 	    get_lease());
+	  peer_activate[peer] = true;
 	} else {
 	  psdout(10) << "activate peer osd." << peer
 		     << " is up to date, but sending pg_log anyway" << dendl;
@@ -2556,6 +2632,7 @@ void PeeringState::activate(
 		 << dendl;
 	m->lease = get_lease();
 	pl->send_cluster_message(peer.osd, m, get_osdmap_epoch());
+	peer_activate[peer] = true;
       }
 
       // peer now has
@@ -4554,6 +4631,48 @@ boost::statechart::result PeeringState::Primary::react(
 {
   DECLARE_LOCALS;
   ps->set_force_backfill(false);
+  return discard_event();
+}
+
+boost::statechart::result PeeringState::Primary::react(const RecoverUnfoundObject& objevt)
+{
+  DECLARE_LOCALS;
+
+  const set<pg_shard_t> &new_location = objevt.peers;
+  const hobject_t &object = objevt.object;
+  const pg_missing_item &missing = objevt.missing;
+
+  psdout(0) << __func__ << " receive RecoverUnfoundObject"
+	    << ", new_location=" << new_location
+	    << ", object=" << object
+	    << ", missing=" << missing
+	    << ", is_active()=" << ps->is_active()
+	    << ", is_recovery_unfound()=" << ps->is_recovery_unfound()
+	    << ", missing_loc.is_unfound()=" << ps->missing_loc.is_unfound(object)
+	    << dendl;
+
+  if (!ps->is_active() ||
+      !ps->is_recovery_unfound() ||
+      ps->missing_loc.is_unfound(object)) {
+    psdout(0) << __func__ << " RecoverUnfoundObject"
+	      << ", new_location=" << new_location
+	      << ", object=" << object
+	      << ", missing=" << missing
+	      << ", discard RecoverUnfoundObject event"<< dendl;
+    return discard_event();
+  }
+
+  ps->discover_unfound_missing(new_location, object, missing,
+			       context<PeeringMachine>().get_recovery_ctx());
+
+  psdout(0) << __func__ << " RecoverUnfoundObject"
+	    << ", new_location=" << new_location
+	    << ", object=" << object
+	    << ", missing=" << missing
+	    << ", send DoRecovery event"<< dendl;
+
+  post_event(DoRecovery());
+
   return discard_event();
 }
 

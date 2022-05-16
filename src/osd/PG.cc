@@ -48,6 +48,7 @@
 #include "messages/MOSDECSubOpReadReply.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
+#include "messages/MOSDPGQueryObjectInfo.h"
 #include "messages/MOSDBackoff.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepOp.h"
@@ -3578,6 +3579,24 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
   return false;
 }
 
+bool PG::can_discard_query_object_info(OpRequestRef op)
+{
+  auto m = op->get_req<MOSDPGQueryObjectInfo>();
+  ceph_assert(m->get_type() == MSG_OSD_PG_QUERY_OBJECT_INFO);
+
+  if (!is_acting(pg_whoami) && !is_up(pg_whoami)) {
+    return false;
+  }
+
+  if (old_peering_msg(m->map_epoch, m->query_epoch)) {
+    dout(0) << " got old query object info, ignoring"
+	    << " " << *m << dendl;
+    return true;
+  }
+
+  return false;
+}
+
 bool PG::can_discard_scan(OpRequestRef op)
 {
   auto m = op->get_req<MOSDPGScan>();
@@ -3650,6 +3669,8 @@ bool PG::can_discard_request(OpRequestRef& op)
 
   case MSG_OSD_PG_SCAN:
     return can_discard_scan(op);
+  case MSG_OSD_PG_QUERY_OBJECT_INFO:
+    return can_discard_query_object_info(op);
   case MSG_OSD_PG_BACKFILL:
     return can_discard_backfill(op);
   case MSG_OSD_PG_BACKFILL_REMOVE:
