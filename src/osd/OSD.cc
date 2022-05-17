@@ -5473,7 +5473,7 @@ void OSD::maybe_update_heartbeat_peers()
   // clean up stale failure pending
   for (auto it = failure_pending.begin(); it != failure_pending.end();) {
     if (heartbeat_peers.count(it->first) == 0) {
-      send_still_alive(get_osdmap_epoch(), it->first, it->second.second);
+      send_still_alive(get_osdmap_epoch(), it->first, it->second.addrs);
       failure_pending.erase(it++);
     } else {
       it++;
@@ -5807,7 +5807,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
                        << "failure report for osd." << from << dendl;
               send_still_alive(curmap->get_epoch(),
                                from,
-                               failure_pending_entry->second.second);
+                               failure_pending_entry->second.addrs);
               failure_pending.erase(failure_pending_entry);
             }
           }
@@ -5907,7 +5907,7 @@ void OSD::heartbeat_check()
              << " (oldest deadline " << oldest_deadline << ")"
              << dendl;
 	// fail
-	failure_queue[p->first] = p->second.first_tx;
+	failure_queue[p->first] = make_pair(p->second.first_tx, MOSDFailure::FLAG_FAILED);
       } else {
 	derr << "heartbeat_check: no reply from "
              << p->second.con_front->get_peer_addr().get_sockaddr()
@@ -5916,7 +5916,8 @@ void OSD::heartbeat_check()
 	     << " (oldest deadline " << oldest_deadline << ")"
              << dendl;
 	// fail
-	failure_queue[p->first] = std::min(p->second.last_rx_back, p->second.last_rx_front);
+	failure_queue[p->first] = make_pair(std::min(p->second.last_rx_back, p->second.last_rx_front),
+					    MOSDFailure::FLAG_FAILED);
       }
     }
   }
@@ -6474,24 +6475,66 @@ bool OSD::ms_handle_refused(Connection *con)
   dout(2) << "ms_handle_refused con " << con << " session " << session.get() << dendl;
   if (!session)
     return false;
+
   int type = con->get_peer_type();
   // handle only OSD failures here
   if (monc && (type == CEPH_ENTITY_TYPE_OSD)) {
     OSDMapRef osdmap = get_osdmap();
     if (osdmap) {
       int id = osdmap->identify_osd_on_all_channels(con->get_peer_addr());
-      if (id >= 0 && osdmap->is_up(id)) {
+      if (id >= 0 && osdmap->is_up(id) && cct->_conf->osd_limit_fast_fail_on_connection_refused) {
+        std::lock_guard l2(heartbeat_lock);
+
+	auto failure_pending_entry = failure_pending.find(id);
+	bool is_immediate = false;
+	bool found = failure_pending_entry != failure_pending.end();
+	if (found)
+	  is_immediate = failure_pending_entry->second.flags & MOSDFailure::FLAG_IMMEDIATE;
+
+	if (!found || !is_immediate) {
+	  MOSDFailure *m = new MOSDFailure(
+	      monc->get_fsid(),
+	      id,
+	      osdmap->get_addrs(id),
+	      cct->_conf->osd_heartbeat_grace + 1,
+	      osdmap->get_epoch(),
+	      (MOSDFailure::FLAG_IMMEDIATE|MOSDFailure::FLAG_FAILED)
+	      );
+
+	  if (cct->_conf->osd_debug_osd_failure) {
+	    dout(0) << __func__ << " con=" << con << " session=" << session
+		    << " " << *m << dendl;
+	  }
+
+	  monc->send_mon_message(m);
+
+	  if (found) {
+	    failure_pending.erase(id);
+	  }
+
+	  failure_pending_t *fp = &failure_pending[id];
+	  fp->time = ceph_clock_now();
+	  fp->addrs = osdmap->get_addrs(id);
+	  fp->flags = MOSDFailure::FLAG_IMMEDIATE|MOSDFailure::FLAG_FAILED;
+	}
+      } else if (id >= 0 && osdmap->is_up(id)) {
 	// I'm cheating mon heartbeat grace logic, because we know it's not going
 	// to respawn alone. +1 so we won't hit any boundary case.
-	monc->send_mon_message(
-	  new MOSDFailure(
+	MOSDFailure *m = new MOSDFailure(
 	    monc->get_fsid(),
 	    id,
 	    osdmap->get_addrs(id),
 	    cct->_conf->osd_heartbeat_grace + 1,
 	    osdmap->get_epoch(),
 	    MOSDFailure::FLAG_IMMEDIATE | MOSDFailure::FLAG_FAILED
-	    ));
+	    );
+
+	if (cct->_conf->osd_debug_osd_failure) {
+	  dout(0) << __func__ << " con=" << con << " session=" << session
+	          << " " << *m << dendl;
+	}
+
+	monc->send_mon_message(m);
       }
     }
   }
@@ -6943,7 +6986,7 @@ void OSD::requeue_failures()
   unsigned old_queue = failure_queue.size();
   unsigned old_pending = failure_pending.size();
   for (auto p = failure_pending.begin(); p != failure_pending.end(); ) {
-    failure_queue[p->first] = p->second.first;
+    failure_queue[p->first] = make_pair(p->second.time, p->second.flags);
     failure_pending.erase(p++);
   }
   dout(10) << __func__ << " " << old_queue << " + " << old_pending << " -> "
@@ -6960,16 +7003,26 @@ void OSD::send_failures()
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
     if (!failure_pending.count(osd)) {
-      int failed_for = (int)(double)(now - failure_queue.begin()->second);
-      monc->send_mon_message(
-	new MOSDFailure(
+      int failed_for = (int)(double)(now - failure_queue.begin()->second.first);
+
+      MOSDFailure *m = new MOSDFailure(
 	  monc->get_fsid(),
 	  osd,
 	  osdmap->get_addrs(osd),
 	  failed_for,
-	  osdmap->get_epoch()));
-      failure_pending[osd] = make_pair(failure_queue.begin()->second,
-				       osdmap->get_addrs(osd));
+	  osdmap->get_epoch(),
+	  failure_queue.begin()->second.second);
+
+      if (cct->_conf->osd_debug_osd_failure) {
+	dout(0) << __func__ << " " << *m << dendl;
+      }
+
+      monc->send_mon_message(m);
+
+      failure_pending_t *fp = &failure_pending[osd];
+      fp->time = failure_queue.begin()->second.first;
+      fp->addrs = osdmap->get_addrs(osd);
+      fp->flags = failure_queue.begin()->second.second;
     }
     failure_queue.erase(osd);
   }
@@ -6979,6 +7032,11 @@ void OSD::send_still_alive(epoch_t epoch, int osd, const entity_addrvec_t &addrs
 {
   MOSDFailure *m = new MOSDFailure(monc->get_fsid(), osd, addrs, 0, epoch,
 				   MOSDFailure::FLAG_ALIVE);
+
+  if (cct->_conf->osd_debug_osd_failure) {
+    dout(0) << __func__ << " " << *m << dendl;
+  }
+
   monc->send_mon_message(m);
 }
 
@@ -6989,7 +7047,7 @@ void OSD::cancel_pending_failures()
   while (it != failure_pending.end()) {
     dout(10) << __func__ << " canceling in-flight failure report for osd."
              << it->first << dendl;
-    send_still_alive(get_osdmap_epoch(), it->first, it->second.second);
+    send_still_alive(get_osdmap_epoch(), it->first, it->second.addrs);
     failure_pending.erase(it++);
   }
 }

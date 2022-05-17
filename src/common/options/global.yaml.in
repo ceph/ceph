@@ -3114,6 +3114,13 @@ options:
   desc: Turn up debug levels during shutdown
   default: false
   with_legacy: true
+# debug osd_failure send to mon messages
+- name: osd_debug_osd_failure
+  type: bool
+  level: dev
+  desc: print log when osd send osd_failures to mon
+  default: false
+  with_legacy: true
 # crash osd if client ignores a backoff; useful for debugging
 - name: osd_debug_crash_on_ignored_backoff
   type: bool
@@ -3307,6 +3314,13 @@ options:
     crashed OSD host survives). Disable it to restore old
     behavior, at the expense of possible long I/O stalls when
     OSDs crash in the middle of I/O operations.
+  with_legacy: true
+- name: osd_limit_fast_fail_on_connection_refused
+  type: bool
+  level: advanced
+  default: true
+  fmt_desc: If this option is enabled, limit the number of
+    send immediate osd_failure.
   with_legacy: true
 - name: osd_pg_object_context_cache_count
   type: int

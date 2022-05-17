@@ -1866,8 +1866,13 @@ protected:
   void got_full_map(epoch_t e);
 
   // -- failures --
-  std::map<int,utime_t> failure_queue;
-  std::map<int,std::pair<utime_t,entity_addrvec_t> > failure_pending;
+  struct failure_pending_t {
+    utime_t time;
+    entity_addrvec_t addrs;
+    int flags;
+  };
+  std::map<int,std::pair<utime_t,int> > failure_queue; //{osd:<time,flags>}
+  std::map<int,failure_pending_t> failure_pending;
 
   void requeue_failures();
   void send_failures();
