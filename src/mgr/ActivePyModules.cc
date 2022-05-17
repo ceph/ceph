@@ -252,8 +252,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     f.close_section();
   } else if (what.substr(0, 6) == "config") {
-    without_gil_t no_gil;
-    with_gil_t with_gil{no_gil};
     if (what == "config_options") {
       g_conf().config_options(&f);
     } else if (what == "config") {
@@ -415,8 +413,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       pg_map.dump_pool_stats(&f);
     });
   } else if (what == "pg_ready") {
-    without_gil_t no_gil;
-    with_gil_t with_gil{no_gil};
     server.dump_pg_ready(&f);
   } else if (what == "pg_progress") {
     without_gil_t no_gil;
@@ -439,9 +435,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
   } else if (what == "osd_pool_stats") {
     int64_t poolid = -ENOENT;
+    without_gil_t no_gil;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap,
 					    const PGMap& pg_map) {
-      without_gil_t no_gil;
       with_gil_t with_gil{no_gil};
       f.open_array_section("pool_stats");
       for (auto &p : osdmap.get_pools()) {
@@ -471,8 +467,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
   } else if (what == "mgr_ips") {
     entity_addrvec_t myaddrs = server.get_myaddrs();
-    without_gil_t no_gil;
-    with_gil_t with_gil{no_gil};
     f.open_array_section("ips");
     std::set<std::string> did;
     for (auto& i : myaddrs.v) {
@@ -483,13 +477,11 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     f.close_section();
   } else if (what == "have_local_config_map") {
-    without_gil_t no_gil;
-    with_gil_t with_gil{no_gil};
     f.dump_bool("have_local_config_map", have_local_config_map);
   } else if (what == "active_clean_pgs"){
+    without_gil_t no_gil;
     cluster_state.with_pgmap(
         [&](const PGMap &pg_map) {
-      without_gil_t no_gil;
       with_gil_t with_gil{no_gil};
       f.open_array_section("pg_stats");
       for (auto &i : pg_map.pg_stat) {
@@ -511,12 +503,8 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
   } else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
-    without_gil_t no_gil;
-    with_gil_t with_gil{no_gil};
     Py_RETURN_NONE;
   }
-  without_gil_t no_gil;
-  no_gil.acquire_gil();
   if(ttl_seconds) {
     return jf.get();
   } else {
