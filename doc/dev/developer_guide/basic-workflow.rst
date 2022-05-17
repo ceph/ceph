@@ -383,9 +383,8 @@ determine the cause of your specific failure.
 Integration tests AKA ceph-qa-suite
 -----------------------------------
 
-Since Ceph is complex, it may be necessary to test your fix to
-see how it behaves on real clusters running on physical or virtual
-hardware. Tests designed for this purpose live in the `ceph/qa
+It may be necessary to test your fix on real Ceph clusters that run on physical
+or virtual hardware. Tests designed for this purpose live in the `ceph/qa
 sub-directory`_ and are run via the `teuthology framework`_.
 
 .. _`ceph/qa sub-directory`: https://github.com/ceph/ceph/tree/master/qa/
@@ -395,10 +394,12 @@ sub-directory`_ and are run via the `teuthology framework`_.
 The Ceph community has access to the `Sepia lab
 <https://wiki.sepia.ceph.com/doku.php>`_ where `integration tests`_ can be run
 on physical hardware.
-Other developers may add tags like "needs-qa" to your PR.  This allows PRs that
-need testing to be merged into a single branch and tested all at the same time.
-Since teuthology suites can take hours (even days in some cases) to run, this
-can save a lot of time.
+
+Other contributors might add tags like `needs-qa` to your PR. This allows PRs
+to be merged into a single branch and then efficiently tested together.
+Teuthology test suites can take hours (and even days in some cases) to
+complete, so batching tests reduces contention for resources and saves a lot of
+time.
 
 To request access to the Sepia lab, start `here
 <https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
