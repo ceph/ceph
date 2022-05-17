@@ -10,7 +10,7 @@ Scenario: "Test $rgw_servers GET/PUT Latencies - GET"
   And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `$rgw_servers GET/PUT Latencies` with legend `GET {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo", instance_id="58892247"} | 2.5000000000000004 |
+    | {ceph_daemon="rgw.foo", instance_id="58892247"} | 1.5 |
 
 Scenario: "Test $rgw_servers GET/PUT Latencies - PUT"
   Given the following series:
@@ -33,7 +33,7 @@ Scenario: "Test Bandwidth by HTTP Operation - GET"
   And variable `rgw_servers` is `rgw.1`
   Then Grafana panel `Bandwidth by HTTP Operation` with legend `GETs {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.1", instance="127.0.0.1", instance_id="92806566", job="ceph"} | 1.6666666666666667 |
+    | {ceph_daemon="rgw.1", instance="127.0.0.1", instance_id="92806566", job="ceph"} | 1.5 |
 
 Scenario: "Test Bandwidth by HTTP Operation - PUT"
   Given the following series:
@@ -44,7 +44,7 @@ Scenario: "Test Bandwidth by HTTP Operation - PUT"
   And variable `rgw_servers` is `rgw.1`
   Then Grafana panel `Bandwidth by HTTP Operation` with legend `PUTs {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.1", instance="127.0.0.1", instance_id="92806566", job="ceph"} | 1 |
+    | {ceph_daemon="rgw.1", instance="127.0.0.1", instance_id="92806566", job="ceph"} | 7.5E-01 |
 
 Scenario: "Test HTTP Request Breakdown - Requests Failed"
   Given the following series:
@@ -55,7 +55,7 @@ Scenario: "Test HTTP Request Breakdown - Requests Failed"
   And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `HTTP Request Breakdown` with legend `Requests Failed {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 6.666666666666667e-02 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1E-01 |
 
 Scenario: "Test HTTP Request Breakdown - GET"
   Given the following series:
@@ -66,7 +66,7 @@ Scenario: "Test HTTP Request Breakdown - GET"
   And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `HTTP Request Breakdown` with legend `GETs {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | .6666666666666666 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1.1666666666666667 |
 
 Scenario: "Test HTTP Request Breakdown - PUT"
   Given the following series:
@@ -77,7 +77,7 @@ Scenario: "Test HTTP Request Breakdown - PUT"
   And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `HTTP Request Breakdown` with legend `PUTs {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 2.3333333333333335 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1.5 |
 
 Scenario: "Test HTTP Request Breakdown - Other"
   Given the following series:
@@ -101,7 +101,7 @@ Scenario: "Test Workload Breakdown - Failures"
   And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `Workload Breakdown` with legend `Failures {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 6.666666666666667e-02 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1E-01 |
 
 Scenario: "Test Workload Breakdown - GETs"
   Given the following series:
@@ -112,7 +112,7 @@ Scenario: "Test Workload Breakdown - GETs"
   And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `Workload Breakdown` with legend `GETs {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | .6666666666666666 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1.1666666666666667 |
 
 Scenario: "Test Workload Breakdown - PUTs"
   Given the following series:
@@ -123,7 +123,7 @@ Scenario: "Test Workload Breakdown - PUTs"
   And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `Workload Breakdown` with legend `PUTs {{ceph_daemon}}` shows:
     | metrics | values |
-    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 2.3333333333333335 |
+    | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1.5 |
 
 Scenario: "Test Workload Breakdown - Other"
   Given the following series:
