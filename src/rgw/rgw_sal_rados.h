@@ -879,7 +879,7 @@ public:
 };
 
 class RadosLuaManager : public StoreLuaManager {
-  RadosStore* store;
+  RadosStore* const store;
   rgw_pool pool;
 
 public:
