@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import uuid
+import os
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set, \
     DefaultDict
@@ -990,6 +991,7 @@ class CephadmServe:
         # ceph.conf
         config = self.mgr.get_minimal_ceph_conf().encode('utf-8')
         config_digest = ''.join('%02x' % c for c in hashlib.sha256(config).digest())
+        cluster_cfg_dir = f'/var/lib/ceph/{self.mgr._cluster_fsid}/config'
 
         if self.mgr.manage_etc_ceph_ceph_conf:
             try:
@@ -1005,9 +1007,9 @@ class CephadmServe:
                 for host in {s.hostname for s in all_slots}:
                     if host not in client_files:
                         client_files[host] = {}
-                    client_files[host]['/etc/ceph/ceph.conf'] = (
-                        0o644, 0, 0, bytes(config), str(config_digest)
-                    )
+                    ceph_conf = (0o644, 0, 0, bytes(config), str(config_digest))
+                    client_files[host]['/etc/ceph/ceph.conf'] = ceph_conf
+                    client_files[host][f'{cluster_cfg_dir}/ceph.conf'] = ceph_conf
             except Exception as e:
                 self.mgr.log.warning(
                     f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
@@ -1035,12 +1037,12 @@ class CephadmServe:
                 for host in {s.hostname for s in all_slots}:
                     if host not in client_files:
                         client_files[host] = {}
-                    client_files[host]['/etc/ceph/ceph.conf'] = (
-                        0o644, 0, 0, bytes(config), str(config_digest)
-                    )
-                    client_files[host][ks.path] = (
-                        ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest
-                    )
+                    ceph_conf = (0o644, 0, 0, bytes(config), str(config_digest))
+                    client_files[host]['/etc/ceph/ceph.conf'] = ceph_conf
+                    client_files[host][f'{cluster_cfg_dir}/ceph.conf'] = ceph_conf
+                    ceph_admin_key = (ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest)
+                    client_files[host][ks.path] = ceph_admin_key
+                    client_files[host][f'{cluster_cfg_dir}/{os.path.basename(ks.path)}'] = ceph_admin_key
             except Exception as e:
                 self.log.warning(
                     f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
