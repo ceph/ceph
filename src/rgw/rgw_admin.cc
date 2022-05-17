@@ -650,6 +650,7 @@ enum class OPT {
   BUCKET_CHOWN,
   BUCKET_RADOS_LIST,
   BUCKET_SHARD_OBJECTS,
+  BUCKET_OBJECT_SHARD,
   POLICY,
   POOL_ADD,
   POOL_RM,
@@ -868,6 +869,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
   { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
+  { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
   { "policy", OPT::POLICY },
   { "pool add", OPT::POOL_ADD },
   { "pool rm", OPT::POOL_RM },
@@ -7031,6 +7033,19 @@ int main(int argc, const char **argv)
       formatter->close_section();
       formatter->flush(cout);
     }
+  }
+
+  if (opt_cmd == OPT::BUCKET_OBJECT_SHARD) {
+    if (!num_shards_specified || object.empty()) {
+      cerr << "ERROR: num-shards and object must be specified."
+	   << std::endl;
+      return EINVAL;
+    }
+    auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
+    formatter->open_object_section("obj_shard");
+    encode_json("shard", shard, formatter.get());
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::BUCKET_CHOWN) {
