@@ -205,6 +205,7 @@ class CBT(Task):
         self.cbt_config = self.generate_cbt_config()
         self.log.info('cbt configuration is %s', self.cbt_config)
         self.cbt_dir = os.path.join(misc.get_archive_dir(self.ctx), 'cbt')
+        self.ctx.cluster.run(args=['rm', '--one-file-system', '-rf', '--', self.cbt_dir])
         self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', self.cbt_dir])
         self.first_mon.write_file(
                 os.path.join(self.cbt_dir, 'cbt_config.yaml'),
