@@ -443,8 +443,8 @@ the :confval:`bluestore_use_optimal_io_size_for_min_alloc_size`
 option that enables automatic discovery of the appropriate value as each OSD is
 created.  Note that the use of ``bcache``, ``OpenCAS``, ``dmcrypt``,
 ``ATA over Ethernet``, `iSCSI`, or other device layering / abstraction
-technologies may confound the determination of appropriate values. OSD devices
-deployed on top of VMware VSAN virtual volumes have been reported to also
+technologies may confound the determination of appropriate values. OSDs
+deployed on top of VMware storage have been reported to also
 sometimes report a ``rotational`` attribute that does not match the underlying
 hardware.
 
