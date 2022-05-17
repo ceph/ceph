@@ -500,6 +500,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   LOG_PREFIX(TransactionManager::rewrite_extent);
 
   if (is_backref_node(extent->get_type())) {
+    t.get_rewrite_version_stats().increment(extent->get_version());
     return backref_manager->rewrite_extent(t, extent);
   }
 
@@ -511,6 +512,8 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     }
     extent = updated;
   }
+
+  t.get_rewrite_version_stats().increment(extent->get_version());
 
   if (extent->get_type() == extent_types_t::ROOT) {
     DEBUGT("marking root for rewrite -- {}", t, *extent);

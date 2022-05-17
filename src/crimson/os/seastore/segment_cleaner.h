@@ -658,6 +658,8 @@ private:
     uint64_t io_blocking_num = 0;
     uint64_t io_count = 0;
     uint64_t io_blocked_count = 0;
+    uint64_t io_blocked_count_trim = 0;
+    uint64_t io_blocked_count_reclaim = 0;
     uint64_t io_blocked_sum = 0;
 
     uint64_t reclaiming_bytes = 0;
@@ -1181,15 +1183,45 @@ private:
       (double)segments.get_total_bytes();
   }
 
+  /*
+   * Journal sizes
+   */
+  std::size_t get_dirty_journal_size() const {
+    auto journal_head = segments.get_journal_head();
+    if (journal_head == JOURNAL_SEQ_NULL ||
+        dirty_extents_replay_from == JOURNAL_SEQ_NULL) {
+      return 0;
+    }
+    return (journal_head.segment_seq - dirty_extents_replay_from.segment_seq) *
+           segments.get_segment_size() +
+           journal_head.offset.as_seg_paddr().get_segment_off() -
+           segments.get_segment_size() -
+           dirty_extents_replay_from.offset.as_seg_paddr().get_segment_off();
+  }
+
+  std::size_t get_alloc_journal_size() const {
+    auto journal_head = segments.get_journal_head();
+    if (journal_head == JOURNAL_SEQ_NULL ||
+        alloc_info_replay_from == JOURNAL_SEQ_NULL) {
+      return 0;
+    }
+    return (journal_head.segment_seq - alloc_info_replay_from.segment_seq) *
+           segments.get_segment_size() +
+           journal_head.offset.as_seg_paddr().get_segment_off() -
+           segments.get_segment_size() -
+           alloc_info_replay_from.offset.as_seg_paddr().get_segment_off();
+  }
+
   /**
    * should_block_on_gc
    *
    * Encapsulates whether block pending gc.
    */
-  bool should_block_on_gc() const {
-    if (get_dirty_tail_limit() > journal_tail_target) {
-      return true;
-    }
+  bool should_block_on_trim() const {
+    return get_dirty_tail_limit() > journal_tail_target;
+  }
+
+  bool should_block_on_reclaim() const {
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1200,6 +1232,10 @@ private:
       ((aratio < config.available_ratio_gc_max) &&
        (rratio > config.reclaim_ratio_hard_limit))
     );
+  }
+
+  bool should_block_on_gc() const {
+    return should_block_on_trim() || should_block_on_reclaim();
   }
 
   void log_gc_state(const char *caller) const {
@@ -1256,13 +1292,20 @@ public:
     // The pipeline configuration prevents another IO from entering
     // prepare until the prior one exits and clears this.
     ceph_assert(!blocked_io_wake);
-    bool is_blocked = false;
     ++stats.io_count;
-    if (should_block_on_gc()) {
+    bool is_blocked = false;
+    if (should_block_on_trim()) {
+      is_blocked = true;
+      ++stats.io_blocked_count_trim;
+    }
+    if (should_block_on_reclaim()) {
+      is_blocked = true;
+      ++stats.io_blocked_count_reclaim;
+    }
+    if (is_blocked) {
       ++stats.io_blocking_num;
       ++stats.io_blocked_count;
       stats.io_blocked_sum += stats.io_blocking_num;
-      is_blocked = true;
     }
     return seastar::do_until(
       [this] {

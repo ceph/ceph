@@ -492,8 +492,10 @@ void Cache::register_metrics()
    */
   auto tree_label = sm::label("tree");
   auto onode_label = tree_label("ONODE");
+  auto omap_label = tree_label("OMAP");
   auto lba_label = tree_label("LBA");
-  auto register_tree_metrics = [&labels_by_src, &onode_label, this](
+  auto backref_label = tree_label("BACKREF");
+  auto register_tree_metrics = [&labels_by_src, &onode_label, &omap_label, this](
       const sm::label_instance& tree_label,
       uint64_t& tree_depth,
       counter_by_src_t<tree_efforts_t>& committed_tree_efforts,
@@ -515,8 +517,9 @@ void Cache::register_metrics()
         continue;
       }
       if (is_cleaner_transaction(src) &&
-          tree_label == onode_label) {
-        // CLEANER transaction won't contain any onode tree operations
+          (tree_label == onode_label ||
+           tree_label == omap_label)) {
+        // CLEANER transaction won't contain any onode/omap tree operations
         continue;
       }
       auto& committed_efforts = get_by_src(committed_tree_efforts, src);
@@ -537,6 +540,12 @@ void Cache::register_metrics()
             {tree_label, src_label}
           ),
           sm::make_counter(
+            "tree_updates_committed",
+            committed_efforts.num_updates,
+            sm::description("total number of committed update operations"),
+            {tree_label, src_label}
+          ),
+          sm::make_counter(
             "tree_inserts_invalidated",
             invalidated_efforts.num_inserts,
             sm::description("total number of invalidated insert operations"),
@@ -546,6 +555,12 @@ void Cache::register_metrics()
             "tree_erases_invalidated",
             invalidated_efforts.num_erases,
             sm::description("total number of invalidated erase operations"),
+            {tree_label, src_label}
+          ),
+          sm::make_counter(
+            "tree_updates_invalidated",
+            invalidated_efforts.num_updates,
+            sm::description("total number of invalidated update operations"),
             {tree_label, src_label}
           ),
         }
@@ -558,10 +573,20 @@ void Cache::register_metrics()
       stats.committed_onode_tree_efforts,
       stats.invalidated_onode_tree_efforts);
   register_tree_metrics(
+      omap_label,
+      stats.omap_tree_depth,
+      stats.committed_omap_tree_efforts,
+      stats.invalidated_omap_tree_efforts);
+  register_tree_metrics(
       lba_label,
       stats.lba_tree_depth,
       stats.committed_lba_tree_efforts,
       stats.invalidated_lba_tree_efforts);
+  register_tree_metrics(
+      backref_label,
+      stats.backref_tree_depth,
+      stats.committed_backref_tree_efforts,
+      stats.invalidated_backref_tree_efforts);
 
   /**
    * conflict combinations
@@ -620,6 +645,35 @@ void Cache::register_metrics()
       }
     );
   }
+
+  /**
+   * rewrite version
+   */
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "version_count_dirty",
+        stats.committed_dirty_version.num,
+        sm::description("total number of rewrite-dirty extents")
+      ),
+      sm::make_counter(
+        "version_sum_dirty",
+        stats.committed_dirty_version.version,
+        sm::description("sum of the version from rewrite-dirty extents")
+      ),
+      sm::make_counter(
+        "version_count_reclaim",
+        stats.committed_reclaim_version.num,
+        sm::description("total number of rewrite-reclaim extents")
+      ),
+      sm::make_counter(
+        "version_sum_reclaim",
+        stats.committed_reclaim_version.version,
+        sm::description("sum of the version from rewrite-reclaim extents")
+      ),
+    }
+  );
 }
 
 void Cache::add_extent(CachedExtentRef ref)
@@ -794,15 +848,20 @@ void Cache::mark_transaction_conflicted(
     efforts.ool_record_bytes += ool_record_bytes;
 
     if (is_cleaner_transaction(t.get_src())) {
-      // CLEANER transaction won't contain any onode tree operations
+      // CLEANER transaction won't contain any onode/omap tree operations
       assert(t.onode_tree_stats.is_clear());
+      assert(t.omap_tree_stats.is_clear());
     } else {
       get_by_src(stats.invalidated_onode_tree_efforts, t.get_src()
           ).increment(t.onode_tree_stats);
+      get_by_src(stats.invalidated_omap_tree_efforts, t.get_src()
+          ).increment(t.omap_tree_stats);
     }
 
     get_by_src(stats.invalidated_lba_tree_efforts, t.get_src()
         ).increment(t.lba_tree_stats);
+    get_by_src(stats.invalidated_backref_tree_efforts, t.get_src()
+        ).increment(t.backref_tree_stats);
 
     SUBDEBUGT(seastore_t,
         "discard {} read, {} fresh, {} delta, {} retire, {}({}B) ool-records",
@@ -820,7 +879,9 @@ void Cache::mark_transaction_conflicted(
     assert(t.mutated_block_list.empty());
     assert(t.get_ool_write_stats().is_clear());
     assert(t.onode_tree_stats.is_clear());
+    assert(t.omap_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
+    assert(t.backref_tree_stats.is_clear());
     SUBDEBUGT(seastore_t, "discard {} read", t, read_stat);
   }
 }
@@ -848,7 +909,9 @@ void Cache::on_transaction_destruct(Transaction& t)
     assert(t.get_fresh_block_stats().is_clear());
     assert(t.mutated_block_list.empty());
     assert(t.onode_tree_stats.is_clear());
+    assert(t.omap_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
+    assert(t.backref_tree_stats.is_clear());
   }
 }
 
@@ -1159,7 +1222,9 @@ record_t Cache::prepare_record(
     SUBINFOT(seastore_t,
         "record to submit is empty, src={}", t, trans_src);
     assert(t.onode_tree_stats.is_clear());
+    assert(t.omap_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
+    assert(t.backref_tree_stats.is_clear());
     assert(ool_stats.is_clear());
   }
 
@@ -1182,12 +1247,15 @@ record_t Cache::prepare_record(
   if (is_cleaner_transaction(trans_src)) {
     // CLEANER transaction won't contain any onode tree operations
     assert(t.onode_tree_stats.is_clear());
+    assert(t.omap_tree_stats.is_clear());
   } else {
     if (t.onode_tree_stats.depth) {
       stats.onode_tree_depth = t.onode_tree_stats.depth;
     }
     get_by_src(stats.committed_onode_tree_efforts, trans_src
         ).increment(t.onode_tree_stats);
+    get_by_src(stats.committed_omap_tree_efforts, trans_src
+        ).increment(t.omap_tree_stats);
   }
 
   if (t.lba_tree_stats.depth) {
@@ -1195,6 +1263,11 @@ record_t Cache::prepare_record(
   }
   get_by_src(stats.committed_lba_tree_efforts, trans_src
       ).increment(t.lba_tree_stats);
+  if (t.backref_tree_stats.depth) {
+    stats.backref_tree_depth = t.backref_tree_stats.depth;
+  }
+  get_by_src(stats.committed_backref_tree_efforts, trans_src
+      ).increment(t.backref_tree_stats);
 
   ++(efforts.num_trans);
   efforts.num_ool_records += ool_stats.num_records;
@@ -1202,6 +1275,15 @@ record_t Cache::prepare_record(
   efforts.ool_record_data_bytes += ool_stats.get_data_bytes();
   efforts.inline_record_metadata_bytes +=
     (record.size.get_raw_mdlength() - record.get_delta_size());
+
+  auto &rewrite_version_stats = t.get_rewrite_version_stats();
+  if (trans_src == Transaction::src_t::CLEANER_TRIM) {
+    stats.committed_dirty_version.increment_stat(rewrite_version_stats);
+  } else if (trans_src == Transaction::src_t::CLEANER_RECLAIM) {
+    stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
+  } else {
+    assert(rewrite_version_stats.is_clear());
+  }
 
   return record;
 }
