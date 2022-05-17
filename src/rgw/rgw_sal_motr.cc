@@ -1293,8 +1293,54 @@ MotrObject::~MotrObject() {
 
 int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_obj* target_obj)
 {
-  // TODO: implement
-  ldpp_dout(dpp, 20) <<__func__<< ": MotrObject::set_obj_attrs()" << dendl;
+  // TODO : Set tags for multipart objects
+  if (this->category == RGWObjCategory::MultiMeta)
+    return 0;
+
+  string bname, key;
+  if (target_obj) {
+    bname = get_bucket_name(target_obj->bucket.tenant, target_obj->bucket.name);
+    key   = target_obj->key.to_str();
+  } else {
+    bname = get_bucket_name(this->get_bucket()->get_tenant(), this->get_bucket()->get_name());
+    key   = this->get_key().to_str();
+  }
+  ldpp_dout(dpp, 20) <<__func__<< ": " << bname << "/" << key << dendl;
+
+  // Get object's metadata (those stored in rgw_bucket_dir_entry).
+  bufferlist bl, update_bl;
+  string bucket_index_iname = "motr.rgw.bucket.index." + bname;
+  if (this->store->get_obj_meta_cache()->get(dpp, key, bl)) {
+    // Cache miss !
+    int rc = this->store->do_idx_op_by_name(bucket_index_iname, M0_IC_GET, key, bl);
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) <<__func__<< ": Failed to get object's entry from bucket index. rc=" << rc << dendl;
+      return rc;
+    }
+  }
+
+  rgw_bucket_dir_entry ent;
+  auto iter = bl.cbegin();
+  ent.decode(iter);
+  // Decoding current_attrs before MotrObject::Meta because 
+  // encode and decode always have to be sequential. 
+  rgw::sal::Attrs current_attrs;
+  decode(current_attrs, iter);
+  MotrObject::Meta meta;
+  meta.decode(iter);
+  ent.meta.mtime = ceph::real_clock::now();
+  ent.encode(update_bl);
+  encode(attrs, update_bl);
+  meta.encode(update_bl);
+
+  int rc = this->store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT, key, update_bl);
+  if (rc < 0) {
+    ldpp_dout(dpp, 0) <<__func__<< ": Failed to put object's entry to bucket index. rc=" << rc << dendl;
+    return rc;
+  }
+  // Put into cache.
+  this->store->get_obj_meta_cache()->put(dpp, key, update_bl);
+
   return 0;
 }
 
