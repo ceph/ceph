@@ -234,6 +234,7 @@ void Elector::assimilate_connection_reports(const bufferlist& tbl)
 
 void Elector::message_victory(const std::set<int>& quorum)
 {
+  dout(10) << __func__ << dendl;
   uint64_t cluster_features = CEPH_FEATURES_ALL;
   mon_feature_t mon_features = ceph::features::mon::get_supported();
   map<int,Metadata> metadata;
@@ -269,7 +270,8 @@ void Elector::message_victory(const std::set<int>& quorum)
     m->mon_release = min_mon_release;
     mon->send_mon_message(m, *p);
   }
-
+  dout(10) << "metadata:" << dendl;
+  mon->print_mon_metadata(metadata);
   // tell monitor
   mon->win_election(get_epoch(), quorum,
                     cluster_features, mon_features, min_mon_release,
