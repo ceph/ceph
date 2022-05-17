@@ -170,11 +170,11 @@ class HealthData(object):
         osd_stats = mgr.get('osd_stats')
 
         for osd in osd_stats['osd_stats']:
-            osd_perf += [{
+            osd_perf.append({
                 'osd': osd['osd'],
                 'apply_latency_ms': osd['perf_stat']['apply_latency_ns'] / 1000000.0,
                 'commit_latency_ms': osd['perf_stat']['commit_latency_ns'] / 1000000.0,
-            }]
+            })
         return {'osd_perf': osd_perf}
 
     def basic_health(self):
