@@ -213,7 +213,10 @@ class Device(object):
             self.disk_api = dev
             device_type = dev.get('TYPE', '')
             # always check is this is an lvm member
-            if device_type in ['part', 'disk']:
+            valid_types = ['part', 'disk']
+            if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False):
+                valid_types.append('loop')
+            if device_type in valid_types:
                 self._set_lvm_membership()
             out, err, rc = process.call([
                 'ceph-bluestore-tool', 'show-label',
@@ -429,7 +432,9 @@ class Device(object):
     @property
     def device_type(self):
         self.load_blkid_api()
-        if self.disk_api:
+        if 'type' in self.sys_api:
+            return self.sys_api['type']
+        elif self.disk_api:
             return self.disk_api['TYPE']
         elif self.blkid_api:
             return self.blkid_api['TYPE']
@@ -460,7 +465,10 @@ class Device(object):
         elif self.blkid_api:
             api = self.blkid_api
         if api:
-            return self.device_type in ['disk', 'device', 'mpath']
+            valid_types = ['disk', 'device', 'mpath']
+            if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False):
+                valid_types.append('loop')
+            return self.device_type in valid_types
         return False
 
     @property
