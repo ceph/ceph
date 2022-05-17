@@ -192,9 +192,7 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
     m_fsm->process_event(StartScrub{});
     dout(10) << "scrubber event --<< StartScrub" << dendl;
   } else {
-    clear_queued_or_active();
-    // and just in case snap trimming was blocked by the aborted scrub
-    m_pg->snap_trimmer_scrub_complete();
+    clear_queued_or_active();  // also restarts snap trimming
   }
 }
 
@@ -210,9 +208,7 @@ void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
     m_fsm->process_event(AfterRepairScrub{});
     dout(10) << "scrubber event --<< AfterRepairScrub" << dendl;
   } else {
-    clear_queued_or_active();
-    // and just in case snap trimming was blocked by the aborted scrub
-    m_pg->snap_trimmer_scrub_complete();
+    clear_queued_or_active();  // also restarts snap trimming
   }
 }
 
@@ -1421,6 +1417,8 @@ void PgScrubber::set_op_parameters(requested_scrub_t& request)
 {
   dout(10) << __func__ << " input: " << request << dendl;
 
+  set_queued_or_active(); // we are fully committed now.
+
   // write down the epoch of starting a new scrub. Will be used
   // to discard stale messages from previous aborted scrubs.
   m_epoch_start = m_pg->get_osdmap_epoch();
@@ -1720,7 +1718,11 @@ void PgScrubber::set_queued_or_active()
 
 void PgScrubber::clear_queued_or_active()
 {
-  m_queued_or_active = false;
+  if (m_queued_or_active) {
+    m_queued_or_active = false;
+    // and just in case snap trimming was blocked by the aborted scrub
+    m_pg->snap_trimmer_scrub_complete();
+  }
 }
 
 bool PgScrubber::is_queued_or_active() const
@@ -1934,9 +1936,6 @@ void PgScrubber::scrub_finish()
   if (m_pg->is_active() && m_pg->is_primary()) {
     m_pg->recovery_state.share_pg_info();
   }
-
-  // we may have blocked the snap trimmer
-  m_pg->snap_trimmer_scrub_complete();
 }
 
 void PgScrubber::on_digest_updates()
