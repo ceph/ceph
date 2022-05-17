@@ -693,12 +693,13 @@ class CephFSMount(object):
         ])
 
     def _run_python(self, pyscript, py_version='python3', sudo=False):
-        args = []
+        args, omit_sudo = [], True
         if sudo:
             args.append('sudo')
+            omit_sudo = False
         args += ['adjust-ulimits', 'daemon-helper', 'kill', py_version, '-c', pyscript]
         return self.client_remote.run(args=args, wait=False, stdin=run.PIPE,
-                                      stdout=StringIO(), omit_sudo=(not sudo))
+                                      stdout=StringIO(), omit_sudo=omit_sudo)
 
     def run_python(self, pyscript, py_version='python3', sudo=False):
         p = self._run_python(pyscript, py_version, sudo=sudo)
@@ -745,6 +746,7 @@ class CephFSMount(object):
             args = ['sudo', '-u', user, '-s', '/bin/bash', '-c', cmd]
 
         kwargs['args'] = args
+        kwargs['omit_sudo'] = False
         return self.run_shell(**kwargs)
 
     def run_as_root(self, **kwargs):
