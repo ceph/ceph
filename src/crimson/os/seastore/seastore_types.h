@@ -813,16 +813,31 @@ private:
     } else if (segment_seq < other.segment_seq) {
       return -1;
     }
-    auto &seg_paddr = offset.as_seg_paddr();
-    auto &o_seg_paddr = other.offset.as_seg_paddr();
-    if (seg_paddr.get_segment_off() > o_seg_paddr.get_segment_off()) {
-      return 1;
-    } else if (seg_paddr.get_segment_off() < o_seg_paddr.get_segment_off()) {
-      return -1;
-    }
-    if (seg_paddr.get_segment_id() > o_seg_paddr.get_segment_id()) {
-      return 1;
-    } else if (seg_paddr.get_segment_id() < o_seg_paddr.get_segment_id()) {
+    if (offset.get_addr_type() == addr_types_t::SEGMENT &&
+	other.offset.get_addr_type() == addr_types_t::SEGMENT) {
+      auto &seg_paddr = offset.as_seg_paddr();
+      auto &o_seg_paddr = other.offset.as_seg_paddr();
+      if (seg_paddr.get_segment_off() > o_seg_paddr.get_segment_off()) {
+	return 1;
+      } else if (seg_paddr.get_segment_off() < o_seg_paddr.get_segment_off()) {
+	return -1;
+      }
+      if (seg_paddr.get_segment_id() > o_seg_paddr.get_segment_id()) {
+	return 1;
+      } else if (seg_paddr.get_segment_id() < o_seg_paddr.get_segment_id()) {
+	return -1;
+      }
+    } else if (offset.get_addr_type() == addr_types_t::RANDOM_BLOCK &&
+	other.offset.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
+      auto &blk_paddr = offset.as_blk_paddr();
+      auto &o_blk_paddr = other.offset.as_blk_paddr();
+      if (blk_paddr.get_block_off() > o_blk_paddr.get_block_off()) {
+	return 1;
+      } else if (blk_paddr.get_block_off() < o_blk_paddr.get_block_off()) {
+	return -1;
+      }
+    } else {
+      // offset.get_addr_type() != other.get_addr_type()
       return -1;
     }
     return 0;
