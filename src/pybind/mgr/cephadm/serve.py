@@ -787,6 +787,14 @@ class CephadmServe:
             if daemon_place_fails:
                 self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(daemon_place_fails), daemon_place_fails)
 
+            if service_type == 'mgr':
+                active_mgr = svc.get_active_daemon(self.mgr.cache.get_daemons_by_type('mgr'))
+                if active_mgr.daemon_id in [d.daemon_id for d in daemons_to_remove]:
+                    # We can't just remove the active mgr like any other daemon.
+                    # Need to fail over later so it can be removed on next pass.
+                    # This can be accomplished by scheduling a restart of the active mgr.
+                    self.mgr._schedule_daemon_action(active_mgr.name(), 'restart')
+
             # remove any?
             def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
                 daemon_ids = [d.daemon_id for d in remove_daemons]
