@@ -2639,7 +2639,9 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   ent.meta.owner = owner.to_str();
   ent.meta.owner_display_name = obj.get_bucket()->get_owner()->get_display_name();
   RGWBucketInfo &info = obj.get_bucket()->get_info();
-  if (info.versioning_enabled())
+
+  // Set version and current flag in case of both versioning enabled and suspended case.
+  if (info.versioned())
     ent.flags = rgw_bucket_dir_entry::FLAG_VER | rgw_bucket_dir_entry::FLAG_CURRENT;
   ldpp_dout(dpp, 20) <<__func__<< ": key=" << obj.get_key().to_str()
                     << " etag: " << etag << " user_data=" << user_data << dendl;
@@ -2662,7 +2664,10 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   obj.meta.encode(bl);
   ldpp_dout(dpp, 20) <<__func__<< ": lid=0x" << std::hex << obj.meta.layout_id
                                                            << dendl;
-  if (info.versioning_enabled()) {
+
+  // Update existing object version entries in a bucket,
+  // in case of both versioning enabled and suspended.
+  if (info.versioned()) {
     // get the list of all versioned objects with the same key and
     // unset their FLAG_CURRENT later, if do_idx_op_by_name() is successful.
     // Note: without distributed lock on the index - it is possible that 2
