@@ -2261,16 +2261,25 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
     dout(10) << "mon_metadata:" << dendl;
     print_mon_metadata(mon_metadata);
     map<int,Metadata> m = metadata;
-    dout(10) << "m:" << dendl;
+    dout(10) << "m before:" << dendl;
     print_mon_metadata(m);
-    set<int> removed_ranks = monmap->removed_ranks;
-    for (unsigned rank = 0; rank < monmap->size(); ++rank) { 
+    std::string output = "removed_ranks: ";
+    std::set<int> removed_ranks = monmap->removed_ranks;
+    for (auto i = removed_ranks.rbegin(); i != removed_ranks.rend(); ++i) {
+      int rank = *i;
+      output += to_string(rank);
+    }
+    dout(10) << output << dendl;
+    dout(10) << "monmap->size(): " << monmap->size() << dendl;
+    for (unsigned rank = 0; rank < monmap->size(); ++rank) {
+      dout(10) << "rank: " << rank << dendl;
       if (m.count(rank) == 0 && mon_metadata.count(rank) &&
           removed_ranks.count(rank) == 0) {
+        dout(10) << "m[rank] = mon_metadata[rank]" << dendl;
         m[rank] = mon_metadata[rank];
       }
     }
-    dout(10) << "m:" << dendl;
+    dout(10) << "m after:" << dendl;
     print_mon_metadata(m);
 
     // FIXME: This is a bit sloppy because we aren't guaranteed to submit
@@ -3786,6 +3795,15 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "mon metadata") {
+    if (!is_leader() && !is_peon()) {
+      dout(10) << " waiting for quorum" << dendl;
+      waitfor_quorum.push_back(new C_RetryMessage(this, op));
+      return;
+    }
+    if (!is_leader()) {
+      forward_request_leader(op);
+      return;
+    }
     if (!f)
       f.reset(Formatter::create("json-pretty"));
 
@@ -5415,15 +5433,16 @@ void Monitor::handle_mon_get_map(MonOpRequestRef op)
 }
 
 void Monitor::print_mon_metadata(map<int,Metadata> &metadata) {
-  std::string output;
+  std::string output = "\n";
   for (auto &[key, value] : metadata) {
     const Metadata& m = value;
     output += "mon.";
     output += to_string(key);
     output += "\n";
     for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
-        if (p->first.c_str() == "addrs" && p->first.c_str() == "hostname") {
-          output += p->first.c_str();
+        std::string p_first = p->first.c_str();
+        if (p_first == "addrs" || p_first == "hostname") {
+          output += p_first;
           output += ": ";
           output += p->second;
           output += "\n";
@@ -5452,26 +5471,23 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
 {
   dout(10) << "get_mon_metadata: mon." << mon << dendl;
   ceph_assert(f);
-  // if (mon_metadata.size() > monmap->ranks.size()) {
-  //   for (auto i = monmap->removed_ranks.rbegin();
-  //       i != monmap->removed_ranks.rend(); ++i) {
-  //     int rank = *i;
-  //     if (rank == monmap->ranks.size()){
-  //       mon_metadata.erase(rank);
-  //     }
-  //     for (unsigned j = rank+1; j <= monmap->ranks.size(); ++j){
-  //         mon_metadata.erase(j-1);
-  //         mon_metadata.insert( std::pair<int, Metadata>(j-1,mon_metadata[j]) );
-  //         if (j == monmap->ranks.size()){
-  //           mon_metadata.erase(j);
-  //         }
-  //     }
-  //  }
-  // }
   if (!mon_metadata.count(mon)) {
     err << "mon." << mon << " not found";
     return -EINVAL;
   }
+  // Do not allow other services to grab the
+  // metadata if is not yet updated.
+  if (mon_metadata.size() > monmap->ranks.size()) {
+    for (auto i = monmap->removed_ranks.rbegin();
+    i != monmap->removed_ranks.rend(); ++i) {
+      int rank = *i;
+      if (rank == mon) {
+        err << "mon." << mon << " is not yet removed from metadata";
+        return -EINVAL;
+      }
+    }
+  }
+  
   const Metadata& m = mon_metadata[mon];
   std::string output = "metadata:\n";
   for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
