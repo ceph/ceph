@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <chrono>
 
 extern "C" {
 #pragma clang diagnostic push
@@ -62,9 +63,44 @@ static std::string motr_global_indices[] = {
   RGW_IAM_MOTR_EMAIL_KEY
 };
 
+// version-id(31 byte = base62 timstamp(8-byte) + UUID(23 byte)
+#define TS_LEN 8
+#define UUID_LEN 23
+
 static unsigned roundup(unsigned x, unsigned by)
 {
   return ((x - 1) / by + 1) * by;
+}
+
+std::string base62_encode(uint64_t value, size_t pad)
+{
+  // Integer to Base62 encoding table. Characters are sorted in
+  // lexicographical order, which makes the encoded result
+  // also sortable in the same way as the integer source.
+  constexpr std::array<char, 62> base62_chars{
+      // 0-9
+      '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+      // A-Z
+      'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+      'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+      // a-z
+      'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+      'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
+
+  std::string ret;
+  ret.reserve(TS_LEN);
+  if (value == 0) {
+    ret = base62_chars[0];
+  }
+
+  while (value > 0) {
+    ret += base62_chars[value % base62_chars.size()];
+    value /= base62_chars.size();
+  }
+  reverse(ret.begin(), ret.end());
+  if (ret.size() < pad) ret.insert(0, pad - ret.size(), base62_chars[0]);
+
+  return ret;
 }
 
 void MotrMetaCache::invalid(const DoutPrefixProvider *dpp,
@@ -1353,11 +1389,22 @@ bool MotrObject::is_expired() {
 // Taken from rgw_rados.cc
 void MotrObject::gen_rand_obj_instance_name()
 {
-  enum {OBJ_INSTANCE_LEN = 32};
-  char buf[OBJ_INSTANCE_LEN + 1];
-
-  gen_rand_alphanumeric_no_underscore(store->ctx(), buf, OBJ_INSTANCE_LEN);
-  key.set_instance(buf);
+  // Creating version-id based on timestamp value
+  // to list/store object versions in lexicographically sorted order.
+  char buf[UUID_LEN + 1];
+  std::string version_id;
+  //TODO: Handle null version object case in PutObj operation.
+  // As the version ID timestamp is encoded in Base62, the maximum value
+  // for 8-characters is 62^8 - 1. This is the maximum time interval in ms.
+  constexpr uint64_t max_ts_count = 218340105584895;
+  using UnsignedMillis = std::chrono::duration<uint64_t, std::milli>;
+  const auto ms_since_epoch = std::chrono::time_point_cast<UnsignedMillis>(
+                              std::chrono::system_clock::now()).time_since_epoch().count();
+  uint64_t cur_time = max_ts_count - ms_since_epoch;
+  auto version_ts = base62_encode(cur_time, TS_LEN);
+  gen_rand_alphanumeric_no_underscore(store->ctx(), buf, UUID_LEN+1);
+  version_id = version_ts + buf;
+  key.set_instance(version_id);
 }
 
 int MotrObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
