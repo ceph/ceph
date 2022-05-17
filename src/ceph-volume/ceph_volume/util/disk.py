@@ -340,16 +340,18 @@ def is_device(dev):
     """
     if not os.path.exists(dev):
         return False
-    # use lsblk first, fall back to using stat
-    TYPE = lsblk(dev).get('TYPE')
-    if TYPE:
-        return TYPE in ['disk', 'mpath']
+    if not dev.startswith('/dev/'):
+        return False
+    if dev[len('/dev/'):].startswith('loop'):
+        if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False) is False:
+            return False
+        logger.info(
+            "Allowing the use of loop devices since "
+            "CEPH_VOLUME_USE_LOOP_DEVICES is set."
+        )
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
-    if stat.S_ISBLK(os.lstat(dev)):
-        return True
-    return False
 
 
 def is_partition(dev):
@@ -763,6 +765,40 @@ def get_block_devs_lsblk(device=''):
         raise OSError('lsblk returned failure, stderr: {}'.format(stderr))
     return [re.split(r'\s+', line) for line in stdout]
 
+
+def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys/dev/block'):
+    # First, get devices that are _not_ partitions
+    result = list()
+    dev_names = os.listdir(_sys_block_path)
+    for dev in dev_names:
+        name = kname = os.path.join("/dev", dev)
+        type_ = 'disk'
+        if get_file_contents(os.path.join(_sys_block_path, dev, 'removable')) == "1":
+            continue
+        dm_dir_path = os.path.join(_sys_block_path, dev, 'dm')
+        if os.path.isdir(dm_dir_path):
+            type_ = 'lvm'
+            basename = get_file_contents(os.path.join(dm_dir_path, 'name'))
+            name = os.path.join("/dev/mapper", basename)
+        if dev.startswith('loop'):
+            if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False) is False:
+                continue
+            # Skip loop devices that are not attached
+            if not os.path.exists(os.path.join(_sys_block_path, dev, 'loop')):
+                continue
+            type_ = 'loop'
+        result.append([kname, name, type_])
+    # Next, look for devices that _are_ partitions
+    for item in os.listdir(_sys_dev_block_path):
+        is_part = get_file_contents(os.path.join(_sys_dev_block_path, item, 'partition')) == "1"
+        dev = os.path.basename(os.readlink(os.path.join(_sys_dev_block_path, item)))
+        if not is_part:
+            continue
+        name = kname = os.path.join("/dev", dev)
+        result.append([name, kname, "part"])
+    return sorted(result, key=lambda x: x[0])
+
+
 def get_devices(_sys_block_path='/sys/block', device=''):
     """
     Captures all available block devices as reported by lsblk.
@@ -776,12 +812,16 @@ def get_devices(_sys_block_path='/sys/block', device=''):
 
     device_facts = {}
 
-    block_devs = get_block_devs_lsblk(device=device)
+    block_devs = get_block_devs_sysfs(_sys_block_path)
+
+    block_types = ['disk', 'mpath']
+    if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False) is not False:
+        block_types.append('loop')
 
     for block in block_devs:
         devname = os.path.basename(block[0])
         diskname = block[1]
-        if block[2] not in ['disk', 'mpath']:
+        if block[2] not in block_types:
             continue
         sysdir = os.path.join(_sys_block_path, devname)
         metadata = {}
@@ -831,6 +871,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['human_readable_size'] = human_readable_size(metadata['size'])
         metadata['path'] = diskname
         metadata['locked'] = is_locked_raw_device(metadata['path'])
+        metadata['type'] = block[2]
 
         device_facts[diskname] = metadata
     return device_facts

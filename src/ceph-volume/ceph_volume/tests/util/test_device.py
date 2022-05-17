@@ -1,3 +1,4 @@
+import os
 import pytest
 from copy import deepcopy
 from ceph_volume.util import device
@@ -79,6 +80,22 @@ class TestDevice(object):
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_device is True
+
+    def test_loop_device_is_not_device(self, fake_call, device_info):
+        data = {"/dev/loop0": {"foo": "bar"}}
+        lsblk = {"TYPE": "loop"}
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/loop0")
+        assert disk.is_device is False
+
+    def test_loop_device_is_device(self, fake_call, device_info):
+        data = {"/dev/loop0": {"foo": "bar"}}
+        lsblk = {"TYPE": "loop"}
+        os.environ["CEPH_VOLUME_USE_LOOP_DEVICES"] = "1"
+        device_info(devices=data, lsblk=lsblk)
+        disk = device.Device("/dev/loop0")
+        assert disk.is_device is True
+        del os.environ["CEPH_VOLUME_USE_LOOP_DEVICES"]
 
     def test_device_is_rotational(self, fake_call, device_info):
         data = {"/dev/sda": {"rotational": "1"}}
