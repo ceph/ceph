@@ -4653,7 +4653,8 @@ def ip_in_subnets(ip_addr: str, subnets: str) -> bool:
     """Determine if the ip_addr belongs to any of the subnets list."""
     subnet_list = [x.strip() for x in subnets.split(',')]
     for subnet in subnet_list:
-        if ipaddress.ip_address(ip_addr) in ipaddress.ip_network(subnet):
+        ip_address = unwrap_ipv6(ip_addr) if is_ipv6(ip_addr) else ip_addr
+        if ipaddress.ip_address(ip_address) in ipaddress.ip_network(subnet):
             return True
     return False
 

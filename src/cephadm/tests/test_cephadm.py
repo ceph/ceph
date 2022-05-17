@@ -2309,6 +2309,10 @@ class TestNetworkValidation:
         rc = cd.ip_in_subnets('fe80::5054:ff:fef4:873a', 'fe80::/64')
         assert rc is True
 
+        # valid wrapped ip and valid IPV6 network
+        rc = cd.ip_in_subnets('[fe80::5054:ff:fef4:873a]', 'fe80::/64')
+        assert rc is True
+
         # valid ip and that doesn't belong to IPV6 network
         rc = cd.ip_in_subnets('fe80::5054:ff:fef4:873a', '2001:db8:85a3::/64')
         assert rc is False
