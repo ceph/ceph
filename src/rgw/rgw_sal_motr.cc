@@ -1896,25 +1896,42 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
     return 0;
 
   processed_bytes += left;
+  int64_t available_data = 0;
+  if (io_ctxt.accumulated_buffer_list.size() > 0) {
+    // We are in data accumulation mode
+    available_data = io_ctxt.total_bufer_sz;
+  }
 
   bs = this->get_optimal_bs(left);
   ldpp_dout(dpp, 20) <<__func__<< ": left=" << left << " bs=" << bs << dendl;
-  if (left < bs) {
+  if ((left + available_data) < bs) {
     // Determine if there are any further chunks/bytes from socket to be processed
     int64_t remaining_bytes = expected_obj_size - processed_bytes;
     if (remaining_bytes > 0) {
+      if (io_ctxt.accumulated_buffer_list.size() == 0) {
+        // Save offset
+        io_ctxt.start_offset = offset;
+      }
       // Append current buffer to the list of accumulated buffers
       ldpp_dout(dpp, 20) <<__func__<< " More data (" <<  remaining_bytes << " bytes) in-flight. Accumulating buffer..." << dendl;
       io_ctxt.accumulated_buffer_list.push_back(std::move(data));
-      if (io_ctxt.start_offset == 0)
-        io_ctxt.start_offset = offset;
       io_ctxt.total_bufer_sz += left;
       return 0;
     } else {
-      // Append last buffer
+      // This is last IO. Check if we have previously accumulated buffers.
+      // If not, simply use in_buffer/data
+      if (io_ctxt.accumulated_buffer_list.size() > 0) {
+        // Append last buffer
+        io_ctxt.accumulated_buffer_list.push_back(std::move(data));
+        io_ctxt.total_bufer_sz += left;
+      }
+    }
+  } else if ((left + available_data) == bs)  {
+    // Ready to write data to Motr. Add it to accumulated buffer
+    if (io_ctxt.accumulated_buffer_list.size() > 0) {
       io_ctxt.accumulated_buffer_list.push_back(std::move(data));
       io_ctxt.total_bufer_sz += left;
-    }
+    } // else, simply use in_buffer
   }
 
   rc = m0_bufvec_empty_alloc(&buf, 1) ?:
@@ -1951,7 +1968,7 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
       unsigned unit_sz = m0_obj_layout_id_to_unit_size(lid);
 
       bs = roundup(left, unit_sz);
-      ldpp_dout(dpp, 20) <<__func__<< " Padding [" << (bs - left) << "] bytes" << dendl;
+      ldpp_dout(dpp, 20) <<__func__<< " left ="<< left << ",bs=" << bs << ", Padding [" << (bs - left) << "] bytes" << dendl;
       data.append_zero(bs - left);
       p = data.c_str();
     }
@@ -1961,6 +1978,7 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
     ext.iv_vec.v_count[0] = bs;
     attr.ov_vec.v_count[0] = 0;
 
+    ldpp_dout(dpp, 20) <<__func__<< "Write buffer bytes=[" << bs << "], at offset=[" << offset << "]" << dendl;
     op = nullptr;
     rc = m0_obj_op(this->mobj, M0_OC_WRITE, &ext, &buf, &attr, 0, 0, &op);
     if (rc != 0)
@@ -1978,6 +1996,9 @@ out:
   m0_indexvec_free(&ext);
   m0_bufvec_free(&attr);
   m0_bufvec_free2(&buf);
+  // Reset io_ctxt state
+  io_ctxt.start_offset = 0;
+  io_ctxt.total_bufer_sz = 0;
   return rc;
 }
 
