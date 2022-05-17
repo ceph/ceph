@@ -91,7 +91,7 @@ SUBSYS(seastore_tm, 0, 5)    // logs below seastore tm
 SUBSYS(seastore_t, 0, 5)
 SUBSYS(seastore_cleaner, 0, 5)
 SUBSYS(seastore_lba, 0, 5)
-SUBSYS(seastore_lba_details, 0, 5)
+SUBSYS(seastore_fixedkv_tree, 0, 5)
 SUBSYS(seastore_cache, 0, 5)
 SUBSYS(seastore_journal, 0, 5)
 SUBSYS(seastore_device, 0, 5)

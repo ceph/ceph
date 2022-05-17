@@ -501,6 +501,13 @@ void SegmentCleaner::register_metrics()
 		     [this] { return get_unavailable_unused_bytes(); },
 		     sm::description("the size of the space is unavailable and not alive")),
 
+    sm::make_counter("dirty_journal_bytes",
+		     [this] { return get_dirty_journal_size(); },
+		     sm::description("the size of the journal for dirty extents")),
+    sm::make_counter("alloc_journal_bytes",
+		     [this] { return get_alloc_journal_size(); },
+		     sm::description("the size of the journal for alloc info")),
+
     sm::make_counter("projected_count", stats.projected_count,
 		    sm::description("the number of projected usage reservations")),
     sm::make_counter("projected_used_bytes_sum", stats.projected_used_bytes_sum,
@@ -510,6 +517,10 @@ void SegmentCleaner::register_metrics()
 		    sm::description("the sum of IOs")),
     sm::make_counter("io_blocked_count", stats.io_blocked_count,
 		    sm::description("IOs that are blocked by gc")),
+    sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
+		    sm::description("IOs that are blocked by trimming")),
+    sm::make_counter("io_blocked_count_reclaim", stats.io_blocked_count_reclaim,
+		    sm::description("IOs that are blocked by reclaimming")),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
 		     sm::description("the sum of blocking IOs")),
 

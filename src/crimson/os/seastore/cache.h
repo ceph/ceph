@@ -1124,10 +1124,12 @@ private:
   struct tree_efforts_t {
     uint64_t num_inserts = 0;
     uint64_t num_erases = 0;
+    uint64_t num_updates = 0;
 
     void increment(const Transaction::tree_stats_t& incremental) {
       num_inserts += incremental.num_inserts;
       num_erases += incremental.num_erases;
+      num_updates += incremental.num_updates;
     }
   };
 
@@ -1149,12 +1151,23 @@ private:
     counter_by_src_t<tree_efforts_t> committed_onode_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_onode_tree_efforts;
 
+    uint64_t omap_tree_depth = 0;
+    counter_by_src_t<tree_efforts_t> committed_omap_tree_efforts;
+    counter_by_src_t<tree_efforts_t> invalidated_omap_tree_efforts;
+
     uint64_t lba_tree_depth = 0;
     counter_by_src_t<tree_efforts_t> committed_lba_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_lba_tree_efforts;
 
+    uint64_t backref_tree_depth = 0;
+    counter_by_src_t<tree_efforts_t> committed_backref_tree_efforts;
+    counter_by_src_t<tree_efforts_t> invalidated_backref_tree_efforts;
+
     std::array<uint64_t, NUM_SRC_COMB> trans_conflicts_by_srcs;
     counter_by_src_t<uint64_t> trans_conflicts_by_unknown;
+
+    version_stat_t committed_dirty_version;
+    version_stat_t committed_reclaim_version;
   } stats;
 
   template <typename CounterT>

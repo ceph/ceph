@@ -22,13 +22,17 @@ namespace crimson::os::seastore::onode {
  * tree_cursor_t
  */
 
+// create from insert
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
       : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
   assert(is_tracked());
   ref_leaf_node->do_track_cursor<true>(*this);
+  // do not account updates for the inserted values
+  is_mutated = true;
 }
 
+// create from lookup
 tree_cursor_t::tree_cursor_t(
     Ref<LeafNode> node, const search_position_t& pos,
     const key_view_t& key_view, const value_header_t* p_value_header)
@@ -39,6 +43,7 @@ tree_cursor_t::tree_cursor_t(
   ref_leaf_node->do_track_cursor<true>(*this);
 }
 
+// lookup reaches the end, contain leaf node for further insert
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
       : ref_leaf_node{node}, position{search_position_t::end()}, cache{ref_leaf_node}
 {
@@ -46,6 +51,7 @@ tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
   assert(ref_leaf_node->is_level_tail());
 }
 
+// create an invalid tree_cursor_t
 tree_cursor_t::~tree_cursor_t()
 {
   if (is_tracked()) {
@@ -2149,7 +2155,8 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {
-    p_cursor = tree_cursor_t::create(this, position, key, p_value_header);
+    p_cursor = tree_cursor_t::create_tracked(
+        this, position, key, p_value_header);
   } else {
     p_cursor = found->second;
     assert(p_cursor->get_leaf_node() == this);
@@ -2199,7 +2206,8 @@ Ref<tree_cursor_t> LeafNode::track_insert(
   // track insert
   // TODO: getting key_view_t from stage::proceed_insert() and
   // stage::append_insert() has not supported yet
-  return tree_cursor_t::create(this, insert_pos);
+  return tree_cursor_t::create_inserted(
+      this, insert_pos);
 }
 
 void LeafNode::track_split(
