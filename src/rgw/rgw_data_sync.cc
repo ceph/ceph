@@ -5159,8 +5159,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
       tn->log(20, SSTR("sync status for source bucket: " << bucket_status.state << 
             ". lease is: " << (bucket_lease_cr ? "taken" : "not taken") << ". stop indications is: " << bucket_stopped));
 
-      if (bucket_status.state == BucketSyncState::Init || 
-          bucket_status.state == BucketSyncState::Stopped ||
+      if (bucket_status.state != BucketSyncState::Incremental ||
           bucket_stopped) { 
         // if state is Init or Stopped, we query the remote RGW for ther state
         yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.dest_bucket, &info));
