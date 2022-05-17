@@ -123,7 +123,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "count(sum by (ceph_daemon) (ceph_osd_metadata{job=~\"$job\", cluster=~\"$cluster\", hostname='$ceph_hosts'}))",
+               "expr": "count(sum by (ceph_daemon) (ceph_osd_metadata{job=~\"$job\", hostname='$ceph_hosts'}))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -615,7 +615,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(\n  ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} and\n    on (ceph_daemon) ceph_disk_occupation{job=~\"$job\", cluster=~\"$cluster\", instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}\n)\n",
+               "expr": "sum(\n  ceph_osd_stat_bytes{job=~\"$job\"} and\n    on (ceph_daemon) ceph_disk_occupation{job=~\"$job\", instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -800,14 +800,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n  (\n    rate(node_disk_writes_completed{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) or\n    rate(node_disk_writes_completed_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval])\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) * on(instance, device) group_left(ceph_daemon) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{job=~\"$job\", cluster=~\"$cluster\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
+               "expr": "label_replace(\n  (\n    rate(node_disk_writes_completed{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) or\n    rate(node_disk_writes_completed_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval])\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) * on(instance, device) group_left(ceph_daemon) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{job=~\"$job\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device}}({{ceph_daemon}}) writes",
                "refId": "A"
             },
             {
-               "expr": "label_replace(\n  (\n    rate(node_disk_reads_completed{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) or\n    rate(node_disk_reads_completed_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval])\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) * on(instance, device) group_left(ceph_daemon) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{job=~\"$job\", cluster=~\"$cluster\"},\"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
+               "expr": "label_replace(\n  (\n    rate(node_disk_reads_completed{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) or\n    rate(node_disk_reads_completed_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval])\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) * on(instance, device) group_left(ceph_daemon) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{job=~\"$job\"},\"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device}}({{ceph_daemon}}) reads",
@@ -898,14 +898,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n  (\n    rate(node_disk_bytes_written{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) or\n    rate(node_disk_written_bytes_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval])\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device)\n  group_left(ceph_daemon) label_replace(\n    label_replace(ceph_disk_occupation_human{job=~\"$job\", cluster=~\"$cluster\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  )\n",
+               "expr": "label_replace(\n  (\n    rate(node_disk_bytes_written{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) or\n    rate(node_disk_written_bytes_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval])\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device)\n  group_left(ceph_daemon) label_replace(\n    label_replace(ceph_disk_occupation_human{job=~\"$job\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  )\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device}}({{ceph_daemon}}) write",
                "refId": "A"
             },
             {
-               "expr": "label_replace(\n  (\n    rate(node_disk_bytes_read{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) or\n    rate(node_disk_read_bytes_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval])\n  ),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device)\n  group_left(ceph_daemon) label_replace(\n    label_replace(ceph_disk_occupation_human{job=~\"$job\", cluster=~\"$cluster\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  )\n",
+               "expr": "label_replace(\n  (\n    rate(node_disk_bytes_read{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) or\n    rate(node_disk_read_bytes_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval])\n  ),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") * on(instance, device)\n  group_left(ceph_daemon) label_replace(\n    label_replace(ceph_disk_occupation_human{job=~\"$job\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  )\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device}}({{ceph_daemon}}) read",
@@ -1077,7 +1077,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n  (\n    (rate(node_disk_io_time_ms{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) / 10) or\n    rate(node_disk_io_time_seconds_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) * 100\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) * on(instance, device) group_left(ceph_daemon) label_replace(\n  label_replace(ceph_disk_occupation_human{job=~\"$job\", cluster=~\"$cluster\", instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"},\n  \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
+               "expr": "label_replace(\n  (\n    (rate(node_disk_io_time_ms{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) / 10) or\n    rate(node_disk_io_time_seconds_total{instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"}[$__rate_interval]) * 100\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) * on(instance, device) group_left(ceph_daemon) label_replace(\n  label_replace(ceph_disk_occupation_human{job=~\"$job\", instance=~\"($ceph_hosts)([\\\\\\\\.:].*)?\"},\n  \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device}}({{ceph_daemon}})",
@@ -1175,7 +1175,7 @@
             "multi": true,
             "name": "job",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster\"}, job)",
+            "query": "label_values(ceph_osd_metadata{}, job)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,
@@ -1195,7 +1195,7 @@
             "multi": false,
             "name": "ceph_hosts",
             "options": [ ],
-            "query": "label_values({cluster=~\"$cluster\"}, instance)",
+            "query": "label_values({}, instance)",
             "refresh": 1,
             "regex": "([^.:]*).*",
             "sort": 3,

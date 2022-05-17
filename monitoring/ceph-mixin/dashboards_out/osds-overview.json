@@ -94,21 +94,21 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "avg (\n  rate(ceph_osd_op_r_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) * 1000\n)\n",
+               "expr": "avg (\n  rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval]) * 1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "AVG read",
                "refId": "A"
             },
             {
-               "expr": "max(\n  rate(ceph_osd_op_r_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) * 1000\n)\n",
+               "expr": "max(\n  rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval]) * 1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "MAX read",
                "refId": "B"
             },
             {
-               "expr": "quantile(0.95,\n  (\n    rate(ceph_osd_op_r_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval])\n      * 1000\n  )\n)\n",
+               "expr": "quantile(0.95,\n  (\n    rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval])\n      * 1000\n  )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "@95%ile",
@@ -222,7 +222,7 @@
          ],
          "targets": [
             {
-               "expr": "topk(10,\n  (sort(\n    (\n      rate(ceph_osd_op_r_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n        on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n        1000\n    )\n  ))\n)\n",
+               "expr": "topk(10,\n  (sort(\n    (\n      rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n        on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval]) *\n        1000\n    )\n  ))\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -281,21 +281,21 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "avg(\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval])\n    * 1000\n)\n",
+               "expr": "avg(\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval])\n    * 1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "AVG write",
                "refId": "A"
             },
             {
-               "expr": "max(\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n    1000\n)\n",
+               "expr": "max(\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval]) *\n    1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "MAX write",
                "refId": "B"
             },
             {
-               "expr": "quantile(0.95, (\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n    1000\n))\n",
+               "expr": "quantile(0.95, (\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval]) *\n    1000\n))\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "@95%ile write",
@@ -409,7 +409,7 @@
          ],
          "targets": [
             {
-               "expr": "topk(10,\n  (sort(\n    (rate(ceph_osd_op_w_latency_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n      1000)\n  ))\n)\n",
+               "expr": "topk(10,\n  (sort(\n    (rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval]) *\n      1000)\n  ))\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -443,7 +443,7 @@
          "pieType": "pie",
          "targets": [
             {
-               "expr": "count by (device_class) (ceph_osd_metadata{job=~\"$job\", cluster=~\"$cluster\"})",
+               "expr": "count by (device_class) (ceph_osd_metadata{job=~\"$job\"})",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device_class}}",
@@ -476,14 +476,14 @@
          "pieType": "pie",
          "targets": [
             {
-               "expr": "count(ceph_bluefs_wal_total_bytes{job=~\"$job\", cluster=~\"$cluster\"})",
+               "expr": "count(ceph_bluefs_wal_total_bytes{job=~\"$job\"})",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "bluestore",
                "refId": "A"
             },
             {
-               "expr": "absent(ceph_bluefs_wal_total_bytesjob=~\"$job\", cluster=~\"$cluster\") * count(ceph_osd_metadata{job=~\"$job\", cluster=~\"$cluster\"})",
+               "expr": "absent(ceph_bluefs_wal_total_bytesjob=~\"$job\") * count(ceph_osd_metadata{job=~\"$job\"})",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "filestore",
@@ -514,63 +514,63 @@
          "pieType": "pie",
          "targets": [
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} < 1099511627776)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} < 1099511627776)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<1TB",
                "refId": "A"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} >= 1099511627776 < 2199023255552)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 1099511627776 < 2199023255552)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<2TB",
                "refId": "B"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} >= 2199023255552 < 3298534883328)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 2199023255552 < 3298534883328)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<3TB",
                "refId": "C"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} >= 3298534883328 < 4398046511104)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 3298534883328 < 4398046511104)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<4TB",
                "refId": "D"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} >= 4398046511104 < 6597069766656)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 4398046511104 < 6597069766656)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<6TB",
                "refId": "E"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} >= 6597069766656 < 8796093022208)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 6597069766656 < 8796093022208)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<8TB",
                "refId": "F"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} >= 8796093022208 < 10995116277760)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 8796093022208 < 10995116277760)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<10TB",
                "refId": "G"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} >= 10995116277760 < 13194139533312)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 10995116277760 < 13194139533312)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<12TB",
                "refId": "H"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\", cluster=~\"$cluster\"} >= 13194139533312)",
+               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 13194139533312)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<12TB+",
@@ -623,7 +623,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "ceph_osd_numpg{job=~\"$job\", cluster=~\"$cluster\"}",
+               "expr": "ceph_osd_numpg{job=~\"$job\"}",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -728,7 +728,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_bluestore_onode_hits{job=~\"$job\", cluster=~\"$cluster\"}) / (\n  sum(ceph_bluestore_onode_hits{job=~\"$job\", cluster=~\"$cluster\"}) +\n  sum(ceph_bluestore_onode_misses{job=~\"$job\", cluster=~\"$cluster\"})\n)\n",
+               "expr": "sum(ceph_bluestore_onode_hits{job=~\"$job\"}) / (\n  sum(ceph_bluestore_onode_hits{job=~\"$job\"}) +\n  sum(ceph_bluestore_onode_misses{job=~\"$job\"})\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -810,14 +810,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "round(sum(rate(ceph_pool_rd{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval])))",
+               "expr": "round(sum(rate(ceph_pool_rd{job=~\"$job\"}[$__rate_interval])))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Reads",
                "refId": "A"
             },
             {
-               "expr": "round(sum(rate(ceph_pool_wr{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval])))",
+               "expr": "round(sum(rate(ceph_pool_wr{job=~\"$job\"}[$__rate_interval])))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Writes",
@@ -914,7 +914,7 @@
             "multi": true,
             "name": "job",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster\"}, job)",
+            "query": "label_values(ceph_osd_metadata{}, job)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,

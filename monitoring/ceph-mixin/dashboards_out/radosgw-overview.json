@@ -99,14 +99,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n  rate(ceph_rgw_get_initial_lat_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"}\n",
+               "expr": "rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n  rate(ceph_rgw_get_initial_lat_count{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GET AVG",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n  rate(ceph_rgw_put_initial_lat_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"}\n",
+               "expr": "rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n  rate(ceph_rgw_put_initial_lat_count{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUT AVG",
@@ -192,7 +192,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (rgw_host) (\n  label_replace(\n    rate(ceph_rgw_req{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n      on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"},\n    \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n  )\n)\n",
+               "expr": "sum by (rgw_host) (\n  label_replace(\n    rate(ceph_rgw_req{job=~\"$job\"}[$__rate_interval]) *\n      on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"},\n    \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n  )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -278,7 +278,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n  rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n    rate(ceph_rgw_get_initial_lat_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
+               "expr": "label_replace(\n  rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_get_initial_lat_count{job=~\"$job\"}[$__rate_interval]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -364,14 +364,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(rate(ceph_rgw_get_b{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]))",
+               "expr": "sum(rate(ceph_rgw_get_b{job=~\"$job\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GETs",
                "refId": "A"
             },
             {
-               "expr": "sum(rate(ceph_rgw_put_b{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]))",
+               "expr": "sum(rate(ceph_rgw_put_b{job=~\"$job\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUTs",
@@ -457,7 +457,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(sum by (instance_id) (\n  rate(ceph_rgw_get_b{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) +\n    rate(ceph_rgw_put_b{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval])) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
+               "expr": "label_replace(sum by (instance_id) (\n  rate(ceph_rgw_get_b{job=~\"$job\"}[$__rate_interval]) +\n    rate(ceph_rgw_put_b{job=~\"$job\"}[$__rate_interval])) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -543,7 +543,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "label_replace(\n  rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) /\n    rate(ceph_rgw_put_initial_lat_count{job=~\"$job\", cluster=~\"$cluster\"}[$__rate_interval]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
+               "expr": "label_replace(\n  rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_put_initial_lat_count{job=~\"$job\"}[$__rate_interval]) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\"},\n  \"rgw_host\", \"$1\", \"ceph_daemon\", \"rgw.(.*)\"\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{rgw_host}}",
@@ -1138,7 +1138,7 @@
             "multi": true,
             "name": "job",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster\"}, job)",
+            "query": "label_values(ceph_osd_metadata{}, job)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,
@@ -1158,7 +1158,7 @@
             "multi": false,
             "name": "rgw_servers",
             "options": [ ],
-            "query": "label_values(ceph_rgw_metadata{job=~\"$job\", cluster=~\"$cluster\"}, ceph_daemon)",
+            "query": "label_values(ceph_rgw_metadata{job=~\"$job\"}, ceph_daemon)",
             "refresh": 1,
             "regex": "RGW Server",
             "sort": 1,

@@ -104,14 +104,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum(rate(ceph_objecter_op_r{job=~\"$job\", cluster=~\"$cluster\", ceph_daemon=~\"($mds_servers).*\"}[$__rate_interval]))",
+               "expr": "sum(rate(ceph_objecter_op_r{job=~\"$job\", ceph_daemon=~\"($mds_servers).*\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Read Ops",
                "refId": "A"
             },
             {
-               "expr": "sum(rate(ceph_objecter_op_w{job=~\"$job\", cluster=~\"$cluster\", ceph_daemon=~\"($mds_servers).*\"}[$__rate_interval]))",
+               "expr": "sum(rate(ceph_objecter_op_w{job=~\"$job\", ceph_daemon=~\"($mds_servers).*\"}[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Write Ops",
@@ -197,7 +197,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "ceph_mds_server_handle_client_request{job=~\"$job\", cluster=~\"$cluster\", ceph_daemon=~\"($mds_servers).*\"}",
+               "expr": "ceph_mds_server_handle_client_request{job=~\"$job\", ceph_daemon=~\"($mds_servers).*\"}",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{ceph_daemon}}",
@@ -294,7 +294,7 @@
             "multi": true,
             "name": "job",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{cluster=~\"$cluster\"}, job)",
+            "query": "label_values(ceph_osd_metadata{}, job)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,
@@ -314,7 +314,7 @@
             "multi": false,
             "name": "mds_servers",
             "options": [ ],
-            "query": "label_values(ceph_mds_inodes{job=~\"$job\", cluster=~\"$cluster\"}, ceph_daemon)",
+            "query": "label_values(ceph_mds_inodes{job=~\"$job\"}, ceph_daemon)",
             "refresh": 1,
             "regex": "",
             "sort": 1,
