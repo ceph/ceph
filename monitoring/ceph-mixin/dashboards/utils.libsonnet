@@ -185,15 +185,16 @@ local g = import 'grafonnet/grafana.libsonnet';
     {
       // Common labels
       jobMatcher: jobMatcher,
-      clusterMatcher: clusterMatcher,
-      matchers: '%s, %s' % [jobMatcher, clusterMatcher],
+      clusterMatcher: (if $._config.showMultiCluster then clusterMatcher else ''),
+      matchers: jobMatcher +
+                (if $._config.showMultiCluster then ', ' + clusterMatcher else ''),
     },
 
   addClusterTemplate()::
     $.addTemplateSchema(
       'cluster',
       '$datasource',
-      'label_values(ceph_osd_metadata, cluster)',
+      'label_values(ceph_osd_metadata, %s)' % $._config.clusterLabel,
       1,
       true,
       1,
