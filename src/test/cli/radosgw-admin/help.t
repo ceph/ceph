@@ -157,7 +157,7 @@
     role delete                remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
-    role modify                modify the assume role policy of an existing role
+    role-trust-policy modify   modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role

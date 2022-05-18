@@ -140,7 +140,7 @@ Update Assume Role Policy Document of a role
 
 To modify a role's assume role policy document, execute the following::
 
-	radosgw-admin role modify --role-name={role-name} --assume-role-policy-doc={trust-policy-document}
+	radosgw-admin role-trust-policy modify --role-name={role-name} --assume-role-policy-doc={trust-policy-document}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -157,7 +157,7 @@ Request Parameters
 
 For example::
 
-  radosgw-admin role modify --role-name=S3Access1 --assume-role-policy-doc=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Principal\":\{\"AWS\":\[\"arn:aws:iam:::user/TESTER2\"\]\},\"Action\":\[\"sts:AssumeRole\"\]\}\]\}
+  radosgw-admin role-trust-policy modify --role-name=S3Access1 --assume-role-policy-doc=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Principal\":\{\"AWS\":\[\"arn:aws:iam:::user/TESTER2\"\]\},\"Action\":\[\"sts:AssumeRole\"\]\}\]\}
 
 .. code-block:: javascript
 
