@@ -46,7 +46,7 @@ std::ostream &operator<<(std::ostream &os,
 
 bool GenericWriteLogEntry::can_writeback() const {
   return (this->completed &&
-          (ram_entry.sequenced ||
+          (ram_entry.is_sequenced() ||
            (sync_point_entry &&
             sync_point_entry->completed)));
 }
@@ -71,7 +71,7 @@ std::ostream &operator<<(std::ostream &os,
 void WriteLogEntry::init(bool has_data,
                          uint64_t current_sync_gen,
                          uint64_t last_op_sequence_num, bool persist_on_flush) {
-  ram_entry.has_data = 1;
+  ram_entry.set_has_data(has_data);
   ram_entry.sync_gen_number = current_sync_gen;
   if (persist_on_flush) {
     /* Persist on flush. Sequence #0 is never used. */
@@ -79,10 +79,10 @@ void WriteLogEntry::init(bool has_data,
   } else {
      /* Persist on write */
      ram_entry.write_sequence_number = last_op_sequence_num;
-     ram_entry.sequenced = 1;
+     ram_entry.set_sequenced(true);
   }
-  ram_entry.sync_point = 0;
-  ram_entry.discard = 0;
+  ram_entry.set_sync_point(false);
+  ram_entry.set_discard(false);
 }
 
 std::ostream& WriteLogEntry::format(std::ostream &os) const {
@@ -115,7 +115,7 @@ void DiscardLogEntry::init(uint64_t current_sync_gen, bool persist_on_flush,
   } else {
     /* Persist on write */
     ram_entry.write_sequence_number = last_op_sequence_num;
-    ram_entry.sequenced = 1;
+    ram_entry.set_sequenced(true);
   }
 }
 
