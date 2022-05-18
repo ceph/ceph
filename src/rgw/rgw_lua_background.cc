@@ -64,20 +64,15 @@ int Background::read_script() {
   return rgw::lua::read_script(&dp, store, tenant, null_yield, rgw::lua::context::background, rgw_script);
 }
 
-const std::string Background::empty_table_value;
+const BackgroundMapValue Background::empty_table_value;
 
-const std::string& Background::get_table_value(const std::string& key) const {
+const BackgroundMapValue& Background::get_table_value(const std::string& key) const {
   std::unique_lock cond_lock(table_mutex);
   const auto it = rgw_map.find(key);
   if (it == rgw_map.end()) {
     return empty_table_value;
   }
   return it->second;
-}
-
-void Background::put_table_value(const std::string& key, const std::string& value) {
-  std::unique_lock cond_lock(table_mutex);
-  rgw_map[key] = value;
 }
 
 //(1) Loads the script from the object if not paused

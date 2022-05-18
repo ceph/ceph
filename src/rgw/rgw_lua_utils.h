@@ -1,6 +1,8 @@
 #pragma once
 
+#include <string.h>
 #include <memory>
+#include <map>
 #include <string>
 #include <string_view>
 #include <ctime>
@@ -208,7 +210,7 @@ void open_standard_libs(lua_State* L);
 
 typedef int MetaTableClosure(lua_State* L);
 
-template<typename MapType>
+template<typename MapType=std::map<std::string, std::string>>
 int StringMapWriteableNewIndex(lua_State* L) {
   const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(1)));
 
