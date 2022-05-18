@@ -1420,7 +1420,7 @@
          ]
       }
    ],
-   "refresh": "15s",
+   "refresh": "30s",
    "rows": [ ],
    "schemaVersion": 22,
    "style": "dark",
@@ -1514,7 +1514,6 @@
       "refresh_intervals": [
          "5s",
          "10s",
-         "15s",
          "30s",
          "1m",
          "5m",

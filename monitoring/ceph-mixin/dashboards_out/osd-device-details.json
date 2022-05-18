@@ -750,7 +750,7 @@
          ]
       }
    ],
-   "refresh": "",
+   "refresh": "30s",
    "rows": [ ],
    "schemaVersion": 16,
    "style": "dark",

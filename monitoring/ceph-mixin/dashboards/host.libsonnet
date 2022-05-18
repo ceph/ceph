@@ -7,14 +7,10 @@ local g = import 'grafonnet/grafana.libsonnet';
       '',
       'y0KGL0iZz',
       'now-1h',
-      '10s',
+      '30s',
       16,
       $._config.dashboardTags,
       '',
-      {
-        refresh_intervals: ['5s', '10s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
-        time_options: ['5m', '15m', '1h', '6h', '12h', '24h', '2d', '7d', '30d'],
-      }
     )
     .addRequired(
       type='grafana', id='grafana', name='Grafana', version='5.3.2'
@@ -291,14 +287,10 @@ local g = import 'grafonnet/grafana.libsonnet';
       '',
       'rtOg0AiWz',
       'now-1h',
-      '10s',
+      '30s',
       16,
       $._config.dashboardTags + ['overview'],
-      '',
-      {
-        refresh_intervals: ['5s', '10s', '30s', '1m', '5m', '15m', '30m', '1h', '2h', '1d'],
-        time_options: ['5m', '15m', '1h', '6h', '12h', '24h', '2d', '7d', '30d'],
-      }
+      ''
     )
     .addRequired(
       type='grafana', id='grafana', name='Grafana', version='5.3.2'
