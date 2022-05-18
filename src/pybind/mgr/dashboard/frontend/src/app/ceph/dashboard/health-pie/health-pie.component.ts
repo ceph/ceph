@@ -106,7 +106,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
       id: 'center_text',
       beforeDraw(chart: Chart) {
         if (chart.config.type !== 'doughnut') {
-          return; 
+          return;
         }
 
         const cssHelper = new CssHelper();

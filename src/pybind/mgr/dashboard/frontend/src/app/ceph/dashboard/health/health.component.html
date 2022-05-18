@@ -228,10 +228,10 @@
     </cd-info-card>
 
     <cd-info-card cardTitle="OSDs Latency"
-                    i18n-cardTitle
-                    class="cd-performance-card cd-chart-card"
-                    contentClass="content-chart"
-                    *ngIf="healthData.perf_stat">
+                  i18n-cardTitle
+                  class="cd-performance-card cd-chart-card"
+                  contentClass="content-chart"
+                  *ngIf="healthData.perf_stat">
       <cd-health-pie [data]="healthData"
                      [config]="latencyChartConfig"
                      (prepareFn)="prepareLatency($event[0], $event[1])">
