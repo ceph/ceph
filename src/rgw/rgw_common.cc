@@ -3016,7 +3016,6 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
   // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
 
-  cerr << "config_store: " << config_store << std::endl;
   if ((config_store == "dbstore") ||
       (config_store == "motr")) {
     // These stores don't use the mon
