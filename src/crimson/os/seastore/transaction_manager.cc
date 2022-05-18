@@ -644,12 +644,23 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto backref_manager = create_backref_manager(*sms, *cache);
+
+  bool cleaner_is_detailed;
+  SegmentCleaner::config_t cleaner_config;
+  if (config.is_test) {
+    cleaner_is_detailed = true;
+    cleaner_config = SegmentCleaner::config_t::get_test();
+  } else {
+    cleaner_is_detailed = false;
+    cleaner_config = SegmentCleaner::config_t::get_default();
+  }
   auto segment_cleaner = std::make_unique<SegmentCleaner>(
-    SegmentCleaner::config_t::get_default(),
+    cleaner_config,
     std::move(sms),
     *backref_manager,
     *cache,
-    config.detailed);
+    cleaner_is_detailed);
+
   JournalRef journal;
   if (config.j_type == journal_type_t::SEGMENT_JOURNAL) {
     journal = journal::make_segmented(*segment_cleaner);
