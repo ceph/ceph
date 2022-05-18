@@ -14,7 +14,6 @@ import logging
 import threading
 import traceback
 import os
-import re
 import shlex
 
 from io import BytesIO, StringIO
@@ -70,14 +69,6 @@ def toolbox(ctx, cluster_name, args, **kwargs):
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
     conf_fp = BytesIO()
     ctx.ceph[cluster].conf.write(conf_fp)
-    conf_fp.seek(0)
-    lines = conf_fp.readlines()
-    m = None
-    for l in lines:
-     m = re.search("rgw.crypt.sse.s3.backend *= *(.*)", l.decode())
-     if m:
-      break
-    ctx.ceph[cluster].rgw_crypt_sse_s3_backend = m.expand("\\1") if m else None
     conf_fp.seek(0)
     writes = ctx.cluster.run(
         args=[
