@@ -38,8 +38,8 @@ required when running Ceph File System clients.
   ``ceph-osd``) stores data, handles data replication, recovery,
   rebalancing, and provides some monitoring information to Ceph
   Monitors and Managers by checking other Ceph OSD Daemons for a
-  heartbeat. At least 3 Ceph OSDs are normally required for redundancy
-  and high availability.
+  heartbeat. At least three Ceph OSDs are normally required for 
+  redundancy and high availability.
 
 - **MDSs**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores
   metadata on behalf of the :term:`Ceph File System` (i.e., Ceph Block
