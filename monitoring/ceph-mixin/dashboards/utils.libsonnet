@@ -10,8 +10,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                   refresh,
                   schemaVersion,
                   tags,
-                  timezone,
-                  timepicker)::
+                  timezone)::
     g.dashboard.new(title=title,
                     description=description,
                     uid=uid,
@@ -19,8 +18,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                     refresh=refresh,
                     schemaVersion=schemaVersion,
                     tags=tags,
-                    timezone=timezone,
-                    timepicker=timepicker),
+                    timezone=timezone),
 
   graphPanelSchema(aliasColors,
                    title,
