@@ -2,6 +2,16 @@
 Pacific
 =======
 
+v16.2.9 Pacific
+===============
+
+This is a hotfix release in the Pacific series to address a bug in 16.2.8 that could cause MGRs to deadlock. See https://tracker.ceph.com/issues/55687.
+
+Changelog
+---------
+
+* mgr/ActivePyModules.cc: fix cases where GIL is held while attempting to lock mutex (`pr#46302 <https://github.com/ceph/ceph/pull/46302>`_, Cory Snyder)
+
 v16.2.8 Pacific   
 ===============
 
