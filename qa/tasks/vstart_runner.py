@@ -71,6 +71,7 @@ from IPy import IP
 import unittest
 import platform
 import logging
+from argparse import Namespace
 
 from unittest import suite, loader
 
@@ -943,7 +944,13 @@ class LocalCluster(object):
 
 class LocalContext(object):
     def __init__(self):
-        self.config = {'cluster': 'ceph'}
+        FSID = remote.run(args=[os.path.join(BIN_PREFIX, 'ceph'), 'fsid'],
+                          stdout=StringIO()).stdout.getvalue()
+
+        cluster_name = 'ceph'
+        self.config = {'cluster': cluster_name}
+        self.ceph = {cluster_name: Namespace()}
+        self.ceph[cluster_name].fsid = FSID
         self.teuthology_config = teuth_config
         self.cluster = LocalCluster()
         self.daemons = DaemonGroup()
