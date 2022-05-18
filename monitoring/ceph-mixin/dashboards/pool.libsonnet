@@ -561,7 +561,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       PoolDetailSingleStatPanel(
         's',
         'Time till full',
-        'Time till pool is full assuming the average fill rate of the last 4 hours',
+        'Time till pool is full assuming the average fill rate of the last 6 hours',
         false,
         100,
         false,
