@@ -136,7 +136,8 @@ class SSHManager:
                                addr: Optional[str] = None,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
-        cmd = "sudo " + " ".join(quote(x) for x in cmd)
+        sudo_prefix = "sudo " if self.mgr.ssh_user != 'root' else ""
+        cmd = sudo_prefix + " ".join(quote(x) for x in cmd)
         logger.debug(f'Running command: {cmd}')
         try:
             r = await conn.run('sudo true', check=True, timeout=5)
