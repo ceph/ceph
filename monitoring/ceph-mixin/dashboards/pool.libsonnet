@@ -2,80 +2,6 @@ local g = import 'grafonnet/grafana.libsonnet';
 
 (import 'utils.libsonnet') {
   'pool-overview.json':
-    local PoolOverviewSingleStatPanel(format,
-                                      title,
-                                      description,
-                                      valueName,
-                                      expr,
-                                      instant,
-                                      targetFormat,
-                                      x,
-                                      y,
-                                      w,
-                                      h) =
-      $.addSingleStatSchema(['#299c46', 'rgba(237, 129, 40, 0.89)', '#d44a3a'],
-                            '$datasource',
-                            format,
-                            title,
-                            description,
-                            valueName,
-                            false,
-                            100,
-                            false,
-                            false,
-                            '')
-      .addTarget($.addTargetSchema(expr, '', targetFormat, 1, instant)) + { gridPos: { x: x, y: y, w: w, h: h } };
-
-    local PoolOverviewStyle(alias,
-                            pattern,
-                            type,
-                            unit,
-                            colorMode,
-                            thresholds,
-                            valueMaps) =
-      $.addStyle(alias,
-                 colorMode,
-                 [
-                   'rgba(245, 54, 54, 0.9)',
-                   'rgba(237, 129, 40, 0.89)',
-                   'rgba(50, 172, 45, 0.97)',
-                 ],
-                 'YYYY-MM-DD HH:mm:ss',
-                 2,
-                 1,
-                 pattern,
-                 thresholds,
-                 type,
-                 unit,
-                 valueMaps);
-
-    local PoolOverviewGraphPanel(title,
-                                 description,
-                                 formatY1,
-                                 labelY1,
-                                 expr,
-                                 legendFormat,
-                                 x,
-                                 y,
-                                 w,
-                                 h) =
-      $.graphPanelSchema({},
-                         title,
-                         description,
-                         'null as zero',
-                         false,
-                         formatY1,
-                         'short',
-                         labelY1,
-                         null,
-                         0,
-                         1,
-                         '$datasource')
-      .addTargets(
-        [$.addTargetSchema(expr,
-                           legendFormat)]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
-
     $.dashboardSchema(
       'Ceph Pools Overview',
       '',
@@ -117,7 +43,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                         query='15')
     )
     .addPanels([
-      PoolOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'none',
         'Pools',
         '',
@@ -130,7 +56,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         3,
         3
       ),
-      PoolOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'none',
         'Pools with Compression',
         'Count of the pools that have compression enabled',
@@ -143,7 +69,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         3,
         3
       ),
-      PoolOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'bytes',
         'Total Raw Capacity',
         'Total raw capacity available to the cluster',
@@ -156,7 +82,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         3,
         3
       ),
-      PoolOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'bytes',
         'Raw Capacity Consumed',
         'Total raw capacity consumed by user data and associated overheads (metadata + redundancy)',
@@ -169,7 +95,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         3,
         3
       ),
-      PoolOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'bytes',
         'Logical Stored ',
         'Total of client data stored in the cluster',
@@ -182,7 +108,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         3,
         3
       ),
-      PoolOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'bytes',
         'Compression Savings',
         'A compression saving is determined as the data eligible to be compressed minus the capacity used to store the data after compression',
@@ -200,7 +126,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         3,
         3
       ),
-      PoolOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'percent',
         'Compression Eligibility',
         'Indicates how suitable the data is within the pools that are/have been enabled for compression - averaged across all pools holding compressed data',
@@ -218,7 +144,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         3,
         3
       ),
-      PoolOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'none',
         'Compression Factor',
         'This factor describes the average ratio of data eligible to be compressed divided by the data actually stored. It does not account for data written that was ineligible for compression (too small, or compression yield too low)',
@@ -241,26 +167,26 @@ local g = import 'grafonnet/grafana.libsonnet';
         '',
         { col: 5, desc: true },
         [
-          PoolOverviewStyle('', 'Time', 'hidden', 'short', null, [], []),
-          PoolOverviewStyle('', 'instance', 'hidden', 'short', null, [], []),
-          PoolOverviewStyle('', 'job', 'hidden', 'short', null, [], []),
-          PoolOverviewStyle('Pool Name', 'name', 'string', 'short', null, [], []),
-          PoolOverviewStyle('Pool ID', 'pool_id', 'hidden', 'none', null, [], []),
-          PoolOverviewStyle('Compression Factor', 'Value #A', 'number', 'none', null, [], []),
-          PoolOverviewStyle('% Used', 'Value #D', 'number', 'percentunit', 'value', ['70', '85'], []),
-          PoolOverviewStyle('Usable Free', 'Value #B', 'number', 'bytes', null, [], []),
-          PoolOverviewStyle('Compression Eligibility', 'Value #C', 'number', 'percent', null, [], []),
-          PoolOverviewStyle('Compression Savings', 'Value #E', 'number', 'bytes', null, [], []),
-          PoolOverviewStyle('Growth (5d)', 'Value #F', 'number', 'bytes', 'value', ['0', '0'], []),
-          PoolOverviewStyle('IOPS', 'Value #G', 'number', 'none', null, [], []),
-          PoolOverviewStyle('Bandwidth', 'Value #H', 'number', 'Bps', null, [], []),
-          PoolOverviewStyle('', '__name__', 'hidden', 'short', null, [], []),
-          PoolOverviewStyle('', 'type', 'hidden', 'short', null, [], []),
-          PoolOverviewStyle('', 'compression_mode', 'hidden', 'short', null, [], []),
-          PoolOverviewStyle('Type', 'description', 'string', 'short', null, [], []),
-          PoolOverviewStyle('Stored', 'Value #J', 'number', 'bytes', null, [], []),
-          PoolOverviewStyle('', 'Value #I', 'hidden', 'short', null, [], []),
-          PoolOverviewStyle('Compression', 'Value #K', 'string', 'short', null, [], [{ text: 'ON', value: '1' }]),
+          $.overviewStyle('', 'Time', 'hidden', 'short'),
+          $.overviewStyle('', 'instance', 'hidden', 'short'),
+          $.overviewStyle('', 'job', 'hidden', 'short'),
+          $.overviewStyle('Pool Name', 'name', 'string', 'short'),
+          $.overviewStyle('Pool ID', 'pool_id', 'hidden', 'none'),
+          $.overviewStyle('Compression Factor', 'Value #A', 'number', 'none'),
+          $.overviewStyle('% Used', 'Value #D', 'number', 'percentunit', 'value', ['70', '85']),
+          $.overviewStyle('Usable Free', 'Value #B', 'number', 'bytes'),
+          $.overviewStyle('Compression Eligibility', 'Value #C', 'number', 'percent'),
+          $.overviewStyle('Compression Savings', 'Value #E', 'number', 'bytes'),
+          $.overviewStyle('Growth (5d)', 'Value #F', 'number', 'bytes', 'value', ['0', '0']),
+          $.overviewStyle('IOPS', 'Value #G', 'number', 'none'),
+          $.overviewStyle('Bandwidth', 'Value #H', 'number', 'Bps'),
+          $.overviewStyle('', '__name__', 'hidden', 'short'),
+          $.overviewStyle('', 'type', 'hidden', 'short'),
+          $.overviewStyle('', 'compression_mode', 'hidden', 'short'),
+          $.overviewStyle('Type', 'description', 'string', 'short'),
+          $.overviewStyle('Stored', 'Value #J', 'number', 'bytes'),
+          $.overviewStyle('', 'Value #I', 'hidden', 'short'),
+          $.overviewStyle('Compression', 'Value #K', 'string', 'short', null, [], [{ text: 'ON', value: '1' }]),
         ],
         'Pool Overview',
         'table'
@@ -365,11 +291,13 @@ local g = import 'grafonnet/grafana.libsonnet';
           $.addTargetSchema('', 'L', '', '', null),
         ]
       ) + { gridPos: { x: 0, y: 3, w: 24, h: 6 } },
-      PoolOverviewGraphPanel(
+      $.simpleGraphPanel(
+        {},
         'Top $topk Client IOPS by Pool',
         'This chart shows the sum of read and write IOPS from all clients by pool',
         'short',
         'IOPS',
+        0,
         |||
           topk($topk,
             round(
@@ -396,11 +324,13 @@ local g = import 'grafonnet/grafana.libsonnet';
           '{{name}} - write'
         )
       ),
-      PoolOverviewGraphPanel(
+      $.simpleGraphPanel(
+        {},
         'Top $topk Client Bandwidth by Pool',
         'The chart shows the sum of read and write bytes from all clients, by pool',
         'Bps',
         'Throughput',
+        0,
         |||
           topk($topk,
             (
@@ -415,11 +345,13 @@ local g = import 'grafonnet/grafana.libsonnet';
         12,
         8
       ),
-      PoolOverviewGraphPanel(
+      $.simpleGraphPanel(
+        {},
         'Pool Capacity Usage (RAW)',
         'Historical view of capacity usage, to help identify growth and trends in pool consumption',
         'bytes',
         'Capacity Used',
+        0,
         'ceph_pool_bytes_used{%(matchers)s} * on(pool_id) group_right ceph_pool_metadata{%(matchers)s}' % $.matchers(),
         '{{name}}',
         0,
@@ -429,61 +361,6 @@ local g = import 'grafonnet/grafana.libsonnet';
       ),
     ]),
   'pool-detail.json':
-    local PoolDetailSingleStatPanel(format,
-                                    title,
-                                    description,
-                                    valueName,
-                                    colorValue,
-                                    gaugeMaxValue,
-                                    gaugeShow,
-                                    sparkLineShow,
-                                    thresholds,
-                                    expr,
-                                    targetFormat,
-                                    x,
-                                    y,
-                                    w,
-                                    h) =
-      $.addSingleStatSchema(['#299c46', 'rgba(237, 129, 40, 0.89)', '#d44a3a'],
-                            '$datasource',
-                            format,
-                            title,
-                            description,
-                            valueName,
-                            colorValue,
-                            gaugeMaxValue,
-                            gaugeShow,
-                            sparkLineShow,
-                            thresholds)
-      .addTarget($.addTargetSchema(expr, '', targetFormat)) + { gridPos: { x: x, y: y, w: w, h: h } };
-
-    local PoolDetailGraphPanel(alias,
-                               title,
-                               description,
-                               formatY1,
-                               labelY1,
-                               expr,
-                               legendFormat,
-                               x,
-                               y,
-                               w,
-                               h) =
-      $.graphPanelSchema(alias,
-                         title,
-                         description,
-                         'null as zero',
-                         false,
-                         formatY1,
-                         'short',
-                         labelY1,
-                         null,
-                         null,
-                         1,
-                         '$datasource')
-      .addTargets(
-        [$.addTargetSchema(expr, legendFormat)]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
-
     $.dashboardSchema(
       'Ceph Pool Details',
       '',
@@ -538,7 +415,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                           '')
     )
     .addPanels([
-      PoolDetailSingleStatPanel(
+      $.gaugeSingleStatPanel(
         'percentunit',
         'Capacity used',
         '',
@@ -558,7 +435,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         7,
         7
       ),
-      PoolDetailSingleStatPanel(
+      $.gaugeSingleStatPanel(
         's',
         'Time till full',
         'Time till pool is full assuming the average fill rate of the last 6 hours',
@@ -578,7 +455,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         5,
         7
       ),
-      PoolDetailGraphPanel(
+      $.simpleGraphPanel(
         {
           read_op_per_sec:
             '#3F6833',
@@ -588,6 +465,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         '',
         'ops',
         'Objects out(-) / in(+) ',
+        null,
         |||
           deriv(ceph_pool_objects{%(matchers)s}[1m]) *
             on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
@@ -598,7 +476,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         12,
         7
       ),
-      PoolDetailGraphPanel(
+      $.simpleGraphPanel(
         {
           read_op_per_sec: '#3F6833',
           write_op_per_sec: '#E5AC0E',
@@ -607,6 +485,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         '',
         'iops',
         'Read (-) / Write (+)',
+        null,
         |||
           rate(ceph_pool_rd{%(matchers)s}[$__rate_interval]) *
             on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
@@ -627,7 +506,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           'writes'
         )
       ),
-      PoolDetailGraphPanel(
+      $.simpleGraphPanel(
         {
           read_op_per_sec: '#3F6833',
           write_op_per_sec: '#E5AC0E',
@@ -636,6 +515,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         '',
         'Bps',
         'Read (-) / Write (+)',
+        null,
         |||
           rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
             on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
@@ -656,7 +536,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           'writes'
         )
       ),
-      PoolDetailGraphPanel(
+      $.simpleGraphPanel(
         {
           read_op_per_sec: '#3F6833',
           write_op_per_sec: '#E5AC0E',
@@ -665,6 +545,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         '',
         'short',
         'Objects',
+        null,
         |||
           ceph_pool_objects{%(matchers)s} *
             on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}

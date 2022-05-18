@@ -2,41 +2,6 @@ local g = import 'grafonnet/grafana.libsonnet';
 
 (import 'utils.libsonnet') {
   'hosts-overview.json':
-    local HostsOverviewSingleStatPanel(format,
-                                       title,
-                                       description,
-                                       valueName,
-                                       expr,
-                                       instant,
-                                       x,
-                                       y,
-                                       w,
-                                       h) =
-      $.addSingleStatSchema(['#299c46', 'rgba(237, 129, 40, 0.89)', '#d44a3a'],
-                            '$datasource',
-                            format,
-                            title,
-                            description,
-                            valueName,
-                            false,
-                            100,
-                            false,
-                            false,
-                            '')
-      .addTarget(
-        $.addTargetSchema(expr, '', 'time_series', 1, instant)
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
-
-    local HostsOverviewGraphPanel(title, description, formatY1, expr, legendFormat, x, y, w, h) =
-      $.graphPanelSchema(
-        {}, title, description, 'null', false, formatY1, 'short', null, null, 0, 1, '$datasource'
-      )
-      .addTargets(
-        [$.addTargetSchema(
-          expr, legendFormat
-        )]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
-
     $.dashboardSchema(
       'Host Overview',
       '',
@@ -124,19 +89,20 @@ local g = import 'grafonnet/grafana.libsonnet';
                           'rgw.(.*)')
     )
     .addPanels([
-      HostsOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'none',
         'OSD Hosts',
         '',
         'current',
         'count(sum by (hostname) (ceph_osd_metadata{%(matchers)s}))' % $.matchers(),
         true,
+        'time_series',
         0,
         0,
         4,
         5
       ),
-      HostsOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'percentunit',
         'AVG CPU Busy',
         'Average CPU busy across all hosts (OSD, RGW, MON etc) within the cluster',
@@ -150,12 +116,13 @@ local g = import 'grafonnet/grafana.libsonnet';
           ))
         |||,
         true,
+        'time_series',
         4,
         0,
         4,
         5
       ),
-      HostsOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'percentunit',
         'AVG RAM Utilization',
         'Average Memory Usage across all hosts in the cluster (excludes buffer/cache usage)',
@@ -185,12 +152,13 @@ local g = import 'grafonnet/grafana.libsonnet';
           ))
         |||,
         true,
+        'time_series',
         8,
         0,
         4,
         5
       ),
-      HostsOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'none',
         'Physical IOPS',
         'IOPS Load at the device as reported by the OS on all OSD hosts',
@@ -205,12 +173,13 @@ local g = import 'grafonnet/grafana.libsonnet';
           ))
         |||,
         true,
+        'time_series',
         12,
         0,
         4,
         5
       ),
-      HostsOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'percent',
         'AVG Disk Utilization',
         'Average Disk utilization for all OSD data devices (i.e. excludes journal/WAL)',
@@ -230,12 +199,13 @@ local g = import 'grafonnet/grafana.libsonnet';
           )
         ||| % $.matchers(),
         true,
+        'time_series',
         16,
         0,
         4,
         5
       ),
-      HostsOverviewSingleStatPanel(
+      $.simpleSingleStatPanel(
         'bytes',
         'Network Load',
         'Total send/receive network load across all hosts in the ceph cluster',
@@ -255,18 +225,21 @@ local g = import 'grafonnet/grafana.libsonnet';
             ) unless on (device, instance)
             label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
           )
-        |||
-        ,
+        |||,
         true,
+        'time_series',
         20,
         0,
         4,
         5
       ),
-      HostsOverviewGraphPanel(
+      $.simpleGraphPanel(
+        {},
         'CPU Busy - Top 10 Hosts',
         'Show the top 10 busiest hosts by cpu',
         'percent',
+        null,
+        0,
         |||
           topk(10,
             100 * (
@@ -285,8 +258,14 @@ local g = import 'grafonnet/grafana.libsonnet';
         12,
         9
       ),
-      HostsOverviewGraphPanel(
-        'Network Load - Top 10 Hosts', 'Top 10 hosts by network load', 'Bps', |||
+      $.simpleGraphPanel(
+        {},
+        'Network Load - Top 10 Hosts',
+        'Top 10 hosts by network load',
+        'Bps',
+        null,
+        0,
+        |||
           topk(10, (sum by(instance) (
           (
             rate(node_network_receive_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval]) or
@@ -298,61 +277,15 @@ local g = import 'grafonnet/grafana.libsonnet';
           ) unless on (device, instance)
             label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)"))
           ))
-        |||
-        , '{{instance}}', 12, 5, 12, 9
+        |||,
+        '{{instance}}',
+        12,
+        5,
+        12,
+        9
       ),
     ]),
   'host-details.json':
-    local HostDetailsSingleStatPanel(format,
-                                     title,
-                                     description,
-                                     valueName,
-                                     expr,
-                                     x,
-                                     y,
-                                     w,
-                                     h) =
-      $.addSingleStatSchema(['#299c46', 'rgba(237, 129, 40, 0.89)', '#d44a3a'],
-                            '$datasource',
-                            format,
-                            title,
-                            description,
-                            valueName,
-                            false,
-                            100,
-                            false,
-                            false,
-                            '')
-      .addTarget($.addTargetSchema(expr)) + { gridPos: { x: x, y: y, w: w, h: h } };
-
-    local HostDetailsGraphPanel(alias,
-                                title,
-                                description,
-                                nullPointMode,
-                                formatY1,
-                                labelY1,
-                                expr,
-                                legendFormat,
-                                x,
-                                y,
-                                w,
-                                h) =
-      $.graphPanelSchema(alias,
-                         title,
-                         description,
-                         nullPointMode,
-                         false,
-                         formatY1,
-                         'short',
-                         labelY1,
-                         null,
-                         null,
-                         1,
-                         '$datasource')
-      .addTargets(
-        [$.addTargetSchema(expr, legendFormat)]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
-
     $.dashboardSchema(
       'Host Details',
       '',
@@ -402,18 +335,20 @@ local g = import 'grafonnet/grafana.libsonnet';
     )
     .addPanels([
       $.addRowSchema(false, true, '$ceph_hosts System Overview') + { gridPos: { x: 0, y: 0, w: 24, h: 1 } },
-      HostDetailsSingleStatPanel(
+      $.simpleSingleStatPanel(
         'none',
         'OSDs',
         '',
         'current',
         "count(sum by (ceph_daemon) (ceph_osd_metadata{%(matchers)s, hostname='$ceph_hosts'}))" % $.matchers(),
+        null,
+        'time_series',
         0,
         1,
         3,
         5
       ),
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {
           interrupt: '#447EBC',
           steal: '#6D1F62',
@@ -423,9 +358,9 @@ local g = import 'grafonnet/grafana.libsonnet';
         },
         'CPU Utilization',
         "Shows the CPU breakdown. When multiple servers are selected, only the first host's cpu data is shown",
-        'null',
         'percent',
         '% Utilization',
+        null,
         |||
           sum by (mode) (
             rate(node_cpu{instance=~"($ceph_hosts)([\\\\.:].*)?", mode=~"(irq|nice|softirq|steal|system|user|iowait)"}[$__rate_interval]) or
@@ -443,7 +378,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         6,
         10
       ),
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {
           Available: '#508642',
           Free: '#508642',
@@ -454,9 +389,9 @@ local g = import 'grafonnet/grafana.libsonnet';
         },
         'RAM Usage',
         '',
-        'null',
         'bytes',
         'RAM used',
+        null,
         |||
           node_memory_MemFree{instance=~"$ceph_hosts([\\\\.:].*)?"} or
             node_memory_MemFree_bytes{instance=~"$ceph_hosts([\\\\.:].*)?"}
@@ -526,13 +461,13 @@ local g = import 'grafonnet/grafana.libsonnet';
           stack: false,
         }
       ),
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {},
         'Network Load',
         "Show the network load (rx,tx) across all interfaces (excluding loopback 'lo')",
-        'null',
         'decbytes',
         'Send (-) / Receive (+)',
+        null,
         |||
           sum by (device) (
             rate(
@@ -563,13 +498,13 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addSeriesOverride(
         { alias: '/.*tx/', transform: 'negative-Y' }
       ),
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {},
         'Network drop rate',
         '',
-        'null',
         'pps',
         'Send (-) / Receive (+)',
+        null,
         |||
           rate(node_network_receive_drop{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval]) or
             rate(node_network_receive_drop_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval])
@@ -597,7 +532,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           transform: 'negative-Y',
         }
       ),
-      HostDetailsSingleStatPanel(
+      $.simpleSingleStatPanel(
         'bytes',
         'Raw Capacity',
         'Each OSD consists of a Journal/WAL partition and a data partition. The RAW Capacity shown is the sum of the data partitions across all OSDs on the selected OSD hosts.',
@@ -608,18 +543,20 @@ local g = import 'grafonnet/grafana.libsonnet';
               on (ceph_daemon) ceph_disk_occupation{%(matchers)s, instance=~"($ceph_hosts)([\\\\.:].*)?"}
           )
         ||| % $.matchers(),
+        null,
+        'time_series',
         0,
         6,
         3,
         5
       ),
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {},
         'Network error rate',
         '',
-        'null',
         'pps',
         'Send (-) / Receive (+)',
+        null,
         |||
           rate(node_network_receive_errs{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval]) or
             rate(node_network_receive_errs_total{instance=~"$ceph_hosts([\\\\.:].*)?"}[$__rate_interval])
@@ -648,13 +585,13 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addRowSchema(false,
                      true,
                      'OSD Disk Performance Statistics') + { gridPos: { x: 0, y: 11, w: 24, h: 1 } },
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {},
         '$ceph_hosts Disk IOPS',
         "For any OSD devices on the host, this chart shows the iops per physical device. Each device is shown by it's name and corresponding OSD id value",
-        'connected',
         'ops',
         'Read (-) / Write (+)',
+        null,
         |||
           label_replace(
             (
@@ -695,13 +632,13 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addSeriesOverride(
         { alias: '/.*reads/', transform: 'negative-Y' }
       ),
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {},
         '$ceph_hosts Throughput by Disk',
         'For OSD hosts, this chart shows the disk bandwidth (read bytes/sec + write bytes/sec) of the physical OSD device. Each device is shown by device name, and corresponding OSD id',
-        'connected',
         'Bps',
         'Read (-) / Write (+)',
+        null,
         |||
           label_replace(
             (
@@ -739,13 +676,13 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addSeriesOverride(
         { alias: '/.*read/', transform: 'negative-Y' }
       ),
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {},
         '$ceph_hosts Disk Latency',
         "For OSD hosts, this chart shows the latency at the physical drive. Each drive is shown by device name, with it's corresponding OSD id",
-        'null as zero',
         's',
         '',
+        null,
         |||
           max by(instance, device) (label_replace(
             (rate(node_disk_write_time_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval])) /
@@ -766,13 +703,13 @@ local g = import 'grafonnet/grafana.libsonnet';
         11,
         9
       ),
-      HostDetailsGraphPanel(
+      $.simpleGraphPanel(
         {},
         '$ceph_hosts Disk utilization',
         'Show disk utilization % (util) of any OSD devices on the host by the physical device name and associated OSD id.',
-        'connected',
         'percent',
         '%Util',
+        null,
         |||
           label_replace(
             (
