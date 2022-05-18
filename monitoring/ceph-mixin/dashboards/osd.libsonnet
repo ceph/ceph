@@ -2,79 +2,6 @@ local g = import 'grafonnet/grafana.libsonnet';
 
 (import 'utils.libsonnet') {
   'osds-overview.json':
-    local OsdOverviewStyle(alias, pattern, type, unit) =
-      $.addStyle(alias, null, [
-        'rgba(245, 54, 54, 0.9)',
-        'rgba(237, 129, 40, 0.89)',
-        'rgba(50, 172, 45, 0.97)',
-      ], 'YYYY-MM-DD HH:mm:ss', 2, 1, pattern, [], type, unit, []);
-    local OsdOverviewGraphPanel(alias,
-                                title,
-                                description,
-                                formatY1,
-                                labelY1,
-                                min,
-                                expr,
-                                legendFormat1,
-                                x,
-                                y,
-                                w,
-                                h) =
-      $.graphPanelSchema(alias,
-                         title,
-                         description,
-                         'null',
-                         false,
-                         formatY1,
-                         'short',
-                         labelY1,
-                         null,
-                         min,
-                         1,
-                         '$datasource')
-      .addTargets(
-        [$.addTargetSchema(expr, legendFormat1)]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
-    local OsdOverviewPieChartPanel(alias, description, title) =
-      $.addPieChartSchema(alias,
-                          '$datasource',
-                          description,
-                          'Under graph',
-                          'pie',
-                          title,
-                          'current');
-    local OsdOverviewSingleStatPanel(colors,
-                                     format,
-                                     title,
-                                     description,
-                                     valueName,
-                                     colorValue,
-                                     gaugeMaxValue,
-                                     gaugeShow,
-                                     sparkLineShow,
-                                     thresholds,
-                                     expr,
-                                     x,
-                                     y,
-                                     w,
-                                     h) =
-      $.addSingleStatSchema(
-        colors,
-        '$datasource',
-        format,
-        title,
-        description,
-        valueName,
-        colorValue,
-        gaugeMaxValue,
-        gaugeShow,
-        sparkLineShow,
-        thresholds
-      )
-      .addTarget(
-        $.addTargetSchema(expr)
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
-
     $.dashboardSchema(
       'OSD Overview',
       '',
@@ -122,7 +49,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addJobTemplate()
     )
     .addPanels([
-      OsdOverviewGraphPanel(
+      $.simpleGraphPanel(
         { '@95%ile': '#e0752d' },
         'OSD Read Latencies',
         '',
@@ -171,9 +98,9 @@ local g = import 'grafonnet/grafana.libsonnet';
         "This table shows the osd's that are delivering the 10 highest read latencies within the cluster",
         { col: 2, desc: true },
         [
-          OsdOverviewStyle('OSD ID', 'ceph_daemon', 'string', 'short'),
-          OsdOverviewStyle('Latency (ms)', 'Value', 'number', 'none'),
-          OsdOverviewStyle('', '/.*/', 'hidden', 'short'),
+          $.overviewStyle('OSD ID', 'ceph_daemon', 'string', 'short'),
+          $.overviewStyle('Latency (ms)', 'Value', 'number', 'none'),
+          $.overviewStyle('', '/.*/', 'hidden', 'short'),
         ],
         'Highest READ Latencies',
         'table'
@@ -197,7 +124,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           true
         )
       ) + { gridPos: { x: 8, y: 0, w: 4, h: 8 } },
-      OsdOverviewGraphPanel(
+      $.simpleGraphPanel(
         {
           '@95%ile write': '#e0752d',
         },
@@ -246,11 +173,11 @@ local g = import 'grafonnet/grafana.libsonnet';
         "This table shows the osd's that are delivering the 10 highest write latencies within the cluster",
         { col: 2, desc: true },
         [
-          OsdOverviewStyle(
+          $.overviewStyle(
             'OSD ID', 'ceph_daemon', 'string', 'short'
           ),
-          OsdOverviewStyle('Latency (ms)', 'Value', 'number', 'none'),
-          OsdOverviewStyle('', '/.*/', 'hidden', 'short'),
+          $.overviewStyle('Latency (ms)', 'Value', 'number', 'none'),
+          $.overviewStyle('', '/.*/', 'hidden', 'short'),
         ],
         'Highest WRITE Latencies',
         'table'
@@ -272,13 +199,13 @@ local g = import 'grafonnet/grafana.libsonnet';
           true
         )
       ) + { gridPos: { x: 20, y: 0, w: 4, h: 8 } },
-      OsdOverviewPieChartPanel(
+      $.simplePieChart(
         {}, '', 'OSD Types Summary'
       )
       .addTarget(
         $.addTargetSchema('count by (device_class) (ceph_osd_metadata{%(matchers)s})' % $.matchers(), '{{device_class}}')
       ) + { gridPos: { x: 0, y: 8, w: 4, h: 8 } },
-      OsdOverviewPieChartPanel(
+      $.simplePieChart(
         { 'Non-Encrypted': '#E5AC0E' }, '', 'OSD Objectstore Types'
       )
       .addTarget(
@@ -291,7 +218,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           'absent(ceph_bluefs_wal_total_bytes{%(matchers)s)} * count(ceph_osd_metadata{%(matchers)s})' % $.matchers(), 'filestore', 'time_series', 2
         )
       ) + { gridPos: { x: 4, y: 8, w: 4, h: 8 } },
-      OsdOverviewPieChartPanel(
+      $.simplePieChart(
         {}, 'The pie chart shows the various OSD sizes used within the cluster', 'OSD Size Summary'
       )
       .addTarget($.addTargetSchema(
@@ -335,8 +262,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTarget($.addTargetSchema(
         'ceph_osd_numpg{%(matchers)s}' % $.matchers(), 'PGs per OSD', 'time_series', 1, true
       )) + { gridPos: { x: 12, y: 8, w: 8, h: 8 } },
-      OsdOverviewSingleStatPanel(
-        ['#d44a3a', '#299c46'],
+      $.gaugeSingleStatPanel(
         'percentunit',
         'OSD onode Hits Ratio',
         'This gauge panel shows onode Hits ratio to help determine if increasing RAM per OSD could help improve the performance of the cluster',
@@ -352,6 +278,7 @@ local g = import 'grafonnet/grafana.libsonnet';
             sum(ceph_bluestore_onode_misses{%(matchers)s})
           )
         ||| % $.matchers(),
+        'time_series',
         20,
         8,
         4,
@@ -360,7 +287,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addRowSchema(false,
                      true,
                      'R/W Profile') + { gridPos: { x: 0, y: 16, w: 24, h: 1 } },
-      OsdOverviewGraphPanel(
+      $.simpleGraphPanel(
         {},
         'Read/Write Profile',
         'Show the read/write workload profile overtime',

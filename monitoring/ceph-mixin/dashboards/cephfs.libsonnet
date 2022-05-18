@@ -2,23 +2,6 @@ local g = import 'grafonnet/grafana.libsonnet';
 
 (import 'utils.libsonnet') {
   'cephfs-overview.json':
-    local CephfsOverviewGraphPanel(title, formatY1, labelY1, expr, legendFormat, x, y, w, h) =
-      $.graphPanelSchema({},
-                         title,
-                         '',
-                         'null',
-                         false,
-                         formatY1,
-                         'short',
-                         labelY1,
-                         null,
-                         0,
-                         1,
-                         '$datasource')
-      .addTargets(
-        [$.addTargetSchema(expr, legendFormat)]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
-
     $.dashboardSchema(
       'MDS Performance',
       '',
@@ -71,10 +54,13 @@ local g = import 'grafonnet/grafana.libsonnet';
     )
     .addPanels([
       $.addRowSchema(false, true, 'MDS Performance') + { gridPos: { x: 0, y: 0, w: 24, h: 1 } },
-      CephfsOverviewGraphPanel(
+      $.simpleGraphPanel(
+        {},
         'MDS Workload - $mds_servers',
+        '',
         'none',
         'Reads(-) / Writes (+)',
+        0,
         'sum(rate(ceph_objecter_op_r{%(matchers)s, ceph_daemon=~"($mds_servers).*"}[$__rate_interval]))' % $.matchers(),
         'Read Ops',
         0,
@@ -89,10 +75,13 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addSeriesOverride(
         { alias: '/.*Reads/', transform: 'negative-Y' }
       ),
-      CephfsOverviewGraphPanel(
+      $.simpleGraphPanel(
+        {},
         'Client Request Load - $mds_servers',
+        '',
         'none',
         'Client Requests',
+        0,
         'ceph_mds_server_handle_client_request{%(matchers)s, ceph_daemon=~"($mds_servers).*"}' % $.matchers(),
         '{{ceph_daemon}}',
         12,

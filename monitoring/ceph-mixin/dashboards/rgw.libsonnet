@@ -1,6 +1,5 @@
 local g = import 'grafonnet/grafana.libsonnet';
 local u = import 'utils.libsonnet';
-local c = (import '../mixin.libsonnet')._config;
 
 (import 'utils.libsonnet') {
   'radosgw-sync-overview.json':
@@ -832,14 +831,14 @@ local c = (import '../mixin.libsonnet')._config;
           ),
         ]
       ),
-      $.addPieChartSchema(
+      $.simplePieChart(
         {
           GETs: '#7eb26d',
           'Other (HEAD,POST,DELETE)': '#447ebc',
           PUTs: '#eab839',
           Requests: '#3f2b5b',
           Failures: '#bf1b00',
-        }, '$datasource', '', 'Under graph', 'pie', 'Workload Breakdown', 'current'
+        }, '', 'Workload Breakdown'
       )
       .addTarget($.addTargetSchema(
         |||

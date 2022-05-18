@@ -672,8 +672,9 @@
          "colorBackground": false,
          "colorValue": true,
          "colors": [
-            "#d44a3a",
-            "#299c46"
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
          ],
          "datasource": "$datasource",
          "description": "This gauge panel shows onode Hits ratio to help determine if increasing RAM per OSD could help improve the performance of the cluster",
