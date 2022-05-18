@@ -420,7 +420,7 @@ option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push 
 option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka push endpoint" ON)
 option(WITH_RADOSGW_LUA "Rados Gateway's support for Lua" ON)
 cmake_dependent_option(WITH_RADOSGW_LUA_PACKAGES
-  "Rados Gateway's support for dynamically adding lua packagess" ON "${WITH_RADOSGW_LUA}" OFF)
+  "Rados Gateway's support for dynamically adding lua packagess" ON "WITH_RADOSGW_LUA" OFF)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for Rados Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for Rados Gateway" OFF)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)

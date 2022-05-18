@@ -292,21 +292,12 @@ void usage()
   cout << "  subscription rm            remove a pubsub subscription\n";
   cout << "  subscription pull          show events in a pubsub subscription\n";
   cout << "  subscription ack           ack (remove) an events in a pubsub subscription\n";
-#ifdef WITH_RADOSGW_LUA
   cout << "  script put                 upload a lua script to a context\n";
   cout << "  script get                 get the lua script of a context\n";
   cout << "  script rm                  remove the lua scripts of a context\n";
   cout << "  script-package add         add a lua package to the scripts allowlist\n";
   cout << "  script-package rm          remove a lua package from the scripts allowlist\n";
   cout << "  script-package list        get the lua packages allowlist\n";
-#else  // WITH_RADOSGW_LUA
-  cout << "  script put                 (disabled) upload a lua script to a context\n";
-  cout << "  script get                 (disabled) get the lua script of a context\n";
-  cout << "  script rm                  (disabled) remove the lua scripts of a context\n";
-  cout << "  script-package add         (disabled) add a lua package to the scripts allowlist\n";
-  cout << "  script-package rm          (disabled) remove a lua package from the scripts allowlist\n";
-  cout << "  script-package list        (disabled) get the lua packages allowlist\n";
-#endif  // WITH_RADOSGW_LUA
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)\n";
@@ -466,11 +457,7 @@ void usage()
   cout << "   --event-id                event id in a pubsub subscription\n";
   cout << "\nScript options:\n";
   cout << "   --context                 context in which the script runs. one of: preRequest, postRequest\n";
-#ifdef WITH_RADOSGW_LUA
   cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
-#else  // WITH_RADOSGW_LUA
-  cout << "   --package                 (disabled) name of the lua package that should be added/removed to/from the allowlist\n";
-#endif  // WITH_RADOSGW_LUA
   cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
   cout << "\nradoslist options:\n";
   cout << "   --rgw-obj-fs              the field separator that will separate the rados\n";
