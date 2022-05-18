@@ -1,6 +1,5 @@
 local g = import 'grafonnet/grafana.libsonnet';
 local u = import 'utils.libsonnet';
-local c = (import '../mixin.libsonnet')._config;
 
 (import 'utils.libsonnet') {
   'rbd-details.json':
@@ -125,18 +124,6 @@ local c = (import '../mixin.libsonnet')._config;
       ),
     ]),
   'rbd-overview.json':
-    local RgwOverviewStyle(alias, pattern, type, unit) =
-      $.addStyle(alias,
-                 null,
-                 ['rgba(245, 54, 54, 0.9)', 'rgba(237, 129, 40, 0.89)', 'rgba(50, 172, 45, 0.97)'],
-                 'YYYY-MM-DD HH:mm:ss',
-                 2,
-                 1,
-                 pattern,
-                 [],
-                 type,
-                 unit,
-                 []);
     local RbdOverviewPanel(title,
                            formatY1,
                            expr1,
@@ -266,10 +253,10 @@ local c = (import '../mixin.libsonnet')._config;
         '',
         { col: 3, desc: true },
         [
-          RgwOverviewStyle('Pool', 'pool', 'string', 'short'),
-          RgwOverviewStyle('Image', 'image', 'string', 'short'),
-          RgwOverviewStyle('IOPS', 'Value', 'number', 'iops'),
-          RgwOverviewStyle('', '/.*/', 'hidden', 'short'),
+          $.overviewStyle('Pool', 'pool', 'string', 'short'),
+          $.overviewStyle('Image', 'image', 'string', 'short'),
+          $.overviewStyle('IOPS', 'Value', 'number', 'iops'),
+          $.overviewStyle('', '/.*/', 'hidden', 'short'),
         ],
         'Highest IOPS',
         'table'
@@ -297,10 +284,10 @@ local c = (import '../mixin.libsonnet')._config;
         '',
         { col: 3, desc: true },
         [
-          RgwOverviewStyle('Pool', 'pool', 'string', 'short'),
-          RgwOverviewStyle('Image', 'image', 'string', 'short'),
-          RgwOverviewStyle('Throughput', 'Value', 'number', 'Bps'),
-          RgwOverviewStyle('', '/.*/', 'hidden', 'short'),
+          $.overviewStyle('Pool', 'pool', 'string', 'short'),
+          $.overviewStyle('Image', 'image', 'string', 'short'),
+          $.overviewStyle('Throughput', 'Value', 'number', 'Bps'),
+          $.overviewStyle('', '/.*/', 'hidden', 'short'),
         ],
         'Highest Throughput',
         'table'
@@ -328,10 +315,10 @@ local c = (import '../mixin.libsonnet')._config;
         '',
         { col: 3, desc: true },
         [
-          RgwOverviewStyle('Pool', 'pool', 'string', 'short'),
-          RgwOverviewStyle('Image', 'image', 'string', 'short'),
-          RgwOverviewStyle('Latency', 'Value', 'number', 'ns'),
-          RgwOverviewStyle('', '/.*/', 'hidden', 'short'),
+          $.overviewStyle('Pool', 'pool', 'string', 'short'),
+          $.overviewStyle('Image', 'image', 'string', 'short'),
+          $.overviewStyle('Latency', 'Value', 'number', 'ns'),
+          $.overviewStyle('', '/.*/', 'hidden', 'short'),
         ],
         'Highest Latency',
         'table'
