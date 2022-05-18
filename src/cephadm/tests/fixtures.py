@@ -1,3 +1,4 @@
+from importlib.resources import contents
 import mock
 import os
 import pytest
@@ -73,8 +74,36 @@ def cephadm_fs(
             fs.create_dir(cd.LOCK_DIR)
             fs.create_dir(cd.LOGROTATE_DIR)
             fs.create_dir(cd.UNIT_DIR)
+            fs.create_dir('/sys/block')
 
             yield fs
+
+
+@pytest.fixture()
+def host_sysfs(fs: fake_filesystem.FakeFilesystem):
+    """Create a fake filesystem to represent sysfs"""
+    enc_path = '/sys/class/scsi_generic/sg2/device/enclosure/0:0:1:0'
+    dev_path = '/sys/class/scsi_generic/sg2/device'
+    slot_count = 12 
+    fs.create_dir(dev_path)
+    fs.create_file(os.path.join(dev_path, 'vendor'), contents="EnclosuresInc")
+    fs.create_file(os.path.join(dev_path, 'model'), contents="D12")
+    fs.create_file(os.path.join(enc_path, 'id'), contents='1')
+    fs.create_file(os.path.join(enc_path, 'components'), contents=str(slot_count))
+    for slot_num in range(slot_count):
+        slot_dir = os.path.join(enc_path, str(slot_num))
+        fs.create_file(os.path.join(slot_dir, 'locate'), contents='0')
+        fs.create_file(os.path.join(slot_dir, 'fault'), contents='0')
+        fs.create_file(os.path.join(slot_dir, 'slot'), contents=str(slot_num))
+        if slot_num < 6:
+            fs.create_file(os.path.join(slot_dir, 'status'), contents='Ok')
+            slot_dev = os.path.join(slot_dir, 'device')
+            fs.create_dir(slot_dev)
+            fs.create_file(os.path.join(slot_dev, 'vpd_pg80'), contents=f'fake{slot_num:0>3}')
+        else:
+            fs.create_file(os.path.join(slot_dir, 'status'), contents='not installed')
+
+    yield fs
 
 
 @contextmanager
