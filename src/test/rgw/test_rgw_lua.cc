@@ -681,7 +681,17 @@ TEST(TestRGWLuaBackground, Start)
 }
 
 
-constexpr auto wait_time = std::chrono::seconds(2);
+constexpr auto wait_time = std::chrono::seconds(3);
+
+template<typename T>
+const T& get_table_value(const TestBackground& b, const std::string& index) {
+  try {
+    return std::get<T>(b.get_table_value(index));
+  } catch (std::bad_variant_access const& ex) {
+    std::cout << "expected RGW[" << index << "] to be: " << typeid(T).name() << std::endl;
+    throw(ex);
+  }
+}
 
 TEST(TestRGWLuaBackground, Script)
 {
@@ -694,7 +704,7 @@ TEST(TestRGWLuaBackground, Script)
   TestBackground lua_background(script);
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
-  EXPECT_EQ(lua_background.get_table_value("hello"), "world");
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "hello"), "world");
 }
 
 TEST(TestRGWLuaBackground, RequestScript)
@@ -722,11 +732,11 @@ TEST(TestRGWLuaBackground, RequestScript)
   lua_background.pause();
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
-  EXPECT_EQ(lua_background.get_table_value("hello"), "from request");
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "hello"), "from request");
   // now we resume and let the background set the value
   lua_background.resume(nullptr);
   std::this_thread::sleep_for(wait_time);
-  EXPECT_EQ(lua_background.get_table_value("hello"), "from background");
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "hello"), "from background");
 }
 
 TEST(TestRGWLuaBackground, Pause)
@@ -744,12 +754,12 @@ TEST(TestRGWLuaBackground, Pause)
   TestBackground lua_background(script);
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
-  const auto value_len = lua_background.get_table_value("hello").size();
+  const auto value_len = get_table_value<std::string>(lua_background, "hello").size();
   EXPECT_GT(value_len, 0);
   lua_background.pause();
   std::this_thread::sleep_for(wait_time);
   // no change in len
-  EXPECT_EQ(value_len, lua_background.get_table_value("hello").size());
+  EXPECT_EQ(value_len, get_table_value<std::string>(lua_background, "hello").size());
 }
 
 TEST(TestRGWLuaBackground, PauseWhileReading)
@@ -769,12 +779,12 @@ TEST(TestRGWLuaBackground, PauseWhileReading)
   TestBackground lua_background(script, 2);
   lua_background.start();
   std::this_thread::sleep_for(long_wait_time);
-  const auto value_len = lua_background.get_table_value("hello").size();
+  const auto value_len = get_table_value<std::string>(lua_background, "hello").size();
   EXPECT_GT(value_len, 0);
   lua_background.pause();
   std::this_thread::sleep_for(long_wait_time);
   // one execution might occur after pause
-  EXPECT_TRUE(value_len + 1 >= lua_background.get_table_value("hello").size());
+  EXPECT_TRUE(value_len + 1 >= get_table_value<std::string>(lua_background, "hello").size());
 }
 
 TEST(TestRGWLuaBackground, ReadWhilePaused)
@@ -789,10 +799,10 @@ TEST(TestRGWLuaBackground, ReadWhilePaused)
   lua_background.pause();
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
-  EXPECT_EQ(lua_background.get_table_value("hello"), "");
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "hello"), "");
   lua_background.resume(nullptr);
   std::this_thread::sleep_for(wait_time);
-  EXPECT_EQ(lua_background.get_table_value("hello"), "world");
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "hello"), "world");
 }
 
 TEST(TestRGWLuaBackground, PauseResume)
@@ -810,16 +820,16 @@ TEST(TestRGWLuaBackground, PauseResume)
   TestBackground lua_background(script);
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
-  const auto value_len = lua_background.get_table_value("hello").size();
+  const auto value_len = get_table_value<std::string>(lua_background, "hello").size();
   EXPECT_GT(value_len, 0);
   lua_background.pause();
   std::this_thread::sleep_for(wait_time);
   // no change in len
-  EXPECT_EQ(value_len, lua_background.get_table_value("hello").size());
+  EXPECT_EQ(value_len, get_table_value<std::string>(lua_background, "hello").size());
   lua_background.resume(nullptr);
   std::this_thread::sleep_for(wait_time);
   // should be a change in len
-  EXPECT_GT(lua_background.get_table_value("hello").size(), value_len);
+  EXPECT_GT(get_table_value<std::string>(lua_background, "hello").size(), value_len);
 }
 
 TEST(TestRGWLuaBackground, MultipleStarts)
@@ -837,7 +847,7 @@ TEST(TestRGWLuaBackground, MultipleStarts)
   TestBackground lua_background(script);
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
-  const auto value_len = lua_background.get_table_value("hello").size();
+  const auto value_len = get_table_value<std::string>(lua_background, "hello").size();
   EXPECT_GT(value_len, 0);
   lua_background.start();
   lua_background.shutdown();
@@ -846,6 +856,170 @@ TEST(TestRGWLuaBackground, MultipleStarts)
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
   // should be a change in len
-  EXPECT_GT(lua_background.get_table_value("hello").size(), value_len);
+  EXPECT_GT(get_table_value<std::string>(lua_background, "hello").size(), value_len);
+}
+
+TEST(TestRGWLuaBackground, TableValues)
+{
+  TestBackground lua_background("");
+
+  const std::string request_script = R"(
+    RGW["key1"] = "string value"
+    RGW["key2"] = 42
+    RGW["key3"] = 42.2
+    RGW["key4"] = true
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<double>(lua_background, "key3"), 42.2);
+  EXPECT_TRUE(get_table_value<bool>(lua_background, "key4"));
+}
+
+TEST(TestRGWLuaBackground, TablePersist)
+{
+  TestBackground lua_background("");
+
+  std::string request_script = R"(
+    RGW["key1"] = "string value"
+    RGW["key2"] = 42
+  )";
+
+  DEFINE_REQ_STATE;
+
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  
+  request_script = R"(
+    RGW["key3"] = RGW["key1"]
+    RGW["key4"] = RGW["key2"]
+  )";
+  
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key3"), "string value");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key4"), 42);
+}
+
+TEST(TestRGWLuaBackground, TableValuesFromRequest)
+{
+  TestBackground lua_background("");
+  lua_background.start();
+
+  const std::string request_script = R"(
+    RGW["key1"] = Request.Response.RGWCode
+    RGW["key2"] = Request.Response.Message
+    RGW["key3"] = Request.Response.RGWCode*0.1
+    RGW["key4"] = Request.Tags["key1"] == Request.Tags["key2"] 
+  )";
+
+  DEFINE_REQ_STATE;
+  s.tagset.add_tag("key1", "val1");
+  s.tagset.add_tag("key2", "val1");
+  s.err.ret = -99;
+  s.err.message = "hi";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key1"), -99);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key2"), "hi");
+  EXPECT_EQ(get_table_value<double>(lua_background, "key3"), -9.9);
+  EXPECT_EQ(get_table_value<bool>(lua_background, "key4"), true);
+}
+
+TEST(TestRGWLuaBackground, TableInvalidValue)
+{
+  TestBackground lua_background("");
+  lua_background.start();
+
+  const std::string request_script = R"(
+    RGW["key1"] = "val1"
+    RGW["key2"] = 42
+    RGW["key3"] = 42.2
+    RGW["key4"] = true
+    RGW["key5"] = Request.Tags
+  )";
+
+  DEFINE_REQ_STATE;
+  s.tagset.add_tag("key1", "val1");
+  s.tagset.add_tag("key2", "val2");
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_NE(rc, 0);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "val1");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<double>(lua_background, "key3"), 42.2);
+  EXPECT_EQ(get_table_value<bool>(lua_background, "key4"), true);
+}
+
+TEST(TestRGWLuaBackground, TableErase)
+{
+  TestBackground lua_background("");
+
+  std::string request_script = R"(
+    RGW["size"] = 0
+    RGW["key1"] = "string value"
+    RGW["key2"] = 42
+    RGW["key3"] = "another string value"
+    RGW["size"] = #RGW
+  )";
+
+  DEFINE_REQ_STATE;
+
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key3"), "another string value");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "size"), 4);
+  
+  request_script = R"(
+    -- erase key1
+    RGW["key1"] = nil
+    -- following should be a no op
+    RGW["key4"] = nil
+    RGW["size"] = #RGW
+  )";
+  
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key3"), "another string value");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "size"), 3);
+}
+
+TEST(TestRGWLuaBackground, TableIterate)
+{
+  TestBackground lua_background("");
+
+  const std::string request_script = R"(
+    RGW["key1"] = "string value"
+    RGW["key2"] = 42
+    RGW["key3"] = 42.2
+    RGW["key4"] = true
+    RGW["size"] = 0
+    for k, v in pairs(RGW) do
+      RGW["size"] = RGW["size"] + 1
+    end
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<double>(lua_background, "key3"), 42.2);
+  EXPECT_TRUE(get_table_value<bool>(lua_background, "key4"));
+  EXPECT_EQ(get_table_value<int64_t>(lua_background, "size"), 5);
 }
 
