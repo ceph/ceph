@@ -134,7 +134,7 @@
             "#d44a3a"
          ],
          "datasource": "$datasource",
-         "description": "Time till pool is full assuming the average fill rate of the last 4 hours",
+         "description": "Time till pool is full assuming the average fill rate of the last 6 hours",
          "format": "s",
          "gauge": {
             "maxValue": false,
