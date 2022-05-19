@@ -471,8 +471,9 @@ class CephFSShell(Cmd):
             if isinstance(e, Cmd2ArgparseError):
                 # NOTE: In case of Cmd2ArgparseError the error message is
                 # already printed beforehand (plus Cmd2ArgparseError
-                # instances have empty message)
-                pass
+                # instances have empty error message), so let's just set the
+                # exit code.
+                set_exit_code_msg(msg=None)
             else:
                 set_exit_code_msg(msg=f'{type(e).__name__}: {e}')
 
