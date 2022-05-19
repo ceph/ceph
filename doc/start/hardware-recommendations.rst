@@ -59,8 +59,8 @@ say, 300 OSDs go with 64GB. For clusters built with (or which will grow to)
 even more OSDs you should provision 128GB. You may also want to consider
 tuning the following settings:
 
-* :confval:`mon_osd_cache_size`
-* :confval:`rocksdb_cache_size`
+* :ref:`mon_osd_cache_size`
+* :ref:`rocksdb_cache_size`
 
 Metadata servers (ceph-mds)
 ---------------------------
@@ -68,17 +68,17 @@ Metadata servers (ceph-mds)
 The metadata daemon memory utilization depends on how much memory its cache is
 configured to consume.  We recommend 1 GB as a minimum for most systems.  See
 `mds_cache_memory_limit`.
-:confval:`mds_cache_memory_limit`.
+:ref:`mds_cache_memory_limit`.
 
 Memory
 ======
 
 Bluestore uses its own memory to cache data rather than relying on the
 operating system page cache.  In bluestore you can adjust the amount of memory
-the OSD attempts to consume with the :confval:`osd_memory_target` configuration
+the OSD attempts to consume with the :ref:`osd_memory_target` configuration
 option.
 
-- Setting the :confval:`osd_memory_target` below 2GB is typically not
+- Setting the :ref:`osd_memory_target` below 2GB is typically not
   recommended (it may fail to keep the memory that low and may also cause
   extremely slow performance.
 
@@ -86,11 +86,11 @@ option.
   in degraded performance: metadata may be read from disk during IO unless the
   active data set is relatively small.
 
-- 4GB is the current default :confval:`osd_memory_target` size.  This default
+- 4GB is the current default :ref:`osd_memory_target` size.  This default
   was chosen for typical use cases, and is intended to balance memory
   requirements and OSD performance for typical use cases.
 
-- Setting the :confval:`osd_memory_target` higher than 4GB can improve
+- Setting the :ref:`osd_memory_target` higher than 4GB can improve
   performance when there many (small) objects or large (256GB/OSD or more) data
   sets are processed.
 
