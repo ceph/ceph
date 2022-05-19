@@ -648,10 +648,9 @@ struct seg_paddr_t : public paddr_t {
    */
   paddr_t maybe_relative_to(paddr_t base) const {
     assert(!base.is_block_relative());
-    seg_paddr_t& s = base.as_seg_paddr();
-    if (is_block_relative())
-      return s.add_block_relative(*this);
-    else
+    if (is_block_relative()) {
+      return base.add_block_relative(*this);
+    } else
       return *this;
   }
 };
@@ -681,6 +680,31 @@ struct blk_paddr_t : public paddr_t {
 
   paddr_t add_offset(seastore_off_t o) const {
     return paddr_t::make_blk_paddr(get_device_id(), get_block_off() + o);
+  }
+
+  paddr_t add_relative(paddr_t o) const {
+    seastore_off_t off;
+    ceph_assert(o.get_addr_type() == addr_types_t::SEGMENT);
+    // segment addr is allocated when alloc_new_extent is called.
+    // But, if random block device is used,
+    // segment-based relative addr needs to be added to block addr
+    off = o.as_seg_paddr().get_segment_off();
+    return add_offset(off);
+  }
+
+  // all blk_paddr_t are absolute, relative addrs are always segmented
+  paddr_t maybe_relative_to(paddr_t base) const {
+    return *this;
+  }
+
+  paddr_t add_block_relative(paddr_t o) const {
+    assert(o.is_block_relative());
+    return add_relative(o);
+  }
+
+  paddr_t add_record_relative(paddr_t o) const {
+    assert(o.is_record_relative());
+    return add_relative(o);
   }
 
 private:
@@ -787,16 +811,31 @@ private:
     } else if (segment_seq < other.segment_seq) {
       return -1;
     }
-    auto &seg_paddr = offset.as_seg_paddr();
-    auto &o_seg_paddr = other.offset.as_seg_paddr();
-    if (seg_paddr.get_segment_off() > o_seg_paddr.get_segment_off()) {
-      return 1;
-    } else if (seg_paddr.get_segment_off() < o_seg_paddr.get_segment_off()) {
-      return -1;
-    }
-    if (seg_paddr.get_segment_id() > o_seg_paddr.get_segment_id()) {
-      return 1;
-    } else if (seg_paddr.get_segment_id() < o_seg_paddr.get_segment_id()) {
+    if (offset.get_addr_type() == addr_types_t::SEGMENT &&
+	other.offset.get_addr_type() == addr_types_t::SEGMENT) {
+      auto &seg_paddr = offset.as_seg_paddr();
+      auto &o_seg_paddr = other.offset.as_seg_paddr();
+      if (seg_paddr.get_segment_off() > o_seg_paddr.get_segment_off()) {
+	return 1;
+      } else if (seg_paddr.get_segment_off() < o_seg_paddr.get_segment_off()) {
+	return -1;
+      }
+      if (seg_paddr.get_segment_id() > o_seg_paddr.get_segment_id()) {
+	return 1;
+      } else if (seg_paddr.get_segment_id() < o_seg_paddr.get_segment_id()) {
+	return -1;
+      }
+    } else if (offset.get_addr_type() == addr_types_t::RANDOM_BLOCK &&
+	other.offset.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
+      auto &blk_paddr = offset.as_blk_paddr();
+      auto &o_blk_paddr = other.offset.as_blk_paddr();
+      if (blk_paddr.get_block_off() > o_blk_paddr.get_block_off()) {
+	return 1;
+      } else if (blk_paddr.get_block_off() < o_blk_paddr.get_block_off()) {
+	return -1;
+      }
+    } else {
+      // offset.get_addr_type() != other.get_addr_type()
       return -1;
     }
     return 0;
@@ -1776,24 +1815,28 @@ inline paddr_t paddr_t::add_offset(int32_t o) const {
 
 inline paddr_t paddr_t::add_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
 
 inline paddr_t paddr_t::add_block_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_block_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_block_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
 
 inline paddr_t paddr_t::add_record_relative(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, add_record_relative(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, add_record_relative(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }
 
 inline paddr_t paddr_t::maybe_relative_to(paddr_t o) const {
   PADDR_OPERATION(addr_types_t::SEGMENT, seg_paddr_t, maybe_relative_to(o))
+  PADDR_OPERATION(addr_types_t::RANDOM_BLOCK, blk_paddr_t, maybe_relative_to(o))
   ceph_assert(0 == "not supported type");
   return P_ADDR_NULL;
 }

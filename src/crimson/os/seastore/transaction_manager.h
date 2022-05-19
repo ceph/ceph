@@ -34,6 +34,20 @@
 namespace crimson::os::seastore {
 class Journal;
 
+struct tm_make_config_t {
+  bool detailed = true;
+  journal_type_t j_type = journal_type_t::SEGMENT_JOURNAL;
+  placement_hint_t default_placement_hint =
+    placement_hint_t::HOT;
+  static tm_make_config_t get_default() {
+    return tm_make_config_t {
+      true,
+      journal_type_t::SEGMENT_JOURNAL,
+      placement_hint_t::HOT
+    };
+  }
+};
+
 template <typename F>
 auto repeat_eagain(F &&f) {
   return seastar::do_with(
@@ -71,7 +85,8 @@ public:
     CacheRef cache,
     LBAManagerRef lba_manager,
     ExtentPlacementManagerRef &&epm,
-    BackrefManagerRef&& backref_manager);
+    BackrefManagerRef&& backref_manager,
+    tm_make_config_t config = tm_make_config_t::get_default());
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -300,7 +315,7 @@ public:
                   T::TYPE == extent_types_t::COLL_BLOCK) {
       placement_hint = placement_hint_t::COLD;
     } else {
-      placement_hint = placement_hint_t::HOT;
+      placement_hint = config.default_placement_hint;
     }
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
@@ -542,10 +557,11 @@ public:
              dev->get_device_id(), is_primary);
     epm->add_device(dev, is_primary);
 
-    ceph_assert(dev->get_device_type() == device_type_t::SEGMENTED);
-    auto sm = dynamic_cast<SegmentManager*>(dev);
-    ceph_assert(sm != nullptr);
-    sm_group.add_segment_manager(sm);
+    if (dev->get_device_type() == device_type_t::SEGMENTED) {
+      auto sm = dynamic_cast<SegmentManager*>(dev);
+      ceph_assert(sm != nullptr);
+      sm_group.add_segment_manager(sm);
+    }
   }
 
   ~TransactionManager();
@@ -563,6 +579,7 @@ private:
 
   WritePipeline write_pipeline;
 
+  tm_make_config_t config;
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
     LogicalCachedExtentRef extent);
@@ -583,9 +600,11 @@ public:
   auto get_cache() {
     return cache.get();
   }
+  auto get_journal() {
+    return journal.get();
+  }
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
-TransactionManagerRef make_transaction_manager(bool detailed);
-
+TransactionManagerRef make_transaction_manager(tm_make_config_t config);
 }
