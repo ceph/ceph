@@ -586,6 +586,9 @@ void SegmentCleaner::update_journal_tail_target(
   journal_seq_t alloc_replay_from)
 {
   LOG_PREFIX(SegmentCleaner::update_journal_tail_target);
+  if (disable_trim) return;
+  assert(dirty_replay_from.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
+  assert(alloc_replay_from.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
   if (dirty_extents_replay_from == JOURNAL_SEQ_NULL
       || dirty_replay_from > dirty_extents_replay_from) {
     DEBUG("dirty_extents_replay_from={} => {}",
@@ -624,6 +627,7 @@ void SegmentCleaner::update_alloc_info_replay_from(
 void SegmentCleaner::update_journal_tail_committed(journal_seq_t committed)
 {
   LOG_PREFIX(SegmentCleaner::update_journal_tail_committed);
+  assert(committed.offset.get_addr_type() != addr_types_t::RANDOM_BLOCK);
   if (committed == JOURNAL_SEQ_NULL) {
     return;
   }
@@ -1217,6 +1221,10 @@ SegmentCleaner::maybe_release_segment(Transaction &t)
 void SegmentCleaner::complete_init()
 {
   LOG_PREFIX(SegmentCleaner::complete_init);
+  if (disable_trim) {
+    init_complete = true;
+    return;
+  }
   INFO("done, start GC");
   ceph_assert(segments.get_journal_head() != JOURNAL_SEQ_NULL);
   init_complete = true;

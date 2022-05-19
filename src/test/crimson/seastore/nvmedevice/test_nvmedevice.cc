@@ -80,7 +80,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
     }
 
     int ret = memcmp(original_data.data, read_data.data, BUF_SIZE);
-    device->close().wait();
+    device->close().unsafe_get();
     ASSERT_TRUE(ret == 0);
     device.reset(nullptr);
   });

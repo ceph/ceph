@@ -162,16 +162,18 @@ NVMeManager::mkfs_ertr::future<> NVMeManager::mkfs(mkfs_config_t config)
         "Invalid error read_rbm_header in NVMeManager::mkfs"
       }
     );
+  }).safe_then([this]() {
+    if (device) {
+      return device->close(
+      ).safe_then([]() {
+	return mkfs_ertr::now();
+      });
+    }
+    return mkfs_ertr::now();
   }).handle_error(
     mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
     "Invalid error open_device in NVMeManager::mkfs"
-  }).finally([this] {
-    if (device) {
-      return device->close();
-    } else {
-      return seastar::now();
-    }
   });
 }
 

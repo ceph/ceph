@@ -101,8 +101,8 @@ using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;
 using blk_no_t = uint64_t;
 using rbm_abs_addr = uint64_t;
 
-inline rbm_abs_addr convert_paddr_to_abs_addr(paddr_t& paddr) {
-  blk_paddr_t& blk_addr = paddr.as_blk_paddr();
+inline rbm_abs_addr convert_paddr_to_abs_addr(const paddr_t& paddr) {
+  const blk_paddr_t& blk_addr = paddr.as_blk_paddr();
   return blk_addr.get_block_off();
 }
 

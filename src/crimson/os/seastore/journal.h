@@ -18,6 +18,11 @@ class NVMeBlockDevice;
 class SegmentManagerGroup;
 class SegmentProvider;
 
+enum class journal_type_t {
+  SEGMENT_JOURNAL = 0,
+  CIRCULARBOUNDED_JOURNAL
+};
+
 class Journal {
 public:
   /**
@@ -87,12 +92,18 @@ public:
     delta_handler_t &&delta_handler) = 0;
 
   virtual ~Journal() {}
+
+  virtual journal_type_t get_type() = 0;
 };
 using JournalRef = std::unique_ptr<Journal>;
 
 namespace journal {
 
 JournalRef make_segmented(SegmentProvider &provider);
+
+JournalRef make_circularbounded(
+  crimson::os::seastore::nvme_device::NVMeBlockDevice* device,
+  std::string path);
 
 }
 

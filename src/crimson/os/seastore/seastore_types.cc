@@ -576,8 +576,7 @@ try_decode_deltas(
       }
     }
     for (auto& i: r.extent_infos) {
-      auto& seg_addr = record_block_base.as_seg_paddr();
-      seg_addr.set_segment_off(seg_addr.get_segment_off() + i.len);
+      record_block_base = record_block_base.add_offset(i.len);
     }
     ++result_iter;
   }

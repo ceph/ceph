@@ -28,14 +28,16 @@ TransactionManager::TransactionManager(
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef &&epm,
-  BackrefManagerRef&& backref_manager)
+  BackrefManagerRef&& backref_manager,
+  tm_make_config_t config)
   : segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
     backref_manager(std::move(backref_manager)),
-    sm_group(*segment_cleaner->get_segment_manager_group())
+    sm_group(*segment_cleaner->get_segment_manager_group()),
+    config(config)
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -634,8 +636,9 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 
 TransactionManager::~TransactionManager() {}
 
-TransactionManagerRef make_transaction_manager(bool detailed)
+TransactionManagerRef make_transaction_manager(tm_make_config_t config)
 {
+  LOG_PREFIX(make_transaction_manager);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
@@ -646,8 +649,17 @@ TransactionManagerRef make_transaction_manager(bool detailed)
     std::move(sms),
     *backref_manager,
     *cache,
-    detailed);
-  auto journal = journal::make_segmented(*segment_cleaner);
+    config.detailed);
+  JournalRef journal;
+  if (config.j_type == journal_type_t::SEGMENT_JOURNAL) {
+    journal = journal::make_segmented(*segment_cleaner);
+  } else {
+    journal = journal::make_circularbounded(
+      nullptr, "");
+    segment_cleaner->set_disable_trim(true);
+    ERROR("disabling journal trimming since support for CircularBoundedJournal\
+	  hasn't been added yet");
+  }
   epm->init_ool_writers(
       *segment_cleaner,
       segment_cleaner->get_ool_segment_seq_allocator());
@@ -658,7 +670,8 @@ TransactionManagerRef make_transaction_manager(bool detailed)
     std::move(cache),
     std::move(lba_manager),
     std::move(epm),
-    std::move(backref_manager));
+    std::move(backref_manager),
+    config);
 }
 
 }
