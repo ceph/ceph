@@ -26,7 +26,7 @@ protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
   std::unique_ptr<nvme_device::NVMeBlockDevice> rb_device;
-  tm_make_config_t tm_config;
+  tm_make_config_t tm_config = tm_make_config_t::get_test_segmented_journal();
 
   EphemeralTestState(std::size_t num_segment_managers) {
     assert(num_segment_managers > 0);
@@ -63,7 +63,7 @@ protected:
   }
 
   seastar::future<> tm_setup(
-    tm_make_config_t config = tm_make_config_t::get_default()) {
+    tm_make_config_t config = tm_make_config_t::get_test_segmented_journal()) {
     tm_config = config;
     segment_manager = segment_manager::create_test_ephemeral();
     for (auto &sec_sm : secondary_segment_managers) {
@@ -128,7 +128,7 @@ protected:
 };
 
 auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
-  auto tm = make_transaction_manager(tm_make_config_t::get_default());
+  auto tm = make_transaction_manager(tm_make_config_t::get_test_segmented_journal());
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     "",
