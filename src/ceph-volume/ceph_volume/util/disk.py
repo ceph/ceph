@@ -872,6 +872,13 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         else:
             metadata['device_nodes'] = devname
 
+        metadata['actuators'] = ""
+        if os.path.isdir(sysdir + "/queue/independent_access_ranges/"):
+            actuators = 0
+            while os.path.isdir(sysdir + "/queue/independent_access_ranges/" + str(actuators)):
+                actuators += 1
+            metadata['actuators'] = actuators
+
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")
         if scheduler is not None:
