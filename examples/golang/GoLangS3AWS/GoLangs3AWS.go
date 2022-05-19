@@ -52,7 +52,7 @@ func uploadObject(filename string) (resp *s3.PutObjectOutput) {
 	fmt.Println("Uploading:", filename)
 	resp, err = s3session.PutObject(&s3.PutObjectInput{
 		Body:   f,
-		Bucket: aws.String(BUCKET_NAME),
+		Bucket: aws.String(cephbucket),
 		Key:    aws.String(filename),
 	})
 
