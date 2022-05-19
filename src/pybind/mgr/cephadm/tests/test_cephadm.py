@@ -1507,31 +1507,48 @@ class TestCephadm(object):
             assert cephadm_module.manage_etc_ceph_ceph_conf is True
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            _write_file.assert_called_with('test', '/etc/ceph/ceph.conf', b'',
-                                           0o644, 0, 0, None)
-
-            assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
+            # Make sure both ceph conf locations (default and per fsid) are called
+            _write_file.assert_has_calls([mock.call('test', '/etc/ceph/ceph.conf', b'',
+                                          0o644, 0, 0, None),
+                                         mock.call('test', '/var/lib/ceph/fsid/config/ceph.conf', b'',
+                                          0o644, 0, 0, None)]
+                                         )
+            ceph_conf_files = cephadm_module.cache.get_host_client_files('test')
+            assert len(ceph_conf_files) == 2
+            assert '/etc/ceph/ceph.conf' in ceph_conf_files
+            assert '/var/lib/ceph/fsid/config/ceph.conf' in ceph_conf_files
 
             # set extra config and expect that we deploy another ceph.conf
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            _write_file.assert_called_with('test', '/etc/ceph/ceph.conf',
-                                           b'\n\n[mon]\nk=v\n', 0o644, 0, 0, None)
-
+            _write_file.assert_has_calls([mock.call('test',
+                                                    '/etc/ceph/ceph.conf',
+                                                    b'\n\n[mon]\nk=v\n', 0o644, 0, 0, None),
+                                          mock.call('test',
+                                                    '/var/lib/ceph/fsid/config/ceph.conf',
+                                                    b'\n\n[mon]\nk=v\n', 0o644, 0, 0, None)])
             # reload
             cephadm_module.cache.last_client_files = {}
             cephadm_module.cache.load()
 
-            assert '/etc/ceph/ceph.conf' in cephadm_module.cache.get_host_client_files('test')
+            ceph_conf_files = cephadm_module.cache.get_host_client_files('test')
+            assert len(ceph_conf_files) == 2
+            assert '/etc/ceph/ceph.conf' in ceph_conf_files
+            assert '/var/lib/ceph/fsid/config/ceph.conf' in ceph_conf_files
 
             # Make sure, _check_daemons does a redeploy due to monmap change:
-            before_digest = cephadm_module.cache.get_host_client_files('test')[
+            f1_before_digest = cephadm_module.cache.get_host_client_files('test')[
                 '/etc/ceph/ceph.conf'][0]
+            f2_before_digest = cephadm_module.cache.get_host_client_files(
+                'test')['/var/lib/ceph/fsid/config/ceph.conf'][0]
             cephadm_module._set_extra_ceph_conf('[mon]\nk2=v2')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-            after_digest = cephadm_module.cache.get_host_client_files('test')[
+            f1_after_digest = cephadm_module.cache.get_host_client_files('test')[
                 '/etc/ceph/ceph.conf'][0]
-            assert before_digest != after_digest
+            f2_after_digest = cephadm_module.cache.get_host_client_files(
+                'test')['/var/lib/ceph/fsid/config/ceph.conf'][0]
+            assert f1_before_digest != f1_after_digest
+            assert f2_before_digest != f2_after_digest
 
     def test_etc_ceph_init(self):
         with with_cephadm_module({'manage_etc_ceph_ceph_conf': True}) as m:
