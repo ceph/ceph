@@ -25,6 +25,7 @@ import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button/copy2clipboard-button.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
+import { CustomLoginBannerComponent } from './custom-login-banner/custom-login-banner.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { DocComponent } from './doc/doc.component';
 import { DownloadButtonComponent } from './download-button/download-button.component';
@@ -95,7 +96,8 @@ import { WizardComponent } from './wizard/wizard.component';
     DownloadButtonComponent,
     FormButtonPanelComponent,
     MotdComponent,
-    WizardComponent
+    WizardComponent,
+    CustomLoginBannerComponent
   ],
   providers: [],
   exports: [
@@ -123,7 +125,8 @@ import { WizardComponent } from './wizard/wizard.component';
     DownloadButtonComponent,
     FormButtonPanelComponent,
     MotdComponent,
-    WizardComponent
+    WizardComponent,
+    CustomLoginBannerComponent
   ]
 })
 export class ComponentsModule {}
