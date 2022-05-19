@@ -16,10 +16,19 @@ import shlex
 import stat
 import errno
 
+from distutils.version import LooseVersion
+
 from cmd2 import Cmd
 from cmd2 import __version__ as cmd2_version
-from cmd2.exceptions import Cmd2ArgparseError
-from distutils.version import LooseVersion
+# XXX: In cmd2 versions < 1.0.1, we'll get SystemExit(2) instead of
+# Cmd2ArgparseError
+if LooseVersion(cmd2_version) >= LooseVersion("1.0.1"):
+    from cmd2.exceptions import Cmd2ArgparseError
+else:
+    # HACK: so that we don't have check for version everywhere
+    # Cmd2ArgparseError is used.
+    class Cmd2ArgparseError:
+        pass
 
 if sys.version_info.major < 3:
     raise RuntimeError("cephfs-shell is only compatible with python3")
@@ -476,6 +485,10 @@ class CephFSShell(Cmd):
                 set_exit_code_msg(msg=None)
             else:
                 set_exit_code_msg(msg=f'{type(e).__name__}: {e}')
+        # In cmd2 versions < 1.1.0 we'll get SystemExit(2) instead of
+        # Cmd2ArgparseError
+        except SystemExit:
+            raise
 
     class path_to_bytes(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
