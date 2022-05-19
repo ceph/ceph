@@ -58,7 +58,6 @@ struct transaction_manager_test_t :
 
   std::random_device rd;
   std::mt19937 gen;
-  tm_make_config_t tm_config;
 
   transaction_manager_test_t(std::size_t num_devices)
     : TMTestState(num_devices), gen(rd()) {
@@ -76,11 +75,9 @@ struct transaction_manager_test_t :
   seastar::future<> set_up_fut() final {
     std::string j_type = GetParam();
     if (j_type == "segmented") {
-      return tm_setup(tm_config);
+      return tm_setup(tm_make_config_t::get_test_segmented_journal());
     } else if (j_type == "circularbounded") {
-      tm_config.j_type = journal_type_t::CIRCULARBOUNDED_JOURNAL;
-      tm_config.default_placement_hint = placement_hint_t::REWRITE;
-      return tm_setup(tm_config);
+      return tm_setup(tm_make_config_t::get_test_cb_journal());
     } else {
       ceph_assert(0 == "no support");
     }
