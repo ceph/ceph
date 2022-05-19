@@ -37,15 +37,40 @@ class Journal;
 struct tm_make_config_t {
   bool detailed = true;
   journal_type_t j_type = journal_type_t::SEGMENT_JOURNAL;
-  placement_hint_t default_placement_hint =
-    placement_hint_t::HOT;
+  placement_hint_t default_placement_hint = placement_hint_t::HOT;
+
   static tm_make_config_t get_default() {
+    return tm_make_config_t {
+      false,
+      journal_type_t::SEGMENT_JOURNAL,
+      placement_hint_t::HOT
+    };
+  }
+  static tm_make_config_t get_test_segmented_journal() {
     return tm_make_config_t {
       true,
       journal_type_t::SEGMENT_JOURNAL,
       placement_hint_t::HOT
     };
   }
+  static tm_make_config_t get_test_cb_journal() {
+    return tm_make_config_t {
+      true,
+      journal_type_t::CIRCULARBOUNDED_JOURNAL,
+      placement_hint_t::REWRITE
+    };
+  }
+
+  tm_make_config_t(const tm_make_config_t &) = default;
+  tm_make_config_t &operator=(const tm_make_config_t &) = default;
+private:
+  tm_make_config_t(
+    bool detailed,
+    journal_type_t j_type,
+    placement_hint_t default_placement_hint)
+    : detailed(detailed), j_type(j_type),
+      default_placement_hint(default_placement_hint)
+  {}
 };
 
 template <typename F>
