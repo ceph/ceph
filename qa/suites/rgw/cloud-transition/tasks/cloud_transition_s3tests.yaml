@@ -1,0 +1,62 @@
+tasks:
+- install:
+- ceph:
+- rgw:
+    storage classes: LUKEWARM, FROZEN
+    client.0:
+      port: 8000
+    client.1:
+      port: 8001
+    #client.2:
+      #port: 8002
+    #client.3:
+      #port: 8003
+- rgw-cloudtier:
+    client.0:
+      # cloudtier storage class params
+      # retain_head_object = false
+      cloud_storage_class: CLOUDTIER-CLIENT0
+      cloud_client: client.1
+      cloud_regular_storage_class: LUKEWARM
+      cloud_target_storage_class: FROZEN
+      cloud_retain_head_object: "false"
+      cloud_target_path: "teuthology-client0"
+      cloudtier_user:
+        # cloud-user creds to be created on cloud-client
+        cloud_secret: "abcefgh"
+        cloud_access_key: "12345678"
+    #client.2:
+      # cloudtier storage class params
+      # retain_head_object = true
+      #
+      # Having multiple cloudtier storage classes
+      # in the same task is increasing the transition
+      # time and resulting in spurious failures.
+      # Hence disabling this until there is a
+      # consistent way of running the tests
+      # without having to depend on lc_debug_interval.
+      #
+      #cloud_storage_class: CLOUDTIER-CLIENT2
+      #cloud_client: client.3
+      #cloud_regular_storage_class: LUKEWARM
+      #cloud_retain_head_object: "true"
+      #cloud_target_path: "teuthology-client2"
+      #cloudtier_user:
+        # cloud-user creds to be created on cloud-client
+        #cloud_secret: "foobar"
+        #cloud_access_key: "87654321"
+- s3tests:
+    client.0:
+      force-branch: ceph-master
+      rgw_server: client.0
+      storage classes: LUKEWARM, FROZEN
+      extra_attrs: ["cloud_transition"]
+      lc_debug_interval: 10
+      cloudtier_tests: True
+    #client.2:
+      #force-branch: ceph-master
+      #rgw_server: client.2
+      #storage classes: LUKEWARM, FROZEN
+      #extra_attrs: ["cloud_transition"]
+      #lc_debug_interval: 10
+      #cloudtier_tests: True
