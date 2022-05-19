@@ -12054,7 +12054,6 @@ int BlueStore::omap_get_values(
   return r;
 }
 
-#ifdef WITH_SEASTAR
 int BlueStore::omap_get_values(
   CollectionHandle &c_,        ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
@@ -12096,7 +12095,6 @@ out:
           << dendl;
   return r;
 }
-#endif
 
 int BlueStore::omap_check_keys(
   CollectionHandle &c_,    ///< [in] Collection containing oid
