@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import cherrypy
 
 
 class ViewCacheNoDataException(Exception):
@@ -17,7 +18,7 @@ class DashboardException(Exception):
 
     # pylint: disable=too-many-arguments
     def __init__(self, e=None, code=None, component=None, http_status_code=None, msg=None):
-        super(DashboardException, self).__init__(msg)
+        super().__init__(msg)
         self._code = code
         self.component = component
         if e:
@@ -31,7 +32,10 @@ class DashboardException(Exception):
         try:
             return str(self.e)
         except AttributeError:
-            return super(DashboardException, self).__str__()
+            return super().__str__()
+
+    def as_cherrypy_exception(self):
+        return cherrypy.HTTPError(status=self.status, message=str(self))
 
     @property
     def errno(self):
@@ -48,7 +52,13 @@ class InvalidCredentialsError(DashboardException):
     def __init__(self):
         super().__init__(msg='Invalid credentials',
                          code='invalid_credentials',
+                         http_status_code=401,
                          component='auth')
+
+
+class RequestError(DashboardException):
+    def __init__(self, code, msg, component):
+        super().__init__(code, msg, component, http_status_code=400)
 
 
 # access control module exceptions

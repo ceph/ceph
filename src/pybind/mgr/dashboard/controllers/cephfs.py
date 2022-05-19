@@ -6,7 +6,7 @@ import cephfs
 import cherrypy
 
 from .. import mgr
-from ..exceptions import DashboardException
+from ..exceptions import RequestError
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
@@ -97,18 +97,18 @@ class CephFS(RESTController):
         try:
             return int(fs_id)
         except ValueError:
-            raise DashboardException(code='invalid_cephfs_id',
-                                     msg="Invalid cephfs ID {}".format(fs_id),
-                                     component='cephfs')
+            raise RequestError(code='invalid_cephfs_id',
+                               msg=f"Invalid cephfs ID {fs_id}",
+                               component='cephfs')
 
     @staticmethod
     def client_id_to_int(client_id):
         try:
             return int(client_id)
         except ValueError:
-            raise DashboardException(code='invalid_cephfs_client_id',
-                                     msg="Invalid cephfs client ID {}".format(client_id),
-                                     component='cephfs')
+            raise RequestError(code='invalid_cephfs_client_id',
+                               msg=f"Invalid cephfs client ID {client_id}",
+                               component='cephfs')
 
     def _get_mds_names(self, filesystem_id=None):
         names = []

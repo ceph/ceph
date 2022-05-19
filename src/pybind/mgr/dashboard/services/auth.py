@@ -12,6 +12,7 @@ import cherrypy
 import jwt
 
 from .. import mgr
+from ..exceptions import InvalidCredentialsError
 from .access_control import LocalAuthenticator, UserDoesNotExist
 
 cherrypy.config.update({
@@ -186,8 +187,7 @@ class AuthManagerTool(cherrypy.Tool):
                 return
         self.logger.debug('Unauthorized access to %s',
                           cherrypy.url(relative='server'))
-        raise cherrypy.HTTPError(401, 'You are not authorized to access '
-                                      'that resource')
+        raise InvalidCredentialsError()
 
     def _check_authorization(self, username):
         self.logger.debug("checking authorization...")

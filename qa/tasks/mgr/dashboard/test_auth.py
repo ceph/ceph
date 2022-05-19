@@ -84,11 +84,12 @@ class AuthTest(DashboardTestCase):
     def test_login_invalid(self):
         # test with Authorization header
         self._post("/api/auth", {'username': 'admin', 'password': 'inval'})
-        self.assertStatus(400)
+        self.assertStatus(401)
         self.assertJsonBody({
             "component": "auth",
             "code": "invalid_credentials",
-            "detail": "Invalid credentials"
+            "detail": "Invalid credentials",
+            "status": "401 Unauthorized",
         })
 
     def test_lockout_user(self):
@@ -97,11 +98,12 @@ class AuthTest(DashboardTestCase):
         for _ in range(3):
             self._post("/api/auth", {'username': 'admin', 'password': 'inval'})
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
-        self.assertStatus(400)
-        self.assertJsonBody({
+        self.assertStatus(401)
+        self.assertJsonSubset({
             "component": "auth",
             "code": "invalid_credentials",
-            "detail": "Invalid credentials"
+            "detail": "Invalid credentials",
+            "status": "401 Unauthorized",
         })
         self._ceph_cmd(['dashboard', 'ac-user-enable', 'admin'])
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
@@ -122,11 +124,12 @@ class AuthTest(DashboardTestCase):
         for _ in range(3):
             self._post("/api/auth", {'username': 'admin', 'password': 'inval'}, set_cookies=True)
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'}, set_cookies=True)
-        self.assertStatus(400)
+        self.assertStatus(401)
         self.assertJsonBody({
             "component": "auth",
             "code": "invalid_credentials",
-            "detail": "Invalid credentials"
+            "detail": "Invalid credentials",
+            "status": "401 Unauthorized",
         })
         self._ceph_cmd(['dashboard', 'ac-user-enable', 'admin'])
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'}, set_cookies=True)

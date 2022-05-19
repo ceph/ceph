@@ -10,7 +10,9 @@ import rados
 import rbd
 from orchestrator import OrchestratorError
 
-from ..exceptions import DashboardException, ViewCacheNoDataException
+from ..exceptions import (
+    DashboardException, ViewCacheNoDataException, InvalidCredentialsError,
+    RequestError)
 from ..rest_client import RequestException
 from ..services.ceph_service import SendCommandError
 
@@ -45,15 +47,15 @@ def dashboard_exception_handler(handler, *args, **kwargs):
     try:
         with handle_rados_error(component=None):  # make the None controller the fallback.
             return handler(*args, **kwargs)
-    # Don't catch cherrypy.* Exceptions.
+    except (cherrypy.HTTPRedirect, cherrypy.NotFound):
+        raise
+    except (InvalidCredentialsError, RequestError) as error:
+        raise error.as_cherrypy_exception()
     except (ViewCacheNoDataException, DashboardException) as error:
         logger.exception('Dashboard Exception')
         cherrypy.response.headers['Content-Type'] = 'application/json'
         cherrypy.response.status = getattr(error, 'status', 400)
         return json.dumps(serialize_dashboard_exception(error)).encode('utf-8')
-    except cherrypy.HTTPRedirect:
-        # No internal errors
-        raise
     except Exception as error:
         logger.exception('Internal Server Error')
         raise error
