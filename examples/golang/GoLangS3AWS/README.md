@@ -21,7 +21,7 @@
 s3cmd --no-ssl --host=localhost:8000 --host-bucket="localhost:8000/%(bucket)" \
 --access_key=0555b35654ad1656d804 \
 --secret_key=h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q== \
-mb s3://<bucketname>
+mb s3://cephbucket
 ```
 6. Then cd into the Golang folder and run `go build` then `./GoLangS3AWS`.
 7. Your result should look like this 
