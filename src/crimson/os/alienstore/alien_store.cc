@@ -194,7 +194,10 @@ AlienStore::list_objects(CollectionRef ch,
   assert(tp);
   return do_with_op_gate(std::vector<ghobject_t>(), ghobject_t(),
                          [=] (auto &objects, auto &next) {
-    objects.reserve(limit);
+    if (limit <= 100) {
+      //reserve if limit is reasonably small
+      objects.reserve(limit);
+    }
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
       [=, &objects, &next] {
       auto c = static_cast<AlienCollection*>(ch.get());
