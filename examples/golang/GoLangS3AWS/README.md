@@ -23,7 +23,7 @@ s3cmd --no-ssl --host=localhost:8000 --host-bucket="localhost:8000/%(bucket)" \
 --secret_key=h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q== \
 mb s3://cephbucket
 ```
-6. Then cd into the Golang folder and run `go build` then `./GoLangS3AWS`.
+6. Then cd into the Golang folder and run `go build` then `./ceph`.
 7. Your result should look like this 
 ![Golang result](https://i.ibb.co/mtNMRTZ/golang.png)
 
