@@ -1302,6 +1302,7 @@ void Cache::backref_batch_update(
   for (auto &ent : list) {
     if (ent->laddr == L_ADDR_NULL) {
       auto [it, insert] = backref_remove_set.insert(*ent);
+      boost::ignore_unused(insert);
 #ifndef NDEBUG
       if (!insert) {
 	ERROR("backref_remove_set already contains {}", ent->paddr);
@@ -1317,6 +1318,7 @@ void Cache::backref_batch_update(
       assert(!r);
 #endif
       auto [it, insert] = backref_inserted_set.insert(*ent);
+      boost::ignore_unused(insert);
       assert(insert);
     }
   }
