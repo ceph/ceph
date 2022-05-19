@@ -26,6 +26,8 @@ mb s3://cephbucket
 6. Then cd into the Golang folder and run `go build` then `./ceph`.
 7. Your result should look like this 
 ![Golang result](https://i.ibb.co/mtNMRTZ/golang.png)
+PS; The aws config credentials I used are:
+    
 
 I hope you find this useful.
 
