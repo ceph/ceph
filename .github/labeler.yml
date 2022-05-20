@@ -54,6 +54,7 @@ mgr:
   - src/pybind/mgr/ceph_module.pyi
   - src/pybind/mgr/mgr_module.py
   - src/pybind/mgr/mgr_util.py
+  - src/pybind/mgr/object_format.py
   - src/pybind/mgr/requirements.txt
   - src/pybind/mgr/tox.ini
   - src/test/mgr/**
