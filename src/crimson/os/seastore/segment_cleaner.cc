@@ -710,6 +710,15 @@ SegmentCleaner::gc_cycle_ret SegmentCleaner::do_gc_cycle()
 	"GCProcess::run encountered invalid error in gc_trim_journal"
       }
     );
+  } else if (gc_should_trim_backref()) {
+    return gc_trim_backref(get_backref_tail()
+    ).safe_then([](auto) {
+      return seastar::now();
+    }).handle_error(
+      crimson::ct_error::assert_all{
+	"GCProcess::run encountered invalid error in gc_trim_backref"
+      }
+    );
   } else if (gc_should_reclaim_space()) {
     return gc_reclaim_space(
     ).handle_error(
@@ -722,35 +731,45 @@ SegmentCleaner::gc_cycle_ret SegmentCleaner::do_gc_cycle()
   }
 }
 
+SegmentCleaner::gc_trim_backref_ret
+SegmentCleaner::gc_trim_backref(journal_seq_t limit) {
+  return seastar::do_with(
+    journal_seq_t(),
+    [this, limit=std::move(limit)](auto &seq) mutable {
+    return repeat_eagain([this, limit=std::move(limit), &seq] {
+      return ecb->with_transaction_intr(
+	Transaction::src_t::TRIM_BACKREF,
+	"trim_backref",
+	[this, limit](auto &t) {
+	return trim_backrefs(
+	  t,
+	  limit
+	).si_then([this, &t, limit](auto trim_backrefs_to)
+	  -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<
+	    journal_seq_t> {
+	  if (trim_backrefs_to != JOURNAL_SEQ_NULL) {
+	    return ecb->submit_transaction_direct(
+	      t, std::make_optional<journal_seq_t>(trim_backrefs_to)
+	    ).si_then([trim_backrefs_to=std::move(trim_backrefs_to)]() mutable {
+	      return seastar::make_ready_future<
+		journal_seq_t>(std::move(trim_backrefs_to));
+	    });
+	  }
+	  return seastar::make_ready_future<journal_seq_t>(std::move(limit));
+	});
+      }).safe_then([&seq](auto trim_backrefs_to) {
+	seq = std::move(trim_backrefs_to);
+      });
+    }).safe_then([&seq] {
+      return gc_trim_backref_ertr::make_ready_future<
+	journal_seq_t>(std::move(seq));
+    });
+  });
+}
+
 SegmentCleaner::gc_trim_journal_ret SegmentCleaner::gc_trim_journal()
 {
-  return ecb->with_transaction_intr(
-    Transaction::src_t::TRIM_BACKREF,
-    "trim_backref",
-    [this](auto &t) {
-    return seastar::do_with(
-      get_dirty_tail(),
-      [this, &t](auto &limit) {
-      return trim_backrefs(t, limit).si_then(
-	[this, &t, &limit](auto trim_backrefs_to)
-	-> ExtentCallbackInterface::submit_transaction_direct_iertr::future<
-	     journal_seq_t> {
-	if (trim_backrefs_to != JOURNAL_SEQ_NULL) {
-	  return ecb->submit_transaction_direct(
-	    t, std::make_optional<journal_seq_t>(trim_backrefs_to)
-	  ).si_then([trim_backrefs_to=std::move(trim_backrefs_to)]() mutable {
-	    return seastar::make_ready_future<
-	      journal_seq_t>(std::move(trim_backrefs_to));
-	  });
-	}
-	return seastar::make_ready_future<journal_seq_t>(std::move(limit));
-      });
-    });
-  }).handle_error(
-    crimson::ct_error::eagain::handle([](auto) {
-      ceph_abort("unexpected eagain");
-    }),
-    crimson::ct_error::pass_further_all()
+  return gc_trim_backref(get_dirty_tail()
   ).safe_then([this](auto seq) {
     return repeat_eagain([this, seq=std::move(seq)]() mutable {
       return ecb->with_transaction_intr(

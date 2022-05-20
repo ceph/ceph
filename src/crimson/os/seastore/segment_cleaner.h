@@ -479,6 +479,10 @@ public:
     /// Number of maximum journal segments to block user transactions.
     size_t max_journal_segments = 0;
 
+    /// Number of journal segments the transactions in which can
+    /// have their corresponding backrefs unmerged
+    size_t target_backref_inflight_segments = 0;
+
     /// Ratio of maximum available space to disable reclaiming.
     double available_ratio_gc_max = 0;
     /// Ratio of minimum available space to force reclaiming.
@@ -511,6 +515,7 @@ public:
       return config_t{
 	  12,   // target_journal_segments
 	  16,   // max_journal_segments
+	  2,	// target_backref_inflight_segments
 	  .9,   // available_ratio_gc_max
 	  .2,   // available_ratio_hard_limit
 	  .8,   // reclaim_ratio_hard_limit
@@ -525,6 +530,7 @@ public:
       return config_t{
 	  2,    // target_journal_segments
 	  4,    // max_journal_segments
+	  2,	// target_backref_inflight_segments
 	  .9,   // available_ratio_gc_max
 	  .2,   // available_ratio_hard_limit
 	  .8,   // reclaim_ratio_hard_limit
@@ -922,6 +928,17 @@ private:
     return ret;
   }
 
+  journal_seq_t get_backref_tail() const {
+    auto ret = segments.get_journal_head();
+    ceph_assert(ret != JOURNAL_SEQ_NULL);
+    if (ret.segment_seq >= config.target_backref_inflight_segments) {
+      ret.segment_seq -= config.target_backref_inflight_segments;
+    } else {
+      ret.segment_seq = 0;
+      ret.offset = P_ADDR_MIN;
+    }
+    return ret;
+  }
   // GC status helpers
   std::optional<paddr_t> next_reclaim_pos;
 
@@ -1020,6 +1037,10 @@ private:
   using gc_trim_journal_ertr = gc_ertr;
   using gc_trim_journal_ret = gc_trim_journal_ertr::future<>;
   gc_trim_journal_ret gc_trim_journal();
+
+  using gc_trim_backref_ertr = gc_ertr;
+  using gc_trim_backref_ret = gc_trim_backref_ertr::future<journal_seq_t>;
+  gc_trim_backref_ret gc_trim_backref(journal_seq_t limit);
 
   using gc_reclaim_space_ertr = gc_ertr;
   using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
@@ -1223,6 +1244,9 @@ private:
     return get_dirty_tail() > journal_tail_target;
   }
 
+  bool gc_should_trim_backref() const {
+    return get_backref_tail() > alloc_info_replay_from;
+  }
   /**
    * gc_should_run
    *
@@ -1231,7 +1255,9 @@ private:
   bool gc_should_run() const {
     if (disable_trim) return false;
     ceph_assert(init_complete);
-    return gc_should_reclaim_space() || gc_should_trim_journal();
+    return gc_should_reclaim_space()
+      || gc_should_trim_journal()
+      || gc_should_trim_backref();
   }
 
   void init_mark_segment_closed(
