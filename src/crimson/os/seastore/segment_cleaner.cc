@@ -3,17 +3,10 @@
 
 #include <seastar/core/metrics.hh>
 
-#include "crimson/common/log.h"
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/transaction_manager.h"
-
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_cleaner);
-  }
-}
 
 SET_SUBSYS(seastore_cleaner);
 
@@ -269,10 +262,11 @@ void segments_info_t::update_written_to(
 
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 {
+  LOG_PREFIX(SpaceTrackerSimple::equals);
   const auto &other = static_cast<const SpaceTrackerSimple&>(_other);
 
   if (other.live_bytes_by_segment.size() != live_bytes_by_segment.size()) {
-    logger().error("{}: different segment counts, bug in test");
+    ERROR("different segment counts, bug in test");
     assert(0 == "segment counts should match");
     return false;
   }
@@ -282,12 +276,8 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
        i != live_bytes_by_segment.end(); ++i, ++j) {
     if (i->second.live_bytes != j->second.live_bytes) {
       all_match = false;
-      logger().debug(
-	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
-	__func__,
-	i->first,
-	i->second.live_bytes,
-	j->second.live_bytes);
+      DEBUG("segment_id {} live bytes mismatch *this: {}, other: {}",
+            i->first, i->second.live_bytes, j->second.live_bytes);
     }
   }
   return all_match;
@@ -299,6 +289,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
   extent_len_t len,
   const extent_len_t block_size)
 {
+  LOG_PREFIX(SegmentMap::allocate);
   assert(offset % block_size == 0);
   assert(len % block_size == 0);
 
@@ -309,16 +300,10 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
   for (auto i = b; i < e; ++i) {
     if (bitmap[i]) {
       if (!error) {
-	logger().error(
-	  "SegmentMap::allocate found allocated in {}, {} ~ {}",
-	  segment,
-	  offset,
-	  len);
+        ERROR("found allocated in {}, {} ~ {}", segment, offset, len);
 	error = true;
       }
-      logger().debug(
-	"SegmentMap::allocate block {} allocated",
-	i * block_size);
+      DEBUG("block {} allocated", i * block_size);
     }
     bitmap[i] = true;
   }
@@ -331,6 +316,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
   extent_len_t len,
   const extent_len_t block_size)
 {
+  LOG_PREFIX(SegmentMap::release);
   assert(offset % block_size == 0);
   assert(len % block_size == 0);
 
@@ -341,16 +327,10 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
   for (auto i = b; i < e; ++i) {
     if (!bitmap[i]) {
       if (!error) {
-	logger().error(
-	  "SegmentMap::release found unallocated in {}, {} ~ {}",
-	  segment,
-	  offset,
-	  len);
+	ERROR("found unallocated in {}, {} ~ {}", segment, offset, len);
 	error = true;
       }
-      logger().debug(
-	"SegmentMap::release block {} unallocated",
-	i * block_size);
+      DEBUG("block {} unallocated", i * block_size);
     }
     bitmap[i] = false;
   }
@@ -359,10 +339,11 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
 
 bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
 {
+  LOG_PREFIX(SpaceTrackerDetailed::equals);
   const auto &other = static_cast<const SpaceTrackerDetailed&>(_other);
 
   if (other.segment_usage.size() != segment_usage.size()) {
-    logger().error("{}: different segment counts, bug in test");
+    ERROR("different segment counts, bug in test");
     assert(0 == "segment counts should match");
     return false;
   }
@@ -372,12 +353,8 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
        i != segment_usage.end(); ++i, ++j) {
     if (i->second.get_usage() != j->second.get_usage()) {
       all_match = false;
-      logger().error(
-	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
-	__func__,
-	i->first,
-	i->second.get_usage(),
-	j->second.get_usage());
+      ERROR("segment_id {} live bytes mismatch *this: {}, other: {}",
+            i->first, i->second.get_usage(), j->second.get_usage());
     }
   }
   return all_match;
@@ -385,26 +362,28 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
 
 void SpaceTrackerDetailed::SegmentMap::dump_usage(extent_len_t block_size) const
 {
+  LOG_PREFIX(SegmentMap::dump_usage);
+  INFO("dump start");
   for (unsigned i = 0; i < bitmap.size(); ++i) {
     if (bitmap[i]) {
-      logger().debug("    {} still live", i * block_size);
+      LOCAL_LOGGER.info("    {} still live", i * block_size);
     }
   }
 }
 
 void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
 {
-  logger().debug("SpaceTrackerDetailed::dump_usage {}", id);
+  LOG_PREFIX(SpaceTrackerDetailed::dump_usage);
+  INFO("{}", id);
   segment_usage[id].dump_usage(
     block_size_by_segment_manager[id.device_id()]);
 }
 
 void SpaceTrackerSimple::dump_usage(segment_id_t id) const
 {
-  logger().info(
-    "SpaceTrackerSimple::dump_usage id: {}, live_bytes: {}",
-    id,
-    live_bytes_by_segment[id].live_bytes);
+  LOG_PREFIX(SpaceTrackerSimple::dump_usage);
+  INFO("id: {}, live_bytes: {}",
+       id, live_bytes_by_segment[id].live_bytes);
 }
 
 SegmentCleaner::SegmentCleaner(
@@ -695,11 +674,10 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
     DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
     return seastar::do_with(
       std::move(dirty_list),
-      [this, &t](auto &dirty_list) {
+      [this, FNAME, &t](auto &dirty_list) {
 	return trans_intr::do_for_each(
 	  dirty_list,
-	  [this, &t](auto &e) {
-	  LOG_PREFIX(SegmentCleaner::rewrite_dirty);
+	  [this, FNAME, &t](auto &e) {
 	  DEBUGT("cleaning {}", t, *e);
 	  return ecb->rewrite_extent(t, e);
 	});
@@ -833,7 +811,7 @@ SegmentCleaner::_retrieve_live_extents(
     return trans_intr::do_for_each(
       backrefs,
       [this, &extents, &t, &seq](auto &ent) {
-      LOG_PREFIX(SegmentCleaner::gc_reclaim_space);
+      LOG_PREFIX(SegmentCleaner::_retrieve_live_extents);
       DEBUGT("getting extent of type {} at {}~{}",
 	t,
 	ent.type,
@@ -841,12 +819,9 @@ SegmentCleaner::_retrieve_live_extents(
 	ent.len);
       return ecb->get_extent_if_live(
 	t, ent.type, ent.paddr, ent.laddr, ent.len
-      ).si_then([this, &extents, &ent, &seq](auto ext) {
+      ).si_then([this, FNAME, &extents, &ent, &seq, &t](auto ext) {
 	if (!ext) {
-	  logger().debug(
-	    "SegmentCleaner::gc_reclaim_space:"
-	    " addr {} dead, skipping",
-	    ent.paddr);
+	  DEBUGT("addr {} dead, skipping", t, ent.paddr);
 	  auto backref = cache.get_del_backref(ent.paddr);
 	  if (seq == JOURNAL_SEQ_NULL || seq < backref.seq) {
 	    seq = backref.seq;
@@ -1011,9 +986,9 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 
 SegmentCleaner::mount_ret SegmentCleaner::mount()
 {
+  LOG_PREFIX(SegmentCleaner::mount);
   const auto& sms = sm_group->get_segment_managers();
-  logger().info(
-    "SegmentCleaner::mount: {} segment managers", sms.size());
+  INFO("{} segment managers", sms.size());
   init_complete = false;
   stats = {};
   journal_tail_target = JOURNAL_SEQ_NULL;
@@ -1035,26 +1010,22 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   metrics.clear();
   register_metrics();
 
-  logger().info("SegmentCleaner::mount: {} segments", segments.get_num_segments());
+  INFO("{} segments", segments.get_num_segments());
   return seastar::do_with(
     std::vector<std::pair<segment_id_t, segment_header_t>>(),
-    [this](auto& segment_set) {
+    [this, FNAME](auto& segment_set) {
     return crimson::do_for_each(
       segments.begin(),
       segments.end(),
-      [this, &segment_set](auto& it) {
+      [this, FNAME, &segment_set](auto& it) {
 	auto segment_id = it.first;
 	return sm_group->read_segment_header(
 	  segment_id
-	).safe_then([segment_id, this, &segment_set](auto header) {
-	  logger().info(
-	    "SegmentCleaner::mount: segment_id={} -- {}",
-	    segment_id, header);
+	).safe_then([segment_id, this, FNAME, &segment_set](auto header) {
+	  INFO("segment_id={} -- {}", segment_id, header);
 	  auto s_type = header.get_type();
 	  if (s_type == segment_type_t::NULL_SEG) {
-	    logger().error(
-	      "SegmentCleaner::mount: got null segment, segment_id={} -- {}",
-	      segment_id, header);
+	    ERROR("got null segment, segment_id={} -- {}", segment_id, header);
 	    ceph_abort();
 	  }
 	  return sm_group->read_segment_tail(
