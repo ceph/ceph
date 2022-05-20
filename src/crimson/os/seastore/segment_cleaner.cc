@@ -1231,4 +1231,215 @@ void SegmentCleaner::complete_init()
   gc_process.start();
 }
 
+void SegmentCleaner::mark_space_used(
+  paddr_t addr,
+  extent_len_t len,
+  time_point last_modified,
+  time_point last_rewritten,
+  bool init_scan)
+{
+  LOG_PREFIX(SegmentCleaner::mark_space_used);
+  if (addr.get_addr_type() != addr_types_t::SEGMENT) {
+    return;
+  }
+  auto& seg_addr = addr.as_seg_paddr();
+
+  if (!init_scan && !init_complete) {
+    return;
+  }
+
+  stats.used_bytes += len;
+  auto old_usage = calc_utilization(seg_addr.get_segment_id());
+  [[maybe_unused]] auto ret = space_tracker->allocate(
+    seg_addr.get_segment_id(),
+    seg_addr.get_segment_off(),
+    len);
+  auto new_usage = calc_utilization(seg_addr.get_segment_id());
+  adjust_segment_util(old_usage, new_usage);
+
+  // use the last extent's last modified time for the calculation of the projected
+  // time the segments' live extents are to stay unmodified; this is an approximation
+  // of the sprite lfs' segment "age".
+
+  segments.update_last_modified_rewritten(
+      seg_addr.get_segment_id(), last_modified, last_rewritten);
+
+  gc_process.maybe_wake_on_space_used();
+  assert(ret > 0);
+  DEBUG("segment {} new len: {}~{}, live_bytes: {}",
+        seg_addr.get_segment_id(),
+        addr,
+        len,
+        space_tracker->get_usage(seg_addr.get_segment_id()));
+}
+
+void SegmentCleaner::mark_space_free(
+  paddr_t addr,
+  extent_len_t len,
+  bool force)
+{
+  LOG_PREFIX(SegmentCleaner::mark_space_free);
+  if (!init_complete && !force) {
+    return;
+  }
+  if (addr.get_addr_type() != addr_types_t::SEGMENT) {
+    return;
+  }
+
+  ceph_assert(stats.used_bytes >= len);
+  stats.used_bytes -= len;
+  auto& seg_addr = addr.as_seg_paddr();
+
+  DEBUG("segment {} free len: {}~{}",
+        seg_addr.get_segment_id(), addr, len);
+  auto old_usage = calc_utilization(seg_addr.get_segment_id());
+  [[maybe_unused]] auto ret = space_tracker->release(
+    seg_addr.get_segment_id(),
+    seg_addr.get_segment_off(),
+    len);
+  auto new_usage = calc_utilization(seg_addr.get_segment_id());
+  adjust_segment_util(old_usage, new_usage);
+  maybe_wake_gc_blocked_io();
+  assert(ret >= 0);
+  DEBUG("segment {} free len: {}~{}, live_bytes: {}",
+        seg_addr.get_segment_id(),
+        addr,
+        len,
+        space_tracker->get_usage(seg_addr.get_segment_id()));
+}
+
+journal_seq_t SegmentCleaner::get_next_gc_target() const
+{
+  LOG_PREFIX(SegmentCleaner::get_next_gc_target);
+  segment_id_t id = NULL_SEG_ID;
+  segment_seq_t seq = NULL_SEG_SEQ;
+  double max_benefit_cost = 0;
+  for (auto& [_id, segment_info] : segments) {
+    if (segment_info.is_closed() &&
+        !segment_info.is_in_journal(journal_tail_committed)) {
+      double benefit_cost = calc_gc_benefit_cost(_id);
+      if (benefit_cost > max_benefit_cost) {
+        id = _id;
+        seq = segment_info.seq;
+        max_benefit_cost = benefit_cost;
+      }
+    }
+  }
+  if (id != NULL_SEG_ID) {
+    DEBUG("segment {} seq {}, benefit_cost {}",
+          id, seq, max_benefit_cost);
+    return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
+  } else {
+    ceph_assert(get_segments_reclaimable() == 0);
+    // see gc_should_reclaim_space()
+    ceph_abort("impossible!");
+    return JOURNAL_SEQ_NULL;
+  }
+}
+
+void SegmentCleaner::log_gc_state(const char *caller) const
+{
+  LOG_PREFIX(SegmentCleaner::log_gc_state);
+  if (LOCAL_LOGGER.is_enabled(seastar::log_level::debug) &&
+      !disable_trim) {
+    DEBUG(
+      "caller {}, "
+      "empty {}, "
+      "open {}, "
+      "closed {}, "
+      "in_journal {}, "
+      "total {}B, "
+      "available {}B, "
+      "unavailable {}B, "
+      "unavailable_used {}B, "
+      "unavailable_unused {}B; "
+      "reclaim_ratio {}, "
+      "available_ratio {}, "
+      "should_block_on_gc {}, "
+      "gc_should_reclaim_space {}, "
+      "journal_head {}, "
+      "journal_tail_target {}, "
+      "journal_tail_commit {}, "
+      "dirty_tail {}, "
+      "dirty_tail_limit {}, "
+      "gc_should_trim_journal {}, ",
+      caller,
+      segments.get_num_empty(),
+      segments.get_num_open(),
+      segments.get_num_closed(),
+      get_segments_in_journal(),
+      segments.get_total_bytes(),
+      segments.get_available_bytes(),
+      segments.get_unavailable_bytes(),
+      stats.used_bytes,
+      get_unavailable_unused_bytes(),
+      get_reclaim_ratio(),
+      segments.get_available_ratio(),
+      should_block_on_gc(),
+      gc_should_reclaim_space(),
+      segments.get_journal_head(),
+      journal_tail_target,
+      journal_tail_committed,
+      get_dirty_tail(),
+      get_dirty_tail_limit(),
+      gc_should_trim_journal()
+    );
+  }
+}
+
+seastar::future<>
+SegmentCleaner::reserve_projected_usage(std::size_t projected_usage)
+{
+  if (disable_trim) {
+    return seastar::now();
+  }
+  ceph_assert(init_complete);
+  // The pipeline configuration prevents another IO from entering
+  // prepare until the prior one exits and clears this.
+  ceph_assert(!blocked_io_wake);
+  ++stats.io_count;
+  bool is_blocked = false;
+  if (should_block_on_trim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_trim;
+  }
+  if (should_block_on_reclaim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_reclaim;
+  }
+  if (is_blocked) {
+    ++stats.io_blocking_num;
+    ++stats.io_blocked_count;
+    stats.io_blocked_sum += stats.io_blocking_num;
+  }
+  return seastar::do_until(
+    [this] {
+      log_gc_state("await_hard_limits");
+      return !should_block_on_gc();
+    },
+    [this] {
+      blocked_io_wake = seastar::promise<>();
+      return blocked_io_wake->get_future();
+    }
+  ).then([this, projected_usage, is_blocked] {
+    ceph_assert(!blocked_io_wake);
+    stats.projected_used_bytes += projected_usage;
+    ++stats.projected_count;
+    stats.projected_used_bytes_sum += stats.projected_used_bytes;
+    if (is_blocked) {
+      assert(stats.io_blocking_num > 0);
+      --stats.io_blocking_num;
+    }
+  });
+}
+
+void SegmentCleaner::release_projected_usage(std::size_t projected_usage)
+{
+  if (disable_trim) return;
+  ceph_assert(init_complete);
+  ceph_assert(stats.projected_used_bytes >= projected_usage);
+  stats.projected_used_bytes -= projected_usage;
+  return maybe_wake_gc_blocked_io();
+}
+
 }
