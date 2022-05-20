@@ -22,6 +22,7 @@ from ceph.utils import datetime_now
 
 from mgr_util import to_pretty_timedelta, format_dimless, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
+from object_format import Format
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, OrchestratorError, \
@@ -42,15 +43,6 @@ def nice_bytes(v: Optional[int]) -> str:
     if not v:
         return '-'
     return format_bytes(v, 5)
-
-
-class Format(enum.Enum):
-    plain = 'plain'
-    json = 'json'
-    json_pretty = 'json-pretty'
-    yaml = 'yaml'
-    xml_pretty = 'xml-pretty'
-    xml = 'xml'
 
 
 class ServiceType(enum.Enum):

@@ -329,6 +329,26 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
 HandlerFuncType = Callable[..., Tuple[int, str, str]]
 
+def _extract_target_func(
+    f: HandlerFuncType
+) -> Tuple[HandlerFuncType, Dict[str, Any]]:
+    """In order to interoperate with other decorated functions,
+    we need to find the original function which will provide
+    the main set of arguments. While we descend through the
+    stack of wrapped functions, gather additional arguments
+    the decorators may want to provide.
+    """
+    # use getattr to keep mypy happy
+    wrapped = getattr(f, "__wrapped__", None)
+    if not wrapped:
+        return f, {}
+    extra_args = {}
+    while wrapped is not None:
+        extra_args.update(getattr(f, "extra_args", {}))
+        f = wrapped
+        wrapped = getattr(f, "__wrapped__", None)
+    return f, extra_args
+
 
 class CLICommand(object):
     COMMANDS = {}  # type: Dict[str, CLICommand]
@@ -346,8 +366,9 @@ class CLICommand(object):
 
     KNOWN_ARGS = '_', 'self', 'mgr', 'inbuf', 'return'
 
-    @staticmethod
-    def load_func_metadata(f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
+    @classmethod
+    def _load_func_metadata(cls: Any, f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
+        f, extra_args = _extract_target_func(f)
         desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
         arg_spec = full_argspec.annotations
@@ -357,7 +378,7 @@ class CLICommand(object):
         args = []
         positional = True
         for index, arg in enumerate(full_argspec.args):
-            if arg in CLICommand.KNOWN_ARGS:
+            if arg in cls.KNOWN_ARGS:
                 continue
             if arg == '_end_positional_':
                 positional = False
@@ -377,11 +398,19 @@ class CLICommand(object):
                                                dict(name=arg),
                                                has_default,
                                                positional))
+        for argname, argtype in extra_args.items():
+            # avoid shadowing args from the function
+            if argname in arg_spec:
+                continue
+            arg_spec[argname] = argtype
+            args.append(CephArgtype.to_argdesc(
+                argtype, dict(name=arg), has_default=True, positional=False
+            ))
         return desc, arg_spec, first_default, ' '.join(args)
 
     def store_func_metadata(self, f: HandlerFuncType) -> None:
         self.desc, self.arg_spec, self.first_default, self.args = \
-            self.load_func_metadata(f)
+            self._load_func_metadata(f)
 
     def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
