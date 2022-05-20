@@ -811,34 +811,28 @@ private:
     } else if (segment_seq < other.segment_seq) {
       return -1;
     }
-    if (offset.get_addr_type() == addr_types_t::SEGMENT &&
-	other.offset.get_addr_type() == addr_types_t::SEGMENT) {
-      auto &seg_paddr = offset.as_seg_paddr();
-      auto &o_seg_paddr = other.offset.as_seg_paddr();
-      if (seg_paddr.get_segment_off() > o_seg_paddr.get_segment_off()) {
-	return 1;
-      } else if (seg_paddr.get_segment_off() < o_seg_paddr.get_segment_off()) {
-	return -1;
+    using ret_t = std::pair<int64_t, segment_id_t>;
+    auto to_pair = [](const paddr_t &addr) -> ret_t {
+      if (addr.get_addr_type() == addr_types_t::SEGMENT) {
+	auto &seg_addr = addr.as_seg_paddr();
+	return ret_t(seg_addr.get_segment_off(), seg_addr.get_segment_id());
+      } else if (addr.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
+	auto &blk_addr = addr.as_blk_paddr();
+	return ret_t(blk_addr.get_block_off(), MAX_SEG_ID);
+      } else {
+	assert(0 == "impossible");
+	return ret_t(0, MAX_SEG_ID);
       }
-      if (seg_paddr.get_segment_id() > o_seg_paddr.get_segment_id()) {
-	return 1;
-      } else if (seg_paddr.get_segment_id() < o_seg_paddr.get_segment_id()) {
-	return -1;
-      }
-    } else if (offset.get_addr_type() == addr_types_t::RANDOM_BLOCK &&
-	other.offset.get_addr_type() == addr_types_t::RANDOM_BLOCK) {
-      auto &blk_paddr = offset.as_blk_paddr();
-      auto &o_blk_paddr = other.offset.as_blk_paddr();
-      if (blk_paddr.get_block_off() > o_blk_paddr.get_block_off()) {
-	return 1;
-      } else if (blk_paddr.get_block_off() < o_blk_paddr.get_block_off()) {
-	return -1;
-      }
-    } else {
-      // offset.get_addr_type() != other.get_addr_type()
+    };
+    auto left = to_pair(offset);
+    auto right = to_pair(other.offset);
+    if (left > right) {
+      return 1;
+    } else if (left < right) {
       return -1;
+    } else {
+      return 0;
     }
-    return 0;
   }
 };
 
