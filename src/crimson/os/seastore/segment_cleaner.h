@@ -510,6 +510,20 @@ public:
 
     static config_t get_default() {
       return config_t{
+	  12,   // target_journal_segments
+	  16,   // max_journal_segments
+	  .9,   // available_ratio_gc_max
+	  .2,   // available_ratio_hard_limit
+	  .8,   // reclaim_ratio_hard_limit
+	  .6,   // reclaim_ratio_gc_threshold
+	  1<<20,// reclaim_bytes_per_cycle
+	  1<<17,// rewrite_dirty_bytes_per_cycle
+	  1<<24 // rewrite_backref_bytes_per_cycle
+	};
+    }
+
+    static config_t get_test() {
+      return config_t{
 	  2,    // target_journal_segments
 	  4,    // max_journal_segments
 	  .9,   // available_ratio_gc_max
@@ -517,7 +531,7 @@ public:
 	  .8,   // reclaim_ratio_hard_limit
 	  .6,   // reclaim_ratio_gc_threshold
 	  1<<20,// reclaim_bytes_per_cycle
-	  1<<20,// rewrite_dirty_bytes_per_cycle
+	  1<<17,// rewrite_dirty_bytes_per_cycle
 	  1<<24 // rewrite_backref_bytes_per_cycle
 	};
     }

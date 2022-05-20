@@ -35,7 +35,7 @@ namespace crimson::os::seastore {
 class Journal;
 
 struct tm_make_config_t {
-  bool detailed = true;
+  bool is_test = true;
   journal_type_t j_type = journal_type_t::SEGMENT_JOURNAL;
   placement_hint_t default_placement_hint = placement_hint_t::HOT;
 
@@ -65,10 +65,10 @@ struct tm_make_config_t {
   tm_make_config_t &operator=(const tm_make_config_t &) = default;
 private:
   tm_make_config_t(
-    bool detailed,
+    bool is_test,
     journal_type_t j_type,
     placement_hint_t default_placement_hint)
-    : detailed(detailed), j_type(j_type),
+    : is_test(is_test), j_type(j_type),
       default_placement_hint(default_placement_hint)
   {}
 };
