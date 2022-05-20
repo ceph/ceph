@@ -58,24 +58,26 @@ struct node_offset_packed_t {
 // TODO: consider alignments
 struct shard_pool_t {
   bool operator==(const shard_pool_t& x) const {
-    return (shard == x.shard && pool == x.pool);
+    return (shard == x.shard && pool() == x.pool());
   }
   bool operator!=(const shard_pool_t& x) const { return !(*this == x); }
+
+  pool_t pool() const { return _pool; }
 
   template <KeyT KT>
   static shard_pool_t from_key(const full_key_t<KT>& key);
 
   shard_t shard;
-  pool_t pool;
+  pool_t _pool;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const shard_pool_t& sp) {
-  return os << (int)sp.shard << "," << sp.pool;
+  return os << (int)sp.shard << "," << sp.pool();
 }
 inline MatchKindCMP compare_to(const shard_pool_t& l, const shard_pool_t& r) {
   auto ret = toMatchKindCMP(l.shard, r.shard);
   if (ret != MatchKindCMP::EQ)
     return ret;
-  return toMatchKindCMP(l.pool, r.pool);
+  return toMatchKindCMP(l.pool(), r.pool());
 }
 
 // Note: this is the reversed version of the object hash
@@ -621,7 +623,7 @@ class key_view_t {
     return shard_pool_packed().shard;
   }
   pool_t pool() const {
-    return shard_pool_packed().pool;
+    return shard_pool_packed().pool();
   }
   crush_hash_t crush() const {
     return crush_packed().crush;
@@ -841,7 +843,7 @@ MatchKindCMP compare_to(const full_key_t<Type>& key, const shard_pool_t& target)
   auto ret = toMatchKindCMP(key.shard(), target.shard);
   if (ret != MatchKindCMP::EQ)
     return ret;
-  return toMatchKindCMP(key.pool(), target.pool);
+  return toMatchKindCMP(key.pool(), target.pool());
 }
 
 template <KeyT Type>
