@@ -5,7 +5,6 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
-from distutils.util import strtobool
 from subprocess import SubprocessError
 
 from mgr_util import build_url
@@ -467,7 +466,7 @@ class RgwClient(RestClient):
     def _is_system_user(self, admin_path, userid, request=None) -> bool:
         # pylint: disable=unused-argument
         response = request()
-        return strtobool(response['data']['system'])
+        return response['data']['system']
 
     def is_system_user(self) -> bool:
         return self._is_system_user(self.admin_path, self.userid)
