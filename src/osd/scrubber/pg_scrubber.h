@@ -831,9 +831,6 @@ class PgScrubber : public ScrubPgIF,
    */
   void request_rescrubbing(requested_scrub_t& req_flags);
 
-  ScrubQueue::sched_params_t determine_scrub_time(
-    const requested_scrub_t& request_flags) const;
-
   void unregister_from_osd();
 
   /*
