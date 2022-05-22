@@ -28,94 +28,163 @@ The following chart illustrates basic development workflow:
            | pull request |         git push       \-------------/
            \--------------/
 
-Below we present an explanation of this chart. The explanation is written
-with the assumption that you, the reader, are a beginning developer who
-has an idea for a bugfix, but do not know exactly how to proceed. Watch
-the `Getting Started with Ceph Development
-<https://www.youtube.com/watch?v=t5UIehZ1oLs>`_ video for
-a practical summary of the same.
+This page assumes that you are a new contributor with an idea for a bugfix or
+an enhancement, but you do not know how to proceed. Watch the `Getting Started
+with Ceph Development <https://www.youtube.com/watch?v=t5UIehZ1oLs>`_ video for
+a practical summary of this workflow.
 
 Update the tracker
 ------------------
 
-Before you start, you should know the `Issue tracker`_ number of the bug
-you intend to fix. If there is no tracker issue, now is the time to create
-one.
+Find the `Redmine issue tracker <https://tracker.ceph.com>`_ number of
+the bug you intend to fix. If no tracker issue exists, create one. There is
+only one case in which you do not have to create a Redmine tracker issue: the
+case of minor documentation changes.
 
-The tracker is there to explain the issue (bug) to your fellow Ceph
-developers and keep them informed as you make progress toward resolution.
-To this end, then, provide a descriptive title as well as sufficient
-information and details in the description.
+Simple documentation cleanup does not require a corresponding tracker issue.
+Major documenatation changes do require a tracker issue. Major documentation
+changes include adding new documentation chapters or files, and making 
+substantial changes to the structure or content of the documentation.
 
-If you have sufficient tracker permissions, assign the bug to yourself by
-changing the ``Assignee`` field.  If your tracker permissions have not yet
-been elevated, simply add a comment to the issue with a short message like
-"I am working on this issue".
+A (Redmine) tracker ticket explains the issue (bug) to other Ceph developers to
+keep them informed as the bug nears resolution. Provide a useful, clear title
+and include detailed information in the description. When composing the title
+of the ticket, ask yourself "If I need to search for this ticket two years from
+now, which keywords am I likely to search for?" Then include those keywords in
+the title.
 
-Upstream code
--------------
+If your tracker permissions are elevated, assign the bug to yourself by setting
+the ``Assignee`` field. If your tracker permissions have not been elevated,
+just add a comment with a short message that says "I am working on this issue".
 
-This section, and the ones that follow, correspond to the nodes in the
-above chart.
+Ceph Workflow Overview
+----------------------
 
-The upstream code lives in https://github.com/ceph/ceph.git, which is
-sometimes referred to as the "upstream repo", or simply "upstream". As the
-chart illustrates, we will make a local copy of this code, modify it, test
-our modifications, and submit the modifications back to the upstream repo
-for review.
+Three repositories are involved in the Ceph workflow. They are:
 
-A local copy of the upstream code is made by
+1. The upstream repository (ceph/ceph)
+2. Your fork of the upstream repository (your_github_id/ceph)
+3. Your local working copy of the repository (on your workstation)
 
-1. forking the upstream repo on GitHub, and
-2. cloning your fork to make a local working copy
+The procedure for making changes to the Ceph repository is as follows:
 
-See the `the GitHub documentation
+#. Configure your local environment
+
+   #. :ref:`Create a fork<forking>` of the "upstream Ceph"
+      repository.
+
+   #. :ref:`Clone the fork<cloning>` to your local filesystem.
+
+#. Fix the bug
+
+   #. :ref:`Synchronize local master with upstream master<synchronizing>`.
+         
+   #. :ref:`Create a bugfix branch<bugfix_branch>` in your local working copy.
+         
+   #. :ref:`Make alterations to the local working copy of the repository in your
+      local filesystem<fixing_bug_locally>`.
+   
+   #. :ref:`Push the changes in your local working copy to your fork<push_changes>`.
+
+#. Create a Pull Request to push the change upstream
+
+   #. Create a Pull Request that asks for your changes to be added into the
+      "upstream Ceph" repository.
+
+Preparing Your Local Working Copy of the Ceph Repository 
+--------------------------------------------------------
+
+The procedures in this section, "Preparing Your Local Working Copy of the Ceph
+Repository", must be followed only when you are first setting up your local
+environment. If this is your first time working with the Ceph project, then
+these commands are necessary and are the first commands that you should run.
+
+.. _forking:
+
+Creating a Fork of the Ceph Repository
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+See the `GitHub documentation
 <https://help.github.com/articles/fork-a-repo/#platform-linux>`_ for
 detailed instructions on forking. In short, if your GitHub username is
-"mygithubaccount", your fork of the upstream repo will show up at
-https://github.com/mygithubaccount/ceph. Once you have created your fork,
-you clone it by doing:
+"mygithubaccount", your fork of the upstream repo will appear at
+``https://github.com/mygithubaccount/ceph``. 
+
+.. _cloning:
+
+Cloning Your Fork  
+^^^^^^^^^^^^^^^^^
+
+After you have created your fork, clone it by running the following command:
 
 .. code::
 
     $ git clone https://github.com/mygithubaccount/ceph
 
-While it is possible to clone the upstream repo directly, in this case you
-must fork it first. Forking is what enables us to open a `GitHub pull
-request`_.
+You must fork the Ceph repository before you clone it.  If you fail to fork,
+you cannot open a `GitHub pull request
+<https://docs.github.com/en/free-pro-team@latest/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request>`_.
 
 For more information on using GitHub, refer to `GitHub Help
 <https://help.github.com/>`_.
 
-Local environment
------------------
+Configuring Your Local Environment
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In the local environment created in the previous step, you now have a
-copy of the ``master`` branch in ``remotes/origin/master``. Since the fork
-(https://github.com/mygithubaccount/ceph.git) is frozen in time and the
-upstream repo (https://github.com/ceph/ceph.git, typically abbreviated to
-``ceph/ceph.git``) is updated frequently by other developers, you will need
-to sync your fork periodically. To do this, first add the upstream repo as
-a "remote" and fetch it::
+The commands in this section configure your local git environment so that it
+generates "Signed-off-by:" tags. They also set up your local environment so
+that it can stay synchronized with the upstream repository.
 
-    $ git remote add ceph https://github.com/ceph/ceph.git
-    $ git fetch ceph
+These commands are necessary only during the initial setup of your local
+working copy. Another way to say that is "These commands are necessary
+only the first time that you are working with the Ceph repository. They are,
+however, unavoidable, and if you fail to run them then you will not be able
+to work on the Ceph repository.".
 
-Fetching downloads all objects (commits, branches) that were added since
-the last sync. After running these commands, all the branches from
-``ceph/ceph.git`` are downloaded to the local git repo as
-``remotes/ceph/$BRANCH_NAME`` and can be referenced as
-``ceph/$BRANCH_NAME`` in certain git commands.
+1. Configure your local git environment with your name and email address.  
 
-For example, your local ``master`` branch can be reset to the upstream Ceph
-``master`` branch by doing::
+   .. prompt:: bash $
 
-    $ git fetch ceph
-    $ git checkout master
-    $ git reset --hard ceph/master
+      git config user.name "FIRST_NAME LAST_NAME"
+      git config user.email "MY_NAME@example.com"
 
-Finally, the ``master`` branch of your fork can then be synced to upstream
-master by::
+2. Add the upstream repo as a "remote" and fetch it:
+
+   .. prompt:: bash $
+
+      git remote add ceph https://github.com/ceph/ceph.git
+      git fetch ceph
+
+   These commands fetch all the branches and commits from ``ceph/ceph.git`` to
+   the local git repo as ``remotes/ceph/$BRANCH_NAME`` and can be referenced as
+   ``ceph/$BRANCH_NAME`` in local git commands.
+
+Fixing the Bug
+--------------
+
+.. _synchronizing:
+
+Synchronizing Local Master with Upstream Master
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In your local git environment, there is a copy of the ``master`` branch in
+``remotes/origin/master``. This is called "local master". This copy of the
+master branch (https://github.com/your_github_id/ceph.git) is "frozen in time"
+at the moment that you cloned it, but the upstream repo
+(https://github.com/ceph/ceph.git, typically abbreviated to ``ceph/ceph.git``)
+that it was forked from is not frozen in time: the upstream repo is still being
+updated by other contributors. 
+
+Because upstream master is continually receiving updates from other
+contributors, your fork will drift farther and farther from the state of the
+upstream repo when you cloned it.
+
+You must keep your fork's master branch synchronized with upstream master in
+order to reduce drift between your fork's master branch and the upstream master
+branch.
+
+Here are the commands for keeping your fork synchronized with the
+upstream repository:
 
     $ git push -u origin master
 
@@ -124,7 +193,10 @@ Bugfix branch
 
 Next, create a branch for the bugfix:
 
-.. code::
+.. _bugfix_branch:
+
+Creating a Bugfix branch
+^^^^^^^^^^^^^^^^^^^^^^^^
 
     $ git checkout master
     $ git checkout -b fix_1
@@ -137,100 +209,177 @@ for long! You are now ready to modify the code.
 Fix bug locally
 ---------------
 
-At this point, change the status of the tracker issue to "In progress" to
-communicate to the other Ceph developers that you have begun working on a
-fix. If you don't have permission to change that field, your comment that
-you are working on the issue is sufficient.
+The first command (git checkout master) makes sure that the bugfix branch
+"fix_1" is created from the most recent state of the master branch of the
+upstream repository. 
 
-Possibly, your fix is very simple and requires only minimal testing.
-More likely, it will be an iterative process involving trial and error, not
-to mention skill. An explanation of how to fix bugs is beyond the
-scope of this document. Instead, we focus on the mechanics of the process
-in the context of the Ceph project.
+The second command (git checkout -b fix_1) creates a "bugfix branch" called
+"fix_1" in your local working copy of the repository. The changes that you make
+in order to fix the bug will be commited to this branch.
 
-A detailed discussion of the tools available for validating your bugfixes,
-see the chapters on testing.
+The third command (git push -u origin fix_1) pushes the bugfix branch from
+your local working repository to your fork of the upstream repository.
 
-For now, let us just assume that you have finished work on the bugfix and
-that you have tested it and believe it works. Commit the changes to your local
-branch using the ``--signoff`` option::
+.. _fixing_bug_locally:
 
-    $ git commit -as
+Fixing the bug in the local working copy
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-and push the changes to your fork::
+#. Updating the tracker 
 
-    $ git push origin fix_1
+   In the `Ceph issue tracker <https://tracker.ceph.com>`_, change the status
+   of the tracker issue to "In progress".  This communicates to other Ceph
+   contributors that you have begun working on a fix, which helps to avoid
+   duplication of effort. If you don't have permission to change that field,
+   your comment that you are working on the issue is sufficient.
 
-GitHub pull request
--------------------
+#. Fixing the bug itself
+
+   This guide cannot tell you how to fix the bug that you have chosen to fix.
+   This guide assumes that you know what required improvement, and that you
+   know what to do to provide that improvement.
+
+   It might be that your fix is simple and requires only minimal testing. But
+   that's unlikely. It is more likely that the process of fixing your bug will
+   be iterative and will involve trial, error, skill, and patience. 
+
+   For a detailed discussion of the tools available for validating bugfixes,
+   see the chapters on testing.
+
+Pushing the Fix to Your Fork
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   
+You have finished work on the bugfix. You have tested the bugfix, and you
+believe that it works. 
+   
+#. Commit the changes to your local working copy.
+
+   Commit the changes to the `fix_1` branch of your local working copy by using
+   the ``--signoff`` option (here represented as the `s` portion of the `-as`
+   flag): 
+
+   .. prompt:: bash $
+
+      git commit -as
+
+   .. _push_changes:
+
+#. Push the changes to your fork:
+
+   Push the changes from the `fix_1` branch of your local working copy to the
+   `fix_1` branch of your fork of the upstream repository:
+
+   .. prompt:: bash $
+
+      git push origin fix_1
+   
+   .. note::
+
+      In the command `git push origin fix_1`, `origin` is the name of your fork
+      of the upstream Ceph repository, and can be thought of as a nickname for
+      `git@github.com:username/ceph.git`, where `username` is your GitHub
+      username.
+
+      It is possible that `origin` is not the name of your fork. Discover the
+      name of your fork by running `git remote -v`, as shown here:
+
+      .. code-block:: bash
+
+         $ git remote -v
+         ceph	https://github.com/ceph/ceph.git (fetch)
+         ceph	https://github.com/ceph/ceph.git (push)
+         origin	git@github.com:username/ceph.git (fetch)
+         origin	git@github.com:username/ceph.git (push)
+
+       The line "origin git@github.com:username/ceph.git (fetch)" and the line
+       "origin git@github.com:username/ceph.git (push)" provide the information
+       that "origin" is the name of your fork of the Ceph repository.
 
 The next step is to open a GitHub pull request. The purpose of this step is
 to make your bugfix available to the community of Ceph developers.  They
 will review it and may do additional testing on it.
 
-In short, this is the point where you "go public" with your modifications.
-Psychologically, you should be prepared to receive suggestions and
-constructive criticism. Don't worry! In our experience, the Ceph project is
-a friendly place!
+After you have pushed the bugfix to your fork, open a GitHub pull request
+(PR). This makes your bugfix visible to the community of Ceph contributors.
+They will review it. They may perform additional testing on your bugfix, and
+they might request changes to the bugfix.
 
-If you are uncertain how to use pull requests, you may read
-`this GitHub pull request tutorial`_.
+Be prepared to receive suggestions and constructive criticism in the form of
+comments within the PR. 
+
+If you don't know how to create and manage pull requests, read `this GitHub
+pull request tutorial`_.
 
 .. _`this GitHub pull request tutorial`:
    https://help.github.com/articles/using-pull-requests/
 
-For some ideas on what constitutes a "good" pull request, see
+To learn what constitutes a "good" pull request, see
 the `Git Commit Good Practice`_ article at the `OpenStack Project Wiki`_.
 
 .. _`Git Commit Good Practice`: https://wiki.openstack.org/wiki/GitCommitMessages
 .. _`OpenStack Project Wiki`: https://wiki.openstack.org/wiki/Main_Page
 
-Once your pull request (PR) is opened, update the `Issue tracker`_ by
-adding a comment to the bug pointing the other developers to your PR. The
-update can be as simple as::
+See also our own `Submitting Patches
+<https://github.com/ceph/ceph/blob/master/SubmittingPatches.rst>`_ document.
+
+After your pull request (PR) has been opened, update the `issue tracker
+<https://tracker.ceph.com>`_ by adding a comment directing other contributors
+to your PR. The comment can be as simple as this::
 
     *PR*: https://github.com/ceph/ceph/pull/$NUMBER_OF_YOUR_PULL_REQUEST
 
 Automated PR validation
 -----------------------
 
-When your PR hits GitHub, the Ceph project's `Continuous Integration (CI)
-<https://en.wikipedia.org/wiki/Continuous_integration>`_
-infrastructure will test it automatically. At the time of this writing
-(March 2016), the automated CI testing included a test to check that the
-commits in the PR are properly signed (see `Submitting patches`_) and a
-`make check`_ test.
+When you create or update your PR, the Ceph project's `Continuous Integration
+(CI) <https://en.wikipedia.org/wiki/Continuous_integration>`_ infrastructure
+automatically tests it. At the time of this writing (May 2022), the automated
+CI testing included many tests. These five are among them:
 
-The latter, `make check`_, builds the PR and runs it through a battery of
-tests. These tests run on machines operated by the Ceph Continuous
-Integration (CI) team. When the tests complete, the result will be shown
-on GitHub in the pull request itself.
+#. a test to check that the commits are properly signed (see `Submitting Patches <https://github.com/ceph/ceph/blob/master/SubmittingPatches.rst>`_):
+#. a test to check that the documentation builds
+#. a test to check that the submodules are unmodified
+#. a test to check that the API is in order
+#. a :ref:`make check<make-check>` test
 
-You can (and should) also test your modifications before you open a PR.
-Refer to the chapters on testing for details.
+Additional tests may be run depending on which files your PR modifies.
+
+The :ref:`make check<make-check>` test builds the PR and runs it through a
+battery of tests. These tests run on servers that are operated by the Ceph
+Continuous Integration (CI) team. When the tests have completed their run, the
+result is shown on GitHub in the pull request itself.
+
+Test your modifications before you open a PR.  Refer to the chapters
+on testing for details.
 
 Notes on PR make check test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The GitHub `make check`_ test is driven by a Jenkins instance.
+The GitHub :ref:`make check<make-check>` test is driven by a Jenkins instance.
 
-Jenkins merges the PR branch into the latest version of the base branch before
-starting the build, so you don't have to rebase the PR to pick up any fixes.
+Jenkins merges your PR branch into the latest version of the base branch before
+it starts any tests. This means that you don't have to rebase the PR in order
+to pick up any fixes.
 
-You can trigger the PR tests at any time by adding a comment to the PR - the
-comment should contain the string "test this please". Since a human subscribed
-to the PR might interpret that as a request for him or her to test the PR,
-it's good to write the request as "Jenkins, test this please".
+You can trigger PR tests at any time by adding a comment to the PR - the
+comment should contain the string "test this please". Since a human who is
+subscribed to the PR might interpret that as a request for him or her to test
+the PR, you must address Jenkins directly. For example, write "jenkins retest
+this please". If you need to run only one of the tests, you can request it with
+a command like "jenkins test signed". A list of these requests is automatically
+added to the end of each new PR's description, so check there to find the
+single test you need.
 
-The `make check`_ log is the place to go if there is a failure and you're not
-sure what caused it. To reach it, first click on "details" (next to the `make
-check`_ test in the PR) to get into the Jenkins web GUI, and then click on
-"Console Output" (on the left).
+If there is a build failure and you aren't sure what caused it, check the
+:ref:`make check<make-check>` log. To access the make check log, click the
+"details" (next to the :ref:`make check<make-check>` test in the PR) link to
+enter the Jenkins web GUI. Then click "Console Output" (on the left).
 
-Jenkins is set up to grep the log for strings known to have been associated
-with `make check`_ failures in the past. However, there is no guarantee that
-the strings are associated with any given `make check`_ failure. You have to
-dig into the log to be sure.
+Jenkins is configured to search logs for strings that are known to have been
+associated with :ref:`make check<make-check>` failures in the past. However,
+there is no guarantee that these known strings are associated with any given
+:ref:`make check<make-check>` failure. You'll have to read through the log to
+determine the cause of your specific failure.
 
 Integration tests AKA ceph-qa-suite
 -----------------------------------
@@ -245,16 +394,16 @@ sub-directory`_ and are run via the `teuthology framework`_.
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
 The Ceph community has access to the `Sepia lab
-<https://wiki.sepia.ceph.com/doku.php>`_ where `integration tests`_ can be
-run on real hardware. Other developers may add tags like "needs-qa" to your
-PR. This allows PRs that need testing to be merged into a single branch and
-tested all at the same time. Since teuthology suites can take hours (even
-days in some cases) to run, this can save a lot of time.
+<https://wiki.sepia.ceph.com/doku.php>`_ where :ref:`integration
+tests<integration-tests>` can be run on real hardware. Other developers may add
+tags like "needs-qa" to your PR. This allows PRs that need testing to be merged
+into a single branch and tested all at the same time. Since teuthology suites
+can take hours (even days in some cases) to run, this can save a lot of time.
 
 To request access to the Sepia lab, start `here <https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
 
-Integration testing is discussed in more detail in the `integration testing`_
-chapter.
+Integration testing is discussed in more detail in the :ref:`integration
+tests<integration-tests>` chapter.
 
 Code review
 -----------
@@ -262,7 +411,7 @@ Code review
 Once your bugfix has been thoroughly tested, or even during this process,
 it will be subjected to code review by other developers. This typically
 takes the form of correspondence in the PR itself, but can be supplemented
-by discussions on `IRC`_ and the `Mailing list`_.
+by discussions on :ref:`IRC<irc>` and the :ref:`mailing-list-subscribe`.
 
 Amending your PR
 ----------------
@@ -290,17 +439,9 @@ Merge
 The bugfixing process culminates when one of the project leads decides to
 merge your PR.
 
-When this happens, it is a signal for you (or the lead who merged the PR)
-to change the `Issue tracker`_ status to "Resolved". Some issues may be
-flagged for backporting, in which case the status should be changed to
-"Pending Backport" (see the `Backporting`_ chapter for details).
+When this happens, it is a signal for you (or the lead who merged the PR) to
+change the `Ceph issue tracker <https://tracker.ceph.com>`_ status to
+"Resolved". Some issues may be flagged for backporting, in which case the
+status should be changed to "Pending Backport" (see the
+:ref:`Backporting<backporting>` chapter for details).
 
-
-.. _make check:
-.. _Backporting: ../essentials/#backporting
-.. _IRC:  ../essentials/#irc
-.. _Issue Tracker: ../issue-tracker
-.. _Integration Tests: ../tests-integration-tests
-.. _Integration Testing: ../tests-integration-tests
-.. _Mailing List: ../essentials/#mailing-list
-.. _Submitting Patches: ../essentials/#submitting-patches
