@@ -395,25 +395,34 @@ process is active within the cluster.*
 CEPHADM_CHECK_KERNEL_VERSION
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The OS kernel version (maj.min) is checked for consistency across the hosts.
-The kernel version of the majority of the hosts is used as the basis for 
+The kernel version of the majority of the hosts is used as the basis for
 identifying anomalies.
 
 .. _client_keyrings_and_configs:
 
 Client keyrings and configs
 ===========================
-
 Cephadm can distribute copies of the ``ceph.conf`` file and client keyring
-files to hosts. It is usually a good idea to store a copy of the config and
-``client.admin`` keyring on any host used to administer the cluster via the
-CLI.  By default, cephadm does this for any nodes that have the ``_admin``
-label (which normally includes the bootstrap host).
+files to hosts. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy),
+in addition to the default location ``/etc/ceph/`` cephadm also stores config
+and keyring files in the ``/var/lib/ceph/<fsid>/config`` directory. It is usually
+a good idea to store a copy of the config and ``client.admin`` keyring on any host
+used to administer the cluster via the CLI. By default, cephadm does this for any
+nodes that have the ``_admin`` label (which normally includes the bootstrap host).
+
+.. note:: Ceph daemons will still use files on ``/etc/ceph/``. The new configuration
+   location ``/var/lib/ceph/<fsid>/config`` is used by cephadm only. Having this config
+   directory under the fsid helps cephadm to load the configuration associated with
+   the cluster.
+
 
 When a client keyring is placed under management, cephadm will:
 
   - build a list of target hosts based on the specified placement spec (see
     :ref:`orchestrator-cli-placement-spec`)
   - store a copy of the ``/etc/ceph/ceph.conf`` file on the specified host(s)
+  - store a copy of the ``ceph.conf`` file at ``/var/lib/ceph/<fsid>/config/ceph.conf`` on the specified host(s)
+  - store a copy of the ``ceph.client.admin.keyring`` file at ``/var/lib/ceph/<fsid>/config/ceph.client.admin.keyring`` on the specified host(s)
   - store a copy of the keyring file on the specified host(s)
   - update the ``ceph.conf`` file as needed (e.g., due to a change in the cluster monitors)
   - update the keyring file if the entity's key is changed (e.g., via ``ceph
