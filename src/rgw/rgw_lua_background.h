@@ -32,14 +32,36 @@ inline void pushvalue(lua_State* L, bool value) {
   lua_pushboolean(L, value);
 }
 
+
 struct RGWTable : EmptyMetaTable {
+
+  static const char* INCREMENT;
+  static const char* DECREMENT;
+
   static std::string TableName() {return "RGW";}
   static std::string Name() {return TableName() + "Meta";}
   
+  static int increment_by(lua_State* L);
+
   static int IndexClosure(lua_State* L) {
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(2)));
     const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(2)));
     const char* index = luaL_checkstring(L, 2);
+
+    if (strcasecmp(index, INCREMENT) == 0) {
+      lua_pushlightuserdata(L, map);
+      lua_pushlightuserdata(L, &mtx);
+      lua_pushboolean(L, false /*increment*/);
+      lua_pushcclosure(L, increment_by, THREE_UPVALS);
+      return ONE_RETURNVAL;
+    } 
+    if (strcasecmp(index, DECREMENT) == 0) {
+      lua_pushlightuserdata(L, map);
+      lua_pushlightuserdata(L, &mtx);
+      lua_pushboolean(L, true /*decrement*/);
+      lua_pushcclosure(L, increment_by, THREE_UPVALS);
+      return ONE_RETURNVAL;
+    }
 
     std::lock_guard l(mtx);
 
@@ -67,6 +89,10 @@ struct RGWTable : EmptyMetaTable {
     auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(2)));
     const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(1)));
     const auto index = luaL_checkstring(L, 2);
+    
+    if (strcasecmp(index, INCREMENT) == 0 || strcasecmp(index, DECREMENT) == 0) {
+        return luaL_error(L, "increment/decrement are reserved function names for RGW");
+    }
 
     std::unique_lock l(mtx);
 

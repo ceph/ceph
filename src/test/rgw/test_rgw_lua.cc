@@ -1023,3 +1023,141 @@ TEST(TestRGWLuaBackground, TableIterate)
   EXPECT_EQ(get_table_value<int64_t>(lua_background, "size"), 5);
 }
 
+TEST(TestRGWLuaBackground, TableIncrement)
+{
+  TestBackground lua_background("");
+
+  const std::string request_script = R"(
+    RGW["key1"] = 42
+    RGW["key2"] = 42.2
+    RGW.increment("key1")
+    assert(RGW["key1"] == 43)
+    RGW.increment("key2")
+    assert(RGW["key2"] == 43.2)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLuaBackground, TableIncrementBy)
+{
+  TestBackground lua_background("");
+
+  const std::string request_script = R"(
+    RGW["key1"] = 42
+    RGW["key2"] = 42.2
+    RGW.increment("key1", 10)
+    assert(RGW["key1"] == 52)
+    RGW.increment("key2", 10)
+    assert(RGW["key2"] == 52.2)
+    RGW.increment("key1", 0.2)
+    assert(RGW["key1"] == 52.2)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLuaBackground, TableDecrement)
+{
+  TestBackground lua_background("");
+
+  const std::string request_script = R"(
+    RGW["key1"] = 42
+    RGW["key2"] = 42.2
+    RGW.decrement("key1")
+    assert(RGW["key1"] == 41)
+    RGW.decrement("key2")
+    assert(RGW["key2"] == 41.2)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLuaBackground, TableDecrementBy)
+{
+  TestBackground lua_background("");
+
+  const std::string request_script = R"(
+    RGW["key1"] = 42
+    RGW["key2"] = 42.2
+    RGW.decrement("key1", 10)
+    assert(RGW["key1"] == 32)
+    RGW.decrement("key2", 10)
+    assert(RGW["key2"] == 32.2)
+    RGW.decrement("key1", 0.8)
+    assert(RGW["key1"] == 31.2)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLuaBackground, TableIncrementValueError)
+{
+  TestBackground lua_background("");
+
+  std::string request_script = R"(
+    -- cannot increment string values
+    RGW["key1"] = "hello"
+    RGW.increment("key1")
+  )";
+
+  DEFINE_REQ_STATE;
+
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_NE(rc, 0);
+  
+  request_script = R"(
+    -- cannot increment bool values
+    RGW["key1"] = true
+    RGW.increment("key1")
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_NE(rc, 0);
+  
+  request_script = R"(
+    -- cannot increment by string values
+    RGW["key1"] = 99
+    RGW.increment("key1", "kaboom")
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_NE(rc, 0);
+}
+
+TEST(TestRGWLuaBackground, TableIncrementError)
+{
+  TestBackground lua_background("");
+
+  std::string request_script = R"(
+    -- missing argument
+    RGW["key1"] = 11
+    RGW.increment()
+  )";
+
+  DEFINE_REQ_STATE;
+
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_NE(rc, 0);
+  
+  request_script = R"(
+    -- used as settable field
+    RGW.increment = 11
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
+  ASSERT_NE(rc, 0);
+}
+
