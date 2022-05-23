@@ -1,8 +1,10 @@
 import datetime
+import enum
 from copy import copy
 import ipaddress
 import json
 import logging
+import math
 import socket
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
     NamedTuple, Type
@@ -26,6 +28,12 @@ logger = logging.getLogger(__name__)
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
+
+
+class HostCacheStatus(enum.Enum):
+    stray = 'stray'
+    host = 'host'
+    devices = 'devices'
 
 
 class Inventory:
@@ -463,7 +471,9 @@ class HostCache():
         # type: () -> None
         for k, v in self.mgr.get_store_prefix(HOST_CACHE_PREFIX).items():
             host = k[len(HOST_CACHE_PREFIX):]
-            if host not in self.mgr.inventory:
+            if self._get_host_cache_entry_status(host) != HostCacheStatus.host:
+                if self._get_host_cache_entry_status(host) == HostCacheStatus.devices:
+                    continue
                 self.mgr.log.warning('removing stray HostCache host record %s' % (
                     host))
                 self.mgr.set_store(k, None)
@@ -482,14 +492,16 @@ class HostCache():
                 self.daemons[host] = {}
                 self.osdspec_previews[host] = []
                 self.osdspec_last_applied[host] = {}
-                self.devices[host] = []
                 self.networks[host] = {}
                 self.daemon_config_deps[host] = {}
                 for name, d in j.get('daemons', {}).items():
                     self.daemons[host][name] = \
                         orchestrator.DaemonDescription.from_json(d)
+                self.devices[host] = []
+                # still want to check old device location for upgrade scenarios
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
+                self.devices[host] += self.load_host_devices(host)
                 self.networks[host] = j.get('networks_and_interfaces', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
                 self.last_client_files[host] = j.get('last_client_files', {})
@@ -516,6 +528,23 @@ class HostCache():
                 self.mgr.log.warning('unable to load cached state for %s: %s' % (
                     host, e))
                 pass
+
+    def _get_host_cache_entry_status(self, host: str) -> HostCacheStatus:
+        # return whether a host cache entry in the config-key
+        # store is for a host, a set of devices or is stray.
+        # for a host, the entry name will match a hostname in our
+        # inventory. For devices, it will be formatted
+        # <hostname>.devices.<integer> where <hostname> is
+        # in out inventory. If neither case applies, it is stray
+        if host in self.mgr.inventory:
+            return HostCacheStatus.host
+        try:
+            # try stripping off the ".devices.<integer>" and see if we get
+            # a host name that matches our inventory
+            actual_host = '.'.join(host.split('.')[:-2])
+            return HostCacheStatus.devices if actual_host in self.mgr.inventory else HostCacheStatus.stray
+        except Exception:
+            return HostCacheStatus.stray
 
     def update_host_daemons(self, host, dm):
         # type: (str, Dict[str, orchestrator.DaemonDescription]) -> None
@@ -671,9 +700,6 @@ class HostCache():
         if host in self.daemons:
             for name, dd in self.daemons[host].items():
                 j['daemons'][name] = dd.to_json()
-        if host in self.devices:
-            for d in self.devices[host]:
-                j['devices'].append(d.to_json())
         if host in self.networks:
             j['networks_and_interfaces'] = self.networks[host]
         if host in self.daemon_config_deps:
@@ -697,8 +723,70 @@ class HostCache():
             j['scheduled_daemon_actions'] = self.scheduled_daemon_actions[host]
         if host in self.metadata_up_to_date:
             j['metadata_up_to_date'] = self.metadata_up_to_date[host]
+        if host in self.devices:
+            self.save_host_devices(host)
 
         self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
+
+    def save_host_devices(self, host: str) -> None:
+        if host not in self.devices or not self.devices[host]:
+            logger.debug(f'Host {host} has no devices to save')
+            return
+
+        devs: List[Dict[str, Any]] = []
+        for d in self.devices[host]:
+            devs.append(d.to_json())
+
+        def byte_len(s: str) -> int:
+            return len(s.encode('utf-8'))
+
+        dev_cache_counter: int = 0
+        cache_size: int = self.mgr.get_foreign_ceph_option('mon', 'mon_config_key_max_entry_size')
+        if cache_size is not None and cache_size != 0 and byte_len(json.dumps(devs)) > cache_size - 1024:
+            # no guarantee all device entries take up the same amount of space
+            # splitting it up so there's one more entry than we need should be fairly
+            # safe and save a lot of extra logic checking sizes
+            cache_entries_needed = math.ceil(byte_len(json.dumps(devs)) / cache_size) + 1
+            dev_sublist_size = math.ceil(len(devs) / cache_entries_needed)
+            dev_lists: List[List[Dict[str, Any]]] = [devs[i:i + dev_sublist_size]
+                                                     for i in range(0, len(devs), dev_sublist_size)]
+            for dev_list in dev_lists:
+                dev_dict: Dict[str, Any] = {'devices': dev_list}
+                if dev_cache_counter == 0:
+                    dev_dict.update({'entries': len(dev_lists)})
+                self.mgr.set_store(HOST_CACHE_PREFIX + host + '.devices.'
+                                   + str(dev_cache_counter), json.dumps(dev_dict))
+                dev_cache_counter += 1
+        else:
+            self.mgr.set_store(HOST_CACHE_PREFIX + host + '.devices.'
+                               + str(dev_cache_counter), json.dumps({'devices': devs, 'entries': 1}))
+
+    def load_host_devices(self, host: str) -> List[inventory.Device]:
+        dev_cache_counter: int = 0
+        devs: List[Dict[str, Any]] = []
+        dev_entries: int = 0
+        try:
+            # number of entries for the host's devices should be in
+            # the "entries" field of the first entry
+            dev_entries = json.loads(self.mgr.get_store(
+                HOST_CACHE_PREFIX + host + '.devices.0')).get('entries')
+        except Exception:
+            logger.debug(f'No device entries found for host {host}')
+        for i in range(dev_entries):
+            try:
+                new_devs = json.loads(self.mgr.get_store(
+                    HOST_CACHE_PREFIX + host + '.devices.' + str(i))).get('devices', [])
+                if len(new_devs) > 0:
+                    # verify list contains actual device objects by trying to load one from json
+                    inventory.Device.from_json(new_devs[0])
+                    # if we didn't throw an Exception on above line, we can add the devices
+                    devs = devs + new_devs
+                    dev_cache_counter += 1
+            except Exception as e:
+                logger.error(('Hit exception trying to load devices from '
+                             + f'{HOST_CACHE_PREFIX + host + ".devices." + str(dev_cache_counter)} in key store: {e}'))
+                return []
+        return [inventory.Device.from_json(d) for d in devs]
 
     def rm_host(self, host):
         # type: (str) -> None
