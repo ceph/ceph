@@ -18,7 +18,8 @@ security fixes.
 .. toctree::
    :maxdepth: 1
    :hidden:
-
+   
+   Quincy (v17.2.*) <quincy>
    Pacific (v16.2.*) <pacific>
    Octopus (v15.2.*) <octopus>
 
