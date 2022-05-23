@@ -387,6 +387,10 @@ void LogMonitor::log_external(const LogEntry& le)
   }
 
   if (g_conf()->mon_cluster_log_to_file) {
+    if (this->log_rotated.exchange(false)) {
+      this->log_external_close_fds();
+    }
+
     auto p = channel_fds.find(channel);
     int fd;
     if (p == channel_fds.end()) {

@@ -501,6 +501,7 @@ void Monitor::handle_signal(int signum)
   derr << "*** Got Signal " << sig_str(signum) << " ***" << dendl;
   if (signum == SIGHUP) {
     sighup_handler(signum);
+    logmon()->reopen_logs();
   } else {
     ceph_assert(signum == SIGINT || signum == SIGTERM);
     shutdown();
