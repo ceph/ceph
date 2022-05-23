@@ -183,23 +183,24 @@ def create_users(ctx, config):
                             '--cluster', cluster_name,
                         ],
                     )
-                    ctx.cluster.only(client).run(
-                        args=[
-                            'adjust-ulimits',
-                            'ceph-coverage',
-                            '{tdir}/archive/coverage'.format(tdir=testdir),
-                            'radosgw-admin',
-                            '-n', client_with_id,
-                            'mfa', 'create',
-                            '--uid', s3tests_conf[section]['user_id'],
-                            '--totp-serial', s3tests_conf[section]['totp_serial'],
-                            '--totp-seed', s3tests_conf[section]['totp_seed'],
-                            '--totp-seconds', s3tests_conf[section]['totp_seconds'],
-                            '--totp-window', '8',
-                            '--totp-seed-type', 'base32',
-                            '--cluster', cluster_name,
-                        ],
-                    )
+                    if not ctx.dbstore_variable:
+                        ctx.cluster.only(client).run(
+                            args=[
+                                'adjust-ulimits',
+                                'ceph-coverage',
+                                '{tdir}/archive/coverage'.format(tdir=testdir),
+                                'radosgw-admin',
+                                '-n', client_with_id,
+                                'mfa', 'create',
+                                '--uid', s3tests_conf[section]['user_id'],
+                                '--totp-serial', s3tests_conf[section]['totp_serial'],
+                                '--totp-seed', s3tests_conf[section]['totp_seed'],
+                                '--totp-seconds', s3tests_conf[section]['totp_seconds'],
+                                '--totp-window', '8',
+                                '--totp-seed-type', 'base32',
+                                '--cluster', cluster_name,
+                            ],
+                        )
 
     else:
         users = {'s3 main': 'foo', 's3 alt': 'bar', 's3 tenant': 'testx$tenanteduser'}
@@ -229,23 +230,24 @@ def create_users(ctx, config):
                             '--cluster', cluster_name,
                         ],
                     )
-                ctx.cluster.only(client).run(
-                        args=[
-                            'adjust-ulimits',
-                            'ceph-coverage',
-                            '{tdir}/archive/coverage'.format(tdir=testdir),
-                            'radosgw-admin',
-                            '-n', client_with_id,
-                            'mfa', 'create',
-                            '--uid', s3tests_conf[section]['user_id'],
-                            '--totp-serial', s3tests_conf[section]['totp_serial'],
-                            '--totp-seed', s3tests_conf[section]['totp_seed'],
-                            '--totp-seconds', s3tests_conf[section]['totp_seconds'],
-                            '--totp-window', '8',
-                            '--totp-seed-type', 'base32',
-                            '--cluster', cluster_name,
-                        ],
-                    )
+                if not ctx.dbstore_variable:
+                    ctx.cluster.only(client).run(
+                            args=[
+                                'adjust-ulimits',
+                                'ceph-coverage',
+                                '{tdir}/archive/coverage'.format(tdir=testdir),
+                                'radosgw-admin',
+                                '-n', client_with_id,
+                                'mfa', 'create',
+                                '--uid', s3tests_conf[section]['user_id'],
+                                '--totp-serial', s3tests_conf[section]['totp_serial'],
+                                '--totp-seed', s3tests_conf[section]['totp_seed'],
+                                '--totp-seconds', s3tests_conf[section]['totp_seconds'],
+                                '--totp-window', '8',
+                                '--totp-seed-type', 'base32',
+                                '--cluster', cluster_name,
+                            ],
+                        )
 
     if "TOKEN" in os.environ:
         s3tests_conf.setdefault('webidentity', {})
@@ -609,10 +611,17 @@ def task(ctx, config):
             ctx.sts_variable = True
         else:
             ctx.sts_variable = False
+
         if 'cloudtier_tests' in client_config:
             ctx.cloudtier_variable = True
         else:
             ctx.cloudtier_variable = False
+
+        if 'dbstore_tests' in client_config:
+            ctx.dbstore_variable = True
+        else:
+            ctx.dbstore_variable = False
+
         #This will be the structure of config file when you want to run webidentity_test (sts-test)
         if ctx.sts_variable and "TOKEN" in os.environ:
             for client in clients:
