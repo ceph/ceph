@@ -270,6 +270,21 @@ class DecoDemo:
             raise object_format.ErrorResponse(f"{name} bad")
         return 0, name, ""
 
+    @CLICommand("empty one", perm="rw")
+    @object_format.EmptyResponder()
+    def empty_one(self, name: str = "default") -> None:
+        # in real code, this would be making some sort of state change
+        # but we need to handle erors still
+        if name in ["pow"]:
+            raise object_format.ErrorResponse(name, return_value=-5)
+        return
+
+    @CLICommand("empty bad", perm="rw")
+    @object_format.EmptyResponder()
+    def empty_bad(self, name: str = "default") -> int:
+        # in real code, this would be making some sort of state change
+        return 5
+
 
 @pytest.mark.parametrize(
     "prefix, args, response",
@@ -413,6 +428,26 @@ class DecoDemo:
                 "zamboni bad",
             ),
         ),
+        # ---
+        (
+            "empty one",
+            {"name": "zucchini"},
+            (
+                0,
+                "",
+                "",
+            ),
+        ),
+        # ---
+        (
+            "empty one",
+            {"name": "pow"},
+            (
+                -5,
+                "",
+                "pow",
+            ),
+        ),
     ],
 )
 def test_cli_with_decorators(prefix, args, response):
@@ -447,3 +482,9 @@ def test_error_response():
     assert r[1] == ""
     assert "blat" in r[2]
     assert r[0] == e3.mgr_return_value()
+
+
+def test_empty_responder_return_check():
+    dd = DecoDemo()
+    with pytest.raises(ValueError):
+        CLICommand.COMMANDS["empty bad"].call(dd, {}, None)
