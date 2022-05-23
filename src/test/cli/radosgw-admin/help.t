@@ -162,6 +162,7 @@
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
     role-policy delete         remove policy attached to a role
+    role update                update max_session_duration of a role
     reshard add                schedule a resharding of a bucket
     reshard list               list all bucket resharding or scheduled to be resharded
     reshard status             read bucket resharding status

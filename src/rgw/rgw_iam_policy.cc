@@ -156,6 +156,7 @@ static const actpair actpairs[] =
  { "iam:TagRole", iamTagRole},
  { "iam:ListRoleTags", iamListRoleTags},
  { "iam:UntagRole", iamUntagRole},
+ { "iam:UpdateRole", iamUpdateRole},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
@@ -1363,6 +1364,9 @@ const char* action_bit_string(uint64_t action) {
 
   case iamUntagRole:
     return "iam:UntagRole";
+
+  case iamUpdateRole:
+    return "iam:UpdateRole";
 
   case stsAssumeRole:
     return "sts:AssumeRole";

@@ -949,3 +949,68 @@ void RGWUntagRole::execute(optional_yield y)
     s->formatter->close_section();
   }
 }
+
+int RGWUpdateRole::get_params()
+{
+  role_name = s->info.args.get("RoleName");
+  max_session_duration = s->info.args.get("MaxSessionDuration");
+
+  if (role_name.empty()) {
+    ldpp_dout(this, 20) << "ERROR: Role name is empty"<< dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWUpdateRole::execute(optional_yield y)
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  if (!store->is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("MaxSessionDuration");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+
+    RGWUserInfo info = s->user->get_info();
+    const auto& it = info.access_keys.begin();
+    RGWAccessKey key;
+    if (it != info.access_keys.end()) {
+      key.id = it->first;
+      RGWAccessKey cred = it->second;
+      key.key = cred.key;
+    }
+    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
+  }
+
+  if (!_role->validate_max_session_duration(this)) {
+    op_ret = -EINVAL;
+    return;
+  }
+
+  _role->update_max_session_duration(max_session_duration);
+  op_ret = _role->update(this, y);
+
+  s->formatter->open_object_section("UpdateRoleResponse");
+  s->formatter->open_object_section("UpdateRoleResult");
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->close_section();
+}
