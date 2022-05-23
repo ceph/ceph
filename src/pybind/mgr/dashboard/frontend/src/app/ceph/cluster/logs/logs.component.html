@@ -78,7 +78,7 @@
       <label for="logs-priority"
              i18n>Priority:</label>
       <select id="logs-priority"
-              class="form-control custom-select"
+              class="form-control"
               [(ngModel)]="priority"
               (ngModelChange)="filterLogs()">
         <option *ngFor="let prio of priorities"

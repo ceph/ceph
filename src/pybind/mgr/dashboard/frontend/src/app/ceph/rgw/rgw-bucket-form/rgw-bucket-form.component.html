@@ -76,7 +76,7 @@
           <div class="cd-col-form-input">
             <select id="owner"
                     name="owner"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="owner"
                     [autofocus]="editing">
               <option i18n
@@ -105,7 +105,7 @@
               <select id="placement-target"
                       name="placement-target"
                       formControlName="placement-target"
-                      class="form-control custom-select">
+                      class="form-control">
                 <option i18n
                         *ngIf="placementTargets === null"
                         [ngValue]="null">Loading...</option>
@@ -243,7 +243,7 @@
                    for="lock_mode"
                    i18n>Mode</label>
             <div class="cd-col-form-input">
-              <select class="form-control custom-select"
+              <select class="form-control"
                       formControlName="lock_mode"
                       name="lock_mode"
                       id="lock_mode">
