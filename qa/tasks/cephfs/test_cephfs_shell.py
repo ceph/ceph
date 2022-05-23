@@ -361,6 +361,9 @@ class TestGetAndPut(TestCephFSShell):
         log.info("o_hash:{}".format(o_hash))
         assert (s_hash == o_hash)
 
+        # cleanup
+        self.mount_a.run_shell("rm dump4", cwd=None, check_status=False)
+
     def test_get_without_target_name(self):
         """
         Test that get should fail when there is no target name
@@ -393,6 +396,9 @@ class TestGetAndPut(TestCephFSShell):
         self.get_cephfs_shell_cmd_output("get /tmp/dump7 ./dump7")
         # test that dump7 exists
         self.mount_a.run_shell("cat ./dump7", cwd=None)
+
+        # cleanup
+        self.mount_a.run_shell(args='rm dump7', cwd=None, check_status=False)
 
     def test_get_to_console(self):
         """
