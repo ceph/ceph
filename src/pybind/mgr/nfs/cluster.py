@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import json
 import re
@@ -105,7 +106,13 @@ class NFSCluster:
             ingress: Optional[bool] = None,
             port: Optional[int] = None,
     ) -> Tuple[int, str, str]:
+
         try:
+            if virtual_ip:
+                # validate virtual_ip value: ip_address throws a ValueError
+                # exception in case it's not a valid ipv4 or ipv6 address
+                ip = virtual_ip.split('/')[0]
+                ipaddress.ip_address(ip)
             if virtual_ip and not ingress:
                 raise NFSInvalidOperation('virtual_ip can only be provided with ingress enabled')
             if not virtual_ip and ingress:
