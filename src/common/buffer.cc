@@ -201,26 +201,6 @@ static ceph::spinlock debug_lock;
   /*
    * primitive buffer types
    */
-  class buffer::raw_char : public buffer::raw {
-  public:
-    MEMPOOL_CLASS_HELPERS();
-
-    explicit raw_char(unsigned l) : raw(l) {
-      if (len)
-	data = new char[len];
-      else
-	data = 0;
-      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << bendl;
-    }
-    raw_char(unsigned l, char *b) : raw(b, l) {
-      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << bendl;
-    }
-    ~raw_char() override {
-      delete[] data;
-      bdout << "raw_char " << this << " free " << (void *)data << bendl;
-    }
-  };
-
   class buffer::raw_claimed_char : public buffer::raw {
   public:
     MEMPOOL_CLASS_HELPERS();
@@ -2270,7 +2250,6 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_malloc, buffer_raw_malloc,
 			      buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
 			      buffer_raw_posix_aligned, buffer_meta);
-MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_char, buffer_raw_char, buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_claimed_char, buffer_raw_claimed_char,
 			      buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
