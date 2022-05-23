@@ -11,3 +11,7 @@ include_directories(${CMAKE_INCLUDE_DIR})
 add_executable(unittest_dbstore_tests ${dbstore_tests_srcs})
 target_link_libraries(unittest_dbstore_tests ${CMAKE_LINK_LIBRARIES})
 add_ceph_unittest(unittest_dbstore_tests)
+
+add_executable(unittest_dbstore_mgr_tests dbstore_mgr_tests.cc)
+target_link_libraries(unittest_dbstore_mgr_tests dbstore gtest_main)
+add_ceph_unittest(unittest_dbstore_mgr_tests)

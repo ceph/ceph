@@ -29,7 +29,7 @@ The above vstart command brings up RGW server on dbstore and creates few default
 `radosgw-admin` can be used to create and remove other users.
 
 
-By default, dbstore creates .db file *'/var/run/ceph/dbstore-default_ns.db'* to store the data. This can be configured using below options in ceph.conf
+By default, dbstore creates .db file *'/var/lib/ceph/radosgw/dbstore-default_ns.db'* to store the data. This can be configured using below options in ceph.conf
 
     [client]
         dbstore db dir = <path for the directory for storing the db backend store data>
@@ -39,12 +39,15 @@ By default, dbstore creates .db file *'/var/run/ceph/dbstore-default_ns.db'* to 
 ## DBStore Unit Tests
 To execute DBStore unit test cases (using Gtest framework), from build directory
 
-    ninja src/rgw/store/dbstore/install
-    ./bin/dbstore-tests [logfile] [loglevel]
+    ninja unittest_dbstore_tests
+    ./bin/unittest_dbstore_tests [logfile] [loglevel]
     (default logfile: rgw_dbstore_tests.log, loglevel: 20)
+    ninja unittest_dbstore_mgr_tests
+    ./bin/unittest_dbstore_mgr_tests
 
 To execute Sample test file
 
+    ninja src/rgw/store/dbstore/install
     ./bin/dbstore-bin [logfile] [loglevel]
     (default logfile: rgw_dbstore_bin.log, loglevel: 20)
 
