@@ -127,7 +127,6 @@ struct error_code;
   class raw_static;
   class raw_posix_aligned;
   class raw_hack_aligned;
-  class raw_char;
   class raw_claimed_char;
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
