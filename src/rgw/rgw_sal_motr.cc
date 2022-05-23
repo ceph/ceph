@@ -2051,14 +2051,10 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
   start = data.c_str();
   for (p = start; left > 0; left -= bs, p += bs, offset += bs) {
     if (left < bs) {
-      // This is the last I/O.
-      // Pad to allign with unit size (and not the group size) and 
-      // set M0_ENF_NO_RMW flag to force no RMW
+      bs = this->get_optimal_bs(left);
       mobj->ob_entity.en_flags |= M0_ENF_NO_RMW;
-      uint64_t lid = M0_OBJ_LAYOUT_ID(meta.layout_id);
-      unsigned unit_sz = m0_obj_layout_id_to_unit_size(lid);
-
-      bs = roundup(left, unit_sz);
+    }
+    if (left < bs) {
       ldpp_dout(dpp, 20) <<__func__<< " left ="<< left << ",bs=" << bs << ", Padding [" << (bs - left) << "] bytes" << dendl;
       data.append_zero(bs - left);
       p = data.c_str();
@@ -2132,18 +2128,14 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
 
   left = end - off;
   for (; left > 0; off += actual) {
+    if (left < bs)
+      bs = this->get_optimal_bs(left);
     actual = bs;
-    if (left < bs) {
-      uint64_t lid = M0_OBJ_LAYOUT_ID(meta.layout_id);
-      unsigned unit_sz = m0_obj_layout_id_to_unit_size(lid);
-      bs = roundup(left, unit_sz);
+    if (left < bs)
       actual = left;
-    }
-
-    mobj->ob_entity.en_flags |= M0_OOF_HOLE;
 
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): off=" << off <<
-                                            " actual=" << actual << dendl;
+                          " bs=" << bs << " actual=" << actual << dendl;
     bufferlist bl;
     buf.ov_buf[0] = bl.append_hole(bs).c_str();
     buf.ov_vec.v_count[0] = bs;
@@ -2156,12 +2148,12 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
     op = nullptr;
     if( start >= ( block_start_off + bs )) 
     {
-	block_start_off += bs;
-	ldpp_dout(dpp, 70) << "MotrObject::read_mobj(): block_start_off=" << block_start_off <<dendl;
-	continue;
+      block_start_off += bs;
+      ldpp_dout(dpp, 70) << "MotrObject::read_mobj(): block_start_off=" << block_start_off <<dendl;
+      continue;
     }
     if( bloff != 0 )
-	bloff = start - block_start_off;
+      bloff = start - block_start_off;
 
     rc = m0_obj_op(this->mobj, M0_OC_READ, &ext, &buf, &attr, 0, 0, &op);
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): init read op rc=" << rc << dendl;
@@ -2483,6 +2475,8 @@ int MotrObject::read_multipart_obj(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+// The optimal bs will be rounded up to the unit size, so
+// use M0_ENF_NO_RMW flag to avoid RMW for the last block.
 unsigned MotrObject::get_optimal_bs(unsigned len)
 {
   struct m0_pool_version *pver;
@@ -2512,10 +2506,8 @@ unsigned MotrObject::get_optimal_bs(unsigned len)
   max_bs = roundup(max_bs, grp_sz); // multiple of group size
   if (len >= max_bs)
     return max_bs;
-  else if (len <= grp_sz)
-    return grp_sz;
   else
-    return roundup(len, grp_sz);
+    return roundup(len, unit_sz);
 }
 
 void MotrAtomicWriter::cleanup()
@@ -2582,16 +2574,12 @@ int MotrAtomicWriter::write()
   bi = acc_data.begin();
   while (left > 0) {
     if (left < bs) {
-      // Pad to allign with unit size (and not the group size) and 
-      // set M0_ENF_NO_RMW flag to force no RMW
+      bs = obj.get_optimal_bs(left);
       obj.mobj->ob_entity.en_flags |= M0_ENF_NO_RMW;
-      uint64_t lid = M0_OBJ_LAYOUT_ID(obj.meta.layout_id);
-      unsigned unit_sz = m0_obj_layout_id_to_unit_size(lid);
-
-      unsigned left_alligned_unit_sz = roundup(left, unit_sz);
-      ldpp_dout(dpp, 20) <<__func__<< " Padding [" << (left_alligned_unit_sz - left) << "] bytes" << dendl;
-      acc_data.append_zero(left_alligned_unit_sz - left);
-      bs = left_alligned_unit_sz;
+    }
+    if (left < bs) {
+      ldpp_dout(dpp, 20) <<__func__<< " Padding [" << (bs - left) << "] bytes" << dendl;
+      acc_data.append_zero(bs - left);
       auto off = bi.get_off();
       bufferlist tmp;
       acc_data.splice(off, bs, &tmp);
