@@ -194,6 +194,17 @@ Arguments:
 * [--skip-firewalld]           Do not configure firewalld
 * [--skip-pull]                do not pull the latest image before adopting
 
+Configuration:
+
+When starting the shell, cephadm looks for configuration in the following order.
+Only the first values found are used:
+
+1. An explicit, user provided path to a config file (``-c/--config`` option)
+2. Config file for daemon specified with ``--name`` parameter (``/var/lib/ceph/<fsid>/<daemon-name>/config``)
+3. ``/var/lib/ceph/<fsid>/config/ceph.conf`` if it exists
+4. The config file for a ``mon`` daemon (``/var/lib/ceph/<fsid>/mon.<mon-id>/config``) if it exists
+5. Finally: fallback to the default file ``/etc/ceph/ceph.conf``
+
 
 bootstrap
 ---------
