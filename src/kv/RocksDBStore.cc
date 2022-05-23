@@ -1353,9 +1353,6 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
 					   const string& key_prefix)
 {
   uint64_t size = 0;
-  uint8_t flags =
-    //rocksdb::DB::INCLUDE_MEMTABLES |  // do not include memtables...
-    rocksdb::DB::INCLUDE_FILES;
   auto p_iter = cf_handles.find(prefix);
   if (p_iter != cf_handles.end()) {
     for (auto cf : p_iter->second.handles) {
@@ -1363,14 +1360,14 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
       string start = key_prefix + string(1, '\x00');
       string limit = key_prefix + string("\xff\xff\xff\xff");
       rocksdb::Range r(start, limit);
-      db->GetApproximateSizes(cf, &r, 1, &s, flags);
+      db->GetApproximateSizes(cf, &r, 1, &s);
       size += s;
     }
   } else {
     string start = combine_strings(prefix , key_prefix);
     string limit = combine_strings(prefix , key_prefix + "\xff\xff\xff\xff");
     rocksdb::Range r(start, limit);
-    db->GetApproximateSizes(default_cf, &r, 1, &size, flags);
+    db->GetApproximateSizes(default_cf, &r, 1, &size);
   }
   return size;
 }
