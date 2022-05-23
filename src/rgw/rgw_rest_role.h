@@ -168,3 +168,14 @@ public:
   RGWOpType get_type() override { return RGW_OP_UNTAG_ROLE; }
   uint64_t get_op() override { return rgw::IAM::iamUntagRole; }
 };
+
+class RGWUpdateRole : public RGWRoleWrite {
+  bufferlist bl_post_body;
+public:
+  RGWUpdateRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
+  void execute(optional_yield y) override;
+  int get_params();
+  const char* name() const override { return "update_role"; }
+  RGWOpType get_type() override { return RGW_OP_UPDATE_ROLE; }
+  uint64_t get_op() override { return rgw::IAM::iamUpdateRole; }
+};
