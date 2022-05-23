@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import uuid
+import os
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set, \
     DefaultDict
@@ -799,6 +800,14 @@ class CephadmServe:
                 self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
                     daemon_place_fails), daemon_place_fails)
 
+            if service_type == 'mgr':
+                active_mgr = svc.get_active_daemon(self.mgr.cache.get_daemons_by_type('mgr'))
+                if active_mgr.daemon_id in [d.daemon_id for d in daemons_to_remove]:
+                    # We can't just remove the active mgr like any other daemon.
+                    # Need to fail over later so it can be removed on next pass.
+                    # This can be accomplished by scheduling a restart of the active mgr.
+                    self.mgr._schedule_daemon_action(active_mgr.name(), 'restart')
+
             # remove any?
             def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
                 daemon_ids = [d.daemon_id for d in remove_daemons]
@@ -982,6 +991,7 @@ class CephadmServe:
         # ceph.conf
         config = self.mgr.get_minimal_ceph_conf().encode('utf-8')
         config_digest = ''.join('%02x' % c for c in hashlib.sha256(config).digest())
+        cluster_cfg_dir = f'/var/lib/ceph/{self.mgr._cluster_fsid}/config'
 
         if self.mgr.manage_etc_ceph_ceph_conf:
             try:
@@ -997,9 +1007,9 @@ class CephadmServe:
                 for host in {s.hostname for s in all_slots}:
                     if host not in client_files:
                         client_files[host] = {}
-                    client_files[host]['/etc/ceph/ceph.conf'] = (
-                        0o644, 0, 0, bytes(config), str(config_digest)
-                    )
+                    ceph_conf = (0o644, 0, 0, bytes(config), str(config_digest))
+                    client_files[host]['/etc/ceph/ceph.conf'] = ceph_conf
+                    client_files[host][f'{cluster_cfg_dir}/ceph.conf'] = ceph_conf
             except Exception as e:
                 self.mgr.log.warning(
                     f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
@@ -1027,12 +1037,12 @@ class CephadmServe:
                 for host in {s.hostname for s in all_slots}:
                     if host not in client_files:
                         client_files[host] = {}
-                    client_files[host]['/etc/ceph/ceph.conf'] = (
-                        0o644, 0, 0, bytes(config), str(config_digest)
-                    )
-                    client_files[host][ks.path] = (
-                        ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest
-                    )
+                    ceph_conf = (0o644, 0, 0, bytes(config), str(config_digest))
+                    client_files[host]['/etc/ceph/ceph.conf'] = ceph_conf
+                    client_files[host][f'{cluster_cfg_dir}/ceph.conf'] = ceph_conf
+                    ceph_admin_key = (ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest)
+                    client_files[host][ks.path] = ceph_admin_key
+                    client_files[host][f'{cluster_cfg_dir}/{os.path.basename(ks.path)}'] = ceph_admin_key
             except Exception as e:
                 self.log.warning(
                     f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
@@ -1196,11 +1206,15 @@ class CephadmServe:
         with set_exception_subject('service', daemon.service_id(), overwrite=True):
 
             self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
-
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
-            args = ['--name', name, '--force']
-            self.log.info('Removing daemon %s from %s' % (name, host))
+            dd = self.mgr.cache.get_daemon(daemon.daemon_name)
+            if dd.ports:
+                args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
+            else:
+                args = ['--name', name, '--force']
+
+            self.log.info('Removing daemon %s from %s -- ports %s' % (name, host, dd.ports))
             out, err, code = self.mgr.wait_async(self._run_cephadm(
                 host, name, 'rm-daemon', args))
             if not code:

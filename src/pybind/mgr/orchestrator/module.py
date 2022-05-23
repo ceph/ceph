@@ -22,6 +22,7 @@ from ceph.utils import datetime_now
 
 from mgr_util import to_pretty_timedelta, format_dimless, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
+from object_format import Format
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, OrchestratorError, \
@@ -42,15 +43,6 @@ def nice_bytes(v: Optional[int]) -> str:
     if not v:
         return '-'
     return format_bytes(v, 5)
-
-
-class Format(enum.Enum):
-    plain = 'plain'
-    json = 'json'
-    json_pretty = 'json-pretty'
-    yaml = 'yaml'
-    xml_pretty = 'xml-pretty'
-    xml = 'xml'
 
 
 class ServiceType(enum.Enum):
@@ -822,7 +814,8 @@ Usage:
                 values.remove(v)
 
             for dev_type in ['data_devices', 'db_devices', 'wal_devices', 'journal_devices']:
-                drive_group_spec[dev_type] = DeviceSelection(paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
+                drive_group_spec[dev_type] = DeviceSelection(
+                    paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
 
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
@@ -1054,8 +1047,11 @@ Usage:
         if inbuf:
             if service_type or placement or unmanaged:
                 raise OrchestratorValidationError(usage)
-            content: Iterator = yaml.safe_load_all(inbuf)
+            yaml_objs: Iterator = yaml.safe_load_all(inbuf)
             specs: List[Union[ServiceSpec, HostSpec]] = []
+            # YAML '---' document separator with no content generates
+            # None entries in the output. Let's skip them silently.
+            content = [o for o in yaml_objs if o is not None]
             for s in content:
                 spec = json_to_generic_spec(s)
 
@@ -1421,6 +1417,7 @@ Usage:
         r = {
             'target_image': status.target_image,
             'in_progress': status.in_progress,
+            'which': status.which,
             'services_complete': status.services_complete,
             'progress': status.progress,
             'message': status.message,
@@ -1432,10 +1429,16 @@ Usage:
     def _upgrade_start(self,
                        image: Optional[str] = None,
                        _end_positional_: int = 0,
+                       daemon_types: Optional[str] = None,
+                       hosts: Optional[str] = None,
+                       services: Optional[str] = None,
+                       limit: Optional[int] = None,
                        ceph_version: Optional[str] = None) -> HandleCommandResult:
         """Initiate upgrade"""
         self._upgrade_check_image_name(image, ceph_version)
-        completion = self.upgrade_start(image, ceph_version)
+        dtypes = daemon_types.split(',') if daemon_types is not None else None
+        service_names = services.split(',') if services is not None else None
+        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
