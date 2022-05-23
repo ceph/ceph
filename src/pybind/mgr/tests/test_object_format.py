@@ -263,6 +263,13 @@ class DecoDemo:
     def gamma_three(self, size: int = 0) -> Dict[str, Any]:
         return {"name": "funnystuff", "size": size}
 
+    @CLICommand("z_err", perm="rw")
+    @object_format.ErrorResponseHandler()
+    def z_err(self, name: str = "default") -> Tuple[int, str, str]:
+        if "z" in name:
+            raise object_format.ErrorResponse(f"{name} bad")
+        return 0, name, ""
+
 
 @pytest.mark.parametrize(
     "prefix, args, response",
@@ -386,9 +393,29 @@ class DecoDemo:
                 "Unknown format name: toml",
             ),
         ),
+        # ---
+        (
+            "z_err",
+            {"name": "foobar"},
+            (
+                0,
+                "foobar",
+                "",
+            ),
+        ),
+        # ---
+        (
+            "z_err",
+            {"name": "zamboni"},
+            (
+                -22,
+                "",
+                "zamboni bad",
+            ),
+        ),
     ],
 )
-def test_cli_command_responder(prefix, args, response):
+def test_cli_with_decorators(prefix, args, response):
     dd = DecoDemo()
     assert CLICommand.COMMANDS[prefix].call(dd, args, None) == response
 
