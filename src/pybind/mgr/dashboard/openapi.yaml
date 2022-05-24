@@ -539,12 +539,27 @@ paths:
               properties:
                 configuration:
                   type: string
+                enable_mirror:
+                  type: string
                 features:
+                  type: string
+                mirror_mode:
                   type: string
                 name:
                   type: string
+                primary:
+                  type: string
+                resync:
+                  default: false
+                  type: boolean
+                schedule_interval:
+                  default: ''
+                  type: string
                 size:
                   type: integer
+                start_time:
+                  default: ''
+                  type: string
               type: object
       responses:
         '200':
