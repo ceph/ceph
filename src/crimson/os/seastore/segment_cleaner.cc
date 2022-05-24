@@ -3,17 +3,10 @@
 
 #include <seastar/core/metrics.hh>
 
-#include "crimson/common/log.h"
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/transaction_manager.h"
-
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_cleaner);
-  }
-}
 
 SET_SUBSYS(seastore_cleaner);
 
@@ -269,10 +262,11 @@ void segments_info_t::update_written_to(
 
 bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
 {
+  LOG_PREFIX(SpaceTrackerSimple::equals);
   const auto &other = static_cast<const SpaceTrackerSimple&>(_other);
 
   if (other.live_bytes_by_segment.size() != live_bytes_by_segment.size()) {
-    logger().error("{}: different segment counts, bug in test");
+    ERROR("different segment counts, bug in test");
     assert(0 == "segment counts should match");
     return false;
   }
@@ -282,12 +276,8 @@ bool SpaceTrackerSimple::equals(const SpaceTrackerI &_other) const
        i != live_bytes_by_segment.end(); ++i, ++j) {
     if (i->second.live_bytes != j->second.live_bytes) {
       all_match = false;
-      logger().debug(
-	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
-	__func__,
-	i->first,
-	i->second.live_bytes,
-	j->second.live_bytes);
+      DEBUG("segment_id {} live bytes mismatch *this: {}, other: {}",
+            i->first, i->second.live_bytes, j->second.live_bytes);
     }
   }
   return all_match;
@@ -299,6 +289,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
   extent_len_t len,
   const extent_len_t block_size)
 {
+  LOG_PREFIX(SegmentMap::allocate);
   assert(offset % block_size == 0);
   assert(len % block_size == 0);
 
@@ -309,16 +300,10 @@ int64_t SpaceTrackerDetailed::SegmentMap::allocate(
   for (auto i = b; i < e; ++i) {
     if (bitmap[i]) {
       if (!error) {
-	logger().error(
-	  "SegmentMap::allocate found allocated in {}, {} ~ {}",
-	  segment,
-	  offset,
-	  len);
+        ERROR("found allocated in {}, {} ~ {}", segment, offset, len);
 	error = true;
       }
-      logger().debug(
-	"SegmentMap::allocate block {} allocated",
-	i * block_size);
+      DEBUG("block {} allocated", i * block_size);
     }
     bitmap[i] = true;
   }
@@ -331,6 +316,7 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
   extent_len_t len,
   const extent_len_t block_size)
 {
+  LOG_PREFIX(SegmentMap::release);
   assert(offset % block_size == 0);
   assert(len % block_size == 0);
 
@@ -341,16 +327,10 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
   for (auto i = b; i < e; ++i) {
     if (!bitmap[i]) {
       if (!error) {
-	logger().error(
-	  "SegmentMap::release found unallocated in {}, {} ~ {}",
-	  segment,
-	  offset,
-	  len);
+	ERROR("found unallocated in {}, {} ~ {}", segment, offset, len);
 	error = true;
       }
-      logger().debug(
-	"SegmentMap::release block {} unallocated",
-	i * block_size);
+      DEBUG("block {} unallocated", i * block_size);
     }
     bitmap[i] = false;
   }
@@ -359,10 +339,11 @@ int64_t SpaceTrackerDetailed::SegmentMap::release(
 
 bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
 {
+  LOG_PREFIX(SpaceTrackerDetailed::equals);
   const auto &other = static_cast<const SpaceTrackerDetailed&>(_other);
 
   if (other.segment_usage.size() != segment_usage.size()) {
-    logger().error("{}: different segment counts, bug in test");
+    ERROR("different segment counts, bug in test");
     assert(0 == "segment counts should match");
     return false;
   }
@@ -372,12 +353,8 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
        i != segment_usage.end(); ++i, ++j) {
     if (i->second.get_usage() != j->second.get_usage()) {
       all_match = false;
-      logger().error(
-	"{}: segment_id {} live bytes mismatch *this: {}, other: {}",
-	__func__,
-	i->first,
-	i->second.get_usage(),
-	j->second.get_usage());
+      ERROR("segment_id {} live bytes mismatch *this: {}, other: {}",
+            i->first, i->second.get_usage(), j->second.get_usage());
     }
   }
   return all_match;
@@ -385,26 +362,28 @@ bool SpaceTrackerDetailed::equals(const SpaceTrackerI &_other) const
 
 void SpaceTrackerDetailed::SegmentMap::dump_usage(extent_len_t block_size) const
 {
+  LOG_PREFIX(SegmentMap::dump_usage);
+  INFO("dump start");
   for (unsigned i = 0; i < bitmap.size(); ++i) {
     if (bitmap[i]) {
-      logger().debug("    {} still live", i * block_size);
+      LOCAL_LOGGER.info("    {} still live", i * block_size);
     }
   }
 }
 
 void SpaceTrackerDetailed::dump_usage(segment_id_t id) const
 {
-  logger().debug("SpaceTrackerDetailed::dump_usage {}", id);
+  LOG_PREFIX(SpaceTrackerDetailed::dump_usage);
+  INFO("{}", id);
   segment_usage[id].dump_usage(
     block_size_by_segment_manager[id.device_id()]);
 }
 
 void SpaceTrackerSimple::dump_usage(segment_id_t id) const
 {
-  logger().info(
-    "SpaceTrackerSimple::dump_usage id: {}, live_bytes: {}",
-    id,
-    live_bytes_by_segment[id].live_bytes);
+  LOG_PREFIX(SpaceTrackerSimple::dump_usage);
+  INFO("id: {}, live_bytes: {}",
+       id, live_bytes_by_segment[id].live_bytes);
 }
 
 SegmentCleaner::SegmentCleaner(
@@ -695,11 +674,10 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
     DEBUGT("rewrite {} dirty extents", t, dirty_list.size());
     return seastar::do_with(
       std::move(dirty_list),
-      [this, &t](auto &dirty_list) {
+      [this, FNAME, &t](auto &dirty_list) {
 	return trans_intr::do_for_each(
 	  dirty_list,
-	  [this, &t](auto &e) {
-	  LOG_PREFIX(SegmentCleaner::rewrite_dirty);
+	  [this, FNAME, &t](auto &e) {
 	  DEBUGT("cleaning {}", t, *e);
 	  return ecb->rewrite_extent(t, e);
 	});
@@ -833,7 +811,7 @@ SegmentCleaner::_retrieve_live_extents(
     return trans_intr::do_for_each(
       backrefs,
       [this, &extents, &t, &seq](auto &ent) {
-      LOG_PREFIX(SegmentCleaner::gc_reclaim_space);
+      LOG_PREFIX(SegmentCleaner::_retrieve_live_extents);
       DEBUGT("getting extent of type {} at {}~{}",
 	t,
 	ent.type,
@@ -841,12 +819,9 @@ SegmentCleaner::_retrieve_live_extents(
 	ent.len);
       return ecb->get_extent_if_live(
 	t, ent.type, ent.paddr, ent.laddr, ent.len
-      ).si_then([this, &extents, &ent, &seq](auto ext) {
+      ).si_then([this, FNAME, &extents, &ent, &seq, &t](auto ext) {
 	if (!ext) {
-	  logger().debug(
-	    "SegmentCleaner::gc_reclaim_space:"
-	    " addr {} dead, skipping",
-	    ent.paddr);
+	  DEBUGT("addr {} dead, skipping", t, ent.paddr);
 	  auto backref = cache.get_del_backref(ent.paddr);
 	  if (seq == JOURNAL_SEQ_NULL || seq < backref.seq) {
 	    seq = backref.seq;
@@ -1011,9 +986,9 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 
 SegmentCleaner::mount_ret SegmentCleaner::mount()
 {
+  LOG_PREFIX(SegmentCleaner::mount);
   const auto& sms = sm_group->get_segment_managers();
-  logger().info(
-    "SegmentCleaner::mount: {} segment managers", sms.size());
+  INFO("{} segment managers", sms.size());
   init_complete = false;
   stats = {};
   journal_tail_target = JOURNAL_SEQ_NULL;
@@ -1035,26 +1010,22 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   metrics.clear();
   register_metrics();
 
-  logger().info("SegmentCleaner::mount: {} segments", segments.get_num_segments());
+  INFO("{} segments", segments.get_num_segments());
   return seastar::do_with(
     std::vector<std::pair<segment_id_t, segment_header_t>>(),
-    [this](auto& segment_set) {
+    [this, FNAME](auto& segment_set) {
     return crimson::do_for_each(
       segments.begin(),
       segments.end(),
-      [this, &segment_set](auto& it) {
+      [this, FNAME, &segment_set](auto& it) {
 	auto segment_id = it.first;
 	return sm_group->read_segment_header(
 	  segment_id
-	).safe_then([segment_id, this, &segment_set](auto header) {
-	  logger().info(
-	    "SegmentCleaner::mount: segment_id={} -- {}",
-	    segment_id, header);
+	).safe_then([segment_id, this, FNAME, &segment_set](auto header) {
+	  INFO("segment_id={} -- {}", segment_id, header);
 	  auto s_type = header.get_type();
 	  if (s_type == segment_type_t::NULL_SEG) {
-	    logger().error(
-	      "SegmentCleaner::mount: got null segment, segment_id={} -- {}",
-	      segment_id, header);
+	    ERROR("got null segment, segment_id={} -- {}", segment_id, header);
 	    ceph_abort();
 	  }
 	  return sm_group->read_segment_tail(
@@ -1229,6 +1200,217 @@ void SegmentCleaner::complete_init()
   ceph_assert(segments.get_journal_head() != JOURNAL_SEQ_NULL);
   init_complete = true;
   gc_process.start();
+}
+
+void SegmentCleaner::mark_space_used(
+  paddr_t addr,
+  extent_len_t len,
+  time_point last_modified,
+  time_point last_rewritten,
+  bool init_scan)
+{
+  LOG_PREFIX(SegmentCleaner::mark_space_used);
+  if (addr.get_addr_type() != addr_types_t::SEGMENT) {
+    return;
+  }
+  auto& seg_addr = addr.as_seg_paddr();
+
+  if (!init_scan && !init_complete) {
+    return;
+  }
+
+  stats.used_bytes += len;
+  auto old_usage = calc_utilization(seg_addr.get_segment_id());
+  [[maybe_unused]] auto ret = space_tracker->allocate(
+    seg_addr.get_segment_id(),
+    seg_addr.get_segment_off(),
+    len);
+  auto new_usage = calc_utilization(seg_addr.get_segment_id());
+  adjust_segment_util(old_usage, new_usage);
+
+  // use the last extent's last modified time for the calculation of the projected
+  // time the segments' live extents are to stay unmodified; this is an approximation
+  // of the sprite lfs' segment "age".
+
+  segments.update_last_modified_rewritten(
+      seg_addr.get_segment_id(), last_modified, last_rewritten);
+
+  gc_process.maybe_wake_on_space_used();
+  assert(ret > 0);
+  DEBUG("segment {} new len: {}~{}, live_bytes: {}",
+        seg_addr.get_segment_id(),
+        addr,
+        len,
+        space_tracker->get_usage(seg_addr.get_segment_id()));
+}
+
+void SegmentCleaner::mark_space_free(
+  paddr_t addr,
+  extent_len_t len,
+  bool force)
+{
+  LOG_PREFIX(SegmentCleaner::mark_space_free);
+  if (!init_complete && !force) {
+    return;
+  }
+  if (addr.get_addr_type() != addr_types_t::SEGMENT) {
+    return;
+  }
+
+  ceph_assert(stats.used_bytes >= len);
+  stats.used_bytes -= len;
+  auto& seg_addr = addr.as_seg_paddr();
+
+  DEBUG("segment {} free len: {}~{}",
+        seg_addr.get_segment_id(), addr, len);
+  auto old_usage = calc_utilization(seg_addr.get_segment_id());
+  [[maybe_unused]] auto ret = space_tracker->release(
+    seg_addr.get_segment_id(),
+    seg_addr.get_segment_off(),
+    len);
+  auto new_usage = calc_utilization(seg_addr.get_segment_id());
+  adjust_segment_util(old_usage, new_usage);
+  maybe_wake_gc_blocked_io();
+  assert(ret >= 0);
+  DEBUG("segment {} free len: {}~{}, live_bytes: {}",
+        seg_addr.get_segment_id(),
+        addr,
+        len,
+        space_tracker->get_usage(seg_addr.get_segment_id()));
+}
+
+journal_seq_t SegmentCleaner::get_next_gc_target() const
+{
+  LOG_PREFIX(SegmentCleaner::get_next_gc_target);
+  segment_id_t id = NULL_SEG_ID;
+  segment_seq_t seq = NULL_SEG_SEQ;
+  double max_benefit_cost = 0;
+  for (auto& [_id, segment_info] : segments) {
+    if (segment_info.is_closed() &&
+        !segment_info.is_in_journal(journal_tail_committed)) {
+      double benefit_cost = calc_gc_benefit_cost(_id);
+      if (benefit_cost > max_benefit_cost) {
+        id = _id;
+        seq = segment_info.seq;
+        max_benefit_cost = benefit_cost;
+      }
+    }
+  }
+  if (id != NULL_SEG_ID) {
+    DEBUG("segment {} seq {}, benefit_cost {}",
+          id, seq, max_benefit_cost);
+    return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
+  } else {
+    ceph_assert(get_segments_reclaimable() == 0);
+    // see gc_should_reclaim_space()
+    ceph_abort("impossible!");
+    return JOURNAL_SEQ_NULL;
+  }
+}
+
+void SegmentCleaner::log_gc_state(const char *caller) const
+{
+  LOG_PREFIX(SegmentCleaner::log_gc_state);
+  if (LOCAL_LOGGER.is_enabled(seastar::log_level::debug) &&
+      !disable_trim) {
+    DEBUG(
+      "caller {}, "
+      "empty {}, "
+      "open {}, "
+      "closed {}, "
+      "in_journal {}, "
+      "total {}B, "
+      "available {}B, "
+      "unavailable {}B, "
+      "unavailable_used {}B, "
+      "unavailable_unused {}B; "
+      "reclaim_ratio {}, "
+      "available_ratio {}, "
+      "should_block_on_gc {}, "
+      "gc_should_reclaim_space {}, "
+      "journal_head {}, "
+      "journal_tail_target {}, "
+      "journal_tail_commit {}, "
+      "dirty_tail {}, "
+      "dirty_tail_limit {}, "
+      "gc_should_trim_journal {}, ",
+      caller,
+      segments.get_num_empty(),
+      segments.get_num_open(),
+      segments.get_num_closed(),
+      get_segments_in_journal(),
+      segments.get_total_bytes(),
+      segments.get_available_bytes(),
+      segments.get_unavailable_bytes(),
+      stats.used_bytes,
+      get_unavailable_unused_bytes(),
+      get_reclaim_ratio(),
+      segments.get_available_ratio(),
+      should_block_on_gc(),
+      gc_should_reclaim_space(),
+      segments.get_journal_head(),
+      journal_tail_target,
+      journal_tail_committed,
+      get_dirty_tail(),
+      get_dirty_tail_limit(),
+      gc_should_trim_journal()
+    );
+  }
+}
+
+seastar::future<>
+SegmentCleaner::reserve_projected_usage(std::size_t projected_usage)
+{
+  if (disable_trim) {
+    return seastar::now();
+  }
+  ceph_assert(init_complete);
+  // The pipeline configuration prevents another IO from entering
+  // prepare until the prior one exits and clears this.
+  ceph_assert(!blocked_io_wake);
+  ++stats.io_count;
+  bool is_blocked = false;
+  if (should_block_on_trim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_trim;
+  }
+  if (should_block_on_reclaim()) {
+    is_blocked = true;
+    ++stats.io_blocked_count_reclaim;
+  }
+  if (is_blocked) {
+    ++stats.io_blocking_num;
+    ++stats.io_blocked_count;
+    stats.io_blocked_sum += stats.io_blocking_num;
+  }
+  return seastar::do_until(
+    [this] {
+      log_gc_state("await_hard_limits");
+      return !should_block_on_gc();
+    },
+    [this] {
+      blocked_io_wake = seastar::promise<>();
+      return blocked_io_wake->get_future();
+    }
+  ).then([this, projected_usage, is_blocked] {
+    ceph_assert(!blocked_io_wake);
+    stats.projected_used_bytes += projected_usage;
+    ++stats.projected_count;
+    stats.projected_used_bytes_sum += stats.projected_used_bytes;
+    if (is_blocked) {
+      assert(stats.io_blocking_num > 0);
+      --stats.io_blocking_num;
+    }
+  });
+}
+
+void SegmentCleaner::release_projected_usage(std::size_t projected_usage)
+{
+  if (disable_trim) return;
+  ceph_assert(init_complete);
+  ceph_assert(stats.projected_used_bytes >= projected_usage);
+  stats.projected_used_bytes -= projected_usage;
+  return maybe_wake_gc_blocked_io();
 }
 
 }
