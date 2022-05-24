@@ -281,7 +281,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
   ceph_assert(!mds->is_any_replay());
-  ceph_assert(!capped);
+  ceph_assert(!mds_is_shutting_down);
 
   ceph_assert(le == cur_event);
   cur_event = NULL;
@@ -482,9 +482,9 @@ void MDLog::kick_submitter()
 }
 
 void MDLog::cap()
-{ 
-  dout(5) << "cap" << dendl;
-  capped = true;
+{
+  dout(5) << "mark mds is shutting down" << dendl;
+  mds_is_shutting_down = true;
 }
 
 void MDLog::shutdown()
@@ -503,7 +503,7 @@ void MDLog::shutdown()
       mds->mds_lock.unlock();
       // Because MDS::stopping is true, it's safe to drop mds_lock: nobody else
       // picking it up will do anything with it.
-   
+
       submit_mutex.lock();
       submit_cond.notify_all();
       submit_mutex.unlock();
@@ -585,7 +585,7 @@ void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
 
-  if (capped) // shutting down the MDS
+  if (mds_is_shutting_down) // shutting down the MDS
     return;
 
   if (mds->mdcache->open_file_table.is_any_committing())
@@ -834,7 +834,7 @@ void MDLog::_trim_expired_segments()
       break;
     }
 
-    if (!capped && ls->seq >= oft_committed_seq) {
+    if (!mds_is_shutting_down && ls->seq >= oft_committed_seq) {
       dout(10) << "_trim_expired_segments open file table committedseq " << oft_committed_seq
 	       << " <= " << ls->seq << "/" << ls->offset << dendl;
       break;
@@ -883,9 +883,9 @@ void MDLog::_expired(LogSegment *ls)
   dout(5) << "_expired segment " << ls->seq << "/" << ls->offset
 	  << ", " << ls->num_events << " events" << dendl;
 
-  if (!capped && ls == peek_current_segment()) {
+  if (!mds_is_shutting_down && ls == peek_current_segment()) {
     dout(5) << "_expired not expiring " << ls->seq << "/" << ls->offset
-	    << ", last one and !capped" << dendl;
+	    << ", last one and !mds_is_shutting_down" << dendl;
   } else {
     // expired.
     expired_segments.insert(ls);
