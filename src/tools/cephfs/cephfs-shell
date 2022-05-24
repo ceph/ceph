@@ -883,14 +883,14 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    rmdir_parser = argparse.ArgumentParser(description='Remove Directory.')
-    rmdir_parser.add_argument('paths', help='Directory Path.', nargs='+',
+    rmdir_parser = argparse.ArgumentParser(
+        description='Remove the directory(ies), if they are empty.')
+    rmdir_parser.add_argument('paths', help='Directory Path(s)', nargs='+',
                               action=path_to_bytes)
     rmdir_parser.add_argument('-p', '--parent', action='store_true',
-                              help='Remove parent directories as necessary. '
-                                   'When this option is specified, no error '
-                                    'is reported if a directory has any '
-                                    'sub-directories, files')
+                              help="remove directory and its ancestors; "
+                                   "e.g., 'rmdir -p a/b/c' is similar to "
+                                   "'rmdir a/b/c a/b a'")
 
     @with_argparser(rmdir_parser)
     def do_rmdir(self, args):
@@ -940,7 +940,23 @@ class CephFSShell(Cmd):
                 try:
                     cephfs.rmdir(path)
                 except libcephfs.Error as e:
-                    set_exit_code_msg(msg=e)
+                    if e.get_error_code() == 2:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rmdir: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "No such file or directory")
+                    elif e.get_error_code() == 20:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rmdir: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "Not a directory")
+                    elif e.get_error_code() == 39:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rmdir: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "Directory not empty")
+                    else:
+                        set_exit_code_msg(msg=e)
 
     def complete_rm(self, text, line, begidx, endidx):
         """
