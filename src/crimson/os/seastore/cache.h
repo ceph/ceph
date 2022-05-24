@@ -949,6 +949,7 @@ public:
   void add_backref_extent(paddr_t paddr, extent_types_t type) {
     assert(!paddr.is_relative());
     auto [iter, inserted] = backref_extents.emplace(paddr, type);
+    boost::ignore_unused(inserted);
     assert(inserted);
   }
 
