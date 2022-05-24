@@ -1060,6 +1060,11 @@ int main(int argc, char **argv)
     AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
     validate_path(cct.get(), path, false);
+
+    // make sure we can adjust any config settings
+    g_conf()._clear_safe_to_start_threads();
+    g_conf().set_val_or_die("bluestore_volume_selection_policy",
+                            "use_some_extra_enforced");
     BlueStore bluestore(cct.get(), path);
     int r = bluestore.cold_open();
     if (r < 0) {
