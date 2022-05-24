@@ -255,7 +255,6 @@ BuildRequires:  hostname
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
 BuildRequires:	python%{python3_pkgversion}-bcrypt
-BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
 BuildRequires:	python%{python3_pkgversion}-requests
 BuildRequires:	python%{python3_pkgversion}-dateutil
