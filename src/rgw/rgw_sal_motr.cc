@@ -2050,8 +2050,6 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
 
   start = data.c_str();
   for (p = start; left > 0; left -= bs, p += bs, offset += bs) {
-    if (left < bs)
-      bs = this->get_optimal_bs(left);
     if (left < bs) {
       // This is the last I/O.
       // Pad to allign with unit size (and not the group size) and 
@@ -2134,11 +2132,16 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
 
   left = end - off;
   for (; left > 0; off += actual) {
-    if (left < bs)
-      bs = this->get_optimal_bs(left);
     actual = bs;
-    if (left < bs)
+    if (left < bs) {
+      uint64_t lid = M0_OBJ_LAYOUT_ID(meta.layout_id);
+      unsigned unit_sz = m0_obj_layout_id_to_unit_size(lid);
+      bs = roundup(left, unit_sz);
       actual = left;
+    }
+
+    mobj->ob_entity.en_flags |= M0_OOF_HOLE;
+
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): off=" << off <<
                                             " actual=" << actual << dendl;
     bufferlist bl;
@@ -2578,8 +2581,6 @@ int MotrAtomicWriter::write()
 
   bi = acc_data.begin();
   while (left > 0) {
-    if (left < bs)
-      bs = obj.get_optimal_bs(left);
     if (left < bs) {
       // Pad to allign with unit size (and not the group size) and 
       // set M0_ENF_NO_RMW flag to force no RMW
