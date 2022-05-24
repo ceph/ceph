@@ -7340,8 +7340,7 @@ TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallOverwrite) {
     GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
   }
   if (smr) {
-    cout << "SKIP" << std::endl;
-    return;
+    GTEST_SKIP() << "smr, skipping";
   }
 
   size_t block_size = 65536;
@@ -7521,8 +7520,7 @@ TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigOverwrite) {
     GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
   }
   if (smr) {
-    cout << "SKIP" << std::endl;
-    return;
+    GTEST_SKIP() << "smr, skipping";
   }
 
   size_t block_size = 4096;
