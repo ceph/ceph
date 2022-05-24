@@ -5372,7 +5372,7 @@ options:
   type: str
   level: dev
   desc: Determines bluefs volume selection policy
-  long_desc: Determines bluefs volume selection policy. 'use_some_extra' policy allows
+  long_desc: Determines bluefs volume selection policy. 'use_some_extra*' policy allows
     to override RocksDB level granularity and put high level's data to faster device
     even when the level doesn't completely fit there. 'fit_to_fast' policy enables
     using 100% of faster disk capacity and allows the user to turn on 'level_compaction_dynamic_level_bytes'
@@ -5381,6 +5381,7 @@ options:
   enum_values:
   - rocksdb_original
   - use_some_extra
+  - use_some_extra_enforced
   - fit_to_fast
   with_legacy: true
 - name: bluestore_volume_selection_reserved_factor
