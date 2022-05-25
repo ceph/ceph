@@ -3249,13 +3249,29 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
+  // Check for bucket versioning
+  // Update existing object version entries in a bucket,
+  // in case of both versioning enabled and suspended.
+  RGWBucketInfo &info = target_obj->get_bucket()->get_info();
+  if(info.versioned())
+  {
+    string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
+    std::unique_ptr<rgw::sal::Object> obj_ver = target_obj->get_bucket()->get_object(rgw_obj_key(target_obj->get_name()));
+    rgw::sal::MotrObject *mobj_ver = static_cast<rgw::sal::MotrObject *>(obj_ver.get());
+
+    rc = mobj_ver->update_version_entries(dpp);
+    ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): update_version_entries, rc: " << rc << dendl;
+    if (rc < 0)
+      return rc;
+  }
+
   rc = store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT,
-                                target_obj->get_name(), update_bl);
+                                target_obj->get_key().to_str(), update_bl);
   if (rc < 0)
     return rc;
 
   // Put into metadata cache.
-  store->get_obj_meta_cache()->put(dpp, target_obj->get_name(), update_bl);
+  store->get_obj_meta_cache()->put(dpp, target_obj->get_key().to_str(), update_bl);
 
   // Now we can remove it from bucket multipart index.
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): remove from bucket multipartindex " << dendl;
