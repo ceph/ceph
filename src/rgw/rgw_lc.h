@@ -548,6 +548,11 @@ public:
     LCWorker(const DoutPrefixProvider* dpp, CephContext *_cct, RGWLC *_lc,
 	     int ix);
     RGWLC* get_lc() { return lc; }
+
+    std::string thr_name() {
+      return std::string{"lc_thrd: "} + std::to_string(ix);
+    }
+
     void *entry() override;
     void stop();
     bool should_work(utime_t& now);
