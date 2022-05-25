@@ -19,19 +19,20 @@ using json_array = boost::json::array;
 void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
   timer.async_wait([&](const boost::system::error_code &e) {
     std::cerr << e << std::endl;
+    const auto start = std::chrono::system_clock::now();
     update_sockets();
     dump_asok_metrics();
-    timer.expires_from_now(std::chrono::seconds(stats_period));
+    const std::chrono::duration<double> end = std::chrono::system_clock::now() - start;
+    timer.expires_from_now(std::chrono::seconds(std::max(stats_period, (int)std::round(end.count()))));
     request_loop(timer);
   });
 }
 
-void DaemonMetricCollector::set_sock_dir(std::string sock_dir) {
-  SOCKETDIR = sock_dir;
+void DaemonMetricCollector::set_sock_dir() {
+  SOCKETDIR = g_conf().get_val<std::string>("sock_dir");
 }
 
 void DaemonMetricCollector::main() {
-  // TODO: let's do 5 for now and expose this to change in the future
   stats_period = g_conf().get_val<int64_t>("exporter_stats_period");;
   boost::asio::io_service io;
   boost::asio::steady_timer timer{io, std::chrono::seconds(stats_period)};
@@ -93,9 +94,10 @@ void DaemonMetricCollector::dump_asok_metrics() {
       for (auto &perf_counter : perf_group_object) {
         std::string perf_name = perf_counter.key().to_string();
         json_object perf_info = perf_counter.value().as_object();
-        int plimit = g_conf().get_val<int64_t>("exporter_prio_limit");
+        int prio_limit = g_conf().get_val<int64_t>("exporter_prio_limit");
+        // std::cout << prio_limit << std::endl;
         if (perf_info["priority"].as_int64() <
-            plimit) {
+            prio_limit) {
           continue;
         }
         std::string name = "ceph_" + perf_group + "_" + perf_name;
@@ -187,6 +189,7 @@ void DaemonMetricCollector::dump_asok_metric(std::stringstream &ss,
   }
 }
 void DaemonMetricCollector::update_sockets() {
+  // std:: cout << SOCKETDIR << std::endl;
   clients.clear();
   for (const auto &entry :
        std::filesystem::directory_iterator(SOCKETDIR)) {
@@ -195,8 +198,10 @@ void DaemonMetricCollector::update_sockets() {
       std::string daemon_name =
           daemon_socket_name.substr(0, daemon_socket_name.size() - 5);
       if (clients.find(daemon_name) == clients.end() &&
-          !(daemon_name.find("mgr") != std::string::npos)) {
+          !(daemon_name.find("mgr") != std::string::npos) && 
+          !(daemon_name.find("client") != std::string::npos)) {
         AdminSocketClient sock(entry.path().string());
+        std::cout << entry.path().string() << std::endl;
         clients.insert({daemon_name, std::move(sock)});
       }
     }

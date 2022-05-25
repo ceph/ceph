@@ -15,10 +15,10 @@
 static void usage() {
   std::cout << "usage: ceph-exporter [options]\n"
             << "options:\n"
-               "  --sock-dir: The path to ceph daemons socket files dir\n"
-               "  --addrs: Host ip address where exporter is deployed\n"
-               "  --port: Port to deploy exporter on. Default is 9926\n"
-               "  --prio-limit: Only perf counters greater than or equal to exporter_prio_limit are fetched\n"
+               "  --sock-dir:     The path to ceph daemons socket files dir\n"
+               "  --addrs:        Host ip address where exporter is deployed\n"
+               "  --port:         Port to deploy exporter on. Default is 9926\n"
+               "  --prio-limit:   Only perf counters greater than or equal to exporter_prio_limit are fetched\n"
                "  --stats-period: Time to wait before sending requests again to exporter server (seconds)"
             << std::endl;
   generic_server_usage();
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON, 0);
-  std::string val, sock_dir, exporter_addrs, exporter_port, exporter_prio_limit;
+  std::string val, sock_dir, exporter_addrs, exporter_prio_limit;
   for (auto i = args.begin(); i != args.end();) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -49,7 +49,6 @@ int main(int argc, char **argv) {
       exporter_addrs = val;
       cct->_conf.set_val("exporter_addrs", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--port", (char *)NULL)) {
-      exporter_port = val;
       cct->_conf.set_val("exporter_port", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--prio-limit", (char *)NULL)) {
       exporter_prio_limit = val;
@@ -63,9 +62,9 @@ int main(int argc, char **argv) {
   }
   common_init_finish(g_ceph_context);
 
-  boost::thread server_thread(http_server_thread_entrypoint, exporter_addrs, exporter_port);
+  boost::thread server_thread(http_server_thread_entrypoint, exporter_addrs);
   DaemonMetricCollector &collector = collector_instance();
-  collector.set_sock_dir(sock_dir);
+  collector.set_sock_dir();
   collector.main();
   server_thread.join();
 }
