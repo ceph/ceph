@@ -71,7 +71,8 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
   return 0;
 }
 
-static int read_header(cls_method_context_t hctx, cls_user_header *header)
+template <typename T>
+static int read_header(cls_method_context_t hctx, T *header)
 {
   bufferlist bl;
 
@@ -80,14 +81,14 @@ static int read_header(cls_method_context_t hctx, cls_user_header *header)
     return ret;
 
   if (bl.length() == 0) {
-    *header = cls_user_header();
+    *header = T();
     return 0;
   }
 
   try {
     decode(*header, bl);
   } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: failed to decode user header");
+    CLS_LOG(0, "ERROR: failed to decode header");
     return -EIO;
   }
 
@@ -292,7 +293,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_user_list_op(): failed to decode op");
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
     return -EINVAL;
   }
 
@@ -501,6 +502,136 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
   return 0;
 } /* cls_user_reset_stats2 */
 
+
+static int cls_account_users_add(cls_method_context_t hctx,
+                                 buffer::list *in, buffer::list *out)
+{
+  cls_account_users_add_op op;
+  try {
+    auto bliter = in->cbegin();
+    decode(op, bliter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+  const std::string& key = op.user;
+
+  // does this user entry exist?
+  bufferlist bl;
+  int ret = cls_cxx_map_get_val(hctx, key, &bl);
+  if (ret == 0) {
+    CLS_LOG(4, "user '%s' is already listed in the account", key.c_str());
+    return -EEXIST;
+  } else if (ret != -ENOENT) {
+    return ret;
+  }
+
+  // update user_count in the account header
+  cls_account_header header;
+  ret = read_header(hctx, &header);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
+    return ret;
+  }
+  if (header.user_count >= op.max_users) {
+    CLS_LOG(4, "account user limit exceeded, %u >= %u",
+            header.user_count, op.max_users);
+    return -EUSERS; // too many users
+  }
+  header.user_count++;
+
+  // write the list entry
+  bufferlist emptybl;
+  ret = cls_cxx_map_set_val(hctx, key, &emptybl);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to write account user entry, ret=%d", ret);
+    return ret;
+  }
+
+  // write the updated account header
+  bufferlist headerbl;
+  encode(header, headerbl);
+  return cls_cxx_map_write_header(hctx, &headerbl);
+} // cls_account_users_add
+
+static int cls_account_users_rm(cls_method_context_t hctx,
+                                buffer::list *in, buffer::list *out)
+{
+  cls_account_users_rm_op op;
+  try {
+    auto bliter = in->cbegin();
+    decode(op, bliter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+  const std::string& key = op.user;
+
+  // does this user entry exist?
+  bufferlist bl;
+  int ret = cls_cxx_map_get_val(hctx, key, &bl);
+  if (ret < 0) {
+    return ret;
+  }
+
+  // update user_count in the account header
+  cls_account_header header;
+  ret = read_header(hctx, &header);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
+    return ret;
+  }
+  if (header.user_count) { // guard underflow
+    header.user_count--;
+  }
+
+  // remove the list entry
+  ret = cls_cxx_map_remove_key(hctx, key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to remove account user entry, ret=%d", ret);
+    return ret;
+  }
+
+  // write the updated account header
+  bufferlist headerbl;
+  encode(header, headerbl);
+  return cls_cxx_map_write_header(hctx, &headerbl);
+} // cls_account_users_rm
+
+static int cls_account_users_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls_account_users_list_op op;
+  try {
+    auto p = in->cbegin();
+    decode(op, p);
+  } catch (const ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+  CLS_LOG(20, "listing users from marker=%s", op.marker.c_str());
+
+  const std::string prefix; // empty prefix
+  const uint32_t max_entries = std::min(op.max_entries, 1000u);
+  std::map<std::string, bufferlist> entries;
+  bool truncated = false;
+
+  int rc = cls_cxx_map_get_vals(hctx, op.marker, prefix, max_entries,
+                                &entries, &truncated);
+  if (rc < 0) {
+    return rc;
+  }
+
+  cls_account_users_list_ret ret;
+  // copy the map's keys into a vector
+  ret.entries.resize(entries.size());
+  std::transform(entries.begin(), entries.end(), ret.entries.begin(),
+      [] (const auto& pair) { return pair.first; });
+  ret.truncated = truncated;
+  encode(ret, *out);
+
+  return 0;
+}
+
 CLS_INIT(user)
 {
   CLS_LOG(1, "Loaded user class!");
@@ -516,7 +647,6 @@ CLS_INIT(user)
 
   cls_register("user", &h_class);
 
-  /* log */
   cls_register_cxx_method(h_class, "set_buckets_info", CLS_METHOD_RD | CLS_METHOD_WR,
                           cls_user_set_buckets_info, &h_user_set_buckets_info);
   cls_register_cxx_method(h_class, "complete_stats_sync", CLS_METHOD_RD | CLS_METHOD_WR,
@@ -526,6 +656,15 @@ CLS_INIT(user)
   cls_register_cxx_method(h_class, "get_header", CLS_METHOD_RD, cls_user_get_header, &h_user_get_header);
   cls_register_cxx_method(h_class, "reset_user_stats", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats, &h_user_reset_stats);
   cls_register_cxx_method(h_class, "reset_user_stats2", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats2, &h_user_reset_stats2);
+
+  // account
+  cls_method_handle_t h_account_users_add;
+  cls_method_handle_t h_account_users_rm;
+  cls_method_handle_t h_account_users_list;
+
+  cls_register_cxx_method(h_class, "account_users_add", CLS_METHOD_RD | CLS_METHOD_WR, cls_account_users_add, &h_account_users_add);
+  cls_register_cxx_method(h_class, "account_users_rm", CLS_METHOD_RD | CLS_METHOD_WR, cls_account_users_rm, &h_account_users_rm);
+  cls_register_cxx_method(h_class, "account_users_list", CLS_METHOD_RD, cls_account_users_list, &h_account_users_list);
 
   return;
 }

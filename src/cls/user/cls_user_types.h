@@ -216,6 +216,26 @@ struct cls_user_header {
 };
 WRITE_CLASS_ENCODER(cls_user_header)
 
+
+struct cls_account_header {
+  uint32_t user_count = 0;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(user_count, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(user_count, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_account_header*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_account_header)
+
+
 void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i);
 void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i);
 void cls_user_gen_test_stats(cls_user_stats *stats);
