@@ -10,6 +10,8 @@ from cephadm.serve import CephadmServe
 from orchestrator import OrchestratorError, DaemonDescription
 from .fixtures import _run_cephadm, wait, with_host, with_service
 
+from typing import List, Tuple, Optional
+
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_start(cephadm_module: CephadmOrchestrator):
@@ -163,3 +165,158 @@ def test_enough_mds_for_ok_to_stop(get, get_daemons_by_service, cephadm_module: 
     get_daemons_by_service.side_effect = [[DaemonDescription(), DaemonDescription()]]
     assert cephadm_module.upgrade._enough_mds_for_ok_to_stop(
         DaemonDescription(daemon_type='mds', daemon_id='myfs.test.host1.gfknd', service_name='mds.myfs.test'))
+
+
+@pytest.mark.parametrize(
+    "upgraded, not_upgraded, daemon_types, hosts, services, should_block",
+    # [ ([(type, host, id), ... ], [...], [daemon types], [hosts], [services], True/False), ... ]
+    [
+        (  # valid, upgrade mgr daemons
+            [],
+            [('mgr', 'a', 'a.x'), ('mon', 'a', 'a')],
+            ['mgr'],
+            None,
+            None,
+            False
+        ),
+        (  # invalid, can't upgrade mons until mgr is upgraded
+            [],
+            [('mgr', 'a', 'a.x'), ('mon', 'a', 'a')],
+            ['mon'],
+            None,
+            None,
+            True
+        ),
+        (  # invalid, can't upgrade mon service until all mgr daemons are upgraded
+            [],
+            [('mgr', 'a', 'a.x'), ('mon', 'a', 'a')],
+            None,
+            None,
+            ['mon'],
+            True
+        ),
+        (  # valid, upgrade mgr service
+            [],
+            [('mgr', 'a', 'a.x'), ('mon', 'a', 'a')],
+            None,
+            None,
+            ['mgr'],
+            False
+        ),
+        (  # valid, mgr is already upgraded so can upgrade mons
+            [('mgr', 'a', 'a.x')],
+            [('mon', 'a', 'a')],
+            ['mon'],
+            None,
+            None,
+            False
+        ),
+        (  # invalid, can't upgrade all daemons on b b/c un-upgraded mgr on a
+            [],
+            [('mgr', 'b', 'b.y'), ('mon', 'a', 'a')],
+            None,
+            ['a'],
+            None,
+            True
+        ),
+        (  # valid, only daemon on b is a mgr
+            [],
+            [('mgr', 'a', 'a.x'), ('mgr', 'b', 'b.y'), ('mon', 'a', 'a')],
+            None,
+            ['b'],
+            None,
+            False
+        ),
+        (  # invalid, can't upgrade mon on a while mgr on b is un-upgraded
+            [],
+            [('mgr', 'a', 'a.x'), ('mgr', 'b', 'b.y'), ('mon', 'a', 'a')],
+            None,
+            ['a'],
+            None,
+            True
+        ),
+        (  # valid, only upgrading the mgr on a
+            [],
+            [('mgr', 'a', 'a.x'), ('mgr', 'b', 'b.y'), ('mon', 'a', 'a')],
+            ['mgr'],
+            ['a'],
+            None,
+            False
+        ),
+        (  # valid, mgr daemon not on b are upgraded
+            [('mgr', 'a', 'a.x')],
+            [('mgr', 'b', 'b.y'), ('mon', 'a', 'a')],
+            None,
+            ['b'],
+            None,
+            False
+        ),
+        (  # valid, all the necessary hosts are covered, mgr on c is already upgraded
+            [('mgr', 'c', 'c.z')],
+            [('mgr', 'a', 'a.x'), ('mgr', 'b', 'b.y'), ('mon', 'a', 'a'), ('osd', 'c', '0')],
+            None,
+            ['a', 'b'],
+            None,
+            False
+        ),
+        (  # invalid, can't upgrade mon on a while mgr on b is un-upgraded
+            [],
+            [('mgr', 'a', 'a.x'), ('mgr', 'b', 'b.y'), ('mon', 'a', 'a')],
+            ['mgr', 'mon'],
+            ['a'],
+            None,
+            True
+        ),
+        (  # valid, only mon not on "b" is upgraded already. Case hit while making teuthology test
+            [('mon', 'a', 'a')],
+            [('mon', 'b', 'x'), ('mon', 'b', 'y'), ('osd', 'a', '1'), ('osd', 'b', '2')],
+            ['mon', 'osd'],
+            ['b'],
+            None,
+            False
+        ),
+    ]
+)
+@mock.patch("cephadm.module.HostCache.get_daemons")
+@mock.patch("cephadm.serve.CephadmServe._get_container_image_info")
+@mock.patch('cephadm.module.SpecStore.__getitem__')
+def test_staggered_upgrade_validation(
+        get_spec,
+        get_image_info,
+        get_daemons,
+        upgraded: List[Tuple[str, str, str]],
+        not_upgraded: List[Tuple[str, str, str, str]],
+        daemon_types: Optional[str],
+        hosts: Optional[str],
+        services: Optional[str],
+        should_block: bool,
+        cephadm_module: CephadmOrchestrator,
+):
+    def to_dds(ts: List[Tuple[str, str]], upgraded: bool) -> List[DaemonDescription]:
+        dds = []
+        digest = 'new_image@repo_digest' if upgraded else 'old_image@repo_digest'
+        for t in ts:
+            dds.append(DaemonDescription(daemon_type=t[0],
+                                         hostname=t[1],
+                                         daemon_id=t[2],
+                                         container_image_digests=[digest],
+                                         deployed_by=[digest],))
+        return dds
+    get_daemons.return_value = to_dds(upgraded, True) + to_dds(not_upgraded, False)
+    get_image_info.return_value = ('new_id', 'ceph version 99.99.99 (hash)', ['new_image@repo_digest'])
+
+    class FakeSpecDesc():
+        def __init__(self, spec):
+            self.spec = spec
+
+    def _get_spec(s):
+        return FakeSpecDesc(ServiceSpec(s))
+
+    get_spec.side_effect = _get_spec
+    if should_block:
+        with pytest.raises(OrchestratorError):
+            cephadm_module.upgrade._validate_upgrade_filters(
+                'new_image_name', daemon_types, hosts, services)
+    else:
+        cephadm_module.upgrade._validate_upgrade_filters(
+            'new_image_name', daemon_types, hosts, services)
