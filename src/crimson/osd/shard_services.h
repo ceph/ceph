@@ -141,9 +141,9 @@ public:
 
   // -- tids --
   // for ops i issue
-  unsigned int last_tid{0};
+  unsigned int next_tid{0};
   ceph_tid_t get_tid() {
-    return (ceph_tid_t)last_tid++;
+    return (ceph_tid_t)next_tid++;
   }
 
   // PG Temp State
