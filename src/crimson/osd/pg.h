@@ -551,6 +551,13 @@ public:
 
   void print(std::ostream& os) const;
   void dump_primary(Formatter*);
+  seastar::future<> submit_error_log(
+    Ref<MOSDOp> m,
+    const OpInfo &op_info,
+    ObjectContextRef obc,
+    const std::error_code e,
+    ceph_tid_t rep_tid,
+    eversion_t &version);
 
 private:
   template<RWState::State State>
