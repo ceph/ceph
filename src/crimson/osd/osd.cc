@@ -22,6 +22,8 @@
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPeeringOp.h"
+#include "messages/MOSDPGUpdateLogMissing.h"
+#include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MPGStats.h"
@@ -781,6 +783,12 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
       return handle_rep_op_reply(conn, boost::static_pointer_cast<MOSDRepOpReply>(m));
     case MSG_OSD_SCRUB2:
       return handle_scrub(conn, boost::static_pointer_cast<MOSDScrub2>(m));
+    case MSG_OSD_PG_UPDATE_LOG_MISSING:
+      return handle_update_log_missing(conn, boost::static_pointer_cast<
+        MOSDPGUpdateLogMissing>(m));
+    case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+      return handle_update_log_missing_reply(conn, boost::static_pointer_cast<
+        MOSDPGUpdateLogMissingReply>(m));
     default:
       dispatched = false;
       return seastar::now();
@@ -1205,6 +1213,28 @@ seastar::future<> OSD::handle_osd_op(crimson::net::ConnectionRef conn,
   (void) start_pg_operation<ClientRequest>(
     *this,
     conn,
+    std::move(m));
+  return seastar::now();
+}
+
+seastar::future<> OSD::handle_update_log_missing(
+  crimson::net::ConnectionRef conn,
+  Ref<MOSDPGUpdateLogMissing> m)
+{
+  m->decode_payload();
+  (void) start_pg_operation<LogMissingRequest>(
+    std::move(conn),
+    std::move(m));
+  return seastar::now();
+}
+
+seastar::future<> OSD::handle_update_log_missing_reply(
+  crimson::net::ConnectionRef conn,
+  Ref<MOSDPGUpdateLogMissingReply> m)
+{
+  m->decode_payload();
+  (void) start_pg_operation<LogMissingRequestReply>(
+    std::move(conn),
     std::move(m));
   return seastar::now();
 }
