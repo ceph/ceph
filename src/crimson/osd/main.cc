@@ -222,11 +222,11 @@ int main(int argc, const char* argv[])
               seastar::log_level::debug
             );
           }
-	  if (config.count("trace")) {
-	    seastar::global_logger_registry().set_all_loggers_level(
+          if (config.count("trace")) {
+            seastar::global_logger_registry().set_all_loggers_level(
               seastar::log_level::trace
             );
-	  }
+          }
           sharded_conf().start(init_params.name, cluster_name).get();
           auto stop_conf = seastar::defer([] {
             sharded_conf().stop().get();
