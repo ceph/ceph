@@ -128,9 +128,9 @@ public:
     const uint64_t max) = 0;
 
   struct remove_mapping_result_t {
-    paddr_t offset;
-    extent_len_t len;
-    laddr_t laddr;
+    paddr_t offset = P_ADDR_NULL;
+    extent_len_t len = 0;
+    laddr_t laddr = L_ADDR_NULL;
   };
 
   /**
