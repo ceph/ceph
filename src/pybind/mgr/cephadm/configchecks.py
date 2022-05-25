@@ -1,6 +1,7 @@
 import json
 import ipaddress
 import logging
+import copy
 
 from mgr_module import ServiceInfoT
 
@@ -636,9 +637,10 @@ class CephadmConfigChecks:
 
     def _process_hosts(self) -> None:
         self.log.debug(f"processing data from {len(self.mgr.cache.facts)} hosts")
-        for hostname in self.mgr.cache.facts:
+        facts = copy.deepcopy(self.mgr.cache.facts)
+        for hostname in facts:
             host = HostFacts()
-            host.load_facts(self.mgr.cache.facts[hostname])
+            host.load_facts(facts[hostname])
             if not host._valid:
                 self.log.warning(f"skipping {hostname} - incompatible host facts")
                 continue
