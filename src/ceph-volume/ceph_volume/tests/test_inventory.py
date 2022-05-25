@@ -111,6 +111,7 @@ def device_data(device_info):
 class TestInventory(object):
 
     expected_keys = [
+        'ceph_device',
         'path',
         'rejected_reasons',
         'sys_api',
@@ -152,30 +153,30 @@ class TestInventory(object):
         'errors',
     ]
 
-    def test_json_inventory_keys_unexpected(self, device_report_keys):
+    def test_json_inventory_keys_unexpected(self, fake_call, device_report_keys):
         for k in device_report_keys:
             assert k in self.expected_keys, "unexpected key {} in report".format(k)
 
-    def test_json_inventory_keys_missing(self, device_report_keys):
+    def test_json_inventory_keys_missing(self, fake_call, device_report_keys):
         for k in self.expected_keys:
             assert k in device_report_keys, "expected key {} in report".format(k)
 
-    def test_sys_api_keys_unexpected(self, device_sys_api_keys):
+    def test_sys_api_keys_unexpected(self, fake_call, device_sys_api_keys):
         for k in device_sys_api_keys:
             assert k in self.expected_sys_api_keys, "unexpected key {} in sys_api field".format(k)
 
-    def test_sys_api_keys_missing(self, device_sys_api_keys):
+    def test_sys_api_keys_missing(self, fake_call, device_sys_api_keys):
         for k in self.expected_sys_api_keys:
             assert k in device_sys_api_keys, "expected key {} in sys_api field".format(k)
 
-    def test_lsm_data_type_unexpected(self, device_data):
+    def test_lsm_data_type_unexpected(self, fake_call, device_data):
         assert isinstance(device_data['lsm_data'], dict), "lsm_data field must be of type dict"
 
-    def test_lsm_data_keys_unexpected(self, device_data):
+    def test_lsm_data_keys_unexpected(self, fake_call, device_data):
         for k in device_data['lsm_data'].keys():
             assert k in self.expected_lsm_keys, "unexpected key {} in lsm_data field".format(k)
 
-    def test_lsm_data_keys_missing(self, device_data):
+    def test_lsm_data_keys_missing(self, fake_call, device_data):
         lsm_keys = device_data['lsm_data'].keys()
         assert lsm_keys
         for k in self.expected_lsm_keys:

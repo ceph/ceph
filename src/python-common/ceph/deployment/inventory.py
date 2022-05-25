@@ -43,6 +43,7 @@ class Devices(object):
 
 class Device(object):
     report_fields = [
+        'ceph_device',
         'rejected_reasons',
         'available',
         'path',
@@ -62,7 +63,8 @@ class Device(object):
                  lvs=None,  # type: Optional[List[str]]
                  device_id=None,  # type: Optional[str]
                  lsm_data=None,  # type: Optional[Dict[str, Dict[str, str]]]
-                 created=None  # type: Optional[datetime.datetime]
+                 created=None,  # type: Optional[datetime.datetime]
+                 ceph_device=None  # type: Optional[bool]
                  ):
         self.path = path
         self.sys_api = sys_api if sys_api is not None else {}  # type: Dict[str, Any]
@@ -72,6 +74,7 @@ class Device(object):
         self.device_id = device_id
         self.lsm_data = lsm_data if lsm_data is not None else {}  # type: Dict[str, Dict[str, str]]
         self.created = created if created is not None else datetime_now()
+        self.ceph_device = ceph_device
 
     def __eq__(self, other):
         # type: (Any) -> bool
@@ -120,6 +123,7 @@ class Device(object):
             'path': self.path if self.path is not None else 'unknown',
             'lvs': self.lvs if self.lvs else 'None',
             'available': str(self.available),
+            'ceph_device': str(self.ceph_device)
         }
         if not self.available and self.rejected_reasons:
             device_desc['rejection reasons'] = self.rejected_reasons

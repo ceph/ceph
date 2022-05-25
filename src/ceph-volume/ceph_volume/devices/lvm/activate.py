@@ -140,7 +140,7 @@ def get_osd_device_path(osd_lvs, device_type, dmcrypt_secret=None):
     raise RuntimeError('could not find %s with uuid %s' % (device_type, device_uuid))
 
 
-def activate_bluestore(osd_lvs, no_systemd=False):
+def activate_bluestore(osd_lvs, no_systemd=False, no_tmpfs=False):
     for lv in osd_lvs:
         if lv.tags.get('ceph.type') == 'block':
             osd_block_lv = lv
@@ -160,7 +160,7 @@ def activate_bluestore(osd_lvs, no_systemd=False):
     osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     if not system.path_is_mounted(osd_path):
         # mkdir -p and mount as tmpfs
-        prepare_utils.create_osd_path(osd_id, tmpfs=True)
+        prepare_utils.create_osd_path(osd_id, tmpfs=not no_tmpfs)
     # XXX This needs to be removed once ceph-bluestore-tool can deal with
     # symlinks that exist in the osd dir
     for link_name in ['block', 'block.db', 'block.wal']:
@@ -297,9 +297,15 @@ class Activate(object):
                         'assuming bluestore')
 
             return activate_bluestore(lvs, args.no_systemd)
-        if args.bluestore:
-            activate_bluestore(lvs, args.no_systemd)
-        elif args.filestore:
+
+        # explicit filestore/bluestore flags take precedence
+        if getattr(args, 'bluestore', False):
+            activate_bluestore(lvs, args.no_systemd, getattr(args, 'no_tmpfs', False))
+        elif getattr(args, 'filestore', False):
+            activate_filestore(lvs, args.no_systemd)
+        elif any('ceph.block_device' in lv.tags for lv in lvs):
+            activate_bluestore(lvs, args.no_systemd, getattr(args, 'no_tmpfs', False))
+        elif any('ceph.data_device' in lv.tags for lv in lvs):
             activate_filestore(lvs, args.no_systemd)
 
     def main(self):
@@ -344,12 +350,12 @@ class Activate(object):
         parser.add_argument(
             '--bluestore',
             action='store_true',
-            help='bluestore objectstore (default)',
+            help='force bluestore objectstore activation',
         )
         parser.add_argument(
             '--filestore',
             action='store_true',
-            help='filestore objectstore',
+            help='force filestore objectstore activation',
         )
         parser.add_argument(
             '--all',
@@ -363,14 +369,15 @@ class Activate(object):
             action='store_true',
             help='Skip creating and enabling systemd units and starting OSD services',
         )
+        parser.add_argument(
+            '--no-tmpfs',
+            action='store_true',
+            help='Do not use a tmpfs mount for OSD data dir'
+        )
         if len(self.argv) == 0:
             print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
-        # Default to bluestore here since defaulting it in add_argument may
-        # cause both to be True
-        if not args.bluestore and not args.filestore:
-            args.bluestore = True
         if args.activate_all:
             self.activate_all(args)
         else:

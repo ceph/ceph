@@ -1,3 +1,4 @@
+import enum
 import yaml
 
 from ceph.deployment.inventory import Device
@@ -8,6 +9,11 @@ try:
     from typing import Optional, List, Dict, Any, Union
 except ImportError:
     pass
+
+
+class OSDMethod(str, enum.Enum):
+    raw = 'raw'
+    lvm = 'lvm'
 
 
 class DeviceSelection(object):
@@ -144,6 +150,7 @@ class DriveGroupSpec(ServiceSpec):
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
+        "data_allocate_fraction", "method",
     ]
 
     def __init__(self,
@@ -168,6 +175,8 @@ class DriveGroupSpec(ServiceSpec):
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
                  extra_container_args=None,  # type: Optional[List[str]]
+                 data_allocate_fraction=None,  # type: Optional[float]
+                 method=None,  # type: Optional[OSDMethod]
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -226,6 +235,11 @@ class DriveGroupSpec(ServiceSpec):
 
         #: If this should be treated as a 'preview' spec
         self.preview_only = preview_only
+
+        #: Allocate a fraction of the data device (0,1.0]
+        self.data_allocate_fraction = data_allocate_fraction
+
+        self.method = method
 
     @classmethod
     def _from_json_impl(cls, json_drive_group):
@@ -320,6 +334,11 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'filter_logic must be either <AND> or <OR>')
+
+        if self.method not in [None, 'lvm', 'raw']:
+            raise DriveGroupValidationError(self.service_id, 'method must be one of None, lvm, raw')
+        if self.method == 'raw' and self.objectstore == 'filestore':
+            raise DriveGroupValidationError(self.service_id, 'method raw only supports bluestore')
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)
