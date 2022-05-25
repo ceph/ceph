@@ -264,4 +264,103 @@ struct cls_user_complete_stats_sync_op {
 WRITE_CLASS_ENCODER(cls_user_complete_stats_sync_op)
 
 
+struct cls_account_init_op {
+  size_t max_users = 0;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl)
+    encode(max_users, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(max_users, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_account_init_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_account_init_op)
+
+struct cls_account_users_add_op {
+  std::string user;
+  uint32_t max_users = 0;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(user, bl);
+    encode(max_users, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(user, bl);
+    decode(max_users, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_account_users_add_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_account_users_add_op)
+
+struct cls_account_users_rm_op {
+  std::string user;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(user, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(user, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_account_users_rm_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_account_users_rm_op)
+
+struct cls_account_users_list_op {
+  std::string marker;
+  uint32_t max_entries;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(marker, bl);
+    encode(max_entries, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(marker, bl);
+    decode(max_entries, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_account_users_list_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_account_users_list_op)
+
+struct cls_account_users_list_ret {
+  std::vector<std::string> entries;
+  bool truncated = false;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entries, bl);
+    encode(truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entries, bl);
+    decode(truncated, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_account_users_list_ret*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_account_users_list_ret)
+
 #endif

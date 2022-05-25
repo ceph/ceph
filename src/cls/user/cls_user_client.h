@@ -33,4 +33,19 @@ void cls_user_get_header(librados::ObjectReadOperation& op, cls_user_header *hea
 int cls_user_get_header_async(librados::IoCtx& io_ctx, std::string& oid, RGWGetUserHeader_CB *ctx);
 void cls_user_reset_stats(librados::ObjectWriteOperation& op);
 
+// accounts
+
+// add an entry to the account's list of users. returns -EUSERS (Too many users)
+// if the user count would exceed the given max_users
+void cls_account_users_add(librados::ObjectWriteOperation& op,
+                           std::string user, uint32_t max_users);
+// remove an entry from the account's list of users
+void cls_account_users_rm(librados::ObjectWriteOperation& op,
+                          std::string user);
+// list the users linked to an account
+void cls_account_users_list(librados::ObjectReadOperation& op,
+                            std::string marker, uint32_t max_entries,
+                            std::vector<std::string>& entries,
+                            bool *truncated, int *pret);
+
 #endif

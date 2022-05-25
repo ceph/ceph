@@ -60,7 +60,7 @@ public:
         auto iter = outbl.cbegin();
         decode(ret, iter);
         if (entries)
-	  *entries = ret.entries;
+	  *entries = std::move(ret.entries);
         if (truncated)
           *truncated = ret.truncated;
         if (marker)
@@ -161,4 +161,67 @@ int cls_user_get_header_async(IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *c
     return r;
 
   return 0;
+}
+
+void cls_account_users_add(librados::ObjectWriteOperation& op,
+                           std::string user, uint32_t max_users)
+{
+  bufferlist inbl;
+  cls_account_users_add_op call;
+  call.user = std::move(user);
+  call.max_users = max_users;
+  encode(call, inbl);
+  op.exec("user", "account_users_add", inbl);
+}
+
+void cls_account_users_rm(librados::ObjectWriteOperation& op, std::string user)
+{
+  bufferlist inbl;
+  cls_account_users_rm_op call;
+  call.user = std::move(user);
+  encode(call, inbl);
+  op.exec("user", "account_users_rm", inbl);
+}
+
+class ClsAccountListCtx : public ObjectOperationCompletion {
+  std::vector<std::string>* entries;
+  bool* truncated;
+  int* pret;
+public:
+  ClsAccountListCtx(std::vector<std::string>* entries,
+                    bool* truncated, int* pret)
+      : entries(entries), truncated(truncated), pret(pret)
+  {}
+  void handle_completion(int r, bufferlist& outbl) override {
+    if (r >= 0) {
+      cls_account_users_list_ret ret;
+      try {
+        auto iter = outbl.cbegin();
+        decode(ret, iter);
+        if (entries)
+	  *entries = std::move(ret.entries);
+        if (truncated)
+          *truncated = ret.truncated;
+      } catch (const ceph::buffer::error& err) {
+        r = -EIO;
+      }
+    }
+    if (pret) {
+      *pret = r;
+    }
+  }
+};
+
+void cls_account_users_list(librados::ObjectReadOperation& op,
+                            std::string marker, uint32_t max_entries,
+                            std::vector<std::string>& entries,
+                            bool *truncated,
+                            int *pret)
+{
+  bufferlist inbl;
+  cls_account_users_list_op call;
+  call.marker = std::move(marker);
+  call.max_entries = max_entries;
+  encode(call, inbl);
+  op.exec("user", "account_users_list", inbl, new ClsAccountListCtx(&entries, truncated, pret));
 }
