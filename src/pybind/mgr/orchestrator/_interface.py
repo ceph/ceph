@@ -660,6 +660,14 @@ class Orchestrator(object):
         """Update prometheus cluster"""
         raise NotImplementedError()
 
+    def get_prometheus_access_info(self) -> OrchResult[Dict[str, str]]:
+        """get prometheus access information"""
+        raise NotImplementedError()
+
+    def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:
+        """get alertmanager access information"""
+        raise NotImplementedError()
+
     def apply_node_exporter(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Node-Exporter daemon(s)"""
         raise NotImplementedError()

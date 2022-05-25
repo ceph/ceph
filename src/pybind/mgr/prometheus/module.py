@@ -1,4 +1,5 @@
 import cherrypy
+import yaml
 from collections import defaultdict
 from pkg_resources import packaging  # type: ignore
 import json
@@ -8,11 +9,12 @@ import re
 import threading
 import time
 import enum
+from collections import namedtuple
+
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
 from rbd import RBD
-from collections import namedtuple
-import yaml
+from cephadm.ssl_cert_utils import SSLCerts
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable
 
@@ -635,6 +637,7 @@ class Module(MgrModule):
         _global_instance = self
         self.metrics_thread = MetricCollectionThread(_global_instance)
         self.health_history = HealthHistory(self)
+        self.ssl_certs = SSLCerts()
 
     def _setup_static_metrics(self) -> Dict[str, Metric]:
         metrics = {}
@@ -856,9 +859,9 @@ class Module(MgrModule):
         self.log.info('Restarting engine...')
         cherrypy.engine.stop()
         cherrypy.server.httpserver = None
+        server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
         server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
-        self.set_uri(build_url(scheme='http', host=self.get_server_addr(), port=server_port, path='/'))
-        cherrypy.config.update({'server.socket_port': server_port})
+        self.configure(server_addr, server_port)
         cherrypy.engine.start()
         self.log.info('Engine started.')
 
@@ -1722,6 +1725,50 @@ class Module(MgrModule):
         self.collect()
         self.get_file_sd_config()
 
+    def configure(self, server_addr: str, server_port: int) -> None:
+        secure_monitoring_stack = self.get_module_option_ex(
+            'cephadm', 'secure_monitoring_stack', False)
+        if secure_monitoring_stack:
+            self.generate_tls_certificates(self.get_mgr_ip())
+            cherrypy.config.update({
+                'server.socket_host': server_addr,
+                'server.socket_port': server_port,
+                'engine.autoreload.on': False,
+                'server.ssl_module': 'builtin',
+                'server.ssl_certificate': self.cert_file,
+                'server.ssl_private_key': self.key_file,
+            })
+            # Publish the URI that others may use to access the service we're about to start serving
+            self.set_uri(build_url(scheme='https', host=self.get_server_addr(),
+                         port=server_port, path='/'))
+        else:
+            cherrypy.config.update({
+                'server.socket_host': server_addr,
+                'server.socket_port': server_port,
+                'engine.autoreload.on': False,
+                'server.ssl_module': None,
+                'server.ssl_certificate': None,
+                'server.ssl_private_key': None,
+            })
+            # Publish the URI that others may use to access the service we're about to start serving
+            self.set_uri(build_url(scheme='http', host=self.get_server_addr(),
+                         port=server_port, path='/'))
+
+    def generate_tls_certificates(self, host: str) -> None:
+        try:
+            old_cert = self.get_store('root/cert')
+            old_key = self.get_store('root/key')
+            if not old_cert or not old_key:
+                raise Exception('No old credentials for mgr-prometheus endpoint')
+            self.ssl_certs.load_root_credentials(old_cert, old_key)
+        except Exception:
+            self.ssl_certs.generate_root_cert(host)
+            self.set_store('root/cert', self.ssl_certs.get_root_cert())
+            self.set_store('root/key', self.ssl_certs.get_root_key())
+
+        self.cert_file, self.key_file = self.ssl_certs.generate_cert_files(
+            self.get_hostname(), host)
+
     def serve(self) -> None:
 
         class Root(object):
@@ -1802,10 +1849,8 @@ class Module(MgrModule):
                                              self.STALE_CACHE_RETURN]:
             self.stale_cache_strategy = self.STALE_CACHE_FAIL
 
-        server_addr = cast(str, self.get_localized_module_option(
-            'server_addr', get_default_addr()))
-        server_port = cast(int, self.get_localized_module_option(
-            'server_port', DEFAULT_PORT))
+        server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
+        server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
         self.log.info(
             "server_addr: %s server_port: %s" %
             (server_addr, server_port)
@@ -1818,19 +1863,13 @@ class Module(MgrModule):
         else:
             self.log.info('Cache disabled')
 
-        cherrypy.config.update({
-            'server.socket_host': server_addr,
-            'server.socket_port': server_port,
-            'engine.autoreload.on': False
-        })
-        # Publish the URI that others may use to access the service we're
-        # about to start serving
-        self.set_uri(build_url(scheme='http', host=self.get_server_addr(), port=server_port, path='/'))
+        self.configure(server_addr, server_port)
 
         cherrypy.tree.mount(Root(), "/")
         self.log.info('Starting engine...')
         cherrypy.engine.start()
         self.log.info('Engine started.')
+
         # wait for the shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()
