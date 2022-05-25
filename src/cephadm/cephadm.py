@@ -589,7 +589,7 @@ class Monitoring(object):
             'cpus': '1',
             'memory': '1GB',
             'args': [
-                '--no-collector.timex',
+                '--no-collector.timex'
             ],
         },
         'grafana': {
@@ -2711,11 +2711,26 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
                 r += ['--cluster.peer={}'.format(peer)]
+            try:
+                r += [f'--web.config.file={config["web_config"]}']
+            except KeyError:
+                pass
             # some alertmanager, by default, look elsewhere for a config
             r += ['--config.file=/etc/alertmanager/alertmanager.yml']
         if daemon_type == 'promtail':
             r += ['--config.expand-env']
+        if daemon_type == 'prometheus':
+            config = get_parm(ctx.config_json)
+            try:
+                r += [f'--web.config.file={config["web_config"]}']
+            except KeyError:
+                pass
         if daemon_type == 'node-exporter':
+            config = get_parm(ctx.config_json)
+            try:
+                r += [f'--web.config={config["web_config"]}']
+            except KeyError:
+                pass
             r += ['--path.procfs=/host/proc',
                   '--path.sysfs=/host/sys',
                   '--path.rootfs=/rootfs']
@@ -2806,6 +2821,12 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             config_dir = 'etc/loki'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'node-exporter':
+            data_dir_root = get_data_dir(fsid, ctx.data_dir,
+                                         daemon_type, daemon_id)
+            config_dir = 'etc/node-exporter'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
 
         # populate the config directory for the component from the config-json
         if 'files' in config_json:
@@ -3039,6 +3060,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[log_dir] = '/var/log/ceph:z'
             mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
         elif daemon_type == 'node-exporter':
+            mounts[os.path.join(data_dir, 'etc/node-exporter')] = '/etc/node-exporter:Z'
             mounts['/proc'] = '/host/proc:ro'
             mounts['/sys'] = '/host/sys:ro'
             mounts['/'] = '/rootfs:ro'
