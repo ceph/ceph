@@ -1902,8 +1902,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   int ret = 0;
   std::unique_ptr<rgw::sal::LCSerializer> serializer =
     sal_lc->get_serializer(lc_index_lock_name, obj_names[index],
-			   std::string());
-
+			   worker->thr_name());
   std::unique_ptr<rgw::sal::Lifecycle::LCEntry> entry;
   if (max_lock_secs <= 0) {
     return -EAGAIN;
@@ -2054,7 +2053,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  << dendl;
 
   std::unique_ptr<rgw::sal::LCSerializer> lock =
-    sal_lc->get_serializer(lc_index_lock_name, lc_shard, std::string());
+    sal_lc->get_serializer(lc_index_lock_name, lc_shard, worker->thr_name());
 
   utime_t lock_for_s(max_lock_secs, 0);
   const auto& lock_lambda = [&]() {
