@@ -895,6 +895,209 @@ TEST_F(DBStoreTest, DeleteObj) {
   ASSERT_EQ(ret, -2);
 }
 
+TEST_F(DBStoreTest, WriteVersionedObject) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  std::string instances[] = {"inst1", "inst2", "inst3"};
+  bufferlist b1;
+
+  params.op.obj.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+  params.op.obj.state.obj.key.name = "object1";
+
+  /* Write versioned objects */
+  DB::Object op_target(db, params.op.bucket.info, params.op.obj.state.obj);
+  DB::Object::Write write_op(&op_target);
+
+  /* Version1 */
+  params.op.obj.state.obj.key.instance = instances[0];
+  encode("HELLO WORLD", b1);
+  params.op.obj.head_data = b1;
+  params.op.obj.state.size = 12;
+  ret = write_op.write_versioned_obj(dpp, params);
+  ASSERT_EQ(ret, 0);
+
+  /* Version2 */
+  params.op.obj.state.obj.key.instance = instances[1];
+  b1.clear();
+  encode("HELLO WORLD ABC", b1);
+  params.op.obj.head_data = b1;
+  params.op.obj.state.size = 16;
+  ret = write_op.write_versioned_obj(dpp, params);
+  ASSERT_EQ(ret, 0);
+
+  /* Version3 */
+  params.op.obj.state.obj.key.instance = instances[2];
+  b1.clear();
+  encode("HELLO WORLD A", b1);
+  params.op.obj.head_data = b1;
+  params.op.obj.state.size = 14;
+  ret = write_op.write_versioned_obj(dpp, params);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST_F(DBStoreTest, ListVersionedObject) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  std::string instances[] = {"inst1", "inst2", "inst3"};
+  int i = 0;
+
+  /* list versioned objects */
+  params.op.obj.state.obj.key.instance.clear();
+  params.op.list_max_count = MAX_VERSIONED_OBJECTS;
+  ret = db->ProcessOp(dpp, "ListVersionedObjects", &params);
+  ASSERT_EQ(ret, 0);
+
+  i = 2;
+  for (auto ent: params.op.obj.list_entries) {
+    string is_current = (ent.flags & rgw_bucket_dir_entry::FLAG_CURRENT)? "true" : "false";
+    cout << "ent.name: " << ent.key.name << ". ent.instance: " << ent.key.instance << " is:current = " << is_current << "\n";
+
+    if (i == 2) {
+      ASSERT_EQ(is_current, "true");
+    } else {
+      ASSERT_EQ(is_current, "false");
+    }
+
+    ASSERT_EQ(ent.key.instance, instances[i]);
+    i--;
+  }
+}
+
+TEST_F(DBStoreTest, ReadVersionedObject) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  std::string instances[] = {"inst1", "inst2", "inst3"};
+  std::string data;
+
+  /* read object.. should fetch latest version */
+  RGWObjState* s;
+  params = GlobalParams;
+  params.op.obj.state.obj.key.instance.clear();
+  DB::Object op_target2(db, params.op.bucket.info, params.op.obj.state.obj);
+  ret = op_target2.get_obj_state(dpp, params.op.bucket.info, params.op.obj.state.obj,
+                                 true, &s);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(s->obj.key.instance, instances[2]);
+  decode(data, s->data);
+  ASSERT_EQ(data, "HELLO WORLD A");
+  ASSERT_EQ(s->size, 14);
+
+  /* read a particular non-current version */
+  params.op.obj.state.obj.key.instance = instances[1];
+  DB::Object op_target3(db, params.op.bucket.info, params.op.obj.state.obj);
+  ret = op_target3.get_obj_state(dpp, params.op.bucket.info, params.op.obj.state.obj,
+                                 true, &s);
+  ASSERT_EQ(ret, 0);
+  decode(data, s->data);
+  ASSERT_EQ(data, "HELLO WORLD ABC");
+  ASSERT_EQ(s->size, 16);
+}
+
+TEST_F(DBStoreTest, DeleteVersionedObject) {
+  struct DBOpParams params = GlobalParams;
+  int ret = -1;
+  std::string instances[] = {"inst1", "inst2", "inst3"};
+  std::string data;
+  std::string dm_instance;
+  int i = 0;
+
+  /* Delete object..should create delete marker */
+  params.op.obj.state.obj.key.instance.clear();
+  DB::Object op_target(db, params.op.bucket.info, params.op.obj.state.obj);
+  DB::Object::Delete delete_op(&op_target);
+  delete_op.params.versioning_status |= BUCKET_VERSIONED;
+
+  ret = delete_op.delete_obj(dpp);
+  ASSERT_EQ(ret, 0);
+
+  /* list versioned objects */
+  params = GlobalParams;
+  params.op.obj.state.obj.key.instance.clear();
+  params.op.list_max_count = MAX_VERSIONED_OBJECTS;
+  ret = db->ProcessOp(dpp, "ListVersionedObjects", &params);
+
+  i = 3;
+  for (auto ent: params.op.obj.list_entries) {
+    string is_current = (ent.flags & rgw_bucket_dir_entry::FLAG_CURRENT)? "true" : "false";
+    string is_delete_marker = (ent.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER)? "true" : "false";
+    cout << "ent.name: " << ent.key.name << ". ent.instance: " << ent.key.instance << " is_delete_marker = " << is_delete_marker << "\n";
+
+    if (i == 3) {
+      ASSERT_EQ(is_delete_marker, "true");
+      ASSERT_EQ(is_current, "true");
+      dm_instance = ent.key.instance;
+    } else {
+      ASSERT_EQ(is_current, "false");
+      ASSERT_EQ(is_delete_marker, "false");
+      ASSERT_EQ(ent.key.instance, instances[i]);
+    }
+
+    i--;
+  }
+
+  /* read object.. should return -ENOENT */
+  RGWObjState* s;
+  params = GlobalParams;
+  params.op.obj.state.obj.key.instance.clear();
+  DB::Object op_target2(db, params.op.bucket.info, params.op.obj.state.obj);
+  ret = op_target2.get_obj_state(dpp, params.op.bucket.info, params.op.obj.state.obj,
+                                 true, &s);
+  ASSERT_EQ(ret, -ENOENT);
+
+  /* Delete delete marker..should be able to read object now */ 
+  params.op.obj.state.obj.key.instance = dm_instance;
+  DB::Object op_target3(db, params.op.bucket.info, params.op.obj.state.obj);
+  DB::Object::Delete delete_op2(&op_target3);
+  delete_op2.params.versioning_status |= BUCKET_VERSIONED;
+
+  ret = delete_op2.delete_obj(dpp);
+  ASSERT_EQ(ret, 0);
+
+  /* read object.. should fetch latest version */
+  params = GlobalParams;
+  params.op.obj.state.obj.key.instance.clear();
+  DB::Object op_target4(db, params.op.bucket.info, params.op.obj.state.obj);
+  ret = op_target4.get_obj_state(dpp, params.op.bucket.info, params.op.obj.state.obj,
+                                 true, &s);
+  ASSERT_EQ(s->obj.key.instance, instances[2]);
+  decode(data, s->data);
+  ASSERT_EQ(data, "HELLO WORLD A");
+  ASSERT_EQ(s->size, 14);
+
+  /* delete latest version using version-id. Next version should get promoted */
+  params.op.obj.state.obj.key.instance = instances[2];
+  DB::Object op_target5(db, params.op.bucket.info, params.op.obj.state.obj);
+  DB::Object::Delete delete_op3(&op_target5);
+  delete_op3.params.versioning_status |= BUCKET_VERSIONED;
+
+  ret = delete_op3.delete_obj(dpp);
+  ASSERT_EQ(ret, 0);
+
+  /* list versioned objects..only two versions should be present
+   * with second version marked as CURRENT */
+  params = GlobalParams;
+  params.op.obj.state.obj.key.instance.clear();
+  params.op.list_max_count = MAX_VERSIONED_OBJECTS;
+  ret = db->ProcessOp(dpp, "ListVersionedObjects", &params);
+
+  i = 1;
+  for (auto ent: params.op.obj.list_entries) {
+    string is_current = (ent.flags & rgw_bucket_dir_entry::FLAG_CURRENT)? "true" : "false";
+    cout << "ent.name: " << ent.key.name << ". ent.instance: " << ent.key.instance << " is_current = " << is_current << "\n";
+
+    if (i == 1) {
+      ASSERT_EQ(is_current, "true");
+      dm_instance = ent.key.instance;
+    } else {
+      ASSERT_EQ(is_current, "false");
+      ASSERT_EQ(ent.key.instance, instances[i]);
+    }
+
+    i--;
+  }
+
+}
+
 TEST_F(DBStoreTest, ObjectOmapSetVal) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
