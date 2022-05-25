@@ -279,6 +279,21 @@ struct EventBackendRegistry<osd::RepRequest> {
   }
 };
 
+
+template <>
+struct EventBackendRegistry<osd::LogMissingRequest> {
+  static std::tuple<> get_backends() {
+    return {/* no extenral backends */};
+  }
+};
+
+template <>
+struct EventBackendRegistry<osd::LogMissingRequestReply> {
+  static std::tuple<> get_backends() {
+    return {/* no extenral backends */};
+  }
+};
+
 template <>
 struct EventBackendRegistry<osd::RecoverySubRequest> {
   static std::tuple<> get_backends() {

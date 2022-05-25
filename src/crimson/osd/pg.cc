@@ -1121,6 +1121,78 @@ void PG::handle_rep_op_reply(crimson::net::ConnectionRef conn,
   }
 }
 
+PG::interruptible_future<> PG::do_update_log_missing(
+  Ref<MOSDPGUpdateLogMissing> m)
+{
+  if (__builtin_expect(stopping, false)) {
+    return seastar::make_exception_future<>(
+      crimson::common::system_shutdown_exception());
+  }
+
+  ceph_assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
+  ObjectStore::Transaction t;
+  std::optional<eversion_t> op_trim_to, op_roll_forward_to;
+  if (m->pg_trim_to != eversion_t())
+    op_trim_to = m->pg_trim_to;
+  if (m->pg_roll_forward_to != eversion_t())
+    op_roll_forward_to = m->pg_roll_forward_to;
+  logger().debug("op_trim_to = {}, op_roll_forward_to = {}",
+    op_trim_to, op_roll_forward_to);
+
+  peering_state.append_log_entries_update_missing(
+    m->entries, t, op_trim_to, op_roll_forward_to);
+
+  return interruptor::make_interruptible(shard_services.get_store().do_transaction(
+    coll_ref, std::move(t))).then_interruptible(
+    [m, lcod=peering_state.get_info().last_complete, this] {
+    if (!peering_state.pg_has_reset_since(m->get_epoch())) {
+      peering_state.update_last_complete_ondisk(lcod);
+      auto reply =
+        crimson::make_message<MOSDPGUpdateLogMissingReply>(
+          spg_t(peering_state.get_info().pgid.pgid, get_primary().shard),
+          pg_whoami.shard,
+          m->get_epoch(),
+          m->min_epoch,
+          m->get_tid(),
+          lcod);
+      reply->set_priority(CEPH_MSG_PRIO_HIGH);
+      return m->get_connection()->send(std::move(reply));
+    }
+    return seastar::now();
+  });
+}
+
+
+PG::interruptible_future<> PG::do_update_log_missing_reply(
+  Ref<MOSDPGUpdateLogMissingReply> m)
+{
+  logger().debug("{}: got reply from {}", __func__, m->get_from());
+
+  auto it = log_entry_update_waiting_on.find(m->get_tid());
+  if (it != log_entry_update_waiting_on.end()) {
+    if (it->second.waiting_on.count(m->get_from())) {
+      it->second.waiting_on.erase(m->get_from());
+      if (m->last_complete_ondisk != eversion_t()) {
+        peering_state.update_peer_last_complete_ondisk(
+	  m->get_from(), m->last_complete_ondisk);
+      }
+    } else {
+      logger().error("{} : {} got reply {} from shard we are not waiting for ",
+        __func__, peering_state.get_info().pgid, *m, m->get_from());
+    }
+
+    if (it->second.waiting_on.empty()) {
+      it->second.all_committed.set_value();
+      it->second.all_committed = {};
+      log_entry_update_waiting_on.erase(it);
+    }
+  } else {
+    logger().error("{} : {} got reply {} on unknown tid {}",
+      __func__, peering_state.get_info().pgid, *m, m->get_tid());
+  }
+  return seastar::now();
+}
+
 bool PG::old_peering_msg(
   const epoch_t reply_epoch,
   const epoch_t query_epoch) const
