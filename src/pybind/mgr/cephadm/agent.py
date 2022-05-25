@@ -1,5 +1,11 @@
-import cherrypy
-import ipaddress
+try:
+    import cherrypy
+    from cherrypy._cpserver import Server
+except ImportError:
+    # to avoid sphinx build crash
+    class Server:  # type: ignore
+        pass
+
 import json
 import logging
 import socket
@@ -8,25 +14,17 @@ import tempfile
 import threading
 import time
 
-from mgr_module import ServiceInfoT
-from mgr_util import verify_tls_files, build_url
+
+from mgr_util import verify_tls_files
 from orchestrator import DaemonDescriptionStatus, OrchestratorError
 from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.services.ingress import IngressSpec
+from cephadm.ssl_cert_utils import SSLCerts
 
-from datetime import datetime, timedelta
-from cryptography import x509
-from cryptography.x509.oid import NameOID
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.backends import default_backend
-
-from typing import Any, Dict, List, Set, Tuple, \
-    TYPE_CHECKING, Optional, cast, Collection
+from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -44,212 +42,87 @@ logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
 cherrypy.log.access_log.propagate = False
 
 
-class CherryPyThread(threading.Thread):
+class AgentEndpoint:
+
+    KV_STORE_AGENT_ROOT_CERT = 'cephadm_agent/root/cert'
+    KV_STORE_AGENT_ROOT_KEY = 'cephadm_agent/root/key'
+
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
-        self.cherrypy_shutdown_event = threading.Event()
-        self.ssl_certs = SSLCerts(self.mgr)
+        self.ssl_certs = SSLCerts()
         self.server_port = 7150
         self.server_addr = self.mgr.get_mgr_ip()
-        super(CherryPyThread, self).__init__(target=self.run)
+        self.host_data: Server = None
 
-    def configure_cherrypy(self) -> None:
-        cherrypy.config.update({
-            'environment': 'production',
-            'server.socket_host': self.server_addr,
-            'server.socket_port': self.server_port,
-            'engine.autoreload.on': False,
-            'server.ssl_module': 'builtin',
-            'server.ssl_certificate': self.cert_tmp.name,
-            'server.ssl_private_key': self.key_tmp.name,
-        })
+    def configure_routes(self) -> None:
+
+        self.host_data = HostData(self.mgr,
+                                  self.server_port,
+                                  self.server_addr,
+                                  self.cert_file.name,
+                                  self.key_file.name)
 
         # configure routes
-        root = Root(self.mgr)
-        host_data = HostData(self.mgr)
         d = cherrypy.dispatch.RoutesDispatcher()
-        d.connect(name='index', route='/', controller=root.index)
-        d.connect(name='sd-config', route='/prometheus/sd-config', controller=root.get_sd_config)
-        d.connect(name='rules', route='/prometheus/rules', controller=root.get_prometheus_rules)
-        d.connect(name='host-data', route='/data', controller=host_data.POST,
+        d.connect(name='host-data', route='/',
+                  controller=self.host_data.POST,
                   conditions=dict(method=['POST']))
 
-        conf = {'/': {'request.dispatch': d}}
-        cherrypy.tree.mount(None, "/", config=conf)
+        cherrypy.tree.mount(None, '/data', config={'/': {'request.dispatch': d}})
 
-    def run(self) -> None:
+    def configure_tls(self) -> None:
         try:
+            old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
+            old_key = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_KEY)
+            if not old_key or not old_cert:
+                raise OrchestratorError('No old credentials for agent found')
+            self.ssl_certs.load_root_credentials(old_cert, old_key)
+        except (OrchestratorError, json.decoder.JSONDecodeError, KeyError, ValueError):
+            self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
+            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_CERT, self.ssl_certs.get_root_cert())
+            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_KEY, self.ssl_certs.get_root_key())
+
+        cert, key = self.ssl_certs.generate_cert(self.mgr.get_mgr_ip())
+        self.key_file = tempfile.NamedTemporaryFile()
+        self.key_file.write(key.encode('utf-8'))
+        self.key_file.flush()  # pkey_tmp must not be gc'ed
+        self.cert_file = tempfile.NamedTemporaryFile()
+        self.cert_file.write(cert.encode('utf-8'))
+        self.cert_file.flush()  # cert_tmp must not be gc'ed
+        verify_tls_files(self.cert_file.name, self.key_file.name)
+
+    def find_free_port(self) -> None:
+        max_port = self.server_port + 150
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        while self.server_port <= max_port:
             try:
-                old_creds = self.mgr.get_store('cephadm_endpoint_credentials')
-                if not old_creds:
-                    raise OrchestratorError('No old credentials for cephadm endpoint found')
-                old_creds_dict = json.loads(old_creds)
-                old_key = old_creds_dict['key']
-                old_cert = old_creds_dict['cert']
-                self.ssl_certs.load_root_credentials(old_cert, old_key)
-            except (OrchestratorError, json.decoder.JSONDecodeError, KeyError, ValueError):
-                self.ssl_certs.generate_root_cert()
-
-            cert, key = self.ssl_certs.generate_cert()
-
-            self.key_tmp = tempfile.NamedTemporaryFile()
-            self.key_tmp.write(key.encode('utf-8'))
-            self.key_tmp.flush()  # pkey_tmp must not be gc'ed
-            key_fname = self.key_tmp.name
-
-            self.cert_tmp = tempfile.NamedTemporaryFile()
-            self.cert_tmp.write(cert.encode('utf-8'))
-            self.cert_tmp.flush()  # cert_tmp must not be gc'ed
-            cert_fname = self.cert_tmp.name
-
-            verify_tls_files(cert_fname, key_fname)
-            self.configure_cherrypy()
-
-            self.mgr.log.debug('Starting cherrypy engine...')
-            self.start_engine()
-            self.mgr.log.debug('Cherrypy engine started.')
-            cephadm_endpoint_creds = {
-                'cert': self.ssl_certs.get_root_cert(),
-                'key': self.ssl_certs.get_root_key()
-            }
-            self.mgr.set_store('cephadm_endpoint_credentials', json.dumps(cephadm_endpoint_creds))
-            self.mgr._kick_serve_loop()
-            # wait for the shutdown event
-            self.cherrypy_shutdown_event.wait()
-            self.cherrypy_shutdown_event.clear()
-            cherrypy.engine.stop()
-            self.mgr.log.debug('Cherrypy engine stopped.')
-        except Exception as e:
-            self.mgr.log.error(f'Failed to run cephadm cherrypy endpoint: {e}')
-
-    def start_engine(self) -> None:
-        port_connect_attempts = 0
-        while port_connect_attempts < 150:
-            try:
-                cherrypy.engine.start()
-                self.mgr.log.debug(f'Cephadm endpoint connected to port {self.server_port}')
+                sock.bind((self.server_addr, self.server_port))
+                sock.close()
+                self.host_data.socket_port = self.server_port
+                self.mgr.log.debug(f'Cephadm agent endpoint using {self.server_port}')
                 return
-            except cherrypy.process.wspbus.ChannelFailures as e:
-                self.mgr.log.debug(
-                    f'{e}. Trying next port.')
+            except OSError:
                 self.server_port += 1
-                cherrypy.server.httpserver = None
-                cherrypy.config.update({
-                    'server.socket_port': self.server_port
-                })
-                port_connect_attempts += 1
         self.mgr.log.error(
-            'Cephadm Endpoint could not find free port in range 7150-7300 and failed to start')
+            'Cephadm agent endpoint could not find free port in range 7150-7300 and failed to start')
 
-    def shutdown(self) -> None:
-        self.mgr.log.debug('Stopping cherrypy engine...')
-        self.cherrypy_shutdown_event.set()
-
-
-class Root(object):
-
-    # collapse everything to '/'
-    def _cp_dispatch(self, vpath: str) -> 'Root':
-        cherrypy.request.path = ''
-        return self
-
-    def __init__(self, mgr: "CephadmOrchestrator"):
-        self.mgr = mgr
-
-    @cherrypy.expose
-    def index(self) -> str:
-        return '''<!DOCTYPE html>
-<html>
-<head><title>Cephadm HTTP Endpoint</title></head>
-<body>
-<h2>Cephadm Service Discovery Endpoints</h2>
-<p><a href='prometheus/sd-config?service=mgr-prometheus'>mgr/Prometheus http sd-config</a></p>
-<p><a href='prometheus/sd-config?service=alertmanager'>Alertmanager http sd-config</a></p>
-<p><a href='prometheus/sd-config?service=node-exporter'>Node exporter http sd-config</a></p>
-<p><a href='prometheus/sd-config?service=haproxy'>HAProxy http sd-config</a></p>
-<p><a href='prometheus/rules'>Prometheus rules</a></p>
-</body>
-</html>'''
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def get_sd_config(self, service: str) -> List[Dict[str, Collection[str]]]:
-        """Return <http_sd_config> compatible prometheus config for the specified service."""
-        if service == 'mgr-prometheus':
-            return self.prometheus_sd_config()
-        elif service == 'alertmanager':
-            return self.alertmgr_sd_config()
-        elif service == 'node-exporter':
-            return self.node_exporter_sd_config()
-        elif service == 'haproxy':
-            return self.haproxy_sd_config()
-        else:
-            return []
-
-    def prometheus_sd_config(self) -> List[Dict[str, Collection[str]]]:
-        """Return <http_sd_config> compatible prometheus config for prometheus service."""
-        servers = self.mgr.list_servers()
-        targets = []
-        for server in servers:
-            hostname = server.get('hostname', '')
-            for service in cast(List[ServiceInfoT], server.get('services', [])):
-                if service['type'] != 'mgr':
-                    continue
-                port = self.mgr.get_module_option_ex('prometheus', 'server_port', 9283)
-                targets.append(f'{hostname}:{port}')
-        return [{"targets": targets, "labels": {}}]
-
-    def alertmgr_sd_config(self) -> List[Dict[str, Collection[str]]]:
-        """Return <http_sd_config> compatible prometheus config for mgr alertmanager service."""
-        srv_entries = []
-        for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
-            assert dd.hostname is not None
-            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
-            port = dd.ports[0] if dd.ports else 9093
-            srv_entries.append('{}'.format(build_url(host=addr, port=port).lstrip('/')))
-        return [{"targets": srv_entries, "labels": {}}]
-
-    def node_exporter_sd_config(self) -> List[Dict[str, Collection[str]]]:
-        """Return <http_sd_config> compatible prometheus config for node-exporter service."""
-        srv_entries = []
-        for dd in self.mgr.cache.get_daemons_by_service('node-exporter'):
-            assert dd.hostname is not None
-            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
-            port = dd.ports[0] if dd.ports else 9100
-            srv_entries.append({
-                'targets': [build_url(host=addr, port=port).lstrip('/')],
-                'labels': {'instance': dd.hostname}
-            })
-        return srv_entries
-
-    def haproxy_sd_config(self) -> List[Dict[str, Collection[str]]]:
-        """Return <http_sd_config> compatible prometheus config for haproxy service."""
-        srv_entries = []
-        for dd in self.mgr.cache.get_daemons_by_type('ingress'):
-            if dd.service_name() in self.mgr.spec_store:
-                spec = cast(IngressSpec, self.mgr.spec_store[dd.service_name()].spec)
-                assert dd.hostname is not None
-                if dd.daemon_type == 'haproxy':
-                    addr = self.mgr.inventory.get_addr(dd.hostname)
-                    srv_entries.append({
-                        'targets': [f"{build_url(host=addr, port=spec.monitor_port).lstrip('/')}"],
-                        'labels': {'instance': dd.service_name()}
-                    })
-        return srv_entries
-
-    @cherrypy.expose(alias='prometheus/rules')
-    def get_prometheus_rules(self) -> str:
-        """Return currently configured prometheus rules as Yaml."""
-        cherrypy.response.headers['Content-Type'] = 'text/plain'
-        with open(self.mgr.prometheus_alerts_path, 'r', encoding='utf-8') as f:
-            return f.read()
+    def configure(self) -> None:
+        self.configure_tls()
+        self.configure_routes()
+        self.find_free_port()
 
 
-class HostData:
+class HostData(Server):
     exposed = True
 
-    def __init__(self, mgr: "CephadmOrchestrator"):
+    def __init__(self, mgr: "CephadmOrchestrator", port: int, host: str, ssl_ca_cert: str, ssl_priv_key: str):
         self.mgr = mgr
+        super().__init__()
+        self.socket_port = port
+        self.ssl_certificate = ssl_ca_cert
+        self.ssl_private_key = ssl_priv_key
+        self._socket_host = host
+        self.subscribe()
 
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
@@ -370,25 +243,26 @@ class HostData:
 class AgentMessageThread(threading.Thread):
     def __init__(self, host: str, port: int, data: Dict[Any, Any], mgr: "CephadmOrchestrator", daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         self.mgr = mgr
+        self.agent = mgr.http_server.agent
         self.host = host
         self.addr = self.mgr.inventory.get_addr(host) if host in self.mgr.inventory else host
         self.port = port
         self.data: str = json.dumps(data)
         self.daemon_spec: Optional[CephadmDaemonDeploySpec] = daemon_spec
-        super(AgentMessageThread, self).__init__(target=self.run)
+        super().__init__(target=self.run)
 
     def run(self) -> None:
         self.mgr.log.debug(f'Sending message to agent on host {self.host}')
         self.mgr.agent_cache.sending_agent_message[self.host] = True
         try:
-            assert self.mgr.cherrypy_thread
-            root_cert = self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+            assert self.agent
+            root_cert = self.agent.ssl_certs.get_root_cert()
             root_cert_tmp = tempfile.NamedTemporaryFile()
             root_cert_tmp.write(root_cert.encode('utf-8'))
             root_cert_tmp.flush()
             root_cert_fname = root_cert_tmp.name
 
-            cert, key = self.mgr.cherrypy_thread.ssl_certs.generate_cert()
+            cert, key = self.agent.ssl_certs.generate_cert(self.mgr.get_mgr_ip())
 
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(cert.encode('utf-8'))
@@ -451,6 +325,7 @@ class AgentMessageThread(threading.Thread):
 class CephadmAgentHelpers:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
+        self.agent = mgr.http_server.agent
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         for host in hosts:
@@ -551,8 +426,8 @@ class CephadmAgentHelpers:
     def _check_agent(self, host: str) -> bool:
         down = False
         try:
-            assert self.mgr.cherrypy_thread
-            assert self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+            assert self.agent
+            assert self.agent.ssl_certs.get_root_cert()
         except Exception:
             self.mgr.log.debug(
                 f'Delaying checking agent on {host} until cephadm endpoint finished creating root cert')
@@ -576,7 +451,7 @@ class CephadmAgentHelpers:
                 # so it's necessary to check this one specifically
                 root_cert_match = False
                 try:
-                    root_cert = self.mgr.cherrypy_thread.ssl_certs.get_root_cert()
+                    root_cert = self.agent.ssl_certs.get_root_cert()
                     if last_deps and root_cert in last_deps:
                         root_cert_match = True
                 except Exception:
@@ -608,133 +483,3 @@ class CephadmAgentHelpers:
                 self.mgr.log.debug(
                     f'Agent on host {host} not ready to {action}: {e}')
         return down
-
-
-class SSLCerts:
-    def __init__(self, mgr: "CephadmOrchestrator") -> None:
-        self.mgr = mgr
-        self.root_cert: Any
-        self.root_key: Any
-
-    def generate_root_cert(self) -> Tuple[str, str]:
-        self.root_key = rsa.generate_private_key(
-            public_exponent=65537, key_size=4096, backend=default_backend())
-        root_public_key = self.root_key.public_key()
-
-        root_builder = x509.CertificateBuilder()
-
-        root_builder = root_builder.subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
-        ]))
-
-        root_builder = root_builder.issuer_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
-        ]))
-
-        root_builder = root_builder.not_valid_before(datetime.now())
-        root_builder = root_builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
-        root_builder = root_builder.serial_number(x509.random_serial_number())
-        root_builder = root_builder.public_key(root_public_key)
-        root_builder = root_builder.add_extension(
-            x509.SubjectAlternativeName(
-                [x509.IPAddress(ipaddress.IPv4Address(str(self.mgr.get_mgr_ip())))]
-            ),
-            critical=False
-        )
-        root_builder = root_builder.add_extension(
-            x509.BasicConstraints(ca=True, path_length=None), critical=True,
-        )
-
-        self.root_cert = root_builder.sign(
-            private_key=self.root_key, algorithm=hashes.SHA256(), backend=default_backend()
-        )
-
-        cert_str = self.root_cert.public_bytes(encoding=serialization.Encoding.PEM).decode('utf-8')
-        key_str = self.root_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        ).decode('utf-8')
-
-        return (cert_str, key_str)
-
-    def generate_cert(self, addr: str = '') -> Tuple[str, str]:
-        have_ip = True
-        if addr:
-            try:
-                ip = x509.IPAddress(ipaddress.IPv4Address(addr))
-            except Exception:
-                try:
-                    ip = x509.IPAddress(ipaddress.IPv6Address(addr))
-                except Exception:
-                    have_ip = False
-                    pass
-        else:
-            ip = x509.IPAddress(ipaddress.IPv4Address(self.mgr.get_mgr_ip()))
-
-        private_key = rsa.generate_private_key(
-            public_exponent=65537, key_size=4096, backend=default_backend())
-        public_key = private_key.public_key()
-
-        builder = x509.CertificateBuilder()
-
-        builder = builder.subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, addr if addr else str(self.mgr.get_mgr_ip())),
-        ]))
-
-        builder = builder.issuer_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
-        ]))
-
-        builder = builder.not_valid_before(datetime.now())
-        builder = builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
-        builder = builder.serial_number(x509.random_serial_number())
-        builder = builder.public_key(public_key)
-        if have_ip:
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName(
-                    [ip]
-                ),
-                critical=False
-            )
-        builder = builder.add_extension(
-            x509.BasicConstraints(ca=False, path_length=None), critical=True,
-        )
-
-        cert = builder.sign(
-            private_key=self.root_key, algorithm=hashes.SHA256(), backend=default_backend()
-        )
-
-        cert_str = cert.public_bytes(encoding=serialization.Encoding.PEM).decode('utf-8')
-        key_str = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        ).decode('utf-8')
-
-        return (cert_str, key_str)
-
-    def get_root_cert(self) -> str:
-        try:
-            return self.root_cert.public_bytes(encoding=serialization.Encoding.PEM).decode('utf-8')
-        except AttributeError:
-            return ''
-
-    def get_root_key(self) -> str:
-        try:
-            return self.root_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption(),
-            ).decode('utf-8')
-        except AttributeError:
-            return ''
-
-    def load_root_credentials(self, cert: str, priv_key: str) -> None:
-        given_cert = x509.load_pem_x509_certificate(cert.encode('utf-8'), backend=default_backend())
-        tz = given_cert.not_valid_after.tzinfo
-        if datetime.now(tz) >= given_cert.not_valid_after:
-            raise OrchestratorError('Given cert is expired')
-        self.root_cert = given_cert
-        self.root_key = serialization.load_pem_private_key(
-            data=priv_key.encode('utf-8'), backend=default_backend(), password=None)
