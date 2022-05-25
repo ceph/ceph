@@ -6,9 +6,6 @@ import time
 import json
 import os
 from common import exec_cmd, boto_connect, create_user
-import re
-
-from pprint import pprint
 
 """
 Rgw manual and dynamic resharding  testing against a running instance
@@ -203,10 +200,10 @@ def main():
 
     # TESTCASE 'check reshard removes olh entries with empty name'
     log.debug(' test: reshard removes olh entries with empty name')
-    bucket1.objects.all().delete()
+    bucket.objects.all().delete()
 
     # get name of shard 0 object, add a bogus olh entry with empty name
-    bucket_shard0 = '.dir.%s.0' % get_bucket_stats(BUCKET_NAME1).bucket_id
+    bucket_shard0 = '.dir.%s.0' % get_bucket_stats(BUCKET_NAME).bucket_id
     if 'CEPH_ROOT' in os.environ:
       k = '%s/qa/workunits/rgw/olh_noname_key' % os.environ['CEPH_ROOT']
       v = '%s/qa/workunits/rgw/olh_noname_val' % os.environ['CEPH_ROOT']
@@ -216,17 +213,17 @@ def main():
     exec_cmd('rados -p %s setomapval %s --omap-key-file %s < %s' % (INDEX_POOL, bucket_shard0, k, v))
 
     # check that bi list has one entry with empty name
-    cmd = exec_cmd('radosgw-admin bi list --bucket %s' % BUCKET_NAME1)
+    cmd = exec_cmd('radosgw-admin bi list --bucket %s' % BUCKET_NAME)
     json_op = json.loads(cmd.decode('utf-8', 'ignore')) # ignore utf-8 can't decode 0x80
     assert len(json_op) == 1
     assert json_op[0]['entry']['key']['name'] == ''
 
     # reshard to prune the bogus olh
-    cmd = exec_cmd('radosgw-admin bucket reshard --bucket %s --num-shards %s --yes-i-really-mean-it' % (BUCKET_NAME1, 1))
+    cmd = exec_cmd('radosgw-admin bucket reshard --bucket %s --num-shards %s --yes-i-really-mean-it' % (BUCKET_NAME, 1))
 
     # get new name of shard 0 object, check that bi list has zero entries
-    bucket_shard0 = '.dir.%s.0' % get_bucket_stats(BUCKET_NAME1).bucket_id
-    cmd = exec_cmd('radosgw-admin bi list --bucket %s' % BUCKET_NAME1)
+    bucket_shard0 = '.dir.%s.0' % get_bucket_stats(BUCKET_NAME).bucket_id
+    cmd = exec_cmd('radosgw-admin bi list --bucket %s' % BUCKET_NAME)
     json_op = json.loads(cmd)
     assert len(json_op) == 0
 
