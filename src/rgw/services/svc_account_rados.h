@@ -18,8 +18,6 @@
 
 class RGWSI_RADOS;
 class RGWSI_Zone;
-class RGWSI_SysObj;
-class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
 class RGWSI_SyncModules;
 class RGWSI_MetaBackend_Handler;
@@ -31,7 +29,7 @@ public:
     RGWSI_Zone *zone {nullptr};
     RGWSI_Meta *meta {nullptr};
     RGWSI_MetaBackend *meta_be {nullptr};
-    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_RADOS *rados{nullptr};
   } svc;
 
   RGWSI_Account_RADOS(CephContext *cct);
@@ -46,7 +44,7 @@ public:
   void init(RGWSI_Zone *_zone_svc,
 	    RGWSI_Meta *_meta_svc,
 	    RGWSI_MetaBackend *_meta_be_svc,
-	    RGWSI_SysObj *_sysobj_svc);
+	    RGWSI_RADOS *_rados_svc);
 
   int store_account_info(const DoutPrefixProvider *dpp,
 			 RGWSI_MetaBackend::Context *ctx,

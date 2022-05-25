@@ -1,27 +1,28 @@
 #include "svc_account_rados.h"
-#include "svc_sys_obj.h"
 #include "svc_meta_be_sobj.h"
 #include "svc_meta.h"
 #include "rgw/rgw_account.h"
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_zone.h"
 #include "svc_zone.h"
+#include "cls/user/cls_user_client.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 constexpr auto RGW_ACCOUNT_USER_OBJ_SUFFIX = ".users";
 
 class RGWSI_Account_Module : public RGWSI_MBSObj_Handler_Module {
-  RGWSI_Account_RADOS::Svc& svc;
+  RGWSI_Zone* zone_svc;
 
   const std::string prefix;
 public:
-  RGWSI_Account_Module(RGWSI_Account_RADOS::Svc& _svc) : RGWSI_MBSObj_Handler_Module("account"),
-                                                   svc(_svc) {}
+  RGWSI_Account_Module(RGWSI_Zone* zone_svc)
+      : RGWSI_MBSObj_Handler_Module("account"), zone_svc(zone_svc)
+  {}
 
   void get_pool_and_oid(const std::string& key, rgw_pool *pool, std::string *oid) override {
     if (pool) {
-      *pool = svc.zone->get_zone_params().account_pool;
+      *pool = zone_svc->get_zone_params().account_pool;
     }
     if (oid) {
       *oid = key;
@@ -53,12 +54,12 @@ RGWSI_Account_RADOS::RGWSI_Account_RADOS(CephContext *cct) :
 void RGWSI_Account_RADOS::init(RGWSI_Zone *_zone_svc,
                                RGWSI_Meta *_meta_svc,
                                RGWSI_MetaBackend *_meta_be_svc,
-                               RGWSI_SysObj *_sysobj_svc)
+                               RGWSI_RADOS *_rados_svc)
 {
   svc.zone = _zone_svc;
   svc.meta = _meta_svc;
   svc.meta_be = _meta_be_svc;
-  svc.sysobj = _sysobj_svc;
+  svc.rados = _rados_svc;
 }
 
 int RGWSI_Account_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dpp)
@@ -70,10 +71,12 @@ int RGWSI_Account_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dp
     return r;
   }
 
+  auto mod = std::make_unique<RGWSI_Account_Module>(svc.zone);
+
   RGWSI_MetaBackend_Handler_SObj *bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
-  auto module = new RGWSI_Account_Module(svc);
-  be_module.reset(module);
-  bh->set_module(module);
+  bh->set_module(mod.get());
+
+  be_module = std::move(mod);
   return 0;
 }
 
@@ -145,66 +148,21 @@ int RGWSI_Account_RADOS::remove_account_info(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-struct rgw_account_user_header {
-  uint32_t current_users {0};
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(current_users, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(current_users, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(rgw_account_user_header)
-
-
 int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,
                                   const RGWAccountInfo& info,
                                   const rgw_user& user,
                                   optional_yield y)
 {
-
   auto obj = get_account_user_obj(info.get_id());
-  auto obj_ctx = svc.sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
-  bufferlist bl;
-  int ret = sysobj.omap().get_header(dpp, &bl, y);
-  if (ret < 0 && ret!= -ENOENT) {
-    return ret;
-  }
-
-  rgw_account_user_header hdr;
-  if (ret != -ENOENT) {
-    try {
-      auto bl_iter = bl.cbegin();
-      decode(hdr, bl_iter);
-    } catch (buffer::error) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to decode account user hdr" << dendl;
-      return -EIO;
-    }
-  }
-
-  if (++hdr.current_users > info.get_max_users()) {
-    ldpp_dout(dpp, 0) << "ERROR: user quota exceeded for account "
-        << info.get_id() << " max_users=" << info.get_max_users() << dendl;
-    return -ERANGE;
-  }
-
-  bufferlist empty_bl;
-  ret = sysobj.omap().set(dpp, user.to_str(), bl, y);
+  auto handle = svc.rados->obj(obj);
+  int ret = handle.open(dpp);
   if (ret < 0) {
     return ret;
   }
 
-  bufferlist header_bl;
-  encode(hdr, header_bl);
-  return sysobj.omap().set_header(dpp, header_bl, y);
+  librados::ObjectWriteOperation op;
+  cls_account_users_add(op, user.to_str(), info.get_max_users());
+  return handle.operate(dpp, &op, y);
 }
 
 int RGWSI_Account_RADOS::remove_user(const DoutPrefixProvider *dpp,
@@ -213,36 +171,15 @@ int RGWSI_Account_RADOS::remove_user(const DoutPrefixProvider *dpp,
                                      optional_yield y)
 {
   auto obj = get_account_user_obj(info.get_id());
-  auto obj_ctx = svc.sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
-  bufferlist bl;
-  int ret = sysobj.omap().get_header(dpp, &bl, y);
-  if (ret < 0 && ret!= -ENOENT) {
-    return ret;
-  }
-
-  rgw_account_user_header hdr;
-  if (ret != -ENOENT) {
-    try {
-      auto bl_iter = bl.cbegin();
-      decode(hdr, bl_iter);
-    } catch (buffer::error) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to decode account user hdr" << dendl;
-      return -EIO;
-    }
-  }
-
-  ret = sysobj.omap().del(dpp, user.to_str(), y);
+  auto handle = svc.rados->obj(obj);
+  int ret = handle.open(dpp);
   if (ret < 0) {
     return ret;
   }
 
-  --hdr.current_users;
-  bufferlist header_bl;
-  encode(hdr, header_bl);
-  return sysobj.omap().set_header(dpp, header_bl, y);
-
+  librados::ObjectWriteOperation op;
+  cls_account_users_rm(op, user.to_str());
+  return handle.operate(dpp, &op, y);
 }
 
 
@@ -254,21 +191,28 @@ int RGWSI_Account_RADOS::list_users(const DoutPrefixProvider *dpp,
                                     optional_yield y)
 {
   auto obj = get_account_user_obj(info.get_id());
-  auto obj_ctx = svc.sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-
-  static constexpr uint64_t MAX_ACCOUNT_USER_LIST_RESULTS = 1000;
-
-  std::map<std::string, bufferlist> m;
-  int ret = sysobj.omap().get_vals(dpp, marker, MAX_ACCOUNT_USER_LIST_RESULTS,
-                         &m, more, y);
+  auto handle = svc.rados->obj(obj);
+  int ret = handle.open(dpp);
   if (ret < 0) {
     return ret;
   }
 
-  for (auto& kv: m) {
-    users.emplace_back(rgw_user(kv.first));
+  static constexpr uint32_t max_entries = 1000u;
+  std::vector<std::string> entries;
+  int ret2 = 0;
+
+  librados::ObjectReadOperation op;
+  cls_account_users_list(op, marker, max_entries, entries, more, &ret2);
+
+  ret = handle.operate(dpp, &op, nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (ret2 < 0) {
+    return ret2;
   }
 
-  return ret;
+  // note that copy converts std::string -> rgw_user via from_str()
+  std::copy(entries.begin(), entries.end(), users.end());
+  return 0;
 }
