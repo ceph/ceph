@@ -474,6 +474,10 @@ class User {
     const rgw_user& get_id() const { return info.user_id; }
     /** Get the type of this User */
     uint32_t get_type() const { return info.type; }
+    /** Get the inline policy size of this User of this User */
+    uint32_t get_user_policy_size() const { return info.inline_policy_size; }
+    /** Set the inline policy size of this User */
+    void set_user_policy_size(uint32_t pol_size) { info.inline_policy_size = pol_size; }
     /** Get the maximum number of buckets allowed for this User */
     int32_t get_max_buckets() const { return info.max_buckets; }
     /** Get the capabilities for this User */

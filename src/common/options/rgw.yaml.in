@@ -252,6 +252,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_user_policy_limit
+  type: uint
+  level: advanced
+  desc: Max limit of total aggregate policy size for a user.
+  default: 2048
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_cache_enabled
   type: bool
   level: advanced

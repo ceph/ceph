@@ -120,6 +120,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
   bufferlist bl = bufferlist::static_from_string(policy);
 
   std::unique_ptr<rgw::sal::User> user = store->get_user(rgw_user(user_name));
+  uint64_t max_pol_limit = store->ctx()->_conf->rgw_user_policy_limit;
 
   op_ret = user->load_user(s, s->yield);
   if (op_ret < 0) {
@@ -142,15 +143,32 @@ void RGWPutUserPolicy::execute(optional_yield y)
 
   try {
     const Policy p(s->cct, s->user->get_tenant(), bl);
+    uint32_t pol_size_occupied = user->get_user_policy_size();
+    uint32_t pol_size = policy.size();
+
     map<string, string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       bufferlist out_bl = it->second;
       decode(policies, out_bl);
     }
+
+    //if it is an update
+    if (auto it = policies.find(policy_name); it != policies.end()) {
+      pol_size_occupied -= (it->second).size();
+    }
+
+    pol_size_occupied += pol_size;
+    if (pol_size_occupied > max_pol_limit) {
+      op_ret = -ERR_LIMIT_EXCEEDED;
+      ldpp_dout(this, 0) << "ERROR: Maximum policy size exceeded for this user ret=" << op_ret << dendl;
+      return;
+    }
+
     bufferlist in_bl;
     policies[policy_name] = policy;
     encode(policies, in_bl);
     user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
+    user->set_user_policy_size(pol_size_occupied);
 
     op_ret = user->store_user(s, s->yield, false);
     if (op_ret < 0) {
@@ -351,6 +369,10 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
     decode(policies, out_bl);
 
     if (auto p = policies.find(policy_name); p != policies.end()) {
+      uint32_t pol_size_occupied = user->get_user_policy_size();
+      pol_size_occupied -= (p->second).size();
+      user->set_user_policy_size(pol_size_occupied);
+
       bufferlist in_bl;
       policies.erase(p);
       encode(policies, in_bl);
