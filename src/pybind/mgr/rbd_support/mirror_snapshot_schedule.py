@@ -455,6 +455,7 @@ class MirrorSnapshotScheduleHandler:
         self.module = module
         self.log = module.log
         self.last_refresh_images = datetime(1970, 1, 1)
+        self.rescan_pool = False
         self.create_snapshot_requests = CreateSnapshotRequests(self)
 
         self.init_schedule_queue()
@@ -556,12 +557,14 @@ class MirrorSnapshotScheduleHandler:
                 images[pool_id][namespace] = {}
                 ioctx.set_namespace(namespace)
                 updated = self.watchers.check(pool_id, namespace, epoch)
-                if not updated:
+                if not updated and not self.rescan_pool:
                     self.log.debug("load_pool_images: {}/{} not updated".format(
                         pool_name, namespace))
                     with self.lock:
                         images[pool_id][namespace] = \
                             self.images[pool_id][namespace]
+                        if self.rescan_pool:
+                            self.rescan_pool = False
                     continue
                 mirror_images = dict(rbd.RBD().mirror_image_info_list(
                     ioctx, rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT))
@@ -585,6 +588,7 @@ class MirrorSnapshotScheduleHandler:
                     self.log.debug(
                         "load_pool_images: adding image {}".format(name))
                     images[pool_id][namespace][image_id] = name
+
         except Exception as e:
             self.log.error(
                 "load_pool_images: exception when scanning pool {}: {}".format(
@@ -687,6 +691,8 @@ class MirrorSnapshotScheduleHandler:
 
         with self.lock:
             self.schedules.add(level_spec, interval, start_time)
+            # force rescan pool to rebuild image list
+            self.rescan_pool = True
 
         # TODO: optimize to rebuild only affected part of the queue
         self.rebuild_queue()
