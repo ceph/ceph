@@ -189,12 +189,16 @@ class KernelMount(CephFSMount):
         stdout = StringIO()
         stderr = StringIO()
         try:
-            self.run_shell_payload(f"sudo dd if={path}", timeout=(5*60),
-                stdout=stdout, stderr=stderr)
+            self.run_shell_payload(f"sudo dd if={path}", timeout=(5 * 60),
+                                   stdout=stdout, stderr=stderr)
             return stdout.getvalue()
         except CommandFailedError:
             if 'no such file or directory' in stderr.getvalue().lower():
-                return None
+                return errno.ENOENT
+            elif 'not a directory' in stderr.getvalue().lower():
+                return errno.ENOTDIR
+            elif 'permission denied' in stderr.getvalue().lower():
+                return errno.EACCES
             raise
 
     def _get_global_id(self):
