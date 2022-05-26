@@ -42,7 +42,9 @@
 namespace ceph {
   class Formatter;
 }
-
+namespace ceph::common {
+  class CephContext;
+}
 /*
  * low-level interface to the local OSD file system
  */
@@ -67,7 +69,7 @@ protected:
 public:
   using Transaction = ceph::os::Transaction;
 
-  CephContext* cct;
+  ceph::common::CephContext* cct;
   /**
    * create - create an ObjectStore instance.
    *
@@ -80,14 +82,14 @@ public:
    */
 #ifndef WITH_SEASTAR
   static std::unique_ptr<ObjectStore> create(
-    CephContext *cct,
+    ceph::common::CephContext *cct,
     const std::string& type,
     const std::string& data,
     const std::string& journal,
     osflagbits_t flags = 0);
 #endif
   static std::unique_ptr<ObjectStore> create(
-    CephContext *cct,
+    ceph::common::CephContext *cct,
     const std::string& type,
     const std::string& data);
 
@@ -99,7 +101,7 @@ public:
    * @param fsid [out] osd uuid
    */
   static int probe_block_device_fsid(
-    CephContext *cct,
+    ceph::common::CephContext *cct,
     const std::string& path,
     uuid_d *fsid);
 
@@ -130,7 +132,7 @@ public:
    * ObjectStore users may get collection handles with open_collection() (or,
    * for bootstrapping a new collection, create_new_collection()).
    */
-  struct CollectionImpl : public RefCountedObject {
+  struct CollectionImpl : public ceph::common::RefCountedObject {
     const coll_t cid;
 
     /// wait for any queued transactions to apply
@@ -156,7 +158,7 @@ public:
     }
   protected:
     CollectionImpl() = delete;
-    CollectionImpl(CephContext* cct, const coll_t& c) : RefCountedObject(cct), cid(c) {}
+    CollectionImpl(ceph::common::CephContext* cct, const coll_t& c) : ceph::common::RefCountedObject(cct), cid(c) {}
     ~CollectionImpl() = default;
   };
   using CollectionHandle = ceph::ref_t<CollectionImpl>;
@@ -236,7 +238,7 @@ public:
 
 
  public:
-  ObjectStore(CephContext* cct,
+  ObjectStore(ceph::common::CephContext* cct,
 	      const std::string& path_) : path(path_), cct(cct) {}
   virtual ~ObjectStore() {}
 
