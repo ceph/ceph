@@ -10,7 +10,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 
 /**
  * This service checks if a route can be activated by executing a
- * REST API call to '/api/<apiPath>/status'. If the returned response
+ * REST API call to '/ui-api/<uiApiPath>/status'. If the returned response
  * states that the module is not available, then the user is redirected
  * to the specified <redirectTo> URL path.
  *
@@ -26,7 +26,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
  *   canActivate: [AuthGuardService, ModuleStatusGuardService],
  *   data: {
  *     moduleStatusGuardConfig: {
- *       apiPath: 'rgw',
+ *       uiApiPath: 'rgw',
  *       redirectTo: 'rgw/501'
  *     }
  *   }
@@ -71,7 +71,7 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
         }
       );
     }
-    return this.http.get(`api/${config.apiPath}/status`).pipe(
+    return this.http.get(`ui-api/${config.uiApiPath}/status`).pipe(
       map((resp: any) => {
         if (!resp.available && !backendCheck) {
           this.router.navigate([config.redirectTo || ''], {
@@ -80,6 +80,8 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
               message: resp.message,
               section: config.section,
               section_info: config.section_info,
+              button_name: config.button_name,
+              button_route: config.button_route,
               icon: Icons.wrench
             }
           });

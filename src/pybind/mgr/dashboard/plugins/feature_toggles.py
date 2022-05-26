@@ -8,7 +8,7 @@ from mgr_module import CLICommand, Option
 
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
-from ..controllers.nfs import NFSGanesha, NFSGaneshaExports
+from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
 from ..controllers.rbd_mirroring import RbdMirroringPoolMode, \
     RbdMirroringPoolPeer, RbdMirroringSummary
@@ -36,7 +36,7 @@ Feature2Controller = {
     Features.ISCSI: [Iscsi, IscsiTarget],
     Features.CEPHFS: [CephFS],
     Features.RGW: [Rgw, RgwDaemon, RgwBucket, RgwUser],
-    Features.NFS: [NFSGanesha, NFSGaneshaExports],
+    Features.NFS: [NFSGaneshaUi, NFSGaneshaExports],
 }
 
 
