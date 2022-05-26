@@ -19,14 +19,14 @@ export class ErrorComponent implements OnDestroy, OnInit {
   message: string;
   section: string;
   section_info: string;
+  button_name: string;
+  button_route: string;
   icon: string;
   docUrl: string;
   source: string;
   routerSubscription: Subscription;
   bootstrap: string;
   uiApiPath: string;
-  button_route: string;
-  button_name: string;
 
   constructor(private router: Router, private docService: DocService,
     private http: HttpClient,
@@ -78,6 +78,8 @@ export class ErrorComponent implements OnDestroy, OnInit {
       this.header = history.state.header;
       this.section = history.state.section;
       this.section_info = history.state.section_info;
+      this.button_name = history.state.button_name;
+      this.button_route = history.state.button_route;
       this.icon = history.state.icon;
       this.source = history.state.source;
       this.bootstrap = history.state.bootstrap;
