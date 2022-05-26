@@ -40,10 +40,11 @@
  * constructors.
  *
  */
-namespace TOPNSPC::common {
+namespace ceph::common {
+class CephContext;
 class RefCountedObject {
 public:
-  void set_cct(CephContext *c) {
+  void set_cct(ceph::common::CephContext *c) {
     cct = c;
   }
 
@@ -67,22 +68,60 @@ protected:
   RefCountedObject& operator=(const RefCountedObject& o) = delete;
   RefCountedObject(RefCountedObject&&) = delete;
   RefCountedObject& operator=(RefCountedObject&&) = delete;
-  RefCountedObject(CephContext* c) : cct(c) {}
+  RefCountedObject(ceph::common::CephContext* c) : cct(c) {}
 
   virtual ~RefCountedObject();
 
 private:
   void _get() const;
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+  mutable std::atomic<uint64_t> nref{1};
+  ceph::common::CephContext *cct{nullptr};
+};
+}
+
+namespace crimson::common {
+class CephContext;
+class RefCountedObject {
+public:
+  void set_cct(crimson::common::CephContext *c) {
+    cct = c;
+  }
+
+  uint64_t get_nref() const {
+    return nref;
+  }
+
+  const RefCountedObject *get() const {
+    _get();
+    return this;
+  }
+  RefCountedObject *get() {
+    _get();
+    return this;
+  }
+  void put() const;
+
+protected:
+  RefCountedObject() = default;
+  RefCountedObject(const RefCountedObject& o) : cct(o.cct) {}
+  RefCountedObject& operator=(const RefCountedObject& o) = delete;
+  RefCountedObject(RefCountedObject&&) = delete;
+  RefCountedObject& operator=(RefCountedObject&&) = delete;
+  RefCountedObject(crimson::common::CephContext* c) : cct(c) {}
+
+  virtual ~RefCountedObject();
+
+private:
+  void _get() const;
+
   // crimson is single threaded at the moment
   mutable uint64_t nref{1};
-#else
-  mutable std::atomic<uint64_t> nref{1};
-#endif
-  CephContext *cct{nullptr};
+  crimson::common::CephContext *cct{nullptr};
 };
+}
 
+namespace TOPNSPC::common {
 class RefCountedObjectSafe : public RefCountedObject {
 public:
   RefCountedObject *get() = delete;
@@ -187,12 +226,6 @@ struct RefCountedWaitObject {
 
 #endif // !defined(WITH_SEASTAR)|| defined(WITH_ALIEN)
 
-static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
-  p->get();
-}
-static inline void intrusive_ptr_release(const RefCountedObject *p) {
-  p->put();
-}
 struct UniquePtrDeleter
 {
   void operator()(RefCountedObject *p) const
@@ -203,5 +236,23 @@ struct UniquePtrDeleter
 };
 }
 using RefCountedPtr = ceph::ref_t<TOPNSPC::common::RefCountedObject>;
+
+namespace ceph::common {
+static inline void intrusive_ptr_add_ref(const ceph::common::RefCountedObject *p) {
+  p->get();
+}
+static inline void intrusive_ptr_release(const ceph::common::RefCountedObject *p) {
+  p->put();
+}
+}
+
+namespace crimson::common {
+static inline void intrusive_ptr_add_ref(const crimson::common::RefCountedObject *p) {
+  p->get();
+}
+static inline void intrusive_ptr_release(const crimson::common::RefCountedObject *p) {
+  p->put();
+}
+}
 
 #endif
