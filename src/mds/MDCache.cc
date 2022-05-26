@@ -8595,7 +8595,10 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 	// directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
-        curdir->fetch(path[depth], snapid, cf.build());
+	if(!g_conf().get_val<bool>("mds_dir_prefetch") && snapid == CEPH_NOSNAP)
+	  curdir->fetch(cf.build());
+	else
+          curdir->fetch(path[depth], snapid, cf.build());
 	if (mds->logger) mds->logger->inc(l_mds_traverse_dir_fetch);
         return 1;
       }
