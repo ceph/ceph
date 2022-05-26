@@ -160,7 +160,7 @@ public:
       reset_backoff(false), exit_on_error(_exit_on_error) {
   }
 
-  ~RGWBackoffControlCR() override {
+  virtual ~RGWBackoffControlCR() override {
     if (cr) {
       cr->put();
     }
@@ -225,7 +225,7 @@ public:
       http_manager(store->ctx(), completion_mgr),
       status_manager(_sm) {}
 
-  virtual ~RGWRemoteMetaLog() override;
+  ~RGWRemoteMetaLog() override;
 
   int init();
   void finish();
@@ -523,6 +523,8 @@ public:
                                                              current_running(0),
                                                              max_concurrent(_max_concurrent),
                                                              status(0) {}
+
+  virtual ~RGWShardCollectCR() {}
 
   virtual bool spawn_next() = 0;
   int operate(const DoutPrefixProvider *dpp) override;

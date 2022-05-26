@@ -157,7 +157,7 @@ protected:
   virtual int log_json(struct req_state* s, bufferlist& bl) = 0;
 public:
   JsonOpsLogSink();
-  ~JsonOpsLogSink() override;
+  virtual ~JsonOpsLogSink() override;
   int log(struct req_state* s, struct rgw_log_entry& entry) override;
 };
 

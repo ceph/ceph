@@ -596,7 +596,7 @@ static int remove_expired_obj(
 
 class LCOpAction {
 public:
-  virtual ~LCOpAction() {}
+  ~LCOpAction() {}
 
   virtual bool check(lc_op_ctx& oc, ceph::real_time *exp_time, const DoutPrefixProvider *dpp) {
     return false;
@@ -626,7 +626,7 @@ public:
 
 class LCOpFilter {
 public:
-virtual ~LCOpFilter() {}
+  ~LCOpFilter() {}
   virtual bool check(const DoutPrefixProvider *dpp, lc_op_ctx& oc) {
     return false;
   }

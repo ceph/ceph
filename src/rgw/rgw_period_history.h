@@ -49,7 +49,7 @@ class RGWPeriodHistory final {
 
   RGWPeriodHistory(CephContext* cct, Puller* puller,
                    const RGWPeriod& current_period);
-  ~RGWPeriodHistory();
+  virtual ~RGWPeriodHistory();
 
   /**
    * Cursor tracks a position in the period history and allows forward and

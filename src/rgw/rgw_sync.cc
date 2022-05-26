@@ -298,12 +298,6 @@ int RGWRemoteMetaLog::init()
   return 0;
 }
 
-void RGWRemoteMetaLog::finish()
-{
-  going_down = true;
-  stop();
-}
-
 #define CLONE_MAX_ENTRIES 100
 
 int RGWMetaSyncStatusManager::init(const DoutPrefixProvider *dpp)
@@ -353,16 +347,6 @@ int RGWMetaSyncStatusManager::init(const DoutPrefixProvider *dpp)
   }
 
   return 0;
-}
-
-unsigned RGWMetaSyncStatusManager::get_subsys() const
-{
-  return dout_subsys;
-}
-
-std::ostream&  RGWMetaSyncStatusManager::gen_prefix(std::ostream& out) const
-{
-  return out << "meta sync: ";
 }
 
 void RGWMetaSyncEnv::init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RadosStore* _store, RGWRESTConn *_conn,

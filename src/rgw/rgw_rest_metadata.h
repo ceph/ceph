@@ -33,7 +33,7 @@ public:
 class RGWOp_Metadata_Get : public RGWRESTOp {
 public:
   RGWOp_Metadata_Get() {}
-  ~RGWOp_Metadata_Get() override {}
+  virtual ~RGWOp_Metadata_Get() override {}
 
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("metadata", RGW_CAP_READ);

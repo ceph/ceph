@@ -153,6 +153,8 @@ protected:
 public:
   RGWSI_SysObj_Core(CephContext *cct): RGWServiceInstance(cct) {}
 
+  ~RGWSI_SysObj_Core() {}
+
   RGWSI_Zone *get_zone_svc() {
     return zone_svc;
   }

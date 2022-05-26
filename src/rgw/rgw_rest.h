@@ -132,13 +132,13 @@ public:
 class RGWGetObjTags_ObjStore : public RGWGetObjTags {
 public:
   RGWGetObjTags_ObjStore() {};
-  ~RGWGetObjTags_ObjStore() {};
+  virtual ~RGWGetObjTags_ObjStore() {};
 };
 
 class RGWPutObjTags_ObjStore: public RGWPutObjTags {
 public:
   RGWPutObjTags_ObjStore() {};
-  ~RGWPutObjTags_ObjStore() {};
+  virtual ~RGWPutObjTags_ObjStore() {};
 };
 
 class RGWGetBucketTags_ObjStore : public RGWGetBucketTags {
@@ -156,7 +156,7 @@ public:
 class RGWGetBucketReplication_ObjStore : public RGWGetBucketReplication {
 public:
   RGWGetBucketReplication_ObjStore() {};
-  ~RGWGetBucketReplication_ObjStore() {};
+  virtual ~RGWGetBucketReplication_ObjStore() {};
 };
 
 class RGWPutBucketReplication_ObjStore: public RGWPutBucketReplication {
@@ -174,50 +174,50 @@ public:
 class RGWListBuckets_ObjStore : public RGWListBuckets {
 public:
   RGWListBuckets_ObjStore() {}
-  ~RGWListBuckets_ObjStore() override {}
+  virtual ~RGWListBuckets_ObjStore() override {}
 };
 
 class RGWGetUsage_ObjStore : public RGWGetUsage {
 public:
   RGWGetUsage_ObjStore() {}
-  ~RGWGetUsage_ObjStore() override {}
+  virtual ~RGWGetUsage_ObjStore() override {}
 };
 
 class RGWListBucket_ObjStore : public RGWListBucket {
 public:
   RGWListBucket_ObjStore() {}
-  ~RGWListBucket_ObjStore() override {}
+  virtual ~RGWListBucket_ObjStore() override {}
 };
 
 class RGWStatAccount_ObjStore : public RGWStatAccount {
 public:
   RGWStatAccount_ObjStore() {}
-  ~RGWStatAccount_ObjStore() override {}
+  virtual ~RGWStatAccount_ObjStore() override {}
 };
 
 class RGWStatBucket_ObjStore : public RGWStatBucket {
 public:
   RGWStatBucket_ObjStore() {}
-  ~RGWStatBucket_ObjStore() override {}
+  virtual ~RGWStatBucket_ObjStore() override {}
 };
 
 class RGWCreateBucket_ObjStore : public RGWCreateBucket {
 public:
   RGWCreateBucket_ObjStore() {}
-  ~RGWCreateBucket_ObjStore() override {}
+  virtual ~RGWCreateBucket_ObjStore() override {}
 };
 
 class RGWDeleteBucket_ObjStore : public RGWDeleteBucket {
 public:
   RGWDeleteBucket_ObjStore() {}
-  ~RGWDeleteBucket_ObjStore() override {}
+  virtual ~RGWDeleteBucket_ObjStore() override {}
 };
 
 class RGWPutObj_ObjStore : public RGWPutObj
 {
 public:
   RGWPutObj_ObjStore() {}
-  ~RGWPutObj_ObjStore() override {}
+  virtual ~RGWPutObj_ObjStore() override {}
 
   int verify_params() override;
   int get_params(optional_yield y) override;
@@ -289,7 +289,7 @@ protected:
 
 public:
   RGWPostObj_ObjStore() {}
-  ~RGWPostObj_ObjStore() override {}
+  virtual ~RGWPostObj_ObjStore() override {}
 
   int verify_params() override;
 };
@@ -299,57 +299,57 @@ class RGWPutMetadataAccount_ObjStore : public RGWPutMetadataAccount
 {
 public:
   RGWPutMetadataAccount_ObjStore() {}
-  ~RGWPutMetadataAccount_ObjStore() override {}
+  virtual ~RGWPutMetadataAccount_ObjStore() override {}
 };
 
 class RGWPutMetadataBucket_ObjStore : public RGWPutMetadataBucket
 {
 public:
   RGWPutMetadataBucket_ObjStore() {}
-  ~RGWPutMetadataBucket_ObjStore() override {}
+  virtual ~RGWPutMetadataBucket_ObjStore() override {}
 };
 
 class RGWPutMetadataObject_ObjStore : public RGWPutMetadataObject
 {
 public:
   RGWPutMetadataObject_ObjStore() {}
-  ~RGWPutMetadataObject_ObjStore() override {}
+  virtual ~RGWPutMetadataObject_ObjStore() override {}
 };
 
 class RGWDeleteObj_ObjStore : public RGWDeleteObj {
 public:
   RGWDeleteObj_ObjStore() {}
-  ~RGWDeleteObj_ObjStore() override {}
+  virtual ~RGWDeleteObj_ObjStore() override {}
 };
 
 class  RGWGetCrossDomainPolicy_ObjStore : public RGWGetCrossDomainPolicy {
 public:
   RGWGetCrossDomainPolicy_ObjStore() = default;
-  ~RGWGetCrossDomainPolicy_ObjStore() override = default;
+  virtual ~RGWGetCrossDomainPolicy_ObjStore() override = default;
 };
 
 class  RGWGetHealthCheck_ObjStore : public RGWGetHealthCheck {
 public:
   RGWGetHealthCheck_ObjStore() = default;
-  ~RGWGetHealthCheck_ObjStore() override = default;
+  virtual ~RGWGetHealthCheck_ObjStore() override = default;
 };
 
 class RGWCopyObj_ObjStore : public RGWCopyObj {
 public:
   RGWCopyObj_ObjStore() {}
-  ~RGWCopyObj_ObjStore() override {}
+  virtual ~RGWCopyObj_ObjStore() override {}
 };
 
 class RGWGetACLs_ObjStore : public RGWGetACLs {
 public:
   RGWGetACLs_ObjStore() {}
-  ~RGWGetACLs_ObjStore() override {}
+  virtual ~RGWGetACLs_ObjStore() override {}
 };
 
 class RGWPutACLs_ObjStore : public RGWPutACLs {
 public:
   RGWPutACLs_ObjStore() {}
-  ~RGWPutACLs_ObjStore() override {}
+  virtual ~RGWPutACLs_ObjStore() override {}
 
   int get_params(optional_yield y) override;
 };
@@ -357,13 +357,13 @@ public:
 class RGWGetLC_ObjStore : public RGWGetLC {
 public:
   RGWGetLC_ObjStore() {}
-  ~RGWGetLC_ObjStore() override {}
+  virtual ~RGWGetLC_ObjStore() override {}
 };
 
 class RGWPutLC_ObjStore : public RGWPutLC {
 public:
   RGWPutLC_ObjStore() {}
-  ~RGWPutLC_ObjStore() override {}
+  virtual ~RGWPutLC_ObjStore() override {}
 
   int get_params(optional_yield y) override;
 };
@@ -371,62 +371,62 @@ public:
 class RGWDeleteLC_ObjStore : public RGWDeleteLC {
 public:
   RGWDeleteLC_ObjStore() {}
-  ~RGWDeleteLC_ObjStore() override {}
+  virtual ~RGWDeleteLC_ObjStore() override {}
 
 };
 
 class RGWGetCORS_ObjStore : public RGWGetCORS {
 public:
   RGWGetCORS_ObjStore() {}
-  ~RGWGetCORS_ObjStore() override {}
+  virtual ~RGWGetCORS_ObjStore() override {}
 };
 
 class RGWPutCORS_ObjStore : public RGWPutCORS {
 public:
   RGWPutCORS_ObjStore() {}
-  ~RGWPutCORS_ObjStore() override {}
+  virtual ~RGWPutCORS_ObjStore() override {}
 };
 
 class RGWDeleteCORS_ObjStore : public RGWDeleteCORS {
 public:
   RGWDeleteCORS_ObjStore() {}
-  ~RGWDeleteCORS_ObjStore() override {}
+  virtual ~RGWDeleteCORS_ObjStore() override {}
 };
 
 class RGWOptionsCORS_ObjStore : public RGWOptionsCORS {
 public:
   RGWOptionsCORS_ObjStore() {}
-  ~RGWOptionsCORS_ObjStore() override {}
+  virtual ~RGWOptionsCORS_ObjStore() override {}
 };
 
 class RGWGetBucketEncryption_ObjStore : public RGWGetBucketEncryption {
 public:
   RGWGetBucketEncryption_ObjStore() {}
-  ~RGWGetBucketEncryption_ObjStore() override {}
+  virtual ~RGWGetBucketEncryption_ObjStore() override {}
 };
 
 class RGWPutBucketEncryption_ObjStore : public RGWPutBucketEncryption {
 public:
   RGWPutBucketEncryption_ObjStore() {}
-  ~RGWPutBucketEncryption_ObjStore() override {}
+  virtual ~RGWPutBucketEncryption_ObjStore() override {}
 };
 
 class RGWDeleteBucketEncryption_ObjStore : public RGWDeleteBucketEncryption {
 public:
   RGWDeleteBucketEncryption_ObjStore() {}
-  ~RGWDeleteBucketEncryption_ObjStore() override {}
+  virtual ~RGWDeleteBucketEncryption_ObjStore() override {}
 };
 
 class RGWInitMultipart_ObjStore : public RGWInitMultipart {
 public:
   RGWInitMultipart_ObjStore() {}
-  ~RGWInitMultipart_ObjStore() override {}
+  virtual ~RGWInitMultipart_ObjStore() override {}
 };
 
 class RGWCompleteMultipart_ObjStore : public RGWCompleteMultipart {
 public:
   RGWCompleteMultipart_ObjStore() {}
-  ~RGWCompleteMultipart_ObjStore() override {}
+  virtual ~RGWCompleteMultipart_ObjStore() override {}
 
   int get_params(optional_yield y) override;
 };
@@ -434,13 +434,13 @@ public:
 class RGWAbortMultipart_ObjStore : public RGWAbortMultipart {
 public:
   RGWAbortMultipart_ObjStore() {}
-  ~RGWAbortMultipart_ObjStore() override {}
+  virtual ~RGWAbortMultipart_ObjStore() override {}
 };
 
 class RGWListMultipart_ObjStore : public RGWListMultipart {
 public:
   RGWListMultipart_ObjStore() {}
-  ~RGWListMultipart_ObjStore() override {}
+  virtual ~RGWListMultipart_ObjStore() override {}
 
   int get_params(optional_yield y) override;
 };
@@ -448,7 +448,7 @@ public:
 class RGWListBucketMultiparts_ObjStore : public RGWListBucketMultiparts {
 public:
   RGWListBucketMultiparts_ObjStore() {}
-  ~RGWListBucketMultiparts_ObjStore() override {}
+  virtual ~RGWListBucketMultiparts_ObjStore() override {}
 
   int get_params(optional_yield y) override;
 };
@@ -456,19 +456,19 @@ public:
 class RGWBulkDelete_ObjStore : public RGWBulkDelete {
 public:
   RGWBulkDelete_ObjStore() {}
-  ~RGWBulkDelete_ObjStore() override {}
+  virtual ~RGWBulkDelete_ObjStore() override {}
 };
 
 class RGWBulkUploadOp_ObjStore : public RGWBulkUploadOp {
 public:
   RGWBulkUploadOp_ObjStore() = default;
-  ~RGWBulkUploadOp_ObjStore() = default;
+  virtual ~RGWBulkUploadOp_ObjStore() = default;
 };
 
 class RGWDeleteMultiObj_ObjStore : public RGWDeleteMultiObj {
 public:
   RGWDeleteMultiObj_ObjStore() {}
-  ~RGWDeleteMultiObj_ObjStore() override {}
+  virtual ~RGWDeleteMultiObj_ObjStore() override {}
 
   int get_params(optional_yield y) override;
 };
@@ -476,45 +476,45 @@ public:
 class RGWInfo_ObjStore : public RGWInfo {
 public:
     RGWInfo_ObjStore() = default;
-    ~RGWInfo_ObjStore() override = default;
+    virtual ~RGWInfo_ObjStore() override = default;
 };
 
 class RGWPutBucketObjectLock_ObjStore : public RGWPutBucketObjectLock {
 public:
   RGWPutBucketObjectLock_ObjStore() = default;
-  ~RGWPutBucketObjectLock_ObjStore() = default;
+  virtual ~RGWPutBucketObjectLock_ObjStore() = default;
   int get_params(optional_yield y) override;
 };
 
 class RGWGetBucketObjectLock_ObjStore : public RGWGetBucketObjectLock {
 public:
   RGWGetBucketObjectLock_ObjStore() = default;
-  ~RGWGetBucketObjectLock_ObjStore() override = default;
+  virtual ~RGWGetBucketObjectLock_ObjStore() override = default;
 };
 
 class RGWPutObjRetention_ObjStore : public RGWPutObjRetention {
 public:
   RGWPutObjRetention_ObjStore() = default;
-  ~RGWPutObjRetention_ObjStore() override = default;
+  virtual ~RGWPutObjRetention_ObjStore() override = default;
 };
 
 class RGWGetObjRetention_ObjStore : public RGWGetObjRetention {
 public:
   RGWGetObjRetention_ObjStore() = default;
-  ~RGWGetObjRetention_ObjStore() = default;
+  virtual ~RGWGetObjRetention_ObjStore() = default;
 };
 
 class RGWPutObjLegalHold_ObjStore : public RGWPutObjLegalHold {
 public:
   RGWPutObjLegalHold_ObjStore() = default;
-  ~RGWPutObjLegalHold_ObjStore() override = default;
+  virtual ~RGWPutObjLegalHold_ObjStore() override = default;
   int get_params(optional_yield y) override;
 };
 
 class RGWGetObjLegalHold_ObjStore : public RGWGetObjLegalHold {
 public:
   RGWGetObjLegalHold_ObjStore() = default;
-  ~RGWGetObjLegalHold_ObjStore() = default;
+  virtual ~RGWGetObjLegalHold_ObjStore() = default;
 };
 
 class RGWRESTOp : public RGWOp {
@@ -554,7 +554,7 @@ public:
   static constexpr int MAX_OBJ_NAME_LEN = 1024;
 
   RGWHandler_REST() {}
-  ~RGWHandler_REST() override {}
+  virtual ~RGWHandler_REST() override {}
 
   static int validate_bucket_name(const std::string& bucket);
   static int validate_object_name(const std::string& object);

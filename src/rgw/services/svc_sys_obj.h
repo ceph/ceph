@@ -269,6 +269,8 @@ protected:
 public:
   RGWSI_SysObj(CephContext *cct): RGWServiceInstance(cct) {}
 
+  ~RGWSI_SysObj() {}
+
   RGWSysObjectCtx init_obj_ctx();
   Obj get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj);
 

@@ -21,7 +21,7 @@ protected:
   virtual bool check(const string& first, const string& second, string& err_msg) = 0;
 
 public:
-  virtual ~RGWPolicyCondition() {}
+  ~RGWPolicyCondition() {}
 
   void set_vals(const string& _v1, const string& _v2) {
     v1 = _v1;

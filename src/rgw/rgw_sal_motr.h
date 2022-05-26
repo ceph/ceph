@@ -139,7 +139,7 @@ class MotrNotification : public Notification {
   public:
     MotrNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type) :
         Notification(_obj, _src_obj, _type) {}
-    ~MotrNotification() = default;
+    virtual ~MotrNotification() = default;
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0;}
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
@@ -290,7 +290,7 @@ class MotrBucket : public Bucket {
       acls() {
       }
 
-    ~MotrBucket() { }
+    virtual ~MotrBucket() { }
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int list(const DoutPrefixProvider *dpp, ListParams&, int, ListResults&, optional_yield y) override;
@@ -441,7 +441,7 @@ class MotrZone : public Zone {
       info.storage_classes = sc;
       zone_params->placement_pools["default"] = info;
     }
-    ~MotrZone() = default;
+    virtual ~MotrZone() = default;
 
     virtual ZoneGroup& get_zonegroup() override;
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
@@ -476,7 +476,7 @@ class MotrOIDCProvider : public RGWOIDCProvider {
   MotrStore* store;
   public:
   MotrOIDCProvider(MotrStore* _store) : store(_store) {}
-  ~MotrOIDCProvider() = default;
+  virtual ~MotrOIDCProvider() = default;
 
   virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) override { return 0; }
   virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant) override { return 0; }
@@ -707,7 +707,7 @@ class MotrAtomicWriter : public Writer {
           const rgw_placement_rule *_ptail_placement_rule,
           uint64_t _olh_epoch,
           const std::string& _unique_tag);
-  ~MotrAtomicWriter() = default;
+  virtual ~MotrAtomicWriter() = default;
 
   // prepare to start processing object data
   virtual int prepare(optional_yield y) override;
@@ -756,7 +756,7 @@ public:
 				  part_num(_part_num), part_num_str(part_num_str)
   {
   }
-  ~MotrMultipartWriter() = default;
+  virtual ~MotrMultipartWriter() = default;
 
   // prepare to start processing object data
   virtual int prepare(optional_yield y) override;
@@ -887,7 +887,7 @@ class MotrStore : public Store {
     struct m0_idx_dix_config dix_conf = {};
 
     MotrStore(CephContext *c): zone(this), cctx(c) {}
-    ~MotrStore() {
+    virtual ~MotrStore() {
       delete obj_meta_cache;
       delete user_cache;
       delete bucket_inst_cache;
