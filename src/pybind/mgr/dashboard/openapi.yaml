@@ -5870,74 +5870,6 @@ paths:
       summary: Updates an NFS-Ganesha export
       tags:
       - NFS-Ganesha
-  /api/nfs-ganesha/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Is API available?
-                    type: boolean
-                  message:
-                    description: Error message
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Status of NFS-Ganesha management feature
-      tags:
-      - NFS-Ganesha
-  /api/orchestrator/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Orchestrator status
-                    type: boolean
-                  message:
-                    description: Error message
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Display Orchestrator Status
-      tags:
-      - Orchestrator
   /api/osd:
     get:
       parameters: []
@@ -7957,40 +7889,6 @@ paths:
       - jwt: []
       tags:
       - RgwSite
-  /api/rgw/status:
-    get:
-      parameters: []
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              schema:
-                properties:
-                  available:
-                    description: Is RGW available?
-                    type: boolean
-                  message:
-                    description: Descriptions
-                    type: string
-                required:
-                - available
-                - message
-                type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: Display RGW Status
-      tags:
-      - Rgw
   /api/rgw/user:
     get:
       parameters:
@@ -10552,8 +10450,6 @@ tags:
   name: NFS-Ganesha
 - description: OSD management API
   name: OSD
-- description: Orchestrator Management API
-  name: Orchestrator
 - description: OSD Perf Counters Management API
   name: OsdPerfCounter
 - description: Perf Counters Management API
@@ -10584,8 +10480,6 @@ tags:
   name: RbdTrash
 - description: Feedback API
   name: Report
-- description: RGW Management API
-  name: Rgw
 - description: RGW Bucket Management API
   name: RgwBucket
 - description: RGW Daemon Management API

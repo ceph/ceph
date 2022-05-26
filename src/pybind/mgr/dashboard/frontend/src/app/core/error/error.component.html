@@ -27,10 +27,17 @@
         the {{ section_info }} management functionality.</h4>
     </div>
     <br><br>
+    <div *ngIf="button_name && button_route; else dashboardButton">
+      <button class="btn btn-primary"
+              [routerLink]="button_route"
+              i18n>{{ button_name }}</button>
+    </div>
+    <ng-template #dashboardButton>
     <div>
       <button class="btn btn-primary"
               [routerLink]="'/dashboard'"
               i18n>Go To Dashboard</button>
     </div>
+    </ng-template>
   </div>
 </div>
