@@ -84,10 +84,7 @@ namespace ceph {
 }
 
 #define CEPHFS_FEATURES_MDS_SUPPORTED CEPHFS_FEATURES_ALL
-#define CEPHFS_FEATURES_MDS_REQUIRED {}
-
 #define CEPHFS_FEATURES_CLIENT_SUPPORTED CEPHFS_FEATURES_ALL
-#define CEPHFS_FEATURES_CLIENT_REQUIRED {}
 
 extern std::string_view cephfs_feature_name(size_t id);
 extern int cephfs_feature_from_name(std::string_view name);
