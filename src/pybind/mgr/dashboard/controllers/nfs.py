@@ -81,31 +81,8 @@ def NfsTask(name, metadata, wait_for):  # noqa: N802
     return composed_decorator
 
 
-@APIRouter('/nfs-ganesha', Scope.NFS_GANESHA)
-@APIDoc("NFS-Ganesha Cluster Management API", "NFS-Ganesha")
-class NFSGanesha(RESTController):
-
-    @EndpointDoc("Status of NFS-Ganesha management feature",
-                 responses={200: {
-                     'available': (bool, "Is API available?"),
-                     'message': (str, "Error message")
-                 }})
-    @Endpoint()
-    @ReadPermission
-    def status(self):
-        status = {'available': True, 'message': None}
-        try:
-            mgr.remote('nfs', 'cluster_ls')
-        except (ImportError, RuntimeError) as error:
-            logger.exception(error)
-            status['available'] = False
-            status['message'] = str(error)  # type: ignore
-
-        return status
-
-
 @APIRouter('/nfs-ganesha/cluster', Scope.NFS_GANESHA)
-@APIDoc(group="NFS-Ganesha")
+@APIDoc("NFS-Ganesha Cluster Management API", "NFS-Ganesha")
 class NFSGaneshaCluster(RESTController):
     @ReadPermission
     @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
@@ -285,3 +262,16 @@ class NFSGaneshaUi(BaseController):
     @ReadPermission
     def filesystems(self):
         return CephFS.list_filesystems()
+
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': True, 'message': None}
+        try:
+            mgr.remote('nfs', 'cluster_ls')
+        except (ImportError, RuntimeError) as error:
+            logger.exception(error)
+            status['available'] = False
+            status['message'] = str(error)  # type: ignore
+
+        return status
