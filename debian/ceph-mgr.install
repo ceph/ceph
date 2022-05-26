@@ -2,3 +2,4 @@ lib/systemd/system/ceph-mgr*
 usr/bin/ceph-mgr
 usr/share/ceph/mgr/mgr_module.*
 usr/share/ceph/mgr/mgr_util.*
+usr/share/ceph/mgr/object_format.*
