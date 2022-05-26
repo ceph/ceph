@@ -202,7 +202,7 @@ AlienStore::list_objects(CollectionRef ch,
       [=, &objects, &next] {
       auto c = static_cast<AlienCollection*>(ch.get());
       return store->collection_list(c->collection, start, end,
-                                    store->get_ideal_list_max(),
+                                    limit,
                                     &objects, &next);
     }).then([&objects, &next] (int r) {
       assert(r == 0);
