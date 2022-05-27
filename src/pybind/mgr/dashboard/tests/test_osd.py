@@ -451,4 +451,5 @@ class OsdTest(ControllerTestCase):
         res = self._get_deployment_options(fake_client, devices_data)
         self.assertTrue(res['options'][OsdDeploymentOptions.COST_CAPACITY]['available'])
         self.assertTrue(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
+        self.assertTrue(res['options'][OsdDeploymentOptions.IOPS]['available'])
         assert res['recommended_option'] == OsdDeploymentOptions.THROUGHPUT
