@@ -120,6 +120,10 @@ struct TimeEvent : Event<T> {
   void dump(ceph::Formatter *f) const {
     detail::dump_time_event(typeid(T).name(), internal_backend.timestamp, f);
   }
+
+  auto get_timestamp() const {
+    return internal_backend.timestamp;
+  }
 };
 
 
