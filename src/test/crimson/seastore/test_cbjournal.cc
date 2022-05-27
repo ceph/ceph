@@ -135,7 +135,7 @@ struct cbjournal_test_t : public seastar_test_suite_t
 
   cbjournal_test_t() :
       segment_manager(segment_manager::create_test_ephemeral()),
-      epm(new ExtentPlacementManager()),
+      epm(new ExtentPlacementManager(true)),
       cache(*epm)
   {
     device = new nvme_device::TestMemory(CBTEST_DEFAULT_TEST_SIZE);

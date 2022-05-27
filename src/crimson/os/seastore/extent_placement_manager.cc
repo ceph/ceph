@@ -10,10 +10,11 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore {
 
 SegmentedOolWriter::SegmentedOolWriter(
-  std::string name,
+  data_category_t category,
+  reclaim_gen_t gen,
   SegmentProvider& sp,
   SegmentSeqAllocator &ssa)
-  : segment_allocator(name, segment_type_t::OOL, sp, ssa),
+  : segment_allocator(segment_type_t::OOL, category, gen, sp, ssa),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
@@ -55,7 +56,7 @@ SegmentedOolWriter::write_record(
       TRACET("{} ool extent written at {} -- {}",
              t, segment_allocator.get_name(),
              extent_addr, *extent);
-      extent->hint = placement_hint_t::NUM_HINTS; // invalidate hint
+      extent->invalidate_hints();
       t.mark_delayed_extent_ool(extent, extent_addr);
       extent_addr = extent_addr.as_seg_paddr().add_offset(
           extent->get_length());

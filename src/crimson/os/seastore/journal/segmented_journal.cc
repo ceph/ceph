@@ -31,8 +31,9 @@ SegmentedJournal::SegmentedJournal(
   : segment_provider(segment_provider),
     segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::JOURNAL)),
-    journal_segment_allocator("JOURNAL",
-                              segment_type_t::JOURNAL,
+    journal_segment_allocator(segment_type_t::JOURNAL,
+                              data_category_t::METADATA,
+                              0, // generation
                               segment_provider,
                               *segment_seq_allocator),
     record_submitter(crimson::common::get_conf<uint64_t>(

@@ -757,9 +757,9 @@ constexpr objaddr_t OBJ_ADDR_MAX = std::numeric_limits<objaddr_t>::max();
 constexpr objaddr_t OBJ_ADDR_NULL = OBJ_ADDR_MAX;
 
 enum class placement_hint_t {
-  HOT = 0,   // Most of the metadata
-  COLD,      // Object data
-  REWRITE,   // Cold metadata and data (probably need further splits)
+  HOT = 0,   // The default user hint that expects mutations or retirement
+  COLD,      // Expect no mutations and no retirement in the near future
+  REWRITE,   // Hint for the internal rewrites
   NUM_HINTS  // Constant for number of hints
 };
 
@@ -972,6 +972,37 @@ constexpr bool is_backref_node(extent_types_t type)
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
+
+using reclaim_gen_t = uint8_t;
+
+constexpr reclaim_gen_t DIRTY_GENERATION = 1;
+constexpr reclaim_gen_t COLD_GENERATION = 1;
+constexpr reclaim_gen_t RECLAIM_GENERATIONS = 3;
+constexpr reclaim_gen_t NULL_GENERATION =
+  std::numeric_limits<reclaim_gen_t>::max();
+
+struct reclaim_gen_printer_t {
+  reclaim_gen_t gen;
+};
+
+std::ostream &operator<<(std::ostream &out, reclaim_gen_printer_t gen);
+
+enum class data_category_t : uint8_t {
+  METADATA = 0,
+  DATA,
+  NUM
+};
+
+std::ostream &operator<<(std::ostream &out, data_category_t c);
+
+constexpr data_category_t get_extent_category(extent_types_t type) {
+  if (type == extent_types_t::OBJECT_DATA_BLOCK ||
+      type == extent_types_t::COLL_BLOCK) {
+    return data_category_t::DATA;
+  } else {
+    return data_category_t::METADATA;
+  }
+}
 
 enum class record_commit_type_t : uint8_t {
   NONE,
@@ -1419,6 +1450,9 @@ struct segment_header_t {
 
   segment_type_t type;
 
+  data_category_t category;
+  reclaim_gen_t generation;
+
   segment_type_t get_type() const {
     return type;
   }
@@ -1431,6 +1465,8 @@ struct segment_header_t {
     denc(v.alloc_replay_from, p);
     denc(v.segment_nonce, p);
     denc(v.type, p);
+    denc(v.category, p);
+    denc(v.generation, p);
     DENC_FINISH(p);
   }
 };

@@ -35,15 +35,16 @@ namespace crimson::os::seastore {
 class Journal;
 
 struct tm_make_config_t {
-  bool is_test = true;
-  journal_type_t j_type = journal_type_t::SEGMENT_JOURNAL;
-  placement_hint_t default_placement_hint = placement_hint_t::HOT;
+  bool is_test;
+  journal_type_t j_type;
+  bool epm_prefer_ool;
+  reclaim_gen_t default_generation;
 
   static tm_make_config_t get_default() {
     return tm_make_config_t {
       false,
       journal_type_t::SEGMENT_JOURNAL,
-      placement_hint_t::HOT
+      false
     };
   }
   static tm_make_config_t get_test_segmented_journal() {
@@ -52,7 +53,7 @@ struct tm_make_config_t {
     return tm_make_config_t {
       true,
       journal_type_t::SEGMENT_JOURNAL,
-      placement_hint_t::HOT
+      false
     };
   }
   static tm_make_config_t get_test_cb_journal() {
@@ -61,7 +62,7 @@ struct tm_make_config_t {
     return tm_make_config_t {
       true,
       journal_type_t::CIRCULARBOUNDED_JOURNAL,
-      placement_hint_t::REWRITE
+      true
     };
   }
 
@@ -71,9 +72,9 @@ private:
   tm_make_config_t(
     bool is_test,
     journal_type_t j_type,
-    placement_hint_t default_placement_hint)
+    bool epm_prefer_ool)
     : is_test(is_test), j_type(j_type),
-      default_placement_hint(default_placement_hint)
+      epm_prefer_ool(epm_prefer_ool)
   {}
 };
 
@@ -114,8 +115,7 @@ public:
     CacheRef cache,
     LBAManagerRef lba_manager,
     ExtentPlacementManagerRef &&epm,
-    BackrefManagerRef&& backref_manager,
-    tm_make_config_t config = tm_make_config_t::get_default());
+    BackrefManagerRef&& backref_manager);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -338,14 +338,8 @@ public:
   alloc_extent_ret<T> alloc_extent(
     Transaction &t,
     laddr_t laddr_hint,
-    extent_len_t len) {
-    placement_hint_t placement_hint;
-    if constexpr (T::TYPE == extent_types_t::OBJECT_DATA_BLOCK ||
-                  T::TYPE == extent_types_t::COLL_BLOCK) {
-      placement_hint = placement_hint_t::COLD;
-    } else {
-      placement_hint = config.default_placement_hint;
-    }
+    extent_len_t len,
+    placement_hint_t placement_hint = placement_hint_t::HOT) {
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
@@ -353,7 +347,8 @@ public:
     auto ext = cache->alloc_new_extent<T>(
       t,
       len,
-      placement_hint);
+      placement_hint,
+      0);
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -447,7 +442,8 @@ public:
   using AsyncCleaner::ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
-    CachedExtentRef extent) final;
+    CachedExtentRef extent,
+    reclaim_gen_t target_generation) final;
 
   using AsyncCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
   get_extent_if_live_ret get_extent_if_live(
@@ -608,10 +604,10 @@ private:
 
   WritePipeline write_pipeline;
 
-  tm_make_config_t config;
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
     LogicalCachedExtentRef extent);
+
 public:
   // Testing interfaces
   auto get_async_cleaner() {

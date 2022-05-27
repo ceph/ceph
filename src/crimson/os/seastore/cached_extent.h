@@ -105,7 +105,17 @@ class CachedExtent : public boost::intrusive_ref_counter<
 
   // time of the last rewrite
   seastar::lowres_system_clock::time_point last_rewritten;
+
 public:
+  void init(extent_state_t _state,
+            paddr_t paddr,
+            placement_hint_t hint,
+            reclaim_gen_t gen) {
+    state = _state;
+    set_paddr(paddr);
+    user_hint = hint;
+    reclaim_generation = gen;
+  }
 
   void set_last_modified(seastar::lowres_system_clock::duration d) {
     last_modified = seastar::lowres_system_clock::time_point(d);
@@ -209,7 +219,9 @@ public:
 	<< ", length=" << get_length()
 	<< ", state=" << state
 	<< ", last_committed_crc=" << last_committed_crc
-	<< ", refcount=" << use_count();
+	<< ", refcount=" << use_count()
+	<< ", user_hint=" << user_hint
+	<< ", reclaim_gen=" << reclaim_generation;
     if (state != extent_state_t::INVALID &&
         state != extent_state_t::CLEAN_PENDING) {
       print_detail(out);
@@ -374,8 +386,24 @@ public:
 
   virtual ~CachedExtent();
 
-  /// hint for allocators
-  placement_hint_t hint = placement_hint_t::NUM_HINTS;
+  placement_hint_t get_user_hint() const {
+    return user_hint;
+  }
+
+  reclaim_gen_t get_reclaim_generation() const {
+    return reclaim_generation;
+  }
+
+  void invalidate_hints() {
+    user_hint = placement_hint_t::NUM_HINTS;
+    reclaim_generation = NULL_GENERATION;
+  }
+
+  void set_reclaim_generation(reclaim_gen_t gen) {
+    assert(gen < RECLAIM_GENERATIONS);
+    user_hint = placement_hint_t::REWRITE;
+    reclaim_generation = gen;
+  }
 
   bool is_inline() const {
     return poffset.is_relative();
@@ -453,6 +481,11 @@ private:
   }
 
   read_set_item_t<Transaction>::list transactions;
+
+  placement_hint_t user_hint;
+
+  /// > 0 and not null means the extent is under reclaimming
+  reclaim_gen_t reclaim_generation;
 
 protected:
   CachedExtent(CachedExtent &&other) = delete;

@@ -60,7 +60,9 @@ struct btree_test_base :
 
   segment_id_t allocate_segment(
     segment_seq_t seq,
-    segment_type_t type
+    segment_type_t type,
+    data_category_t,
+    reclaim_gen_t
   ) final {
     auto ret = next;
     next = segment_id_t{
@@ -111,7 +113,7 @@ struct btree_test_base :
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(*this);
-      epm.reset(new ExtentPlacementManager());
+      epm.reset(new ExtentPlacementManager(false));
       cache.reset(new Cache(*epm));
 
       block_size = segment_manager->get_block_size();
@@ -368,7 +370,11 @@ struct btree_lba_manager_test : btree_test_base {
       test_lba_mappings
     };
     if (create_fake_extent) {
-      cache->alloc_new_extent<TestBlockPhysical>(*t.t, TestBlockPhysical::SIZE);
+      cache->alloc_new_extent<TestBlockPhysical>(
+          *t.t,
+          TestBlockPhysical::SIZE,
+          placement_hint_t::HOT,
+          0);
     };
     return t;
   }

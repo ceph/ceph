@@ -85,8 +85,10 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     // add a new placeholder to Cache
     ext = CachedExtent::make_cached_extent_ref<
       RetiredExtentPlaceholder>(length);
-    ext->set_paddr(addr);
-    ext->state = CachedExtent::extent_state_t::CLEAN;
+    ext->init(CachedExtent::extent_state_t::CLEAN,
+              addr,
+              placement_hint_t::NUM_HINTS,
+              NULL_GENERATION);
     DEBUGT("retire {}~{} as placeholder, add extent -- {}",
            t, addr, length, *ext);
     add_extent(ext);
@@ -924,40 +926,41 @@ void Cache::on_transaction_destruct(Transaction& t)
 }
 
 CachedExtentRef Cache::alloc_new_extent_by_type(
-  Transaction &t,       ///< [in, out] current transaction
-  extent_types_t type,  ///< [in] type tag
+  Transaction &t,        ///< [in, out] current transaction
+  extent_types_t type,   ///< [in] type tag
   seastore_off_t length, ///< [in] length
-  placement_hint_t hint
+  placement_hint_t hint, ///< [in] user hint
+  reclaim_gen_t gen      ///< [in] reclaim generation
 )
 {
   LOG_PREFIX(Cache::alloc_new_extent_by_type);
-  SUBDEBUGT(seastore_cache, "allocate {} {}B, hint={}",
-            t, type, length, hint);
+  SUBDEBUGT(seastore_cache, "allocate {} {}B, hint={}, gen={}",
+            t, type, length, hint, reclaim_gen_printer_t{gen});
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");
     return CachedExtentRef();
   case extent_types_t::LADDR_INTERNAL:
-    return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length, hint);
+    return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length, hint, gen);
   case extent_types_t::LADDR_LEAF:
-    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length, hint);
+    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length, hint, gen);
   case extent_types_t::ONODE_BLOCK_STAGED:
-    return alloc_new_extent<onode::SeastoreNodeExtent>(t, length, hint);
+    return alloc_new_extent<onode::SeastoreNodeExtent>(t, length, hint, gen);
   case extent_types_t::OMAP_INNER:
-    return alloc_new_extent<omap_manager::OMapInnerNode>(t, length, hint);
+    return alloc_new_extent<omap_manager::OMapInnerNode>(t, length, hint, gen);
   case extent_types_t::OMAP_LEAF:
-    return alloc_new_extent<omap_manager::OMapLeafNode>(t, length, hint);
+    return alloc_new_extent<omap_manager::OMapLeafNode>(t, length, hint, gen);
   case extent_types_t::COLL_BLOCK:
-    return alloc_new_extent<collection_manager::CollectionNode>(t, length, hint);
+    return alloc_new_extent<collection_manager::CollectionNode>(t, length, hint, gen);
   case extent_types_t::OBJECT_DATA_BLOCK:
-    return alloc_new_extent<ObjectDataBlock>(t, length, hint);
+    return alloc_new_extent<ObjectDataBlock>(t, length, hint, gen);
   case extent_types_t::RETIRED_PLACEHOLDER:
     ceph_assert(0 == "impossible");
     return CachedExtentRef();
   case extent_types_t::TEST_BLOCK:
-    return alloc_new_extent<TestBlock>(t, length, hint);
+    return alloc_new_extent<TestBlock>(t, length, hint, gen);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
-    return alloc_new_extent<TestBlockPhysical>(t, length, hint);
+    return alloc_new_extent<TestBlockPhysical>(t, length, hint, gen);
   case extent_types_t::NONE: {
     ceph_assert(0 == "NONE is an invalid extent type");
     return CachedExtentRef();
@@ -986,6 +989,7 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
+  ret->set_reclaim_generation(DIRTY_GENERATION);
   DEBUGT("{} -> {}", t, *i, *ret);
   return ret;
 }

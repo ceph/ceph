@@ -303,8 +303,10 @@ public:
     if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
-      ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
+      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+                offset,
+                placement_hint_t::NUM_HINTS,
+                NULL_GENERATION);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -319,8 +321,10 @@ public:
     if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
-      ret->set_paddr(offset);
-      ret->state = CachedExtent::extent_state_t::CLEAN_PENDING;
+      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+                offset,
+                placement_hint_t::NUM_HINTS,
+                NULL_GENERATION);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent(placeholder), reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -681,19 +685,23 @@ public:
   TCachedExtentRef<T> alloc_new_extent(
     Transaction &t,         ///< [in, out] current transaction
     seastore_off_t length,  ///< [in] length
-    placement_hint_t hint = placement_hint_t::HOT
+    placement_hint_t hint,  ///< [in] user hint
+    reclaim_gen_t gen       ///< [in] reclaim generation
   ) {
     LOG_PREFIX(Cache::alloc_new_extent);
-    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}",
-              t, T::TYPE, length, hint);
-    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint);
+    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
+              t, T::TYPE, length, hint, reclaim_gen_printer_t{gen});
+    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen);
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
-    ret->set_paddr(result.paddr);
-    ret->hint = hint;
-    ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
+    ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
+              result.paddr,
+              hint,
+              result.gen);
     t.add_fresh_extent(ret);
-    SUBDEBUGT(seastore_cache, "allocated {} {}B extent at {}, hint={} -- {}",
-              t, T::TYPE, length, result.paddr, hint, *ret);
+    SUBDEBUGT(seastore_cache,
+              "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
+              t, T::TYPE, length, result.paddr,
+              hint, reclaim_gen_printer_t{result.gen}, *ret);
     return ret;
   }
 
@@ -703,10 +711,11 @@ public:
    * Allocates a fresh extent.  addr will be relative until commit.
    */
   CachedExtentRef alloc_new_extent_by_type(
-    Transaction &t,       ///< [in, out] current transaction
-    extent_types_t type,  ///< [in] type tag
+    Transaction &t,        ///< [in, out] current transaction
+    extent_types_t type,   ///< [in] type tag
     seastore_off_t length, ///< [in] length
-    placement_hint_t hint = placement_hint_t::HOT
+    placement_hint_t hint, ///< [in] user hint
+    reclaim_gen_t gen      ///< [in] reclaim generation
     );
 
   /**
