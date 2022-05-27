@@ -1015,7 +1015,7 @@ Notable Changes
 
 * Cephadm now supports an *ingress* service type that provides load
   balancing and HA (via haproxy and keepalived on a virtual IP) for
-  RGW service (see :ref:`orchestrator-haproxy-service-spec`).  (The experimental
+  RGW service (see `orchestrator-haproxy-service-spec`_).  (The experimental
   *rgw-ha* service has been removed.)
 
 Changelog
