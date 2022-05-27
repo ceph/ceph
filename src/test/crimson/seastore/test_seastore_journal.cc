@@ -109,7 +109,9 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   segment_id_t allocate_segment(
     segment_seq_t seq,
-    segment_type_t type
+    segment_type_t type,
+    data_category_t,
+    reclaim_gen_t
   ) final {
     auto ret = next;
     next = segment_id_t{

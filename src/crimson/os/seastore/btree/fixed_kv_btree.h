@@ -313,7 +313,9 @@ public:
   static mkfs_ret mkfs(op_context_t<node_key_t> c) {
     auto root_leaf = c.cache.template alloc_new_extent<leaf_node_t>(
       c.trans,
-      node_size);
+      node_size,
+      placement_hint_t::HOT,
+      0);
     root_leaf->set_size(0);
     fixed_kv_node_meta_t<node_key_t> meta{min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, 1};
     root_leaf->set_meta(meta);
@@ -814,7 +816,9 @@ public:
         std::remove_reference_t<decltype(fixed_kv_extent)>
         >(
         c.trans,
-        fixed_kv_extent.get_length());
+        fixed_kv_extent.get_length(),
+        fixed_kv_extent.get_user_hint(),
+        fixed_kv_extent.get_reclaim_generation());
       fixed_kv_extent.get_bptr().copy_out(
         0,
         fixed_kv_extent.get_length(),
@@ -1400,7 +1404,7 @@ private:
 
     if (split_from == iter.get_depth()) {
       auto nroot = c.cache.template alloc_new_extent<internal_node_t>(
-        c.trans, node_size);
+        c.trans, node_size, placement_hint_t::HOT, 0);
       fixed_kv_node_meta_t<node_key_t> meta{
         min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
       nroot->set_meta(meta);

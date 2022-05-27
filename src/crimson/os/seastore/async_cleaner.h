@@ -37,6 +37,10 @@ struct segment_info_t {
 
   segment_type_t type = segment_type_t::NULL_SEG;
 
+  data_category_t category = data_category_t::NUM;
+
+  reclaim_gen_t generation = NULL_GENERATION;
+
   time_point last_modified;
   time_point last_rewritten;
 
@@ -59,9 +63,12 @@ struct segment_info_t {
     return state == Segment::segment_state_t::OPEN;
   }
 
-  void init_closed(segment_seq_t, segment_type_t, std::size_t);
+  void init_closed(segment_seq_t, segment_type_t,
+                   data_category_t, reclaim_gen_t,
+                   std::size_t);
 
-  void set_open(segment_seq_t, segment_type_t);
+  void set_open(segment_seq_t, segment_type_t,
+                data_category_t, reclaim_gen_t);
 
   void set_empty();
 
@@ -190,9 +197,11 @@ public:
   void add_segment_manager(SegmentManager &segment_manager);
 
   // initiate non-empty segments, the others are by default empty
-  void init_closed(segment_id_t, segment_seq_t, segment_type_t);
+  void init_closed(segment_id_t, segment_seq_t, segment_type_t,
+                   data_category_t, reclaim_gen_t);
 
-  void mark_open(segment_id_t, segment_seq_t, segment_type_t);
+  void mark_open(segment_id_t, segment_seq_t, segment_type_t,
+                 data_category_t, reclaim_gen_t);
 
   void mark_empty(segment_id_t);
 
@@ -241,7 +250,7 @@ public:
   virtual const segment_info_t& get_seg_info(segment_id_t id) const = 0;
 
   virtual segment_id_t allocate_segment(
-      segment_seq_t seq, segment_type_t type) = 0;
+      segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) = 0;
 
   virtual journal_seq_t get_dirty_extents_replay_from() const = 0;
 
@@ -597,7 +606,8 @@ public:
     using rewrite_extent_ret = rewrite_extent_iertr::future<>;
     virtual rewrite_extent_ret rewrite_extent(
       Transaction &t,
-      CachedExtentRef extent) = 0;
+      CachedExtentRef extent,
+      reclaim_gen_t target_generation) = 0;
 
     /**
      * get_extent_if_live
@@ -739,7 +749,7 @@ public:
   }
 
   segment_id_t allocate_segment(
-      segment_seq_t seq, segment_type_t type) final;
+      segment_seq_t, segment_type_t, data_category_t, reclaim_gen_t) final;
 
   void close_segment(segment_id_t segment) final;
 
@@ -935,14 +945,21 @@ private:
   }
 
   struct reclaim_state_t {
+    reclaim_gen_t generation;
+    reclaim_gen_t target_generation;
     std::size_t segment_size;
     paddr_t start_pos;
     paddr_t end_pos;
 
     static reclaim_state_t create(
         segment_id_t segment_id,
+        reclaim_gen_t generation,
         std::size_t segment_size) {
-      return {segment_size,
+      ceph_assert(generation < RECLAIM_GENERATIONS);
+      return {generation,
+              (reclaim_gen_t)(generation == RECLAIM_GENERATIONS - 1 ?
+                              generation : generation + 1),
+              segment_size,
               P_ADDR_NULL,
               paddr_t::make_seg_paddr(segment_id, 0)};
     }
@@ -1280,10 +1297,12 @@ private:
   void init_mark_segment_closed(
       segment_id_t segment,
       segment_seq_t seq,
-      segment_type_t s_type) {
+      segment_type_t s_type,
+      data_category_t category,
+      reclaim_gen_t generation) {
     ceph_assert(!init_complete);
     auto old_usage = calc_utilization(segment);
-    segments.init_closed(segment, seq, s_type);
+    segments.init_closed(segment, seq, s_type, category, generation);
     auto new_usage = calc_utilization(segment);
     adjust_segment_util(old_usage, new_usage);
     if (s_type == segment_type_t::OOL) {

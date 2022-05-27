@@ -13,13 +13,15 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentAllocator::SegmentAllocator(
-  std::string name,
   segment_type_t type,
+  data_category_t category,
+  reclaim_gen_t gen,
   SegmentProvider &sp,
   SegmentSeqAllocator &ssa)
-  : name{name},
-    print_name{fmt::format("D?_{}", name)},
+  : print_name{fmt::format("{}_G{}", category, gen)},
     type{type},
+    category{category},
+    gen{gen},
     segment_provider{sp},
     sm_group{*sp.get_segment_manager_group()},
     segment_seq_allocator(ssa)
@@ -40,7 +42,8 @@ SegmentAllocator::do_open()
     new_segment_seq,
     reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
     sizeof(meta.seastore_id.uuid));
-  auto new_segment_id = segment_provider.allocate_segment(new_segment_seq, type);
+  auto new_segment_id = segment_provider.allocate_segment(
+      new_segment_seq, type, category, gen);
   ceph_assert(new_segment_id != NULL_SEG_ID);
   return sm_group.open(new_segment_id
   ).handle_error(
@@ -66,7 +69,9 @@ SegmentAllocator::do_open()
       new_journal_tail,
       new_alloc_replay_from,
       current_segment_nonce,
-      type};
+      type,
+      category,
+      gen};
     INFO("{} writing header to new segment ... -- {}",
          print_name, header);
 
@@ -124,7 +129,8 @@ SegmentAllocator::open()
   for (auto& device_id : device_ids) {
     oss << "_" << device_id_printer_t{device_id};
   }
-  oss << "_" << name;
+  oss << "_"
+      << fmt::format("{}_G{}", category, gen);
   print_name = oss.str();
 
   INFO("{}", print_name);

@@ -28,16 +28,14 @@ TransactionManager::TransactionManager(
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef &&epm,
-  BackrefManagerRef&& backref_manager,
-  tm_make_config_t config)
+  BackrefManagerRef&& backref_manager)
   : async_cleaner(std::move(_async_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
     backref_manager(std::move(backref_manager)),
-    sm_group(*async_cleaner->get_segment_manager_group()),
-    config(config)
+    sm_group(*async_cleaner->get_segment_manager_group())
 {
   async_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -473,7 +471,8 @@ TransactionManager::rewrite_logical_extent(
     t,
     lextent->get_type(),
     lextent->get_length(),
-    placement_hint_t::REWRITE)->cast<LogicalCachedExtent>();
+    lextent->get_user_hint(),
+    lextent->get_reclaim_generation())->cast<LogicalCachedExtent>();
   lextent->get_bptr().copy_out(
     0,
     lextent->get_length(),
@@ -497,7 +496,8 @@ TransactionManager::rewrite_logical_extent(
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   Transaction &t,
-  CachedExtentRef extent)
+  CachedExtentRef extent,
+  reclaim_gen_t target_generation)
 {
   LOG_PREFIX(TransactionManager::rewrite_extent);
 
@@ -509,6 +509,13 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     }
     extent = updated;
     ceph_assert(!extent->is_pending_io());
+  }
+
+  assert(extent->is_valid() && !extent->is_initial_pending());
+  if (extent->is_dirty()) {
+    extent->set_reclaim_generation(DIRTY_GENERATION);
+  } else {
+    extent->set_reclaim_generation(target_generation);
   }
 
   t.get_rewrite_version_stats().increment(extent->get_version());
@@ -640,7 +647,7 @@ TransactionManager::~TransactionManager() {}
 TransactionManagerRef make_transaction_manager(tm_make_config_t config)
 {
   LOG_PREFIX(make_transaction_manager);
-  auto epm = std::make_unique<ExtentPlacementManager>();
+  auto epm = std::make_unique<ExtentPlacementManager>(config.epm_prefer_ool);
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
@@ -681,8 +688,7 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
     std::move(cache),
     std::move(lba_manager),
     std::move(epm),
-    std::move(backref_manager),
-    config);
+    std::move(backref_manager));
 }
 
 }

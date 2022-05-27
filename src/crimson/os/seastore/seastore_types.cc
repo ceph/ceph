@@ -173,6 +173,29 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, reclaim_gen_printer_t gen)
+{
+  if (gen.gen == NULL_GENERATION) {
+    return out << "NULL_GEN";
+  } else if (gen.gen >= RECLAIM_GENERATIONS) {
+    return out << "INVALID_GEN(" << (unsigned)gen.gen << ")";
+  } else {
+    return out << "GEN(" << (unsigned)gen.gen << ")";
+  }
+}
+
+std::ostream &operator<<(std::ostream &out, data_category_t c)
+{
+  switch (c) {
+    case data_category_t::METADATA:
+      return out << "MD";
+    case data_category_t::DATA:
+      return out << "DATA";
+    default:
+      return out << "INVALID_CATEGORY!";
+  }
+}
+
 std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs)
 {
   bool first = false;
@@ -224,6 +247,8 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
 	     << ", journal_tail=" << header.journal_tail
 	     << ", segment_nonce=" << header.segment_nonce
 	     << ", type=" << header.type
+	     << ", category=" << header.category
+	     << ", generaton=" << (unsigned)header.generation
 	     << ")";
 }
 

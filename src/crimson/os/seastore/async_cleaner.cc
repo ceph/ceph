@@ -13,13 +13,18 @@ SET_SUBSYS(seastore_cleaner);
 namespace crimson::os::seastore {
 
 void segment_info_t::set_open(
-    segment_seq_t _seq, segment_type_t _type)
+    segment_seq_t _seq, segment_type_t _type,
+    data_category_t _category, reclaim_gen_t _generation)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
+  ceph_assert(_category != data_category_t::NUM);
+  ceph_assert(_generation < RECLAIM_GENERATIONS);
   state = Segment::segment_state_t::OPEN;
   seq = _seq;
   type = _type;
+  category = _category;
+  generation = _generation;
   written_to = 0;
 }
 
@@ -28,6 +33,8 @@ void segment_info_t::set_empty()
   state = Segment::segment_state_t::EMPTY;
   seq = NULL_SEG_SEQ;
   type = segment_type_t::NULL_SEG;
+  category = data_category_t::NUM;
+  generation = NULL_GENERATION;
   last_modified = {};
   last_rewritten = {};
   written_to = 0;
@@ -40,13 +47,19 @@ void segment_info_t::set_closed()
 }
 
 void segment_info_t::init_closed(
-    segment_seq_t _seq, segment_type_t _type, std::size_t seg_size)
+    segment_seq_t _seq, segment_type_t _type,
+    data_category_t _category, reclaim_gen_t _generation,
+    std::size_t seg_size)
 {
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
+  ceph_assert(_category != data_category_t::NUM);
+  ceph_assert(_generation < RECLAIM_GENERATIONS);
   state = Segment::segment_state_t::CLOSED;
   seq = _seq;
   type = _type;
+  category = _category;
+  generation = _generation;
   written_to = seg_size;
 }
 
@@ -59,6 +72,8 @@ std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
   } else { // open or closed
     out << ", seq=" << segment_seq_printer_t{info.seq}
         << ", type=" << info.type
+        << ", category=" << info.category
+        << ", generation=" << reclaim_gen_printer_t{info.generation}
         << ", last_modified=" << info.last_modified.time_since_epoch()
         << ", last_rewritten=" << info.last_rewritten.time_since_epoch()
         << ", written_to=" << info.written_to;
@@ -124,15 +139,19 @@ void segments_info_t::add_segment_manager(
 }
 
 void segments_info_t::init_closed(
-    segment_id_t segment, segment_seq_t seq, segment_type_t type)
+    segment_id_t segment, segment_seq_t seq, segment_type_t type,
+    data_category_t category, reclaim_gen_t generation)
 {
   LOG_PREFIX(segments_info_t::init_closed);
   auto& segment_info = segments[segment];
-  INFO("initiating {} {} {}, {}, num_segments(empty={}, opened={}, closed={})",
+  INFO("initiating {} {} {} {} {}, {}, "
+       "num_segments(empty={}, opened={}, closed={})",
        segment, segment_seq_printer_t{seq}, type,
+       category, reclaim_gen_printer_t{generation},
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
-  segment_info.init_closed(seq, type, get_segment_size());
+  segment_info.init_closed(
+      seq, type, category, generation, get_segment_size());
   ceph_assert(num_empty > 0);
   --num_empty;
   ++num_closed;
@@ -147,15 +166,18 @@ void segments_info_t::init_closed(
 }
 
 void segments_info_t::mark_open(
-    segment_id_t segment, segment_seq_t seq, segment_type_t type)
+    segment_id_t segment, segment_seq_t seq, segment_type_t type,
+    data_category_t category, reclaim_gen_t generation)
 {
   LOG_PREFIX(segments_info_t::mark_open);
   auto& segment_info = segments[segment];
-  INFO("opening {} {} {}, {}, num_segments(empty={}, opened={}, closed={})",
+  INFO("opening {} {} {} {} {}, {}, "
+       "num_segments(empty={}, opened={}, closed={})",
        segment, segment_seq_printer_t{seq}, type,
+       category, reclaim_gen_printer_t{generation},
        segment_info, num_empty, num_open, num_closed);
   ceph_assert(segment_info.is_empty());
-  segment_info.set_open(seq, type);
+  segment_info.set_open(seq, type, category, generation);
   ceph_assert(num_empty > 0);
   --num_empty;
   ++num_open;
@@ -531,7 +553,9 @@ void AsyncCleaner::register_metrics()
 
 segment_id_t AsyncCleaner::allocate_segment(
     segment_seq_t seq,
-    segment_type_t type)
+    segment_type_t type,
+    data_category_t category,
+    reclaim_gen_t generation)
 {
   LOG_PREFIX(AsyncCleaner::allocate_segment);
   assert(seq != NULL_SEG_SEQ);
@@ -542,7 +566,7 @@ segment_id_t AsyncCleaner::allocate_segment(
     auto& segment_info = it->second;
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
-      segments.mark_open(seg_id, seq, type);
+      segments.mark_open(seg_id, seq, type, category, generation);
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
       INFO("opened, should_block_on_gc {}, projected_avail_ratio {}, "
@@ -682,7 +706,7 @@ AsyncCleaner::rewrite_dirty_ret AsyncCleaner::rewrite_dirty(
 	  dirty_list,
 	  [this, FNAME, &t](auto &e) {
 	  DEBUGT("cleaning {}", t, *e);
-	  return ecb->rewrite_extent(t, e);
+	  return ecb->rewrite_extent(t, e, DIRTY_GENERATION);
 	});
       });
   });
@@ -867,11 +891,12 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
     INFO("reclaim {} {} start", seg_id, segment_info);
     ceph_assert(segment_info.is_closed());
     reclaim_state = reclaim_state_t::create(
-        seg_id, segments.get_segment_size());
+        seg_id, segment_info.generation, segments.get_segment_size());
   }
   reclaim_state->advance(config.reclaim_bytes_per_cycle);
 
-  DEBUG("reclaiming {}~{}",
+  DEBUG("reclaiming {} {}~{}",
+        reclaim_gen_printer_t{reclaim_state->generation},
         reclaim_state->start_pos,
         reclaim_state->end_pos);
   double pavail_ratio = get_projected_available_ratio();
@@ -965,7 +990,7 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
 		    extents,
 		    [this, &t, &reclaimed](auto &ext) {
 		    reclaimed += ext->get_length();
-		    return ecb->rewrite_extent(t, ext);
+		    return ecb->rewrite_extent(t, ext, reclaim_state->target_generation);
 		  });
 		});
 	      }).si_then([this, &t, &seq] {
@@ -1074,7 +1099,9 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
 	    init_mark_segment_closed(
 	      segment_id,
 	      header.segment_seq,
-	      header.type);
+	      header.type,
+	      header.category,
+	      header.generation);
 	    return seastar::now();
 	  }).handle_error(
 	    crimson::ct_error::enodata::handle(
@@ -1179,7 +1206,9 @@ AsyncCleaner::scan_extents_ret AsyncCleaner::scan_nonfull_segment(
     init_mark_segment_closed(
       segment_id,
       header.segment_seq,
-      header.type);
+      header.type,
+      header.category,
+      header.generation);
     return seastar::now();
   });
 }
