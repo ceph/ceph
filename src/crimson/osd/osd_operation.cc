@@ -35,6 +35,36 @@ void OSDOperationRegistry::do_stop()
   // to_ref_down is going off
 }
 
+void OSDOperationRegistry::put_historic(const ClientRequest& op) {
+  // unlink the op from the client request registry. this is a part of
+  // the re-link procedure. finally it will be in historic registry.
+  constexpr auto client_reg_index =
+    static_cast<size_t>(OperationTypeCode::client_request);
+  constexpr auto historic_reg_index =
+    static_cast<size_t>(OperationTypeCode::historic_client_request);
+  auto& client_registry = get_registry<client_reg_index>();
+  auto& historic_registry = get_registry<historic_reg_index>();
+
+  historic_registry.splice(std::end(historic_registry),
+			   client_registry,
+			   client_registry.iterator_to(op));
+  ClientRequest::ICRef(
+    &op, /* add_ref= */true
+  ).detach(); // yes, "leak" it for now!
+
+  // check whether the history size limit is not exceeded; if so, then
+  // purge the oldest op.
+  // NOTE: Operation uses the auto-unlink feature of boost::intrusive.
+  // NOTE: the cleaning happens in OSDOperationRegistry::do_stop()
+  using crimson::common::local_conf;
+  if (historic_registry.size() > local_conf()->osd_op_history_size) {
+    const auto& oldest_historic_op =
+      static_cast<const ClientRequest&>(historic_registry.front());
+    // clear a previously "leaked" op
+    ClientRequest::ICRef(&oldest_historic_op, /* add_ref= */false);
+  }
+}
+
 size_t OSDOperationRegistry::dump_client_requests(ceph::Formatter* f) const
 {
   const auto& client_registry =
