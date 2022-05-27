@@ -66,7 +66,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="pool"
                     name="pool"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="pool"
                     *ngIf="mode !== 'editing' && poolPermission.read">
               <option *ngIf="pools === null"
@@ -110,7 +110,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="namespace"
                     name="namespace"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="namespace"
                     *ngIf="mode !== 'editing' && poolPermission.read">
               <option *ngIf="pools === null"
@@ -169,7 +169,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="dataPool"
                     name="dataPool"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="dataPool"
                     (change)="onDataPoolChange($event.target.value)"
                     *ngIf="mode !== 'editing' && poolPermission.read">
@@ -266,7 +266,7 @@
               <div class="cd-col-form-input">
                 <select id="obj_size"
                         name="obj_size"
-                        class="form-control custom-select"
+                        class="form-control"
                         formControlName="obj_size">
                   <option *ngFor="let objectSize of objectSizes"
                           [value]="objectSize">{{ objectSize }}</option>
@@ -283,7 +283,7 @@
               <div class="cd-col-form-input">
                 <select id="stripingUnit"
                         name="stripingUnit"
-                        class="form-control custom-select"
+                        class="form-control"
                         formControlName="stripingUnit">
                   <option i18n
                           [ngValue]="null">-- Select stripe unit --</option>
