@@ -7,10 +7,12 @@ install(TARGETS ceph_perf_objectstore
 add_library(store_test_fixture OBJECT store_test_fixture.cc)
 target_include_directories(store_test_fixture PRIVATE
   $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
+if(WITH_SEASTAR)
+  target_link_libraries(store_test_fixture xstore-crimson)
+endif()
 
 add_executable(ceph_test_objectstore
-  store_test.cc
-  $<TARGET_OBJECTS:store_test_fixture>)
+  store_test.cc)
 
 if(WITH_SEASTAR)
 target_compile_definitions(ceph_test_objectstore PUBLIC WITH_XSTORE=1)
@@ -24,10 +26,11 @@ target_link_libraries(ceph_test_objectstore
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
+  store_test_fixture
   )
 if(WITH_SEASTAR)
   target_link_libraries(ceph_test_objectstore
-    xstore-classic
+    xstore-crimson
     ceph-common-minor
 )
 else()
@@ -47,12 +50,6 @@ target_link_libraries(xstore-crimson
   crimson-common
   crimson
   crimson::cflags)
-
-add_library(xstore-classic STATIC
-  xstore.cc)
-target_link_libraries(xstore-classic PRIVATE
-  xstore-crimson
-  os)
 endif()
 
 add_executable(ceph_test_keyvaluedb
@@ -189,10 +186,9 @@ target_link_libraries(unittest_transaction os ceph-common)
 
 # unittest_memstore_clone
 add_executable(unittest_memstore_clone
-  test_memstore_clone.cc
-  $<TARGET_OBJECTS:store_test_fixture>)
+  test_memstore_clone.cc)
 add_ceph_unittest(unittest_memstore_clone)
-target_link_libraries(unittest_memstore_clone os global)
+target_link_libraries(unittest_memstore_clone os global store_test_fixture)
 
 if(WITH_BLUESTORE)
   add_executable(ceph_test_alloc_replay
