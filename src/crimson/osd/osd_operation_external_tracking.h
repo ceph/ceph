@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "crimson/osd/osd.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/osd_operations/client_request.h"
@@ -230,8 +231,20 @@ struct HistoricBackend
               const ClientRequest::PGPipeline::SendReply& blocker) override {
   }
 
-  void handle(ClientRequest::CompletionEvent&,
-              const Operation&) override;
+  static const ClientRequest& to_client_request(const Operation& op) {
+#ifdef NDEBUG
+    return static_cast<const ClientRequest&>(op);
+#else
+    return dynamic_cast<const ClientRequest&>(op);
+#endif
+  }
+
+  void handle(ClientRequest::CompletionEvent&, const Operation& op) override {
+    if (crimson::common::local_conf()->osd_op_history_size) {
+      const auto& client_op = to_client_request(op);
+      client_op.osd.get_shard_services().registry.put_historic(client_op);
+    }
+  }
 };
 
 } // namespace crimson::osd

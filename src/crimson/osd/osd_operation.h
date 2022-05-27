@@ -171,6 +171,9 @@ struct OSDOperationRegistry : OperationRegistryT<
   static_cast<size_t>(OperationTypeCode::last_op)
 > {
   void do_stop() override;
+
+  void put_historic(const class ClientRequest& op);
+
   size_t dump_client_requests(ceph::Formatter* f) const;
   size_t dump_historic_client_requests(ceph::Formatter* f) const;
 
