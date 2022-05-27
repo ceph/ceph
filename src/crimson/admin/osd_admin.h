@@ -19,6 +19,7 @@ class OsdStatusHook;
 class SendBeaconHook;
 class DumpInFlightOpsHook;
 class DumpHistoricOpsHook;
+class DumpSlowestHistoricOpsHook;
 
 template<class Hook, class... Args>
 std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args);

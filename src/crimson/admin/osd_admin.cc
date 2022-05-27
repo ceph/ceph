@@ -483,4 +483,29 @@ private:
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<DumpHistoricOpsHook>(const crimson::osd::OSDOperationRegistry& op_registry);
 
+
+class DumpSlowestHistoricOpsHook : public AdminSocketHook {
+public:
+  explicit DumpSlowestHistoricOpsHook(const crimson::osd::OSDOperationRegistry& op_registry) :
+    AdminSocketHook{"dump_historic_slow_ops", "", "show slowest recent ops"},
+    op_registry(op_registry)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    logger().warn("{}", __func__);
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->open_object_section("historic_slow_ops");
+    op_registry.dump_slowest_historic_client_requests(f.get());
+    f->close_section();
+    f->dump_int("num_ops", 0);
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+private:
+  const crimson::osd::OSDOperationRegistry& op_registry;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<DumpSlowestHistoricOpsHook>(const crimson::osd::OSDOperationRegistry& op_registry);
+
 } // namespace crimson::admin

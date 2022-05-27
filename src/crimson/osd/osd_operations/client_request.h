@@ -155,6 +155,14 @@ public:
 
   friend class LttngBackend;
   friend class HistoricBackend;
+
+  auto get_started() const {
+    return get_event<StartEvent>().get_timestamp();
+  };
+
+  auto get_completed() const {
+    return get_event<CompletionEvent>().get_timestamp();
+  };
 };
 
 }
