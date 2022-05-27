@@ -100,7 +100,17 @@ predefined_drive_groups = {
         },
         'encrypted': False
     },
-    OsdDeploymentOptions.IOPS: {},
+    OsdDeploymentOptions.IOPS: {
+        'service_type': 'osd',
+        'service_id': 'iops_optimized',
+        'placement': {
+            'host_pattern': '*'
+        },
+        'data_devices': {
+            'rotational': 0
+        },
+        'encrypted': False
+    },
 }
 
 
@@ -493,24 +503,26 @@ class OsdUi(Osd):
         ssds = 0
         nvmes = 0
         res = DeploymentOptions()
-        devices = {}
 
         for inventory_host in orch.inventory.list(hosts=None, refresh=True):
             for device in inventory_host.devices.devices:
                 if device.available:
-                    devices[device.path] = device
                     if device.human_readable_type == 'hdd':
                         hdds += 1
-                    elif device.human_readable_type == 'ssd':
+                    else:
                         ssds += 1
-                    elif device.human_readable_type == 'nvme':
+                        # we still don't know how to infer nvmes
+                        # Tracker: https://tracker.ceph.com/issues/55728
                         nvmes += 1
+
         if hdds:
             res.options[OsdDeploymentOptions.COST_CAPACITY].available = True
             res.recommended_option = OsdDeploymentOptions.COST_CAPACITY
         if ssds:
             res.options[OsdDeploymentOptions.THROUGHPUT].available = True
             res.recommended_option = OsdDeploymentOptions.THROUGHPUT
+        if nvmes:
+            res.options[OsdDeploymentOptions.IOPS].available = True
 
         return res.as_dict()
 
