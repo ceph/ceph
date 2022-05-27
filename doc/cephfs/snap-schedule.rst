@@ -1,3 +1,5 @@
+.. _snap-schedule:
+
 ==========================
 Snapshot Scheduling Module
 ==========================

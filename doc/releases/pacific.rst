@@ -1015,7 +1015,7 @@ Notable Changes
 
 * Cephadm now supports an *ingress* service type that provides load
   balancing and HA (via haproxy and keepalived on a virtual IP) for
-  RGW service (see `orchestrator-haproxy-service-spec`_).  (The experimental
+  RGW service (see :ref:`orchestrator-haproxy-service-spec`).  (The experimental
   *rgw-ha* service has been removed.)
 
 Changelog
@@ -1157,7 +1157,7 @@ The :ref:`mgr-dashboard` brings improvements in the following management areas:
   - OSD: disk replacement, display status of ongoing deletion, and improved
     health/SMART diagnostics reporting.
 
-* Official :ref:`mgr ceph api`:
+* Official :ref:`mgr-ceph-api`:
 
   - OpenAPI v3 compliant.
   - Stability commitment starting from Pacific release.

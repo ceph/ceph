@@ -503,6 +503,34 @@ set with::
 :Required: No
 :Default: 64K
 
+.. _bluestore-rocksdb-sharding:
+
+RocksDB Sharding
+================
+
+Internally BlueStore uses multiple types of key-value data,
+stored in RocksDB.  Each data type in BlueStore is assigned a
+unique prefix. Until Pacific all key-value data was stored in
+single RocksDB column family: 'default'.  Since Pacific,
+BlueStore can divide this data into multiple RocksDB column
+families. When keys have similar access frequency, modification
+frequency and lifetime, BlueStore benefits from better caching
+and more precise compaction. This improves performance, and also
+requires less disk space during compaction, since each column
+family is smaller and can compact independent of others.
+
+OSDs deployed in Pacific or later use RocksDB sharding by default.
+If Ceph is upgraded to Pacific from a previous version, sharding is off.
+
+To enable sharding and apply the Pacific defaults, stop an OSD and run
+
+    .. prompt:: bash #
+
+      ceph-bluestore-tool \
+        --path <data path> \
+        --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
+        reshard
+
 SPDK Usage
 ==================
 
