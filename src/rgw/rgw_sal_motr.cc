@@ -1299,26 +1299,13 @@ int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
   if (this->category == RGWObjCategory::MultiMeta)
     return 0;
 
-  string bname, key;
-  if (target_obj) {
-    bname = get_bucket_name(target_obj->bucket.tenant, target_obj->bucket.name);
-    key   = target_obj->key.to_str();
-  } else {
-    bname = get_bucket_name(this->get_bucket()->get_tenant(), this->get_bucket()->get_name());
-    key   = this->get_key().to_str();
-  }
-  ldpp_dout(dpp, 20) <<__func__<< ": " << bname << "/" << key << dendl;
-
   // Get object's metadata (those stored in rgw_bucket_dir_entry).
   bufferlist bl, update_bl;
-  string bucket_index_iname = "motr.rgw.bucket.index." + bname;
-  if (this->store->get_obj_meta_cache()->get(dpp, key, bl)) {
-    // Cache miss !
-    int rc = this->store->do_idx_op_by_name(bucket_index_iname, M0_IC_GET, key, bl);
-    if (rc < 0) {
-      ldpp_dout(dpp, 0) <<__func__<< ": Failed to get object's entry from bucket index. rc=" << rc << dendl;
-      return rc;
-    }
+  string bname, key;
+  int r = read_obj_attrs(dpp, bname, key, bl, target_obj);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) <<__func__<< ": Failed to read bucket name and key. rc=" << r << dendl;
+    return r;
   }
 
   rgw_bucket_dir_entry ent;
@@ -1335,6 +1322,7 @@ int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
   encode(attrs, update_bl);
   meta.encode(update_bl);
 
+  string bucket_index_iname = "motr.rgw.bucket.index." + bname;
   int rc = this->store->do_idx_op_by_name(bucket_index_iname, M0_IC_PUT, key, update_bl);
   if (rc < 0) {
     ldpp_dout(dpp, 0) <<__func__<< ": Failed to put object's entry to bucket index. rc=" << rc << dendl;
@@ -1351,7 +1339,25 @@ int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPr
   if (this->category == RGWObjCategory::MultiMeta)
     return 0;
 
+  bufferlist bl;
   string bname, key;
+  int r = read_obj_attrs(dpp, bname, key, bl, target_obj);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) <<__func__<< ": Failed to read bucket name and key. rc=" << r << dendl;
+    return r;
+  }
+
+  rgw_bucket_dir_entry ent;
+  bufferlist& blr = bl;
+  auto iter = blr.cbegin();
+  ent.decode(iter);
+  decode(attrs, iter);
+
+  return 0;
+}
+
+void MotrObject::read_bucket_info(const DoutPrefixProvider* dpp, std::string& bname, std::string& key, rgw_obj* target_obj)
+{
   if (target_obj) {
     bname = get_bucket_name(target_obj->bucket.tenant, target_obj->bucket.name);
     key   = target_obj->key.to_str();
@@ -1359,10 +1365,13 @@ int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPr
     bname = get_bucket_name(this->get_bucket()->get_tenant(), this->get_bucket()->get_name());
     key   = this->get_key().to_str();
   }
-  ldpp_dout(dpp, 20) << __func__ << ": for " << bname << "/" << key << dendl;
+  ldpp_dout(dpp, 20) <<__func__<< ": " << bname << "/" << key << dendl;
+}
 
+int MotrObject::read_obj_attrs(const DoutPrefixProvider* dpp, std::string& bname, std::string& key, bufferlist& bl, rgw_obj* target_obj)
+{
+  read_bucket_info(dpp, bname, key, target_obj);
   // Get object's metadata (those stored in rgw_bucket_dir_entry).
-  bufferlist bl;
   if (this->store->get_obj_meta_cache()->get(dpp, key, bl)) {
     // Cache misses.
     string bucket_index_iname = "motr.rgw.bucket.index." + bname;
@@ -1375,13 +1384,6 @@ int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPr
     // Put into cache.
     this->store->get_obj_meta_cache()->put(dpp, key, bl);
   }
-
-  rgw_bucket_dir_entry ent;
-  bufferlist& blr = bl;
-  auto iter = blr.cbegin();
-  ent.decode(iter);
-  decode(attrs, iter);
-
   return 0;
 }
 
