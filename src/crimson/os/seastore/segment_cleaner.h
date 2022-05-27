@@ -885,7 +885,7 @@ private:
     return (1 - util) * age / (1 + util);
   }
 
-  journal_seq_t get_next_gc_target() const;
+  segment_id_t get_next_reclaim_segment() const;
 
   /**
    * rewrite_dirty
@@ -939,13 +939,41 @@ private:
     }
     return ret;
   }
-  // GC status helpers
-  std::optional<paddr_t> next_reclaim_pos;
 
-  bool final_reclaim() {
-    return next_reclaim_pos->as_seg_paddr().get_segment_off()
-      + config.reclaim_bytes_per_cycle >= (size_t)segments.get_segment_size();
-  }
+  struct reclaim_state_t {
+    std::size_t segment_size;
+    paddr_t start_pos;
+    paddr_t end_pos;
+
+    static reclaim_state_t create(
+        segment_id_t segment_id,
+        std::size_t segment_size) {
+      return {segment_size,
+              P_ADDR_NULL,
+              paddr_t::make_seg_paddr(segment_id, 0)};
+    }
+
+    segment_id_t get_segment_id() const {
+      return end_pos.as_seg_paddr().get_segment_id();
+    }
+
+    bool is_complete() const {
+      return (std::size_t)end_pos.as_seg_paddr().get_segment_off() >= segment_size;
+    }
+
+    void advance(std::size_t bytes) {
+      assert(!is_complete());
+      start_pos = end_pos;
+      auto &end_seg_paddr = end_pos.as_seg_paddr();
+      auto next_off = end_seg_paddr.get_segment_off() + bytes;
+      if (next_off > segment_size) {
+        end_seg_paddr.set_segment_off(segment_size);
+      } else {
+        end_seg_paddr.set_segment_off(next_off);
+      }
+    }
+  };
+  std::optional<reclaim_state_t> reclaim_state;
 
   /**
    * GCProcess
