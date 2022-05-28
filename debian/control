@@ -226,15 +226,6 @@ Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ceph-mgr-modules-core (= ${binary:Version}),
-         python3-bcrypt,
-         python3-cherrypy3,
-         python3-natsort,
-         python3-distutils,
-         python3-jwt,
-         python3-openssl,
-         python3-pecan,
-         python3-requests,
-         python3-werkzeug,
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
@@ -256,14 +247,7 @@ Description: manager for the ceph distributed storage system
 Package: ceph-mgr-dashboard
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-         python3-cherrypy3,
-         python3-jwt,
-         python3-bcrypt,
-         python3-werkzeug,
-         python3-routes,
-         ${misc:Depends},
-         ${python:Depends},
-         ${shlibs:Depends},
+         ${python3:Depends}
 Description: dashboard module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -279,12 +263,7 @@ Description: dashboard module for ceph-mgr
 Package: ceph-mgr-diskprediction-local
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-         python3-numpy,
-         python3-scipy,
-         python3-sklearn,
-         ${misc:Depends},
-         ${python:Depends},
-         ${shlibs:Depends},
+         ${python3:Depends}
 Description: diskprediction-local module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -297,9 +276,6 @@ Package: ceph-mgr-modules-core
 Architecture: all
 Depends: ${misc:Depends},
          ${python3:Depends},
-         ${shlibs:Depends},
-         python3-dateutil,
-         python3-openssl,
 Replaces: ceph-mgr (<< 15.1.0)
 Breaks: ceph-mgr (<< 15.1.0)
 Description: ceph manager modules which are always enabled
@@ -313,7 +289,6 @@ Description: ceph manager modules which are always enabled
 Package: ceph-mgr-rook
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-         python3-jsonpatch
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
