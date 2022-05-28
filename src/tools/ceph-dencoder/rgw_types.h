@@ -89,7 +89,6 @@ TYPE(rgw_cls_obj_store_pg_ver_op)
 TYPE(rgw_cls_obj_check_attrs_prefix)
 TYPE(rgw_cls_obj_check_mtime)
 
-
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
 TYPE(cls_rgw_reshard_entry)

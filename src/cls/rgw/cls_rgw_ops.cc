@@ -401,7 +401,6 @@ void rgw_cls_obj_remove_op::generate_test_instances(list<rgw_cls_obj_remove_op *
   r->keep_attr_prefixes.push_back("111");
   r->keep_attr_prefixes.push_back("222");
   o.push_back(r);
-
   o.push_back(new rgw_cls_obj_remove_op);
 }
 
@@ -413,7 +412,6 @@ void rgw_cls_obj_store_pg_ver_op::generate_test_instances(list<rgw_cls_obj_store
   rgw_cls_obj_store_pg_ver_op *r = new rgw_cls_obj_store_pg_ver_op;
   r->attr = "test";
   o.push_back(r);
-
   o.push_back(new rgw_cls_obj_store_pg_ver_op);
 }
 
@@ -427,7 +425,6 @@ void rgw_cls_obj_check_attrs_prefix::generate_test_instances(list<rgw_cls_obj_ch
   r->check_prefix = "test_prefix";
   r->fail_if_exist = true;
   o.push_back(r);
-
   o.push_back(new rgw_cls_obj_check_attrs_prefix);
 }
 
@@ -455,12 +452,10 @@ void rgw_cls_obj_check_mtime::generate_test_instances(list<rgw_cls_obj_check_mti
   tm1.tm_isdst = -1;
   time1 = mktime(&tm1);
   
-
   r->mtime = ceph::real_clock::from_time_t(time1);
   r->type = RGWCheckMTimeType::CLS_RGW_CHECK_TIME_MTIME_LT;
   r->high_precision_time = true;
   o.push_back(r);
-
   o.push_back(new rgw_cls_obj_check_mtime);
 }
 
