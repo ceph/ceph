@@ -136,8 +136,8 @@ Depends: binutils,
          parted,
          psmisc,
          ${misc:Depends},
-         ${python:Depends},
          ${shlibs:Depends},
+         ${python3:Depends}
 Recommends: btrfs-tools,
             ceph-mds (= ${binary:Version}),
             librados2 (= ${binary:Version}),
@@ -183,7 +183,7 @@ Package: cephadm
 Architecture: linux-any
 Recommends: podman (>= 2.0.2) | docker.io
 Depends: lvm2,
-	 ${python:Depends},
+	 ${python3:Depends},
 Description: cephadm utility to bootstrap ceph daemons with systemd and containers
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -236,7 +236,7 @@ Depends: ceph-base (= ${binary:Version}),
          python3-requests,
          python3-werkzeug,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
 Recommends: ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
@@ -296,7 +296,7 @@ Description: diskprediction-local module for ceph-mgr
 Package: ceph-mgr-modules-core
 Architecture: all
 Depends: ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
          python3-dateutil,
          python3-openssl,
@@ -315,7 +315,7 @@ Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python3-jsonpatch
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
 Description: rook module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
@@ -331,7 +331,7 @@ Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python3-kubernetes,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
 Description: kubernetes events module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -346,7 +346,7 @@ Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
 	 cephadm,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          openssh-client,
          python3-jinja2,
          python3-cherrypy3
@@ -407,7 +407,7 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          sudo,
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
 Replaces: ceph (<< 10),
           ceph-test (<< 12.2.2-14),
@@ -640,7 +640,7 @@ Depends: librbd1 (= ${binary:Version}),
          python3-rbd (= ${binary:Version}),
          python3-rgw (= ${binary:Version}),
          ${misc:Depends},
-         ${python:Depends},
+         ${python3:Depends},
          ${shlibs:Depends},
 Conflicts: ceph-client-tools,
 Replaces: ceph (<< 10),
