@@ -142,6 +142,9 @@ override_dh_python3:
 	for binding in rados cephfs rbd rgw; do \
 	  dh_python3 -p python3-$$binding;      \
 	done
+	for pkg in $(basename $(notdir $(wildcard debian/*.requires))); do \
+	  dh_python3 -p $$pkg --requires=debian/$$pkg.requires;            \
+	done
 	dh_python3 -p python3-ceph-argparse
 	dh_python3 -p python3-ceph-common
 	dh_python3 -p cephfs-shell
