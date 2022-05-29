@@ -466,7 +466,7 @@ options:
   type: uint
   level: advanced
   desc: mirroring snapshots limit
-  default: 3
+  default: 5
   services:
   - rbd
   min: 3
