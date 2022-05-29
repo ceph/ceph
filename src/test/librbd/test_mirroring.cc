@@ -1120,7 +1120,7 @@ TEST_F(TestMirroring, Snapshot)
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
 
   ASSERT_EQ(0, image.metadata_set(
-              "conf_rbd_mirroring_max_mirroring_snapshots", "3"));
+              "conf_rbd_mirroring_max_mirroring_snapshots", "5"));
 
   uint64_t snap_id;
 
@@ -1145,22 +1145,24 @@ TEST_F(TestMirroring, Snapshot)
   ASSERT_EQ(1U, snaps.size());
   ASSERT_EQ(snaps[0].id, snap_id);
 
-  ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
-  ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
-  ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
+  for (int i = 0; i < 5; i++) {
+    ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
+  }
   snaps.clear();
   ASSERT_EQ(0, image.snap_list(snaps));
-  ASSERT_EQ(3U, snaps.size());
-  ASSERT_EQ(snaps[2].id, snap_id);
+  ASSERT_EQ(5U, snaps.size());
+  ASSERT_EQ(snaps[4].id, snap_id);
 
   // automatic peer unlink on max_mirroring_snapshots reached
   ASSERT_EQ(0, image.mirror_image_create_snapshot(&snap_id));
   vector<librbd::snap_info_t> snaps1;
   ASSERT_EQ(0, image.snap_list(snaps1));
-  ASSERT_EQ(3U, snaps1.size());
+  ASSERT_EQ(5U, snaps1.size());
   ASSERT_EQ(snaps1[0].id, snaps[0].id);
   ASSERT_EQ(snaps1[1].id, snaps[1].id);
-  ASSERT_EQ(snaps1[2].id, snap_id);
+  ASSERT_EQ(snaps1[2].id, snaps[2].id);
+  ASSERT_EQ(snaps1[3].id, snaps[3].id);
+  ASSERT_EQ(snaps1[4].id, snap_id);
 
   librbd::snap_namespace_type_t snap_ns_type;
   ASSERT_EQ(0, image.snap_get_namespace_type(snap_id, &snap_ns_type));
