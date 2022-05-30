@@ -457,6 +457,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_cli_write_command('orch host rescan')
+    def _host_rescan(self, hostname: str, with_summary: bool = False) -> HandleCommandResult:
+        """Perform a disk rescan on a host"""
+        completion = self.rescan_host(hostname)
+        raise_if_exception(completion)
+
+        if with_summary:
+            return HandleCommandResult(stdout=completion.result_str())
+        return HandleCommandResult(stdout=completion.result_str().split('.')[0])
+
     @_cli_read_command('orch device ls')
     def _list_devices(self,
                       hostname: Optional[List[str]] = None,
