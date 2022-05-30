@@ -1157,7 +1157,7 @@ The :ref:`mgr-dashboard` brings improvements in the following management areas:
   - OSD: disk replacement, display status of ongoing deletion, and improved
     health/SMART diagnostics reporting.
 
-* Official :ref:`mgr ceph api`:
+* Official :ref:`mgr-ceph-api`:
 
   - OpenAPI v3 compliant.
   - Stability commitment starting from Pacific release.
