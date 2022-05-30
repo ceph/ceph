@@ -167,15 +167,6 @@ of priorities.  If priority information is not available, the
 ``bluestore_cache_meta_ratio`` and ``bluestore_cache_kv_ratio`` options are
 used as fallbacks.
 
-.. confval:: bluestore_cache_autotune
-.. confval:: osd_memory_target
-.. confval:: bluestore_cache_autotune_interval
-.. confval:: osd_memory_base
-.. confval:: osd_memory_expected_fragmentation
-.. confval:: osd_memory_cache_min
-.. confval:: osd_memory_cache_resize_interval
-
-
 Manual Cache Sizing
 ===================
 
@@ -208,12 +199,6 @@ device) as well as the meta and kv ratios.
 The data fraction can be calculated by
 ``<effective_cache_size> * (1 - bluestore_cache_meta_ratio - bluestore_cache_kv_ratio)``
 
-.. confval:: bluestore_cache_size
-.. confval:: bluestore_cache_size_hdd
-.. confval:: bluestore_cache_size_ssd
-.. confval:: bluestore_cache_meta_ratio
-.. confval:: bluestore_cache_kv_ratio
-
 Checksums
 =========
 
@@ -242,8 +227,6 @@ The *checksum algorithm* can be set either via a per-pool
 ``csum_type`` property or the global config option.  For example, ::
 
   ceph osd pool set <pool-name> csum_type <algorithm>
-
-.. confval:: bluestore_csum_type
 
 Inline Compression
 ==================
@@ -283,16 +266,6 @@ set with::
   ceph osd pool set <pool-name> compression_min_blob_size <size>
   ceph osd pool set <pool-name> compression_max_blob_size <size>
 
-.. confval:: bluestore_compression_algorithm
-.. confval:: bluestore_compression_mode
-.. confval:: bluestore_compression_required_ratio
-.. confval:: bluestore_compression_min_blob_size
-.. confval:: bluestore_compression_min_blob_size_hdd
-.. confval:: bluestore_compression_min_blob_size_ssd
-.. confval:: bluestore_compression_max_blob_size
-.. confval:: bluestore_compression_max_blob_size_hdd
-.. confval:: bluestore_compression_max_blob_size_ssd
-
 .. _bluestore-rocksdb-sharding:
 
 RocksDB Sharding
@@ -321,17 +294,9 @@ To enable sharding and apply the Pacific defaults, stop an OSD and run
         --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
         reshard
 
-.. confval:: bluestore_rocksdb_cf
-.. confval:: bluestore_rocksdb_cfs
 
 Throttling
 ==========
-
-.. confval:: bluestore_throttle_bytes
-.. confval:: bluestore_throttle_deferred_bytes
-.. confval:: bluestore_throttle_cost_per_io
-.. confval:: bluestore_throttle_cost_per_io_hdd
-.. confval:: bluestore_throttle_cost_per_io_ssd
 
 SPDK Usage
 ==================
@@ -388,12 +353,12 @@ Minimum Allocation Size
 
 There is a configured minimum amount of storage that BlueStore will allocate on
 an OSD.  In practice, this is the least amount of capacity that a RADOS object
-can consume.  The value of :confval:`bluestore_min_alloc_size` is derived from the
-value of :confval:`bluestore_min_alloc_size_hdd` or :confval:`bluestore_min_alloc_size_ssd`
+can consume.  The value of `bluestore_min_alloc_size` is derived from the
+value of `bluestore_min_alloc_size_hdd` or `bluestore_min_alloc_size_ssd`
 depending on the OSD's ``rotational`` attribute.  This means that when an OSD
 is created on an HDD, BlueStore will be initialized with the current value
-of :confval:`bluestore_min_alloc_size_hdd`, and SSD OSDs (including NVMe devices)
-with the value of :confval:`bluestore_min_alloc_size_ssd`.
+of `bluestore_min_alloc_size_hdd`, and SSD OSDs (including NVMe devices)
+with the value of `bluestore_min_alloc_size_ssd`.
 
 Through the Mimic release, the default values were 64KB and 16KB for rotational
 (HDD) and non-rotational (SSD) media respectively.  Octopus changed the default
@@ -405,7 +370,7 @@ GateWay (RGW) deployments that host large numbers of small files
 (S3/Swift objects).
 
 For example, when an RGW client stores a 1KB S3 object, it is written to a
-single RADOS object.  With the default :confval:`min_alloc_size` value, 4KB of
+single RADOS object.  With the default `min_alloc_size` value, 4KB of
 underlying drive space is allocated.  This means that roughly
 (4KB - 1KB) == 3KB is allocated but never used, which corresponds to 300%
 overhead or 25% efficiency. Similarly, a 5KB user object will be stored
@@ -427,7 +392,7 @@ that expect a signficiant fraction of relatively small objects.
 
 The 4KB default value aligns well with conventional HDD and SSD devices.  Some
 new coarse-IU (Indirection Unit) QLC SSDs however perform and wear best
-when :confval:`bluestore_min_alloc_size_ssd`
+when `bluestore_min_alloc_size_ssd`
 is set at OSD creation to match the device's IU:. 8KB, 16KB, or even 64KB.
 These novel storage drives allow one to achieve read performance competitive
 with conventional TLC SSDs and write performance faster than HDDs, with
@@ -439,7 +404,7 @@ HDD devices.  This may be done through careful ordering of OSD creation, custom
 OSD device classes, and especially by the use of central configuration _masks_.
 
 Quincy and later releases add
-the :confval:`bluestore_use_optimal_io_size_for_min_alloc_size`
+the `bluestore_use_optimal_io_size_for_min_alloc_size`
 option that enables automatic discovery of the appropriate value as each OSD is
 created.  Note that the use of ``bcache``, ``OpenCAS``, ``dmcrypt``,
 ``ATA over Ethernet``, `iSCSI`, or other device layering / abstraction
@@ -471,12 +436,6 @@ changed later, a given OSD's behavior will not change unless / until it is
 destroyed and redeployed with the appropriate option value(s).  Upgrading
 to a later Ceph release will *not* change the value used by OSDs deployed
 under older releases or with other settings.
-
-
-.. confval:: bluestore_min_alloc_size
-.. confval:: bluestore_min_alloc_size_hdd
-.. confval:: bluestore_min_alloc_size_ssd
-.. confval:: bluestore_use_optimal_io_size_for_min_alloc_size
 
 DSA (Data Streaming Accelerator Usage)
 ======================================
