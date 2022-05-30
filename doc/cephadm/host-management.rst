@@ -177,6 +177,21 @@ Where the force flag when entering maintenance allows the user to bypass warning
 
 See also :ref:`cephadm-fqdn`
 
+Rescanning Host Devices
+=======================
+
+Some servers and external enclosures may not register device removal or insertion with the
+kernel. In these scenarios, you'll need to perform a host rescan. A rescan is typically
+non-disruptive, and can be performed with the following CLI command.::
+
+    ceph orch host rescan <hostname> [--with-summary]
+
+The ``with-summary`` flag provides a breakdown of the number of HBAs found and scanned, together
+with any that failed.::
+
+    [ceph: root@rh9-ceph1 /]# ceph orch host rescan rh9-ceph1 --with-summary
+    Ok. 2 adapters detected: 2 rescanned, 0 skipped, 0 failed (0.32s)
+
 Creating many hosts at once
 ===========================
 
