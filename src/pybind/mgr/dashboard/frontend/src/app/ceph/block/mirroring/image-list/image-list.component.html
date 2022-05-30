@@ -4,7 +4,7 @@
     cdStatefulTab="image-list">
   <li ngbNavItem="issues">
     <a ngbNavLink
-       i18n>Issues</a>
+       i18n>Issues ({{ image_error.data.length }})</a>
     <ng-template ngbNavContent>
       <cd-table [data]="image_error.data"
                 columnMode="flex"
@@ -17,7 +17,7 @@
   </li>
   <li ngbNavItem="syncing">
     <a ngbNavLink
-       i18n>Syncing</a>
+       i18n>Syncing ({{ image_syncing.data.length }})</a>
     <ng-template ngbNavContent>
       <cd-table [data]="image_syncing.data"
                 columnMode="flex"
@@ -30,7 +30,7 @@
   </li>
   <li ngbNavItem="ready">
     <a ngbNavLink
-       i18n>Ready</a>
+       i18n>Ready ({{ image_ready.data.length }})</a>
     <ng-template ngbNavContent>
       <cd-table [data]="image_ready.data"
                 columnMode="flex"
@@ -51,14 +51,19 @@
   <span [ngClass]="row.state_color | mirrorHealthColor">{{ value }}</span>
 </ng-template>
 
-<ng-template #syncTmpl>
-  <span class="badge badge-info"
-        i18n>Syncing</span>
-</ng-template>
-
 <ng-template #progressTmpl
+             let-row="row"
              let-value="value">
-  <ngb-progressbar type="info"
+  <div *ngIf="row.state === 'Replaying'">
+    <span *ngIf="row.seconds_until_synced == 0">
+      synced
+    </span>
+    <span *ngIf="row.seconds_until_synced > 0">
+      {{row.seconds_until_synced | duration }} until synced
+    </span>
+  </div>
+  <ngb-progressbar *ngIf="row.state === 'Syncing'"
+                    type="info"
                    [value]="value"
                    [showValue]="true"></ngb-progressbar>
 </ng-template>
