@@ -109,4 +109,5 @@ about Ceph, see our `Architecture`_ section.
    ceph-volume/index
    releases/general
    releases/index
+   security/index 
    Glossary <glossary>
