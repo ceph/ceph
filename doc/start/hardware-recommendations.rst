@@ -75,30 +75,30 @@ Memory
 ======
 
 Bluestore uses its own memory to cache data rather than relying on the
-operating system page cache.  In bluestore you can adjust the amount of memory
-the OSD attempts to consume with the :confval:`osd_memory_target` configuration
-option.
+operating system's page cache. In Bluestore you can adjust the amount of memory
+that the OSD attempts to consume by changing the :confval:`osd_memory_target`
+configuration option.
 
 - Setting the :confval:`osd_memory_target` below 2GB is typically not
-  recommended (it may fail to keep the memory that low and may also cause
-  extremely slow performance.
+  recommended (Ceph may fail to keep the memory consumption under 2GB and 
+  this may cause extremely slow performance).
 
 - Setting the memory target between 2GB and 4GB typically works but may result
   in degraded performance: metadata may be read from disk during IO unless the
   active data set is relatively small.
 
-- 4GB is the current default :confval:`osd_memory_target` size.  This default
+- 4GB is the current default :confval:`osd_memory_target` size. This default
   was chosen for typical use cases, and is intended to balance memory
-  requirements and OSD performance for typical use cases.
+  requirements and OSD performance.
 
 - Setting the :confval:`osd_memory_target` higher than 4GB can improve
-  performance when there many (small) objects or large (256GB/OSD or more) data
-  sets are processed.
+  performance when there many (small) objects or when large (256GB/OSD 
+  or more) data sets are processed.
 
 .. important:: OSD memory autotuning is "best effort". Although the OSD may
    unmap memory to allow the kernel to reclaim it, there is no guarantee that
    the kernel will actually reclaim freed memory within a specific time
-   frame. This is especially true in older versions of Ceph where transparent
+   frame. This applies especially in older versions of Ceph, where transparent
    huge pages can prevent the kernel from reclaiming memory that was freed from
    fragmented huge pages. Modern versions of Ceph disable transparent huge
    pages at the application level to avoid this, but that does not
@@ -109,9 +109,10 @@ option.
    the kernel reclaiming freed pages. That 20% value might be more or less than
    needed, depending on the exact configuration of the system.
 
-When using the legacy FileStore backend, the page cache is used for caching
-data, so no tuning is normally needed, and the OSD memory consumption is
-generally related to the number of PGs per daemon in the system.
+When using the legacy FileStore back end, the page cache is used for caching
+data, so no tuning is normally needed. When using the legacy FileStore backend,
+the OSD memory consumption is related to the number of PGs per daemon in the
+system.
 
 
 Data Storage
