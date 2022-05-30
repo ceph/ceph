@@ -228,15 +228,17 @@ def _get_pool_datum(pool_name):
             'state': 'Error'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_SYNCING: {
-            'health': 'syncing'
+            'health': 'syncing',
+            'state_color': 'success',
+            'state': 'Syncing'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY: {
-            'health': 'ok',
+            'health': 'syncing',
             'state_color': 'success',
             'state': 'Starting'
         },
         rbd.MIRROR_IMAGE_STATUS_STATE_REPLAYING: {
-            'health': 'ok',
+            'health': 'syncing',
             'state_color': 'success',
             'state': 'Replaying'
         },
@@ -296,26 +298,36 @@ def _get_content_data():  # pylint: disable=R0914
         for mirror_image in mirror_images:
             image = {
                 'pool_name': pool_name,
-                'name': mirror_image['name']
+                'name': mirror_image['name'],
+                'state_color': mirror_image['state_color'],
+                'state': mirror_image['state']
             }
 
             if mirror_image['health'] == 'ok':
                 image.update({
-                    'state_color': mirror_image['state_color'],
-                    'state': mirror_image['state'],
                     'description': mirror_image['description']
                 })
                 image_ready.append(image)
             elif mirror_image['health'] == 'syncing':
-                p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
-                image.update({
-                    'progress': (p.findall(mirror_image['description']) or [0])[0]
-                })
+                if mirror_image['state'] == 'Replaying':
+                    p = re.compile("replaying, ({.*})")
+                    replaying_data = p.findall(mirror_image['description'])
+                    assert len(replaying_data) == 1
+                    replaying_data = json.loads(replaying_data[0])
+                    seconds_until_synced = 0
+                    if 'seconds_until_synced' in replaying_data:
+                        seconds_until_synced = replaying_data['seconds_until_synced']
+                    image.update({
+                        'seconds_until_synced': seconds_until_synced
+                    })
+                else:
+                    p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
+                    image.update({
+                        'progress': (p.findall(mirror_image['description']) or [0])[0]
+                    })
                 image_syncing.append(image)
             else:
                 image.update({
-                    'state_color': mirror_image['state_color'],
-                    'state': mirror_image['state'],
                     'description': mirror_image['description']
                 })
                 image_error.append(image)

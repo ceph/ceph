@@ -62,7 +62,7 @@ export class ImageListComponent implements OnInit, OnDestroy {
       {
         prop: 'state',
         name: $localize`State`,
-        cellTemplate: this.syncTmpl,
+        cellTemplate: this.stateTmpl,
         flexGrow: 1
       }
     ];
