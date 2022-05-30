@@ -488,8 +488,6 @@ public:
     /// Ratio of minimum available space to force reclaiming.
     double available_ratio_hard_limit = 0;
 
-    /// Ratio of maximum reclaimable space to block user transactions.
-    double reclaim_ratio_hard_limit = 0;
     /// Ratio of minimum reclaimable space to stop reclaiming.
     double reclaim_ratio_gc_threshold = 0;
 
@@ -505,7 +503,6 @@ public:
     void validate() const {
       ceph_assert(max_journal_segments > target_journal_segments);
       ceph_assert(available_ratio_gc_max > available_ratio_hard_limit);
-      ceph_assert(reclaim_ratio_hard_limit > reclaim_ratio_gc_threshold);
       ceph_assert(reclaim_bytes_per_cycle > 0);
       ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
       ceph_assert(rewrite_backref_bytes_per_cycle > 0);
@@ -518,7 +515,6 @@ public:
 	  2,	// target_backref_inflight_segments
 	  .1,   // available_ratio_gc_max
 	  .05,  // available_ratio_hard_limit
-	  .9,   // reclaim_ratio_hard_limit
 	  .1,   // reclaim_ratio_gc_threshold
 	  1<<20,// reclaim_bytes_per_cycle
 	  1<<17,// rewrite_dirty_bytes_per_cycle
@@ -531,9 +527,8 @@ public:
 	  2,    // target_journal_segments
 	  4,    // max_journal_segments
 	  2,	// target_backref_inflight_segments
-	  .9,   // available_ratio_gc_max
+	  .99,  // available_ratio_gc_max
 	  .2,   // available_ratio_hard_limit
-	  .8,   // reclaim_ratio_hard_limit
 	  .6,   // reclaim_ratio_gc_threshold
 	  1<<20,// reclaim_bytes_per_cycle
 	  1<<17,// rewrite_dirty_bytes_per_cycle
@@ -1205,12 +1200,7 @@ private:
       return false;
     }
     auto aratio = get_projected_available_ratio();
-    auto rratio = get_reclaim_ratio();
-    return (
-      (aratio < config.available_ratio_hard_limit) ||
-      ((aratio < config.available_ratio_gc_max) &&
-       (rratio > config.reclaim_ratio_hard_limit))
-    );
+    return aratio < config.available_ratio_hard_limit;
   }
 
   bool should_block_on_gc() const {

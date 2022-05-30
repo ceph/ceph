@@ -131,7 +131,12 @@ seastar::future<bufferlist> TMDriver::read(
 
 void TMDriver::init()
 {
+#ifndef NDEBUG
+  tm = make_transaction_manager(
+      tm_make_config_t::get_test_segmented_journal());
+#else
   tm = make_transaction_manager(tm_make_config_t::get_default());
+#endif
   tm->add_device(device.get(), true);
 }
 

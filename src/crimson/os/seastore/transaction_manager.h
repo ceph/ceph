@@ -47,6 +47,8 @@ struct tm_make_config_t {
     };
   }
   static tm_make_config_t get_test_segmented_journal() {
+    LOG_PREFIX(get_test_segmented_journal);
+    SUBWARN(seastore_tm, "test mode enabled!");
     return tm_make_config_t {
       true,
       journal_type_t::SEGMENT_JOURNAL,
@@ -54,6 +56,8 @@ struct tm_make_config_t {
     };
   }
   static tm_make_config_t get_test_cb_journal() {
+    LOG_PREFIX(get_test_cb_journal);
+    SUBWARN(seastore_tm, "test mode enabled!");
     return tm_make_config_t {
       true,
       journal_type_t::CIRCULARBOUNDED_JOURNAL,
