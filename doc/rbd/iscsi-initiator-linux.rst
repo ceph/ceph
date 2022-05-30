@@ -54,8 +54,23 @@ Install the iSCSI initiator and multipath tools:
 
 **iSCSI Discovery and Setup:**
 
-#. If CHAP was setup on the iSCSI gateway, provide a CHAP username and
-   password by updating the ``/etc/iscsi/iscsid.conf`` file accordingly.
+#. Enable CHAP authentication and provide the initiator CHAP username
+   and password by uncommenting and setting the following options in
+   ``/etc/iscsi/iscsid.conf`` file:
+
+   ::
+
+       node.session.auth.authmethod = CHAP
+       node.session.auth.username = myusername
+       node.session.auth.password = mypassword
+
+   If mutual (bidirectional) authentication is used, also provide the
+   target CHAP username and password:
+
+   ::
+
+       node.session.auth.username_in = mytgtusername
+       node.session.auth.password_in = mytgtpassword
 
 #. Discover the target portals:
 
