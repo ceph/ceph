@@ -582,7 +582,12 @@ void SegmentCleaner::update_journal_tail_target(
               journal_head >= target);
   if (journal_tail_target == JOURNAL_SEQ_NULL ||
       target > journal_tail_target) {
-    DEBUG("journal_tail_target={} => {}", journal_tail_target, target);
+    if (!init_complete ||
+        journal_tail_target.segment_seq == target.segment_seq) {
+      DEBUG("journal_tail_target={} => {}", journal_tail_target, target);
+    } else {
+      INFO("journal_tail_target={} => {}", journal_tail_target, target);
+    }
     journal_tail_target = target;
   }
   gc_process.maybe_wake_on_space_used();
