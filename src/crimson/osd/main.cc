@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <iostream>
+#include <fstream>
 #include <random>
 
 #include <seastar/apps/lib/stop_signal.hh>
@@ -238,6 +239,19 @@ int main(int argc, const char* argv[])
           local_conf().parse_config_files(conf_file_list).get();
           local_conf().parse_env().get();
           local_conf().parse_argv(config_proxy_args).get();
+          std::ofstream log_file_stream;
+          if (auto log_file = local_conf()->log_file; !log_file.empty()) {
+            log_file_stream.open(log_file, std::ios::app | std::ios::out);
+            try {
+              seastar::throw_system_error_on(log_file_stream.fail());
+            } catch (const std::system_error& e) {
+              ceph_abort_msg(fmt::format("unable to open log file: {}", e.what()));
+            }
+            auto reset_logger = seastar::defer([] {
+              logger().set_ostream(std::cerr);
+            });
+            logger().set_ostream(log_file_stream);
+          }
           if (const auto ret = pidfile_write(local_conf()->pid_file);
               ret == -EACCES || ret == -EAGAIN) {
             ceph_abort_msg(
