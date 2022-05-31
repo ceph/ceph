@@ -925,13 +925,12 @@ class CephIscsi(object):
 
     def get_tcmu_runner_container(self):
         # type: () -> CephContainer
-        tcmu_container = get_container(self.ctx, self.fsid, self.daemon_type, self.daemon_id)
+        # daemon_id, is used to generated the cid and pid files used by podman but as both tcmu-runner
+        # and rbd-target-api have the same daemon_id, it conflits and prevent the second container from
+        # starting. .tcmu runner is appened to the daemon_id to fix that.
+        tcmu_container = get_container(self.ctx, self.fsid, self.daemon_type, str(self.daemon_id) + '.tcmu')
         tcmu_container.entrypoint = '/usr/bin/tcmu-runner'
         tcmu_container.cname = self.get_container_name(desc='tcmu')
-        # remove extra container args for tcmu container.
-        # extra args could cause issue with forking service type
-        tcmu_container.container_args = []
-        set_pids_limit_unlimited(self.ctx, tcmu_container.container_args)
         return tcmu_container
 
 ##################################
@@ -2994,6 +2993,10 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
     if daemon_type == CephIscsi.daemon_type:
         assert daemon_id
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
+        # Removes ending ".tcmu" from data_dir a tcmu-runner uses the same data_dir
+        # as rbd-runner-api
+        if data_dir.endswith('.tcmu'):
+            data_dir = re.sub(r'\.tcmu$', '', data_dir)
         log_dir = get_log_dir(fsid, ctx.log_dir)
         mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
 
@@ -3510,9 +3513,12 @@ def deploy_daemon_units(
             _write_container_cmd_to_bash(ctx, f, poststop, 'deactivate osd')
         elif daemon_type == CephIscsi.daemon_type:
             # make sure we also stop the tcmu container
+            runtime_dir = '/run'
             ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
             f.write('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
+            f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
+            f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.poststop.new',
