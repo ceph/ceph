@@ -104,6 +104,7 @@ extensions = [
     'breathe',
     'ceph_commands',
     'ceph_releases',
+    'ceph_confval',
     'sphinxcontrib.openapi'
     ]
 
@@ -214,6 +215,12 @@ for c in pybinds:
     if pybind not in sys.path:
         sys.path.insert(0, pybind)
 
+# ceph_confval
+ceph_confval_imports = glob.glob(os.path.join(top_level,
+                                              'src/common/options',
+                                              '*.yaml.in'))
+ceph_confval_mgr_module_path = 'src/pybind/mgr'
+ceph_confval_mgr_python_path = 'src/pybind'
 
 # handles edit-on-github and old version warning display
 def setup(app):
