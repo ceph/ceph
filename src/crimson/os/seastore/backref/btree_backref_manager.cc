@@ -351,14 +351,6 @@ BtreeBackrefManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
-  LOG_PREFIX(BtreeBackrefManager::rewrite_extent);
-  auto updated = cache.update_extent_from_transaction(t, extent);
-  if (!updated) {
-    DEBUGT("extent is already retired, skipping -- {}", t, *extent);
-    return rewrite_extent_iertr::now();
-  }
-  extent = updated;
-
   auto c = get_context(t);
   return with_btree<BackrefBtree>(
     cache,

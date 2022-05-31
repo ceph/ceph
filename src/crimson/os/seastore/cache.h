@@ -667,8 +667,8 @@ public:
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->set_paddr(result.paddr);
     ret->hint = hint;
-    t.add_fresh_extent(ret);
     ret->state = CachedExtent::extent_state_t::INITIAL_WRITE_PENDING;
+    t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache, "allocated {} {}B extent at {}, hint={} -- {}",
               t, T::TYPE, length, result.paddr, hint, *ret);
     return ret;
