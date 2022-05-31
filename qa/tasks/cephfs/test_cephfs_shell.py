@@ -309,38 +309,6 @@ class TestRmdir(TestCephFSShell):
         self.mount_a.stat(self.dir_name)
 
 class TestGetAndPut(TestCephFSShell):
-    def test_without_target_dir(self):
-        """
-        Test put and get commands without target path.
-        """
-        tempdir = self.mount_a.client_remote.mkdtemp()
-        tempdirname = path.basename(tempdir)
-        files = ('dump1', 'dump2', 'dump3', tempdirname)
-
-        for i, file_ in enumerate(files[ : -1]):
-            size = i + 1
-            ofarg = 'of=' + path.join(tempdir, file_)
-            bsarg = 'bs=' + str(size) + 'M'
-            self.mount_a.run_shell_payload(f"dd if=/dev/urandom {ofarg} {bsarg} count=1")
-
-        self.run_cephfs_shell_cmd('put ' + tempdir)
-        for file_ in files:
-            if file_ == tempdirname:
-                self.mount_a.stat(path.join(self.mount_a.mountpoint, file_))
-            else:
-                self.mount_a.stat(path.join(self.mount_a.mountpoint,
-                                            tempdirname, file_))
-
-        self.mount_a.run_shell_payload(f"rm -rf {tempdir}")
-
-        self.run_cephfs_shell_cmd('get ' + tempdirname)
-        pwd = self.get_cephfs_shell_cmd_output('!pwd')
-        for file_ in files:
-            if file_ == tempdirname:
-               self.mount_a.run_shell_payload(f"stat {path.join(pwd, file_)}")
-            else:
-               self.mount_a.run_shell_payload(f"stat {path.join(pwd, tempdirname, file_)}")
-
     def test_get_with_target_name(self):
         """
         Test that get passes with target name
@@ -354,7 +322,7 @@ class TestGetAndPut(TestCephFSShell):
         o = self.mount_a.stat('dump4')
         log.info("mount_a output:\n{}".format(o))
 
-        o = self.get_cephfs_shell_cmd_output("get dump4 .")
+        o = self.get_cephfs_shell_cmd_output("get dump4 ./dump4")
         log.info("cephfs-shell output:\n{}".format(o))
 
         o = self.get_cephfs_shell_cmd_output("!cat dump4")
@@ -367,31 +335,36 @@ class TestGetAndPut(TestCephFSShell):
 
     def test_get_without_target_name(self):
         """
-        Test that get passes with target name
+        Test that get should fail when there is no target name
         """
-        s = 'D' * 1024
-        o = self.get_cephfs_shell_cmd_output("put - dump5", stdin=s)
-        log.info("cephfs-shell output:\n{}".format(o))
-
+        s = 'Somedata'
         # put - dump5 should pass
-        o = self.mount_a.stat('dump5')
-        log.info("mount_a output:\n{}".format(o))
+        self.get_cephfs_shell_cmd_output("put - dump5", stdin=s)
 
-        # get dump5 should fail
-        o = self.get_cephfs_shell_cmd_output("get dump5")
-        o = self.get_cephfs_shell_cmd_output("!stat dump5 || echo $?")
-        log.info("cephfs-shell output:\n{}".format(o))
-        l = o.split('\n')
-        try:
-            ret = int(l[1])
-            # verify that stat dump5 passes
-            # if ret == 1, then that implies the stat failed
-            # which implies that there was a problem with "get dump5"
-            assert(ret != 1)
-        except ValueError:
-            # we have a valid stat output; so this is good
-            # if the int() fails then that means there's a valid stat output
-            pass
+        self.mount_a.stat('dump5')
+
+        # get dump5 should fail as there is no local_path mentioned
+        with self.assertRaises(CommandFailedError):
+            self.get_cephfs_shell_cmd_output("get dump5")
+
+        # stat dump would return non-zero exit code as get dump failed
+        # cwd=None because we want to run it at CWD, not at cephfs mntpt.
+        r = self.mount_a.run_shell('stat dump5', cwd=None,
+                                   check_status=False).returncode
+        self.assertEqual(r, 1)
+
+    def test_get_doesnt_create_dir(self):
+        # if get cmd is creating subdirs on its own then dump7 will be
+        # stored as ./dump7/tmp/dump7 and not ./dump7, therefore
+        # if doing `cat ./dump7` returns non-zero exit code(i.e. 1) then
+        # it implies that no such file exists at that location
+        dir_abspath = path.join(self.mount_a.mountpoint, 'tmp')
+        self.mount_a.run_shell_payload(f"mkdir {dir_abspath}")
+        self.mount_a.client_remote.write_file(path.join(dir_abspath, 'dump7'),
+                                              'somedata')
+        self.get_cephfs_shell_cmd_output("get /tmp/dump7 ./dump7")
+        # test that dump7 exists
+        self.mount_a.run_shell("cat ./dump7", cwd=None)
 
     def test_get_to_console(self):
         """
@@ -415,6 +388,23 @@ class TestGetAndPut(TestCephFSShell):
         log.info("s_hash:{}".format(s_hash))
         log.info("o_hash:{}".format(o_hash))
         assert(s_hash == o_hash)
+
+    def test_put_without_target_name(self):
+        """
+        put - should fail as the cmd expects both arguments are mandatory.
+        """
+        with self.assertRaises(CommandFailedError):
+            self.get_cephfs_shell_cmd_output("put -")
+
+    def test_put_validate_local_path(self):
+        """
+        This test is intended to make sure local_path is validated before
+        trying to put the file from local fs to cephfs and the command
+        put ./dumpXYZ dump8 would fail as dumpXYX doesn't exist.
+        """
+        with self.assertRaises(CommandFailedError):
+            o = self.get_cephfs_shell_cmd_output("put ./dumpXYZ dump8")
+            log.info("cephfs-shell output:\n{}".format(o))
 
 class TestSnapshots(TestCephFSShell):
     def test_snap(self):
