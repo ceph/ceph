@@ -43,3 +43,12 @@ options:
   - ceph-exporter
   flags:
   - runtime
+- name: exporter_sort_metrics
+  type: bool
+  level: advanced
+  desc: If true it will sort the metrics and group them.
+  default: true
+  services:
+  - ceph-exporter
+  flags:
+  - runtime
