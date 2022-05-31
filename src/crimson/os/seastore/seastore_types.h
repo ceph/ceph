@@ -946,6 +946,8 @@ constexpr bool is_logical_type(extent_types_t type) {
   case extent_types_t::ROOT:
   case extent_types_t::LADDR_INTERNAL:
   case extent_types_t::LADDR_LEAF:
+  case extent_types_t::BACKREF_INTERNAL:
+  case extent_types_t::BACKREF_LEAF:
     return false;
   default:
     return true;

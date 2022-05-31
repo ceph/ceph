@@ -482,7 +482,7 @@ TransactionManager::rewrite_logical_extent(
   nlextent->set_pin(lextent->get_pin().duplicate());
   nlextent->last_modified = lextent->last_modified;
 
-  DEBUGT("rewriting extent -- {} to {}", t, *lextent, *nlextent);
+  DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
   /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
    * extents since we're going to do it again once we either do the ool write
@@ -501,11 +501,6 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
 {
   LOG_PREFIX(TransactionManager::rewrite_extent);
 
-  if (is_backref_node(extent->get_type())) {
-    t.get_rewrite_version_stats().increment(extent->get_version());
-    return backref_manager->rewrite_extent(t, extent);
-  }
-
   {
     auto updated = cache->update_extent_from_transaction(t, extent);
     if (!updated) {
@@ -517,8 +512,13 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
 
   t.get_rewrite_version_stats().increment(extent->get_version());
 
+  if (is_backref_node(extent->get_type())) {
+    DEBUGT("rewriting backref extent -- {}", t, *extent);
+    return backref_manager->rewrite_extent(t, extent);
+  }
+
   if (extent->get_type() == extent_types_t::ROOT) {
-    DEBUGT("marking root for rewrite -- {}", t, *extent);
+    DEBUGT("rewriting root extent -- {}", t, *extent);
     cache->duplicate_for_write(t, extent);
     return rewrite_extent_iertr::now();
   }

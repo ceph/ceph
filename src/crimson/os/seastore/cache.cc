@@ -695,13 +695,13 @@ void Cache::mark_dirty(CachedExtentRef ref)
   }
 
   lru.remove_from_lru(*ref);
-  add_to_dirty(ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
+  add_to_dirty(ref);
 }
 
 void Cache::add_to_dirty(CachedExtentRef ref)
 {
-  assert(ref->is_valid());
+  assert(ref->is_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
@@ -746,6 +746,7 @@ void Cache::commit_replace_extent(
     CachedExtentRef next,
     CachedExtentRef prev)
 {
+  assert(next->is_dirty());
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->version == prev->version + 1);
   extents.replace(*next, *prev);
