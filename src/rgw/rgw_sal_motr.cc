@@ -1957,8 +1957,7 @@ MotrAtomicWriter::MotrAtomicWriter(const DoutPrefixProvider *dpp,
               ptail_placement_rule(_ptail_placement_rule),
               olh_epoch(_olh_epoch),
               unique_tag(_unique_tag),
-              obj(_store, _head_obj->get_key(), _head_obj->get_bucket()),
-              old_obj(_store, _head_obj->get_key(), _head_obj->get_bucket()) {}
+              obj(_store, _head_obj->get_key(), _head_obj->get_bucket()) {}
 
 static const unsigned MAX_BUFVEC_NR = 256;
 
@@ -1970,12 +1969,8 @@ int MotrAtomicWriter::prepare(optional_yield y)
     return 0;
 
   rgw_bucket_dir_entry ent;
-  int rc = old_obj.get_bucket_dir_ent(dpp, ent);
-  if (rc == 0) {
-    ldpp_dout(dpp, 20) << __func__ << ": object exists." << dendl;
-  }
 
-  rc = m0_bufvec_empty_alloc(&buf, MAX_BUFVEC_NR) ?:
+  int rc = m0_bufvec_empty_alloc(&buf, MAX_BUFVEC_NR) ?:
            m0_bufvec_alloc(&attr, MAX_BUFVEC_NR, 1) ?:
            m0_indexvec_alloc(&ext, MAX_BUFVEC_NR);
   if (rc != 0)
@@ -2752,7 +2747,6 @@ void MotrAtomicWriter::cleanup()
   m0_bufvec_free2(&buf);
   acc_data.clear();
   obj.close_mobj();
-  old_obj.close_mobj();
 }
 
 unsigned MotrAtomicWriter::populate_bvec(unsigned len, bufferlist::iterator &bi)
@@ -3058,6 +3052,40 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   string tenant_bkt_name = get_bucket_name(obj.get_bucket()->get_tenant(), obj.get_bucket()->get_name());
   // Insert an entry into bucket index.
   string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
+
+  if( !info.versioning_enabled() )
+  {
+	std::string obj_type = "simple object";
+  	rgw_bucket_dir_entry old_ent;
+  	bufferlist old_check_bl;	
+	// Before updating bucket index with entry for new object, check if
+  	// old object exists. Perform M0_IC_GET operation on bucket index.
+  	rc = store->do_idx_op_by_name(bucket_index_iname, M0_IC_GET,
+                                obj.get_name(), old_check_bl);
+  	if (rc == 0 && old_check_bl.length() > 0) {
+    		auto ent_iter = old_check_bl.cbegin();
+    		old_ent.decode(ent_iter);
+    		std::unique_ptr<rgw::sal::Object> old_obj = obj.get_bucket()->get_object(rgw_obj_key(obj.get_name()));
+    		rgw::sal::MotrObject *old_mobj = static_cast<rgw::sal::MotrObject *>(old_obj.get());
+    		if (old_ent.meta.category == RGWObjCategory::MultiMeta) {
+      			obj_type = "multipart object";
+      			old_mobj->set_category(RGWObjCategory::MultiMeta);
+    		}
+    	ldpp_dout(dpp, 20) <<__func__<< ": Old " << obj_type << " exists" << dendl;
+    	// Delete old object
+	// Initialize version of the previous object so that it can delete a specific version,rather than delete the latest object.
+	// TODO: This will be taken care during version implementation.
+    	rc = old_mobj->delete_object(dpp, NULL, y, true);
+	if (rc == 0) {
+      		ldpp_dout(dpp, 20) <<__func__<< ": Old " << obj_type << " ["
+          	<< old_mobj->get_name() <<  "] deleted succesfully" << dendl;
+    	} else {
+      		ldpp_dout(dpp, 0) << __func__<<": Failed to delete old " << obj_type << " ["
+          	<< old_mobj->get_name() <<  "]. Error = " << rc << dendl;
+                // TODO: This will be handled during GC
+    	}
+  	}
+  }
   rc = store->do_idx_op_by_name(bucket_index_iname,
                                 M0_IC_PUT, obj.get_key().to_str(), bl);
   if (rc != 0) {
@@ -3066,13 +3094,6 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   }
 
   store->get_obj_meta_cache()->put(dpp, obj.get_key().to_str(), bl);
-
-  if (rc == 0 && !info.versioning_enabled())
-      // Delete old object data if exists.
-      old_obj.delete_mobj(dpp);
-
-  if (rc != 0)
-    obj.delete_mobj(dpp);
 
   // TODO: We need to handle the object leak caused by parallel object upload by
   // making use of background gc, which is currently not enabled for motr.
