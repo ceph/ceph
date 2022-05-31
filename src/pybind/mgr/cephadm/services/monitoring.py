@@ -70,7 +70,7 @@ class GrafanaService(CephadmService):
         # TODO: signed cert
         dd = self.get_active_daemon(daemon_descrs)
         service_url = 'https://{}:{}'.format(
-            self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
+            self._inventory_get_fqdn(dd.hostname), self.DEFAULT_SERVICE_PORT)
         self._set_service_url_on_dashboard(
             'Grafana',
             'dashboard get-grafana-api-url',
@@ -119,7 +119,7 @@ class AlertmanagerService(CephadmService):
                 continue
             if dd.daemon_id == self.mgr.get_mgr_id():
                 continue
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = self._inventory_get_fqdn(dd.hostname)
             dashboard_urls.append('%s//%s:%s/' % (proto, addr.split(':')[0],
                                                   port))
 
@@ -133,7 +133,7 @@ class AlertmanagerService(CephadmService):
         port = '9094'
         for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
             deps.append(dd.name())
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = self._inventory_get_fqdn(dd.hostname)
             peers.append(addr.split(':')[0] + ':' + port)
         return {
             "files": {
@@ -151,7 +151,7 @@ class AlertmanagerService(CephadmService):
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         dd = self.get_active_daemon(daemon_descrs)
-        service_url = 'http://{}:{}'.format(self._inventory_get_addr(dd.hostname),
+        service_url = 'http://{}:{}'.format(self._inventory_get_fqdn(dd.hostname),
                                             self.DEFAULT_SERVICE_PORT)
         self._set_service_url_on_dashboard(
             'AlertManager',
@@ -194,14 +194,14 @@ class PrometheusService(CephadmService):
                 continue
             if dd.daemon_id == self.mgr.get_mgr_id():
                 continue
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = self._inventory_get_fqdn(dd.hostname)
             mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
 
         # scrape node exporters
         nodes = []
         for dd in self.mgr.cache.get_daemons_by_service('node-exporter'):
             deps.append(dd.name())
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = self._inventory_get_fqdn(dd.hostname)
             nodes.append({
                 'hostname': dd.hostname,
                 'url': addr.split(':')[0] + ':9100'
@@ -211,7 +211,7 @@ class PrometheusService(CephadmService):
         alertmgr_targets = []
         for dd in self.mgr.cache.get_daemons_by_service('alertmanager'):
             deps.append(dd.name())
-            addr = self.mgr.inventory.get_addr(dd.hostname)
+            addr = self._inventory_get_fqdn(dd.hostname)
             alertmgr_targets.append("'{}:9093'".format(addr.split(':')[0]))
 
         # generate the prometheus configuration
@@ -246,7 +246,7 @@ class PrometheusService(CephadmService):
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         dd = self.get_active_daemon(daemon_descrs)
         service_url = 'http://{}:{}'.format(
-            self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
+            self._inventory_get_fqdn(dd.hostname), self.DEFAULT_SERVICE_PORT)
         self._set_service_url_on_dashboard(
             'Prometheus',
             'dashboard get-prometheus-api-host',
