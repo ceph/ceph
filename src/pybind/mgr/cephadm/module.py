@@ -678,7 +678,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         suffix = daemon_type not in [
             'mon', 'crash',
-            'ceph-exporter', 'prometheus', 'node-exporter', 'grafana', 'alertmanager',
+            'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail'
         ]
         if forcename:
@@ -1333,7 +1333,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_haproxy
         elif daemon_type == 'keepalived':
             image = self.container_image_keepalived
-        elif daemon_type == CustomContainerService.TYPE or daemon_type == 'ceph-exporter':
+        elif daemon_type == CustomContainerService.TYPE:
             # The image can't be resolved, the necessary information
             # is only available when a container is deployed (given
             # via spec).

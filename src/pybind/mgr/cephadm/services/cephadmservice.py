@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, List, Callable, TypeVar, \
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
-from ceph.deployment.service_spec import ServiceSpec, RGWSpec
+from ceph.deployment.service_spec import ServiceSpec, RGWSpec, CephExporterSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from mgr_util import build_url
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
@@ -457,7 +457,7 @@ class CephService(CephadmService):
         """
         # despite this mapping entity names to daemons, self.TYPE within
         # the CephService class refers to service types, not daemon types
-        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress']:
+        if self.TYPE in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress', 'ceph-exporter']:
             return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
         elif self.TYPE in ['crash', 'agent']:
             if host == "":
@@ -466,7 +466,7 @@ class CephService(CephadmService):
             return AuthEntity(f'client.{self.TYPE}.{host}')
         elif self.TYPE == 'mon':
             return AuthEntity('mon.')
-        elif self.TYPE in ['mgr', 'osd', 'mds', 'ceph-exporter']:
+        elif self.TYPE in ['mgr', 'osd', 'mds']:
             return AuthEntity(f'{self.TYPE}.{daemon_id}')
         else:
             raise OrchestratorError("unknown daemon type")
@@ -1022,7 +1022,18 @@ class CephExporterService(CephService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        return {}, []
+        deps: List[str] = []
+
+        spec = cast(CephExporterService, self.mgr.spec_store[daemon_spec.service_name].spec)
+        config = {
+            "sock-dir": spec.sock_dir,
+            "addrs": spec.addrs,
+            "port": spec.port,
+            "prio-limit": spec.prio_limit,
+            "stats-period": spec.stats_period,
+        }
+
+        return config, sorted(deps)
 
 
 class CephfsMirrorService(CephService):
