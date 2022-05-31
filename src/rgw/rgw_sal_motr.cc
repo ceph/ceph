@@ -4027,13 +4027,46 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
   snprintf(buf, sizeof(buf), "%08d", (int)part_num);
   p.append(buf);
   string tenant_bkt_name = get_bucket_name(head_obj->get_bucket()->get_tenant(), head_obj->get_bucket()->get_name());
-  
   //This is a MultipartComplete operation so this should always have valid upload id.
   string upload_id_str = upload_id;
-
   string obj_part_iname = "motr.rgw.object." + tenant_bkt_name + "." +
 	                  head_obj->get_key().to_str() + "." + upload_id_str + ".parts";
   ldpp_dout(dpp, 20) << __func__ << ": object part index = " << obj_part_iname << dendl;
+
+  // Before updating object part index with entry for new part, check if
+  // old part exists. Perform M0_IC_GET operation on object part index.
+  bufferlist old_part_check_bl;
+  rc = store->do_idx_op_by_name(obj_part_iname, M0_IC_GET, p, old_part_check_bl);
+  if (rc == 0 && old_part_check_bl.length() > 0) {
+    // Old part exists. Try to delete it.
+    RGWUploadPartInfo old_part_info;
+    std::map<std::string, bufferlist> dummy_attr;
+    string part_obj_name = head_obj->get_bucket()->get_name() + "." +
+                          head_obj->get_key().to_str() +
+                          ".part." + std::to_string(part_num);
+    std::unique_ptr<MotrObject> old_part_obj =
+        std::make_unique<MotrObject>(this->store, rgw_obj_key(part_obj_name),head_obj->get_bucket());
+    if (old_part_obj == nullptr)
+      return -ENOMEM;
+
+    auto bl_iter = old_part_check_bl.cbegin();
+    decode(old_part_info, bl_iter);
+    decode(dummy_attr, bl_iter);
+    old_part_obj->meta.decode(bl_iter);
+    char oid_str[M0_FID_STR_LEN];
+    snprintf(oid_str, ARRAY_SIZE(oid_str), U128X_F, U128_P(&old_part_obj->meta.oid));
+    rgw::sal::MotrObject *old_mobj = static_cast<rgw::sal::MotrObject *>(old_part_obj.get());
+    ldpp_dout(dpp, 20) << __func__ << ": Old part with oid [" << oid_str << "] exists" << dendl;
+    // Delete old object
+    rc = old_mobj->delete_mobj(dpp);
+    if (rc == 0) {
+      ldpp_dout(dpp, 20) << __func__ << ": Old part [" << p <<  "] deleted succesfully" << dendl;
+    } else {
+      ldpp_dout(dpp, 0) << __func__ << ": Failed to delete old part [" << p <<  "]. Error = " << rc << dendl;
+      return rc;
+    }
+  }
+
   rc = store->do_idx_op_by_name(obj_part_iname, M0_IC_PUT, p, bl);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << __func__ << ": failed to add part obj in part index, rc = " << rc << dendl;
