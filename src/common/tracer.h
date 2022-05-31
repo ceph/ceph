@@ -34,6 +34,11 @@ class Tracer {
   // creates and returns a new span with `trace_name`
   // this span represents a trace, since it has no parent.
   jspan start_trace(opentelemetry::nostd::string_view trace_name);
+
+  // creates and returns a new span with `trace_name`
+  // if false is given to `trace_is_enabled` param, noop span will be returned
+  jspan start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled);
+
   // creates and returns a new span with `span_name` which parent span is `parent_span'
   jspan add_span(opentelemetry::nostd::string_view span_name, const jspan& parent_span);
   // creates and return a new span with `span_name`
@@ -90,7 +95,7 @@ namespace tracing {
 
 struct Tracer {
   bool is_enabled() const { return false; }
-  jspan start_trace(std::string_view) { return {}; }
+  jspan start_trace(std::string_view, bool enabled = true) { return {}; }
   jspan add_span(std::string_view, const jspan&) { return {}; }
   jspan add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
   void init(std::string_view service_name) {}

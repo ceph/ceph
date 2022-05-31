@@ -298,7 +298,8 @@ class OSDService(CephService):
 
                 # driveselection for host
                 cmds: List[str] = self.driveselection_to_ceph_volume(ds,
-                                                                     osd_id_claims.filtered_by_host(host),
+                                                                     osd_id_claims.filtered_by_host(
+                                                                         host),
                                                                      preview=True)
                 if not cmds:
                     logger.debug("No data_devices, skipping DriveGroup: {}".format(

@@ -61,10 +61,11 @@ PGBackend::create(pg_t pgid,
 
 PGBackend::PGBackend(shard_id_t shard,
                      CollectionRef coll,
-                     crimson::os::FuturizedStore* store)
+                     crimson::osd::ShardServices &shard_services)
   : shard{shard},
     coll{coll},
-    store{store}
+    shard_services{shard_services},
+    store{&shard_services.get_store()}
 {}
 
 PGBackend::load_metadata_iertr::future

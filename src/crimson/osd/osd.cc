@@ -52,6 +52,7 @@
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
 
 namespace {
   seastar::logger& logger() {
@@ -545,6 +546,9 @@ seastar::future<> OSD::start_asok_admin()
     // PG commands
     asok->register_command(make_asok_hook<pg::QueryCommand>(*this));
     asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this));
+    // ops commands
+    asok->register_command(make_asok_hook<DumpInFlightOpsHook>(
+      std::as_const(get_shard_services().registry)));
   });
 }
 
@@ -1194,7 +1198,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
 seastar::future<> OSD::handle_osd_op(crimson::net::ConnectionRef conn,
                                      Ref<MOSDOp> m)
 {
-  (void) shard_services.start_operation<ClientRequest>(
+  (void) start_pg_operation<ClientRequest>(
     *this,
     conn,
     std::move(m));
@@ -1231,8 +1235,7 @@ seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
 				     Ref<MOSDRepOp> m)
 {
   m->finish_decode();
-  (void) shard_services.start_operation<RepRequest>(
-    *this,
+  std::ignore = start_pg_operation<RepRequest>(
     std::move(conn),
     std::move(m));
   return seastar::now();
@@ -1263,8 +1266,7 @@ seastar::future<> OSD::handle_scrub(crimson::net::ConnectionRef conn,
     pg_shard_t from_shard{static_cast<int>(m->get_source().num()),
                           pgid.shard};
     PeeringState::RequestScrub scrub_request{m->deep, m->repair};
-    return shard_services.start_operation<RemotePeeringEvent>(
-      *this,
+    return start_pg_operation<RemotePeeringEvent>(
       conn,
       shard_services,
       from_shard,
@@ -1285,10 +1287,7 @@ seastar::future<> OSD::handle_mark_me_down(crimson::net::ConnectionRef conn,
 seastar::future<> OSD::handle_recovery_subreq(crimson::net::ConnectionRef conn,
 				   Ref<MOSDFastDispatchOp> m)
 {
-  (void) shard_services.start_operation<RecoverySubRequest>(
-    *this,
-    conn,
-    std::move(m));
+  std::ignore = start_pg_operation<RecoverySubRequest>(conn, std::move(m));
   return seastar::now();
 }
 
@@ -1377,8 +1376,7 @@ seastar::future<> OSD::handle_peering_op(
   const int from = m->get_source().num();
   logger().debug("handle_peering_op on {} from {}", m->get_spg(), from);
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
-  (void) shard_services.start_operation<RemotePeeringEvent>(
-    *this,
+  (void) start_pg_operation<RemotePeeringEvent>(
     conn,
     shard_services,
     pg_shard_t{from, m->get_spg().shard},
@@ -1409,28 +1407,29 @@ seastar::future<> OSD::consume_map(epoch_t epoch)
 }
 
 
-blocking_future<Ref<PG>>
+seastar::future<Ref<PG>>
 OSD::get_or_create_pg(
+  PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
   spg_t pgid,
   epoch_t epoch,
   std::unique_ptr<PGCreateInfo> info)
 {
   if (info) {
-    auto [fut, creating] = pg_map.wait_for_pg(pgid);
+    auto [fut, creating] = pg_map.wait_for_pg(std::move(trigger), pgid);
     if (!creating) {
       pg_map.set_creating(pgid);
       (void)handle_pg_create_info(std::move(info));
     }
     return std::move(fut);
   } else {
-    return make_ready_blocking_future<Ref<PG>>(pg_map.get_pg(pgid));
+    return seastar::make_ready_future<Ref<PG>>(pg_map.get_pg(pgid));
   }
 }
 
-blocking_future<Ref<PG>> OSD::wait_for_pg(
-  spg_t pgid)
+seastar::future<Ref<PG>> OSD::wait_for_pg(
+  PGMap::PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
 {
-  return pg_map.wait_for_pg(pgid).first;
+  return pg_map.wait_for_pg(std::move(trigger), pgid).first;
 }
 
 Ref<PG> OSD::get_pg(spg_t pgid)

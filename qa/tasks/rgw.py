@@ -407,6 +407,7 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('rgw', {}))
 
     ctx.rgw = argparse.Namespace()
+    ctx.rgw_cloudtier = None
 
     ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})

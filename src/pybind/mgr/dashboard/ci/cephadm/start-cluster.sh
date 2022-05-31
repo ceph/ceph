@@ -64,7 +64,7 @@ if [[ -n "$JENKINS_HOME" ]]; then
     npm cache clean --force
 fi
 npm ci
-FRONTEND_BUILD_OPTS='-- --prod'
+FRONTEND_BUILD_OPTS='--configuration=production'
 if [[ -n "${DEV_MODE}" ]]; then
     FRONTEND_BUILD_OPTS+=' --deleteOutputPath=false --watch'
 fi

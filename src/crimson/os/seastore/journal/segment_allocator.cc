@@ -51,16 +51,20 @@ SegmentAllocator::do_open()
   ).safe_then([this, FNAME, new_segment_seq](auto sref) {
     // initialize new segment
     journal_seq_t new_journal_tail;
+    journal_seq_t new_alloc_replay_from;
     if (type == segment_type_t::JOURNAL) {
       new_journal_tail = segment_provider.get_journal_tail_target();
+      new_alloc_replay_from = segment_provider.get_alloc_info_replay_from();
     } else { // OOL
       new_journal_tail = NO_DELTAS;
+      new_alloc_replay_from = NO_DELTAS;
     }
     segment_id_t segment_id = sref->get_segment_id();
     auto header = segment_header_t{
       new_segment_seq,
       segment_id,
       new_journal_tail,
+      new_alloc_replay_from,
       current_segment_nonce,
       type};
     INFO("{} writing header to new segment ... -- {}",
@@ -82,11 +86,8 @@ SegmentAllocator::do_open()
     auto new_journal_seq = journal_seq_t{
       new_segment_seq,
       paddr_t::make_seg_paddr(segment_id, written_to)};
-    if (type == segment_type_t::OOL) {
-      // FIXME: improve the special handling for OOL
-      segment_provider.update_segment_avail_bytes(
-          new_journal_seq.offset);
-    }
+    segment_provider.update_segment_avail_bytes(
+        type, new_journal_seq.offset);
     return sref->write(0, bl
     ).handle_error(
       open_ertr::pass_further{},
@@ -134,7 +135,7 @@ SegmentAllocator::roll_ertr::future<>
 SegmentAllocator::roll()
 {
   ceph_assert(can_write());
-  return close_segment(true).safe_then([this] {
+  return close_segment().safe_then([this] {
     return do_open().discard_result();
   });
 }
@@ -161,13 +162,11 @@ SegmentAllocator::write(ceph::bufferlist to_write)
     static_cast<seastore_off_t>(write_length)
   };
   written_to += write_length;
-  if (type == segment_type_t::OOL) {
-    // FIXME: improve the special handling for OOL
-    segment_provider.update_segment_avail_bytes(
-      paddr_t::make_seg_paddr(
-        current_segment->get_segment_id(), written_to)
-    );
-  }
+  segment_provider.update_segment_avail_bytes(
+    type,
+    paddr_t::make_seg_paddr(
+      current_segment->get_segment_id(), written_to)
+  );
   return current_segment->write(
     write_start_offset, to_write
   ).handle_error(
@@ -187,7 +186,7 @@ SegmentAllocator::close()
     LOG_PREFIX(SegmentAllocator::close);
     if (current_segment) {
       INFO("{} close current segment", print_name);
-      return close_segment(false);
+      return close_segment();
     } else {
       INFO("{} no current segment", print_name);
       return close_segment_ertr::now();
@@ -198,27 +197,29 @@ SegmentAllocator::close()
 }
 
 SegmentAllocator::close_segment_ertr::future<>
-SegmentAllocator::close_segment(bool is_rolling)
+SegmentAllocator::close_segment()
 {
   LOG_PREFIX(SegmentAllocator::close_segment);
   assert(can_write());
   // Note: make sure no one can access the current segment once closing
   auto seg_to_close = std::move(current_segment);
   auto close_segment_id = seg_to_close->get_segment_id();
-  if (is_rolling) {
-    segment_provider.close_segment(close_segment_id);
-  }
+  segment_provider.close_segment(close_segment_id);
   auto close_seg_info = segment_provider.get_seg_info(close_segment_id);
   journal_seq_t cur_journal_tail;
+  journal_seq_t new_alloc_replay_from;
   if (type == segment_type_t::JOURNAL) {
     cur_journal_tail = segment_provider.get_journal_tail_target();
+    new_alloc_replay_from = segment_provider.get_alloc_info_replay_from();
   } else { // OOL
     cur_journal_tail = NO_DELTAS;
+    new_alloc_replay_from = NO_DELTAS;
   }
   auto tail = segment_tail_t{
     close_seg_info.seq,
     close_segment_id,
     cur_journal_tail,
+    new_alloc_replay_from,
     current_segment_nonce,
     type,
     close_seg_info.last_modified.time_since_epoch().count(),

@@ -19,28 +19,6 @@ export class HostsPageHelper extends PageHelper {
     this.getTableCount('total').should('not.be.eq', 0);
   }
 
-  // function that checks all services links work for first
-  // host in table
-  check_services_links() {
-    // check that text (links) is present in services box
-    let links_tested = 0;
-
-    cy.get('cd-hosts a.service-link')
-      .should('have.length.greaterThan', 0)
-      .then(($elems) => {
-        $elems.each((_i, $el) => {
-          // click link, check it worked by looking for changed breadcrumb,
-          // navigate back to hosts page, repeat until all links checked
-          cy.contains('a', $el.innerText).should('exist').click();
-          this.expectBreadcrumbText('Performance Counters');
-          this.navigateTo();
-          links_tested++;
-        });
-        // check if any links were actually tested
-        expect(links_tested).gt(0);
-      });
-  }
-
   add(hostname: string, exist?: boolean, maintenance?: boolean, labels: string[] = []) {
     cy.get(`${this.pages.add.id}`).within(() => {
       cy.get('#hostname').type(hostname);
@@ -127,8 +105,8 @@ export class HostsPageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.index.url)
   maintenance(hostname: string, exit = false, force = false) {
     this.clearTableSearchInput();
+    this.getTableCell(this.columnIndex.hostname, hostname).click();
     if (force) {
-      this.getTableCell(this.columnIndex.hostname, hostname).click();
       this.clickActionButton('enter-maintenance');
 
       cy.get('cd-modal').within(() => {
@@ -145,7 +123,6 @@ export class HostsPageHelper extends PageHelper {
     }
     if (exit) {
       this.getTableCell(this.columnIndex.hostname, hostname)
-        .click()
         .parent()
         .find(`datatable-body-cell:nth-child(${this.columnIndex.status})`)
         .then(($ele) => {
@@ -163,7 +140,6 @@ export class HostsPageHelper extends PageHelper {
           expect(status).to.not.include('maintenance');
         });
     } else {
-      this.getTableCell(this.columnIndex.hostname, hostname).click();
       this.clickActionButton('enter-maintenance');
 
       this.getTableCell(this.columnIndex.hostname, hostname)
@@ -187,5 +163,9 @@ export class HostsPageHelper extends PageHelper {
       cy.wait(20000);
       this.expectTableCount('total', 0);
     });
+
+    // unselect it to avoid colliding with any other selection
+    // in different steps
+    this.getTableCell(this.columnIndex.hostname, hostname).click();
   }
 }

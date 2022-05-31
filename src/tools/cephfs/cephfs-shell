@@ -16,9 +16,19 @@ import shlex
 import stat
 import errno
 
+from distutils.version import LooseVersion
+
 from cmd2 import Cmd
 from cmd2 import __version__ as cmd2_version
-from distutils.version import LooseVersion
+# XXX: In cmd2 versions < 1.0.1, we'll get SystemExit(2) instead of
+# Cmd2ArgparseError
+if LooseVersion(cmd2_version) >= LooseVersion("1.0.1"):
+    from cmd2.exceptions import Cmd2ArgparseError
+else:
+    # HACK: so that we don't have check for version everywhere
+    # Cmd2ArgparseError is used.
+    class Cmd2ArgparseError:
+        pass
 
 if sys.version_info.major < 3:
     raise RuntimeError("cephfs-shell is only compatible with python3")
@@ -79,7 +89,8 @@ exit_codes = {'Misc': 1,
               errno.ECONNABORTED: 19,
               errno.ECONNREFUSED: 20,
               errno.ECONNRESET: 21,
-              errno.EINTR: 22}
+              errno.EINTR: 22,
+              errno.EISDIR: 23}
 
 
 #########################################################################
@@ -467,7 +478,18 @@ class CephFSShell(Cmd):
         except (libcephfs.Error, Exception) as e:
             if shell.debug:
                 traceback.print_exc(file=sys.stdout)
-            set_exit_code_msg(msg=e)
+            if isinstance(e, Cmd2ArgparseError):
+                # NOTE: In case of Cmd2ArgparseError the error message is
+                # already printed beforehand (plus Cmd2ArgparseError
+                # instances have empty error message), so let's just set the
+                # exit code.
+                set_exit_code_msg(msg=None)
+            else:
+                set_exit_code_msg(msg=f'{type(e).__name__}: {e}')
+        # In cmd2 versions < 1.1.0 we'll get SystemExit(2) instead of
+        # Cmd2ArgparseError
+        except SystemExit:
+            raise
 
     class path_to_bytes(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
@@ -604,8 +626,7 @@ class CephFSShell(Cmd):
     put_parser.add_argument('local_path', type=str, action=path_to_bytes,
                             help='Path of the file in the local system')
     put_parser.add_argument('remote_path', type=str, action=path_to_bytes,
-                            help='Path of the file in the remote system.',
-                            nargs='?', default='.')
+                            help='Path of the file in the remote system')
     put_parser.add_argument('-f', '--force', action='store_true',
                             help='Overwrites the destination if it already exists.')
 
@@ -614,6 +635,21 @@ class CephFSShell(Cmd):
         """
         Copy a local file/directory to CephFS.
         """
+        if args.local_path != b'-' and not os.path.isfile(args.local_path) \
+                and not os.path.isdir(args.local_path):
+            set_exit_code_msg(errno.ENOENT,
+                              msg=f"error: "
+                                  f"{args.local_path.decode('utf-8')}: "
+                                  f"No such file or directory")
+            return
+
+        if (is_file_exists(args.remote_path) or is_dir_exists(
+                args.remote_path)) and not args.force:
+            set_exit_code_msg(msg=f"error: file/directory "
+                                  f"{args.remote_path.decode('utf-8')} "
+                                  f"exists, use --force to overwrite")
+            return
+
         root_src_dir = args.local_path
         root_dst_dir = args.remote_path
         if args.local_path == b'.' or args.local_path == b'./':
@@ -647,14 +683,6 @@ class CephFSShell(Cmd):
             root_dst_dir += b'/'
 
         if args.local_path == b'-' or os.path.isfile(root_src_dir):
-            if not args.force:
-                if os.path.isfile(root_src_dir):
-                    dst_file = root_dst_dir
-                    if is_file_exists(dst_file):
-                        set_exit_code_msg(errno.EEXIST,
-                                          f"{dst_file.decode('utf-8')}: file "
-                                          "exists! use --force to overwrite")
-                        return
             if args.local_path == b'-':
                 root_src_dir = b'-'
             copy_from_local(root_src_dir, root_dst_dir)
@@ -703,12 +731,11 @@ class CephFSShell(Cmd):
         return self.complete_filenames(text, line, begidx, endidx)
 
     get_parser = argparse.ArgumentParser(
-        description='Copy a file from Ceph File System from Local Directory.')
+        description='Copy a file from Ceph File System to Local Directory.')
     get_parser.add_argument('remote_path', type=str, action=path_to_bytes,
                             help='Path of the file in the remote system')
     get_parser.add_argument('local_path', type=str, action=path_to_bytes,
-                            help='Path of the file in the local system',
-                            nargs='?', default='.')
+                            help='Path of the file in the local system')
     get_parser.add_argument('-f', '--force', action='store_true',
                             help='Overwrites the destination if it already exists.')
 
@@ -717,6 +744,19 @@ class CephFSShell(Cmd):
         """
         Copy a file/directory from CephFS to given path.
         """
+        if not is_file_exists(args.remote_path) and not \
+                is_dir_exists(args.remote_path):
+            set_exit_code_msg(errno.ENOENT, "error: no file/directory"
+                                            " found at specified remote "
+                                            "path")
+            return
+        if (os.path.isfile(args.local_path) or os.path.isdir(
+                args.local_path)) and not args.force:
+            set_exit_code_msg(msg=f"error: file/directory "
+                                  f"{args.local_path.decode('utf-8')}"
+                                  f" already exists, use --force to "
+                                  f"overwrite")
+            return
         root_src_dir = args.remote_path
         root_dst_dir = args.local_path
         fname = root_src_dir.rsplit(b'/', 1)
@@ -730,23 +770,11 @@ class CephFSShell(Cmd):
                 return
             copy_to_local(root_src_dir, b'-')
         elif is_file_exists(args.remote_path):
-            copy_to_local(root_src_dir,
-                          root_dst_dir + b'/' + root_src_dir)
+            copy_to_local(root_src_dir, root_dst_dir)
         elif b'/' in root_src_dir and is_file_exists(fname[1], fname[0]):
             copy_to_local(root_src_dir, root_dst_dir)
         else:
             files = list(reversed(sorted(dirwalk(root_src_dir))))
-            if len(files) == 0:
-                try:
-                    os.makedirs(root_dst_dir + b'/' + root_src_dir)
-                except OSError as e:
-                    if args.force:
-                        pass
-                    else:
-                        set_exit_code_msg(e.errno, f"{root_src_dir.decode('utf-8')}: "
-                                          "already exists! use --force to overwrite")
-                        return
-
             for file_ in files:
                 dst_dirpath, dst_file = file_.rsplit(b'/', 1)
                 if dst_dirpath in files:
@@ -759,16 +787,7 @@ class CephFSShell(Cmd):
                     except OSError:
                         pass
                 else:
-                    if not args.force:
-                        try:
-                            os.stat(dst_path)
-                            set_exit_code_msg(errno.EEXIST, f"{file_.decode('utf-8')}: "
-                                              "file already exists! use --force to override")
-                            return
-                        except OSError:
-                            copy_to_local(file_, dst_path)
-                    else:
-                        copy_to_local(file_, dst_path)
+                    copy_to_local(file_, dst_path)
 
         return 0
 
@@ -865,14 +884,14 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    rmdir_parser = argparse.ArgumentParser(description='Remove Directory.')
-    rmdir_parser.add_argument('paths', help='Directory Path.', nargs='+',
+    rmdir_parser = argparse.ArgumentParser(
+        description='Remove the directory(ies), if they are empty.')
+    rmdir_parser.add_argument('paths', help='Directory Path(s)', nargs='+',
                               action=path_to_bytes)
     rmdir_parser.add_argument('-p', '--parent', action='store_true',
-                              help='Remove parent directories as necessary. '
-                                   'When this option is specified, no error '
-                                    'is reported if a directory has any '
-                                    'sub-directories, files')
+                              help="remove directory and its ancestors; "
+                                   "e.g., 'rmdir -p a/b/c' is similar to "
+                                   "'rmdir a/b/c a/b a'")
 
     @with_argparser(rmdir_parser)
     def do_rmdir(self, args):
@@ -922,7 +941,23 @@ class CephFSShell(Cmd):
                 try:
                     cephfs.rmdir(path)
                 except libcephfs.Error as e:
-                    set_exit_code_msg(msg=e)
+                    if e.get_error_code() == 2:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rmdir: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "No such file or directory")
+                    elif e.get_error_code() == 20:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rmdir: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "Not a directory")
+                    elif e.get_error_code() == 39:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rmdir: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "Directory not empty")
+                    else:
+                        set_exit_code_msg(msg=e)
 
     def complete_rm(self, text, line, begidx, endidx):
         """
@@ -949,7 +984,18 @@ class CephFSShell(Cmd):
                     cephfs.unlink(path)
                 except libcephfs.Error as e:
                     # NOTE: perhaps we need a better msg here
-                    set_exit_code_msg(msg=e)
+                    if e.get_error_code() == 2:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rm: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "No such file or directory")
+                    elif e.get_error_code() == 21:
+                        set_exit_code_msg(e.get_error_code(),
+                                          "rm: failed to remove "
+                                          f"{path.decode('utf-8')}: "
+                                          "Is a directory")
+                    else:
+                        set_exit_code_msg(msg=e)
 
     def complete_mv(self, text, line, begidx, endidx):
         """

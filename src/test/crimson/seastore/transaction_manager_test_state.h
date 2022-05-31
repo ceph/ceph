@@ -14,6 +14,8 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
+#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
+#include "crimson/os/seastore/journal/circular_bounded_journal.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -23,6 +25,8 @@ class EphemeralTestState {
 protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
+  std::unique_ptr<nvme_device::NVMeBlockDevice> rb_device;
+  tm_make_config_t tm_config = tm_make_config_t::get_test_segmented_journal();
 
   EphemeralTestState(std::size_t num_segment_managers) {
     assert(num_segment_managers > 0);
@@ -58,10 +62,19 @@ protected:
     _mount().handle_error(crimson::ct_error::assert_all{}).get0();
   }
 
-  seastar::future<> tm_setup() {
+  seastar::future<> tm_setup(
+    tm_make_config_t config = tm_make_config_t::get_test_segmented_journal()) {
+    tm_config = config;
     segment_manager = segment_manager::create_test_ephemeral();
     for (auto &sec_sm : secondary_segment_managers) {
       sec_sm = segment_manager::create_test_ephemeral();
+    }
+    if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
+      auto config =
+	journal::CircularBoundedJournal::mkfs_config_t::get_default();
+      rb_device.reset(new nvme_device::TestMemory(config.total_size));
+      rb_device->set_device_id(
+	1 << (std::numeric_limits<device_id_t>::digits - 1));
     }
     return segment_manager->init(
     ).safe_then([this] {
@@ -109,12 +122,13 @@ protected:
       for (auto &sec_sm : secondary_segment_managers) {
         sec_sm.reset();
       }
+      rb_device.reset();
     });
   }
 };
 
 auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
-  auto tm = make_transaction_manager(true);
+  auto tm = make_transaction_manager(tm_make_config_t::get_test_segmented_journal());
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     "",
@@ -130,6 +144,8 @@ class TMTestState : public EphemeralTestState {
 protected:
   TransactionManagerRef tm;
   LBAManager *lba_manager;
+  BackrefManager *backref_manager;
+  Cache* cache;
   SegmentCleaner *segment_cleaner;
 
   TMTestState() : EphemeralTestState(1) {}
@@ -137,8 +153,13 @@ protected:
   TMTestState(std::size_t num_devices) : EphemeralTestState(num_devices) {}
 
   virtual void _init() override {
-    tm = make_transaction_manager(true);
+    tm = make_transaction_manager(tm_config);
     tm->add_device(segment_manager.get(), true);
+    if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
+      tm->add_device(rb_device.get(), false);
+      static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
+	add_device(rb_device.get());
+    }
     if (get_num_devices() > 1) {
       for (auto &sec_sm : secondary_segment_managers) {
         tm->add_device(sec_sm.get(), false);
@@ -146,6 +167,8 @@ protected:
     }
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
+    backref_manager = tm->get_backref_manager();
+    cache = tm->get_cache();
   }
 
   virtual void _destroy() override {
@@ -175,10 +198,28 @@ protected:
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
-    return tm->mkfs(
-    ).handle_error(
-      crimson::ct_error::assert_all{"Error in teardown"}
-    );
+    if (tm_config.j_type == journal_type_t::SEGMENT_JOURNAL) {
+      return tm->mkfs(
+      ).handle_error(
+	crimson::ct_error::assert_all{"Error in mkfs"}
+      );
+    } else {
+      auto config = journal::CircularBoundedJournal::mkfs_config_t::get_default();
+      return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->mkfs(
+	config
+      ).safe_then([this]() {
+	return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
+	  open_device_read_header(journal::CBJOURNAL_START_ADDRESS
+	).safe_then([this](auto addr) {
+	  return tm->mkfs(
+	  ).handle_error(
+	    crimson::ct_error::assert_all{"Error in mkfs"}
+	  );
+	});
+      }).handle_error(
+	crimson::ct_error::assert_all{"Error in mkfs"}
+      );
+    }
   }
 
   auto create_mutate_transaction() {

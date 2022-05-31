@@ -26,7 +26,6 @@ import errno
 import struct
 import ssl
 from enum import Enum
-
 from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Iterable
 
 import re
@@ -1706,8 +1705,9 @@ def call(ctx: CephadmContext,
         assert process.stdout
         assert process.stderr
         try:
+            stdout, stderr = await asyncio.gather(tee(process.stdout),
+                                                  tee(process.stderr))
             returncode = await asyncio.wait_for(process.wait(), timeout)
-            stdout, stderr = await asyncio.gather(tee(process.stdout), tee(process.stderr))
         except asyncio.TimeoutError:
             logger.info(prefix + f'timeout after {timeout} seconds')
             return '', '', 124
@@ -2545,6 +2545,10 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                 if 'ports' in meta and meta['ports']:
                     port = meta['ports'][0]
             r += [f'--web.listen-address={ip}:{port}']
+            if daemon_type == 'prometheus':
+                scheme = 'http'
+                host = get_fqdn()
+                r += [f'--web.external-url={scheme}://{host}:{port}']
         if daemon_type == 'alertmanager':
             config = get_parm(ctx.config_json)
             peers = config.get('peers', list())  # type: ignore
@@ -3300,6 +3304,16 @@ def deploy_daemon_units(
                     bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
                     cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
                 )
+                if 'cluster' in ctx and ctx.cluster:
+                    # ctx.cluster is only set during adoption of a daemon from a cluster
+                    # with a custom name (not "ceph"). The initial activate command the first
+                    # time we start the new cephadm based systemd unit for this osd must account
+                    # for this by mounting to the correct data dir in the container. Otherwise
+                    # necessary files from the old data dir of the daemon won't be copied over
+                    # to the new data dir on the host. After the first start (e.g. on any redeploys)
+                    # this is no longer necessary as we will have these files in the data dir on the host
+                    if data_dir in prestart.volume_mounts:
+                        prestart.volume_mounts[data_dir] = f'/var/lib/ceph/osd/{ctx.cluster}-{daemon_id}'
                 _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
         elif daemon_type == CephIscsi.daemon_type:
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
@@ -3356,8 +3370,12 @@ def deploy_daemon_units(
 
     # post-stop command(s)
     with open(data_dir + '/unit.stop.new', 'w') as f:
-        f.write('! ' + ' '.join(c.stop_cmd()) + '\n')
-        f.write('! ' + ' '.join(c.stop_cmd(old_cname=True)) + '\n')
+        # following generated script basically checks if the container exists
+        # before stopping it. Exit code will be success either if it doesn't
+        # exist or if it exists and is stopped successfully.
+        container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
+        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True))} \n')
+        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd())} \n')
 
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.stop.new',
@@ -3683,7 +3701,7 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/environment
 ExecStart=/bin/bash {data_dir}/{fsid}/%i/unit.run
-ExecStop=-/bin/bash -c '{container_path} stop ceph-{fsid}-%i ; bash {data_dir}/{fsid}/%i/unit.stop'
+ExecStop=-/bin/bash -c 'bash {data_dir}/{fsid}/%i/unit.stop'
 ExecStopPost=-/bin/bash {data_dir}/{fsid}/%i/unit.poststop
 KillMode=none
 Restart=on-failure
@@ -3695,8 +3713,7 @@ StartLimitBurst=5
 {extra_args}
 [Install]
 WantedBy=ceph-{fsid}.target
-""".format(container_path=ctx.container_engine.path,
-           fsid=fsid,
+""".format(fsid=fsid,
            data_dir=ctx.data_dir,
            extra_args=extra_args,
            # if docker, we depend on docker.service
@@ -4638,7 +4655,8 @@ def ip_in_subnets(ip_addr: str, subnets: str) -> bool:
     """Determine if the ip_addr belongs to any of the subnets list."""
     subnet_list = [x.strip() for x in subnets.split(',')]
     for subnet in subnet_list:
-        if ipaddress.ip_address(ip_addr) in ipaddress.ip_network(subnet):
+        ip_address = unwrap_ipv6(ip_addr) if is_ipv6(ip_addr) else ip_addr
+        if ipaddress.ip_address(ip_address) in ipaddress.ip_network(subnet):
             return True
     return False
 
@@ -5036,44 +5054,16 @@ def prepare_ssh(
         }
         cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
         cli(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
+        ssh_pub = cli(['cephadm', 'get-pub-key'])
     else:
         logger.info('Generating ssh key...')
         cli(['cephadm', 'generate-key'])
         ssh_pub = cli(['cephadm', 'get-pub-key'])
-
         with open(ctx.output_pub_ssh_key, 'w') as f:
             f.write(ssh_pub)
         logger.info('Wrote public SSH key to %s' % ctx.output_pub_ssh_key)
 
-        logger.info('Adding key to %s@localhost authorized_keys...' % ctx.ssh_user)
-        try:
-            s_pwd = pwd.getpwnam(ctx.ssh_user)
-        except KeyError:
-            raise Error('Cannot find uid/gid for ssh-user: %s' % (ctx.ssh_user))
-        ssh_uid = s_pwd.pw_uid
-        ssh_gid = s_pwd.pw_gid
-        ssh_dir = os.path.join(s_pwd.pw_dir, '.ssh')
-
-        if not os.path.exists(ssh_dir):
-            makedirs(ssh_dir, ssh_uid, ssh_gid, 0o700)
-
-        auth_keys_file = '%s/authorized_keys' % ssh_dir
-        add_newline = False
-
-        if os.path.exists(auth_keys_file):
-            with open(auth_keys_file, 'r') as f:
-                f.seek(0, os.SEEK_END)
-                if f.tell() > 0:
-                    f.seek(f.tell() - 1, os.SEEK_SET)  # go to last char
-                    if f.read() != '\n':
-                        add_newline = True
-
-        with open(auth_keys_file, 'a') as f:
-            os.fchown(f.fileno(), ssh_uid, ssh_gid)  # just in case we created it
-            os.fchmod(f.fileno(), 0o600)  # just in case we created it
-            if add_newline:
-                f.write('\n')
-            f.write(ssh_pub.strip() + '\n')
+    authorize_ssh_key(ssh_pub, ctx.ssh_user)
 
     host = get_hostname()
     logger.info('Adding host %s...' % host)
@@ -5293,7 +5283,7 @@ def _parse_yaml_docs(f: Iterable[str]) -> List[List[str]]:
     docs = []
     current_doc = []  # type: List[str]
     for line in f:
-        if '---' in line:
+        if re.search(r'^---\s+', line):
             if current_doc:
                 docs.append(current_doc)
             current_doc = []
@@ -5377,6 +5367,9 @@ def command_bootstrap(ctx):
     if not ctx.output_pub_ssh_key:
         ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, CEPH_PUBKEY)
 
+    if bool(ctx.ssh_private_key) is not bool(ctx.ssh_public_key):
+        raise Error('--ssh-private-key and --ssh-public-key must be provided together or not at all.')
+
     if ctx.fsid:
         data_dir_base = os.path.join(ctx.data_dir, ctx.fsid)
         if os.path.exists(data_dir_base):
@@ -5402,6 +5395,9 @@ def command_bootstrap(ctx):
                 raise Error(f'Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.')
 
     (user_conf, _) = get_config_and_keyring(ctx)
+
+    if ctx.ssh_user != 'root':
+        check_ssh_connectivity(ctx)
 
     if not ctx.skip_prepare_host:
         command_prepare_host(ctx)
@@ -6083,12 +6079,14 @@ def _list_ipv4_networks(ctx: CephadmContext) -> Dict[str, Dict[str, Set[str]]]:
 
 def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
     r = {}  # type: Dict[str, Dict[str, Set[str]]]
-    p = re.compile(r'^(\S+) dev (\S+) (.*)scope link (.*)src (\S+)')
+    p = re.compile(r'^(\S+) (?:via \S+)? ?dev (\S+) (.*)scope link (.*)src (\S+)')
     for line in out.splitlines():
         m = p.findall(line)
         if not m:
             continue
         net = m[0][0]
+        if '/' not in net:  # aggregate /32 mask for single host sub-networks
+            net += '/32'
         iface = m[0][1]
         ip = m[0][4]
         if net not in r:
@@ -6118,9 +6116,11 @@ def _parse_ipv6_route(routes: str, ips: str) -> Dict[str, Dict[str, Set[str]]]:
         if not m or m[0][0].lower() == 'default':
             continue
         net = m[0][0]
-        if '/' not in net:  # only consider networks with a mask
-            continue
+        if '/' not in net:  # aggregate /128 mask for single host sub-networks
+            net += '/128'
         iface = m[0][1]
+        if iface == 'lo':  # skip loopback devices
+            continue
         if net not in r:
             r[net] = {}
         if iface not in r[net]:
@@ -6202,14 +6202,22 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
     # keep track of image digests
     seen_digests = {}   # type: Dict[str, List[str]]
 
-    # keep track of memory usage we've seen
+    # keep track of memory and cpu usage we've seen
     seen_memusage = {}  # type: Dict[str, int]
+    seen_cpuperc = {}  # type: Dict[str, str]
     out, err, code = call(
         ctx,
         [container_path, 'stats', '--format', '{{.ID}},{{.MemUsage}}', '--no-stream'],
         verbosity=CallVerbosity.DEBUG
     )
     seen_memusage_cid_len, seen_memusage = _parse_mem_usage(code, out)
+
+    out, err, code = call(
+        ctx,
+        [container_path, 'stats', '--format', '{{.ID}},{{.CPUPerc}}', '--no-stream'],
+        verbosity=CallVerbosity.DEBUG
+    )
+    seen_cpuperc_cid_len, seen_cpuperc = _parse_cpu_perc(code, out)
 
     # /var/lib/ceph
     if os.path.exists(data_dir):
@@ -6380,6 +6388,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         val['container_image_digests'] = image_digests
                         if container_id:
                             val['memory_usage'] = seen_memusage.get(container_id[0:seen_memusage_cid_len])
+                            val['cpu_percentage'] = seen_cpuperc.get(container_id[0:seen_cpuperc_cid_len])
                         val['version'] = version
                         val['started'] = start_stamp
                         val['created'] = get_file_timestamp(
@@ -6389,7 +6398,6 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                             os.path.join(data_dir, fsid, j, 'unit.image'))
                         val['configured'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.configured'))
-
                     ls.append(val)
 
     return ls
@@ -6411,6 +6419,22 @@ def _parse_mem_usage(code: int, out: str) -> Tuple[int, Dict[str, int]]:
                 logger.info('unable to parse memory usage line\n>{}'.format(line))
                 pass
     return seen_memusage_cid_len, seen_memusage
+
+
+def _parse_cpu_perc(code: int, out: str) -> Tuple[int, Dict[str, str]]:
+    seen_cpuperc = {}
+    seen_cpuperc_cid_len = 0
+    if not code:
+        for line in out.splitlines():
+            (cid, cpuperc) = line.split(',')
+            try:
+                seen_cpuperc[cid] = cpuperc
+                if not seen_cpuperc_cid_len:
+                    seen_cpuperc_cid_len = len(cid)
+            except ValueError:
+                logger.info('unable to parse cpu percentage line\n>{}'.format(line))
+                pass
+    return seen_cpuperc_cid_len, seen_cpuperc
 
 
 def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):
@@ -6867,6 +6891,18 @@ def command_rm_daemon(ctx):
     else:
         call_throws(ctx, ['rm', '-rf', data_dir])
 
+    if 'tcp_ports' in ctx and ctx.tcp_ports is not None:
+        ports: List[int] = [int(p) for p in ctx.tcp_ports.split()]
+        try:
+            fw = Firewalld(ctx)
+            fw.close_ports(ports)
+            fw.apply_rules()
+        except RuntimeError as e:
+            # in case we cannot close the ports we will remove
+            # the daemon but keep them open.
+            logger.warning(f' Error when trying to close ports: {e}')
+
+
 ##################################
 
 
@@ -7078,6 +7114,142 @@ def command_check_host(ctx: CephadmContext) -> None:
     logger.info('Host looks OK')
 
 ##################################
+
+
+def get_ssh_vars(ssh_user: str) -> Tuple[int, int, str]:
+    try:
+        s_pwd = pwd.getpwnam(ssh_user)
+    except KeyError:
+        raise Error('Cannot find uid/gid for ssh-user: %s' % (ssh_user))
+
+    ssh_uid = s_pwd.pw_uid
+    ssh_gid = s_pwd.pw_gid
+    ssh_dir = os.path.join(s_pwd.pw_dir, '.ssh')
+    return ssh_uid, ssh_gid, ssh_dir
+
+
+def authorize_ssh_key(ssh_pub_key: str, ssh_user: str) -> bool:
+    """Authorize the public key for the provided ssh user"""
+
+    def key_in_file(path: str, key: str) -> bool:
+        if not os.path.exists(path):
+            return False
+        with open(path) as f:
+            lines = f.readlines()
+            for line in lines:
+                if line.strip() == key.strip():
+                    return True
+        return False
+
+    logger.info(f'Adding key to {ssh_user}@localhost authorized_keys...')
+    if ssh_pub_key is None or ssh_pub_key.isspace():
+        raise Error('Trying to authorize an empty ssh key')
+
+    ssh_pub_key = ssh_pub_key.strip()
+    ssh_uid, ssh_gid, ssh_dir = get_ssh_vars(ssh_user)
+    if not os.path.exists(ssh_dir):
+        makedirs(ssh_dir, ssh_uid, ssh_gid, 0o700)
+
+    auth_keys_file = '%s/authorized_keys' % ssh_dir
+    if key_in_file(auth_keys_file, ssh_pub_key):
+        logger.info(f'key already in {ssh_user}@localhost authorized_keys...')
+        return False
+
+    add_newline = False
+    if os.path.exists(auth_keys_file):
+        with open(auth_keys_file, 'r') as f:
+            f.seek(0, os.SEEK_END)
+            if f.tell() > 0:
+                f.seek(f.tell() - 1, os.SEEK_SET)  # go to last char
+                if f.read() != '\n':
+                    add_newline = True
+
+    with open(auth_keys_file, 'a') as f:
+        os.fchown(f.fileno(), ssh_uid, ssh_gid)  # just in case we created it
+        os.fchmod(f.fileno(), 0o600)  # just in case we created it
+        if add_newline:
+            f.write('\n')
+        f.write(ssh_pub_key + '\n')
+
+    return True
+
+
+def revoke_ssh_key(key: str, ssh_user: str) -> None:
+    """Revoke the public key authorization for the ssh user"""
+    ssh_uid, ssh_gid, ssh_dir = get_ssh_vars(ssh_user)
+    auth_keys_file = '%s/authorized_keys' % ssh_dir
+    deleted = False
+    if os.path.exists(auth_keys_file):
+        with open(auth_keys_file, 'r') as f:
+            lines = f.readlines()
+        _, filename = tempfile.mkstemp()
+        with open(filename, 'w') as f:
+            os.fchown(f.fileno(), ssh_uid, ssh_gid)
+            os.fchmod(f.fileno(), 0o600)  # secure access to the keys file
+            for line in lines:
+                if line.strip() == key.strip():
+                    deleted = True
+                else:
+                    f.write(line)
+
+    if deleted:
+        shutil.move(filename, auth_keys_file)
+    else:
+        logger.warning('Cannot find the ssh key to be deleted')
+
+
+def check_ssh_connectivity(ctx: CephadmContext) -> None:
+
+    def cmd_is_available(cmd: str) -> bool:
+        if shutil.which(cmd) is None:
+            logger.warning(f'Command not found: {cmd}')
+            return False
+        return True
+
+    if not cmd_is_available('ssh') or not cmd_is_available('ssh-keygen'):
+        logger.warning('Cannot check ssh connectivity. Skipping...')
+        return
+
+    logger.info('Verifying ssh connectivity ...')
+    if ctx.ssh_private_key and ctx.ssh_public_key:
+        # let's use the keys provided by the user
+        ssh_priv_key_path = pathify(ctx.ssh_private_key.name)
+        ssh_pub_key_path = pathify(ctx.ssh_public_key.name)
+    else:
+        # no custom keys, let's generate some random keys just for this check
+        ssh_priv_key_path = f'/tmp/ssh_key_{uuid.uuid1()}'
+        ssh_pub_key_path = f'{ssh_priv_key_path}.pub'
+        ssh_key_gen_cmd = ['ssh-keygen', '-q', '-t', 'rsa', '-N', '', '-C', '', '-f', ssh_priv_key_path]
+        _, _, code = call(ctx, ssh_key_gen_cmd)
+        if code != 0:
+            logger.warning('Cannot generate keys to check ssh connectivity.')
+            return
+
+    with open(ssh_pub_key_path, 'r') as f:
+        key = f.read().strip()
+    new_key = authorize_ssh_key(key, ctx.ssh_user)
+    ssh_cfg_file_arg = ['-F', pathify(ctx.ssh_config.name)] if ctx.ssh_config else []
+    _, _, code = call(ctx, ['ssh', '-o StrictHostKeyChecking=no',
+                            *ssh_cfg_file_arg, '-i', ssh_priv_key_path,
+                            '-o PasswordAuthentication=no',
+                            f'{ctx.ssh_user}@{get_hostname()}',
+                            'sudo echo'])
+
+    # we only remove the key if it's a new one. In case the user has provided
+    # some already existing key then we don't alter authorized_keys file
+    if new_key:
+        revoke_ssh_key(key, ctx.ssh_user)
+
+    pub_key_msg = '- The public key file configured by --ssh-public-key is valid\n' if ctx.ssh_public_key else ''
+    prv_key_msg = '- The private key file configured by --ssh-private-key is valid\n' if ctx.ssh_private_key else ''
+    ssh_cfg_msg = '- The ssh configuration file configured by --ssh-config is valid\n' if ctx.ssh_config else ''
+    err_msg = f"""
+** Please verify your user's ssh configuration and make sure:
+- User {ctx.ssh_user} must have passwordless sudo access
+{pub_key_msg}{prv_key_msg}{ssh_cfg_msg}
+"""
+    if code != 0:
+        raise Error(err_msg)
 
 
 def command_prepare_host(ctx: CephadmContext) -> None:
@@ -7758,9 +7930,9 @@ def read_file(path_list, file_name=''):
         else:
             file_path = path
         if os.path.exists(file_path):
-            with open(file_path, 'r') as f:
+            with open(file_path, 'rb') as f:
                 try:
-                    content = f.read().strip()
+                    content = f.read().decode('utf-8', 'ignore').strip()
                 except OSError:
                     # sysfs may populate the file, but for devices like
                     # virtio reads can fail
@@ -7772,6 +7944,83 @@ def read_file(path_list, file_name=''):
 ##################################
 
 
+class Enclosure:
+    def __init__(self, enc_id: str, enc_path: str, dev_path: str):
+        """External disk enclosure metadata
+
+        Args:
+        :param enc_id: enclosure id (normally a WWN)
+        :param enc_path: sysfs path to HBA attached to the enclosure
+                         e.g. /sys/class/scsi_generic/sg11/device/enclosure/0:0:9:0
+        :param dev_path: sysfs path to the generic scsi device for the enclosure HBA
+                         e.g. /sys/class/scsi_generic/sg2
+        """
+        self._path: str = dev_path
+        self._dev_path: str = os.path.join(dev_path, 'device')
+        self._enc_path: str = enc_path
+        self.ses_paths: List[str] = []
+        self.path_count: int = 0
+        self.vendor: str = ''
+        self.model: str = ''
+        self.enc_id: str = enc_id
+        self.components: Union[int, str] = 0
+        self.device_lookup: Dict[str, str] = {}
+        self.device_count: int = 0
+        self.slot_map: Dict[str, Dict[str, str]] = {}
+
+        self._probe()
+
+    def _probe(self) -> None:
+        """Analyse the dev paths to identify enclosure related information"""
+
+        self.vendor = read_file([os.path.join(self._dev_path, 'vendor')])
+        self.model = read_file([os.path.join(self._dev_path, 'model')])
+        self.components = read_file([os.path.join(self._enc_path, 'components')])
+        slot_paths = glob(os.path.join(self._enc_path, '*', 'slot'))
+        for slot_path in slot_paths:
+            slot = read_file([slot_path])
+            serial_path = os.path.join(os.path.dirname(slot_path), 'device', 'vpd_pg80')
+            serial = ''
+            if os.path.exists(serial_path):
+                serial_raw = read_file([serial_path])
+                serial = (''.join(char for char in serial_raw if char in string.printable)).strip()
+                self.device_lookup[serial] = slot
+            slot_dir = os.path.dirname(slot_path)
+            self.slot_map[slot] = {
+                'status': read_file([os.path.join(slot_dir, 'status')]),
+                'fault': read_file([os.path.join(slot_dir, 'fault')]),
+                'locate': read_file([os.path.join(slot_dir, 'locate')]),
+                'serial': serial,
+            }
+
+        self.device_count = len(self.device_lookup)
+        self.update(os.path.basename(self._path))
+
+    def update(self, dev_id: str) -> None:
+        """Update an enclosure object with a related sg device name
+
+        :param dev_id (str): device name e.g. sg2
+        """
+        self.ses_paths.append(dev_id)
+        self.path_count = len(self.ses_paths)
+
+    def _dump(self) -> Dict[str, Any]:
+        """Return a dict representation of the object"""
+        return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+
+    def __str__(self) -> str:
+        """Return a formatted json representation of the object as a string"""
+        return json.dumps(self._dump(), indent=2)
+
+    def __repr__(self) -> str:
+        """Return a json representation of the object as a string"""
+        return json.dumps(self._dump())
+
+    def as_json(self) -> Dict[str, Any]:
+        """Return a dict representing the object"""
+        return self._dump()
+
+
 class HostFacts():
     _dmi_path_list = ['/sys/class/dmi/id']
     _nic_path_list = ['/sys/class/net']
@@ -7779,7 +8028,8 @@ class HostFacts():
     _disk_vendor_workarounds = {
         '0x1af4': 'Virtio Block Device'
     }
-    _excluded_block_devices = ('sr', 'zram', 'dm-')
+    _excluded_block_devices = ('sr', 'zram', 'dm-', 'loop', 'md')
+    _sg_generic_glob = '/sys/class/scsi_generic/*'
 
     def __init__(self, ctx: CephadmContext):
         self.ctx: CephadmContext = ctx
@@ -7794,6 +8044,52 @@ class HostFacts():
         self._process_nics()
         self.arch: str = platform.processor()
         self.kernel: str = platform.release()
+        self._enclosures = self._discover_enclosures()
+        self._block_devices = self._get_block_devs()
+        self._device_list = self._get_device_info()
+
+    def _discover_enclosures(self) -> Dict[str, Enclosure]:
+        """Build a dictionary of discovered scsi enclosures
+
+        Enclosures are detected by walking the scsi generic sysfs hierarchy.
+        Any device tree that holds an 'enclosure' subdirectory is interpreted as
+        an enclosure. Once identified the enclosire directory is analysis to
+        identify key descriptors that will help relate disks to enclosures and
+        disks to enclosure slots.
+
+        :return: Dict[str, Enclosure]: a map of enclosure id (hex) to enclosure object
+        """
+        sg_paths: List[str] = glob(HostFacts._sg_generic_glob)
+        enclosures: Dict[str, Enclosure] = {}
+
+        for sg_path in sg_paths:
+            enc_path = os.path.join(sg_path, 'device', 'enclosure')
+            if os.path.exists(enc_path):
+                enc_dirs = glob(os.path.join(enc_path, '*'))
+                if len(enc_dirs) != 1:
+                    # incomplete enclosure spec - expecting ONE dir in the fomrat
+                    # host(adapter):bus:target:lun e.g. 16:0:0:0
+                    continue
+                enc_path = enc_dirs[0]
+                enc_id = read_file([os.path.join(enc_path, 'id')])
+                if enc_id in enclosures:
+                    enclosures[enc_id].update(os.path.basename(sg_path))
+                    continue
+
+                enclosure = Enclosure(enc_id, enc_path, sg_path)
+                enclosures[enc_id] = enclosure
+
+        return enclosures
+
+    @property
+    def enclosures(self) -> Dict[str, Dict[str, Any]]:
+        """Dump the enclosure objects as dicts"""
+        return {k: v._dump() for k, v in self._enclosures.items()}
+
+    @property
+    def enclosure_count(self) -> int:
+        """Return the number of enclosures detected"""
+        return len(self._enclosures.keys())
 
     def _get_cpuinfo(self):
         # type: () -> None
@@ -7820,17 +8116,6 @@ class HostFacts():
         """Determine the list of block devices by looking at /sys/block"""
         return [dev for dev in os.listdir('/sys/block')
                 if not dev.startswith(HostFacts._excluded_block_devices)]
-
-    def _get_devs_by_type(self, rota='0'):
-        # type: (str) -> List[str]
-        """Filter block devices by a given rotational attribute (0=flash, 1=spinner)"""
-        devs = list()
-        for blk_dev in self._get_block_devs():
-            rot_path = '/sys/block/{}/queue/rotational'.format(blk_dev)
-            rot_value = read_file([rot_path])
-            if rot_value == rota:
-                devs.append(blk_dev)
-        return devs
 
     @property
     def operating_system(self):
@@ -7883,7 +8168,7 @@ class HostFacts():
     def hdd_count(self):
         # type: () -> int
         """Return a count of HDDs (spinners)"""
-        return len(self._get_devs_by_type(rota='1'))
+        return len(self.hdd_list)
 
     def _get_capacity(self, dev):
         # type: (str) -> int
@@ -7894,25 +8179,77 @@ class HostFacts():
         blk_count = int(read_file([blk_path]))
         return size_blocks * blk_count
 
-    def _get_capacity_by_type(self, rota='0'):
+    def _get_capacity_by_type(self, disk_type='hdd'):
         # type: (str) -> int
         """Return the total capacity of a category of device (flash or hdd)"""
-        devs = self._get_devs_by_type(rota=rota)
-        capacity = 0
-        for dev in devs:
-            capacity += self._get_capacity(dev)
+        capacity: int = 0
+        for dev in self._device_list:
+            if dev['disk_type'] == disk_type:
+                disk_capacity = cast(int, dev.get('disk_size_bytes', 0))
+                capacity += disk_capacity
         return capacity
 
-    def _dev_list(self, dev_list):
-        # type: (List[str]) -> List[Dict[str, object]]
-        """Return a 'pretty' name list for each device in the `dev_list`"""
+    def _get_device_info(self):
+        # type: () -> List[Dict[str, object]]
+        """Return a 'pretty' name list for each unique device in the `dev_list`"""
         disk_list = list()
 
-        for dev in dev_list:
+        # serial_num_lookup is a dict of serial number -> List of devices with that serial number
+        serial_num_lookup: Dict[str, List[str]] = {}
+
+        # make a map of devname -> disk path. this path name may indicate the physical slot
+        # of a drive (phyXX)
+        disk_path_map: Dict[str, str] = {}
+        for path in glob('/dev/disk/by-path/*'):
+            tgt_raw = Path(path).resolve()
+            tgt = os.path.basename(str(tgt_raw))
+            disk_path_map[tgt] = path
+
+        # make a map of holder (dm-XX) -> full mpath name
+        dm_device_map: Dict[str, str] = {}
+        for mpath in glob('/dev/mapper/mpath*'):
+            tgt_raw = Path(mpath).resolve()
+            tgt = os.path.basename(str(tgt_raw))
+            dm_device_map[tgt] = mpath
+
+        # main loop to process all eligible block devices
+        for dev in self._block_devices:
+            enclosure_id = ''
+            enclosure_slot = ''
+            scsi_addr = ''
+            mpath = ''
+
             disk_model = read_file(['/sys/block/{}/device/model'.format(dev)]).strip()
             disk_rev = read_file(['/sys/block/{}/device/rev'.format(dev)]).strip()
             disk_wwid = read_file(['/sys/block/{}/device/wwid'.format(dev)]).strip()
             vendor = read_file(['/sys/block/{}/device/vendor'.format(dev)]).strip()
+            rotational = read_file(['/sys/block/{}/queue/rotational'.format(dev)])
+            holders_raw = glob('/sys/block/{}/holders/*'.format(dev))
+            if len(holders_raw) == 1:
+                # mpath will have 1 holder entry
+                holder = os.path.basename(holders_raw[0])
+                mpath = dm_device_map.get(holder, '')
+
+            disk_type = 'hdd' if rotational == '1' else 'flash'
+            scsi_addr_path = glob('/sys/block/{}/device/bsg/*'.format(dev))
+            if len(scsi_addr_path) == 1:
+                scsi_addr = os.path.basename(scsi_addr_path[0])
+
+            # vpd_pg80 isn't guaranteed (libvirt, vmware for example)
+            serial_raw = read_file(['/sys/block/{}/device/vpd_pg80'.format(dev)])
+            serial = (''.join(i for i in serial_raw if i in string.printable)).strip()
+            if serial.lower() == 'unknown':
+                serial = ''
+            else:
+                if serial in serial_num_lookup:
+                    serial_num_lookup[serial].append(dev)
+                else:
+                    serial_num_lookup[serial] = [dev]
+                for enc_id, enclosure in self._enclosures.items():
+                    if serial in enclosure.device_lookup.keys():
+                        enclosure_id = enc_id
+                        enclosure_slot = enclosure.device_lookup[serial]
+
             disk_vendor = HostFacts._disk_vendor_workarounds.get(vendor, vendor)
             disk_size_bytes = self._get_capacity(dev)
             disk_list.append({
@@ -7923,28 +8260,51 @@ class HostFacts():
                 'wwid': disk_wwid,
                 'dev_name': dev,
                 'disk_size_bytes': disk_size_bytes,
+                'disk_type': disk_type,
+                'serial': serial,
+                'alt_dev_name': '',
+                'scsi_addr': scsi_addr,
+                'enclosure_id': enclosure_id,
+                'enclosure_slot': enclosure_slot,
+                'path_id': disk_path_map.get(dev, ''),
+                'mpath': mpath,
             })
-        return disk_list
+
+        # process the devices to drop duplicate physical devs based on matching
+        # the unique serial number
+        disk_list_unique: List[Dict[str, Any]] = []
+        serials_seen: List[str] = []
+        for dev in disk_list:
+            serial = str(dev['serial'])
+            if serial:
+                if serial in serials_seen:
+                    continue
+                else:
+                    serials_seen.append(serial)
+                    devs = serial_num_lookup[serial].copy()
+                    devs.remove(str(dev['dev_name']))
+                    dev['alt_dev_name'] = ','.join(devs)
+            disk_list_unique.append(dev)
+
+        return disk_list_unique
 
     @property
     def hdd_list(self):
         # type: () -> List[Dict[str, object]]
         """Return a list of devices that are HDDs (spinners)"""
-        devs = self._get_devs_by_type(rota='1')
-        return self._dev_list(devs)
+        return [dev for dev in self._device_list if dev['disk_type'] == 'hdd']
 
     @property
     def flash_list(self):
         # type: () -> List[Dict[str, object]]
         """Return a list of devices that are flash based (SSD, NVMe)"""
-        devs = self._get_devs_by_type(rota='0')
-        return self._dev_list(devs)
+        return [dev for dev in self._device_list if dev['disk_type'] == 'flash']
 
     @property
     def hdd_capacity_bytes(self):
         # type: () -> int
         """Return the total capacity for all HDD devices (bytes)"""
-        return self._get_capacity_by_type(rota='1')
+        return self._get_capacity_by_type(disk_type='hdd')
 
     @property
     def hdd_capacity(self):
@@ -7968,13 +8328,13 @@ class HostFacts():
     def flash_count(self):
         # type: () -> int
         """Return the number of flash devices in the system (SSD, NVMe)"""
-        return len(self._get_devs_by_type(rota='0'))
+        return len(self.flash_list)
 
     @property
     def flash_capacity_bytes(self):
         # type: () -> int
         """Return the total capacity for all flash devices (bytes)"""
-        return self._get_capacity_by_type(rota='0')
+        return self._get_capacity_by_type(disk_type='flash')
 
     @property
     def flash_capacity(self):
@@ -8513,6 +8873,9 @@ def _get_parser():
         required=True,
         action=CustomValidation,
         help='daemon name (type.id)')
+    parser_rm_daemon.add_argument(
+        '--tcp-ports',
+        help='List of tcp ports to close in the host firewall')
     parser_rm_daemon.add_argument(
         '--fsid',
         required=True,

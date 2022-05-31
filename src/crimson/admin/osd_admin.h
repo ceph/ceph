@@ -17,6 +17,7 @@ class InjectDataErrorHook;
 class InjectMDataErrorHook;
 class OsdStatusHook;
 class SendBeaconHook;
+class DumpInFlightOpsHook;
 
 template<class Hook, class... Args>
 std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args);

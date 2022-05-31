@@ -259,7 +259,7 @@ void PG::on_activate(interval_set<snapid_t>)
 
 void PG::on_activate_complete()
 {
-  wait_for_active_blocker.on_active();
+  wait_for_active_blocker.unblock();
 
   if (peering_state.needs_recovery()) {
     logger().info("{}: requesting recovery",
@@ -331,7 +331,7 @@ void PG::prepare_write(pg_info_t &info,
   }
   pglog.write_log_and_missing(
     t, &km, coll_ref->get_cid(), pgmeta_oid,
-    peering_state.get_pool().info.require_rollback());
+    peering_state.get_pgpool().info.require_rollback());
   if (!km.empty()) {
     t.omap_setkeys(coll_ref->get_cid(), pgmeta_oid, km);
   }
@@ -542,32 +542,6 @@ std::ostream& operator<<(std::ostream& os, const PG& pg)
   return os;
 }
 
-void PG::WaitForActiveBlocker::dump_detail(Formatter *f) const
-{
-  f->dump_stream("pgid") << pg->pgid;
-}
-
-void PG::WaitForActiveBlocker::on_active()
-{
-  p.set_value();
-  p = {};
-}
-
-blocking_future<> PG::WaitForActiveBlocker::wait()
-{
-  if (pg->peering_state.is_active()) {
-    return make_blocking_future(seastar::now());
-  } else {
-    return make_blocking_future(p.get_shared_future());
-  }
-}
-
-seastar::future<> PG::WaitForActiveBlocker::stop()
-{
-  p.set_exception(crimson::common::system_shutdown_exception());
-  return seastar::now();
-}
-
 std::tuple<PG::interruptible_future<>,
            PG::interruptible_future<>>
 PG::submit_transaction(
@@ -651,6 +625,37 @@ PG::do_osd_ops_execute(
     logger().debug(
       "do_osd_ops_execute: object {} all operations successful",
       ox->get_target());
+    // check for full
+    if ((ox->delta_stats.num_bytes > 0 ||
+      ox->delta_stats.num_objects > 0) &&
+      get_pgpool().info.has_flag(pg_pool_t::FLAG_FULL)) {
+      const auto& m = ox->get_message();
+      if (m.get_reqid().name.is_mds() ||   // FIXME: ignore MDS for now
+        m.has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
+        logger().info(" full, but proceeding due to FULL_FORCE or MDS");
+      } else if (m.has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+        // they tried, they failed.
+        logger().info(" full, replying to FULL_TRY op");
+        if (get_pgpool().info.has_flag(pg_pool_t::FLAG_FULL_QUOTA))
+          return interruptor::make_ready_future<OpsExecuter::rep_op_fut_tuple>(
+            seastar::now(),
+            OpsExecuter::osd_op_ierrorator::future<>(
+              crimson::ct_error::edquot::make()));
+        else
+          return interruptor::make_ready_future<OpsExecuter::rep_op_fut_tuple>(
+            seastar::now(),
+            OpsExecuter::osd_op_ierrorator::future<>(
+              crimson::ct_error::enospc::make()));
+      } else {
+        // drop request
+        logger().info(" full, dropping request (bad client)");
+        return interruptor::make_ready_future<OpsExecuter::rep_op_fut_tuple>(
+          seastar::now(),
+          OpsExecuter::osd_op_ierrorator::future<>(
+            crimson::ct_error::eagain::make()));
+      }
+    }
+
     peering_state.apply_op_stats(ox->get_target(), ox->get_stats());
     return std::move(*ox).flush_changes_n_do_ops_effects(ops,
       [this] (auto&& txn,
@@ -1175,12 +1180,20 @@ seastar::future<> PG::stop()
 }
 
 void PG::on_change(ceph::os::Transaction &t) {
-  logger().debug("{}, {}", __func__, *this);
+  logger().debug("{} {}:", *this, __func__);
   for (auto& obc : obc_set_accessing) {
     obc.interrupt(::crimson::common::actingset_changed(is_primary()));
   }
   recovery_backend->on_peering_interval_change(t);
   backend->on_actingset_changed({ is_primary() });
+  wait_for_active_blocker.unblock();
+  if (is_primary()) {
+    logger().debug("{} {}: requeueing", *this, __func__);
+    client_request_orderer.requeue(shard_services, this);
+  } else {
+    logger().debug("{} {}: dropping requests", *this, __func__);
+    client_request_orderer.clear_and_cancel();
+  }
 }
 
 bool PG::can_discard_op(const MOSDOp& m) const {

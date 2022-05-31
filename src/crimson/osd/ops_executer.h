@@ -41,6 +41,9 @@ class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
     crimson::stateful_ec,
     crimson::ct_error::enoent,
     crimson::ct_error::eexist,
+    crimson::ct_error::enospc,
+    crimson::ct_error::edquot,
+    crimson::ct_error::eagain,
     crimson::ct_error::invarg,
     crimson::ct_error::erange,
     crimson::ct_error::ecanceled,
@@ -97,6 +100,7 @@ public:
     virtual epoch_t get_map_epoch() const = 0;
     virtual entity_inst_t get_orig_source_inst() const = 0;
     virtual uint64_t get_features() const = 0;
+    virtual bool has_flag(uint32_t flag) const = 0;
   };
 
   template <class ImplT>
@@ -110,6 +114,9 @@ public:
     }
     osd_reqid_t get_reqid() const final {
       return pimpl->get_reqid();
+    }
+    bool has_flag(uint32_t flag) const final {
+      return pimpl->has_flag(flag);
     }
     utime_t get_mtime() const final {
       return pimpl->get_mtime();
@@ -142,6 +149,7 @@ public:
     ::crimson::interruptible::interruptible_errorator<
       IOInterruptCondition, osd_op_errorator>;
 
+  object_stat_sum_t delta_stats;
 private:
   // an operation can be divided into two stages: main and effect-exposing
   // one. The former is performed immediately on call to `do_osd_op()` while
@@ -167,7 +175,6 @@ private:
 
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
-  object_stat_sum_t delta_stats;
 
   // this gizmo could be wrapped in std::optional for the sake of lazy
   // initialization. we don't need it for ops that doesn't have effect
@@ -266,8 +273,11 @@ public:
     const std::vector<OSDOp>& ops);
   void fill_op_params_bump_pg_version();
 
+  const object_info_t &get_object_info() const {
+    return obc->obs.oi;
+  }
   const hobject_t &get_target() const {
-    return obc->obs.oi.soid;
+    return get_object_info().soid;
   }
 
   const auto& get_message() const {

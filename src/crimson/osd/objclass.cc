@@ -7,6 +7,7 @@
 #include "common/ceph_context.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
+#include "crimson/common/config_proxy.h"
 #include "common/debug.h"
 
 #include "crimson/osd/exceptions.h"
@@ -498,16 +499,12 @@ ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
 
 const ConfigProxy& cls_get_config(cls_method_context_t hctx)
 {
-  // FIXME ; segfault if ever called
-  static ConfigProxy* dummy = nullptr;
-  return *dummy;
+  return crimson::common::local_conf();
 }
 
 const object_info_t& cls_get_object_info(cls_method_context_t hctx)
 {
-  // FIXME ; segfault if ever called
-  static object_info_t* dummy = nullptr;
-  return *dummy;
+  return reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->get_object_info();
 }
 
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq)

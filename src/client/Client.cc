@@ -2457,6 +2457,9 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   ldout(cct, 10) << __func__ << " rebuilding request " << request->get_tid()
 		 << " for mds." << mds << dendl;
   auto r = build_client_request(request);
+  if (!r)
+    return;
+
   if (request->dentry()) {
     r->set_dentry_wanted();
   }
@@ -2500,6 +2503,28 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
 
 ref_t<MClientRequest> Client::build_client_request(MetaRequest *request)
 {
+  /*
+   * The type of 'retry_attempt' in 'MetaRequest' is 'int',
+   * while in 'ceph_mds_request_head' the type of 'num_retry'
+   * is '__u8'. So in case the request retries exceeding 256
+   * times, the MDS will receive a incorrect retry seq.
+   *
+   * In this case it's ususally a bug in MDS and continue
+   * retrying the request makes no sense.
+   *
+   * In future this could be fixed in ceph code, so avoid
+   * using the hardcode here.
+   */
+  int max_retry = sizeof(((struct ceph_mds_request_head*)0)->num_retry);
+  max_retry = 1 << (max_retry * CHAR_BIT);
+  if (request->retry_attempt >= max_retry) {
+    request->abort(-EMULTIHOP);
+    request->caller_cond->notify_all();
+    ldout(cct, 1) << __func__ << " request tid " << request->tid
+                  << " seq overflow" << ", abort it" << dendl;
+    return nullptr;
+  }
+
   auto req = make_message<MClientRequest>(request->get_op());
   req->set_tid(request->tid);
   req->set_stamp(request->op_stamp);
@@ -6834,7 +6859,8 @@ void Client::collect_and_send_global_metrics() {
   }
 
   // metadata latency
-  if (session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
     metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat),
                                                         logger->tget(l_c_md_avg),
                                                         logger->get(l_c_md_sqsum),
@@ -6859,7 +6885,8 @@ void Client::collect_and_send_global_metrics() {
   }
 
   // opened files
-  if (session->mds_metric_flags.test(CLIENT_METRIC_TYPE_OPENED_FILES)) {
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_OPENED_FILES)) {
     auto [opened_files, total_inodes] = get_opened_files_rates();
     metric = ClientMetricMessage(OpenedFilesPayload(opened_files, total_inodes));
     message.push_back(metric);
@@ -8155,11 +8182,11 @@ unsigned Client::statx_to_mask(unsigned int flags, unsigned int want)
 {
   unsigned mask = 0;
 
-  /* if NO_ATTR_SYNC is set, then we don't need any -- just use what's in cache */
-  if (flags & AT_NO_ATTR_SYNC)
+  /* The AT_STATX_FORCE_SYNC is always in higher priority than AT_STATX_DONT_SYNC. */
+  if ((flags & AT_STATX_SYNC_TYPE) == AT_STATX_DONT_SYNC)
     goto out;
 
-  /* Always set PIN to distinguish from AT_NO_ATTR_SYNC case */
+  /* Always set PIN to distinguish from AT_STATX_DONT_SYNC case */
   mask |= CEPH_CAP_PIN;
   if (want & (CEPH_STATX_MODE|CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_BTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION))
     mask |= CEPH_CAP_AUTH_SHARED;
@@ -8287,7 +8314,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
   memset(stx, 0, sizeof(struct ceph_statx));
 
   /*
-   * If mask is 0, then the caller set AT_NO_ATTR_SYNC. Reset the mask
+   * If mask is 0, then the caller set AT_STATX_DONT_SYNC. Reset the mask
    * so that all bits are set.
    */
   if (!mask)

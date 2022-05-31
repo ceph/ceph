@@ -5975,7 +5975,7 @@ bool MDCache::open_undef_inodes_dirfrags()
       } else if (!p.first) {
         p.second.push_back(dn->key());
       }
-         }
+    }
   }
 
   if (fetch_queue.empty())
@@ -5997,10 +5997,11 @@ bool MDCache::open_undef_inodes_dirfrags()
       continue;
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
       ceph_assert(diri->dirfragtree.is_leaf(dir->get_frag()));
-    if (p.second.first)
+    if (p.second.first || p.second.second.empty()) {
       dir->fetch(gather.new_sub());
-    else
+    } else {
       dir->fetch_keys(p.second.second, gather.new_sub());
+    }
   }
   ceph_assert(gather.has_subs());
   gather.activate();
@@ -9484,6 +9485,19 @@ void MDCache::handle_find_ino(const cref_t<MMDSFindIno> &m)
   if (in) {
     in->make_path(r->path);
     dout(10) << " have " << r->path << " " << *in << dendl;
+
+    /*
+     * If the the CInode was just created by using openc in current
+     * auth MDS, but the client just sends a getattr request to another
+     * replica MDS. Then here it will make a path of '#INODE-NUMBER'
+     * only because the CInode hasn't been linked yet, and the replica
+     * MDS will keep retrying until the auth MDS flushes the mdlog and
+     * the C_MDS_openc_finish and link_primary_inode are called at most
+     * 5 seconds later.
+     */
+    if (!in->get_parent_dn() && in->is_auth()) {
+      mds->mdlog->flush();
+    }
   }
   mds->send_message_mds(r, mds_rank_t(m->get_source().num()));
 }

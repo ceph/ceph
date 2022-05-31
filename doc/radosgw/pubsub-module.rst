@@ -280,8 +280,8 @@ Response will have the following format (JSON):
                "push_endpoint":"",
                "push_endpoint_args":"",
                "push_endpoint_topic":"",
-               "stored_secret":"",
-               "persistent":""
+               "stored_secret":false,
+               "persistent":true,
            },
            "arn":""
            "opaqueData":""
@@ -519,7 +519,7 @@ The response will hold information on the current marker and whether there are m
 
 ::
 
-   {"next_marker":"","is_truncated":"",...}
+   {"next_marker":"","is_truncated":false,...}
 
 
 The actual content of the response is depended with how the subscription was created.

@@ -71,12 +71,13 @@ from IPy import IP
 import unittest
 import platform
 import logging
+from argparse import Namespace
 
 from unittest import suite, loader
 
 from teuthology.orchestra.run import quote, PIPE
 from teuthology.orchestra.daemon import DaemonGroup
-from teuthology.orchestra.remote import Remote
+from teuthology.orchestra.remote import RemoteShell
 from teuthology.config import config as teuth_config
 from teuthology.contextutil import safe_while
 from teuthology.contextutil import MaxWhileTries
@@ -294,7 +295,7 @@ class LocalRemoteProcess(object):
         return FakeStdIn(self)
 
 
-class LocalRemote(object):
+class LocalRemote(RemoteShell):
     """
     Amusingly named class to present the teuthology RemoteProcess interface when we are really
     running things locally for vstart
@@ -302,13 +303,17 @@ class LocalRemote(object):
     Run this inside your src/ dir!
     """
 
-    os = Remote.os
-    arch = Remote.arch
-
     def __init__(self):
+        super().__init__()
         self.name = "local"
-        self.hostname = "localhost"
+        self._hostname = "localhost"
         self.user = getpass.getuser()
+
+    @property
+    def hostname(self):
+        if not hasattr(self, '_hostname'):
+            self._hostname = 'localhost'
+        return self._hostname
 
     def get_file(self, path, sudo, dest_dir):
         tmpfile = tempfile.NamedTemporaryFile(delete=False).name
@@ -324,104 +329,30 @@ class LocalRemote(object):
         except shutil.SameFileError:
             pass
 
-    # XXX: accepts only two arugments to maintain compatibility with
-    # teuthology's mkdtemp.
-    def mkdtemp(self, suffix='', parentdir=None):
-        from tempfile import mkdtemp
 
-        # XXX: prefix had to be set without that this method failed against
-        # Python2.7 -
-        # > /usr/lib64/python2.7/tempfile.py(337)mkdtemp()
-        # -> file = _os.path.join(dir, prefix + name + suffix)
-        # (Pdb) p prefix
-        # None
-        return mkdtemp(suffix=suffix, prefix='', dir=parentdir)
-
-    def mktemp(self, suffix='', parentdir='', path=None, data=None,
-               owner=None, mode=None):
+    def _omit_cmd_args(self, args, omit_sudo):
         """
-        Make a remote temporary file
-
-        Returns: the path of the temp file created.
+        Helper tools are omitted since those are not meant for tests executed
+        using vstart_runner.py. And sudo's omission depends on the value of
+        the variable omit_sudo.
         """
-        from tempfile import mktemp
-        if not path:
-            path = mktemp(suffix=suffix, dir=parentdir)
-        if not parentdir:
-            path = os.path.join('/tmp', path)
+        helper_tools = ('adjust-ulimits', 'ceph-coverage',
+                        'None/archive/coverage')
+        for i in helper_tools:
+            if i in args:
+                helper_tools_found = True
+                break
+        else:
+            helper_tools_found = False
 
-        if data:
-            # sudo is set to False since root user can't write files in /tmp
-            # owned by other users.
-            self.write_file(path=path, data=data, sudo=False)
+        if not helper_tools_found and 'sudo' not in args:
+            return args, args
 
-        return path
+        prefix = ''
 
-    def write_file(self, path, data, sudo=False, mode=None, owner=None,
-                                     mkdir=False, append=False):
-        """
-        Write data to file
-
-        :param path:    file path on host
-        :param data:    str, binary or fileobj to be written
-        :param sudo:    use sudo to write file, defaults False
-        :param mode:    set file mode bits if provided
-        :param owner:   set file owner if provided
-        :param mkdir:   preliminary create the file directory, defaults False
-        :param append:  append data to the file, defaults False
-        """
-        dd = 'sudo dd' if sudo else 'dd'
-        args = dd + ' of=' + path
-        if append:
-            args += ' conv=notrunc oflag=append'
-        if mkdir:
-            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
-            dirpath = os.path.dirname(path)
-            if dirpath:
-                args = mkdirp + ' ' + dirpath + '\n' + args
-        if mode:
-            chmod = 'sudo chmod' if sudo else 'chmod'
-            args += '\n' + chmod + ' ' + mode + ' ' + path
-        if owner:
-            chown = 'sudo chown' if sudo else 'chown'
-            args += '\n' + chown + ' ' + owner + ' ' + path
-        omit_sudo = False if sudo else True
-        self.run(args=args, stdin=data, omit_sudo=omit_sudo)
-
-    def sudo_write_file(self, path, data, **kwargs):
-        """
-        Write data to file with sudo, for more info see `write_file()`.
-        """
-        self.write_file(path, data, sudo=True, **kwargs)
-
-    # XXX: omit_sudo is re-set to False even in cases of commands like passwd
-    # and chown.
-    # XXX: "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments
-    # are overridden. Former two usually have no applicability for test runs
-    # on developer's machines and see note point on "omit_sudo" to know more
-    # about overriding of "sudo".
-    # XXX: the presence of binary file named after the first argument is
-    # checked in build/bin/, if present the first argument is replaced with
-    # the path to binary file.
-    def _perform_checks_and_adjustments(self, args, omit_sudo, shell):
-        if isinstance(args, list):
-            args = quote(args)
-
-        assert isinstance(args, str)
-
-        first_arg = args[ : args.find(' ')]
-        if '/' not in first_arg:
-            local_bin = os.path.join(BIN_PREFIX, first_arg)
-            if os.path.exists(local_bin):
-                args = args.replace(first_arg, local_bin, 1)
-
-        # we're intentionally logging the command before overriding to avoid
-        # this clutter in the log.
-        log.debug('> ' + args)
-
-        args = args.replace('None/archive/ceph-coverage', '')
-
-        prefix = """
+        if helper_tools_found:
+            args = args.replace('None/archive/coverage', '')
+            prefix += """
 adjust-ulimits() {
     "$@"
 }
@@ -429,6 +360,12 @@ ceph-coverage() {
     "$@"
 }
 """
+            log.debug('Helper tools like adjust-ulimits and ceph-coverage '
+                      'were omitted from the following cmd args before '
+                      'logging and execution; check vstart_runner.py for '
+                      'more details.')
+
+        first_arg = args[ : args.find(' ')]
         # We'll let sudo be a part of command even omit flag says otherwise in
         # cases of commands which can normally be ran only by root.
         last_arg = args[args.rfind(' ') + 1 : ]
@@ -440,17 +377,35 @@ ceph-coverage() {
                     omit_sudo = False
 
         if omit_sudo:
-            prefix = prefix + """
+            prefix += """
 sudo() {
     "$@"
 }
 """
+            log.debug('"sudo" was omitted from the following cmd args '
+                      'before execution and logging using function '
+                      'overriding; check vstart_runner.py for more details.')
+
         # usr_args = args passed by the user/caller of this method
         usr_args, args = args, prefix + args
-        log.info('helper tools like adjust-ulimits , ceph-coverage and '
-                 '"archive/coverage" were found it cmd args. they have been'
-                 'omitted before execution, check vstart_runner.py for more '
-                 'details.')
+
+        return usr_args, args
+
+    def _perform_checks_and_adjustments(self, args, omit_sudo):
+        if isinstance(args, list):
+            args = quote(args)
+
+        assert isinstance(args, str)
+
+        first_arg = args[ : args.find(' ')]
+        if '/' not in first_arg:
+            local_bin = os.path.join(BIN_PREFIX, first_arg)
+            if os.path.exists(local_bin):
+                args = args.replace(first_arg, local_bin, 1)
+
+        usr_args, args = self._omit_cmd_args(args, omit_sudo)
+
+        log.debug('> ' + usr_args)
 
         return args, usr_args
 
@@ -462,11 +417,19 @@ sudo() {
     # XXX: omit_sudo is set to True since using sudo can change the ownership
     # of files which becomes problematic for following executions of
     # vstart_runner.py.
+    # XXX: omit_sudo is re-set to False even in cases of commands like passwd
+    # and chown.
+    # XXX: "adjust-ulimits", "ceph-coverage" and "sudo" in command arguments
+    # are overridden. Former two usually have no applicability for test runs
+    # on developer's machines and see note point on "omit_sudo" to know more
+    # about overriding of "sudo".
+    # XXX: the presence of binary file named after the first argument is
+    # checked in build/bin/, if present the first argument is replaced with
+    # the path to binary file.
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
-                env=None, timeout=None, omit_sudo=True, shell=True):
-        args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo,
-                                                              shell)
+                env=None, timeout=None, omit_sudo=True, shell=True, quiet=False):
+        args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo)
 
         subproc = launch_subprocess(args, cwd, env, shell)
 
@@ -491,29 +454,6 @@ sudo() {
             proc.wait()
 
         return proc
-
-    # XXX: for compatibility keep this method same as teuthology.orchestra.remote.sh
-    # BytesIO is being used just to keep things identical
-    def sh(self, script, **kwargs):
-        """
-        Shortcut for run method.
-
-        Usage:
-            my_name = remote.sh('whoami')
-            remote_date = remote.sh('date')
-        """
-        from io import BytesIO
-
-        if 'stdout' not in kwargs:
-            kwargs['stdout'] = BytesIO()
-        if 'args' not in kwargs:
-            kwargs['args'] = script
-        proc = self.run(**kwargs)
-        out = proc.stdout.getvalue()
-        if isinstance(out, bytes):
-            return out.decode()
-        else:
-            return out
 
 class LocalDaemon(object):
     def __init__(self, daemon_type, daemon_id):
@@ -596,7 +536,7 @@ class LocalDaemon(object):
             self.stop()
 
         self.proc = self.controller.run(args=[
-            os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)),
+            os.path.join(BIN_PREFIX, "ceph-{0}".format(self.daemon_type)),
             "-i", self.daemon_id])
 
     def signal(self, sig, silent=False):
@@ -743,8 +683,10 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
         self.client_remote.run(args=f'mkdir -p -v {self.hostfs_mntpt}')
 
     def _run_mount_cmd(self, mntopts, check_status):
-        super(type(self), self)._run_mount_cmd(mntopts, check_status)
-        self._set_fuse_daemon_pid(check_status)
+        retval = super(type(self), self)._run_mount_cmd(mntopts, check_status)
+        if retval is None: # None represents success
+            self._set_fuse_daemon_pid(check_status)
+        return retval
 
     def _get_mount_cmd(self, mntopts):
         mount_cmd = super(type(self), self)._get_mount_cmd(mntopts)
@@ -1002,7 +944,13 @@ class LocalCluster(object):
 
 class LocalContext(object):
     def __init__(self):
-        self.config = {'cluster': 'ceph'}
+        FSID = remote.run(args=[os.path.join(BIN_PREFIX, 'ceph'), 'fsid'],
+                          stdout=StringIO()).stdout.getvalue()
+
+        cluster_name = 'ceph'
+        self.config = {'cluster': cluster_name}
+        self.ceph = {cluster_name: Namespace()}
+        self.ceph[cluster_name].fsid = FSID
         self.teuthology_config = teuth_config
         self.cluster = LocalCluster()
         self.daemons = DaemonGroup()

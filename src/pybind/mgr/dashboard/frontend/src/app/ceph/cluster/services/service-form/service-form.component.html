@@ -16,7 +16,7 @@
           <div class="cd-col-form-input">
             <select id="service_type"
                     name="service_type"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="service_type">
               <option i18n
                       [ngValue]="null">-- Select a service type --</option>
@@ -41,7 +41,7 @@
             <div class="cd-col-form-input">
               <select id="backend_service"
                       name="backend_service"
-                      class="form-control custom-select"
+                      class="form-control"
                       formControlName="backend_service"
                       (change)="prePopulateId()">
                 <option *ngIf="services === null"
@@ -107,7 +107,7 @@
                  i18n>Placement</label>
           <div class="cd-col-form-input">
             <select id="placement"
-                    class="form-control custom-select"
+                    class="form-control"
                     formControlName="placement">
               <option i18n
                       value="hosts">Hosts</option>
@@ -212,7 +212,7 @@
             <div class="cd-col-form-input">
               <select id="pool"
                       name="pool"
-                      class="form-control custom-select"
+                      class="form-control"
                       formControlName="pool">
                 <option *ngIf="pools === null"
                         [ngValue]="null"
@@ -435,7 +435,7 @@
             <div class="cd-col-form-input">
               <select id="snmp_version"
                       name="snmp_version"
-                      class="form-control custom-select"
+                      class="form-control"
                       formControlName="snmp_version"
                       (change)="clearValidations()">
                 <option i18n
@@ -502,7 +502,7 @@
             <div class="cd-col-form-input">
               <select id="auth_protocol"
                       name="auth_protocol"
-                      class="form-control custom-select"
+                      class="form-control"
                       formControlName="auth_protocol">
                 <option i18n
                         [ngValue]="null">-- Select auth protocol --</option>
@@ -525,7 +525,7 @@
             <div class="cd-col-form-input">
               <select id="privacy_protocol"
                       name="privacy_protocol"
-                      class="form-control custom-select"
+                      class="form-control"
                       formControlName="privacy_protocol">
                 <option i18n
                         [ngValue]="null">-- Select privacy protocol --</option>
@@ -652,7 +652,7 @@
           </div>
 
           <!-- ssl_key -->
-          <div *ngIf="serviceForm.controls.ssl.value && serviceForm.controls.service_type.value !== 'rgw'"
+          <div *ngIf="serviceForm.controls.ssl.value && !(['rgw', 'ingress'].includes(serviceForm.controls.service_type.value))"
                class="form-group row">
             <label class="cd-col-form-label"
                    for="ssl_key">

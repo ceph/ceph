@@ -22,6 +22,7 @@
 
 #include "crimson/os/futurized_collection.h"
 
+#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
@@ -1691,7 +1692,7 @@ seastar::future<std::unique_ptr<SeaStore>> make_seastore(
   return Device::make_device(
     device
   ).then([&device](DeviceRef device_obj) {
-    auto tm = make_transaction_manager(false /* detailed */);
+    auto tm = make_transaction_manager(tm_make_config_t::get_default());
     auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
     return std::make_unique<SeaStore>(
       device,

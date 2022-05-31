@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+        rgw crypt require ssl: false
+        rgw backend store: dbstore
+  rgw:
+    frontend: beast

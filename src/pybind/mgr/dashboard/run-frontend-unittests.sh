@@ -11,7 +11,7 @@ if [ `uname` != "FreeBSD" ]; then
 fi
 
 # Build
-npm run build -- --prod --progress=false || failed=true
+npm run build -- --configuration=production --progress=false || failed=true
 
 # Unit Tests
 npm run test:ci || failed=true

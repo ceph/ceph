@@ -25,6 +25,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/lba_manager.h"
+#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/device.h"
@@ -32,6 +33,45 @@
 
 namespace crimson::os::seastore {
 class Journal;
+
+struct tm_make_config_t {
+  bool is_test = true;
+  journal_type_t j_type = journal_type_t::SEGMENT_JOURNAL;
+  placement_hint_t default_placement_hint = placement_hint_t::HOT;
+
+  static tm_make_config_t get_default() {
+    return tm_make_config_t {
+      false,
+      journal_type_t::SEGMENT_JOURNAL,
+      placement_hint_t::HOT
+    };
+  }
+  static tm_make_config_t get_test_segmented_journal() {
+    return tm_make_config_t {
+      true,
+      journal_type_t::SEGMENT_JOURNAL,
+      placement_hint_t::HOT
+    };
+  }
+  static tm_make_config_t get_test_cb_journal() {
+    return tm_make_config_t {
+      true,
+      journal_type_t::CIRCULARBOUNDED_JOURNAL,
+      placement_hint_t::REWRITE
+    };
+  }
+
+  tm_make_config_t(const tm_make_config_t &) = default;
+  tm_make_config_t &operator=(const tm_make_config_t &) = default;
+private:
+  tm_make_config_t(
+    bool is_test,
+    journal_type_t j_type,
+    placement_hint_t default_placement_hint)
+    : is_test(is_test), j_type(j_type),
+      default_placement_hint(default_placement_hint)
+  {}
+};
 
 template <typename F>
 auto repeat_eagain(F &&f) {
@@ -69,7 +109,9 @@ public:
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
-    ExtentPlacementManagerRef &&epm);
+    ExtentPlacementManagerRef &&epm,
+    BackrefManagerRef&& backref_manager,
+    tm_make_config_t config = tm_make_config_t::get_default());
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -154,7 +196,7 @@ public:
     auto &pref = *pin;
     return cache->get_extent<T>(
       t,
-      pref.get_paddr(),
+      pref.get_val(),
       pref.get_length(),
       [this, pin=std::move(pin)](T &extent) mutable {
 	assert(!extent.has_pin());
@@ -191,7 +233,7 @@ public:
     return get_pin(
       t, offset
     ).si_then([this, FNAME, &t, offset, length] (auto pin) {
-      if (length != pin->get_length() || !pin->get_paddr().is_real()) {
+      if (length != pin->get_length() || !pin->get_val().is_real()) {
         SUBERRORT(seastore_tm,
             "offset {} len {} got wrong pin {}",
             t, offset, length, *pin);
@@ -215,7 +257,7 @@ public:
     return get_pin(
       t, offset
     ).si_then([this, FNAME, &t, offset] (auto pin) {
-      if (!pin->get_paddr().is_real()) {
+      if (!pin->get_val().is_real()) {
         SUBERRORT(seastore_tm,
             "offset {} got wrong pin {}",
             t, offset, *pin);
@@ -298,7 +340,7 @@ public:
                   T::TYPE == extent_types_t::COLL_BLOCK) {
       placement_hint = placement_hint_t::COLD;
     } else {
-      placement_hint = placement_hint_t::HOT;
+      placement_hint = config.default_placement_hint;
     }
     LOG_PREFIX(TransactionManager::alloc_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
@@ -380,7 +422,8 @@ public:
   /// SegmentCleaner::ExtentCallbackInterface
   using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
   submit_transaction_direct_ret submit_transaction_direct(
-    Transaction &t) final;
+    Transaction &t,
+    std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
 
   /**
    * flush
@@ -539,10 +582,11 @@ public:
              dev->get_device_id(), is_primary);
     epm->add_device(dev, is_primary);
 
-    ceph_assert(dev->get_device_type() == device_type_t::SEGMENTED);
-    auto sm = dynamic_cast<SegmentManager*>(dev);
-    ceph_assert(sm != nullptr);
-    sm_group.add_segment_manager(sm);
+    if (dev->get_device_type() == device_type_t::SEGMENTED) {
+      auto sm = dynamic_cast<SegmentManager*>(dev);
+      ceph_assert(sm != nullptr);
+      sm_group.add_segment_manager(sm);
+    }
   }
 
   ~TransactionManager();
@@ -555,10 +599,12 @@ private:
   LBAManagerRef lba_manager;
   JournalRef journal;
   ExtentPlacementManagerRef epm;
+  BackrefManagerRef backref_manager;
   SegmentManagerGroup &sm_group;
 
   WritePipeline write_pipeline;
 
+  tm_make_config_t config;
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
     LogicalCachedExtentRef extent);
@@ -571,9 +617,19 @@ public:
   auto get_lba_manager() {
     return lba_manager.get();
   }
+
+  auto get_backref_manager() {
+    return backref_manager.get();
+  }
+
+  auto get_cache() {
+    return cache.get();
+  }
+  auto get_journal() {
+    return journal.get();
+  }
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
-TransactionManagerRef make_transaction_manager(bool detailed);
-
+TransactionManagerRef make_transaction_manager(tm_make_config_t config);
 }

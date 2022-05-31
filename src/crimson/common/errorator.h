@@ -1112,40 +1112,41 @@ using compound_errorator_t = typename compound_errorator<Args...>::type;
 // this is conjunction of two nasty features: C++14's variable template
 // and inline global variable of C++17. The latter is crucial to ensure
 // the variable will get the same address across all translation units.
-template <std::errc ErrorV>
-inline std::error_code ec = std::make_error_code(ErrorV);
+template <int ErrorV>
+inline std::error_code ec = std::error_code(ErrorV, std::generic_category());
 
-template <std::errc ErrorV>
+template <int ErrorV>
 using ct_error_code = unthrowable_wrapper<const std::error_code&, ec<ErrorV>>;
 
 namespace ct_error {
-  using enoent = ct_error_code<std::errc::no_such_file_or_directory>;
-  using enodata = ct_error_code<std::errc::no_message_available>;
-  using invarg =  ct_error_code<std::errc::invalid_argument>;
-  using input_output_error = ct_error_code<std::errc::io_error>;
-  using object_corrupted = ct_error_code<std::errc::illegal_byte_sequence>;
-  using permission_denied = ct_error_code<std::errc::permission_denied>;
+  using enoent = ct_error_code<static_cast<int>(std::errc::no_such_file_or_directory)>;
+  using enodata = ct_error_code<static_cast<int>(std::errc::no_message_available)>;
+  using invarg =  ct_error_code<static_cast<int>(std::errc::invalid_argument)>;
+  using input_output_error = ct_error_code<static_cast<int>(std::errc::io_error)>;
+  using object_corrupted = ct_error_code<static_cast<int>(std::errc::illegal_byte_sequence)>;
+  using permission_denied = ct_error_code<static_cast<int>(std::errc::permission_denied)>;
   using operation_not_supported =
-    ct_error_code<std::errc::operation_not_supported>;
-  using not_connected = ct_error_code<std::errc::not_connected>;
-  using timed_out = ct_error_code<std::errc::timed_out>;
+    ct_error_code<static_cast<int>(std::errc::operation_not_supported)>;
+  using not_connected = ct_error_code<static_cast<int>(std::errc::not_connected)>;
+  using timed_out = ct_error_code<static_cast<int>(std::errc::timed_out)>;
   using erange =
-    ct_error_code<std::errc::result_out_of_range>;
+    ct_error_code<static_cast<int>(std::errc::result_out_of_range)>;
   using ebadf =
-    ct_error_code<std::errc::bad_file_descriptor>;
+    ct_error_code<static_cast<int>(std::errc::bad_file_descriptor)>;
   using enospc =
-    ct_error_code<std::errc::no_space_on_device>;
-  using value_too_large = ct_error_code<std::errc::value_too_large>;
+    ct_error_code<static_cast<int>(std::errc::no_space_on_device)>;
+  using value_too_large = ct_error_code<static_cast<int>(std::errc::value_too_large)>;
   using eagain =
-    ct_error_code<std::errc::resource_unavailable_try_again>;
+    ct_error_code<static_cast<int>(std::errc::resource_unavailable_try_again)>;
   using file_too_large =
-    ct_error_code<std::errc::file_too_large>;
-  using address_in_use = ct_error_code<std::errc::address_in_use>;
-  using address_not_available = ct_error_code<std::errc::address_not_available>;
-  using ecanceled = ct_error_code<std::errc::operation_canceled>;
-  using einprogress = ct_error_code<std::errc::operation_in_progress>;
-  using enametoolong = ct_error_code<std::errc::filename_too_long>;
-  using eexist = ct_error_code<std::errc::file_exists>;
+    ct_error_code<static_cast<int>(std::errc::file_too_large)>;
+  using address_in_use = ct_error_code<static_cast<int>(std::errc::address_in_use)>;
+  using address_not_available = ct_error_code<static_cast<int>(std::errc::address_not_available)>;
+  using ecanceled = ct_error_code<static_cast<int>(std::errc::operation_canceled)>;
+  using einprogress = ct_error_code<static_cast<int>(std::errc::operation_in_progress)>;
+  using enametoolong = ct_error_code<static_cast<int>(std::errc::filename_too_long)>;
+  using eexist = ct_error_code<static_cast<int>(std::errc::file_exists)>;
+  using edquot = ct_error_code<int(122)>;
 
   struct pass_further_all {
     template <class ErrorT>

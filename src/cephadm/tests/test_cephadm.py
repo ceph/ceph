@@ -1013,7 +1013,7 @@ class TestMaintenance:
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
     def test_enter_failure_2(self, _target_state, _call, _listdir):
-        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
@@ -1040,7 +1040,7 @@ class TestMaintenance:
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
     def test_exit_failure_2(self, _target_exists, _target_state, _call, _listdir):
-        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = False
         _target_exists.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -1078,6 +1078,14 @@ class TestMonitoring(object):
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
         version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
+
+    def test_prometheus_external_url(self):
+        ctx = cd.CephadmContext()
+        daemon_type = 'prometheus'
+        daemon_id = 'home'
+        fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
+        args = cd.get_daemon_args(ctx, fsid, daemon_type, daemon_id)
+        assert any([x.startswith('--web.external-url=http://') for x in args])
 
     @mock.patch('cephadm.call')
     def test_get_version_node_exporter(self, _call):
@@ -2010,7 +2018,8 @@ class TestPull:
 class TestApplySpec:
 
     def test_parse_yaml(self, cephadm_fs):
-        yaml = '''service_type: host
+        yaml = '''---
+service_type: host
 hostname: vm-00
 addr: 192.168.122.44
 labels:
@@ -2022,16 +2031,46 @@ hostname: vm-01
 addr: 192.168.122.247
 labels:
  - grafana
----
+---      
 service_type: host
 hostname: vm-02
-addr: 192.168.122.165'''
+addr: 192.168.122.165
+---
+---      
+service_type: rgw
+service_id: myrgw
+spec:
+  rgw_frontend_ssl_certificate: |
+    -----BEGIN PRIVATE KEY-----
+    V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
+    ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
+    IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
+    YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
+    ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
+    -----END PRIVATE KEY-----
+    -----BEGIN CERTIFICATE-----
+    V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
+    ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
+    IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
+    YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
+    ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
+    -----END CERTIFICATE-----
+  ssl: true
+---  
+'''
 
         cephadm_fs.create_file('spec.yml', contents=yaml)
-
         retdic = [{'service_type': 'host', 'hostname': 'vm-00', 'addr': '192.168.122.44', 'labels': '- example1- example2'},
                   {'service_type': 'host', 'hostname': 'vm-01', 'addr': '192.168.122.247', 'labels': '- grafana'},
-                  {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'}]
+                  {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'},
+                  {'service_id': 'myrgw',
+                   'service_type': 'rgw',
+                   'spec':
+                   'rgw_frontend_ssl_certificate: |-----BEGIN PRIVATE '
+                   'KEY-----V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3MgZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=-----END '
+                   'PRIVATE KEY----------BEGIN '
+                   'CERTIFICATE-----V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3MgZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=-----END '
+                   'CERTIFICATE-----ssl: true'}]
 
         with open('spec.yml') as f:
             dic = cd.parse_yaml_objs(f)
@@ -2268,6 +2307,10 @@ class TestNetworkValidation:
 
         # valid ip and valid IPV6 network
         rc = cd.ip_in_subnets('fe80::5054:ff:fef4:873a', 'fe80::/64')
+        assert rc is True
+
+        # valid wrapped ip and valid IPV6 network
+        rc = cd.ip_in_subnets('[fe80::5054:ff:fef4:873a]', 'fe80::/64')
         assert rc is True
 
         # valid ip and that doesn't belong to IPV6 network

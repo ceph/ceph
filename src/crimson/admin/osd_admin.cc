@@ -245,11 +245,18 @@ private:
     case data_type::GAUGE:
       f->dump_float(value_name, v.d());
       break;
-    case data_type::COUNTER:
-      f->dump_unsigned(value_name, v.ui());
+    case data_type::REAL_COUNTER:
+      f->dump_float(value_name, v.d());
       break;
-    case data_type::DERIVE:
-      f->dump_int(value_name, v.i());
+    case data_type::COUNTER:
+      double val;
+      try {
+	val = v.ui();
+      } catch (std::range_error&) {
+	// seastar's cpu steal time may be negative
+	val = 0;
+      }
+      f->dump_unsigned(value_name, val);
       break;
     case data_type::HISTOGRAM: {
       f->open_object_section(value_name);
@@ -423,5 +430,33 @@ private:
 };
 template std::unique_ptr<AdminSocketHook> make_asok_hook<InjectMDataErrorHook>(
   crimson::osd::ShardServices&);
+
+
+/**
+ * An InFlightOps admin hook: dump current in-flight operations
+ */
+class DumpInFlightOpsHook : public AdminSocketHook {
+public:
+  explicit DumpInFlightOpsHook(const crimson::osd::OSDOperationRegistry& op_registry) :
+    AdminSocketHook{"dump_ops_in_flight", "", "show the ops currently in flight"},
+    op_registry(op_registry)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    logger().warn("{}", __func__);
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->open_object_section("ops_in_flight");
+    op_registry.dump_client_requests(f.get());
+    f->close_section();
+    f->dump_int("num_ops", 0);
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+private:
+  const crimson::osd::OSDOperationRegistry& op_registry;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<DumpInFlightOpsHook>(const crimson::osd::OSDOperationRegistry& op_registry);
 
 } // namespace crimson::admin

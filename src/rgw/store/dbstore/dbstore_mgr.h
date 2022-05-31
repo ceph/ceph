@@ -24,7 +24,7 @@ const static std::string default_tenant = "default_ns";
 class DBStoreManager {
 private:
   std::map<std::string, DB*> DBStoreHandles;
-  DB *default_db = NULL;
+  DB *default_db = nullptr;
   CephContext *cct;
 
 public:
@@ -38,6 +38,7 @@ public:
     cct->_log->set_log_file(logfile);
     cct->_log->reopen_log_file();
     cct->_conf->subsys.set_log_level(ceph_subsys_rgw, loglevel);
+    default_db = createDB(default_tenant);
   };
   ~DBStoreManager() { destroyAllHandles(); };
 

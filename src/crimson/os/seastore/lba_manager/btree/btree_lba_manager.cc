@@ -252,16 +252,12 @@ static depth_t get_depth(const CachedExtent &e)
 }
 
 void BtreeLBAManager::complete_transaction(
-  Transaction &t)
+  Transaction &t,
+  std::vector<CachedExtentRef> &to_clear,
+  std::vector<CachedExtentRef> &to_link)
 {
   LOG_PREFIX(BtreeLBAManager::complete_transaction);
   DEBUGT("start", t);
-  std::vector<CachedExtentRef> to_clear;
-  to_clear.reserve(t.get_retired_set().size());
-  for (auto &e: t.get_retired_set()) {
-    if (e->is_logical() || is_lba_node(*e))
-      to_clear.push_back(e);
-  }
   // need to call check_parent from leaf->parent
   std::sort(
     to_clear.begin(), to_clear.end(),
@@ -272,14 +268,6 @@ void BtreeLBAManager::complete_transaction(
     DEBUGT("retiring extent {} -- {}", t, pin, *e);
     pin_set.retire(pin);
   }
-
-  // ...but add_pin from parent->leaf
-  std::vector<CachedExtentRef> to_link;
-  to_link.reserve(t.get_fresh_block_stats().num);
-  t.for_each_fresh_block([&](auto &e) {
-    if (e->is_valid() && (is_lba_node(*e) || e->is_logical()))
-      to_link.push_back(e);
-  });
 
   std::sort(
     to_link.begin(), to_link.end(),
@@ -406,7 +394,7 @@ BtreeLBAManager::scan_mapped_space_ret BtreeLBAManager::scan_mapped_space(
 		  interruptible::ready_future_marker{},
 		  seastar::stop_iteration::yes);
 	      }
-	      visitor(pos.get_val().paddr, pos.get_val().len);
+	      visitor(pos.get_val().paddr, pos.get_val().len, 0);
 	      return LBABtree::iterate_repeat_ret_inner(
 		interruptible::ready_future_marker{},
 		seastar::stop_iteration::no);

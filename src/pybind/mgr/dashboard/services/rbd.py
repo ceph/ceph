@@ -84,13 +84,13 @@ def parse_image_spec(image_spec):
 def rbd_call(pool_name, namespace, func, *args, **kwargs):
     with mgr.rados.open_ioctx(pool_name) as ioctx:
         ioctx.set_namespace(namespace if namespace is not None else '')
-        func(ioctx, *args, **kwargs)
+        return func(ioctx, *args, **kwargs)
 
 
 def rbd_image_call(pool_name, namespace, image_name, func, *args, **kwargs):
     def _ioctx_func(ioctx, image_name, func, *args, **kwargs):
         with rbd.Image(ioctx, image_name) as img:
-            func(ioctx, img, *args, **kwargs)
+            return func(ioctx, img, *args, **kwargs)
 
     return rbd_call(pool_name, namespace, _ioctx_func, image_name, func, *args, **kwargs)
 
@@ -415,3 +415,47 @@ class RbdSnapshotService(object):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
         return rbd_image_call(pool_name, namespace, image_name,
                               _remove_snapshot, snapshot_name, unprotect)
+
+
+class RBDSchedulerInterval:
+    def __init__(self, interval: str):
+        self.amount = int(interval[:-1])
+        self.unit = interval[-1]
+        if self.unit not in 'mhd':
+            raise ValueError(f'Invalid interval unit {self.unit}')
+
+    def __str__(self):
+        return f'{self.amount}{self.unit}'
+
+
+class RbdMirroringService:
+
+    @classmethod
+    def enable_image(cls, image_name: str, pool_name: str, namespace: str, mode: str):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_enable(mode))
+
+    @classmethod
+    def disable_image(cls, image_name: str, pool_name: str, namespace: str, force: bool = False):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_disable(force))
+
+    @classmethod
+    def promote_image(cls, image_name: str, pool_name: str, namespace: str, force: bool = False):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_promote(force))
+
+    @classmethod
+    def demote_image(cls, image_name: str, pool_name: str, namespace: str):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_demote())
+
+    @classmethod
+    def resync_image(cls, image_name: str, pool_name: str, namespace: str):
+        rbd_image_call(pool_name, namespace, image_name,
+                       lambda ioctx, image: image.mirror_image_resync())
+
+    @classmethod
+    def snapshot_schedule(cls, image_spec: str, interval: str, start_time: str = ''):
+        mgr.remote('rbd_support', 'mirror_snapshot_schedule_add', image_spec,
+                   str(RBDSchedulerInterval(interval)), start_time)
