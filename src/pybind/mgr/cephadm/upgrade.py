@@ -267,7 +267,11 @@ class CephadmUpgrade:
             "registry": reg_name,
             "bare_image": bare_image,
         }
-        ls = reg.get_tags(bare_image)
+
+        try:
+            ls = reg.get_tags(bare_image)
+        except ValueError as e:
+            raise OrchestratorError(f'{e}')
         if not tags:
             for t in ls:
                 if t[0] != 'v':
