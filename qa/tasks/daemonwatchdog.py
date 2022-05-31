@@ -50,11 +50,12 @@ class DaemonWatchdog(Greenlet):
 
     def bark(self):
         self.log("BARK! unmounting mounts and killing all daemons")
-        for mount in self.ctx.mounts.values():
-            try:
-                mount.umount_wait(force=True)
-            except:
-                self.logger.exception("ignoring exception:")
+        if hasattr(self.ctx, 'mounts'):
+            for mount in self.ctx.mounts.values():
+                try:
+                    mount.umount_wait(force=True)
+                except:
+                    self.logger.exception("ignoring exception:")
         daemons = []
         daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('osd', cluster=self.cluster)))
         daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.cluster)))
