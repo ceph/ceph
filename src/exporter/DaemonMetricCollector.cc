@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <regex>
 #include <string>
 #include <utility>
@@ -34,6 +35,8 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
 }
 
 void DaemonMetricCollector::main() {
+  // time to wait before sending requests again
+
   boost::asio::io_service io;
   boost::asio::steady_timer timer{io, std::chrono::seconds(0)};
   request_loop(timer);
@@ -46,23 +49,22 @@ std::string DaemonMetricCollector::get_metrics() {
 }
 
 template <class T>
-void add_metric(std::stringstream &ss, T value, std::string name,
-                std::string description, std::string mtype,
-                std::string labels) {
-  ss << "# HELP " << name << " " << description << "\n";
-  ss << "# TYPE " << name << " " << mtype << "\n";
-  ss << name << "{" << labels << "} " << value << "\n";
+void add_metric(std::unique_ptr<MetricsBuilder> &builder, T value,
+                std::string name, std::string description, std::string mtype,
+                labels_t labels) {
+  builder->add(std::to_string(value), name, description, mtype, labels);
 }
 
-void add_double_or_int_metric(std::stringstream &ss, json_value value,
-                              std::string name, std::string description,
-                              std::string mtype, std::string labels) {
+void add_double_or_int_metric(std::unique_ptr<MetricsBuilder> &builder,
+                              json_value value, std::string name,
+                              std::string description, std::string mtype,
+                              labels_t labels) {
   if (value.is_int64()) {
     int64_t v = value.as_int64();
-    add_metric(ss, v, name, description, mtype, labels);
+    add_metric(builder, v, name, description, mtype, labels);
   } else if (value.is_double()) {
     double v = value.as_double();
-    add_metric(ss, v, name, description, mtype, labels);
+    add_metric(builder, v, name, description, mtype, labels);
   }
 }
 
@@ -78,8 +80,14 @@ bool is_hyphen(char ch) { return ch == '-'; }
 void DaemonMetricCollector::dump_asok_metrics() {
   BlockTimer timer(__FILE__, __FUNCTION__);
 
-  std::stringstream ss;
   std::vector<std::pair<std::string, int>> daemon_pids;
+
+  bool sort = g_conf().get_val<bool>("exporter_sort_metrics");
+  if (sort) {
+    builder = std::unique_ptr<OrderedMetricsBuilder>(new OrderedMetricsBuilder());
+  } else {
+    builder = std::unique_ptr<UnorderedMetricsBuilder>(new UnorderedMetricsBuilder());
+  }
   for (auto &[daemon_name, sock_client] : clients) {
     bool ok;
     sock_client.ping(&ok);
@@ -121,26 +129,26 @@ void DaemonMetricCollector::dump_asok_metrics() {
 
         // FIXME: test this, based on mgr_module perfpath_to_path_labels
         auto labels_and_name = get_labels_and_metric_name(daemon_name, name);
-        std::string labels = labels_and_name.first;
+        labels_t labels = labels_and_name.first;
         name = labels_and_name.second;
 
         json_value perf_values = dump[perf_group].as_object()[perf_name];
-        dump_asok_metric(ss, perf_info, perf_values, name, labels);
+        dump_asok_metric(perf_info, perf_values, name, labels);
       }
     }
   }
   // get time spent on this function
   timer.stop();
   std::string scrap_desc("Time spent scraping and transforming perfcounters to metrics");
-  std::string scrap_labels("host=");
-  std::string host = ceph_get_hostname();
-  scrap_labels += quote(host);
-  add_metric(ss, timer.get_ms(), "ceph_exporter_scrape_time", scrap_desc,
+  labels_t scrap_labels;
+  scrap_labels["host"] = quote(ceph_get_hostname());
+  scrap_labels["function"] = quote(__FUNCTION__);
+  add_metric(builder, timer.get_ms(), "ceph_exporter_scrape_time", scrap_desc,
              "gauge", scrap_labels);
 
   const std::lock_guard<std::mutex> lock(metrics_mutex);
-  metrics = ss.str();
-  metrics += get_process_metrics(daemon_pids);
+  get_process_metrics(daemon_pids);
+  metrics = builder->dump();
 }
 
 std::vector<std::string> read_proc_stat_file(std::string path) {
@@ -166,7 +174,7 @@ struct pstat read_pid_stat(int pid) {
   return stat;
 }
 
-std::string DaemonMetricCollector::get_process_metrics(std::vector<std::pair<std::string, int>> daemon_pids) {
+void DaemonMetricCollector::get_process_metrics(std::vector<std::pair<std::string, int>> daemon_pids) {
   std::string path("/proc");
   std::stringstream ss;
   for (auto &[daemon_name, pid] : daemon_pids) {
@@ -182,33 +190,34 @@ std::string DaemonMetricCollector::get_process_metrics(std::vector<std::pair<std
     double idle_time = elapsed_time  - total_time_seconds;
     double usage = total_time_seconds * 100 / elapsed_time;
 
-    std::string labels = "ceph_daemon=";
-    labels += quote(daemon_name);
-    add_metric(ss, stat.minflt, "ceph_exporter_minflt_total",
+    labels_t labels;
+    labels["ceph_daemon"] = quote(daemon_name);
+    add_metric(builder, stat.minflt, "ceph_exporter_minflt_total",
                "Number of minor page faults of daemon", "counter", labels);
-    add_metric(ss, stat.majflt, "ceph_exporter_majflt_total",
+    add_metric(builder, stat.majflt, "ceph_exporter_majflt_total",
                "Number of major page faults of daemon", "counter", labels);
-    add_metric(ss, stat.num_threads, "ceph_exporter_num_threads",
+    add_metric(builder, stat.num_threads, "ceph_exporter_num_threads",
                "Number of threads used by daemon", "gauge", labels);
-    add_metric(ss, usage, "ceph_exporter_cpu_usage", "CPU usage of a daemon",
+    add_metric(builder, usage, "ceph_exporter_cpu_usage", "CPU usage of a daemon",
                "gauge", labels);
-    std::string cpu_labels = labels;
-    std::string kernel_mode = cpu_labels + ",mode=\"kernel\"";
-    std::string user_mode = cpu_labels + ",mode=\"user\"";
-    std::string idle_mode = cpu_labels + ",mode=\"idle\"";
+
     std::string cpu_time_desc = "Process time in kernel/user/idle mode";
-    add_metric(ss, kernel_time, "ceph_exporter_cpu_total", cpu_time_desc,
-               "counter", kernel_mode);
-    add_metric(ss, user_time, "ceph_exporter_cpu_total", cpu_time_desc,
-               "counter", user_mode);
-    add_metric(ss, idle_time, "ceph_exporter_cpu_total", cpu_time_desc,
-               "counter", idle_mode);
-    add_metric(ss, stat.vm_size, "ceph_exporter_vm_size", "Virtual memory used in a daemon",
+    labels_t cpu_total_labels;
+    cpu_total_labels["ceph_daemon"] = quote(daemon_name);
+    cpu_total_labels["mode"] = quote("kernel");
+    add_metric(builder, kernel_time, "ceph_exporter_cpu_total", cpu_time_desc,
+               "counter", cpu_total_labels);
+    cpu_total_labels["mode"] = quote("user");
+    add_metric(builder, user_time, "ceph_exporter_cpu_total", cpu_time_desc,
+               "counter", cpu_total_labels);
+    cpu_total_labels["mode"] = quote("idle");
+    add_metric(builder, idle_time, "ceph_exporter_cpu_total", cpu_time_desc,
+               "counter", cpu_total_labels);
+    add_metric(builder, stat.vm_size, "ceph_exporter_vm_size", "Virtual memory used in a daemon",
                "gauge", labels);
-    add_metric(ss, stat.resident_size, "ceph_exporter_resident_size",
+    add_metric(builder, stat.resident_size, "ceph_exporter_resident_size",
                "Resident memory in a daemon", "gauge", labels);
   }
-  return ss.str();
 }
 
 std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
@@ -222,26 +231,27 @@ std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
   return response;
 }
 
-std::pair<std::string, std::string>
+std::pair<labels_t, std::string>
 DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
                                                   std::string metric_name) {
-  std::string labels, new_metric_name;
+  std::string new_metric_name;
+  labels_t labels;
   new_metric_name = metric_name;
   if (daemon_name.find("rgw") != std::string::npos) {
     std::string tmp = daemon_name.substr(16, std::string::npos);
     std::string::size_type pos = tmp.find('.');
-    labels = std::string("instance_id=") + quote("rgw." + tmp.substr(0, pos));
+    labels["instance_id"] = quote("rgw." + tmp.substr(0, pos));
   } else {
-    labels = "ceph_daemon=" + quote(daemon_name);
+    labels["ceph_daemon"] = quote(daemon_name);
     if (daemon_name.find("rbd-mirror") != std::string::npos) {
       std::regex re("^rbd_mirror_image_([^/]+)/(?:(?:([^/]+)/"
                     ")?)(.*)\\.(replay(?:_bytes|_latency)?)$");
       std::smatch match;
       if (std::regex_search(daemon_name, match, re) == true) {
         new_metric_name = "ceph_rbd_mirror_image_" + match.str(4);
-        labels += ",pool=" + quote(match.str(1));
-        labels += ",namespace=" + quote(match.str(2));
-        labels += ",image=" + quote(match.str(3));
+        labels["pool"] = quote(match.str(1));
+        labels["namespace"] = quote(match.str(2));
+        labels["image"] = quote(match.str(3));
       }
     }
   }
@@ -249,14 +259,13 @@ DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
 }
 
 /*
-  perf_values can be either a int/double or a json_object. Since
-  json_value is a wrapper of both we use that class.
-*/
-void DaemonMetricCollector::dump_asok_metric(std::stringstream &ss,
-                                             json_object perf_info,
+perf_values can be either a int/double or a json_object. Since
+   json_value is a wrapper of both we use that class.
+ */
+void DaemonMetricCollector::dump_asok_metric(json_object perf_info,
                                              json_value perf_values,
                                              std::string name,
-                                             std::string labels) {
+                                             labels_t labels) {
   int64_t type = perf_info["type"].as_int64();
   std::string metric_type =
     boost_string_to_std(perf_info["metric_type"].as_string());
@@ -265,23 +274,25 @@ void DaemonMetricCollector::dump_asok_metric(std::stringstream &ss,
 
   if (type & PERFCOUNTER_LONGRUNAVG) {
     int64_t count = perf_values.as_object()["avgcount"].as_int64();
-    add_metric(ss, count, name + "_count", description, metric_type, labels);
+    add_metric(builder, count, name + "_count", description, metric_type,
+               labels);
     json_value sum_value = perf_values.as_object()["sum"];
-    add_double_or_int_metric(ss, sum_value, name + "_sum", description,
+    add_double_or_int_metric(builder, sum_value, name + "_sum", description,
                              metric_type, labels);
   } else if (type & PERFCOUNTER_TIME) {
     if (perf_values.is_int64()) {
       double value = perf_values.as_int64() / 1000000000.0f;
-      add_metric(ss, value, name, description, metric_type, labels);
+      add_metric(builder, value, name, description, metric_type, labels);
     } else if (perf_values.is_double()) {
       double value = perf_values.as_double() / 1000000000.0f;
-      add_metric(ss, value, name, description, metric_type, labels);
+      add_metric(builder, value, name, description, metric_type, labels);
     }
   } else {
-    add_double_or_int_metric(ss, perf_values, name, description, metric_type,
-                             labels);
+    add_double_or_int_metric(builder, perf_values, name, description,
+                             metric_type, labels);
   }
 }
+
 void DaemonMetricCollector::update_sockets() {
   std::string sock_dir = g_conf().get_val<std::string>("exporter_sock_dir");
   clients.clear();
@@ -298,6 +309,65 @@ void DaemonMetricCollector::update_sockets() {
       }
     }
   }
+}
+
+void OrderedMetricsBuilder::add(std::string value, std::string name,
+                                std::string description, std::string mtype,
+                                labels_t labels) {
+
+  if (metrics.find(name) == metrics.end()) {
+    Metric metric(name, mtype, description);
+    metrics[name] = std::move(metric);
+  }
+  Metric &metric = metrics[name];
+  metric.add(labels, value);
+}
+
+std::string OrderedMetricsBuilder::dump() {
+  for (auto &[name, metric] : metrics) {
+    out += metric.dump() + "\n\n";
+  }
+  return out;
+}
+
+void UnorderedMetricsBuilder::add(std::string value, std::string name,
+                                  std::string description, std::string mtype,
+                                  labels_t labels) {
+
+  Metric metric(name, mtype, description);
+  metric.add(labels, value);
+  out += metric.dump() + "\n\n";
+}
+
+std::string UnorderedMetricsBuilder::dump() { return out; }
+
+void Metric::add(labels_t labels, std::string value) {
+  metric_entry entry;
+  entry.labels = labels;
+  entry.value = value;
+  entries.push_back(entry);
+}
+
+std::string Metric::dump() {
+  std::stringstream metric_ss;
+  metric_ss << "# HELP " << name << " " << description << "\n";
+  metric_ss << "# TYPE " << name << " " << mtype << "\n";
+  for (auto &entry : entries) {
+    std::stringstream labels_ss;
+    size_t i = 0;
+    for (auto &[label_name, label_value] : entry.labels) {
+      labels_ss << label_name << "=" << label_value;
+      if (i < entry.labels.size() - 1) {
+        labels_ss << ",";
+      }
+      i++;
+    }
+    metric_ss << name << "{" << labels_ss.str() << "} " << entry.value;
+    if (&entry != &entries.back()) {
+      metric_ss << "\n";
+    }
+  }
+  return metric_ss.str();
 }
 
 DaemonMetricCollector &collector_instance() {
