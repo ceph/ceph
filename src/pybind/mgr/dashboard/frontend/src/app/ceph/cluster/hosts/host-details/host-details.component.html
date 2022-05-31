@@ -24,7 +24,8 @@
          i18n>Daemons</a>
       <ng-template ngbNavContent>
         <cd-service-daemon-list [hostname]="selectedHostname"
-                                flag="hostDetails">
+                                flag="hostDetails"
+                                [hiddenColumns]="['hostname']">
         </cd-service-daemon-list>
       </ng-template>
     </li>
