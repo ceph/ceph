@@ -6,10 +6,10 @@ Lua Scripting
 
 .. contents::
 
-This feature allows users to upload Lua scripts to different context in the radosgw. The three supported contexts are "preRequest" that will execute a script before the
-operation was taken, "postRequest" that will execute after each operation is taken and "background" that will execute a script in a given time interval.
-Request context script may be uploaded to address requests for users of a specific tenant.
-The request context script can also access fields in the request and modify some fields. All Lua language features can be used in the script.
+This feature allows users to assign execution context to Lua scripts. The three supported contexts are ``preRequest``" which will execute a script before each
+operation is performed, ``postRequest`` which will execute after each operation is performed, and ``background`` which will execute within a specified time interval.
+A request context script may be constrained to operations belonging to a specific tenant's users.
+The request context script can also access fields in the request and modify some fields. All Lua language features can be used.
 
 By default, all lua standard libraries are available in the script, however, in order to allow for other lua modules to be used in the script, we support adding packages to an allowlist:
 
@@ -35,7 +35,7 @@ To upload a script:
    # radosgw-admin script put --infile={lua-file} --context={preRequest|postRequest|background} [--tenant={tenant-name}]
 
 
-* When uploading a script in background context, tenant name could not be specified.
+* When uploading a script with the ``background`` context, a tenant name may not be specified.
 
 
 To print the content of the script to standard output:
@@ -304,20 +304,17 @@ The ``Request.Log()`` function prints the requests into the operations log. This
 
 Background Context
 --------------------
-The background context may be used for various need such as analytics, monitoring and
-caching data from other context executions.
+The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.
 
-The ``RGW`` Lua table which is accesible from any context saves the data written into it
-while execution and this data could be read and used later in any other execution.
+The ``RGW`` Lua table is accessible from all contexts and saves data written to it
+during execution so that it may be read and used later during other executions, from the same context of a different one.
 
 - Background script execution default interval is 5 seconds.
 
-- Each RGW instance has its own ``RGW`` Lua table, while the Background Context script
-  will run on every instance.
+- Each RGW instance has its own private and ephemeral ``RGW`` Lua table that is lost when the daemon restarts. Note that ``background`` context scripts will run on every instance.
 
-- The maximum number of entries in the table is 100,000. Each entry has a key and string value
-  of no more than 1KB (together). Lua script will abort with an error if the
-  number of entries or entry size exceeds their limits.
+- The maximum number of entries in the table is 100,000. Each entry has a key and string value with a combined length of no more than 1KB. 
+  A Lua script will abort with an error if the number of entries or entry size exceeds these limits.
 
 Lua Code Samples
 ----------------
