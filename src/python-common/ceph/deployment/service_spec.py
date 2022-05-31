@@ -467,6 +467,7 @@ class ServiceSpec(object):
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
+            'ceph-exporter': CephExporterSpec,
             'prometheus': MonitoringSpec,
             'loki': MonitoringSpec,
             'promtail': MonitoringSpec,
@@ -1422,3 +1423,36 @@ class TracingSpec(ServiceSpec):
 
 
 yaml.add_representer(TracingSpec, ServiceSpec.yaml_representer)
+
+
+class CephExporterSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'ceph-exporter',
+                 sock_dir: Optional[str] = None,
+                 addrs: str = '',
+                 port: Optional[int] = None,
+                 prio_limit: Optional[int] = None,
+                 stats_period: Optional[int] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 extra_container_args: Optional[List[str]] = None,
+                 ):
+        assert service_type == 'ceph-exporter'
+
+        super(CephExporterSpec, self).__init__(
+            service_type,
+            placement=placement,
+            unmanaged=unmanaged,
+            preview_only=preview_only,
+            extra_container_args=extra_container_args)
+
+        self.service_type = service_type
+        self.sock_dir=sock_dir
+        self.addrs=addrs
+        self.port=port
+        self.prio_limit=prio_limit
+        self.stats_period=stats_period
+
+
+yaml.add_representer(CephExporterSpec, ServiceSpec.yaml_representer)

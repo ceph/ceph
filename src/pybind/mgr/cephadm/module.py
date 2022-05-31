@@ -1364,7 +1364,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_haproxy
         elif daemon_type == 'keepalived':
             image = self.container_image_keepalived
-<<<<<<< HEAD
         elif daemon_type == 'elasticsearch':
             image = self.container_image_elasticsearch
         elif daemon_type == 'jaeger-agent':
@@ -1374,9 +1373,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         elif daemon_type == 'jaeger-query':
             image = self.container_image_jaeger_query
         elif daemon_type == CustomContainerService.TYPE:
-=======
-        elif daemon_type == CustomContainerService.TYPE or daemon_type == 'ceph-exporter':
->>>>>>> 1783d1faf5d (exporter: cephadm tox fixes)
             # The image can't be resolved, the necessary information
             # is only available when a container is deployed (given
             # via spec).
