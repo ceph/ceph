@@ -31,7 +31,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec
+    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec, TunedProfileSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -666,6 +666,26 @@ class Orchestrator(object):
 
     def apply_snmp_gateway(self, spec: SNMPGatewaySpec) -> OrchResult[str]:
         """Update an existing snmp gateway service"""
+        raise NotImplementedError()
+
+    def apply_tuned_profiles(self, specs: List[TunedProfileSpec]) -> OrchResult[str]:
+        """Add or update an existing tuned profile"""
+        raise NotImplementedError()
+
+    def rm_tuned_profile(self, profile_name: str) -> OrchResult[str]:
+        """Remove a tuned profile"""
+        raise NotImplementedError()
+
+    def tuned_profile_ls(self) -> OrchResult[List[TunedProfileSpec]]:
+        """See current tuned profiles"""
+        raise NotImplementedError()
+
+    def tuned_profile_add_setting(self, profile_name: str, setting: str, value: str) -> OrchResult[str]:
+        """Change/Add a specific setting for a tuned profile"""
+        raise NotImplementedError()
+
+    def tuned_profile_rm_setting(self, profile_name: str, setting: str) -> OrchResult[str]:
+        """Remove a specific setting for a tuned profile"""
         raise NotImplementedError()
 
     def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
