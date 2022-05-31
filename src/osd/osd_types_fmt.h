@@ -104,3 +104,14 @@ struct fmt::formatter<object_info_t> {
     return fmt::format_to(ctx.out(), ")");
   }
 };
+
+template <>
+struct fmt::formatter<pg_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const pg_t& pg, FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(), "{}.{:x}", pg.pool(), pg.m_seed);
+  }
+};
