@@ -39,7 +39,11 @@ class Registry:
         headers = {'Accept': 'application/json'}
         url = f'https://{self.api_domain}/v2/{image}/tags/list'
         while True:
-            r = requests.get(url, headers=headers)
+            try:
+                r = requests.get(url, headers=headers)
+            except requests.exceptions.ConnectionError as e:
+                msg = f"Cannot get tags from url '{url}': {e}"
+                raise ValueError(msg) from e
             if r.status_code == 401:
                 if 'Authorization' in headers:
                     raise ValueError('failed authentication')
