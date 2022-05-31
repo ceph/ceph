@@ -1090,8 +1090,11 @@ std::vector<mds_gid_t> FSMap::stop(mds_gid_t who)
     if (other_info.rank == info.rank
         && other_info.state == MDSMap::STATE_STANDBY_REPLAY) {
       standbys.push_back(other_gid);
-      erase(other_gid, 0);
     }
+  }
+
+  for (const auto &other_gid : standbys) {
+    erase(other_gid, 0);
   }
 
   fs->mds_map.mds_info.erase(who);
