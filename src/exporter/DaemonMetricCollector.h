@@ -12,12 +12,16 @@
 #include <string>
 #include <vector>
 
-static const int STATM_SIZE = 0;
-static const int STATM_RESIDENT = 1;
-static const int STAT_UTIME = 13;
-static const int STAT_STIME = 14;
-static const int STAT_START_TIME = 21;
-static const int UPTIME_SYSTEM = 0;
+struct pstat {
+  unsigned long utime;
+  unsigned long stime;
+  unsigned long minflt;
+  unsigned long majflt;
+  unsigned long start_time;
+  int num_threads;
+  unsigned long vm_size;
+  int resident_size;
+};
 
 class DaemonMetricCollector {
 public:
