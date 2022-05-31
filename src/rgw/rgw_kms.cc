@@ -873,7 +873,7 @@ static int get_actual_key_from_conf(const DoutPrefixProvider* dpp,
 
   map<string, string>::iterator it = str_map.find(std::string(key_id));
   if (it == str_map.end())
-    return -ERR_INVALID_ACCESS_KEY;
+    return -EINVAL;
 
   std::string master_key;
   try {
