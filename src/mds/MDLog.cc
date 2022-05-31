@@ -961,7 +961,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
 
       // Oh dear, something unreadable in the store for this rank: require
       // operator intervention.
-      mds->damaged();
+      mds->damaged_unlocked();
       ceph_abort();  // damaged should not return
   }
 
