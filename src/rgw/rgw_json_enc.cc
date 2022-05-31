@@ -17,6 +17,7 @@
 #include "rgw_orphan.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_tools.h"
+#include "rgw_account.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -33,3 +34,30 @@ void decode_json_obj(rgw_placement_rule& v, JSONObj *obj)
   v.from_str(s);
 }
 
+void AccountQuota::dump(Formatter * const f) const
+{
+  f->open_object_section("AccountQuota");
+  f->dump_unsigned("max_users", max_users);
+  f->dump_unsigned("max_roles", max_roles);
+  f->close_section();
+}
+
+void AccountQuota::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("max_users", max_users, obj);
+  JSONDecoder::decode_json("max_roles", max_roles, obj);
+}
+
+void RGWAccountInfo::dump(Formatter * const f) const
+{
+  encode_json("id", id, f);
+  encode_json("tenant", tenant, f);
+  account_quota.dump(f);
+}
+
+void RGWAccountInfo::decode_json(JSONObj* obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
+  JSONDecoder::decode_json("quota", account_quota, obj);
+}

@@ -135,6 +135,9 @@ TYPE(rgw_data_sync_info)
 TYPE(rgw_data_sync_marker)
 TYPE(rgw_data_sync_status)
 
+#include "rgw/rgw_account.h"
+TYPE(RGWAccountInfo)
+
 #include "rgw/rgw_bucket_encryption.h"
 TYPE(RGWBucketEncryptionConfig)
 

@@ -74,6 +74,8 @@ class RGWSI_SysObj_Core;
 class RGWSI_SysObj_Cache;
 class RGWSI_User;
 class RGWSI_User_RADOS;
+class RGWSI_Account;
+class RGWSI_Account_RADOS;
 class RGWDataChangesLog;
 
 struct RGWServices_Def
@@ -103,7 +105,9 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj_Core> sysobj_core;
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
   std::unique_ptr<RGWSI_User_RADOS> user_rados;
+  std::unique_ptr<RGWSI_Account_RADOS> account_rados;
   std::unique_ptr<RGWDataChangesLog> datalog_rados;
+  
 
   RGWServices_Def();
   ~RGWServices_Def();
@@ -146,6 +150,7 @@ struct RGWServices
   RGWSI_SysObj_Cache *cache{nullptr};
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
+  RGWSI_Account *account{nullptr};
 
   int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
 
@@ -166,6 +171,7 @@ class RGWMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
 class RGWOTPCtl;
+class RGWAccountCtl;
 
 struct RGWCtlDef {
   struct _meta {
@@ -174,6 +180,7 @@ struct RGWCtlDef {
     std::unique_ptr<RGWMetadataHandler> bucket_instance;
     std::unique_ptr<RGWMetadataHandler> user;
     std::unique_ptr<RGWMetadataHandler> otp;
+    std::unique_ptr<RGWMetadataHandler> account;
 
     _meta();
     ~_meta();
@@ -182,6 +189,7 @@ struct RGWCtlDef {
   std::unique_ptr<RGWUserCtl> user;
   std::unique_ptr<RGWBucketCtl> bucket;
   std::unique_ptr<RGWOTPCtl> otp;
+  std::unique_ptr<RGWAccountCtl> account;
 
   RGWCtlDef();
   ~RGWCtlDef();
@@ -202,11 +210,13 @@ struct RGWCtl {
     RGWMetadataHandler *bucket_instance{nullptr};
     RGWMetadataHandler *user{nullptr};
     RGWMetadataHandler *otp{nullptr};
+    RGWMetadataHandler *account{nullptr};
   } meta;
 
   RGWUserCtl *user{nullptr};
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
+  RGWAccountCtl *account{nullptr};
 
   int init(RGWServices *_svc, const DoutPrefixProvider *dpp);
 };

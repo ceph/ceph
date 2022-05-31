@@ -379,6 +379,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool reshard_pool;
   rgw_pool otp_pool;
   rgw_pool oidc_pool;
+  rgw_pool account_pool;
 
   RGWAccessKey system_key;
 
@@ -441,6 +442,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(otp_pool, bl);
     encode(tier_config, bl);
     encode(oidc_pool, bl);
+    encode(account_pool, bl);
     encode(notif_pool, bl);
     ENCODE_FINISH(bl);
   }
@@ -509,6 +511,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
       ::decode(oidc_pool, bl);
     } else {
       oidc_pool = name + ".rgw.meta:oidc";
+    }
+    if (struct_v >= 14) {
+      decode(account_pool, bl);
+    }
+    else {
+      account_pool = name + ".rgw.meta:account";
     }
     if (struct_v >= 14) {
       decode(notif_pool, bl);

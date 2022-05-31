@@ -274,6 +274,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_IDENTITY_TOKEN  2401
 
 #define ERR_NO_SUCH_TAG_SET 2402
+#define ERR_ACCOUNT_EXISTS 2403
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -753,6 +754,7 @@ struct RGWUserInfo
   uint32_t type;
   std::set<std::string> mfa_ids;
   std::string assumed_role_arn;
+  std::string account_id;
 
   RGWUserInfo()
     : suspended(0),
@@ -819,6 +821,7 @@ struct RGWUserInfo
      encode(mfa_ids, bl);
      encode(assumed_role_arn, bl);
      encode(user_id.ns, bl);
+     encode(account_id, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
@@ -907,6 +910,9 @@ struct RGWUserInfo
       decode(user_id.ns, bl);
     } else {
       user_id.ns.clear();
+    }
+    if (struct_v >= 22) {
+      decode(account_id, bl);
     }
     DECODE_FINISH(bl);
   }

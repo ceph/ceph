@@ -31,7 +31,7 @@ protected:
     rados_svc = _rados_svc;
     zone_svc = _zone_svc;
   }
-  int get_rados_obj(const DoutPrefixProvider *dpp, RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
+  int get_rados_obj(RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
   virtual int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize,
                        real_time *pmtime, uint64_t *epoch,
@@ -93,13 +93,22 @@ protected:
                             std::map<std::string, bufferlist> *m,
                             bool *pmore,
                             optional_yield y);
+
+  virtual int omap_get_header(const rgw_raw_obj& obj,
+                              bufferlist *bl, optional_yield y);
+
   virtual int omap_set(const DoutPrefixProvider *dpp, 
                        const rgw_raw_obj& obj, const std::string& key,
                        bufferlist& bl, bool must_exist,
                        optional_yield y);
+
   virtual int omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                        const std::map<std::string, bufferlist>& m, bool must_exist,
                        optional_yield y);
+
+  virtual int omap_set_header(const rgw_raw_obj& obj, const bufferlist& bl,
+                              bool must_exist, optional_yield y);
+
   virtual int omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
                        optional_yield y);
 

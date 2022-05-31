@@ -22,6 +22,8 @@ find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
   services/svc_finisher.cc
+  services/svc_account.cc
+  services/svc_account_rados.cc
   services/svc_bi_rados.cc
   services/svc_bilog_rados.cc
   services/svc_bucket.cc
@@ -48,6 +50,7 @@ set(librgw_common_srcs
   services/svc_zone.cc
   services/svc_zone_utils.cc
   rgw_service.cc
+  rgw_account.cc
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
@@ -120,6 +123,7 @@ set(librgw_common_srcs
   rgw_rados.cc
   rgw_resolve.cc
   rgw_rest.cc
+  rgw_rest_account.cc
   rgw_rest_client.cc
   rgw_rest_conn.cc
   rgw_rest_log.cc

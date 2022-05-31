@@ -1057,6 +1057,45 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   }
 }
 
+class RGWOp_link_user_account : public RGWRESTOp {
+public:
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("user", RGW_CAP_WRITE);
+  }
+
+  void execute() override;
+
+  const char* name() const override { return "link_user_account"; }
+};
+
+
+void RGWOp_link_user_account::execute()
+{
+  RGWUserAdminOpState op_state;
+
+  std::string uid_str, account_id;
+  bool link;
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  RESTArgs::get_string(s, "account", account_id, &account_id);
+  RESTArgs::get_bool(s, "link", true, &link);
+
+  if (uid_str.empty() || account_id.empty()){
+    http_ret=-EINVAL;
+    return;
+  }
+
+  rgw_user uid(uid_str);
+
+  op_state.set_user_id(uid);
+  op_state.set_account_id(account_id);
+  if (link) {
+    http_ret = RGWUserAdminOp_User::link_account(store, op_state, flusher, s->yield);
+  } else {
+    http_ret = RGWUserAdminOp_User::unlink_account(store, op_state, flusher, s->yield);
+  }
+
+}
+
 RGWOp *RGWHandler_User::op_get()
 {
   if (s->info.args.sub_resource_exists("quota"))
@@ -1081,6 +1120,9 @@ RGWOp *RGWHandler_User::op_put()
 
   if (s->info.args.sub_resource_exists("quota"))
     return new RGWOp_Quota_Set;
+
+  if (s->info.args.sub_resource_exists("account"))
+    return new RGWOp_link_user_account;
 
   return new RGWOp_User_Create;
 }
