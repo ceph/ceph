@@ -34,6 +34,7 @@ import os
 import re
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
+from redminelib.exceptions import ResourceAttrError
 
 redmine_endpoint = "https://tracker.ceph.com"
 project_name = "Ceph"
@@ -216,6 +217,11 @@ def update_relations(r, issue, dry_run):
                 "unknown release " + release)
             break
         subject = (release + ": " + issue['subject'])[:255]
+        assigned_to_id = None
+        try:
+            assigned_to_id = issue.assigned_to.id
+        except ResourceAttrError: # not assigned
+            pass
         if dry_run:
             logging.info(url(issue) + " add backport to " + release)
             continue
@@ -223,6 +229,7 @@ def update_relations(r, issue, dry_run):
                                tracker_id=backport_tracker_id,
                                subject=subject,
                                priority_id=issue['priority']['id'],
+                               assigned_to_id=assigned_to_id,
                                target_version=None,
                                custom_fields=[{
                                    "id": release_id,
