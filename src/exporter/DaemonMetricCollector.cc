@@ -9,13 +9,13 @@
 #include "util.h"
 
 #include <boost/json/src.hpp>
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <map>
 #include <regex>
 #include <string>
 #include <utility>
-#include <chrono>
 
 using json_object = boost::json::object;
 using json_value = boost::json::value;
@@ -154,41 +154,49 @@ std::vector<std::string> read_proc_stat_file(std::string path) {
   return strings;
 }
 
+struct pstat read_pid_stat(int pid) {
+  std::string stat_path("/proc/" + std::to_string(pid) + "/stat");
+  std::vector<std::string> stats = read_proc_stat_file(stat_path);
+  struct pstat stat;
+  stat.minflt = std::stoul(stats[9]);
+  stat.majflt = std::stoul(stats[11]);
+  stat.utime = std::stoul(stats[13]);
+  stat.stime = std::stoul(stats[14]);
+  stat.num_threads = std::stoul(stats[19]);
+  stat.start_time = std::stoul(stats[21]);
+  stat.vm_size = std::stoul(stats[22]);
+  stat.resident_size = std::stoi(stats[23]);
+  return stat;
+}
+
 std::string DaemonMetricCollector::get_process_metrics(
     std::vector<std::pair<std::string, int>> daemon_pids) {
   std::string path("/proc");
   std::stringstream ss;
   for (auto &[daemon_name, pid] : daemon_pids) {
-    std::string stat_path("/proc/" + std::to_string(pid) + "/stat");
-    std::vector<std::string> stats = read_proc_stat_file(stat_path);
-    unsigned long utime = std::stoul(stats[13]);
-    unsigned long stime = std::stoul(stats[14]);
     std::vector<std::string> uptimes = read_proc_stat_file("/proc/uptime");
-
+    struct pstat stat = read_pid_stat(pid);
     int clk_tck = sysconf(_SC_CLK_TCK);
-    double starttime = std::stoull(stats[STAT_START_TIME]) / (double)clk_tck;
-    double usage_time = (utime + stime) / (double)clk_tck;
-    double uptime = std::stod(uptimes[UPTIME_SYSTEM]);
-    double elapsed_time = uptime - starttime;
-    double usage = usage_time * 100 / elapsed_time;
+    double start_time_seconds = stat.start_time / (double)clk_tck;
+    double total_time_seconds = (stat.utime + stat.stime) / (double)clk_tck;
+    double uptime = std::stod(uptimes[0]);
+    double elapsed_time = uptime - start_time_seconds;
+    double usage = total_time_seconds * 100 / elapsed_time;
 
     std::string labels = "ceph_daemon=";
     labels += quote(daemon_name);
+    add_metric(ss, stat.minflt, "ceph_exporter_minflt",
+               "Number of minor page faults of daemon", "gauge", labels);
+    add_metric(ss, stat.majflt, "ceph_exporter_majflt",
+               "Number of major page faults of daemon", "gauge", labels);
+    add_metric(ss, stat.num_threads, "ceph_exporter_num_threads",
+               "Number of threads used by daemon", "gauge", labels);
     add_metric(ss, usage, "ceph_exporter_cpu_usage", "CPU usage of a daemon",
                "gauge", labels);
-
-    std::string statm_path("/proc/" + std::to_string(pid) + "/statm");
-    std::vector<std::string> mem_stats = read_proc_stat_file(statm_path);
-
-    int vm_size = std::stoi(mem_stats[0]);
-    int resident_size = std::stoi(mem_stats[1]);
-    double mem_usage = resident_size / (double)vm_size;
-    add_metric(ss, vm_size, "ceph_exporter_vm_size", "dec",
+    add_metric(ss, stat.vm_size, "ceph_exporter_vm_size", "dec",
                "Virtual memory used in a daemon", labels);
-    add_metric(ss, resident_size, "ceph_exporter_resident_size",
+    add_metric(ss, stat.resident_size, "ceph_exporter_resident_size",
                "Resident memory in a daemon", "gauge", labels);
-    add_metric(ss, mem_usage, "ceph_exporter_mem_usage",
-               "Memory usage of daemon", "gauge", labels);
   }
   return ss.str();
 }
