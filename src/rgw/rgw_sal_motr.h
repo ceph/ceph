@@ -252,6 +252,7 @@ class MotrUser : public User {
     virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
 
     int create_user_info_idx();
+    int create_user_stats_idx();
     int load_user_from_idx(const DoutPrefixProvider *dpp, MotrStore *store, RGWUserInfo& info, std::map<std::string, 
                               bufferlist> *attrs, RGWObjVersionTracker *objv_tr);
 
