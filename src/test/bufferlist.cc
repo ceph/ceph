@@ -1660,15 +1660,17 @@ TEST(BufferList, rebuild_aligned_size_and_memory) {
      * scenario where the first bptr is both size and memory aligned and
      * the second is 0-length */
     bl.clear();
-    bufferptr ptr1(buffer::create_aligned(4096, 4096));
-    bl.append(ptr1);
-    bufferptr ptr(10);
-    /* bl.back().length() must be 0 */
-    bl.append(ptr, 0, 0);
+    bl.append(bufferptr{buffer::create_aligned(4096, 4096)});
+    bufferptr ptr(buffer::create_aligned(42, 4096));
+    /* bl.back().length() must be 0. offset set to 42 guarantees
+     * the entire list is unaligned. */
+    bl.append(ptr, 42, 0);
     EXPECT_EQ(bl.get_num_buffers(), 2);
     EXPECT_EQ(bl.back().length(), 0);
-    /* rebuild_aligned() calls rebuild_aligned_size_and_memory() */
-    bl.rebuild_aligned(4096);
+    EXPECT_FALSE(bl.is_aligned(4096));
+    /* rebuild_aligned() calls rebuild_aligned_size_and_memory().
+     * we assume the rebuild always happens. */
+    EXPECT_TRUE(bl.rebuild_aligned(4096));
     EXPECT_EQ(bl.get_num_buffers(), 1);
   }
 }
