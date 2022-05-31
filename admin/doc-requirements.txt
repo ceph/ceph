@@ -6,7 +6,6 @@ pyyaml >= 5.1.2
 Cython
 pcpp
 prettytable
-sphinx-autodoc-typehints
 sphinx-prompt
 sphinx_rtd_theme == 1.0.0
 Sphinx-Substitution-Extensions
