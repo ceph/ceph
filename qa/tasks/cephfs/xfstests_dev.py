@@ -17,6 +17,8 @@ log = getLogger(__name__)
 # actually testsed.
 class XFSTestsDev(CephFSTestCase):
 
+    RESULTS_DIR = "results"
+
     def setUp(self):
         super(XFSTestsDev, self).setUp()
         self.setup_xfsprogs_devs()
@@ -56,12 +58,48 @@ class XFSTestsDev(CephFSTestCase):
                                        omit_sudo=False, check_status=False)
 
     def del_repos(self):
+        self.save_results_dir()
         self.mount_a.client_remote.run(args=f'sudo rm -rf {self.xfstests_repo_path}',
                                        omit_sudo=False, check_status=False)
 
         if self.install_xfsprogs:
             self.mount_a.client_remote.run(args=f'sudo rm -rf {self.xfsprogs_repo_path}',
                                            omit_sudo=False, check_status=False)
+
+    def save_results_dir(self):
+        """
+        When tests in xfstests-dev repo are executed, logs are created and
+        saved, under a directory named "results" that lies at the repo root.
+        In case a test from xfstests-dev repo fails, these logs will help find
+        the cause of the failure.
+
+        Since there's no option in teuthology to copy a directory lying at a
+        custom location in order to save it from teuthology test runner's tear
+        down, let's copy this directory to a standard location that teuthology
+        copies away before erasing all data on the test machine. The standard
+        location chosen in the case here is the Ceph log directory.
+
+        In case of vstart_runner.py, this methods does nothing.
+        """
+        # No need to save results dir in case of vstart_runner.py.
+        for x in ('LocalFuseMount', 'LocalKernelMount'):
+            if x in self.mount_a.__class__.__name__:
+                return
+
+        src = join(self.xfstests_repo_path, self.RESULTS_DIR)
+
+        if self.mount_a.run_shell(f'sudo stat {src}',
+                check_status=False, omit_sudo=False).returncode != 0:
+            log.info(f'xfstests-dev repo contains not directory named '
+                     f'"{self.RESULTS_DIR}". repo location: {self.xfstests_repo_path}')
+            return
+
+        std_loc = '/var/log/ceph' # standard location
+        dst = join(std_loc, 'xfstests-dev-results')
+        self.mount_a.run_shell(f'sudo mkdir -p {dst}', omit_sudo=False)
+        self.mount_a.run_shell(f'sudo cp -r {src} {dst}', omit_sudo=False)
+        log.info(f'results dir from xfstests-dev has been saved; it was '
+                 f'copied from {self.xfstests_repo_path} to {std_loc}.')
 
     def build_and_install(self):
         # NOTE: On teuthology machines it's necessary to run "make" as
