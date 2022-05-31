@@ -121,15 +121,14 @@ int RGWSI_Account_RADOS::read_account_info(const DoutPrefixProvider* dpp,
   auto bl_iter = bl.cbegin();
   try {
     decode(*info, bl_iter);
-    if (info->get_id() != account_id) {
-      lderr(svc.meta_be->ctx()) << "ERROR: read_account_info account id mismatch" << info->get_id() << "!= " << account_id << dendl;
-      return -EIO;
-    }
   } catch (buffer::error& err) {
     ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode account info, caught buffer::error" << dendl;
     return -EIO;
   }
-
+  if (info->id != account_id) {
+    lderr(svc.meta_be->ctx()) << "ERROR: read_account_info account id mismatch" << info->id << "!= " << account_id << dendl;
+    return -EIO;
+  }
   return 0;
 }
 
