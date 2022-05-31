@@ -43,6 +43,7 @@ enum class OperationTypeCode {
   background_recovery,
   background_recovery_sub,
   internal_client_request,
+  historic_client_request,
   last_op
 };
 
@@ -56,6 +57,7 @@ static constexpr const char* const OP_NAMES[] = {
   "background_recovery",
   "background_recovery_sub",
   "internal_client_request",
+  "historic_client_request",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
@@ -77,6 +79,7 @@ template <typename T>
 struct OperationT : InterruptibleOperation {
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
+  using ICRef = boost::intrusive_ptr<const T>;
 
   unsigned get_type() const final {
     return static_cast<unsigned>(T::type);
@@ -101,6 +104,7 @@ class TrackableOperationT : public OperationT<T> {
     return static_cast<const T*>(this);
   }
 
+protected:
   template<class EventT>
   decltype(auto) get_event() {
     // all out derivates are supposed to define the list of tracking
@@ -109,7 +113,11 @@ class TrackableOperationT : public OperationT<T> {
     return std::get<EventT>(that()->tracking_events);
   }
 
-protected:
+  template<class EventT>
+  decltype(auto) get_event() const {
+    return std::get<EventT>(that()->tracking_events);
+  }
+
   using OperationT<T>::OperationT;
 
   struct StartEvent : TimeEvent<StartEvent> {};
@@ -167,7 +175,20 @@ protected:
 struct OSDOperationRegistry : OperationRegistryT<
   static_cast<size_t>(OperationTypeCode::last_op)
 > {
+  OSDOperationRegistry();
+
+  void do_stop() override;
+
+  void put_historic(const class ClientRequest& op);
+
   size_t dump_client_requests(ceph::Formatter* f) const;
+  size_t dump_historic_client_requests(ceph::Formatter* f) const;
+  size_t dump_slowest_historic_client_requests(ceph::Formatter* f) const;
+
+private:
+  op_list::const_iterator last_of_recents;
+  size_t num_recent_ops = 0;
+  size_t num_slow_ops = 0;
 };
 /**
  * Throttles set of currently running operations

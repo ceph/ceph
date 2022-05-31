@@ -47,6 +47,7 @@ public:
     } send_reply;
     friend class ClientRequest;
     friend class LttngBackend;
+    friend class HistoricBackend;
   };
 
   using ordering_hook_t = boost::intrusive::list_member_hook<>;
@@ -154,6 +155,14 @@ public:
 
   friend class LttngBackend;
   friend class HistoricBackend;
+
+  auto get_started() const {
+    return get_event<StartEvent>().get_timestamp();
+  };
+
+  auto get_completed() const {
+    return get_event<CompletionEvent>().get_timestamp();
+  };
 };
 
 }
