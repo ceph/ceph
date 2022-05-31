@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Se
 
 import orchestrator
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, TunedProfileSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -405,6 +405,77 @@ class ClientKeyringStore():
             self.save()
 
 
+class TunedProfileStore():
+    """
+    Store for out tuned profile information
+    """
+
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr: CephadmOrchestrator = mgr
+        self.mgr = mgr
+        self.profiles: Dict[str, TunedProfileSpec] = {}
+
+    def __contains__(self, profile: str) -> bool:
+        return profile in self.profiles
+
+    def load(self) -> None:
+        c = self.mgr.get_store('tuned_profiles') or b'{}'
+        j = json.loads(c)
+        for k, v in j.items():
+            self.profiles[k] = TunedProfileSpec.from_json(v)
+            self.profiles[k]._last_updated = datetime_to_str(datetime_now())
+
+    def save(self) -> None:
+        profiles_json = {k: v.to_json() for k, v in self.profiles.items()}
+        self.mgr.set_store('tuned_profiles', json.dumps(profiles_json))
+
+    def add_setting(self, profile: str, setting: str, value: str) -> None:
+        if profile in self.profiles:
+            self.profiles[profile].settings[setting] = value
+            self.profiles[profile]._last_updated = datetime_to_str(datetime_now())
+            self.save()
+        else:
+            logger.error(
+                f'Attempted to set setting "{setting}" for nonexistent os tuning profile "{profile}"')
+
+    def rm_setting(self, profile: str, setting: str) -> None:
+        if profile in self.profiles:
+            if setting in self.profiles[profile].settings:
+                self.profiles[profile].settings.pop(setting, '')
+                self.profiles[profile]._last_updated = datetime_to_str(datetime_now())
+                self.save()
+            else:
+                logger.error(
+                    f'Attemped to remove nonexistent setting "{setting}" from os tuning profile "{profile}"')
+        else:
+            logger.error(
+                f'Attempted to remove setting "{setting}" from nonexistent os tuning profile "{profile}"')
+
+    def add_profile(self, spec: TunedProfileSpec) -> None:
+        spec._last_updated = datetime_to_str(datetime_now())
+        self.profiles[spec.profile_name] = spec
+        self.save()
+
+    def rm_profile(self, profile: str) -> None:
+        if profile in self.profiles:
+            self.profiles.pop(profile, TunedProfileSpec(''))
+        else:
+            logger.error(f'Attempted to remove nonexistent os tuning profile "{profile}"')
+        self.save()
+
+    def last_updated(self, profile: str) -> Optional[datetime.datetime]:
+        if profile not in self.profiles or not self.profiles[profile]._last_updated:
+            return None
+        return str_to_datetime(self.profiles[profile]._last_updated)
+
+    def set_last_updated(self, profile: str, new_datetime: datetime.datetime) -> None:
+        if profile in self.profiles:
+            self.profiles[profile]._last_updated = datetime_to_str(new_datetime)
+
+    def list_profiles(self) -> List[TunedProfileSpec]:
+        return [p for p in self.profiles.values()]
+
+
 class HostCache():
     """
     HostCache stores different things:
@@ -451,6 +522,7 @@ class HostCache():
         self.last_network_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
+        self.last_tuned_profile_update = {}  # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
         self.network_refresh_queue = []  # type: List[str]
@@ -515,6 +587,9 @@ class HostCache():
                     }
                 if 'last_host_check' in j:
                     self.last_host_check[host] = str_to_datetime(j['last_host_check'])
+                if 'last_tuned_profile_update' in j:
+                    self.last_tuned_profile_update[host] = str_to_datetime(
+                        j['last_tuned_profile_update'])
                 self.registry_login_queue.add(host)
                 self.scheduled_daemon_actions[host] = j.get('scheduled_daemon_actions', {})
                 self.metadata_up_to_date[host] = j.get('metadata_up_to_date', False)
@@ -697,6 +772,8 @@ class HostCache():
             j['last_network_update'] = datetime_to_str(self.last_network_update[host])
         if host in self.last_device_change:
             j['last_device_change'] = datetime_to_str(self.last_device_change[host])
+        if host in self.last_tuned_profile_update:
+            j['last_tuned_profile_update'] = datetime_to_str(self.last_tuned_profile_update[host])
         if host in self.daemons:
             for name, dd in self.daemons[host].items():
                 j['daemons'][name] = dd.to_json()
@@ -816,6 +893,8 @@ class HostCache():
             del self.last_network_update[host]
         if host in self.last_device_change:
             del self.last_device_change[host]
+        if host in self.last_tuned_profile_update:
+            del self.last_tuned_profile_update[host]
         if host in self.daemon_config_deps:
             del self.daemon_config_deps[host]
         if host in self.scheduled_daemon_actions:
@@ -996,6 +1075,24 @@ class HostCache():
         cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.autotune_interval)
         if host not in self.last_autotune or self.last_autotune[host] < cutoff:
+            return True
+        return False
+
+    def host_needs_tuned_profile_update(self, host: str, profile: str) -> bool:
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Cannot apply tuned profile')
+            return False
+        if profile not in self.mgr.tuned_profiles:
+            logger.debug(
+                f'Cannot apply tuned profile {profile} on host {host}. Profile does not exist')
+            return False
+        if host not in self.last_tuned_profile_update:
+            return True
+        last_profile_update = self.mgr.tuned_profiles.last_updated(profile)
+        if last_profile_update is None:
+            self.mgr.tuned_profiles.set_last_updated(profile, datetime_now())
+            return True
+        if self.last_tuned_profile_update[host] < last_profile_update:
             return True
         return False
 
