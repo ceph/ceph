@@ -29,58 +29,18 @@ class RGWSI_Account;
 class RGWSI_MetaBackend_Handler;
 class RGWFormatterFlusher;
 
-static constexpr uint32_t DEFAULT_QUOTA_LIMIT = 1000;
-
-struct AccountQuota {
-  uint32_t max_users {DEFAULT_QUOTA_LIMIT};
-  uint32_t max_roles {DEFAULT_QUOTA_LIMIT};
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1,1,bl);
-    encode(max_users, bl);
-    encode(max_roles, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1,bl);
-    decode(max_users, bl);
-    decode(max_roles, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter * const f) const;
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(AccountQuota)
-
-class RGWAccountInfo {
+struct RGWAccountInfo {
   std::string id;
   std::string tenant;
-  AccountQuota account_quota;
 
-public:
-  RGWAccountInfo() = default;
-  explicit RGWAccountInfo(std::string&& _id) : id(std::move(_id)) {}
-  explicit RGWAccountInfo(const std::string& _id): id(_id) {}
-
-  RGWAccountInfo(const std::string& _id,
-		 const std::string& _tenant) : id(_id),
-					       tenant(_tenant)
-  {}
-
-  RGWAccountInfo(std::string&& _id,
-		 std::string&& _tenant) : id(std::move(_id)),
-					  tenant(std::move(_tenant))
-  {}
-
-  ~RGWAccountInfo() = default;
+  static constexpr uint32_t DEFAULT_QUOTA_LIMIT = 1000;
+  uint32_t max_users = DEFAULT_QUOTA_LIMIT;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1,1,bl);
     encode(id, bl);
     encode(tenant, bl);
-    encode(account_quota, bl);
+    encode(max_users, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -88,23 +48,8 @@ public:
     DECODE_START(1, bl);
     decode(id, bl);
     decode(tenant, bl);
-    decode(account_quota, bl);
+    decode(max_users, bl);
     DECODE_FINISH(bl);
-  }
-
-  const std::string& get_id() const { return id; }
-  const std::string& get_tenant() { return tenant; }
-  uint32_t get_max_users() const
-  {
-    return account_quota.max_users == 0 ? UINT32_MAX: account_quota.max_users;
-  }
-
-  void set_max_users(uint32_t _max_users) {
-    account_quota.max_users = _max_users;
-  }
-
-  void set_max_roles(uint32_t _max_roles) {
-    account_quota.max_roles = _max_roles;
   }
 
   void dump(Formatter * const f) const;
@@ -236,7 +181,6 @@ struct RGWAccountAdminOpState
   std::string account_id;
   std::string tenant;
   uint32_t max_users;
-  uint32_t max_roles;
   RGWObjVersionTracker objv_tracker;
 
   bool has_account_id() {
@@ -244,7 +188,6 @@ struct RGWAccountAdminOpState
   }
 
   void set_max_users(uint32_t _max_users) { max_users = _max_users;}
-  void set_max_roles(uint32_t _max_roles) { max_roles = _max_roles; }
   RGWAccountAdminOpState(const std::string& _account_id): account_id(_account_id) {};
   RGWAccountAdminOpState(const std::string& _account_id,
 			 const std::string& _tenant) : account_id(_account_id),

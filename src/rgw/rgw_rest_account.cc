@@ -19,15 +19,15 @@ void RGWOp_Account_Create::execute(optional_yield y)
   std::string account_id;
   std::string tenant;
   uint32_t max_users;
-  uint32_t max_roles;
   RESTArgs::get_string(s, "account", account_id, &account_id);
   RESTArgs::get_string(s, "tenant", tenant, &tenant);
-  RESTArgs::get_uint32(s, "max-users", DEFAULT_QUOTA_LIMIT, &max_users);
-  RESTArgs::get_uint32(s, "max-roles", DEFAULT_QUOTA_LIMIT, &max_roles);
+  bool has_max_users = false;
+  RESTArgs::get_uint32(s, "max-users", 0, &max_users, &has_max_users);
 
   RGWAccountAdminOpState acc_op_state(account_id, tenant);
-  acc_op_state.set_max_users(max_users);
-  acc_op_state.set_max_roles(max_roles);
+  if (has_max_users) {
+    acc_op_state.set_max_users(max_users);
+  }
 
   op_ret = RGWAdminOp_Account::add(this, store, acc_op_state, flusher, s->yield);
   if (op_ret < 0) {

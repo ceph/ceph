@@ -11,5 +11,5 @@ RGWSI_Account::~RGWSI_Account() {
 }
 
 std::string RGWSI_Account::get_meta_key(const RGWAccountInfo& info) {
-  return info.get_id();
+  return info.id;
 }

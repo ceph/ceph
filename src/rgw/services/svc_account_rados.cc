@@ -153,7 +153,7 @@ int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,
                                   const rgw_user& user,
                                   optional_yield y)
 {
-  auto obj = get_account_user_obj(info.get_id());
+  auto obj = get_account_user_obj(info.id);
   auto handle = svc.rados->obj(obj);
   int ret = handle.open(dpp);
   if (ret < 0) {
@@ -161,7 +161,7 @@ int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,
   }
 
   librados::ObjectWriteOperation op;
-  cls_account_users_add(op, user.to_str(), info.get_max_users());
+  cls_account_users_add(op, user.to_str(), info.max_users);
   return handle.operate(dpp, &op, y);
 }
 
@@ -170,7 +170,7 @@ int RGWSI_Account_RADOS::remove_user(const DoutPrefixProvider *dpp,
                                      const rgw_user& user,
                                      optional_yield y)
 {
-  auto obj = get_account_user_obj(info.get_id());
+  auto obj = get_account_user_obj(info.id);
   auto handle = svc.rados->obj(obj);
   int ret = handle.open(dpp);
   if (ret < 0) {
@@ -190,7 +190,7 @@ int RGWSI_Account_RADOS::list_users(const DoutPrefixProvider *dpp,
                                     std::vector<rgw_user>& users,
                                     optional_yield y)
 {
-  auto obj = get_account_user_obj(info.get_id());
+  auto obj = get_account_user_obj(info.id);
   auto handle = svc.rados->obj(obj);
   int ret = handle.open(dpp);
   if (ret < 0) {

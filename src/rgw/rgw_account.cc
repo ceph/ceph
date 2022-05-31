@@ -42,36 +42,27 @@ int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
                           });
 }
 
-void AccountQuota::dump(Formatter * const f) const
-{
-  f->dump_unsigned("max_users", max_users);
-  f->dump_unsigned("max_roles", max_roles);
-}
-
-void AccountQuota::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("max_users", max_users, obj);
-  JSONDecoder::decode_json("max_roles", max_roles, obj);
-}
-
 void RGWAccountInfo::dump(Formatter * const f) const
 {
   encode_json("id", id, f);
   encode_json("tenant", tenant, f);
-  encode_json("AccountQuota", account_quota, f);
+  encode_json("max_users", max_users, f);
 }
 
 void RGWAccountInfo::decode_json(JSONObj* obj)
 {
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("tenant", tenant, obj);
-  JSONDecoder::decode_json("quota", account_quota, obj);
+  JSONDecoder::decode_json("max_users", max_users, obj);
 }
 
 void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
 {
-  o.push_back(new RGWAccountInfo("account1", "tenant1"));
   o.push_back(new RGWAccountInfo);
+  auto p = new RGWAccountInfo;
+  p->id = "account1";
+  p->tenant = "tenant1";
+  o.push_back(p);
 }
 
 int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
@@ -277,8 +268,10 @@ int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
     return -EINVAL;
   }
 
-  RGWAccountInfo account_info(op_state.account_id,
-                              op_state.tenant);
+  RGWAccountInfo account_info;
+  account_info.tenant = op_state.tenant;
+  account_info.id = op_state.account_id;
+
   int ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
       dpp, account_info, &op_state.objv_tracker, real_time(), true, nullptr, y);
   if (ret < 0) {

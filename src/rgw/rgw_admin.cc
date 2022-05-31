@@ -10499,8 +10499,6 @@ next:
     RGWAccountAdminOpState acc_op_state(account_id, tenant);
 
     if (opt_cmd == OPT::ACCOUNT_CREATE) {
-      RGWAccountInfo account_info(account_id, tenant);
-
       ret = RGWAdminOp_Account::add(dpp(), store, acc_op_state,
                                     stream_flusher, null_yield);
       if (ret < 0) {
