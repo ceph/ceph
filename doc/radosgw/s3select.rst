@@ -57,11 +57,10 @@ Error Handling
 
 
 
+.. _s3-select-feature-table:
 
 Features Support
 ----------------
-
-.. _s3-select-feature-table:
 
   | Currently only part of `AWS select command <https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-glacier-select-sql-reference-select.html>`_ is implemented, table bellow describes what is currently supported.
   | The following table describes the current implementation for s3-select functionalities:
