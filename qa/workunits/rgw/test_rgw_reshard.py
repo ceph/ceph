@@ -76,6 +76,14 @@ def get_bucket_stats(bucket_name):
               num_objects, size_kb, num_shards))
     return BucketStats(bucket_name, bucket_id, num_objects, size_kb, num_shards)
 
+def get_bucket_layout(bucket_name):
+    res = exec_cmd("radosgw-admin bucket layout --bucket {}".format(bucket_name))
+    return json.loads(res)
+
+def get_bucket_shard0(bucket_name):
+    bucket_id = get_bucket_stats(bucket_name).bucket_id
+    index_gen = get_bucket_layout(bucket_name)['layout']['current_index']['gen']
+    return '.dir.%s.%d.0' % (bucket_id, index_gen)
 
 def get_bucket_num_shards(bucket_name, bucket_id):
     """
@@ -280,8 +288,9 @@ def main():
     log.debug(' test: reshard removes olh entries with empty name')
     bucket.objects.all().delete()
 
+
     # get name of shard 0 object, add a bogus olh entry with empty name
-    bucket_shard0 = '.dir.%s.0' % get_bucket_stats(BUCKET_NAME).bucket_id
+    bucket_shard0 = get_bucket_shard0(BUCKET_NAME)
     if 'CEPH_ROOT' in os.environ:
       k = '%s/qa/workunits/rgw/olh_noname_key' % os.environ['CEPH_ROOT']
       v = '%s/qa/workunits/rgw/olh_noname_val' % os.environ['CEPH_ROOT']
@@ -299,10 +308,9 @@ def main():
     # reshard to prune the bogus olh
     cmd = exec_cmd('radosgw-admin bucket reshard --bucket %s --num-shards %s --yes-i-really-mean-it' % (BUCKET_NAME, 1))
 
-    # get new name of shard 0 object, check that bi list has zero entries
-    bucket_shard0 = '.dir.%s.0' % get_bucket_stats(BUCKET_NAME).bucket_id
+    # get that bi list has zero entries
     cmd = exec_cmd('radosgw-admin bi list --bucket %s' % BUCKET_NAME)
-    json_op = json.loads(cmd)
+    json_op = json.loads(cmd.decode('utf-8', 'ignore')) # ignore utf-8 can't decode 0x80
     assert len(json_op) == 0
 
     # Clean up
