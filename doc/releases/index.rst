@@ -7,6 +7,8 @@ Ceph Releases (index)
 .. toctree::
    :maxdepth: 1
 
+.. _active-releases:
+
 Active Releases
 ---------------
 
