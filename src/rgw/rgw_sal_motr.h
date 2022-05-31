@@ -728,6 +728,8 @@ class MotrAtomicWriter : public Writer {
   struct m0_bufvec attr;
   struct m0_indexvec ext;
 
+  uint64_t req_id;
+
   public:
   MotrAtomicWriter(const DoutPrefixProvider *dpp,
           optional_yield y,

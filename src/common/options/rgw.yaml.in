@@ -3308,6 +3308,13 @@ options:
   default: false
   services:
   - rgw
+- name: motr_addb_enabled
+  type: bool
+  level: advanced
+  desc: Set to true when Motr client ADDB is needed
+  default: false
+  services:
+  - rgw
 - name: rgw_luarocks_location
   type: str
   level: advanced
