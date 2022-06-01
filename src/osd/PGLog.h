@@ -565,7 +565,7 @@ public:
     void trim(
       CephContext* cct,
       eversion_t s,
-      set<eversion_t> *trimmed,
+      set<string> *trimmed,
       set<string>* trimmed_dups,
       eversion_t *write_from_dups);
 
@@ -582,7 +582,7 @@ protected:
   eversion_t dirty_to;         ///< must clear/writeout all keys <= dirty_to
   eversion_t dirty_from;       ///< must clear/writeout all keys >= dirty_from
   eversion_t writeout_from;    ///< must writout keys >= writeout_from
-  set<eversion_t> trimmed;     ///< must clear keys in trimmed
+  set<string> trimmed;         ///< must clear keys in trimmed
   eversion_t dirty_to_dups;    ///< must clear/writeout all dups <= dirty_to_dups
   eversion_t dirty_from_dups;  ///< must clear/writeout all dups >= dirty_from_dups
   eversion_t write_from_dups;  ///< must write keys >= write_from_dups
@@ -1313,7 +1313,7 @@ public:
     eversion_t dirty_to,
     eversion_t dirty_from,
     eversion_t writeout_from,
-    set<eversion_t> &&trimmed,
+    set<string> &&trimmed,
     set<string> &&trimmed_dups,
     const pg_missing_tracker_t &missing,
     bool touch_log,
@@ -1336,7 +1336,7 @@ public:
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
-      store, ch, pgmeta_oid, info,
+      cct, store, ch, pgmeta_oid, info,
       log, missing, oss,
       tolerate_divergent_missing_log,
       &clear_divergent_priors,
@@ -1347,6 +1347,7 @@ public:
 
   template <typename missing_type>
   static void read_log_and_missing(
+    CephContext *cct,
     ObjectStore *store,
     ObjectStore::CollectionHandle &ch,
     ghobject_t pgmeta_oid,
@@ -1415,6 +1416,9 @@ public:
 	    ceph_assert(dups.back().version < dup.version);
 	  }
 	  dups.push_back(dup);
+	  if (dups.size() >= cct->_conf->osd_pg_log_dups_tracked) {
+	    dups.pop_front();
+	  }
 	} else {
 	  pg_log_entry_t e;
 	  e.decode_with_checksum(bp);
