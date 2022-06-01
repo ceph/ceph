@@ -23,7 +23,7 @@
 #include "crimson/os/futurized_collection.h"
 
 #include "crimson/os/seastore/backref_manager.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
 #include "crimson/os/seastore/omap_manager/btree/btree_omap_manager.h"

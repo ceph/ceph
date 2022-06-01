@@ -467,7 +467,7 @@ public:
 };
 
 
-class SegmentCleaner : public SegmentProvider {
+class AsyncCleaner : public SegmentProvider {
 public:
   using time_point = seastar::lowres_system_clock::time_point;
   using duration = seastar::lowres_system_clock::duration;
@@ -707,12 +707,12 @@ private:
    * disable_trim
    *
    * added to enable unit testing of CircularBoundedJournal before
-   * proper support is added to SegmentCleaner.
+   * proper support is added to AsyncCleaner.
    * Should be removed once proper support is added. TODO
    */
   bool disable_trim = false;
 public:
-  SegmentCleaner(
+  AsyncCleaner(
     config_t config,
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
@@ -978,7 +978,7 @@ private:
   class GCProcess {
     std::optional<gc_cycle_ret> process_join;
 
-    SegmentCleaner &cleaner;
+    AsyncCleaner &cleaner;
 
     std::optional<seastar::promise<>> blocking;
 
@@ -1008,7 +1008,7 @@ private:
 	});
     }
   public:
-    GCProcess(SegmentCleaner &cleaner) : cleaner(cleaner) {}
+    GCProcess(AsyncCleaner &cleaner) : cleaner(cleaner) {}
 
     void start() {
       ceph_assert(is_stopping());
@@ -1291,6 +1291,6 @@ private:
     }
   }
 };
-using SegmentCleanerRef = std::unique_ptr<SegmentCleaner>;
+using AsyncCleanerRef = std::unique_ptr<AsyncCleaner>;
 
 }

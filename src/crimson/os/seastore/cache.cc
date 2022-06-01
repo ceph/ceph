@@ -10,7 +10,7 @@
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/common/config_proxy.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 
 // included for get_extent_by_type
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
@@ -1371,7 +1371,7 @@ void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start,
   journal_seq_t seq,
-  SegmentCleaner *cleaner)
+  AsyncCleaner *cleaner)
 {
   LOG_PREFIX(Cache::complete_commit);
   SUBTRACET(seastore_t, "final_block_start={}, seq={}",
