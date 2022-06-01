@@ -2253,7 +2253,10 @@ int MotrObject::create_mobj(const DoutPrefixProvider *dpp, uint64_t sz)
   ldpp_dout(dpp, 20) <<__func__<< ": sz=" << sz << " oid=" << fid_str << dendl;
 
   int64_t lid = m0_layout_find_by_objsz(store->instance, nullptr, sz);
-  M0_ASSERT(lid > 0);
+  if (lid <= 0) {
+    ldpp_dout(dpp, 0) <<__func__<< ": failed to get lid: " << lid << dendl;
+    return lid == 0 ? -EINVAL : (int)lid;
+  }
 
   M0_ASSERT(mobj == nullptr);
   mobj = new m0_obj();
