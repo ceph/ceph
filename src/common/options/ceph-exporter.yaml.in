@@ -2,14 +2,16 @@
 ---
 
 options:
-- name: sock_dir
+- name: exporter_sock_dir
   type: str
   level: advanced
   desc: The path to ceph daemons socket files dir
   default: /var/run/ceph/
   services:
   - ceph-exporter
-- name: exporter_addrs
+  flags:
+  - runtime
+- name: exporter_addr
   type: str
   level: advanced
   desc: Host ip address where exporter is deployed
@@ -30,6 +32,8 @@ options:
   default: 10
   services:
   - ceph-exporter
+  flags:
+  - runtime
 - name: exporter_stats_period
   type: int
   level: advanced
@@ -37,3 +41,5 @@ options:
   default: 5
   services:
   - ceph-exporter
+  flags:
+  - runtime
