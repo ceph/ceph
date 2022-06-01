@@ -705,6 +705,7 @@ PG::do_osd_ops_execute(
     (const std::error_code& e) mutable {
     return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
         seastar::now(),
+        e.value() == ENOENT ? (*failure_func_ptr)(e) :
         rollbacker.rollback_obc_if_modified(e).then_interruptible(
           [e, failure_func_ptr] {
           return (*failure_func_ptr)(e);
