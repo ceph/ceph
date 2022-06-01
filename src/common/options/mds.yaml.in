@@ -65,15 +65,6 @@ options:
   - mds
   flags:
   - runtime
-# max xattr kv pairs size for each dir/file
-- name: mds_max_xattr_pairs_size
-  type: size
-  level: advanced
-  desc: maximum aggregate size of extended attributes on a file
-  default: 64_K
-  services:
-  - mds
-  with_legacy: true
 - name: mds_cache_trim_interval
   type: secs
   level: advanced
