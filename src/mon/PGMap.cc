@@ -881,6 +881,7 @@ void PGMapDigest::dump_object_stat_sum(
 {
   const object_stat_sum_t &sum = pool_stat.stats.sum;
   const store_statfs_t statfs = pool_stat.store_stats;
+  float orig_used_rate = raw_used_rate;
 
   if (sum.num_object_copies > 0) {
     raw_used_rate *= (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
@@ -898,7 +899,7 @@ void PGMapDigest::dump_object_stat_sum(
   } else if (used_bytes) {
     used = 1.0;
   }
-  auto avail_res = raw_used_rate ? avail / raw_used_rate : 0;
+  auto avail_res = orig_used_rate ? avail / orig_used_rate : 0;
   // an approximation for actually stored user data
   auto stored_data_normalized = pool_stat.get_user_data_bytes(
     raw_used_rate, per_pool);
@@ -987,6 +988,37 @@ int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
   return avail / osd_map.pool_raw_used_rate(poolid);
 }
 
+void PGMap::filter_down_out_osd(const OSDMap &osdmap, std::map<int,float> &wm) const
+{
+  float sum = 0.0;
+  bool is_down_out = false;
+
+  auto p = wm.begin();
+  while (p != wm.end()) {
+    if (osdmap.is_down(p->first) || osdmap.is_out(p->first)) {
+      dout(10) << __func__ << " osd." << p->first
+	      << " is_down=" << osdmap.is_down(p->first)
+	      << " is_out=" << osdmap.is_out(p->first) << dendl;
+      p = wm.erase(p);
+      is_down_out = true;
+    } else {
+      sum += p->second;
+      ++p;
+    }
+  }
+
+  if (!is_down_out)
+    return;
+
+  for (auto p = wm.begin(); p != wm.end(); ++p) {
+    dout(10) << __func__ << " osd." << p->first
+	    << " sum=" << sum
+	    << " before_percentage=" << p->second
+	    << " after_percentage=" << (p->second / sum) << dendl;
+    p->second /= sum;
+  }
+}
+
 int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 {
   map<int,float> wm;
@@ -994,6 +1026,9 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
   if (r < 0) {
     return r;
   }
+
+  filter_down_out_osd(osdmap, wm);
+
   if (wm.empty()) {
     return 0;
   }
@@ -1084,7 +1119,7 @@ void PGMap::Incremental::dump(ceph::Formatter *f) const
 
   f->open_array_section("osd_stat_removals");
   for (auto p = osd_stat_rm.begin(); p != osd_stat_rm.end(); ++p)
-    f->dump_int("osd", *p);
+    f->dump_int("osd", p->first);
   f->close_section();
 
   f->open_array_section("pg_removals");
@@ -1110,7 +1145,7 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
   o.back()->pg_stat_updates[pg_t(4,5)] = pg_stat_t();
   o.back()->osd_stat_updates[6] = osd_stat_t();
   o.back()->pg_remove.insert(pg_t(1,2));
-  o.back()->osd_stat_rm.insert(5);
+  o.back()->osd_stat_rm[5] = false;
   o.back()->pool_statfs_updates[std::make_pair(1234,4)] = store_statfs_t();
 }
 
@@ -1207,15 +1242,21 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   for (auto p = inc.get_osd_stat_rm().begin();
        p != inc.get_osd_stat_rm().end();
        ++p) {
-    auto t = osd_stat.find(*p);
-    if (t != osd_stat.end()) {
-      stat_osd_sub(t->first, t->second);
-      osd_stat.erase(t);
+    // osd remove by user, then delete its osd_stat
+    if (!p->second) {
+      auto t = osd_stat.find(p->first);
+      if (t != osd_stat.end()) {
+        stat_osd_sub(t->first, t->second);
+        osd_stat.erase(t);
+      }
     }
-    for (auto i = pool_statfs.begin();  i != pool_statfs.end(); ++i) {
-      if (i->first.second == *p) {
+
+    for (auto i = pool_statfs.begin();  i != pool_statfs.end();) {
+      if (i->first.second == p->first) {
 	pg_pool_sum[i->first.first].sub(i->second);
-	pool_statfs.erase(i);
+	pool_statfs.erase(i++);
+      } else {
+	++i;
       }
     }
   }
@@ -3719,9 +3760,15 @@ void PGMapUpdater::check_osd_map(
   PGMap::Incremental *pending_inc)
 {
   for (auto& p : pgmap.osd_stat) {
+    if (osdmap.exists(p.first) &&
+	(osdmap.is_down(p.first) || osdmap.is_out(p.first))) {
+      // only sub pg_pool_sum and remove osd from pool_statfs
+      pending_inc->rm_stat(p.first, osdmap.exists(p.first));
+    }
+
     if (!osdmap.exists(p.first)) {
       // remove osd_stat
-      pending_inc->rm_stat(p.first);
+      pending_inc->rm_stat(p.first, osdmap.exists(p.first));
     } else if (osdmap.is_out(p.first)) {
       // zero osd_stat
       if (p.second.statfs.total != 0) {

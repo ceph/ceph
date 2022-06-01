@@ -261,13 +261,13 @@ public:
 
   private:
     mempool::pgmap::map<int32_t,osd_stat_t> osd_stat_updates;
-    mempool::pgmap::set<int32_t> osd_stat_rm;
+    mempool::pgmap::map<int32_t,bool> osd_stat_rm; //<osd, exists>
   public:
 
     const mempool::pgmap::map<int32_t, osd_stat_t> &get_osd_stat_updates() const {
       return osd_stat_updates;
     }
-    const mempool::pgmap::set<int32_t> &get_osd_stat_rm() const {
+    const mempool::pgmap::map<int32_t, bool> &get_osd_stat_rm() const {
       return osd_stat_rm;
     }
     template<typename OsdStat>
@@ -290,9 +290,10 @@ public:
 	t.op_queue_age_hist.clear();
       }
     }
-    void rm_stat(int32_t osd) {
-      osd_stat_rm.insert(osd);
-      osd_stat_updates.erase(osd);
+    void rm_stat(int32_t osd, bool exists) {
+      osd_stat_rm[osd]= exists;
+      if (!exists)
+	osd_stat_updates.erase(osd);
     }
     void dump(ceph::Formatter *f) const;
     static void generate_test_instances(std::list<Incremental*>& o);
@@ -436,7 +437,9 @@ public:
   void encode_digest(const OSDMap& osdmap,
 		     ceph::buffer::list& bl, uint64_t features);
 
+  void filter_down_out_osd(const OSDMap &osdmap, std::map<int,float> &wm) const;
   int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
+
   void get_rules_avail(const OSDMap& osdmap,
 		       std::map<int,int64_t> *avail_map) const;
   void dump(ceph::Formatter *f, bool with_net = true) const;
