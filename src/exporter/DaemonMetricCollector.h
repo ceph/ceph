@@ -15,15 +15,12 @@
 class DaemonMetricCollector {
 public:
   void main();
-  void set_sock_dir();
   std::string get_metrics();
-  std::string SOCKETDIR = "/var/run/ceph/";
 
 private:
   std::map<std::string, AdminSocketClient> clients;
   std::string metrics;
   std::mutex metrics_mutex;
-  int stats_period;     // time to wait before sending requests again
   void update_sockets();
   void request_loop(boost::asio::steady_timer &timer);
 
