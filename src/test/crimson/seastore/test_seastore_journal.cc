@@ -6,7 +6,7 @@
 #include <random>
 
 #include "crimson/common/log.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
 

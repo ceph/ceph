@@ -8,7 +8,7 @@
 #include "test/crimson/gtest_seastar.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
@@ -396,7 +396,7 @@ struct transaction_manager_test_t :
 
   bool check_usage() {
     auto t = create_weak_test_transaction();
-    SpaceTrackerIRef tracker(segment_cleaner->get_empty_space_tracker());
+    SpaceTrackerIRef tracker(async_cleaner->get_empty_space_tracker());
     with_trans_intr(
       *t.t,
       [this, &tracker](auto &t) {
@@ -427,7 +427,7 @@ struct transaction_manager_test_t :
 	    return seastar::now();
 	  });
       }).unsafe_get0();
-    return segment_cleaner->debug_check_space(*tracker);
+    return async_cleaner->debug_check_space(*tracker);
   }
 
   void replay() {
@@ -578,7 +578,7 @@ struct transaction_manager_test_t :
 	"try_submit_transaction hit invalid error"
       }
     ).then([this](auto ret) {
-      return segment_cleaner->run_until_halt().then([ret] { return ret; });
+      return async_cleaner->run_until_halt().then([ret] { return ret; });
     }).get0();
 
     if (success) {
@@ -628,7 +628,7 @@ struct transaction_manager_test_t :
 	    });
 	});
     }).safe_then([this]() {
-      return segment_cleaner->run_until_halt();
+      return async_cleaner->run_until_halt();
     }).handle_error(
       crimson::ct_error::assert_all{
 	"Invalid error in SeaStore::list_collections"
