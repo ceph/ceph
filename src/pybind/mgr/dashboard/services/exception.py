@@ -51,6 +51,9 @@ def dashboard_exception_handler(handler, *args, **kwargs):
         cherrypy.response.headers['Content-Type'] = 'application/json'
         cherrypy.response.status = getattr(error, 'status', 400)
         return json.dumps(serialize_dashboard_exception(error)).encode('utf-8')
+    except cherrypy.HTTPRedirect:
+        # No internal errors
+        raise
     except Exception as error:
         logger.exception('Internal Server Error')
         raise error
