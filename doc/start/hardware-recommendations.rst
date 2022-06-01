@@ -75,10 +75,10 @@ Memory
 
 Bluestore uses its own memory to cache data rather than relying on the
 operating system's page cache. In Bluestore you can adjust the amount of memory
-that the OSD attempts to consume by changing the :confval:`osd_memory_target`
+that the OSD attempts to consume by changing the `osd_memory_target`
 configuration option.
 
-- Setting the :confval:`osd_memory_target` below 2GB is typically not
+- Setting the `osd_memory_target` below 2GB is typically not
   recommended (Ceph may fail to keep the memory consumption under 2GB and 
   this may cause extremely slow performance).
 
@@ -86,11 +86,11 @@ configuration option.
   in degraded performance: metadata may be read from disk during IO unless the
   active data set is relatively small.
 
-- 4GB is the current default :confval:`osd_memory_target` size. This default
+- 4GB is the current default `osd_memory_target` size. This default
   was chosen for typical use cases, and is intended to balance memory
   requirements and OSD performance.
 
-- Setting the :confval:`osd_memory_target` higher than 4GB can improve
+- Setting the `osd_memory_target` higher than 4GB can improve
   performance when there many (small) objects or when large (256GB/OSD 
   or more) data sets are processed.
 
