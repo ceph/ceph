@@ -264,12 +264,13 @@ public:
   using get_extent_ertr = base_ertr;
   template <typename T>
   using get_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
-  template <typename T, typename Func>
+  template <typename T, typename Func, typename OnCache>
   get_extent_ret<T> get_extent(
     paddr_t offset,                ///< [in] starting addr
     seastore_off_t length,          ///< [in] length
     const src_ext_t* p_metric_key, ///< [in] cache query metric key
-    Func &&extent_init_func        ///< [in] init func for extent
+    Func &&extent_init_func,       ///< [in] init func for extent
+    OnCache &&on_cache
   ) {
     LOG_PREFIX(Cache::get_extent);
     auto cached = query_cache(offset, p_metric_key);
@@ -282,6 +283,7 @@ public:
           "{} {}~{} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
       add_extent(ret);
+      on_cache(*ret);
       extent_init_func(*ret);
       return read_extent<T>(
 	std::move(ret));
@@ -313,6 +315,7 @@ public:
           "{} {}~{} is present in cache -- {}",
           T::TYPE, offset, length, *cached);
       auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
+      on_cache(*ret);
       return ret->wait_io(
       ).then([ret=std::move(ret)]() mutable
 	     -> get_extent_ret<T> {
@@ -331,7 +334,7 @@ public:
   ) {
     return get_extent<T>(
       offset, length, p_metric_key,
-      [](T &){});
+      [](T &){}, [](T &) {});
   }
 
   /**
@@ -357,8 +360,10 @@ public:
     } else if (result == Transaction::get_extent_ret::PRESENT) {
       SUBTRACET(seastore_cache, "{} {} is present on t -- {}",
           t, type, offset, *ret);
-      return get_extent_if_cached_iertr::make_ready_future<
-        CachedExtentRef>(ret);
+      return ret->wait_io().then([ret] {
+	return get_extent_if_cached_iertr::make_ready_future<
+	  CachedExtentRef>(ret);
+      });
     }
 
     // get_extent_ret::ABSENT from transaction
@@ -413,30 +418,26 @@ public:
           result == Transaction::get_extent_ret::PRESENT ? "present" : "retired",
           *ret);
       assert(result != Transaction::get_extent_ret::RETIRED);
-      return seastar::make_ready_future<TCachedExtentRef<T>>(
-	ret->cast<T>());
+      return ret->wait_io().then([ret] {
+	return seastar::make_ready_future<TCachedExtentRef<T>>(
+	  ret->cast<T>());
+      });
     } else {
       SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
                 t, T::TYPE, offset, length);
+      auto f = [&t](CachedExtent &ext) {
+	t.add_to_read_set(CachedExtentRef(&ext));
+      };
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
 	get_extent<T>(
 	  offset, length, &metric_key,
-	  std::forward<Func>(extent_init_func))
-      ).si_then([this, FNAME, offset, length, &t](auto ref) {
-	(void)this; // silence incorrect clang warning about capture
-	if (!ref->is_valid()) {
-	  SUBDEBUGT(seastore_cache, "{} {}~{} is invalid -- {}",
-	            t, T::TYPE, offset, length, *ref);
-	  ++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
-	  mark_transaction_conflicted(t, *ref);
-	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>();
-	} else {
-	  touch_extent(*ref);
-	  t.add_to_read_set(ref);
-	  return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
-	    std::move(ref));
-	}
+	  std::forward<Func>(extent_init_func), std::move(f))
+      ).si_then([this](auto ref) {
+	(void)this; // silence incorrect clang warning about captur
+	touch_extent(*ref);
+	return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
+	  std::move(ref));
       });
     }
   }
@@ -481,7 +482,8 @@ private:
     laddr_t laddr,
     seastore_off_t length,
     const Transaction::src_t* p_src,
-    extent_init_func_t &&extent_init_func
+    extent_init_func_t &&extent_init_func,
+    extent_init_func_t &&on_cache
   );
 
   using get_extent_by_type_iertr = get_extent_iertr;
@@ -505,28 +507,24 @@ private:
     } else if (status == Transaction::get_extent_ret::PRESENT) {
       SUBTRACET(seastore_cache, "{} {}~{} {} is present on t -- {}",
                 t, type, offset, length, laddr, *ret);
-      return seastar::make_ready_future<CachedExtentRef>(ret);
+      return ret->wait_io().then([ret] {
+	return seastar::make_ready_future<CachedExtentRef>(ret);
+      });
     } else {
       SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
                 t, type, offset, length, laddr);
+      auto f = [&t](CachedExtent &ext) {
+	t.add_to_read_set(CachedExtentRef(&ext));
+      };
       auto src = t.get_src();
       return trans_intr::make_interruptible(
 	_get_extent_by_type(
 	  type, offset, laddr, length, &src,
-	  std::move(extent_init_func))
-      ).si_then([=, &t](CachedExtentRef ret) {
-        if (!ret->is_valid()) {
-          SUBDEBUGT(seastore_cache, "{} {}~{} {} is invalid -- {}",
-                    t, type, offset, length, laddr, *ret);
-          ++(get_by_src(stats.trans_conflicts_by_unknown, t.get_src()));
-          mark_transaction_conflicted(t, *ret.get());
-          return get_extent_ertr::make_ready_future<CachedExtentRef>();
-        } else {
-	  touch_extent(*ret);
-          t.add_to_read_set(ret);
-          return get_extent_ertr::make_ready_future<CachedExtentRef>(
-            std::move(ret));
-        }
+	  std::move(extent_init_func), std::move(f))
+      ).si_then([this](CachedExtentRef ret) {
+	touch_extent(*ret);
+	return get_extent_ertr::make_ready_future<CachedExtentRef>(
+	  std::move(ret));
       });
     }
   }
