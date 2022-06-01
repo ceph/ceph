@@ -672,21 +672,22 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (this.updateSelectionOnRefresh === 'never') {
       return;
     }
-    const newSelected: any[] = [];
+    const newSelected = new Set();
     this.selection.selected.forEach((selectedItem) => {
       for (const row of this.data) {
         if (selectedItem[this.identifier] === row[this.identifier]) {
-          newSelected.push(row);
+          newSelected.add(row);
         }
       }
     });
+    const newSelectedArray = Array.from(newSelected.values());
     if (
       this.updateSelectionOnRefresh === 'onChange' &&
-      _.isEqual(this.selection.selected, newSelected)
+      _.isEqual(this.selection.selected, newSelectedArray)
     ) {
       return;
     }
-    this.selection.selected = newSelected;
+    this.selection.selected = newSelectedArray;
     this.onSelect(this.selection);
   }
 

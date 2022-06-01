@@ -117,6 +117,56 @@ describe('HostsComponent', () => {
     expect(spans[0].textContent).toBe(hostname);
   });
 
+  it('should show the exact count of the repeating daemons', () => {
+    const hostname = 'ceph.dev';
+    const payload = [
+      {
+        services: [
+          {
+            type: 'mgr',
+            id: 'x'
+          },
+          {
+            type: 'mgr',
+            id: 'y'
+          },
+          {
+            type: 'osd',
+            id: '0'
+          },
+          {
+            type: 'osd',
+            id: '1'
+          },
+          {
+            type: 'osd',
+            id: '2'
+          },
+          {
+            type: 'rgw',
+            id: 'rgw'
+          }
+        ],
+        hostname: hostname,
+        labels: ['foo', 'bar']
+      }
+    ];
+
+    OrchestratorHelper.mockStatus(false);
+    hostListSpy.and.callFake(() => of(payload));
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    fixture.detectChanges();
+
+    const spans = fixture.debugElement.nativeElement.querySelectorAll(
+      '.datatable-body-cell-label span span.badge.badge-background-primary'
+    );
+    expect(spans[0].textContent).toContain('mgr: 2');
+    expect(spans[1].textContent).toContain('osd: 3');
+    expect(spans[2].textContent).toContain('rgw: 1');
+  });
+
   it('should test if host facts are tranformed correctly if orch available', () => {
     const features = [OrchestratorFeature.HOST_FACTS];
     const payload = [

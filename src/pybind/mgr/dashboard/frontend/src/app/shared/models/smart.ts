@@ -77,10 +77,30 @@ interface SmartCtlBaseDataV1 {
   user_capacity: { blocks: number; bytes: number };
 }
 
+export interface RVWAttributes {
+  correction_algorithm_invocations: number;
+  errors_corrected_by_eccdelayed: number;
+  errors_corrected_by_eccfast: number;
+  errors_corrected_by_rereads_rewrites: number;
+  gigabytes_processed: number;
+  total_errors_corrected: number;
+  total_uncorrected_errors: number;
+}
+
+/**
+ * Result structure of `smartctl` applied on an SCSI. Returned by the back-end.
+ */
+export interface IscsiSmartDataV1 extends SmartCtlBaseDataV1 {
+  scsi_error_counter_log: {
+    read: RVWAttributes[];
+  };
+  scsi_grown_defect_list: number;
+}
+
 /**
  * Result structure of `smartctl` applied on an HDD. Returned by the back-end.
  */
-export interface HddSmartDataV1 extends SmartCtlBaseDataV1 {
+export interface AtaSmartDataV1 extends SmartCtlBaseDataV1 {
   ata_sct_capabilities: {
     data_table_supported: boolean;
     error_recovery_control_supported: boolean;
@@ -204,7 +224,7 @@ interface SmartBasicResult {
  * contain the structure for a HDD, NVMe or an error.
  */
 export interface SmartDataResponseV1 {
-  [deviceId: string]: HddSmartDataV1 | NvmeSmartDataV1 | SmartError;
+  [deviceId: string]: AtaSmartDataV1 | NvmeSmartDataV1 | SmartError;
 }
 
 /**
@@ -216,6 +236,8 @@ export interface SmartDataResult extends SmartBasicResult {
     attributes?: any;
     data?: any;
     nvmeData?: any;
+    scsi_error_counter_log?: any;
+    scsi_grown_defect_list?: any;
   };
 }
 
