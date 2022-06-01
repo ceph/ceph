@@ -56,9 +56,10 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const boost::optional<uint32_t>& perm_mask) const override {
+                            const boost::optional<uint32_t>& perm_mask,
+                            const std::string& access_key_id) const override {
     auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
+      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask, access_key_id));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -178,9 +179,10 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const boost::optional<uint32_t>& perm_mask) const override {
+                            const boost::optional<uint32_t>& perm_mask,
+                            const std::string& access_key_id) const override {
     auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
+      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask, access_key_id));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
