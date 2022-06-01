@@ -4843,7 +4843,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   unsigned max_bytes = req->head.args.readdir.max_bytes;
   if (!max_bytes)
     // make sure at least one item can be encoded
-    max_bytes = (512 << 10) + g_conf()->mds_max_xattr_pairs_size;
+    max_bytes = (512 << 10) + mds->mdsmap->get_max_xattr_size();
 
   // start final blob
   bufferlist dirbl;
@@ -6547,7 +6547,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
       cur_xattrs_size += p.first.length() + p.second.length();
     }
 
-    if (((cur_xattrs_size + inc) > g_conf()->mds_max_xattr_pairs_size)) {
+    if (((cur_xattrs_size + inc) > mds->mdsmap->get_max_xattr_size())) {
       dout(10) << "xattr kv pairs size too big. cur_xattrs_size "
 	<< cur_xattrs_size << ", inc " << inc << dendl;
       respond_to_request(mdr, -CEPHFS_ENOSPC);
@@ -10924,7 +10924,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   int max_bytes = req->head.args.readdir.max_bytes;
   if (!max_bytes)
     // make sure at least one item can be encoded
-    max_bytes = (512 << 10) + g_conf()->mds_max_xattr_pairs_size;
+    max_bytes = (512 << 10) + mds->mdsmap->get_max_xattr_size();
 
   __u64 last_snapid = 0;
   string offset_str = req->get_path2();
