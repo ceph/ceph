@@ -2,4 +2,4 @@
 
 #include <string>
 
-void http_server_thread_entrypoint(std::string exporter_addrs);
+void http_server_thread_entrypoint();

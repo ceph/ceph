@@ -38,23 +38,19 @@ int main(int argc, char **argv) {
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON, 0);
-  std::string val, sock_dir, exporter_addrs, exporter_prio_limit;
+  std::string val;
   for (auto i = args.begin(); i != args.end();) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_witharg(args, i, &val, "--sock-dir", (char *)NULL)) {
-      sock_dir = val;
-      cct->_conf.set_val("sock_dir", val);
+      cct->_conf.set_val("exporter_sock_dir", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--addrs", (char *)NULL)) {
-      exporter_addrs = val;
-      cct->_conf.set_val("exporter_addrs", val);
+      cct->_conf.set_val("exporter_addr", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--port", (char *)NULL)) {
       cct->_conf.set_val("exporter_port", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--prio-limit", (char *)NULL)) {
-      exporter_prio_limit = val;
       cct->_conf.set_val("exporter_prio_limit", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--stats-period", (char *)NULL)) {
-      exporter_prio_limit = val;
       cct->_conf.set_val("exporter_stats_period", val);
     } else {
       ++i;
@@ -62,9 +58,8 @@ int main(int argc, char **argv) {
   }
   common_init_finish(g_ceph_context);
 
-  boost::thread server_thread(http_server_thread_entrypoint, exporter_addrs);
+  boost::thread server_thread(http_server_thread_entrypoint);
   DaemonMetricCollector &collector = collector_instance();
-  collector.set_sock_dir();
   collector.main();
   server_thread.join();
 }

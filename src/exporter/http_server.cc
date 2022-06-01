@@ -136,10 +136,10 @@ void http_server(tcp::acceptor &acceptor, tcp::socket &socket) {
   });
 }
 
-void http_server_thread_entrypoint(std::string exporter_addrs) {
+void http_server_thread_entrypoint() {
   try {
-    exporter_addrs = !exporter_addrs.empty() ? exporter_addrs : g_conf().get_val<std::string>("exporter_addrs");
-    auto const address = net::ip::make_address(exporter_addrs);
+    std::string exporter_addr = g_conf().get_val<std::string>("exporter_addr");
+    auto const address = net::ip::make_address(exporter_addr);
     unsigned short port = g_conf().get_val<int64_t>("exporter_port");
 
     net::io_context ioc{1};
@@ -147,7 +147,7 @@ void http_server_thread_entrypoint(std::string exporter_addrs) {
     tcp::acceptor acceptor{ioc, {address, port}};
     tcp::socket socket{ioc};
     http_server(acceptor, socket);
-    std::cout << "Http server running on " << exporter_addrs + ":" << port << std::endl;
+    std::cout << "Http server running on " << exporter_addr << ":" << port << std::endl;
     ioc.run();
   } catch (std::exception const &e) {
     std::cerr << "Error: " << e.what() << std::endl;

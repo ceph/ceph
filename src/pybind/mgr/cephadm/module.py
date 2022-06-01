@@ -94,7 +94,7 @@ os._exit = os_exit_noop   # type: ignore
 
 
 # Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'docker.io/rhcsdashboard/ceph-exporter'
+DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.18.1'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v0.18.1'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'

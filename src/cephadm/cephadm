@@ -44,7 +44,7 @@ from pathlib import Path
 FuncT = TypeVar('FuncT', bound=Callable)
 
 # Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'docker.io/rhcsdashboard/ceph-exporter'
+DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
 DEFAULT_IMAGE_IS_MAIN = True
 DEFAULT_IMAGE_RELEASE = 'quincy'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.33.4'
