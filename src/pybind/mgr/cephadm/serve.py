@@ -320,6 +320,7 @@ class CephadmServe:
             sd.memory_usage = d.get('memory_usage')
             sd.memory_request = d.get('memory_request')
             sd.memory_limit = d.get('memory_limit')
+            sd.cpu_percentage = d.get('cpu_percentage')
             sd._service_name = d.get('service_name')
             sd.deployed_by = d.get('deployed_by')
             sd.version = d.get('version')

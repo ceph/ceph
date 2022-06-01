@@ -1025,7 +1025,7 @@ class TestMaintenance:
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
     def test_enter_failure_2(self, _target_state, _call, _listdir):
-        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
@@ -1052,7 +1052,7 @@ class TestMaintenance:
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
     def test_exit_failure_2(self, _target_exists, _target_state, _call, _listdir):
-        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = False
         _target_exists.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(

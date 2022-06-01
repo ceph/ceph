@@ -841,6 +841,7 @@ class DaemonDescription(object):
                  memory_usage: Optional[int] = None,
                  memory_request: Optional[int] = None,
                  memory_limit: Optional[int] = None,
+                 cpu_percentage: Optional[str] = None,
                  service_name: Optional[str] = None,
                  ports: Optional[List[int]] = None,
                  ip: Optional[str] = None,
@@ -902,6 +903,8 @@ class DaemonDescription(object):
         self.memory_usage: Optional[int] = memory_usage
         self.memory_request: Optional[int] = memory_request
         self.memory_limit: Optional[int] = memory_limit
+
+        self.cpu_percentage: Optional[str] = cpu_percentage
 
         self.ports: Optional[List[int]] = ports
         self.ip: Optional[str] = ip
@@ -1026,6 +1029,7 @@ class DaemonDescription(object):
         out['memory_usage'] = self.memory_usage
         out['memory_request'] = self.memory_request
         out['memory_limit'] = self.memory_limit
+        out['cpu_percentage'] = self.cpu_percentage
         out['version'] = self.version
         out['status'] = self.status.value if self.status is not None else None
         out['status_desc'] = self.status_desc
@@ -1063,6 +1067,7 @@ class DaemonDescription(object):
         out['memory_usage'] = self.memory_usage
         out['memory_request'] = self.memory_request
         out['memory_limit'] = self.memory_limit
+        out['cpu_percentage'] = self.cpu_percentage
         out['version'] = self.version
         out['status'] = self.status.value if self.status is not None else None
         out['status_desc'] = self.status_desc
