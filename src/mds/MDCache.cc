@@ -8212,7 +8212,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   if (mdr)
     mdr->snapid = snapid;
 
-  client_t client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
+  client_t client = mdr ? mdr->get_client() : -1;
 
   if (mds->logger) mds->logger->inc(l_mds_traverse);
 
