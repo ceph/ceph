@@ -8500,6 +8500,24 @@ class HostFacts():
         return read_file(HostFacts._dmi_path_list, 'bios_date')
 
     @property
+    def chassis_serial(self):
+        # type: () -> str
+        """Determine chassis serial number from DMI data in sysfs"""
+        return read_file(HostFacts._dmi_path_list, 'chassis_serial')
+
+    @property
+    def board_serial(self):
+        # type: () -> str
+        """Determine mainboard serial number from DMI data in sysfs"""
+        return read_file(HostFacts._dmi_path_list, 'board_serial')
+
+    @property
+    def product_serial(self):
+        # type: () -> str
+        """Determine server's serial number from DMI data in sysfs"""
+        return read_file(HostFacts._dmi_path_list, 'product_serial')
+
+    @property
     def timestamp(self):
         # type: () -> float
         """Return the current time as Epoch seconds"""
