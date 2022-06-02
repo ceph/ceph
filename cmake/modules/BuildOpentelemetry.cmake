@@ -6,14 +6,14 @@ function(target_create _target _lib)
 endfunction()
 
 function(build_opentelemetry)
-  set(opentelemetry_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/opentelemetry-cpp")
+  set(opentelemetry_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/opentelemetry-cpp")
   set(opentelemetry_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/opentelemetry-cpp")
   set(opentelemetry_cpp_targets opentelemetry_trace opentelemetry_exporter_jaeger_trace)
   set(opentelemetry_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                                -DWITH_JAEGER=ON
                                -DBUILD_TESTING=OFF
-                               -DWITH_EXAMPLES=OFF
-                               -DBoost_INCLUDE_DIR=${CMAKE_BINARY_DIR}/boost/include)
+                               -DCMAKE_BUILD_TYPE=Release
+                               -DWITH_EXAMPLES=OFF)
 
   set(opentelemetry_libs
       ${opentelemetry_BINARY_DIR}/sdk/src/trace/libopentelemetry_trace.a
@@ -27,7 +27,6 @@ function(build_opentelemetry)
                                 ${opentelemetry_SOURCE_DIR}/exporters/jaeger/include/
                                 ${opentelemetry_SOURCE_DIR}/ext/include/
                                 ${opentelemetry_SOURCE_DIR}/sdk/include/)
-  include_directories(SYSTEM ${opentelemetry_include_dir})
   # TODO: add target based propogation
   set(opentelemetry_deps opentelemetry_trace opentelemetry_resources opentelemetry_common
                          opentelemetry_exporter_jaeger_trace http_client_curl
@@ -41,8 +40,11 @@ function(build_opentelemetry)
                  ${opentelemetry_cpp_targets})
   endif()
 
-  if(NOT WITH_SYSTEM_BOOST)
+  if(WITH_SYSTEM_BOOST)
+    list(APPEND opentelemetry_CMAKE_ARGS -DBOOST_ROOT=${BOOST_ROOT})
+  else()
     list(APPEND dependencies Boost)
+    list(APPEND opentelemetry_CMAKE_ARGS -DBoost_INCLUDE_DIR=${CMAKE_BINARY_DIR}/boost/include)
   endif()
 
   include(ExternalProject)
@@ -76,12 +78,12 @@ function(build_opentelemetry)
 
   # will do all linking and path setting fake include path for
   # interface_include_directories since this happens at build time
-  file(MAKE_DIRECTORY
-       "${opentelemetry_BINARY_DIR}/opentelemetry-cpp/exporters/jaeger/include")
+  file(MAKE_DIRECTORY ${opentelemetry_include_dir})
   add_library(opentelemetry::libopentelemetry INTERFACE IMPORTED)
   add_dependencies(opentelemetry::libopentelemetry opentelemetry-cpp)
   set_target_properties(
     opentelemetry::libopentelemetry
     PROPERTIES
-      INTERFACE_LINK_LIBRARIES "${opentelemetry_deps}")
+      INTERFACE_LINK_LIBRARIES "${opentelemetry_deps}"
+      INTERFACE_INCLUDE_DIRECTORIES "${opentelemetry_include_dir}")
 endfunction()

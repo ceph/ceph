@@ -334,7 +334,7 @@ int radosgw_Main(int argc, const char **argv)
     derr << "ERROR: unable to initialize rgw tools" << dendl;
     return -r;
   }
-
+  tracing::rgw::tracer.init("rgw");
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
   rgw_http_client_init(g_ceph_context);

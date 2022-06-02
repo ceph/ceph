@@ -86,7 +86,7 @@
 %endif
 %endif
 %bcond_with seastar
-%bcond_with jaeger
+%bcond_without jaeger
 %if 0%{?fedora} || 0%{?suse_version} >= 1500
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
