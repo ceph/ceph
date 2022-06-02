@@ -577,7 +577,7 @@ int RGWObjectDirectory::setValue(cache_obj *ptr){
   list.push_back(make_pair("obj_acl", ptr->acl));
   list.push_back(make_pair("aclTimeStamp", to_string(ptr->aclTimeStamp)));
   list.push_back(make_pair("hosts", hosts));
-  list.push_back(make_pair("dirty", BoolToString(ptr->dirty)));
+  //list.push_back(make_pair("dirty", BoolToString(ptr->dirty)));
   list.push_back(make_pair("size", to_string(ptr->size_in_bytes)));
   list.push_back(make_pair("creationTime", to_string(ptr->creationTime)));
   list.push_back(make_pair("lastAccessTime", to_string(ptr->lastAccessTime)));
@@ -586,9 +586,9 @@ int RGWObjectDirectory::setValue(cache_obj *ptr){
   list.push_back(make_pair("bucket_name", ptr->bucket_name));
   list.push_back(make_pair("obj_name", ptr->obj_name));
   list.push_back(make_pair("home_location", homeToString(ptr->home_location)));
-  list.push_back(make_pair("intermediate", BoolToString(ptr->intermediate)));
-  list.push_back(make_pair("mapping_id", ptr->mapping_id));
-  list.push_back(make_pair("offset", to_string(ptr->offset)));
+  //list.push_back(make_pair("intermediate", BoolToString(ptr->intermediate)));
+  //list.push_back(make_pair("mapping_id", ptr->mapping_id));
+  //list.push_back(make_pair("offset", to_string(ptr->offset)));
 
   //creating a key entry
   keys.push_back(key);
@@ -619,7 +619,7 @@ int RGWObjectDirectory::setValue(cache_obj *ptr){
 
 }
 
-int RGWBlockDirectory::getAvgCacheWeight(string endpoint){
+/*int RGWBlockDirectory::getAvgCacheWeight(string endpoint){
   ldout(cct,10) <<__func__<<" endpoint: " << endpoint<<  dendl;
   cpp_redis::client client;
   findClient(endpoint, &client);
@@ -656,7 +656,7 @@ int RGWBlockDirectory::setAvgCacheWeight(int64_t weight){
 //  client.commit();
   client.sync_commit(std::chrono::milliseconds(1000));
   return result;
-}
+}*/
 
 int RGWBlockDirectory::setValue(cache_block *ptr){
 
@@ -895,8 +895,8 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
 	while(getline(sloction, tmp, '_'))
 	  ptr->hosts_list.push_back(tmp);
 
-	ptr->dirty = StringToBool(dirty);
-	ptr->intermediate = StringToBool(intermediate);
+	//ptr->dirty = StringToBool(dirty);
+	//ptr->intermediate = StringToBool(intermediate);
 	ptr->size_in_bytes = stoull(size);
 	ptr->creationTime = stoull(creationTime);
 	ptr->lastAccessTime = stoull(lastAccessTime);
@@ -905,8 +905,8 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
 	ptr->bucket_name = bucket_name;
 	ptr->obj_name = obj_name;
 	ptr->home_location = stringToHome(home_location);
-	ptr->mapping_id = mapping_id;
-	ptr->offset = stoull(offset);
+	//ptr->mapping_id = mapping_id;
+	//ptr->offset = stoull(offset);
 //	client.disconnect(true);
 	}
     catch(exception &e) {
@@ -982,7 +982,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr, string key){
 	while(getline(sloction, tmp, '_')){
       if (tmp.compare(cct->_conf->remote_cache_addr) != 0){
         if(tmp.compare("") != 0){
-		  ptr->cachedOnRemote = true;
+		  //ptr->cachedOnRemote = true;
 		  ptr->hosts_list.push_back(tmp);
 		}
     }}
@@ -1075,7 +1075,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr){
 	while(getline(sloction, tmp, '_')){
 	  if (tmp.compare(cct->_conf->remote_cache_addr) != 0){
 		ptr->hosts_list.push_back(tmp);
-		ptr->cachedOnRemote = true;
+		//ptr->cachedOnRemote = true;
 		}
 	}
 
