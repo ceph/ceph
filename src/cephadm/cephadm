@@ -3304,16 +3304,6 @@ def deploy_daemon_units(
                     bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
                     cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
                 )
-                if 'cluster' in ctx and ctx.cluster:
-                    # ctx.cluster is only set during adoption of a daemon from a cluster
-                    # with a custom name (not "ceph"). The initial activate command the first
-                    # time we start the new cephadm based systemd unit for this osd must account
-                    # for this by mounting to the correct data dir in the container. Otherwise
-                    # necessary files from the old data dir of the daemon won't be copied over
-                    # to the new data dir on the host. After the first start (e.g. on any redeploys)
-                    # this is no longer necessary as we will have these files in the data dir on the host
-                    if data_dir in prestart.volume_mounts:
-                        prestart.volume_mounts[data_dir] = f'/var/lib/ceph/osd/{ctx.cluster}-{daemon_id}'
                 _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
         elif daemon_type == CephIscsi.daemon_type:
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
@@ -6585,6 +6575,37 @@ class AdoptOsd(object):
 
         return osd_fsid, osd_type
 
+    def change_cluster_name(self) -> None:
+        logger.info('Attempting to convert osd cluster name to ceph . . .')
+        c = get_ceph_volume_container(
+            self.ctx,
+            args=['lvm', 'list', '{}'.format(self.osd_id), '--format=json'],
+        )
+        out, err, code = call_throws(self.ctx, c.run_cmd())
+        if code:
+            raise Exception(f'Failed to get list of LVs: {err}\nceph-volume failed with rc {code}')
+        try:
+            js = json.loads(out)
+            if not js:
+                raise RuntimeError(f'Failed to find osd.{self.osd_id}')
+            device: Optional[Dict[Any, Any]] = None
+            for d in js[self.osd_id]:
+                if d['type'] == 'block':
+                    device = d
+                    break
+            if not device:
+                raise RuntimeError(f'Failed to find block device for osd.{self.osd_id}')
+            vg = device['vg_name']
+            out, err, code = call_throws(self.ctx, ['lvchange', '--deltag', f'ceph.cluster_name={self.ctx.cluster}', vg])
+            if code:
+                raise RuntimeError(f"Can't delete tag ceph.cluster_name={self.ctx.cluster} on osd.{self.osd_id}.\nlvchange failed with rc {code}")
+            out, err, code = call_throws(self.ctx, ['lvchange', '--addtag', 'ceph.cluster_name=ceph', vg])
+            if code:
+                raise RuntimeError(f"Can't add tag ceph.cluster_name=ceph on osd.{self.osd_id}.\nlvchange failed with rc {code}")
+            logger.info('Successfully converted osd cluster name')
+        except (Exception, RuntimeError) as e:
+            logger.info(f'Failed to convert osd cluster name: {e}')
+
 
 def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
     # type: (CephadmContext, str, str, str) -> None
@@ -6610,6 +6631,8 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
             osd_fsid, osd_type = adopt_osd.check_offline_simple_osd()
         if not osd_fsid:
             raise Error('Unable to find OSD {}'.format(daemon_id))
+        elif ctx.cluster != 'ceph':
+            adopt_osd.change_cluster_name()
         logger.info('objectstore_type is %s' % osd_type)
         assert osd_type
         if osd_type == 'filestore':
