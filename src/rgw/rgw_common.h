@@ -2462,12 +2462,14 @@ struct cache_obj {
   std::string acl;  // ACLs of S3 Object
   time_t aclTimeStamp; // ACLs timestamp
   time_t creationTime; // Creation time of the S3 Object
+  /* //////// Unused for directory ///////
   bool dirty;
   bool intermediate;
   std::string mapping_id;
   uint64_t offset;
   bool is_remote_req;
   bool is_remote_req_put;
+  ///////////////////////////////////// */
 };
 
 struct cache_block {
@@ -2479,7 +2481,9 @@ struct cache_block {
   std::vector<std::string> hosts_list; // list of hostnames <ip:post> of block locations
   int64_t access_count;
   time_t lastAccessTime;
+  /* //////// Unused for directory ///////
   bool cachedOnRemote;
+  ///////////////////////////////////// */
   //CacheLocation cache_location;  
  // string host; // hostname of remote cache
 };
