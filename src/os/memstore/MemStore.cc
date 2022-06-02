@@ -1820,5 +1820,5 @@ int MemStore::PageSetObject::truncate(uint64_t size)
 MemStore::ObjectRef MemStore::Collection::create_object() const {
   if (use_page_set)
     return ceph::make_ref<PageSetObject>(cct->_conf->memstore_page_size);
-  return new BufferlistObject();
+  return make_ref<BufferlistObject>();
 }
