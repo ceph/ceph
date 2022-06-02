@@ -3555,6 +3555,7 @@ options:
   services:
   - rgw
   - osd
+  with_legacy: true
 - name: rgw_directory_address
   type: str
   level: advanced
