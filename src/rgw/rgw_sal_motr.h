@@ -306,12 +306,15 @@ class MotrBucket : public Bucket {
     int unlink_user(const DoutPrefixProvider* dpp, User* new_user, optional_yield y);
     int create_bucket_index();
     int create_multipart_indices();
-    virtual int read_stats(const DoutPrefixProvider *dpp, int shard_id,
+    virtual int read_stats(const DoutPrefixProvider *dpp,
+        const bucket_index_layout_generation& idx_layout, int shard_id,
         std::string *bucket_ver, std::string *master_ver,
         std::map<RGWObjCategory, RGWStorageStats>& stats,
         std::string *max_marker = nullptr,
         bool *syncstopped = nullptr) override;
-    virtual int read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB* ctx) override;
+    virtual int read_stats_async(const DoutPrefixProvider *dpp,
+                                 const bucket_index_layout_generation& idx_layout,
+                                 int shard_id, RGWGetBucketStats_CB* ctx) override;
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
     virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
@@ -940,7 +943,7 @@ class MotrStore : public Store {
         optional_yield y) override;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
     virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override { return; }
-    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, std::map<int, std::set<std::string> >& shard_ids) override { return; }
+    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) override {}
     virtual int clear_usage(const DoutPrefixProvider *dpp) override { return 0; }
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
         uint32_t max_entries, bool *is_truncated,
