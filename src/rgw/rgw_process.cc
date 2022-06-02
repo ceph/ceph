@@ -401,7 +401,7 @@ int process_request(rgw::sal::Store* const store,
   }
 
 done:
-  if (op) {
+  if (op && s->trace) {
     s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
     if (s->user) {
       s->trace->SetAttribute(tracing::rgw::USER_ID, s->user->get_id().id);
