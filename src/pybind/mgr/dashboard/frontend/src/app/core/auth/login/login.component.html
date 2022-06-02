@@ -1,5 +1,6 @@
 <div class="container"
      *ngIf="isLoginActive">
+  <h1 class="sr-only">Ceph login</h1>
   <form name="loginForm"
         (ngSubmit)="login()"
         #loginForm="ngForm"
@@ -49,7 +50,8 @@
         <span class="form-group-append">
           <button type="button"
                   class="btn btn-outline-light btn-password h-100 px-4"
-                  cdPasswordButton="password">
+                  cdPasswordButton="password"
+                  aria-label="toggle-password">
           </button>
         </span>
       </div>
