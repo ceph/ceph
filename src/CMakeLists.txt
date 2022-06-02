@@ -406,11 +406,9 @@ if(WITH_JAEGER)
   find_package(thrift 0.13.0 REQUIRED)
   include(BuildOpentelemetry)
   build_opentelemetry()
-  add_library(jaeger_base INTERFACE)
-  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
-    thrift::libthrift)
-  add_dependencies(common-objs jaeger_base)
-  target_link_libraries(common-objs jaeger_base)
+  set(jaeger_base opentelemetry::libopentelemetry thrift::libthrift)
+  add_dependencies(common-objs ${jaeger_base})
+  target_link_libraries(common-objs ${jaeger_base})
 endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
@@ -474,7 +472,7 @@ if(WITH_DPDK)
 endif()
 
 if(WITH_JAEGER)
-  list(APPEND ceph_common_deps jaeger_base)
+  list(APPEND ceph_common_deps ${jaeger_base})
 endif()
 
 if(WIN32)
@@ -500,10 +498,7 @@ endif()
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
-add_dependencies(common legacy-option-headers)
-if(WITH_JAEGER)
-add_dependencies(common jaeger_base)
-endif()
+add_dependencies(common legacy-option-headers ${jaeger_base})
 
 if (WIN32)
   # Statically building ceph-common on Windows fails. We're temporarily
@@ -517,13 +512,7 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 if(ENABLE_COVERAGE)
   target_link_libraries(ceph-common gcov)
 endif(ENABLE_COVERAGE)
-
-add_dependencies(ceph-common legacy-option-headers)
-
-if(WITH_JAEGER)
-add_dependencies(ceph-common jaeger_base)
-endif()
-
+add_dependencies(ceph-common legacy-option-headers ${jaeger_base})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2

@@ -408,7 +408,7 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
-option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" ON)
+option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" OFF)
 if(WITH_JAEGER)
   set(HAVE_JAEGER TRUE)
 endif()

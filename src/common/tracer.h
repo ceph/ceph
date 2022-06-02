@@ -7,7 +7,11 @@
 #include "include/buffer.h"
 
 #ifdef HAVE_JAEGER
+
 #include "opentelemetry/trace/provider.h"
+#include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
+#include "opentelemetry/sdk/trace/simple_processor.h"
+#include "opentelemetry/sdk/trace/tracer_provider.h"
 
 using jspan = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>;
 using jspan_context = opentelemetry::trace::SpanContext;
@@ -17,7 +21,6 @@ namespace tracing {
 class Tracer {
  private:
   const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
-  const static jspan noop_span;
   opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
 
  public:
@@ -25,6 +28,7 @@ class Tracer {
   Tracer(opentelemetry::nostd::string_view service_name);
 
   void init(opentelemetry::nostd::string_view service_name);
+  void shutdown();
 
   bool is_enabled() const;
   // creates and returns a new span with `trace_name`
@@ -53,6 +57,7 @@ void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl);
 #else  // !HAVE_JAEGER
 
 #include <string_view>
+
 
 
 class Value {
@@ -94,6 +99,7 @@ struct Tracer {
   jspan add_span(std::string_view, const jspan&) { return {}; }
   jspan add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
   void init(std::string_view service_name) {}
+  void shutdown() {}
 };
   inline void encode(const jspan_context& span, bufferlist& bl, uint64_t f=0) {}
   inline void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl) {}

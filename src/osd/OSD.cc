@@ -4521,6 +4521,7 @@ int OSD::shutdown()
   utime_t duration = ceph_clock_now() - start_time_func;
   dout(0) <<"Slow Shutdown duration:" << duration << " seconds" << dendl;
 
+  tracing::osd::tracer.shutdown();
 
   return r;
 }
@@ -7275,6 +7276,7 @@ void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRe
 
 void OSD::ms_fast_dispatch(Message *m)
 {
+  auto dispatch_span = tracing::osd::tracer.start_trace(__func__);
   FUNCTRACE(cct);
   if (service.is_stopping()) {
     m->put();
@@ -7330,7 +7332,7 @@ void OSD::ms_fast_dispatch(Message *m)
     tracepoint(osd, ms_fast_dispatch, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
-  op->osd_parent_span = tracing::osd::tracer.start_trace("op-request-created");
+  op->osd_parent_span = tracing::osd::tracer.add_span("op-request-created", dispatch_span);
 
   if (m->trace)
     op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
