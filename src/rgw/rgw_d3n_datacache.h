@@ -41,7 +41,8 @@ struct D3nChunkDataInfo : public LRUObject {
 };
 
 struct D3nCacheAioWriteRequest {
-	std::string oid;
+	cache_block *c_blk;
+        std::string oid;
 	void *data;
 	int fd;
 	struct aiocb *cb;
