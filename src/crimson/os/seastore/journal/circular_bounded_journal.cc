@@ -35,46 +35,27 @@ CircularBoundedJournal::mkfs_ret
 CircularBoundedJournal::mkfs(const mkfs_config_t& config)
 {
   LOG_PREFIX(CircularBoundedJournal::mkfs);
-  return _open_device(path
-  ).safe_then([this, config, FNAME]() mutable -> mkfs_ret {
-    assert(static_cast<seastore_off_t>(config.block_size) ==
-      device->get_block_size());
-    ceph::bufferlist bl;
-    CircularBoundedJournal::cbj_header_t head;
-    head.block_size = config.block_size;
-    head.size = config.total_size - device->get_block_size();
-    head.journal_tail = device->get_block_size();
-    head.device_id = config.device_id;
-    encode(head, bl);
-    header = head;
-    set_written_to(head.journal_tail);
-    DEBUG(
-      "initialize header block in CircularBoundedJournal, length {}",
-      bl.length());
-    return write_header(
-    ).handle_error(
-      mkfs_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-        "Invalid error in CircularBoundedJournal::mkfs"
-      }
-    );
-  }).safe_then([this]() -> mkfs_ret {
-    if (device) {
-      return device->close();
-    }
-    return mkfs_ertr::now();
-  });
-}
-
-CircularBoundedJournal::open_for_mount_ertr::future<>
-CircularBoundedJournal::_open_device(const std::string &path)
-{
-  ceph_assert(device);
-  return device->open(path, seastar::open_flags::rw
+  assert(device);
+  assert(static_cast<seastore_off_t>(config.block_size) ==
+    device->get_block_size());
+  ceph::bufferlist bl;
+  CircularBoundedJournal::cbj_header_t head;
+  head.block_size = config.block_size;
+  head.size = config.total_size - device->get_block_size();
+  head.journal_tail = device->get_block_size();
+  head.device_id = config.device_id;
+  encode(head, bl);
+  header = head;
+  set_written_to(head.journal_tail);
+  initialized = true;
+  DEBUG(
+    "initialize header block in CircularBoundedJournal, length {}",
+    bl.length());
+  return write_header(
   ).handle_error(
-    open_for_mount_ertr::pass_further{},
+    mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
-      "Invalid error device->open"
+      "Invalid error in CircularBoundedJournal::mkfs"
     }
   );
 }
@@ -105,10 +86,10 @@ CircularBoundedJournal::open_for_mkfs()
 CircularBoundedJournal::open_for_mount_ret
 CircularBoundedJournal::open_for_mount()
 {
-  ceph_assert(initialized);
   paddr_t paddr = convert_abs_addr_to_paddr(
     get_written_to(),
     header.device_id);
+  ceph_assert(initialized);
   if (circulation_seq == NULL_SEG_SEQ) {
     circulation_seq = 0;
   }
@@ -116,8 +97,7 @@ CircularBoundedJournal::open_for_mount()
     open_for_mount_ertr::ready_future_marker{},
     journal_seq_t{
       circulation_seq,
-      paddr
-  });
+      paddr});
 }
 
 CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
@@ -125,47 +105,13 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
   return write_header(
   ).safe_then([this]() -> close_ertr::future<> {
     initialized = false;
-    return device->close();
+    return close_ertr::now();
   }).handle_error(
     open_for_mount_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error write_header"
     }
   );
-}
-
-CircularBoundedJournal::open_for_mount_ret
-CircularBoundedJournal::open_device_read_header()
-{
-  LOG_PREFIX(CircularBoundedJournal::open_device_read_header);
-  ceph_assert(!initialized);
-  return _open_device(path
-  ).safe_then([this, FNAME]() {
-    return read_header(
-    ).handle_error(
-      open_for_mount_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error read_header"
-    }).safe_then([this, FNAME](auto p) mutable {
-      auto &[head, bl] = *p;
-      header = head;
-      DEBUG("header : {}", header);
-      paddr_t paddr = convert_abs_addr_to_paddr(
-	get_written_to(),
-	header.device_id);
-      initialized = true;
-      return open_for_mount_ret(
-	open_for_mount_ertr::ready_future_marker{},
-	journal_seq_t{
-	  circulation_seq,
-	  paddr
-	});
-    });
-  }).handle_error(
-    open_for_mount_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error _open_device"
-  });
 }
 
 CircularBoundedJournal::submit_record_ret CircularBoundedJournal::submit_record(
@@ -310,8 +256,16 @@ Journal::replay_ret CircularBoundedJournal::replay(
    * read records from last applied record prior to written_to, and replay
    */
   LOG_PREFIX(CircularBoundedJournal::replay);
-  return open_device_read_header(
-  ).safe_then([this, FNAME, delta_handler=std::move(delta_handler)] (auto) {
+  return read_header(
+  ).handle_error(
+    open_for_mount_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error read_header"
+  }).safe_then([this, FNAME, delta_handler=std::move(delta_handler)](auto p) mutable {
+    auto &[head, bl] = *p;
+    header = head;
+    DEBUG("header : {}", header);
+    initialized = true;
     circulation_seq = NULL_SEG_SEQ;
     set_written_to(get_journal_tail());
     return seastar::do_with(
@@ -333,13 +287,13 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	    if (expected_seq == NULL_SEG_SEQ || is_rolled) {
 	      DEBUG("no more records, stop replaying");
 	      return replay_ertr::make_ready_future<
-	        seastar::stop_iteration>(seastar::stop_iteration::yes);
+		seastar::stop_iteration>(seastar::stop_iteration::yes);
 	    } else {
 	      cursor_addr = get_start_addr();
 	      ++expected_seq;
 	      is_rolled = true;
 	      return replay_ertr::make_ready_future<
-	        seastar::stop_iteration>(seastar::stop_iteration::no);
+		seastar::stop_iteration>(seastar::stop_iteration::no);
 	    }
 	  }
 	  auto [r_header, bl] = *ret;
@@ -352,7 +306,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	  if (!maybe_record_deltas_list) {
 	    // This should be impossible, we did check the crc on the mdbuf
 	    ERROR("unable to decode deltas for record {} at {}",
-	          r_header, record_block_base);
+		  r_header, record_block_base);
 	    return crimson::ct_error::input_output_error::make();
 	  }
 	  DEBUG("{} at {}", r_header, cursor_addr);
