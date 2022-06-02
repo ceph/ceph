@@ -226,12 +226,12 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   auto replay() {
-    cbj->replay(
+    return cbj->replay(
       [this](const auto &offsets,
-             const auto &e,
-             auto &dirty_seq,
-             auto &alloc_seq,
-             auto last_modified) {
+	     const auto &e,
+	     auto &dirty_seq,
+	     auto &alloc_seq,
+	     auto last_modified) {
       bool found = false;
       for (auto &i : entries) {
 	paddr_t base = offsets.write_result.start_seq.offset; 
@@ -248,11 +248,19 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   auto mkfs() {
-    return cbj->mkfs(config).unsafe_get0();
+    return device->mount(
+    ).safe_then([this]() {
+      return cbj->mkfs(config
+      ).safe_then([]() {
+	return seastar::now();
+      });
+    }).unsafe_get0();
   }
   void open() {
-    cbj->open_device_read_header().unsafe_get0();
-    cbj->open_for_mkfs().unsafe_get0();
+    return cbj->open_for_mkfs(
+    ).safe_then([](auto q) {
+      return seastar::now();
+    }).unsafe_get0();
   }
   auto get_available_size() {
     return cbj->get_available_size();

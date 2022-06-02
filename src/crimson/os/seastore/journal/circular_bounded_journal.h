@@ -88,7 +88,6 @@ public:
 
   open_for_mount_ret open_for_mount() final;
 
-  open_for_mount_ret open_device_read_header();
   close_ertr::future<> close() final;
 
   journal_type_t get_type() final {
@@ -108,8 +107,6 @@ public:
   }
 
   replay_ret replay(delta_handler_t &&delta_handler) final;
-
-  open_for_mount_ertr::future<> _open_device(const std::string &path);
 
   struct cbj_header_t;
   using write_ertr = submit_record_ertr;
