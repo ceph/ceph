@@ -153,6 +153,13 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       name: this.actionLabels.DELETE,
       disable: (selection: CdTableSelection) => this.getDeleteDisableDesc(selection)
     };
+    const resyncAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.refresh,
+      click: () => this.resyncRbdModal(),
+      name: this.actionLabels.RESYNC,
+      disable: (selection: CdTableSelection) => this.getResyncDisableDesc(selection)
+    };
     const copyAction: CdTableAction = {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
@@ -200,6 +207,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       editAction,
       copyAction,
       flattenAction,
+      resyncAction,
       deleteAction,
       moveAction,
       removeSchedulingAction
@@ -411,6 +419,26 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     });
   }
 
+  resyncRbdModal() {
+    const poolName = this.selection.first().pool_name;
+    const namespace = this.selection.first().namespace;
+    const imageName = this.selection.first().name;
+    const imageSpec = new ImageSpec(poolName, namespace, imageName);
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: 'RBD',
+      itemNames: [imageSpec],
+      actionDescription: 'resync',
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('rbd/edit', {
+            image_spec: imageSpec.toString()
+          }),
+          call: this.rbdService.update(imageSpec, { resync: true })
+        })
+    });
+  }
+
   trashRbdModal() {
     const initialState = {
       poolName: this.selection.first().pool_name,
@@ -533,6 +561,19 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     return this.getInvalidNameDisable(selection) || this.hasClonedSnapshots(selection.first());
   }
 
+  getResyncDisableDesc(selection: CdTableSelection): string | boolean {
+    const first = selection.first();
+
+    if (first && this.imageIsPrimary(first)) {
+      return $localize`Primary RBD cannot be resynced`;
+    }
+
+    return this.getInvalidNameDisable(selection);
+  }
+
+  imageIsPrimary(image: object) {
+    return image['primary'];
+  }
   getInvalidNameDisable(selection: CdTableSelection): string | boolean {
     const first = selection.first();
 
