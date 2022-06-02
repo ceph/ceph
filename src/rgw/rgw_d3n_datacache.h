@@ -14,7 +14,7 @@
 #include "include/Context.h"
 #include "include/lru.h"
 #include "rgw_d3n_cacherequest.h"
-
+#include "rgw_directory.h"
 
 /*D3nDataCache*/
 struct D3nDataCache;
