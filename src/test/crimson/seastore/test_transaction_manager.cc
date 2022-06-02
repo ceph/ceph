@@ -360,6 +360,10 @@ struct transaction_manager_test_t :
     return { create_mutate_transaction(), {} };
   }
 
+  test_transaction_t create_read_test_transaction() {
+    return {create_read_transaction(), {} };
+  }
+
   test_transaction_t create_weak_test_transaction() {
     return { create_weak_transaction(), {} };
   }
@@ -640,6 +644,39 @@ struct transaction_manager_test_t :
 	"Invalid error in SeaStore::list_collections"
       }
     );
+  }
+
+  void test_parallel_extent_read() {
+    constexpr size_t TOTAL = 4<<20;
+    constexpr size_t BSIZE = 4<<10;
+    constexpr size_t BLOCKS = TOTAL / BSIZE;
+    run_async([this] {
+      for (unsigned i = 0; i < BLOCKS; ++i) {
+	auto t = create_transaction();
+	auto extent = alloc_extent(
+	  t,
+	  i * BSIZE,
+	  BSIZE);
+	ASSERT_EQ(i * BSIZE, extent->get_laddr());
+	submit_transaction(std::move(t));
+      }
+
+      seastar::do_with(
+	create_read_test_transaction(),
+	[this](auto &t) {
+	return with_trans_intr(*(t.t), [this](auto &t) {
+	  return trans_intr::parallel_for_each(
+	    boost::make_counting_iterator(0lu),
+	    boost::make_counting_iterator(BLOCKS),
+	    [this, &t](auto i) {
+	    return tm->read_extent<TestBlock>(t, i * BSIZE, BSIZE
+	    ).si_then([](auto) {
+	      return seastar::now();
+	    });
+	  });
+	});
+      }).unsafe_get0();
+    });
   }
 
   void test_random_writes_concurrent() {
@@ -1070,6 +1107,11 @@ TEST_P(tm_single_device_test_t, random_writes_concurrent)
 TEST_P(tm_multi_device_test_t, random_writes_concurrent)
 {
   test_random_writes_concurrent();
+}
+
+TEST_P(tm_single_device_test_t, parallel_extent_read)
+{
+  test_parallel_extent_read();
 }
 
 INSTANTIATE_TEST_SUITE_P(
