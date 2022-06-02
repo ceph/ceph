@@ -213,15 +213,15 @@ function cherry_pick_phase {
     verbose "Examining ${original_pr_url}"
     remote_api_output=$(curl -u ${github_user}:${github_token} --silent "https://api.github.com/repos/ceph/ceph/pulls/${original_pr}")
     base_branch=$(echo "${remote_api_output}" | jq -r '.base.label')
-    if [ "$base_branch" = "ceph:master" ] ; then
+    if [ "$base_branch" = "ceph:master" -o "$base_branch" = "ceph:main" ] ; then
         true
     else
         if [ "$FORCE" ] ; then
-            warning "base_branch ->$base_branch<- is something other than \"ceph:master\""
+            warning "base_branch ->$base_branch<- is something other than \"ceph:master\" or \"ceph:main\""
             info "--force was given, so continuing anyway"
         else
             error "${original_pr_url} is targeting ${base_branch}: cowardly refusing to perform automated cherry-pick"
-            info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\"."
+            info "Out of an abundance of caution, the script only automates cherry-picking of commits from PRs targeting \"ceph:master\" or \"ceph:main\"."
             info "You can still use the script to stage the backport, though. Just prepare the local branch \"${local_branch}\" manually and re-run the script."
             false
         fi
@@ -1156,7 +1156,7 @@ https://tracker.ceph.com/issues/41502, run:
 
     ${this_script} 41502
 
-Provided the commits in the corresponding master PR cherry-pick cleanly, the
+Provided the commits in the corresponding main PR cherry-pick cleanly, the
 script will automatically perform all steps required to stage the backport:
 
 Cherry-pick phase:
@@ -1199,7 +1199,7 @@ For details on all the options the script takes, run:
 
 For more information on Ceph backporting, see:
 
-    https://github.com/ceph/ceph/tree/master/SubmittingPatches-backports.rst
+    https://github.com/ceph/ceph/tree/main/SubmittingPatches-backports.rst
 
 EOM
 }
@@ -1705,7 +1705,7 @@ if [ "$PR_PHASE" ] ; then
         [ "$original_pr"    ] && desc="${desc}\nbackport of $(number_to_url "github" "${original_pr}")"
         [ "$original_issue" ] && desc="${desc}\nparent tracker: $(number_to_url "redmine" "${original_issue}")"
     fi
-    desc="${desc}\n\nthis backport was staged using ceph-backport.sh version ${SCRIPT_VERSION}\nfind the latest version at ${github_endpoint}/blob/master/src/script/ceph-backport.sh"
+    desc="${desc}\n\nthis backport was staged using ceph-backport.sh version ${SCRIPT_VERSION}\nfind the latest version at ${github_endpoint}/blob/main/src/script/ceph-backport.sh"
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then
