@@ -3646,3 +3646,23 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: backend_url
+  type: str
+  level: advanced
+  desc: provides Ip of backend for cluster
+  default: localhost:8001
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: max_remote_retries
+  type: int
+  level: advanced
+  desc: number of attempts to reach a remote RGW
+  default: 5
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
