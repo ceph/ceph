@@ -178,3 +178,9 @@ Relevant tracker: https://tracker.ceph.com/issues/55715
 request from client(s). This can be useful during some recovery situations
 where it's desirable to bring MDS up but have no client workload.
 Relevant tracker: https://tracker.ceph.com/issues/57090
+
+* New MDSMap field `max_xattr_size` which can be set using the `fs set` command.
+  This MDSMap field allows to configure the maximum size allowed for the full
+  key/value set for a filesystem extended attributes.  It effectively replaces
+  the old per-MDS `max_xattr_pairs_size` setting, which is now dropped.
+  Relevant tracker: https://tracker.ceph.com/issues/55725
