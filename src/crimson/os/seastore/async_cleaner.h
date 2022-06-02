@@ -17,6 +17,8 @@
 #include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
+#include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/journal/circular_bounded_journal.h"
 
 namespace crimson::os::seastore {
 

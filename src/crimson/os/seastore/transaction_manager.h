@@ -622,7 +622,7 @@ public:
   auto get_cache() {
     return cache.get();
   }
-  auto get_journal() {
+  Journal* get_journal() {
     return journal.get();
   }
 };
