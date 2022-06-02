@@ -122,6 +122,11 @@ int RGWZoneGroup::create_default(const DoutPrefixProvider *dpp, optional_yield y
   default_zone.name = zone_params.get_name();
   default_zone.id = zone_params.get_id();
   master_zone = default_zone.id;
+
+  // enable all supported features
+  enabled_features.insert(rgw::zone_features::supported.begin(),
+                          rgw::zone_features::supported.end());
+  default_zone.supported_features = enabled_features;
   
   r = create(dpp, y);
   if (r < 0 && r != -EEXIST) {
@@ -202,6 +207,8 @@ int RGWZoneGroup::add_zone(const DoutPrefixProvider *dpp,
                            bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
                            string *predirect_zone, std::optional<int> bucket_index_max_shards,
                            RGWSyncModulesManager *sync_mgr,
+                           const rgw::zone_features::set& enable_features,
+                           const rgw::zone_features::set& disable_features,
 			   optional_yield y)
 {
   auto& zone_id = zone_params.get_id();
@@ -267,6 +274,24 @@ int RGWZoneGroup::add_zone(const DoutPrefixProvider *dpp,
 
   for (auto rm : sync_from_rm) {
     zone.sync_from.erase(rm);
+  }
+
+  zone.supported_features.insert(enable_features.begin(),
+                                 enable_features.end());
+
+  for (const auto& feature : disable_features) {
+    if (enabled_features.contains(feature)) {
+      lderr(cct) << "ERROR: Cannot disable zone feature \"" << feature
+          << "\" until it's been disabled in zonegroup " << name << dendl;
+      return -EINVAL;
+    }
+    auto i = zone.supported_features.find(feature);
+    if (i == zone.supported_features.end()) {
+      ldout(cct, 1) << "WARNING: zone feature \"" << feature
+          << "\" was not enabled in zone " << zone.name << dendl;
+      continue;
+    }
+    zone.supported_features.erase(i);
   }
 
   post_process_params(dpp, y);
@@ -2379,6 +2404,7 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("default_placement", default_placement, f);
   encode_json("realm_id", realm_id, f);
   encode_json("sync_policy", sync_policy, f);
+  encode_json("enabled_features", enabled_features, f);
 }
 
 static void decode_zones(map<rgw_zone_id, RGWZone>& zones, JSONObj *o)
@@ -2423,6 +2449,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   default_placement.from_str(pr);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("sync_policy", sync_policy, obj);
+  JSONDecoder::decode_json("enabled_features", enabled_features, obj);
 }
 
 void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
@@ -2675,6 +2702,7 @@ void RGWZone::dump(Formatter *f) const
   encode_json("sync_from_all", sync_from_all, f);
   encode_json("sync_from", sync_from, f);
   encode_json("redirect_zone", redirect_zone, f);
+  encode_json("supported_features", supported_features, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -2693,6 +2721,7 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("sync_from_all", sync_from_all, true, obj);
   JSONDecoder::decode_json("sync_from", sync_from, obj);
   JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
+  JSONDecoder::decode_json("supported_features", supported_features, obj);
 }
 
 void RGWTierACLMapping::dump(Formatter *f) const

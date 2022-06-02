@@ -226,6 +226,10 @@
                                  data sync status
                                required for: 
                                  mdlog trim
+     --gen=<gen-id>            optional for: 
+                                 bilog list
+                                 bilog trim
+                                 bilog status
      --max-entries=<entries>   max entries for listing operations
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
@@ -310,6 +314,8 @@
      --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,
                                the trimming process will sleep the specified msec for every 1000 entries trimmed
      --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)
+     --enable-feature          enable a zone/zonegroup feature
+     --disable-feature         disable a zone/zonegroup feature
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   

@@ -8,6 +8,7 @@ overrides:
         is_master: true
         is_default: true
         endpoints: [c1.client.0]
+        enabled_features: ['resharding']
         zones:
           - name: a1
             is_master: true
@@ -18,6 +19,7 @@ overrides:
       - name: b
         is_default: true
         endpoints: [c2.client.0]
+        enabled_features: ['resharding']
         zones:
           - name: b1
             is_master: true

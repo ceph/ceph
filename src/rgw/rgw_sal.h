@@ -18,10 +18,15 @@
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
 #include "common/tracer.h"
+#include "rgw_datalog_notify.h"
 
 class RGWGetDataCB;
 class RGWAccessListFilter;
 class RGWLC;
+class RGWObjManifest;
+struct RGWZoneGroup;
+struct RGWZoneParams;
+class RGWRealm;
 struct RGWCtl;
 struct rgw_user_bucket;
 class RGWUsageBatch;
@@ -370,7 +375,7 @@ class Store {
     /** Wake up sync threads for bucket metadata sync */
     virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) = 0;
     /** Wake up sync threads for bucket data sync */
-    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, std::map<int, std::set<std::string> >& shard_ids) = 0;
+    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) = 0;
     /** Clear all usage statistics globally */
     virtual int clear_usage(const DoutPrefixProvider *dpp) = 0;
     /** Get usage statistics for all users and buckets */
@@ -700,13 +705,16 @@ class Bucket {
      * If @a get_stats is true, then statistics on the bucket are also looked up. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats = false) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
-    virtual int read_stats(const DoutPrefixProvider *dpp, int shard_id,
-				 std::string* bucket_ver, std::string* master_ver,
-				 std::map<RGWObjCategory, RGWStorageStats>& stats,
-				 std::string* max_marker = nullptr,
-				 bool* syncstopped = nullptr) = 0;
+    virtual int read_stats(const DoutPrefixProvider *dpp,
+			   const bucket_index_layout_generation& idx_layout,
+			   int shard_id, std::string* bucket_ver, std::string* master_ver,
+			   std::map<RGWObjCategory, RGWStorageStats>& stats,
+			   std::string* max_marker = nullptr,
+			   bool* syncstopped = nullptr) = 0;
     /** Read the bucket stats from the backing Store, asynchronous */
-    virtual int read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB* ctx) = 0;
+    virtual int read_stats_async(const DoutPrefixProvider *dpp,
+				 const bucket_index_layout_generation& idx_layout,
+				 int shard_id, RGWGetBucketStats_CB* ctx) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Refresh the metadata stats (size, count, and so on) from the backing store */

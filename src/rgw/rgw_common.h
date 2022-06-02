@@ -1071,11 +1071,6 @@ struct RGWBucketInfo {
   // layout of bucket index objects
   rgw::BucketLayout layout;
 
-  // Represents the number of bucket index object shards:
-  //   - value of 0 indicates there is no sharding (this is by default
-  //     before this feature is implemented).
-  //   - value of UINT32_T::MAX indicates this is a blind bucket.
-
   // Represents the shard number for blind bucket.
   const static uint32_t NUM_SHARDS_BLIND_BUCKET;
 
@@ -1120,6 +1115,16 @@ struct RGWBucketInfo {
   void set_sync_policy(rgw_sync_policy_info&& policy);
 
   bool empty_sync_policy() const;
+
+  bool is_indexless() const {
+    return rgw::is_layout_indexless(layout.current_index);
+  }
+  const rgw::bucket_index_layout_generation& get_current_index() const {
+    return layout.current_index;
+  }
+  rgw::bucket_index_layout_generation& get_current_index() {
+    return layout.current_index;
+  }
 
   RGWBucketInfo();
   ~RGWBucketInfo();
