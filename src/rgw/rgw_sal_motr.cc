@@ -2837,7 +2837,8 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
 
 out:
   if (rc == 0) {
-    decode(attrs, iter);
+    sal::Attrs dummy;
+    decode(dummy, iter);
     meta.decode(iter);
     ldpp_dout(dpp, 20) <<__func__<< ": lid=0x" << std::hex << meta.layout_id << dendl;
 
