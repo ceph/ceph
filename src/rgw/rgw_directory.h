@@ -83,8 +83,10 @@ public:
 	int updateAccessCount(string key, int incr);
 	int setTTL(cache_block *ptr, int seconds);
 	int getHosts(string key, string hosts);
+  	/* //////// Unused for directory ///////
 	int setAvgCacheWeight(int64_t avg_weight);
 	int getAvgCacheWeight(string endpoint);
+  	///////////////////////////////////// */
 private:
 	string buildIndex(cache_block *ptr);
 };
