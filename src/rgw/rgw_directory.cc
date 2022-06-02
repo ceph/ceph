@@ -245,10 +245,16 @@ void RGWBlockDirectory::findClient(string key, cpp_redis::client *client){
  * based on bucket_name, obj_name, and chunk_id
  */
 string RGWObjectDirectory::buildIndex(cache_obj *ptr){
+  // ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
+  ///////// Changes for directory testing ////////
+  ldout(cct,5) << __func__ << "Sam: bucket name" << ptr->bucket_name << " with object name " << ptr->obj_name << dendl;
   return ptr->bucket_name + "_" + ptr->obj_name;
 }
 
 string RGWBlockDirectory::buildIndex(cache_block *ptr){
+  // ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
+  ///////// Changes for directory testing ////////
+  ldout(cct,5) << __func__ << "Sam: bucket name" << ptr->c_obj.bucket_name << " with object name " << ptr->c_obj.obj_name << " with id " << to_string(ptr->block_id) << dendl;
   return ptr->c_obj.bucket_name + "_" + ptr->c_obj.obj_name + "_" + to_string(ptr->block_id);
 }
 /*
@@ -698,9 +704,13 @@ int RGWBlockDirectory::setValue(cache_block *ptr){
 		});
 	client.sync_commit(std::chrono::milliseconds(1000));
 	if (result.find("OK") != std::string::npos)
-	  ldout(cct,10) <<__func__<<" new key res  " << result <<dendl;
+	  // ldout(cct,10) <<__func__<<" new key res  " << result <<dendl;
+	  ///////// Changes for directory testing ////////
+	  ldout(cct,5) <<__func__<<" Sam: new key res  " << result <<dendl;
 	else
-	  ldout(cct,10) <<__func__<<" else key res  " << result <<dendl;
+	  // ldout(cct,10) <<__func__<<" else key res  " << result <<dendl; 
+	  ///////// Changes for directory testing ////////
+	  ldout(cct,5) <<__func__<<" Sam: else key res  " << result <<dendl;
 	return 0;
   }
   else
@@ -911,10 +921,14 @@ int RGWBlockDirectory::getValue(cache_block *ptr, string key){
   auto start = chrono::steady_clock::now();
   cpp_redis::client client;
   findClient(key, &client);
-  ldout(cct,10) << __func__ <<" block2 key:" << key <<dendl;
+  // ldout(cct,10) << __func__ <<" block2 key:" << key <<dendl;
+  ///////// Changes for directory testing ////////
+  ldout(cct,5) << __func__ <<" Sam: block2 key:" << key <<dendl;
 
   if (!client.is_connected()){
-	ldout(cct,10) << __func__ <<" Error key:" << key <<dendl;
+	// ldout(cct,10) << __func__ <<" Error key:" << key <<dendl;
+  	///////// Changes for directory testing ////////
+	ldout(cct,5) << __func__ <<" Sam: Error key:" << key <<dendl;
 	return -1;
   }
   int key_exist = -1;
@@ -999,12 +1013,16 @@ int RGWBlockDirectory::getValue(cache_block *ptr){
   string key = buildIndex(ptr);
   cpp_redis::client client;
   findClient(key, &client);
-  ldout(cct,10) << __func__ <<" block1 keyi0:" << key <<dendl;
+  // ldout(cct,10) << __func__ <<" block1 keyi0:" << key <<dendl;
+  ///////// Changes for directory testing ////////
+  ldout(cct,5) << __func__ <<" Sam: block1 keyi0:" << key <<dendl;
   if (!client.is_connected()){
 	return -1;
   }
 
-  ldout(cct,10) << __func__ <<" key:" << key <<dendl;
+  // ldout(cct,10) << __func__ <<" key:" << key <<dendl;
+  ///////// Changes for directory testing ////////
+  ldout(cct,5) << __func__ <<" Sam: key:" << key <<dendl;
   if (existKey(key, &client)){
 
 	string hosts;
@@ -1046,7 +1064,9 @@ int RGWBlockDirectory::getValue(cache_block *ptr){
 	  if (key_exist < 0 )
 		return key_exist;
 	
-	ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
+	// ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
+  	///////// Changes for directory testing ////////
+	ldout(cct,5) << __func__ << "Sam: found the block entry "<< key << " hosts " << hosts << dendl;
 	stringstream sloction(hosts);
 	string tmp;
 	ptr->c_obj.owner = owner;
