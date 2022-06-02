@@ -176,6 +176,25 @@ void D3nDataCache::d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c)
     outstanding_write_size -= c->cb->aio_nbytes;
     lru_insert_head(chunk_info);
   }
+
+  //////// Start of directory changes ////////
+  ldout(cct, 5) << "Sam: before cache block is made" <<dendl; 
+  c->c_blk = new cache_block(); 
+  ldout(cct, 5) << "Sam: after cache block is made" <<dendl; 
+  
+  // ALI TODO change the config var IP_ADDR:PORT 
+  //c->c_blk->hosts_list.push_back(cct->_conf->rgw_ip); 
+  c->c_blk->hosts_list.push_back("127.0.0.1:8000"); 
+  c->c_blk->hosts_list.push_back("127.0.0.1:8001"); 
+  ldout(cct, 5) << "Sam: pushed back hosts_list to c_blk, first is " << c->c_blk->hosts_list[0] << dendl; 
+  c->c_blk->c_obj.obj_name = c->oid; 
+  ldout(cct, 5) << "Sam: added c_obj.obj_name to c_blk is: " << c->c_blk->c_obj.obj_name << dendl; 
+  int rgwObjSetValue = blk_dir->setValue(c->c_blk); 
+  ldout(cct, 5) << "Sam: setObjValue: " << rgwObjSetValue << dendl; 
+  delete c->c_blk; 
+  c->c_blk = nullptr;
+  /////// End of directory changes ////////
+
   delete c;
   c = nullptr;
 }
