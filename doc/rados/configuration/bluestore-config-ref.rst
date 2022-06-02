@@ -64,7 +64,7 @@ the deployment strategy:
 **block (data) only**
 ^^^^^^^^^^^^^^^^^^^^^
 If all devices are the same type, for example all rotational drives, and
-there are no fast devices to use for metadata, it makes sense to specifiy the
+there are no fast devices to use for metadata, it makes sense to specify the
 block device only and to not separate ``block.db`` or ``block.wal``. The
 :ref:`ceph-volume-lvm` command for a single ``/dev/sda`` device looks like::
 
@@ -139,7 +139,7 @@ In older releases, internal level sizes mean that the DB can fully utilize only
 specific partition / LV sizes that correspond to sums of L0, L0+L1, L1+L2,
 etc. sizes, which with default settings means roughly 3 GB, 30 GB, 300 GB, and
 so forth.  Most deployments will not substantially benefit from sizing to
-accomodate L3 and higher, though DB compaction can be facilitated by doubling
+accommodate L3 and higher, though DB compaction can be facilitated by doubling
 these figures to 6GB, 60GB, and 600GB.
 
 Improvements in releases beginning with Nautilus 14.2.12 and Octopus 15.2.6
@@ -166,93 +166,6 @@ algorithm and caches will not shrink smaller than the amount specified by
 of priorities.  If priority information is not available, the
 ``bluestore_cache_meta_ratio`` and ``bluestore_cache_kv_ratio`` options are
 used as fallbacks.
-
-``bluestore_cache_autotune``
-
-:Description: Automatically tune the space ratios assigned to various BlueStore
-              caches while respecting minimum values.
-:Type: Boolean
-:Required: Yes
-:Default: ``True``
-
-``osd_memory_target``
-
-:Description: When TCMalloc is available and cache autotuning is enabled, try to
-              keep this many bytes mapped in memory. Note: This may not exactly
-              match the RSS memory usage of the process.  While the total amount
-              of heap memory mapped by the process should usually be close
-              to this target, there is no guarantee that the kernel will actually
-              reclaim  memory that has been unmapped.  During initial development,
-              it was found that some kernels result in the OSD's RSS memory
-              exceeding the mapped memory by up to 20%.  It is hypothesised
-              however, that the kernel generally may be more aggressive about
-              reclaiming unmapped memory when there is a high amount of memory
-              pressure.  Your mileage may vary.
-:Type: Unsigned Integer
-:Required: Yes
-:Default: ``4294967296``
-
-``bluestore_cache_autotune_chunk_size``
-
-:Description: The chunk size in bytes to allocate to caches when cache autotune
-              is enabled.  When the autotuner assigns memory to various caches,
-              it will allocate memory in chunks.  This is done to avoid
-              evictions when there are minor fluctuations in the heap size or
-              autotuned cache ratios.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``33554432``
-
-``bluestore_cache_autotune_interval``
-
-:Description: The number of seconds to wait between rebalances when cache autotune
-              is enabled.  This setting changes how quickly the allocation ratios of
-              various caches are recomputed.  Note:  Setting this interval too small
-              can result in high CPU usage and lower performance.
-:Type: Float
-:Required: No
-:Default: ``5``
-
-``osd_memory_base``
-
-:Description: When TCMalloc and cache autotuning are enabled, estimate the minimum
-              amount of memory in bytes the OSD will need.  This is used to help
-              the autotuner estimate the expected aggregate memory consumption of
-              the caches.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``805306368``
-
-``osd_memory_expected_fragmentation``
-
-:Description: When TCMalloc and cache autotuning is enabled, estimate the
-              percentage of memory fragmentation.  This is used to help the
-              autotuner estimate the expected aggregate memory consumption
-              of the caches.
-:Type: Float
-:Required: No
-:Default: ``0.15``
-
-``osd_memory_cache_min``
-
-:Description: When TCMalloc and cache autotuning are enabled, set the minimum
-              amount of memory used for caches. Note: Setting this value too
-              low can result in significant cache thrashing.
-:Type: Unsigned Integer
-:Required: No
-:Default: ``134217728``
-
-``osd_memory_cache_resize_interval``
-
-:Description: When TCMalloc and cache autotuning are enabled, wait this many
-              seconds between resizing caches.  This setting changes the total
-              amount of memory available for BlueStore to use for caching.  Note
-              that setting this interval too small can result in memory allocator
-              thrashing and lower performance.
-:Type: Float
-:Required: No
-:Default: ``1``
-
 
 Manual Cache Sizing
 ===================
@@ -286,53 +199,6 @@ device) as well as the meta and kv ratios.
 The data fraction can be calculated by
 ``<effective_cache_size> * (1 - bluestore_cache_meta_ratio - bluestore_cache_kv_ratio)``
 
-``bluestore_cache_size``
-
-:Description: The amount of memory BlueStore will use for its cache.  If zero,
-              ``bluestore_cache_size_hdd`` or ``bluestore_cache_size_ssd`` will
-              be used instead.
-:Type: Unsigned Integer
-:Required: Yes
-:Default: ``0``
-
-``bluestore_cache_size_hdd``
-
-:Description: The default amount of memory BlueStore will use for its cache when
-              backed by an HDD.
-:Type: Unsigned Integer
-:Required: Yes
-:Default: ``1 * 1024 * 1024 * 1024`` (1 GB)
-
-``bluestore_cache_size_ssd``
-
-:Description: The default amount of memory BlueStore will use for its cache when
-              backed by an SSD.
-:Type: Unsigned Integer
-:Required: Yes
-:Default: ``3 * 1024 * 1024 * 1024`` (3 GB)
-
-``bluestore_cache_meta_ratio``
-
-:Description: The ratio of cache devoted to metadata.
-:Type: Floating point
-:Required: Yes
-:Default: ``.4``
-
-``bluestore_cache_kv_ratio``
-
-:Description: The ratio of cache devoted to key/value data (RocksDB).
-:Type: Floating point
-:Required: Yes
-:Default: ``.4``
-
-``bluestore_cache_kv_max``
-
-:Description: The maximum amount of cache devoted to key/value data (RocksDB).
-:Type: Unsigned Integer
-:Required: Yes
-:Default: ``512 * 1024*1024`` (512 MB)
-
-
 Checksums
 =========
 
@@ -361,15 +227,6 @@ The *checksum algorithm* can be set either via a per-pool
 ``csum_type`` property or the global config option.  For example, ::
 
   ceph osd pool set <pool-name> csum_type <algorithm>
-
-``bluestore_csum_type``
-
-:Description: The default checksum algorithm to use.
-:Type: String
-:Required: Yes
-:Valid Settings: ``none``, ``crc32c``, ``crc32c_16``, ``crc32c_8``, ``xxhash32``, ``xxhash64``
-:Default: ``crc32c``
-
 
 Inline Compression
 ==================
@@ -409,99 +266,36 @@ set with::
   ceph osd pool set <pool-name> compression_min_blob_size <size>
   ceph osd pool set <pool-name> compression_max_blob_size <size>
 
-``bluestore_compression_algorithm``
+.. _bluestore-rocksdb-sharding:
 
-:Description: The default compressor to use (if any) if the per-pool property
-              ``compression_algorithm`` is not set. Note that ``zstd`` is *not*
-              recommended for BlueStore due to high CPU overhead when
-              compressing small amounts of data.
-:Type: String
-:Required: No
-:Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
-:Default: ``snappy``
+RocksDB Sharding
+================
 
-``bluestore_compression_mode``
+Internally BlueStore uses multiple types of key-value data,
+stored in RocksDB.  Each data type in BlueStore is assigned a
+unique prefix. Until Pacific all key-value data was stored in
+single RocksDB column family: 'default'.  Since Pacific,
+BlueStore can divide this data into multiple RocksDB column
+families. When keys have similar access frequency, modification
+frequency and lifetime, BlueStore benefits from better caching
+and more precise compaction. This improves performance, and also
+requires less disk space during compaction, since each column
+family is smaller and can compact independent of others.
 
-:Description: The default policy for using compression if the per-pool property
-              ``compression_mode`` is not set. ``none`` means never use
-              compression. ``passive`` means use compression when
-              :c:func:`clients hint <rados_set_alloc_hint>` that data is
-              compressible.  ``aggressive`` means use compression unless
-              clients hint that data is not compressible.  ``force`` means use
-              compression under all circumstances even if the clients hint that
-              the data is not compressible.
-:Type: String
-:Required: No
-:Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
-:Default: ``none``
+OSDs deployed in Pacific or later use RocksDB sharding by default.
+If Ceph is upgraded to Pacific from a previous version, sharding is off.
 
-``bluestore_compression_required_ratio``
+To enable sharding and apply the Pacific defaults, stop an OSD and run
 
-:Description: The ratio of the size of the data chunk after
-              compression relative to the original size must be at
-              least this small in order to store the compressed
-              version.
+    .. prompt:: bash #
 
-:Type: Floating point
-:Required: No
-:Default: .875
+      ceph-bluestore-tool \
+        --path <data path> \
+        --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
+        reshard
 
-``bluestore_compression_min_blob_size``
-
-:Description: Chunks smaller than this are never compressed.
-              The per-pool property ``compression_min_blob_size`` overrides
-              this setting.
-
-:Type: Unsigned Integer
-:Required: No
-:Default: 0
-
-``bluestore_compression_min_blob_size_hdd``
-
-:Description: Default value of ``bluestore compression min blob size``
-              for rotational media.
-
-:Type: Unsigned Integer
-:Required: No
-:Default: 128K
-
-``bluestore_compression_min_blob_size_ssd``
-
-:Description: Default value of ``bluestore compression min blob size``
-              for non-rotational (solid state) media.
-
-:Type: Unsigned Integer
-:Required: No
-:Default: 8K
-
-``bluestore_compression_max_blob_size``
-
-:Description: Chunks larger than this value are broken into smaller blobs of at most
-              ``bluestore_compression_max_blob_size`` bytes before being compressed.
-              The per-pool property ``compression_max_blob_size`` overrides
-              this setting.
-
-:Type: Unsigned Integer
-:Required: No
-:Default: 0
-
-``bluestore_compression_max_blob_size_hdd``
-
-:Description: Default value of ``bluestore compression max blob size``
-              for rotational media.
-
-:Type: Unsigned Integer
-:Required: No
-:Default: 512K
-
-``bluestore_compression_max_blob_size_ssd``
-
-:Description: Default value of ``bluestore compression max blob size``
-              for non-rotational (SSD, NVMe) media.
-
-:Type: Unsigned Integer
-:Required: No
-:Default: 64K
+Throttling
+==========
 
 SPDK Usage
 ==================
