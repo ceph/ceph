@@ -565,7 +565,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const first = selection.first();
 
     if (first && this.imageIsPrimary(first)) {
-      return $localize`Primary RBD cannot be resynced`;
+      return $localize`Primary RBD images cannot be resynced`;
     }
 
     return this.getInvalidNameDisable(selection);
