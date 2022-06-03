@@ -68,6 +68,7 @@ class Collection(str, enum.Enum):
     basic_mds_metadata = 'basic_mds_metadata'
     basic_pool_usage = 'basic_pool_usage'
     basic_usage_by_class = 'basic_usage_by_class'
+    basic_rook_v01 = 'basic_rook_v01'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -117,7 +118,42 @@ MODULE_COLLECTION : List[Dict] = [
         "description": "Default device class usage statistics",
         "channel": "basic",
         "nag": False
-    }
+    },
+    {
+        "name": Collection.basic_rook_v01,
+        "description": "Basic Rook deployment data",
+        "channel": "basic",
+        "nag": True
+    },
+]
+
+ROOK_KEYS_BY_COLLECTION : List[Tuple[str, Collection]] = [
+        # Note: a key cannot be both a node and a leaf, e.g.
+        # "rook/a/b"
+        # "rook/a/b/c"
+        ("rook/version", Collection.basic_rook_v01),
+        ("rook/kubernetes/version", Collection.basic_rook_v01),
+        ("rook/csi/version", Collection.basic_rook_v01),
+        ("rook/node/count/kubernetes-total", Collection.basic_rook_v01),
+        ("rook/node/count/with-ceph-daemons", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-rbd-plugin", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-cephfs-plugin", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-nfs-plugin", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/total", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/rbd", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/cephfs", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/nfs", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/bucket", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/total", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/portable", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/non-portable", Collection.basic_rook_v01),
+        ("rook/cluster/mon/count", Collection.basic_rook_v01),
+        ("rook/cluster/mon/allow-multiple-per-node", Collection.basic_rook_v01),
+        ("rook/cluster/mon/max-id", Collection.basic_rook_v01),
+        ("rook/cluster/mon/pvc/enabled", Collection.basic_rook_v01),
+        ("rook/cluster/mon/stretch/enabled", Collection.basic_rook_v01),
+        ("rook/cluster/network/provider", Collection.basic_rook_v01),
+        ("rook/cluster/external-mode", Collection.basic_rook_v01),
 ]
 
 class Module(MgrModule):
@@ -1165,6 +1201,9 @@ class Module(MgrModule):
                     'active': False
                 }
 
+            # Rook
+            self.get_rook_data(report)
+
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
 
@@ -1183,6 +1222,42 @@ class Module(MgrModule):
         # sent to a different endpoint.
 
         return report
+
+    def get_rook_data(self, report: Dict[str, object]) -> None:
+        r, outb, outs = self.mon_command({
+            'prefix': 'config-key dump',
+            'format': 'json'
+        })
+        if r != 0:
+            return
+        try:
+            config_kv_dump = json.loads(outb)
+        except json.decoder.JSONDecodeError:
+            return
+
+        for elem in ROOK_KEYS_BY_COLLECTION:
+            # elem[0] is the full key path (e.g. "rook/node/count/with-csi-nfs-plugin")
+            # elem[1] is the Collection this key belongs to
+            if self.is_enabled_collection(elem[1]):
+                self.add_kv_to_report(report, elem[0], config_kv_dump.get(elem[0]))
+
+    def add_kv_to_report(self, report: Dict[str, object], key_path: str, value: Any) -> None:
+        last_node = key_path.split('/')[-1]
+        for node in key_path.split('/')[0:-1]:
+            if node not in report:
+                report[node] = {}
+            report = report[node]  # type: ignore
+
+            # sanity check of keys correctness
+            if not isinstance(report, dict):
+                self.log.error(f"'{key_path}' is an invalid key, expected type 'dict' but got {type(report)}")
+                return
+
+        if last_node in report:
+            self.log.error(f"'{key_path}' is an invalid key, last part must not exist at this point")
+            return
+
+        report[last_node] = value
 
     def _try_post(self, what: str, url: str, report: Dict[str, Dict[str, str]]) -> Optional[str]:
         self.log.info('Sending %s to: %s' % (what, url))
