@@ -803,7 +803,7 @@ SegmentCleaner::_retrieve_live_extents(
     JOURNAL_SEQ_NULL,
     std::move(backrefs),
     [this, &t, &extents](auto &seq, auto &backrefs) {
-    return trans_intr::do_for_each(
+    return trans_intr::parallel_for_each(
       backrefs,
       [this, &extents, &t, &seq](auto &ent) {
       LOG_PREFIX(SegmentCleaner::_retrieve_live_extents);
