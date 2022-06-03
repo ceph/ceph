@@ -99,17 +99,7 @@ int RGWBackoffControlCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
     // retry the operation until it succeeds
     while (true) {
-      yield {
-	std::lock_guard l{lock};
-        cr = alloc_cr();
-        cr->get();
-        call(cr);
-      }
-      {
-	std::lock_guard l{lock};
-        cr->put();
-        cr = NULL;
-      }
+      yield call(alloc_cr());
       if (retcode >= 0) {
         break;
       }
@@ -347,27 +337,11 @@ int RGWMetaSyncStatusManager::init(const DoutPrefixProvider *dpp)
     return r;
   }
 
-  RGWMetaSyncEnv& sync_env = master_log.get_sync_env();
-
   rgw_meta_sync_status sync_status;
   r = read_sync_status(dpp, &sync_status);
   if (r < 0 && r != -ENOENT) {
     ldpp_dout(dpp, -1) << "ERROR: failed to read sync status, r=" << r << dendl;
     return r;
-  }
-
-  int num_shards = sync_status.sync_info.num_shards;
-
-  for (int i = 0; i < num_shards; i++) {
-    shard_objs[i] = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env.shard_obj_name(i));
-  }
-
-  std::unique_lock wl{ts_to_shard_lock};
-  for (int i = 0; i < num_shards; i++) {
-    clone_markers.push_back(string());
-    utime_shard ut;
-    ut.shard_id = i;
-    ts_to_shard[ut] = i;
   }
 
   return 0;
@@ -1948,16 +1922,6 @@ class RGWMetaSyncCR : public RGWCoroutine {
   RGWPeriodHistory::Cursor next; //< next period in history
   rgw_meta_sync_status sync_status;
   RGWSyncTraceNodeRef tn;
-
-  std::mutex mutex; //< protect access to shard_crs
-
-  // TODO: it should be enough to hold a reference on the stack only, as calling
-  // RGWCoroutinesStack::wakeup() doesn't refer to the RGWCoroutine if it has
-  // already completed
-  using ControlCRRef = boost::intrusive_ptr<RGWMetaSyncShardControlCR>;
-  using StackRef = boost::intrusive_ptr<RGWCoroutinesStack>;
-  using RefPair = std::pair<ControlCRRef, StackRef>;
-  map<int, RefPair> shard_crs;
   int ret{0};
 
 public:
@@ -1999,9 +1963,6 @@ public:
 
           tn->log(1, SSTR("realm epoch=" << realm_epoch << " period id=" << period_id));
 
-          // prevent wakeup() from accessing shard_crs while we're spawning them
-          std::lock_guard<std::mutex> lock(mutex);
-
           // sync this period on each shard
           for (const auto& m : sync_status.sync_markers) {
             uint32_t shard_id = m.first;
@@ -2020,11 +1981,9 @@ public:
             }
 
             using ShardCR = RGWMetaSyncShardControlCR;
-            auto cr = new ShardCR(sync_env, pool, period_id, realm_epoch,
-                                  mdlog, shard_id, marker,
-                                  std::move(period_marker), tn);
-            auto stack = spawn(cr, false);
-            shard_crs[shard_id] = RefPair{cr, stack};
+            spawn(new ShardCR(sync_env, pool, period_id, realm_epoch,
+                              mdlog, shard_id, marker,
+                              std::move(period_marker), tn), false);
           }
         }
         // wait for each shard to complete
@@ -2033,11 +1992,6 @@ public:
           collect(&ret, nullptr);
         }
         drain_all();
-        {
-          // drop shard cr refs under lock
-          std::lock_guard<std::mutex> lock(mutex);
-          shard_crs.clear();
-        }
         if (ret < 0) {
           return set_cr_error(ret);
         }
@@ -2055,15 +2009,6 @@ public:
       }
     }
     return 0;
-  }
-
-  void wakeup(int shard_id) {
-    std::lock_guard<std::mutex> lock(mutex);
-    auto iter = shard_crs.find(shard_id);
-    if (iter == shard_crs.end()) {
-      return;
-    }
-    iter->second.first->wakeup();
   }
 };
 
@@ -2315,14 +2260,6 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
   } while (!going_down);
 
   return 0;
-}
-
-void RGWRemoteMetaLog::wakeup(int shard_id)
-{
-  if (!meta_sync_cr) {
-    return;
-  }
-  meta_sync_cr->wakeup(shard_id);
 }
 
 int RGWCloneMetaLogCoroutine::operate(const DoutPrefixProvider *dpp)

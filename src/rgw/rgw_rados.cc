@@ -351,11 +351,6 @@ public:
   RGWMetaSyncProcessorThread(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados)
     : RGWSyncProcessorThread(_store->getRados(), "meta-sync"), sync(_store, async_rados) {}
 
-  void wakeup_sync_shards(set<int>& shard_ids) {
-    for (set<int>::iterator iter = shard_ids.begin(); iter != shard_ids.end(); ++iter) {
-      sync.wakeup(*iter);
-    }
-  }
   RGWMetaSyncStatusManager* get_manager() { return &sync; }
 
   int init(const DoutPrefixProvider *dpp) override {
@@ -397,12 +392,6 @@ public:
       counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + source_zone->name)),
       sync(_store, async_rados, source_zone->id, counters.get()),
       initialized(false) {}
-
-  void wakeup_sync_shards(bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >& entries) {
-    for (bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-      sync.wakeup(iter->first, iter->second);
-    }
-  }
 
   RGWDataSyncStatusManager* get_manager() { return &sync; }
 
@@ -494,38 +483,6 @@ public:
   }
 
 };
-
-void RGWRados::wakeup_meta_sync_shards(set<int>& shard_ids)
-{
-  std::lock_guard l{meta_sync_thread_lock};
-  if (meta_sync_processor_thread) {
-    meta_sync_processor_thread->wakeup_sync_shards(shard_ids);
-  }
-}
-
-void RGWRados::wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >& entries)
-{
-  ldpp_dout(dpp, 20) << __func__ << ": source_zone=" << source_zone << ", entries=" << entries << dendl;
-  for (bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-    ldpp_dout(dpp, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
-    bc::flat_set<rgw_data_notify_entry>& entries = iter->second;
-    for (const auto& [key, gen] : entries) {
-      ldpp_dout(dpp, 20) << __func__ << ": source_zone=" << source_zone << ", key=" << key
-			 << ", gen=" << gen << dendl;
-    }
-  }
-
-  std::lock_guard l{data_sync_thread_lock};
-  auto iter = data_sync_processor_threads.find(source_zone);
-  if (iter == data_sync_processor_threads.end()) {
-    ldpp_dout(dpp, 10) << __func__ << ": couldn't find sync thread for zone " << source_zone << ", skipping async data sync processing" << dendl;
-    return;
-  }
-
-  RGWDataSyncProcessorThread *thread = iter->second;
-  ceph_assert(thread);
-  thread->wakeup_sync_shards(entries);
-}
 
 RGWMetaSyncStatusManager* RGWRados::get_meta_sync_manager()
 {
@@ -1095,7 +1052,6 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
     obj_expirer->start_processor();
   }
 
-  auto& current_period = svc.zone->get_current_period();
   auto& zonegroup = svc.zone->get_zonegroup();
   auto& zone_params = svc.zone->get_zone_params();
   auto& zone = svc.zone->get_zone();

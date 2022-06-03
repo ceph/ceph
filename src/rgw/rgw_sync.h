@@ -132,7 +132,6 @@ public:
 class RGWBackoffControlCR : public RGWCoroutine
 {
   RGWCoroutine *cr;
-  ceph::mutex lock;
 
   RGWSyncBackoff backoff;
   bool reset_backoff;
@@ -144,10 +143,6 @@ protected:
     return &reset_backoff;
   }
 
-  ceph::mutex& cr_lock() {
-    return lock;
-  }
-
   RGWCoroutine *get_cr() {
     return cr;
   }
@@ -156,7 +151,6 @@ public:
   RGWBackoffControlCR(CephContext *_cct, bool _exit_on_error)
     : RGWCoroutine(_cct),
       cr(nullptr),
-      lock(ceph::make_mutex("RGWBackoffControlCR::lock:" + stringify(this))),
       reset_backoff(false), exit_on_error(_exit_on_error) {
   }
 
@@ -237,8 +231,6 @@ public:
   int init_sync_status(const DoutPrefixProvider *dpp);
   int run_sync(const DoutPrefixProvider *dpp, optional_yield y);
 
-  void wakeup(int shard_id);
-
   RGWMetaSyncEnv& get_sync_env() {
     return sync_env;
   }
@@ -249,26 +241,6 @@ class RGWMetaSyncStatusManager : public DoutPrefixProvider {
   librados::IoCtx ioctx;
 
   RGWRemoteMetaLog master_log;
-
-  std::map<int, rgw_raw_obj> shard_objs;
-
-  struct utime_shard {
-    real_time ts;
-    int shard_id;
-
-    utime_shard() : shard_id(-1) {}
-
-    bool operator<(const utime_shard& rhs) const {
-      if (ts == rhs.ts) {
-	return shard_id < rhs.shard_id;
-      }
-      return ts < rhs.ts;
-    }
-  };
-
-  ceph::shared_mutex ts_to_shard_lock = ceph::make_shared_mutex("ts_to_shard_lock");
-  std::map<utime_shard, int> ts_to_shard;
-  std::vector<std::string> clone_markers;
 
 public:
   RGWMetaSyncStatusManager(rgw::sal::RadosStore* _store, RGWAsyncRadosProcessor *async_rados)
@@ -301,7 +273,6 @@ public:
   unsigned get_subsys() const override;
   std::ostream& gen_prefix(std::ostream& out) const override;
 
-  void wakeup(int shard_id) { return master_log.wakeup(shard_id); }
   void stop() {
     master_log.finish();
   }

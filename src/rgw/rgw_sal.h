@@ -372,10 +372,6 @@ class Store {
 					optional_yield y) = 0;
     /** Get a status manager for bucket sync */
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;
-    /** Wake up sync threads for bucket metadata sync */
-    virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) = 0;
-    /** Wake up sync threads for bucket data sync */
-    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) = 0;
     /** Clear all usage statistics globally */
     virtual int clear_usage(const DoutPrefixProvider *dpp) = 0;
     /** Get usage statistics for all users and buckets */

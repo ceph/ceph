@@ -367,9 +367,6 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   RGWDataSyncEnv sync_env;
   RGWDataSyncCtx sc;
 
-  ceph::shared_mutex lock = ceph::make_shared_mutex("RGWRemoteDataLog::lock");
-  RGWDataSyncControlCR *data_sync_cr;
-
   RGWSyncTraceNodeRef tn;
 
   bool initialized;
@@ -391,8 +388,6 @@ public:
   int read_shard_status(const DoutPrefixProvider *dpp, int shard_id, std::set<std::string>& lagging_buckets,std::set<std::string>& recovering_buckets, rgw_data_sync_marker* sync_marker, const int max_entries);
   int init_sync_status(const DoutPrefixProvider *dpp, int num_shards);
   int run_sync(const DoutPrefixProvider *dpp, int num_shards);
-
-  void wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries);
 };
 
 class RGWDataSyncStatusManager : public DoutPrefixProvider {
@@ -458,8 +453,6 @@ public:
   }
 
   int run(const DoutPrefixProvider *dpp) { return source_log.run_sync(dpp, num_shards); }
-
-  void wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries) { return source_log.wakeup(shard_id, entries); }
 
   void stop() {
     source_log.finish();
