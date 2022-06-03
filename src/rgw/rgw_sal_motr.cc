@@ -1896,7 +1896,6 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   source->store->get_obj_meta_cache()->remove(dpp, delete_key);
   
   if (ent.meta.size == 0) {
-    ldpp_dout(dpp, 20) << __func__ << ": Object size is 0, not deleting motr object." << dendl;
     if (source->have_instance() && ent.is_delete_marker())
     {
       result.delete_marker = true;
@@ -1923,127 +1922,132 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
       if(ent.key.instance == "null")
         del_null_ref_key = true;
     }
-  } else {
-    ldpp_dout(dpp, 20) << "delete " << delete_key << " from " << tenant_bkt_name << dendl;
-    // Remove the motr object.
-    // versioning enabled and suspended case.
-    if (info.versioned()) {
-      if (source->have_instance())
-      {
-        // delete object permanently.
-        result.version_id = ent.key.instance;
-        if (ent.meta.category == RGWObjCategory::MultiMeta)
-          rc = source->delete_part_objs(dpp);
-        else
-          rc = source->delete_mobj(dpp);
-        if (rc < 0) {
-          ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. key- "<< delete_key << dendl;
-          return rc;
-        }
-        // delete bucket index entry.
-        rc = source->store->do_idx_op_by_name(bucket_index_iname,
-                                              M0_IC_DEL, delete_key, bl);
-        if (rc < 0) {
-          ldpp_dout(dpp, 0) << "Failed to del object's entry " << delete_key << "from bucket index. " << dendl;
-          return rc;
-        }
-        // if deleted object version is the latest version, 
-        // then update is-latest flag to true for previous version.
-        if(ent.is_current())
-        {
-          ldpp_dout(dpp, 20)<<__func__<< "Updating previous version entries " << dendl;
-          bool set_is_latest=true;
-          rc = source->update_version_entries(dpp, set_is_latest);
-          if (rc < 0)
-            return rc;
-        }
-        // delete null reference key
-        if(ent.key.instance == "null")
-          del_null_ref_key = true;
-      }
-      else{
-        // generate version-id for delete marker.
-        result.delete_marker = true;
-        source->gen_rand_obj_instance_name();
-
-
-        // if latest version is null version, then delete the null version-object and
-        // add reference of delete-marker in null reference key.
-        if(ent.key.instance == "null"){
-          result.version_id = "null";
-          // delete null version key and update null reference entry.
-          rc = source->update_null_reference(dpp, ent);
-          if (rc<0)
-          {
-            ldpp_dout(dpp, 0) << "Failed to update null reference key bucket." << dendl;
-            return rc;
-          }
-          }
-        else{
-          result.version_id = source->get_instance();
-          // update is-latest=false for current version entry.
-          ldpp_dout(dpp, 20)<<__func__<< " Updating previous version entries " << dendl;
-          rc = source->update_version_entries(dpp);
-          if (rc < 0)
-            return rc;
-          }
-        // creating a delete marker
-        bufferlist del_mark_bl;
-        rgw_bucket_dir_entry ent_del_marker;
-        ent_del_marker.key.name = source->get_name();
-        ent_del_marker.key.instance = source->get_instance();
-        if(ent.key.instance == "null")
-          ent_del_marker.key.instance = "null";
-        ent_del_marker.meta.owner = params.obj_owner.get_id().to_str();
-        ent_del_marker.meta.owner_display_name = params.obj_owner.get_display_name();
-        ent_del_marker.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER | rgw_bucket_dir_entry::FLAG_CURRENT;
-        if (real_clock::is_zero(params.mtime))
-          ent_del_marker.meta.mtime = real_clock::now();
-        else
-          ent_del_marker.meta.mtime = params.mtime;
-
-        rgw::sal::Attrs attrs;
-        ent_del_marker.encode(del_mark_bl);
-        encode(attrs, del_mark_bl);
-        ent_del_marker.meta.encode(del_mark_bl);
-
-        // key for delete marker - obj1[delete-markers's ver-id].
-        std::string delete_marker_key = source->get_key().to_str();
-        ldpp_dout(dpp, 20)<<__func__<< "Add delete marker in bucket index, key=  " <<  delete_marker_key << dendl;
-        rc = source->store->do_idx_op_by_name(bucket_index_iname,
-                                              M0_IC_PUT, delete_marker_key, del_mark_bl);
-        if(rc < 0)
-        {
-          ldpp_dout(dpp, 0) << "Failed to add delete marker in bucket." << dendl;
-          return rc;
-        }
-
-        // Update in the cache.
-        source->store->get_obj_meta_cache()->put(dpp, delete_marker_key, del_mark_bl);
-      }
-    }else
+  }
+  // Remove the motr object.
+  // versioning enabled and suspended case.
+  if (info.versioned()) {
+    if (source->have_instance())
     {
-      // Unversioned flow
-      if(ent.meta.size !=0 )
+      // delete object permanently.
+      result.version_id = ent.key.instance;
+      ldpp_dout(dpp, 20) << "delete " << delete_key << " from " << tenant_bkt_name << dendl;
+
+      // handling empty size object case
+      if(ent.meta.size != 0)
       {
-        if (ent.meta.category == RGWObjCategory::MultiMeta)
-          rc = source->delete_part_objs(dpp);
-        else
-          rc = source->delete_mobj(dpp);
-        if (rc < 0) {
-          ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. " << dendl;
-          return rc;
-        }
+          if (ent.meta.category == RGWObjCategory::MultiMeta)
+            rc = source->delete_part_objs(dpp);
+          else
+            rc = source->delete_mobj(dpp);
+          if (rc < 0) {
+            ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. key- "<< delete_key << dendl;
+            return rc;
+          }
       }
+      // delete bucket index entry.
       rc = source->store->do_idx_op_by_name(bucket_index_iname,
-                                                  M0_IC_DEL, delete_key, bl);
+                                            M0_IC_DEL, delete_key, bl);
       if (rc < 0) {
-        ldpp_dout(dpp, 0) << "Failed to del object's entry from bucket index. " << dendl;
+        ldpp_dout(dpp, 0) << "Failed to del object's entry " << delete_key << "from bucket index. " << dendl;
         return rc;
       }
-      // delete null reference key.
-      del_null_ref_key = true;
-   }
+      // if deleted object version is the latest version,
+      // then update is-latest flag to true for previous version.
+      if(ent.is_current())
+      {
+        ldpp_dout(dpp, 20)<<__func__<< "Updating previous version entries " << dendl;
+        bool set_is_latest=true;
+        rc = source->update_version_entries(dpp, set_is_latest);
+        if (rc < 0)
+          return rc;
+      }
+      // delete null reference key
+      if(ent.key.instance == "null")
+        del_null_ref_key = true;
+    }
+    else{
+      // generate version-id for delete marker.
+      result.delete_marker = true;
+      source->gen_rand_obj_instance_name();
+
+      // if latest version is null version, then delete the null version-object and
+      // add reference of delete-marker in null reference key.
+      if(ent.key.instance == "null"){
+        result.version_id = "null";
+        // delete null version key and update null reference entry.
+        rc = source->update_null_reference(dpp, ent);
+        if (rc<0)
+        {
+          ldpp_dout(dpp, 0) << "Failed to update null reference key bucket." << dendl;
+          return rc;
+        }
+        }
+      else{
+        result.version_id = source->get_instance();
+        // update is-latest=false for current version entry.
+        ldpp_dout(dpp, 20)<<__func__<< " Updating previous version entries " << dendl;
+        rc = source->update_version_entries(dpp);
+        if (rc < 0)
+          return rc;
+        }
+      // creating a delete marker
+      bufferlist del_mark_bl;
+      rgw_bucket_dir_entry ent_del_marker;
+      ent_del_marker.key.name = source->get_name();
+      ent_del_marker.key.instance = source->get_instance();
+      if(ent.key.instance == "null")
+        ent_del_marker.key.instance = "null";
+      ent_del_marker.meta.owner = params.obj_owner.get_id().to_str();
+      ent_del_marker.meta.owner_display_name = params.obj_owner.get_display_name();
+      ent_del_marker.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER | rgw_bucket_dir_entry::FLAG_CURRENT;
+      if (real_clock::is_zero(params.mtime))
+        ent_del_marker.meta.mtime = real_clock::now();
+      else
+        ent_del_marker.meta.mtime = params.mtime;
+
+      rgw::sal::Attrs attrs;
+      ent_del_marker.encode(del_mark_bl);
+      encode(attrs, del_mark_bl);
+      ent_del_marker.meta.encode(del_mark_bl);
+
+      // key for delete marker - obj1[delete-markers's ver-id].
+      std::string delete_marker_key = source->get_key().to_str();
+      ldpp_dout(dpp, 20)<<__func__<< "Add delete marker in bucket index, key=  " <<  delete_marker_key << dendl;
+      rc = source->store->do_idx_op_by_name(bucket_index_iname,
+                                            M0_IC_PUT, delete_marker_key, del_mark_bl);
+      if(rc < 0)
+      {
+        ldpp_dout(dpp, 0) << "Failed to add delete marker in bucket." << dendl;
+        return rc;
+      }
+
+      // Update in the cache.
+      source->store->get_obj_meta_cache()->put(dpp, delete_marker_key, del_mark_bl);
+    }
+  }else
+  {
+    // Unversioned flow
+    // handling empty size object case
+    if(ent.meta.size !=0)
+    {
+      ldpp_dout(dpp, 20) << "delete " << delete_key << " from " << tenant_bkt_name << dendl;
+      if (ent.meta.category == RGWObjCategory::MultiMeta)
+        rc = source->delete_part_objs(dpp);
+      else
+        rc = source->delete_mobj(dpp);
+      if (rc < 0) {
+        ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. " << dendl;
+        return rc;
+      }
+    }
+    rc = source->store->do_idx_op_by_name(bucket_index_iname,
+                                                M0_IC_DEL, delete_key, bl);
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) << "Failed to del object's entry from bucket index. " << dendl;
+      return rc;
+    }
+    // delete null reference key.
+    del_null_ref_key = true;
   }
   if(del_null_ref_key)
   {
