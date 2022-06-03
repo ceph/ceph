@@ -19,7 +19,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   panelStyle: any;
   grafanaExist = false;
   mode = '&kiosk';
-  datasource = 'Dashboard1';
+  datasource: string;
   loading = true;
   styles: Record<string, string> = {};
   dashboardExist = true;
@@ -28,6 +28,8 @@ export class GrafanaComponent implements OnInit, OnChanges {
   icons = Icons;
   readonly DEFAULT_TIME: string = 'from=now-1h&to=now';
 
+  @Input()
+  type: string;
   @Input()
   grafanaPath: string;
   @Input()
@@ -153,6 +155,8 @@ export class GrafanaComponent implements OnInit, OnChanges {
       four: 'grafana_four'
     };
 
+    this.datasource = this.type === 'metrics' ? 'Dashboard1' : 'Loki';
+
     this.settingsService.ifSettingConfigured('api/grafana/url', (url) => {
       this.grafanaExist = true;
       this.loading = false;
@@ -166,16 +170,13 @@ export class GrafanaComponent implements OnInit, OnChanges {
     this.settingsService
       .validateGrafanaDashboardUrl(this.uid)
       .subscribe((data: any) => (this.dashboardExist = data === 200));
-    this.url =
-      this.baseUrl +
-      this.uid +
-      '/' +
-      this.grafanaPath +
-      '&refresh=2s' +
-      `&var-datasource=${this.datasource}` +
-      this.mode +
-      '&' +
-      this.time;
+    if (this.type === 'metrics') {
+      this.url = `${this.baseUrl}${this.uid}/${this.grafanaPath}&refresh=2s&var-datasource=${this.datasource}${this.mode}&${this.time}`;
+    } else {
+      this.url = `${this.baseUrl.slice(0, -2)}${this.grafanaPath}orgId=1&left=["now-1h","now","${
+        this.datasource
+      }",{"refId":"A"}]${this.mode}`;
+    }
     this.grafanaSrc = this.sanitizer.bypassSecurityTrustResourceUrl(this.url);
   }
 

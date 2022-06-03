@@ -20,6 +20,8 @@ describe('GrafanaComponent', () => {
   let fixture: ComponentFixture<GrafanaComponent>;
   const expected_url =
     'http:localhost:3000/d/foo/somePath&refresh=2s&var-datasource=Dashboard1&kiosk&from=now-1h&to=now';
+  const expected_logs_url =
+    'http:localhost:3000/explore?orgId=1&left=["now-1h","now","Loki",{"refId":"A"}]&kiosk';
 
   configureTestBed({
     declarations: [GrafanaComponent, AlertPanelComponent, LoadingPanelComponent, DocComponent],
@@ -31,6 +33,7 @@ describe('GrafanaComponent', () => {
     fixture = TestBed.createComponent(GrafanaComponent);
     component = fixture.componentInstance;
     component.grafanaPath = 'somePath';
+    component.type = 'metrics';
     component.uid = 'foo';
   });
 
@@ -50,6 +53,7 @@ describe('GrafanaComponent', () => {
   describe('with grafana initialized', () => {
     beforeEach(() => {
       TestBed.inject(SettingsService)['settings'] = { 'api/grafana/url': 'http:localhost:3000' };
+      component.type = 'metrics';
       fixture.detectChanges();
     });
 
@@ -76,6 +80,25 @@ describe('GrafanaComponent', () => {
     it('should have Dashboard', () => {
       TestBed.inject(SettingsService).validateGrafanaDashboardUrl = () => of({ uid: 200 });
       expect(component.dashboardExist).toBe(true);
+    });
+  });
+
+  describe('with loki datasource', () => {
+    beforeEach(() => {
+      TestBed.inject(SettingsService)['settings'] = { 'api/grafana/url': 'http:localhost:3000' };
+      component.type = 'logs';
+      component.grafanaPath = 'explore?';
+      fixture.detectChanges();
+    });
+
+    it('should have found out that Loki Log Search exists', () => {
+      expect(component.grafanaExist).toBe(true);
+      expect(component.baseUrl).toBe('http:localhost:3000/d/');
+      expect(component.loading).toBe(false);
+      expect(component.url).toBe(expected_logs_url);
+      expect(component.grafanaSrc).toEqual({
+        changingThisBreaksApplicationSecurity: expected_logs_url
+      });
     });
   });
 });
