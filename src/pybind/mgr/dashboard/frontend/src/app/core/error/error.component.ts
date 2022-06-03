@@ -75,13 +75,9 @@ export class ErrorComponent implements OnDestroy, OnInit {
       this.message = history.state.message;
       this.header = history.state.header;
       this.section = history.state.section;
-<<<<<<< HEAD
       this.section_info = history.state.section_info;
       this.button_name = history.state.button_name;
       this.button_route = history.state.button_route;
-=======
-      this.sectionInfo = history.state.section_info;
->>>>>>> 5b33f500f5d (mgr/dashboard: Error page cleanup)
       this.icon = history.state.icon;
       this.source = history.state.source;
       this.uiConfig = history.state.uiConfig;
