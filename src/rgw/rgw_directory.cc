@@ -247,14 +247,14 @@ void RGWBlockDirectory::findClient(string key, cpp_redis::client *client){
 string RGWObjectDirectory::buildIndex(cache_obj *ptr){
   // ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
   ///////// Changes for directory testing ////////
-  ldout(cct,5) << __func__ << "Sam: bucket name" << ptr->bucket_name << " with object name " << ptr->obj_name << dendl;
+  ldout(cct,5) << "Sam: bucket name" << ptr->bucket_name << " with object name " << ptr->obj_name << dendl;
   return ptr->bucket_name + "_" + ptr->obj_name;
 }
 
 string RGWBlockDirectory::buildIndex(cache_block *ptr){
   // ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
   ///////// Changes for directory testing ////////
-  ldout(cct,5) << __func__ << "Sam: object name " << ptr->c_obj.obj_name << dendl;
+  ldout(cct,5) << "Sam: object name " << ptr->c_obj.obj_name << dendl;
   return ptr->c_obj.obj_name;
 }
 /*

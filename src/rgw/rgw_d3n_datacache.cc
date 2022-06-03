@@ -68,6 +68,8 @@ void D3nDataCache::init(CephContext *_cct) {
   head = nullptr;
   tail = nullptr;
   cache_location = cct->_conf->rgw_d3n_l1_datacache_persistent_path;
+  blk_dir = new RGWBlockDirectory();
+  blk_dir->init(cct);
   if(cache_location.back() != '/') {
       cache_location += "/";
   }
