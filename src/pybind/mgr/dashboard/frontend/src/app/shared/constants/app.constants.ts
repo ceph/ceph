@@ -128,6 +128,8 @@ export class ActionLabelsI18n {
   ENTER_MAINTENANCE: string;
   EXIT_MAINTENANCE: string;
   REMOVE_SCHEDULING: string;
+  PROMOTE: string;
+  DEMOTE: string;
   START_DRAIN: string;
   STOP_DRAIN: string;
   START: string;
@@ -202,6 +204,8 @@ export class ActionLabelsI18n {
     this.RESTART = $localize`Restart`;
 
     this.REMOVE_SCHEDULING = $localize`Remove Scheduling`;
+    this.PROMOTE = $localize`Promote`;
+    this.DEMOTE = $localize`Demote`;
   }
 }
 
