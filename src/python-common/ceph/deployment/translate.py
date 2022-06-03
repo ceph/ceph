@@ -109,6 +109,9 @@ class to_ceph_volume(object):
                 cmds[i] += " --yes"
                 cmds[i] += " --no-systemd"
 
+            if self.spec.crush_device_class:
+                cmds[i] += " --crush-device-class {}".format(self.spec.crush_device_class)
+
             if self.preview:
                 cmds[i] += " --report"
                 cmds[i] += " --format json"
