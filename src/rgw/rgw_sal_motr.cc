@@ -1530,10 +1530,7 @@ int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
 
 int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
 {
-  req_state *s = (req_state *) rctx->get_private();
-  string req_method = s->info.method;
-  /* TODO: Temp fix: Enabled Multipart-GET Obj. and disabled other multipart request methods */
-  if (this->category == RGWObjCategory::MultiMeta && (req_method == "POST" || req_method == "PUT"))
+  if (this->category == RGWObjCategory::MultiMeta)
    return 0;
 
   int rc;
@@ -3688,25 +3685,6 @@ int MotrMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
     ent.meta.mtime = ceph::real_clock::now();
     ent.meta.user_data.assign(mpbl.c_str(), mpbl.c_str() + mpbl.length());
     ent.encode(bl);
-    std::unique_ptr<RGWObjTags> obj_tags;
-    req_state *s = (req_state *) obj_ctx->get_private();
-    /* handle object tagging */
-    auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
-    if (tag_str){
-      obj_tags = std::make_unique<RGWObjTags>();
-      int ret = obj_tags->set_from_string(tag_str);
-      if (ret < 0){
-        ldpp_dout(dpp,0) << "setting obj tags failed with rc=" << ret << dendl;
-        if (ret == -ERR_INVALID_TAG){
-          ret = -EINVAL; //s3 returns only -EINVAL for PUT requests
-        }
-        return ret;
-      }
-    }
-    bufferlist tags_bl;
-    obj_tags->encode(tags_bl);
-    attrs[RGW_ATTR_TAGS] = tags_bl;
-    encode(attrs, bl);
 
     // Insert an entry into bucket multipart index so it is not shown
     // when listing a bucket.
@@ -4019,13 +3997,10 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   if (rc < 0) {
     return rc == -ENOENT ? -ERR_NO_SUCH_UPLOAD : rc;
   }
-  rgw::sal::Attrs temp_attrs;
   rgw_bucket_dir_entry ent;
   bufferlist& blr = bl;
   auto ent_iter = blr.cbegin();
   ent.decode(ent_iter);
-  decode(temp_attrs, ent_iter);
-  attrs[RGW_ATTR_TAGS] = temp_attrs[RGW_ATTR_TAGS];
 
   // Update the dir entry and insert it to the bucket index so
   // the object will be seen when listing the bucket.
