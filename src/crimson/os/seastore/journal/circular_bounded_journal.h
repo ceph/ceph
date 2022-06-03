@@ -200,7 +200,7 @@ public:
     uint64_t size = 0;   // max length of journal
 
     // start offset of CircularBoundedJournal in the device
-    rbm_abs_addr journal_tail = 0;
+    journal_seq_t journal_tail;
 
     device_id_t device_id;
 
@@ -231,9 +231,12 @@ public:
    */
 
   size_t get_used_size() const {
-    return get_written_to() >= get_journal_tail() ?
-      get_written_to() - get_journal_tail() :
-      get_written_to() + header.size + get_block_size() - get_journal_tail();
+    auto rbm_written_to = get_rbm_addr(get_written_to());
+    auto rbm_tail = get_rbm_addr(get_journal_tail());
+    return rbm_written_to >= rbm_tail ?
+      rbm_written_to - rbm_tail :
+      rbm_written_to + header.size + get_block_size()
+      - rbm_tail;
   }
   size_t get_total_size() const {
     return header.size;
@@ -245,11 +248,11 @@ public:
     return get_total_size() - get_used_size();
   }
 
-  write_ertr::future<> update_journal_tail(rbm_abs_addr addr) {
-    header.journal_tail = addr;
+  write_ertr::future<> update_journal_tail(journal_seq_t seq) {
+    header.journal_tail = seq;
     return write_header();
   }
-  rbm_abs_addr get_journal_tail() const {
+  journal_seq_t get_journal_tail() const {
     return header.journal_tail;
   }
 
@@ -261,13 +264,17 @@ public:
     write_pipeline = _write_pipeline;
   }
 
-  rbm_abs_addr get_written_to() const {
+  journal_seq_t get_written_to() const {
     return written_to;
   }
-  void set_written_to(rbm_abs_addr addr) {
+  rbm_abs_addr get_rbm_addr(journal_seq_t seq) const {
+    return convert_paddr_to_abs_addr(seq.offset);
+  }
+  void set_written_to(journal_seq_t seq) {
+    rbm_abs_addr addr = convert_paddr_to_abs_addr(seq.offset);
     assert(addr >= get_start_addr());
     assert(addr < get_journal_end());
-    written_to = addr;
+    written_to = seq;
   }
   device_id_t get_device_id() const {
     return header.device_id;
@@ -293,12 +300,11 @@ private:
    */
   bool initialized = false;
 
-  // circulation seq to track the sequence to written records
-  segment_seq_t circulation_seq = NULL_SEG_SEQ;
-
   // start address where the newest record will be written
   // should be in range [get_start_addr(), get_journal_end())
-  rbm_abs_addr written_to = 0;
+  // written_to.segment_seq is circulation seq to track 
+  // the sequence to written records
+  journal_seq_t written_to;
 };
 
 std::ostream &operator<<(std::ostream &out, const CircularBoundedJournal::cbj_header_t &header);

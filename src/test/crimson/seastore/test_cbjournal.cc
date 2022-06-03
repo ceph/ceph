@@ -271,6 +271,9 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   auto get_block_size() {
     return device->get_block_size();
   }
+  auto get_written_to_rbm_addr() {
+    return cbj->get_rbm_addr(cbj->get_written_to());
+  }
   auto get_written_to() {
     return cbj->get_written_to();
   }
@@ -281,10 +284,14 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     return cbj->get_used_size();
   }
   void update_journal_tail(rbm_abs_addr addr, uint32_t len) {
-    cbj->update_journal_tail(addr + len).unsafe_get0();
+    cbj->update_journal_tail(
+      journal_seq_t{0,
+	convert_abs_addr_to_paddr(
+	  addr + len,
+	  cbj->get_device_id())}).unsafe_get0();
   }
-  void set_written_to(rbm_abs_addr addr) {
-    cbj->set_written_to(addr);
+  void set_written_to(journal_seq_t seq) {
+    cbj->set_written_to(seq);
   }
 };
 
@@ -426,7 +433,7 @@ TEST_F(cbjournal_test_t, update_header)
     cbj->close().unsafe_get0();
     replay();
 
-    ASSERT_EQ(update_header.journal_tail, update_header.journal_tail);
+    ASSERT_EQ(update_header.journal_tail.offset, update_header.journal_tail.offset);
     ASSERT_EQ(header.block_size, update_header.block_size);
     ASSERT_EQ(header.size, update_header.size);
   });
@@ -489,7 +496,11 @@ TEST_F(cbjournal_test_t, replay_after_reset)
     }
     auto old_written_to = get_written_to();
     auto old_used_size = get_used_size();
-    set_written_to(4096);
+    set_written_to(
+      journal_seq_t{0,
+	convert_abs_addr_to_paddr(
+	  4096,
+	  cbj->get_device_id())});
     cbj->close().unsafe_get0();
     replay();
     ASSERT_EQ(old_written_to, get_written_to());
