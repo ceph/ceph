@@ -515,7 +515,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
   }
   image_locker.unlock();
 
-  if (m_local_snap_id_start > 0 && m_local_snap_id_end == CEPH_NOSNAP) {
+  if (m_local_snap_id_start > 0) {
     // remove candidate that is required for delta snapshot sync
     prune_snap_ids.erase(m_local_snap_id_start);
   }
