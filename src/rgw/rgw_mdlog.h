@@ -79,18 +79,13 @@ class RGWMetadataLog {
     return META_LOG_OBJ_PREFIX + period + ".";
   }
 
-  RWLock lock;
-  std::set<int> modified_shards;
-
-  void mark_modified(int shard_id);
 public:
   RGWMetadataLog(CephContext *_cct,
                  RGWSI_Zone *_zone_svc,
                  RGWSI_Cls *_cls_svc,
                  const std::string& period)
     : cct(_cct),
-      prefix(make_prefix(period)),
-      lock("RGWMetaLog::lock") {
+      prefix(make_prefix(period)) {
     svc.zone = _zone_svc;
     svc.cls = _cls_svc;
   }
@@ -137,8 +132,6 @@ public:
   int unlock(const DoutPrefixProvider *dpp, int shard_id, std::string& zone_id, std::string& owner_id);
 
   int update_shards(std::list<int>& shards);
-
-  void read_clear_modified(std::set<int> &modified);
 };
 
 struct LogStatusDump {

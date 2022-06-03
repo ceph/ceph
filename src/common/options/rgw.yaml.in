@@ -2304,17 +2304,6 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_md_notify_interval_msec
-  type: int
-  level: advanced
-  desc: Length of time to aggregate metadata changes
-  long_desc: Length of time (in milliseconds) in which the master zone aggregates
-    all the metadata changes that occurred, before sending notifications to all the
-    other zones.
-  default: 200
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_run_sync_thread
   type: bool
   level: advanced
@@ -3001,17 +2990,6 @@ options:
   type: str
   level: advanced
   desc: torrent field encoding
-  services:
-  - rgw
-  with_legacy: true
-- name: rgw_data_notify_interval_msec
-  type: int
-  level: advanced
-  desc: data changes notification interval to followers
-  long_desc: In multisite, radosgw will occasionally broadcast new entries in its
-    data changes log to peer zones, so they can prioritize sync of some
-    of the most recent changes. Can be disabled with 0.
-  default: 0
   services:
   - rgw
   with_legacy: true

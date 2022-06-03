@@ -249,9 +249,6 @@ class RGWDataChangesLog {
   std::string prefix;
 
   ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
-  ceph::shared_mutex modified_lock =
-    ceph::make_shared_mutex("RGWDataChangesLog::modified_lock");
-  bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> modified_shards;
 
   std::atomic<bool> down_flag = { false };
 
@@ -314,15 +311,6 @@ public:
   int list_entries(const DoutPrefixProvider *dpp, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   LogMarker& marker, bool* ptruncated);
-
-  void mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen);
-  auto read_clear_modified() {
-    std::unique_lock wl{modified_lock};
-    decltype(modified_shards) modified;
-    modified.swap(modified_shards);
-    modified_shards.clear();
-    return modified;
-  }
 
   void set_observer(rgw::BucketChangeObserver *observer) {
     this->observer = observer;

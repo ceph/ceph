@@ -156,7 +156,6 @@ int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_
   int shard_id;
 
   rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
-  mark_modified(shard_id);
   real_time now = real_clock::now();
   return svc.cls->timelog.add(dpp, oid, now, section, key, bl, null_yield);
 }
@@ -173,7 +172,6 @@ int RGWMetadataLog::store_entries_in_shard(const DoutPrefixProvider *dpp, list<c
 {
   string oid;
 
-  mark_modified(shard_id);
   rgw_shard_name(prefix, shard_id, oid);
   return svc.cls->timelog.add(dpp, oid, entries, completion, false, null_yield);
 }
@@ -298,26 +296,6 @@ int RGWMetadataLog::unlock(const DoutPrefixProvider *dpp, int shard_id, string& 
   get_shard_oid(shard_id, oid);
 
   return svc.cls->lock.unlock(dpp, svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
-}
-
-void RGWMetadataLog::mark_modified(int shard_id)
-{
-  lock.get_read();
-  if (modified_shards.find(shard_id) != modified_shards.end()) {
-    lock.unlock();
-    return;
-  }
-  lock.unlock();
-
-  std::unique_lock wl{lock};
-  modified_shards.insert(shard_id);
-}
-
-void RGWMetadataLog::read_clear_modified(set<int> &modified)
-{
-  std::unique_lock wl{lock};
-  modified.swap(modified_shards);
-  modified_shards.clear();
 }
 
 obj_version& RGWMetadataObject::get_version()
