@@ -7,12 +7,15 @@ Ceph Releases (index)
 .. toctree::
    :maxdepth: 1
 
+.. _active-releases:
+
 Active Releases
 ---------------
 
 .. toctree::
    :maxdepth: 1
 
+   Pacific <pacific>
    Octopus <octopus>
    Nautilus <nautilus>
 
