@@ -45,13 +45,11 @@ class Activate(object):
         # first try raw
         try:
             RAWActivate([]).activate(
-                device=None,
+                devs=None,
                 start_osd_id=self.args.osd_id,
                 start_osd_uuid=self.args.osd_uuid,
                 tmpfs=not self.args.no_tmpfs,
                 systemd=not self.args.no_systemd,
-                block_wal=None,
-                block_db=None,
             )
             return
         except Exception as e:
