@@ -565,6 +565,17 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   oldest_gen = logs.front().gen;
   latest_gen = logs.back().gen;
+
+  std::vector<std::pair<int, int>> gen_numshards;
+  for (auto gen = logs.front().gen; gen <= logs.back().gen; gen++) {
+    auto log = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
+    if (log == logs.end()) {
+      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
+      op_ret = -ENOENT;
+    }
+    const auto& num_shards = log->layout.in_index.layout.num_shards;
+    gen_numshards.push_back(std::make_pair(gen, num_shards));
+  }
 }
 
 void RGWOp_BILog_Info::send_response() {

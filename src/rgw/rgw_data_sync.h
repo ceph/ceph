@@ -674,6 +674,7 @@ struct rgw_bucket_index_marker_info {
   bool syncstopped{false};
   uint64_t oldest_gen = 0;
   uint64_t latest_gen = 0;
+  std::vector<std::pair<int, int>> gen_numshards;
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);

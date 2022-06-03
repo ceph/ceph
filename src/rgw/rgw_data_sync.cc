@@ -1477,6 +1477,15 @@ class RGWDataSyncShardCR : public RGWCoroutine {
     return rgw_bucket_parse_bucket_key(sync_env->cct, key,
                                        &bs.bucket, &bs.shard_id);
   }
+
+  rgw_raw_obj datalog_oid_for_error_repo(rgw_bucket_shard& bs) {
+    auto shard_shift = (bs.shard_id > 0 ? bs.shard_id : 0);
+    auto datalog_shard = (ceph_str_hash_linux(bs.bucket.name.data(), bs.bucket.name.size()) +
+        shard_shift) % cct->_conf->rgw_data_log_num_shards;
+    string oid = RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, datalog_shard);
+    return rgw_raw_obj(pool, oid + ".retry");
+  }
+
   RGWCoroutine* sync_single_entry(const rgw_bucket_shard& src,
                                   std::optional<uint64_t> gen,
                                   const std::string& marker,
@@ -1748,6 +1757,32 @@ public:
             tn->log(1, SSTR("failed to parse bucket shard: " << log_iter->entry.key));
             marker_tracker->try_update_high_marker(log_iter->log_id, 0, log_iter->log_timestamp);
             continue;
+          }
+          if (!log_iter->entry.gen) {
+            yield {
+              rgw_bucket_index_marker_info remote_info;
+              BucketIndexShardsManager remote_markers;
+              retcode = rgw_read_remote_bilog_info(sync_env->dpp, sc->conn, source_bs.bucket,
+                            remote_info, remote_markers, null_yield);
+
+              if (retcode < 0) {
+                tn->log(1, SSTR(" rgw_read_remote_bilog_info failed with retcode=" << retcode));
+                return retcode;
+              }
+              for (const auto& each : remote_info.gen_numshards) {
+                for (int sid = 0; sid < each.second; sid++) {
+                  rgw_bucket_shard bs(source_bs.bucket, sid);
+                  error_repo = datalog_oid_for_error_repo(bs);
+                  tn->log(10, SSTR("writing shard_id " << sid << "of gen" << each.first << " to error repo for retry"));
+                  call(rgw::error_repo::write_cr(sync_env->store->svc()->rados, error_repo,
+                                                      rgw::error_repo::encode_key(bs, each.first),
+                                                      ceph::real_time{}));
+                  if (retcode < 0) {
+                    tn->log(0, SSTR("ERROR: failed to log sync failure in error repo: retcode=" << retcode));
+                  }
+                }
+              }
+            }
           }
           if (!marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << log_iter->log_id << ". Duplicate entry?"));
