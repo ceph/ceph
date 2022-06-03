@@ -254,8 +254,8 @@ string RGWObjectDirectory::buildIndex(cache_obj *ptr){
 string RGWBlockDirectory::buildIndex(cache_block *ptr){
   // ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
   ///////// Changes for directory testing ////////
-  ldout(cct,5) << __func__ << "Sam: bucket name" << ptr->c_obj.bucket_name << " with object name " << ptr->c_obj.obj_name << " with id " << to_string(ptr->block_id) << dendl;
-  return ptr->c_obj.bucket_name + "_" + ptr->c_obj.obj_name + "_" + to_string(ptr->block_id);
+  ldout(cct,5) << __func__ << "Sam: object name " << ptr->c_obj.obj_name << dendl;
+  return ptr->c_obj.obj_name;
 }
 /*
  * 1 if the key exists.
