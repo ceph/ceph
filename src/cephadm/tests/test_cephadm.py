@@ -1025,7 +1025,7 @@ class TestMaintenance:
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
     def test_enter_failure_2(self, _target_state, _call, _listdir):
-        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
@@ -1052,7 +1052,7 @@ class TestMaintenance:
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
     def test_exit_failure_2(self, _target_exists, _target_state, _call, _listdir):
-        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = False
         _target_exists.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -1090,6 +1090,14 @@ class TestMonitoring(object):
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
         version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
+
+    def test_prometheus_external_url(self):
+        ctx = cd.CephadmContext()
+        daemon_type = 'prometheus'
+        daemon_id = 'home'
+        fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
+        args = cd.get_daemon_args(ctx, fsid, daemon_type, daemon_id)
+        assert any([x.startswith('--web.external-url=http://') for x in args])
 
     @mock.patch('cephadm.call')
     def test_get_version_node_exporter(self, _call):

@@ -9,7 +9,7 @@ import yaml
 from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
@@ -777,26 +777,54 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(-errno.EINVAL, stderr='--all-available-devices is required')
 
     @_cli_write_command('orch daemon add osd')
-    def _daemon_add_osd(self, svc_arg: Optional[str] = None) -> HandleCommandResult:
-        """Create an OSD service. Either --svc_arg=host:drives"""
+    def _daemon_add_osd(self,
+                        svc_arg: Optional[str] = None,
+                        method: Optional[OSDMethod] = None) -> HandleCommandResult:
+        """Create OSD daemon(s) on specified host and device(s) (e.g., ceph orch daemon add osd myhost:/dev/sdb)"""
         # Create one or more OSDs"""
 
         usage = """
 Usage:
   ceph orch daemon add osd host:device1,device2,...
+  ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2,...
 """
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
         try:
-            host_name, block_device = svc_arg.split(":")
-            block_devices = block_device.split(',')
-            devs = DeviceSelection(paths=block_devices)
+            host_name, raw = svc_arg.split(":")
+            drive_group_spec = {
+                'data_devices': []
+            }  # type: Dict
+            drv_grp_spec_arg = None
+            values = raw.split(',')
+            while values:
+                v = values[0].split(',', 1)[0]
+                if '=' in v:
+                    drv_grp_spec_arg, value = v.split('=')
+                    if drv_grp_spec_arg in ['data_devices',
+                                            'db_devices',
+                                            'wal_devices',
+                                            'journal_devices']:
+                        drive_group_spec[drv_grp_spec_arg] = []
+                        drive_group_spec[drv_grp_spec_arg].append(value)
+                    else:
+                        drive_group_spec[drv_grp_spec_arg] = value
+                elif drv_grp_spec_arg is not None:
+                    drive_group_spec[drv_grp_spec_arg].append(v)
+                else:
+                    drive_group_spec['data_devices'].append(v)
+                values.remove(v)
+
+            for dev_type in ['data_devices', 'db_devices', 'wal_devices', 'journal_devices']:
+                drive_group_spec[dev_type] = DeviceSelection(paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
+
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
-                data_devices=devs,
+                method=method,
+                **drive_group_spec,
             )
         except (TypeError, KeyError, ValueError) as e:
-            msg = f"Invalid 'host:device' spec: '{svc_arg}': {e}" + usage
+            msg = f"Invalid host:device spec: '{svc_arg}': {e}" + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
         completion = self.create_osds(drive_group)
@@ -1386,6 +1414,7 @@ Usage:
         r = {
             'target_image': status.target_image,
             'in_progress': status.in_progress,
+            'which': status.which,
             'services_complete': status.services_complete,
             'progress': status.progress,
             'message': status.message,
@@ -1396,10 +1425,16 @@ Usage:
     @_cli_write_command('orch upgrade start')
     def _upgrade_start(self,
                        image: Optional[str] = None,
-                       ceph_version: Optional[str] = None) -> HandleCommandResult:
+                       ceph_version: Optional[str] = None,
+                       daemon_types: Optional[str] = None,
+                       hosts: Optional[str] = None,
+                       services: Optional[str] = None,
+                       limit: Optional[int] = None) -> HandleCommandResult:
         """Initiate upgrade"""
         self._upgrade_check_image_name(image, ceph_version)
-        completion = self.upgrade_start(image, ceph_version)
+        dtypes = daemon_types.split(',') if daemon_types is not None else None
+        service_names = services.split(',') if services is not None else None
+        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 

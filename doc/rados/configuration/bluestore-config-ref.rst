@@ -228,7 +228,6 @@ The *checksum algorithm* can be set either via a per-pool
 
   ceph osd pool set <pool-name> csum_type <algorithm>
 
-
 Inline Compression
 ==================
 
@@ -267,7 +266,6 @@ set with::
   ceph osd pool set <pool-name> compression_min_blob_size <size>
   ceph osd pool set <pool-name> compression_max_blob_size <size>
 
-
 .. _bluestore-rocksdb-sharding:
 
 RocksDB Sharding
@@ -299,7 +297,6 @@ To enable sharding and apply the Pacific defaults, stop an OSD and run
 
 Throttling
 ==========
-
 
 SPDK Usage
 ==================

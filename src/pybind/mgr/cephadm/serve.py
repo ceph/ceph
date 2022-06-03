@@ -69,6 +69,7 @@ class CephadmServe:
         self.mgr.config_checker.load_network_config()
 
         while self.mgr.run:
+            self.log.debug("serve loop start")
 
             try:
 
@@ -111,7 +112,9 @@ class CephadmServe:
                 if e.event_subject:
                     self.mgr.events.from_orch_error(e)
 
+            self.log.debug("serve loop sleep")
             self._serve_sleep()
+            self.log.debug("serve loop wake")
         self.log.debug("serve exit")
 
     def _serve_sleep(self) -> None:
@@ -129,6 +132,7 @@ class CephadmServe:
         self.mgr.event.clear()
 
     def _update_paused_health(self) -> None:
+        self.log.debug('_update_paused_health')
         if self.mgr.paused:
             self.mgr.set_health_warning('CEPHADM_PAUSED', 'cephadm background work is paused', 1, ["'ceph orch resume' to resume"])
         else:
@@ -180,6 +184,7 @@ class CephadmServe:
         self.mgr.cache.update_autotune(host)
 
     def _refresh_hosts_and_daemons(self) -> None:
+        self.log.debug('_refresh_hosts_and_daemons')
         bad_hosts = []
         failures = []
 
@@ -320,6 +325,7 @@ class CephadmServe:
             sd.memory_usage = d.get('memory_usage')
             sd.memory_request = d.get('memory_request')
             sd.memory_limit = d.get('memory_limit')
+            sd.cpu_percentage = d.get('cpu_percentage')
             sd._service_name = d.get('service_name')
             sd.deployed_by = d.get('deployed_by')
             sd.version = d.get('version')
@@ -468,6 +474,7 @@ class CephadmServe:
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
 
     def _check_for_moved_osds(self) -> None:
+        self.log.debug('_check_for_moved_osds')
         all_osds: DefaultDict[int, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in self.mgr.cache.get_daemons_by_type('osd'):
             assert dd.daemon_id
@@ -495,6 +502,7 @@ class CephadmServe:
                     logger.exception(f'failed to remove duplicated daemon {e}')
 
     def _apply_all_services(self) -> bool:
+        self.log.debug('_apply_all_services')
         r = False
         specs = []  # type: List[ServiceSpec]
         for sn, spec in self.mgr.spec_store.active_specs.items():
@@ -824,7 +832,7 @@ class CephadmServe:
         return r
 
     def _check_daemons(self) -> None:
-
+        self.log.debug('_check_daemons')
         daemons = self.mgr.cache.get_daemons()
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in daemons:
@@ -920,6 +928,7 @@ class CephadmServe:
                     daemon_type)).daemon_check_post(daemon_descs)
 
     def _purge_deleted_services(self) -> None:
+        self.log.debug('_purge_deleted_services')
         existing_services = self.mgr.spec_store.all_specs.items()
         for service_name, spec in list(existing_services):
             if service_name not in self.mgr.spec_store.spec_deleted:

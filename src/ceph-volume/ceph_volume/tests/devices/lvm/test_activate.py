@@ -319,7 +319,7 @@ class TestActivateFlags(object):
         activation.main()
         parsed_args = capture.calls[0]['args'][0]
         assert parsed_args.filestore is False
-        assert parsed_args.bluestore is True
+        assert parsed_args.bluestore is False
 
     def test_uses_filestore(self, capture):
         args = ['--filestore', '0', 'asdf-ljh-asdf']

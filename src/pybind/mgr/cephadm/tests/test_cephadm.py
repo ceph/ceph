@@ -121,6 +121,8 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
                   ['--name', f'osd.{osd_id}', '--meta-json', mock.ANY,
                    '--config-json', '-', '--osd-fsid', 'uuid'],
                   stdin=mock.ANY, image=''),
+        mock.call(host, 'osd', 'ceph-volume',
+                  ['--', 'raw', 'list', '--format', 'json'], no_fsid=False, image=''),
     ]
     dd = cephadm_module.cache.get_daemon(f'osd.{osd_id}', host=host)
     assert dd.name() == f'osd.{osd_id}'
@@ -756,8 +758,10 @@ class TestCephadm(object):
                 ['--config-json', '-', '--', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
-            _run_cephadm.assert_called_with(
+            _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False)
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_save_non_collocated(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -796,8 +800,10 @@ class TestCephadm(object):
                     '--wal-devices', '/dev/sdd', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
                 error_ok=True, stdin='{"config": "", "keyring": ""}')
-            _run_cephadm.assert_called_with(
+            _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False)
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -868,29 +874,54 @@ class TestCephadm(object):
             assert isinstance(f1[1], DriveSelection)
 
     @pytest.mark.parametrize(
-        "devices, preview, exp_command",
+        "devices, preview, exp_commands",
         [
             # no preview and only one disk, prepare is used due the hack that is in place.
-            (['/dev/sda'], False, "lvm batch --no-auto /dev/sda --yes --no-systemd"),
+            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --yes --no-systemd"]),
             # no preview and multiple disks, uses batch
             (['/dev/sda', '/dev/sdb'], False,
-             "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"]),
             # preview and only one disk needs to use batch again to generate the preview
-            (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"),
+            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"]),
             # preview and multiple disks work the same
             (['/dev/sda', '/dev/sdb'], True,
-             "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"]),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    def test_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_command):
+    def test_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_commands):
         with with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(service_id='test.spec', placement=PlacementSpec(
                 host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
-            assert out in exp_command
+            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands) for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
+
+    @pytest.mark.parametrize(
+        "devices, preview, exp_commands",
+        [
+            # one data device, no preview
+            (['/dev/sda'], False, ["raw prepare --bluestore --data /dev/sda"]),
+            # multiple data devices, no preview
+            (['/dev/sda', '/dev/sdb'], False,
+             ["raw prepare --bluestore --data /dev/sda", "raw prepare --bluestore --data /dev/sdb"]),
+            # one data device, preview
+            (['/dev/sda'], True, ["raw prepare --bluestore --data /dev/sda --report --format json"]),
+            # multiple data devices, preview
+            (['/dev/sda', '/dev/sdb'], True,
+             ["raw prepare --bluestore --data /dev/sda --report --format json", "raw prepare --bluestore --data /dev/sdb --report --format json"]),
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_raw_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_commands):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(service_id='test.spec', method='raw', placement=PlacementSpec(
+                host_pattern='test'), data_devices=DeviceSelection(paths=devices))
+            ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
+            preview = preview
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
+            assert all(any(cmd in exp_cmd for exp_cmd in exp_commands) for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([

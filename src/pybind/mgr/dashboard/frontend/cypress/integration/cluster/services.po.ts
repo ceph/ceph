@@ -18,7 +18,7 @@ export class ServicesPageHelper extends PageHelper {
 
   serviceDetailColumnIndex = {
     daemonName: 2,
-    status: 7
+    status: 4
   };
 
   check_for_service() {
@@ -123,7 +123,7 @@ export class ServicesPageHelper extends PageHelper {
     cy.url().then((url) => {
       if (!url.includes(pages.index.url)) {
         daemonNameIndex = 1;
-        statusIndex = 6;
+        statusIndex = 3;
       }
 
       cy.get('cd-service-daemon-list').within(() => {
@@ -179,6 +179,10 @@ export class ServicesPageHelper extends PageHelper {
     cy.get('cd-service-daemon-list').within(() => {
       this.getTableRow(daemon).click();
       this.clickActionButton(action);
+
+      // unselect it to avoid colliding with any other selection
+      // in different steps
+      this.getTableRow(daemon).click();
     });
   }
 }
