@@ -147,6 +147,7 @@ class CephadmUpgrade:
             r.target_image = self.target_image
             r.in_progress = True
             r.progress, r.services_complete = self._get_upgrade_info()
+            r.is_paused = self.upgrade_state.paused
 
             if self.upgrade_state.daemon_types is not None:
                 which_str = f'Upgrading daemons of type(s) {",".join(self.upgrade_state.daemon_types)}'
