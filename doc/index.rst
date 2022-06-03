@@ -110,5 +110,4 @@ about Ceph, see our `Architecture`_ section.
    security/index
    releases/general
    releases/index
-   security/index
    Glossary <glossary>
