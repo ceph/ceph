@@ -197,6 +197,7 @@ namespace rgw { namespace sal {
 
 class User;
 class Bucket;
+class Account;
 class Object;
 class BucketList;
 class MultipartUpload;
@@ -885,6 +886,20 @@ public:
   }
 };
 
+class Account {
+  protected:
+    std::string name;
+  public:
+    Account(std::string n) { name=n; }
+    virtual ~Account() = default;
+
+    const std::string& get_account_name() const { return name; }
+    virtual int load_account(const DoutPrefixProvider *dpp, optional_yield y)=0;
+    virtual int store_account(const DoutPrefixProvider *dpp, optional_yield y)=0;
+    virtual int link_user(const DoutPrefixProvider *dpp, optional_yield y)=0;
+    virtual int unlink_user(const DoutPrefixProvider *dpp, optional_yield y)=0;
+    virtual int list_users(const DoutPrefixProvider *dpp, optional_yield y)=0;
+};
 /**
  * @brief Object abstraction
  *
