@@ -353,6 +353,18 @@ class MotrBucket : public Bucket {
     friend class MotrStore;
 };
 
+class MotrAccount: public Account {
+  private:
+    MotrStore *store;
+
+  public:
+    virtual int load_account(const DoutPrefixProvider *dpp, optional_yield y) override;
+    virtual int store_account(const DoutPrefixProvider *dpp, optional_yield y) override;
+    virtual int link_user(const DoutPrefixProvider *dpp, optional_yield y) override;
+    virtual int unlink_user(const DoutPrefixProvider *dpp, optional_yield y) override;
+    virtual int list_users(const DoutPrefixProvider *dpp, optional_yield y) override;
+};
+
 class MotrPlacementTier: public PlacementTier {
   MotrStore* store;
   RGWZoneGroupPlacementTier tier;

@@ -504,6 +504,26 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBAccount::load_account(const DoutPrefixProvider *dpp, optional_yield y) {
+    return 0;
+  }
+
+  int DBAccount::store_account(const DoutPrefixProvider *dpp, optional_yield y) {
+    return 0;
+  }
+
+  int DBAccount::link_user(const DoutPrefixProvider *dpp, optional_yield y){
+    return 0; 
+  }
+
+  int DBAccount::unlink_user(const DoutPrefixProvider *dpp, optional_yield y) {
+    return 0;
+  }
+
+  int DBAccount::list_users(const DoutPrefixProvider *dpp, optional_yield y) {
+    return 0;
+  }
+
   void DBStore::finalize(void)
   {
     if (dbsm)

@@ -836,6 +836,27 @@ int MotrBucket::abort_multiparts(const DoutPrefixProvider *dpp, CephContext *cct
   return 0;
 }
 
+int MotrAccount::load_account(const DoutPrefixProvider *dpp, optional_yield y) {
+  return 0;
+}
+
+int MotrAccount::store_account(const DoutPrefixProvider *dpp, optional_yield y) {
+  return 0;
+}
+
+int MotrAccount::link_user(const DoutPrefixProvider *dpp, optional_yield y){
+  return 0; 
+}
+
+int MotrAccount::unlink_user(const DoutPrefixProvider *dpp, optional_yield y) {
+  return 0;
+}
+
+int MotrAccount::list_users(const DoutPrefixProvider *dpp, optional_yield y) {
+  return 0;
+}
+
+
 void MotrStore::finalize(void)
 {
 }

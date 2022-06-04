@@ -982,6 +982,26 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int RadosAccount::load_account(const DoutPrefixProvider *dpp, optional_yield y) {
+  return 0;
+}
+
+int RadosAccount::store_account(const DoutPrefixProvider *dpp, optional_yield y) {
+  return 0;
+}
+
+int RadosAccount::link_user(const DoutPrefixProvider *dpp, optional_yield y){
+  return 0; 
+}
+
+int RadosAccount::unlink_user(const DoutPrefixProvider *dpp, optional_yield y) {
+  return 0;
+}
+
+int RadosAccount::list_users(const DoutPrefixProvider *dpp, optional_yield y) {
+  return 0;
+}
+
 std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)
 {
   return std::make_unique<RadosUser>(this, u);
