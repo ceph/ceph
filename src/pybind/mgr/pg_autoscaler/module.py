@@ -556,7 +556,7 @@ class PgAutoscaler(MgrModule):
             capacity = root_map[root_id].capacity
             assert capacity is not None
             if capacity == 0:
-                self.log.debug('skipping empty subtree %s', cr_name)
+                self.log.debug("skipping empty subtree {0}".format(cr_name))
                 continue
 
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
