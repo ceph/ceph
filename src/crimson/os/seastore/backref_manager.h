@@ -102,6 +102,8 @@ public:
     paddr_t start,
     paddr_t end) = 0;
 
+  virtual bool backref_should_be_removed(paddr_t paddr) = 0;
+
   using retrieve_backref_extents_iertr = trans_iertr<
     crimson::errorator<
       crimson::ct_error::input_output_error>
@@ -126,9 +128,9 @@ public:
     const uint64_t max) = 0;
 
   struct remove_mapping_result_t {
-    paddr_t offset;
-    extent_len_t len;
-    laddr_t laddr;
+    paddr_t offset = P_ADDR_NULL;
+    extent_len_t len = 0;
+    laddr_t laddr = L_ADDR_NULL;
   };
 
   /**

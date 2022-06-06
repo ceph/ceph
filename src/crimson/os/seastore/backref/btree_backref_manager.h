@@ -126,6 +126,8 @@ public:
 
   void cache_new_backref_extent(paddr_t paddr, extent_types_t type) final;
 
+  bool backref_should_be_removed(paddr_t paddr) final;
+
 private:
   SegmentManagerGroup &sm_group;
   Cache &cache;
