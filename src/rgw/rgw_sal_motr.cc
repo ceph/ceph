@@ -1518,6 +1518,24 @@ int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
       ldpp_dout(dpp, 0) <<__func__<< ": Failed to get key or object's entry from bucket index. rc= " << rc << dendl;
       return rc;
     }
+  // set attributes present in setattrs
+  if (setattrs != nullptr){
+    for (auto& it : *setattrs){
+      attrs[it.first]=it.second;
+      ldpp_dout(dpp, 0) <<__func__<< " adding "<< it.first << " to attribute list." << dendl;
+    }
+  }
+
+  // delete attributes present in delattrs
+  if (delattrs != nullptr){
+    for (auto& it: *delattrs){
+      auto del_it = attrs.find(it.first);
+        if (del_it != attrs.end()) {
+            ldpp_dout(dpp, 0) <<__func__<< " removing "<< it.first << " from attribute list." << dendl;
+          attrs.erase(del_it);
+        }
+    }
+  }
   bufferlist update_bl;
   string bucket_index_iname = "motr.rgw.bucket.index." + bname;
 
@@ -1550,24 +1568,6 @@ int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPr
       ldpp_dout(dpp, 0) <<__func__<< ": Failed to get key or object's entry from bucket index. rc= " << rc << dendl;
       return rc;
     }
-  bufferlist bl;
-  if (this->store->get_obj_meta_cache()->get(dpp, key, bl)) {
-    // Cache misses.
-    string bucket_index_iname = "motr.rgw.bucket.index." + bname;
-    int rc = this->store->do_idx_op_by_name(bucket_index_iname, M0_IC_GET, key, bl);
-    if (rc < 0) {
-      ldpp_dout(dpp, 0) <<__func__<< ": Failed to get object's entry from bucket index. rc= " << rc << dendl;
-      return rc;
-    }
-
-    // Put into cache.
-    this->store->get_obj_meta_cache()->put(dpp, key, bl);
-  }
-
-  bufferlist& blr = bl;
-  auto iter = blr.cbegin();
-  ent.decode(iter);
-  decode(attrs, iter);
 
   return 0;
 }
@@ -1587,24 +1587,22 @@ void MotrObject::read_bucket_info(const DoutPrefixProvider* dpp, std::string& bn
 int MotrObject::modify_obj_attrs(RGWObjectCtx* rctx, const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
 {
   rgw_obj target = get_obj();
-  int r = get_obj_attrs(rctx, y, dpp, &target);
-  if (r < 0) {
-    return r;
-  }
+  sal::Attrs set_attrs;
+
   set_atomic(rctx);
-  attrs[attr_name] = attr_val;
-  return set_obj_attrs(dpp, rctx, &attrs, nullptr, y, &target);
+  set_attrs[attr_name] = attr_val;
+  return set_obj_attrs(dpp, rctx, &set_attrs, nullptr, y, &target);
 }
 
 int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, const char* attr_name, optional_yield y)
 {
   rgw_obj target = get_obj();
-  Attrs rmattr;
+  Attrs rm_attr;
   bufferlist bl;
 
   set_atomic(rctx);
-  rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, rctx, nullptr, &rmattr, y, &target);
+  rm_attr[attr_name] = bl;
+  return set_obj_attrs(dpp, rctx, nullptr, &rm_attr, y, &target);
 }
 
 /* RGWObjectCtx will be moved out of sal */
@@ -2850,8 +2848,7 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
 
 out:
   if (rc == 0) {
-    sal::Attrs dummy;
-    decode(dummy, iter);
+    decode(attrs, iter);
     meta.decode(iter);
     ldpp_dout(dpp, 20) <<__func__<< ": lid=0x" << std::hex << meta.layout_id << dendl;
 
