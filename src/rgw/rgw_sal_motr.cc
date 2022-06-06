@@ -39,6 +39,7 @@ extern "C" {
 #include "rgw_sal.h"
 #include "rgw_sal_motr.h"
 #include "rgw_bucket.h"
+#include "rgw_quota.h"
 #include "motr/addb/rgw_addb.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -1091,11 +1092,19 @@ int MotrBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int MotrBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
-    optional_yield y, bool check_size_only)
-{
-  /* Not Handled in the first pass as stats are also needed */
-  return 0;
+int MotrBucket::check_quota(const DoutPrefixProvider *dpp,
+    RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
+    uint64_t obj_size, optional_yield y, bool check_size_only) {
+  RGWQuotaHandler* quota_handler = \
+    RGWQuotaHandler::generate_handler(dpp, store, false);
+
+  ldpp_dout(dpp, 20) << __func__ << ": called. check_size_only = "
+     << check_size_only << ", obj_size = " << obj_size << dendl;
+
+  int rc = quota_handler->check_quota(dpp, info.owner, info.bucket,
+                                      user_quota, bucket_quota,
+                                      check_size_only ? 0 : 1, obj_size, y);
+  return rc;
 }
 
 int MotrBucket::merge_and_store_attrs(const DoutPrefixProvider *dpp, Attrs& new_attrs, optional_yield y)
