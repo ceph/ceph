@@ -7,6 +7,7 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
+from cephadm.inventory import HostCacheStatus
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 
 try:
@@ -1153,7 +1154,9 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_invalid_config_option_health_warning(self, _run_cephadm, get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+    @mock.patch("cephadm.module.HostCache.save_host_devices")
+    def test_invalid_config_option_health_warning(self, _save_devs, _run_cephadm, get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+        _save_devs.return_value = None
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
@@ -1166,6 +1169,144 @@ class TestCephadm(object):
                 'CEPHADM_INVALID_CONFIG_OPTION']['summary']
             assert 'Ignoring invalid mgr config option test' in cephadm_module.health_checks[
                 'CEPHADM_INVALID_CONFIG_OPTION']['detail']
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
+    def test_save_devices(self, _set_store, _run_cephadm, _get_foreign_ceph_option, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        entry_size = 65536  # default 64k size
+        _get_foreign_ceph_option.return_value = entry_size
+
+        class FakeDev():
+            def __init__(self, c: str = 'a'):
+                # using 1015 here makes the serialized string exactly 1024 bytes if c is one char
+                self.content = {c: c * 1015}
+
+            def to_json(self):
+                return self.content
+
+            def from_json(self, stuff):
+                return json.loads(stuff)
+
+        def byte_len(s):
+            return len(s.encode('utf-8'))
+
+        with with_host(cephadm_module, 'test'):
+            fake_devices = [FakeDev()] * 100  # should be ~100k
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) > entry_size
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size * 2
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 34], 'entries': 3})),
+                mock.call('host.test.devices.1', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 34]})),
+                mock.call('host.test.devices.2', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 32]})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+            fake_devices = [FakeDev()] * 300  # should be ~300k
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) > entry_size * 4
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size * 5
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50], 'entries': 6})),
+                mock.call('host.test.devices.1', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+                mock.call('host.test.devices.2', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+                mock.call('host.test.devices.3', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+                mock.call('host.test.devices.4', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+                mock.call('host.test.devices.5', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 50]})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+            fake_devices = [FakeDev()] * 62  # should be ~62k, just under cache size
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 62], 'entries': 1})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+            # should be ~64k but just over so it requires more entries
+            fake_devices = [FakeDev()] * 64
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) > entry_size
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size * 2
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 22], 'entries': 3})),
+                mock.call('host.test.devices.1', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 22]})),
+                mock.call('host.test.devices.2', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev()] * 20]})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+            # test for actual content being correct using differing devices
+            entry_size = 3072
+            _get_foreign_ceph_option.return_value = entry_size
+            fake_devices = [FakeDev('a'), FakeDev('b'), FakeDev('c'), FakeDev('d'), FakeDev('e')]
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) > entry_size
+            assert byte_len(json.dumps([d.to_json() for d in fake_devices])) < entry_size * 2
+            cephadm_module.cache.update_host_devices('test', fake_devices)
+            cephadm_module.cache.save_host_devices('test')
+            expected_calls = [
+                mock.call('host.test.devices.0', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev('a'), FakeDev('b')]], 'entries': 3})),
+                mock.call('host.test.devices.1', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev('c'), FakeDev('d')]]})),
+                mock.call('host.test.devices.2', json.dumps(
+                    {'devices': [d.to_json() for d in [FakeDev('e')]]})),
+            ]
+            _set_store.assert_has_calls(expected_calls)
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.get_store")
+    def test_load_devices(self, _get_store, cephadm_module: CephadmOrchestrator):
+        def _fake_store(key):
+            if key == 'host.test.devices.0':
+                return json.dumps({'devices': [d.to_json() for d in [Device('/path')] * 9], 'entries': 3})
+            elif key == 'host.test.devices.1':
+                return json.dumps({'devices': [d.to_json() for d in [Device('/path')] * 7]})
+            elif key == 'host.test.devices.2':
+                return json.dumps({'devices': [d.to_json() for d in [Device('/path')] * 4]})
+            else:
+                raise Exception(f'Get store with unexpected value {key}')
+
+        _get_store.side_effect = _fake_store
+        devs = cephadm_module.cache.load_host_devices('test')
+        assert devs == [Device('/path')] * 20
+
+    @mock.patch("cephadm.module.Inventory.__contains__")
+    def test_check_stray_host_cache_entry(self, _contains, cephadm_module: CephadmOrchestrator):
+        def _fake_inv(key):
+            if key in ['host1', 'node02', 'host.something.com']:
+                return True
+            return False
+
+        _contains.side_effect = _fake_inv
+        assert cephadm_module.cache._get_host_cache_entry_status('host1') == HostCacheStatus.host
+        assert cephadm_module.cache._get_host_cache_entry_status(
+            'host.something.com') == HostCacheStatus.host
+        assert cephadm_module.cache._get_host_cache_entry_status(
+            'node02.devices.37') == HostCacheStatus.devices
+        assert cephadm_module.cache._get_host_cache_entry_status(
+            'host.something.com.devices.0') == HostCacheStatus.devices
+        assert cephadm_module.cache._get_host_cache_entry_status('hostXXX') == HostCacheStatus.stray
+        assert cephadm_module.cache._get_host_cache_entry_status(
+            'host.nothing.com') == HostCacheStatus.stray
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
