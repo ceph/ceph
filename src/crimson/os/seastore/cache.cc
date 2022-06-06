@@ -77,12 +77,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     DEBUGT("retire {}~{} in cache -- {}", t, addr, length, *ext);
     if (ext->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
       t.add_to_read_set(ext);
-      return trans_intr::make_interruptible(
-        ext->wait_io()
-      ).then_interruptible([&t, ext=std::move(ext)]() mutable {
-        t.add_to_retired_set(ext);
-        return retire_extent_iertr::now();
-      });
+      t.add_to_retired_set(ext);
+      return retire_extent_iertr::now();
     }
     // the retired-placeholder exists
   } else {
