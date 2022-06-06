@@ -1652,7 +1652,7 @@ public:
               pos_to_prev[marker] = marker;
             }
             // limit spawn window
-            while (num_spawned() > cct->_conf->rgw_meta_sync_spawn_window) {
+            while (num_spawned() > static_cast<size_t>(cct->_conf->rgw_meta_sync_spawn_window)) {
               yield wait_for_child();
               collect_children();
             }
@@ -1851,7 +1851,7 @@ public:
                 pos_to_prev[log_iter->id] = marker;
               }
               // limit spawn window
-              while (num_spawned() > cct->_conf->rgw_meta_sync_spawn_window) {
+              while (num_spawned() > static_cast<size_t>(cct->_conf->rgw_meta_sync_spawn_window)) {
                 yield wait_for_child();
                 collect_children();
               }
