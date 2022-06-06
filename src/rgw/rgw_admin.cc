@@ -2576,7 +2576,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     return r;
   }
 
-  const size_t total_shards = shard_status.size();
+  const int total_shards = shard_status.size();
 
   out << indented{width} << "incremental sync on " << total_shards << " shards\n";
 
