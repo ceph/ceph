@@ -397,6 +397,8 @@ public:
 
     mempool::osdmap::map<entity_addr_t,utime_t> new_blocklist;
     mempool::osdmap::vector<entity_addr_t> old_blocklist;
+    mempool::osdmap::map<entity_addr_t,utime_t> new_range_blocklist;
+    mempool::osdmap::vector<entity_addr_t> old_range_blocklist;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_back_up;
     mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_front_up;
 
@@ -582,7 +584,31 @@ private:
   std::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
+  class range_bits {
+    struct ip6 {
+      uint64_t upper_64_bits, lower_64_bits;
+      uint64_t upper_mask, lower_mask;
+    };
+    struct ip4 {
+      uint32_t ip_32_bits;
+      uint32_t mask;
+    };
+    union {
+      ip6 ipv6;
+      ip4 ipv4;
+    } bits;
+    bool ipv6;
+    static void get_ipv6_bytes(unsigned const char *addr,
+			uint64_t *upper, uint64_t *lower);
+  public:
+    range_bits();
+    range_bits(const entity_addr_t& addr);
+    void parse(const entity_addr_t& addr);
+    bool matches(const entity_addr_t& addr) const;
+  };
   mempool::osdmap::unordered_map<entity_addr_t,utime_t> blocklist;
+  mempool::osdmap::map<entity_addr_t,utime_t> range_blocklist;
+  mempool::osdmap::map<entity_addr_t,range_bits> calculated_ranges;
 
   /// queue of snaps to remove
   mempool::osdmap::map<int64_t, snap_interval_set_t> removed_snaps_queue;
@@ -693,10 +719,12 @@ public:
   const utime_t& get_created() const { return created; }
   const utime_t& get_modified() const { return modified; }
 
-  bool is_blocklisted(const entity_addr_t& a) const;
-  bool is_blocklisted(const entity_addrvec_t& a) const;
-  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl) const;
-  void get_blocklist(std::set<entity_addr_t> *bl) const;
+  bool is_blocklisted(const entity_addr_t& a, CephContext *cct=nullptr) const;
+  bool is_blocklisted(const entity_addrvec_t& a, CephContext *cct=nullptr) const;
+  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl,
+		     std::list<std::pair<entity_addr_t,utime_t> > *rl) const;
+  void get_blocklist(std::set<entity_addr_t> *bl,
+		     std::set<entity_addr_t> *rl) const;
 
   std::string get_cluster_snapshot() const {
     if (cluster_snapshot_epoch == epoch)
