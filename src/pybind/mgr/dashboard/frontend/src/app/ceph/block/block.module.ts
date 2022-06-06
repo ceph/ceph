@@ -149,8 +149,19 @@ const routes: Routes = [
   {
     path: 'mirroring',
     component: RbdMirroringComponent,
-    canActivate: [FeatureTogglesGuardService],
-    data: { breadcrumbs: 'Mirroring' },
+    canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'block/mirroring',
+        redirectTo: 'error',
+        header: $localize`RBD mirroring is not configured`,
+        button_name: $localize`Configure RBD Mirroring`,
+        button_title: $localize`This will create rbd-mirror service and a replicated RBD pool`,
+        component: 'RBD Mirroring',
+        uiConfig: true
+      },
+      breadcrumbs: 'Mirroring'
+    },
     children: [
       {
         path: `${URLVerbs.EDIT}/:pool_name`,
