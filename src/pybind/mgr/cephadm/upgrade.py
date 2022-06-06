@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast
 
 import orchestrator
 from cephadm.registry import Registry
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # from ceph_fs.h
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
-
+CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
     """
@@ -58,6 +58,7 @@ class UpgradeState:
                  target_version: Optional[str] = None,
                  error: Optional[str] = None,
                  paused: Optional[bool] = None,
+                 fail_fs: bool = False,
                  fs_original_max_mds: Optional[Dict[str, int]] = None,
                  fs_original_allow_standby_replay: Optional[Dict[str, bool]] = None,
                  daemon_types: Optional[List[str]] = None,
@@ -76,6 +77,7 @@ class UpgradeState:
         self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
         self.fs_original_allow_standby_replay: Optional[Dict[str,
                                                              bool]] = fs_original_allow_standby_replay
+        self.fail_fs = fail_fs
         self.daemon_types = daemon_types
         self.hosts = hosts
         self.services = services
@@ -89,6 +91,7 @@ class UpgradeState:
             'target_id': self.target_id,
             'target_digests': self.target_digests,
             'target_version': self.target_version,
+            'fail_fs': self.fail_fs,
             'fs_original_max_mds': self.fs_original_max_mds,
             'fs_original_allow_standby_replay': self.fs_original_allow_standby_replay,
             'error': self.error,
@@ -299,6 +302,8 @@ class CephadmUpgrade:
 
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
                       hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
+        fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
+            'orchestrator', 'fail_fs', False))
         if self.mgr.mode != 'root':
             raise OrchestratorError('upgrade is not supported in %s mode' % (
                 self.mgr.mode))
@@ -336,6 +341,7 @@ class CephadmUpgrade:
         self.upgrade_state = UpgradeState(
             target_name=target_name,
             progress_id=str(uuid.uuid4()),
+            fail_fs=fail_fs_value,
             daemon_types=daemon_types,
             hosts=hosts,
             services=services,
@@ -611,27 +617,43 @@ class CephadmUpgrade:
 
             # scale down this filesystem?
             if mdsmap["max_mds"] > 1:
-                self.mgr.log.info('Upgrade: Scaling down filesystem %s' % (
-                    fs_name
-                ))
-                if fscid not in self.upgrade_state.fs_original_max_mds:
-                    self.upgrade_state.fs_original_max_mds[fscid] = mdsmap['max_mds']
-                    self._save_upgrade_state()
-                ret, out, err = self.mgr.check_mon_command({
-                    'prefix': 'fs set',
-                    'fs_name': fs_name,
-                    'var': 'max_mds',
-                    'val': '1',
-                })
-                continue_upgrade = False
-                continue
+                if self.upgrade_state.fail_fs:
+                    if not (mdsmap['flags'] & CEPH_MDSMAP_NOT_JOINABLE) and \
+                            len(mdsmap['up']) > 0:
+                        self.mgr.log.info(f'Upgrade: failing fs {fs_name} for '
+                                          f'rapid multi-rank mds upgrade')
+                        ret, out, err = self.mgr.check_mon_command({
+                            'prefix': 'fs fail',
+                            'fs_name': fs_name
+                        })
+                        if ret != 0:
+                            continue_upgrade = False
+                    continue
+                else:
+                    self.mgr.log.info('Upgrade: Scaling down filesystem %s' % (
+                        fs_name
+                    ))
+                    if fscid not in self.upgrade_state.fs_original_max_mds:
+                        self.upgrade_state.fs_original_max_mds[fscid] = \
+                            mdsmap['max_mds']
+                        self._save_upgrade_state()
+                    ret, out, err = self.mgr.check_mon_command({
+                        'prefix': 'fs set',
+                        'fs_name': fs_name,
+                        'var': 'max_mds',
+                        'val': '1',
+                    })
+                    continue_upgrade = False
+                    continue
 
-            if not (mdsmap['in'] == [0] and len(mdsmap['up']) <= 1):
-                self.mgr.log.info(
-                    'Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (fs_name))
-                time.sleep(10)
-                continue_upgrade = False
-                continue
+            if not self.upgrade_state.fail_fs:
+                if not (mdsmap['in'] == [0] and len(mdsmap['up']) <= 1):
+                    self.mgr.log.info(
+                        'Upgrade: Waiting for fs %s to scale down to reach 1 MDS' % (
+                            fs_name))
+                    time.sleep(10)
+                    continue_upgrade = False
+                    continue
 
             if len(mdsmap['up']) == 0:
                 self.mgr.log.warning(
@@ -693,6 +715,22 @@ class CephadmUpgrade:
             return False
 
         return True  # if mds has no fs it should pass ok-to-stop
+
+    def find_fs_ready_to_be_joinable(self, need_upgrade):
+        if need_upgrade:
+            fs_list = []
+            for fs in self.mgr.get("fs_map")['filesystems']:
+                cnt = 0
+                fs_name = fs["mdsmap"]["fs_name"]
+                for d_entry in need_upgrade:
+                    assert d_entry[0].daemon_id
+                    if d_entry[0].daemon_type == 'mds' and fs_name == \
+                            d_entry[0].service_name().split('.', 1)[1]:
+                        cnt += 1
+                if cnt <= 1:
+                    if fs_name not in fs_list:
+                        fs_list.append(fs_name)
+            return fs_list
 
     def _detect_need_upgrade(self, daemons: List[DaemonDescription], target_digests: Optional[List[str]] = None) -> Tuple[bool, List[Tuple[DaemonDescription, bool]], List[Tuple[DaemonDescription, bool]], int]:
         # this function takes a list of daemons and container digests. The purpose
@@ -775,7 +813,14 @@ class CephadmUpgrade:
                     return False, to_upgrade
 
             if d.daemon_type == 'mds' and self._enough_mds_for_ok_to_stop(d):
-                if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                # when fail_fs is set to true, all MDS daemons will be moved to
+                # up:standby state, so Cephadm won't be able to upgrade due to
+                # this check and and will warn with "It is NOT safe to stop
+                # mds.<daemon_name> at this time: one or more filesystems is
+                # currently degraded", therefore we bypass this check for that
+                # case.
+                if not self.upgrade_state.fail_fs \
+                        and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
 
             to_upgrade.append(d_entry)
@@ -921,7 +966,7 @@ class CephadmUpgrade:
 
     def _complete_mds_upgrade(self) -> None:
         assert self.upgrade_state is not None
-        if self.upgrade_state.fs_original_max_mds:
+        if not self.upgrade_state.fail_fs and self.upgrade_state.fs_original_max_mds:
             for fs in self.mgr.get("fs_map")['filesystems']:
                 fscid = fs["id"]
                 fs_name = fs['mdsmap']['fs_name']
@@ -1126,6 +1171,29 @@ class CephadmUpgrade:
             if not _continue:
                 return
             self._upgrade_daemons(to_upgrade, target_image, target_digests)
+            if daemon_type == 'mds':
+                fs_list = self.find_fs_ready_to_be_joinable(need_upgrade)
+                if fs_list is not None and to_upgrade is not None:
+                    for fs_name in fs_list:
+                        assert self.upgrade_state is not None
+                        if fs_name in [_d[0].service_name().split('.', 1)[1]
+                                       for _d in to_upgrade]:
+                            if self.upgrade_state.fail_fs:
+                                self.mgr.log.info('Upgrade: Setting filesystem '
+                                                  f'{fs_name} Joinable')
+                                try:
+                                    ret, _, err = self.mgr.check_mon_command({
+                                        'prefix': 'fs set',
+                                        'fs_name': fs_name,
+                                        'var': 'joinable',
+                                        'val': 'true',
+                                    })
+                                except Exception as e:
+                                    logger.error("Failed to set fs joinable "
+                                                 f"true due to {e}")
+                                    raise OrchestratorError("Failed to set"
+                                                            "fs joinable true"
+                                                            f"due to {e}")
             if to_upgrade:
                 return
 
