@@ -429,6 +429,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   [[nodiscard]] bool was_epoch_changed() const final;
 
   void set_queued_or_active() final;
+  /// Clears `m_queued_or_active` and restarts snaptrimming
   void clear_queued_or_active() final;
 
   void mark_local_map_ready() final;

@@ -191,6 +191,8 @@ struct ScrubPgIF {
   /**
    * Manipulate the 'scrubbing request has been queued, or - we are
    * actually scrubbing' Scrubber's flag
+   *
+   * clear_queued_or_active() will also restart any blocked snaptrimming.
    */
   virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
