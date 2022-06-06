@@ -2,19 +2,10 @@
 /src/pybind/mgr/dashboard                       @ceph/dashboard
 /qa/suites/rados/dashboard                      @ceph/dashboard
 /qa/tasks/mgr/test_dashboard.py                 @ceph/dashboard
+/qa/tasks/mgr/test_module_selftest.py           @ceph/dashboard
 /qa/tasks/mgr/dashboard                         @ceph/dashboard
 /monitoring                                     @ceph/dashboard
 /doc/mgr/dashboard.rst                          @ceph/dashboard
-
-# Dashboard API team
-/src/pybind/mgr/dashboard/openapi.yaml                 @ceph/api
-/src/pybind/mgr/dashboard/controllers                  @ceph/api
-/src/pybind/mgr/dashboard/frontend/src/app/shared/api  @ceph/api
-/src/pybind/mgr/dashboard/run-backend-api-tests.sh     @ceph/api
-/qa/suites/rados/dashboard                             @ceph/api
-/qa/tasks/mgr/test_dashboard.py                        @ceph/api
-/qa/tasks/mgr/dashboard                                @ceph/api
-/qa/tasks/mgr/test_module_selftest.py                  @ceph/api
 
 # For Orchestrator related PRs
 /src/cephadm                                    @ceph/orchestrators
