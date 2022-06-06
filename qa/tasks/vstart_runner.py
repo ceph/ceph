@@ -623,8 +623,8 @@ class LocalCephFSMount():
         if sudo:
             args.append('sudo')
         args += [py_version, '-c', pyscript]
-        return self.client_remote.run(args=args,
-                                      wait=False, stdout=StringIO())
+        return self.client_remote.run(args=args, wait=False,
+                                      stdout=StringIO(), omit_sudo=(not sudo))
 
     def setup_netns(self):
         if opt_use_ns:

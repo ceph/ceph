@@ -697,7 +697,8 @@ class CephFSMount(object):
         if sudo:
             args.append('sudo')
         args += ['adjust-ulimits', 'daemon-helper', 'kill', py_version, '-c', pyscript]
-        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE, stdout=StringIO())
+        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE,
+                                      stdout=StringIO(), omit_sudo=(not sudo))
 
     def run_python(self, pyscript, py_version='python3', sudo=False):
         p = self._run_python(pyscript, py_version, sudo=sudo)
