@@ -44,8 +44,8 @@ from pathlib import Path
 FuncT = TypeVar('FuncT', bound=Callable)
 
 # Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:master'
-DEFAULT_IMAGE_IS_MASTER = True
+DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
+DEFAULT_IMAGE_IS_MAIN = True
 DEFAULT_IMAGE_RELEASE = 'quincy'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.33.4'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
@@ -2038,7 +2038,7 @@ def infer_config(func: FuncT) -> FuncT:
 
 
 def _get_default_image(ctx: CephadmContext) -> str:
-    if DEFAULT_IMAGE_IS_MASTER:
+    if DEFAULT_IMAGE_IS_MAIN:
         warn = """This is a development version of cephadm.
 For information regarding the latest stable release:
     https://docs.ceph.com/docs/{}/cephadm/install
@@ -5591,7 +5591,7 @@ def command_bootstrap(ctx):
     logger.info('Please consider enabling telemetry to help improve Ceph:\n\n'
                 '\tceph telemetry on\n\n'
                 'For more information see:\n\n'
-                '\thttps://docs.ceph.com/docs/master/mgr/telemetry/\n')
+                '\thttps://docs.ceph.com/en/latest/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
     return 0
 
