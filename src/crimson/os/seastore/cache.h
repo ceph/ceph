@@ -47,12 +47,12 @@ struct backref_buf_entry_t {
       len(alloc_blk.len),
       type(alloc_blk.type)
   {}
-  const paddr_t paddr = P_ADDR_NULL;
-  const laddr_t laddr = L_ADDR_NULL;
-  const extent_len_t len = 0;
-  const extent_types_t type =
+  paddr_t paddr = P_ADDR_NULL;
+  laddr_t laddr = L_ADDR_NULL;
+  extent_len_t len = 0;
+  extent_types_t type =
     extent_types_t::ROOT;
-  const journal_seq_t seq;
+  journal_seq_t seq;
   friend bool operator< (
     const backref_buf_entry_t &l,
     const backref_buf_entry_t &r) {
@@ -68,18 +68,34 @@ struct backref_buf_entry_t {
     const backref_buf_entry_t &r) {
     return l.paddr == r.paddr;
   }
-  using hook_t =
+  using set_hook_t =
     boost::intrusive::set_member_hook<
       boost::intrusive::link_mode<
 	boost::intrusive::auto_unlink>>;
-  hook_t backref_set_hook;
+  set_hook_t backref_set_hook;
+
+  using list_hook_t =
+    boost::intrusive::list_member_hook<
+      boost::intrusive::link_mode<
+	boost::intrusive::auto_unlink>>;
+  list_hook_t backref_buf_hook;
+
   using backref_set_member_options = boost::intrusive::member_hook<
     backref_buf_entry_t,
-    hook_t,
+    set_hook_t,
     &backref_buf_entry_t::backref_set_hook>;
   using set_t = boost::intrusive::set<
     backref_buf_entry_t,
     backref_set_member_options,
+    boost::intrusive::constant_time_size<false>>;
+
+  using backref_list_member_options = boost::intrusive::member_hook<
+    backref_buf_entry_t,
+    list_hook_t,
+    &backref_buf_entry_t::backref_buf_hook>;
+  using list_t = boost::intrusive::list<
+    backref_buf_entry_t,
+    backref_list_member_options,
     boost::intrusive::constant_time_size<false>>;
   struct cmp_t {
     using is_transparent = paddr_t;
@@ -100,10 +116,20 @@ struct backref_buf_entry_t {
 using backref_buf_entry_ref =
   std::unique_ptr<backref_buf_entry_t>;
 
-struct backref_buffer_t {
-  std::map<journal_seq_t, std::vector<backref_buf_entry_ref>> backrefs;
+struct backref_buf_t {
+  backref_buf_t(std::vector<backref_buf_entry_ref> &&refs) : backrefs(std::move(refs)) {
+    for (auto &ref : backrefs) {
+      br_list.push_back(*ref);
+    }
+  }
+  std::vector<backref_buf_entry_ref> backrefs;
+  backref_buf_entry_t::list_t br_list;
 };
-using backref_buffer_ref = std::unique_ptr<backref_buffer_t>;
+
+struct backref_cache_t {
+  std::map<journal_seq_t, backref_buf_t> backrefs_by_seq;
+};
+using backref_cache_ref = std::unique_ptr<backref_cache_t>;
 
 /**
  * Cache
@@ -529,7 +555,7 @@ private:
     }
   }
 
-  backref_buffer_ref backref_buffer;
+  backref_cache_ref backref_buffer;
   // backrefs that needs to be inserted into the backref tree
   backref_buf_entry_t::set_t backref_inserted_set;
   backref_buf_entry_t::set_t backref_remove_set; // backrefs needs to be removed
@@ -589,6 +615,11 @@ private:
     return *it;
   }
 
+  bool backref_should_be_removed(paddr_t addr) {
+    return backref_remove_set.find(
+      addr, backref_buf_entry_t::cmp_t()) != backref_remove_set.end();
+  }
+
   const backref_buf_entry_t::set_t& get_backrefs() {
     return backref_inserted_set;
   }
@@ -597,7 +628,7 @@ private:
     return backref_remove_set;
   }
 
-  backref_buffer_ref& get_backref_buffer() {
+  backref_cache_ref& get_backref_buffer() {
     return backref_buffer;
   }
 
@@ -639,11 +670,11 @@ public:
   void trim_backref_bufs(const journal_seq_t &trim_to) {
     LOG_PREFIX(Cache::trim_backref_bufs);
     SUBDEBUG(seastore_cache, "trimming to {}", trim_to);
-    if (backref_buffer && !backref_buffer->backrefs.empty()) {
-      assert(backref_buffer->backrefs.rbegin()->first >= trim_to);
-      auto iter = backref_buffer->backrefs.upper_bound(trim_to);
-      backref_buffer->backrefs.erase(
-	backref_buffer->backrefs.begin(), iter);
+    if (backref_buffer && !backref_buffer->backrefs_by_seq.empty()) {
+      assert(backref_buffer->backrefs_by_seq.rbegin()->first >= trim_to);
+      auto iter = backref_buffer->backrefs_by_seq.upper_bound(trim_to);
+      backref_buffer->backrefs_by_seq.erase(
+	backref_buffer->backrefs_by_seq.begin(), iter);
     }
   }
 
@@ -889,8 +920,8 @@ public:
   std::optional<journal_seq_t> get_oldest_backref_dirty_from() const {
     LOG_PREFIX(Cache::get_oldest_backref_dirty_from);
     journal_seq_t backref_oldest = JOURNAL_SEQ_NULL;
-    if (backref_buffer && !backref_buffer->backrefs.empty()) {
-      backref_oldest = backref_buffer->backrefs.begin()->first;
+    if (backref_buffer && !backref_buffer->backrefs_by_seq.empty()) {
+      backref_oldest = backref_buffer->backrefs_by_seq.begin()->first;
     }
     if (backref_oldest == JOURNAL_SEQ_NULL) {
       SUBDEBUG(seastore_cache, "backref_oldest: null");
