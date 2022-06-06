@@ -125,9 +125,16 @@ static std::string motr_global_indices[] = {
 #define TS_LEN 8
 #define UUID_LEN 23
 
-static unsigned roundup(unsigned x, unsigned by)
+static uint64_t roundup(uint64_t x, uint64_t by)
 {
+  if (x == 0)
+    return 0;
   return ((x - 1) / by + 1) * by;
+}
+
+static uint64_t rounddown(uint64_t x, uint64_t by)
+{
+  return x / by * by;
 }
 
 std::string base62_encode(uint64_t value, size_t pad)
@@ -2590,65 +2597,54 @@ out:
   return rc;
 }
 
-int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t end, RGWGetDataCB* cb)
+int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t end, RGWGetDataCB* cb)
 {
   int rc;
-  unsigned bs;
-  int64_t actual, left, start, bloff, block_start_off;
+  unsigned bs, skip;
+  int64_t left = end + 1, off;
   struct m0_op *op;
   struct m0_bufvec buf;
   struct m0_bufvec attr;
   struct m0_indexvec ext;
   uint64_t req_id;
 
-  start = off;
-
   req_id = addb_logger.get_id();
   ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
        RGW_ADDB_FUNC_READ_MOBJ,
        RGW_ADDB_PHASE_START);
 
-  // make end pointer exclusive:
-  // it's easier to work with it this way
-  end++;
-  ldpp_dout(dpp, 20) << __func__ << ": off=" << off <<
-                       " end=" << end << dendl;
-  off = 0;
-  // As `off` may not be parity group size aligned, even using optimal
-  // buffer block size, simply reading data from offset `off` could come
-  // across parity group boundary. And Motr only allows page-size aligned
-  // offset.
-  //
-  // The optimal size of each IO should also take into account the data
-  // transfer size to s3 client. For example, 16MB may be nice to read
-  // data from motr, but it could be too big for network transfer.
-  
-  bs = this->get_optimal_bs(end - off);
-  block_start_off = 0;
-  bloff = 1;
-  ldpp_dout(dpp, 20) << __func__ << ": bs=" << bs << dendl;
+  ldpp_dout(dpp, 20) <<__func__<< ": start=" << start << " end=" << end << dendl;
 
   rc = m0_bufvec_empty_alloc(&buf, 1) ? :
        m0_bufvec_alloc(&attr, 1, 1) ? :
        m0_indexvec_alloc(&ext, 1);
   if (rc < 0) {
-    ldpp_dout(dpp, 0) <<__func__<< ": buffer allocation failed with rc = "<< rc << dendl;
+    ldpp_dout(dpp, 0) <<__func__<< ": vecs alloc failed: rc="<< rc << dendl;
     ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-	 RGW_ADDB_FUNC_READ_MOBJ,
-	 RGW_ADDB_PHASE_ERROR);
-    
+         RGW_ADDB_FUNC_READ_MOBJ,
+         RGW_ADDB_PHASE_ERROR);
     goto out;
   }
-  left = end - off;
-  for (; left > 0; off += actual) {
+
+  bs = this->get_optimal_bs(left);
+
+  for (off = 0; left > 0; left -= bs, off += bs) {
     if (left < bs)
       bs = this->get_optimal_bs(left);
-    actual = bs;
-    if (left < bs)
-      actual = left;
+    if (start >= off + bs)
+      continue; // to the next block
+    if (start > off) {
+      // Skip reading the units which are not requested.
+      // Note: offset must be aligned to the unit size.
+      unsigned unit_sz = get_unit_sz();
+      skip = rounddown(start, unit_sz) - off;
+      off += skip;
+      bs -= skip;
+      left -= skip;
+    }
 
-    ldpp_dout(dpp, 20) << __func__ << ": off=" << off <<
-                          " bs=" << bs << " actual=" << actual << dendl;
+    // Read from Motr.
+    ldpp_dout(dpp, 20) <<__func__<< ": off=" << off << " bs=" << bs << dendl;
     bufferlist bl;
     buf.ov_buf[0] = bl.append_hole(bs).c_str();
     buf.ov_vec.v_count[0] = bs;
@@ -2656,25 +2652,13 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
     ext.iv_vec.v_count[0] = bs;
     attr.ov_vec.v_count[0] = 0;
 
-    left -= actual;
-    // Read from Motr.
     op = nullptr;
-    if( start >= ( block_start_off + bs )) 
-    {
-      block_start_off += bs;
-      ldpp_dout(dpp, 70) << __func__  << ": block_start_off=" << block_start_off <<dendl;
-      continue;
-    }
-    if( bloff != 0 )
-      bloff = start - block_start_off;
-
     rc = m0_obj_op(this->mobj, M0_OC_READ, &ext, &buf, &attr, 0, 0, &op);
-    ldpp_dout(dpp, 20) << __func__  << ": init read op rc = " << rc << dendl;
     if (rc != 0) {
-      ldpp_dout(dpp, 0) << __func__ << ": read failed during m0_obj_op, rc =" << rc << dendl;
+      ldpp_dout(dpp, 0) <<__func__<< ": motr op failed: rc=" << rc << dendl;
       ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-	   RGW_ADDB_FUNC_READ_MOBJ,
-	   RGW_ADDB_PHASE_ERROR);
+           RGW_ADDB_FUNC_READ_MOBJ,
+           RGW_ADDB_PHASE_ERROR);
       goto out;
     }
     ADDB(RGW_ADDB_REQUEST_TO_MOTR_ID, addb_logger.get_id(), m0_sm_id_get(&op->op_sm));
@@ -2684,16 +2668,18 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
     m0_op_fini(op);
     m0_op_free(op);
     if (rc != 0) {
-      ldpp_dout(dpp, 0) << __func__ << ": read failed, m0_op_wait rc =" << rc << dendl;
+      ldpp_dout(dpp, 0) <<__func__<< ": m0_op_wait failed: rc=" << rc << dendl;
       ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-	   RGW_ADDB_FUNC_READ_MOBJ,
-	   RGW_ADDB_PHASE_ERROR);
+           RGW_ADDB_FUNC_READ_MOBJ,
+           RGW_ADDB_PHASE_ERROR);
       goto out;
     }
+
     // Call `cb` to process returned data.
-    ldpp_dout(dpp, 20) << __func__  << " call cb to process data" << dendl;
-    cb->handle_data(bl, bloff, actual);
-    bloff = 0;
+    skip = 0;
+    if (start > off)
+      skip = start - off;
+    cb->handle_data(bl, skip, (left < bs ? left : bs) - skip);
 
     addb_logger.set_id(req_id);
   }
@@ -3060,6 +3046,12 @@ int MotrObject::read_multipart_obj(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+unsigned MotrObject::get_unit_sz()
+{
+  uint64_t lid = M0_OBJ_LAYOUT_ID(meta.layout_id);
+  return m0_obj_layout_id_to_unit_size(lid);
+}
+
 // The optimal bs will be rounded up to the unit size, so
 // use M0_ENF_NO_RMW flag to avoid RMW for the last block.
 unsigned MotrObject::get_optimal_bs(unsigned len)
@@ -3070,8 +3062,7 @@ unsigned MotrObject::get_optimal_bs(unsigned len)
                               &mobj->ob_attr.oa_pver);
   M0_ASSERT(pver != nullptr);
   struct m0_pdclust_attr *pa = &pver->pv_attr;
-  uint64_t lid = M0_OBJ_LAYOUT_ID(meta.layout_id);
-  unsigned unit_sz = m0_obj_layout_id_to_unit_size(lid);
+  unsigned unit_sz = get_unit_sz();
   unsigned grp_sz  = unit_sz * pa->pa_N;
 
   // bs should be max 4-times pool-width deep counting by 1MB units, or
