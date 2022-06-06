@@ -27,9 +27,15 @@
         the {{ section_info }} management functionality.</h4>
     </div>
     <br><br>
-    <div *ngIf="button_name && button_route; else dashboardButton">
+    <div *ngIf="(button_name && button_route) || bootstrap; else dashboardButton">
       <button class="btn btn-primary"
               [routerLink]="button_route"
+              *ngIf="button_name && button_route && !bootstrap"
+              i18n>{{ button_name }}</button>
+
+      <button class="btn btn-primary"
+              (click)="doBootstrap()"
+              *ngIf="bootstrap"
               i18n>{{ button_name }}</button>
     </div>
     <ng-template #dashboardButton>
