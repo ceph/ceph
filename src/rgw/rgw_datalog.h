@@ -284,7 +284,6 @@ class RGWDataChangesLog {
   std::thread renew_thread;
 
   std::function<bool(const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp)> bucket_filter;
-  int choose_oid(const rgw_bucket_shard& bs);
   bool going_down() const;
   bool filter_bucket(const DoutPrefixProvider *dpp, const rgw_bucket& bucket, optional_yield y) const;
   int renew_entries(const DoutPrefixProvider *dpp);
@@ -296,7 +295,7 @@ public:
 
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone, const RGWZoneParams& zoneparams,
 	    librados::Rados* lr);
-
+  int choose_oid(const rgw_bucket_shard& bs);
   int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
 		const rgw::bucket_log_layout_generation& gen, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
