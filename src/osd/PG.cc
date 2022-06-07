@@ -1326,6 +1326,7 @@ unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsig
  */
 Scrub::schedule_result_t PG::sched_scrub()
 {
+  using Scrub::schedule_result_t;
   dout(15) << __func__ << " pg(" << info.pgid
 	  << (is_active() ? ") <active>" : ") <not-active>")
 	  << (is_clean() ? " <clean>" : " <not-clean>") << dendl;
@@ -1333,11 +1334,19 @@ Scrub::schedule_result_t PG::sched_scrub()
   ceph_assert(m_scrubber);
 
   if (is_scrub_queued_or_active()) {
-    return Scrub::schedule_result_t::already_started;
+    return schedule_result_t::already_started;
   }
 
   if (!is_primary() || !is_active() || !is_clean()) {
-    return Scrub::schedule_result_t::bad_pg_state;
+    return schedule_result_t::bad_pg_state;
+  }
+
+  if (state_test(PG_STATE_SNAPTRIM) || state_test(PG_STATE_SNAPTRIM_WAIT)) {
+    // note that the trimmer checks scrub status when setting 'snaptrim_wait'
+    // (on the transition from NotTrimming to Trimming/WaitReservation),
+    // i.e. some time before setting 'snaptrim'.
+    dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
+    return schedule_result_t::bad_pg_state;
   }
 
   // analyse the combination of the requested scrub flags, the osd/pool configuration
@@ -1349,14 +1358,14 @@ Scrub::schedule_result_t PG::sched_scrub()
     // (due to configuration or priority issues)
     // The reason was already reported by the callee.
     dout(10) << __func__ << ": failed to initiate a scrub" << dendl;
-    return Scrub::schedule_result_t::preconditions;
+    return schedule_result_t::preconditions;
   }
 
   // try to reserve the local OSD resources. If failing: no harm. We will
   // be retried by the OSD later on.
   if (!m_scrubber->reserve_local()) {
     dout(10) << __func__ << ": failed to reserve locally" << dendl;
-    return Scrub::schedule_result_t::no_local_resources;
+    return schedule_result_t::no_local_resources;
   }
 
   // can commit to the updated flags now, as nothing will stop the scrub
@@ -1371,7 +1380,7 @@ Scrub::schedule_result_t PG::sched_scrub()
 
   dout(10) << __func__ << ": queueing" << dendl;
   osd->queue_for_scrub(this, Scrub::scrub_prio_t::low_priority);
-  return Scrub::schedule_result_t::scrub_initiated;
+  return schedule_result_t::scrub_initiated;
 }
 
 double PG::next_deepscrub_interval() const
