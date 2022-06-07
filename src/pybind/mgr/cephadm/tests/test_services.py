@@ -1126,9 +1126,9 @@ class TestJaeger:
                         [
                             '--name', 'jaeger-agent.test',
                             '--meta-json',
-                            '{"service_name": "jaeger-agent", "ports": [6831], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                            '{"service_name": "jaeger-agent", "ports": [6799], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
                             '--config-json', '-',
-                            '--tcp-ports', '6831'
+                            '--tcp-ports', '6799'
 
                         ],
                         stdin=json.dumps(agent_config),
