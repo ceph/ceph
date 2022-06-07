@@ -118,25 +118,20 @@ static seastar::future<> reset_device(
 }
 
 static seastar::future<size_t> get_zone_capacity(
-  seastar::file &device, 
-  uint32_t zone_size, 
+  seastar::file &device,
+  uint32_t zone_size,
   uint32_t nr_zones)
 {
   return seastar::do_with(
-    blk_zone_range{},
     ZoneReport(nr_zones),
-    [&] (auto &first_zone_range, auto &zr){
-      first_zone_range.sector = 0;
-      first_zone_range.nr_sectors = zone_size;
-      return device.ioctl(
-	BLKOPENZONE, 
-	&first_zone_range
-      ).then([&](int ret){
-	return device.ioctl(BLKREPORTZONE, zr.hdr);
-      }).then([&] (int ret){
-	return device.ioctl(BLKRESETZONE, &first_zone_range);
-      }).then([&](int ret){
-	return seastar::make_ready_future<size_t>(zr.hdr->zones[0].wp);
+    [&] (auto &zr) {
+        zr.hdr->sector = 0;
+        zr.hdr->nr_zones = nr_zones;
+	return device.ioctl(
+          BLKREPORTZONE,
+          zr.hdr
+        ).then([&](int ret) {
+	return seastar::make_ready_future<size_t>(zr.hdr->zones[0].capacity);
       });
     }
   );
@@ -322,10 +317,12 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
 	  }
 	  return device.ioctl(BLKGETZONESZ, (void *)&zone_size);
 	}).then([&] (int ret){
+          ceph_assert(zone_size);
 	  return reset_device(device, zone_size, nr_zones);
 	}).then([&] {
 	  return get_zone_capacity(device, zone_size, nr_zones); 
 	}).then([&, FNAME, config] (auto zone_capacity){
+          ceph_assert(zone_capacity);
 	  sb = make_metadata(
 	    config.meta, 
 	    stat, 
