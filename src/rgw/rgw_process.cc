@@ -327,6 +327,7 @@ int process_request(rgw::sal::Store* const store,
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler, yield);
     goto done;
   }
+  s->lua_background = lua_background;
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     std::string script;
@@ -336,7 +337,7 @@ int process_request(rgw::sal::Store* const store,
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_background);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
@@ -419,7 +420,7 @@ done:
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_background);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }
