@@ -258,6 +258,10 @@ void rgw_sync_bucket_entities::set_bucket(std::optional<string> tenant,
     bucket.emplace();
   }
 
+  if (!bucket) {
+    return;
+  }
+
   set_bucket_field(tenant, &bucket->tenant);
   set_bucket_field(bucket_name, &bucket->name);
   set_bucket_field(bucket_id, &bucket->bucket_id);
