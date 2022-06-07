@@ -211,6 +211,7 @@ class RbdTest(DashboardTestCase):
             "name": "img1",
             "pool_name": "rbd",
             "features": 61,
+            "primary": true,
             "features_name": ["deep-flatten", "exclusive-lock", "fast-diff", "layering",
                               "object-map"]
         }
@@ -227,6 +228,7 @@ class RbdTest(DashboardTestCase):
             'image_format': JLeaf(int),
             'pool_name': JLeaf(str),
             'namespace': JLeaf(str, none=True),
+            'primary': JLeaf(bool, none=True),
             'features': JLeaf(int),
             'features_name': JList(JLeaf(str)),
             'stripe_count': JLeaf(int, none=True),
