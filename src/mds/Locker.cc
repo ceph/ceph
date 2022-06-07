@@ -4252,8 +4252,8 @@ void Locker::handle_client_lease(const cref_t<MClientLease> &m)
 }
 
 
-void Locker::issue_client_lease(CDentry *dn, MDRequestRef &mdr, int mask,
-			        utime_t now, bufferlist &bl)
+void Locker::issue_client_lease(CDentry *dn, CInode *in, MDRequestRef &mdr, utime_t now,
+                                bufferlist &bl)
 {
   client_t client = mdr->get_client();
   Session *session = mdr->session;
@@ -4264,6 +4264,17 @@ void Locker::issue_client_lease(CDentry *dn, MDRequestRef &mdr, int mask,
       !diri->is_stray() &&  // do not issue dn leases in stray dir!
       !diri->filelock.can_lease(client) &&
       !(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL))) {
+    int mask = 0;
+    CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
+    if (dnl->is_primary()) {
+      ceph_assert(dnl->get_inode() == in);
+      mask = CEPH_LEASE_PRIMARY_LINK;
+    } else {
+      if (dnl->is_remote())
+        ceph_assert(dnl->get_remote_ino() == in->ino());
+      else
+        ceph_assert(!in);
+    }
     // issue a dentry lease
     ClientLease *l = dn->add_client_lease(client, session);
     session->touch_lease(l);
@@ -4283,7 +4294,7 @@ void Locker::issue_client_lease(CDentry *dn, MDRequestRef &mdr, int mask,
   } else {
     // null lease
     LeaseStat lstat;
-    lstat.mask = mask;
+    lstat.mask = 0;
     lstat.alternate_name = std::string(dn->alternate_name);
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
