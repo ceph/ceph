@@ -241,7 +241,7 @@ class Module(MgrModule):
                runtime=True),
         Option(name='end_time',
                type='str',
-               default='2400',
+               default='2359',
                desc='ending time of day to automatically balance',
                long_desc='This is a time of day in the format HHMM.',
                runtime=True),
@@ -249,17 +249,17 @@ class Module(MgrModule):
                type='uint',
                default=0,
                min=0,
-               max=7,
+               max=6,
                desc='Restrict automatic balancing to this day of the week or later',
-               long_desc='0 or 7 = Sunday, 1 = Monday, etc.',
+               long_desc='0 = Sunday, 1 = Monday, etc.',
                runtime=True),
         Option(name='end_weekday',
                type='uint',
-               default=7,
+               default=0,
                min=0,
-               max=7,
+               max=6,
                desc='Restrict automatic balancing to days of the week earlier than this',
-               long_desc='0 or 7 = Sunday, 1 = Monday, etc.',
+               long_desc='0 = Sunday, 1 = Monday, etc.',
                runtime=True),
         Option(name='crush_compat_max_iterations',
                type='uint',
@@ -620,10 +620,22 @@ class Module(MgrModule):
         weekday = (local_time.tm_wday + 1) % 7  # be compatible with C
         permit = False
 
+        def check_time(time: str, option: str):
+            if len(time) != 4:
+                self.log.error('invalid time for %s - expected HHMM format', option)
+            try:
+                datetime.time(int(time[:2]), int(time[2:]))
+            except ValueError as err:
+                self.log.error('invalid time for %s - %s', option, err)
+
         begin_time = cast(str, self.get_module_option('begin_time'))
+        check_time(begin_time, 'begin_time')
         end_time = cast(str, self.get_module_option('end_time'))
-        if begin_time <= end_time:
+        check_time(end_time, 'end_time')
+        if begin_time < end_time:
             permit = begin_time <= time_of_day < end_time
+        elif begin_time == end_time:
+            permit = True
         else:
             permit = time_of_day >= begin_time or time_of_day < end_time
         if not permit:
@@ -633,8 +645,10 @@ class Module(MgrModule):
 
         begin_weekday = cast(int, self.get_module_option('begin_weekday'))
         end_weekday = cast(int, self.get_module_option('end_weekday'))
-        if begin_weekday <= end_weekday:
+        if begin_weekday < end_weekday:
             permit = begin_weekday <= weekday < end_weekday
+        elif begin_weekday == end_weekday:
+            permit = True
         else:
             permit = weekday >= begin_weekday or weekday < end_weekday
         if not permit:

@@ -54,17 +54,17 @@ Set the time of day to begin automatic balancing in HHMM format::
 
 Set the time of day to finish automatic balancing in HHMM format::
 
-  ceph config set mgr mgr/balancer/end_time 2400
+  ceph config set mgr mgr/balancer/end_time 2359
 
 Restrict automatic balancing to this day of the week or later. 
-Uses the same conventions as crontab, 0 or 7 is Sunday, 1 is Monday, and so on::
+Uses the same conventions as crontab, 0 is Sunday, 1 is Monday, and so on::
 
   ceph config set mgr mgr/balancer/begin_weekday 0
 
 Restrict automatic balancing to this day of the week or earlier. 
-Uses the same conventions as crontab, 0 or 7 is Sunday, 1 is Monday, and so on::
+Uses the same conventions as crontab, 0 is Sunday, 1 is Monday, and so on::
 
-  ceph config set mgr mgr/balancer/end_weekday 7
+  ceph config set mgr mgr/balancer/end_weekday 6
 
 Pool IDs to which the automatic balancing will be limited. 
 The default for this is an empty string, meaning all pools will be balanced. 
