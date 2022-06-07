@@ -2,7 +2,7 @@
 set -ex
 
 CEPH_ID=${CEPH_ID:-admin}
-TMP_FILES="/tmp/passphrase /tmp/testdata1 /tmp/testdata2"
+TMP_FILES="/tmp/passphrase /tmp/testdata1 /tmp/testdata2 /tmp/cmpdata"
 
 _sudo()
 {
@@ -22,6 +22,7 @@ _sudo()
 }
 
 function drop_caches {
+  sudo sync
   echo 3 | sudo tee /proc/sys/vm/drop_caches
 }
 
@@ -35,19 +36,21 @@ function test_encryption_format() {
 
   # open encryption with cryptsetup
   sudo cryptsetup open $RAW_DEV --type $format cryptsetupdev -d /tmp/passphrase
+  sudo chmod 666 /dev/mapper/cryptsetupdev
 
   # open encryption with librbd
   LIBRBD_DEV=$(_sudo rbd -p rbd map testimg -t nbd -o encryption-format=$format,encryption-passphrase-file=/tmp/passphrase)
+  sudo chmod 666 $LIBRBD_DEV
 
   # write via librbd && compare
-  sudo dd if=/tmp/testdata1 of=$LIBRBD_DEV conv=fdatasync
-  drop_caches
-  sudo cmp -n 16MB $LIBRBD_DEV /dev/mapper/cryptsetupdev
+  dd if=/tmp/testdata1 of=$LIBRBD_DEV oflag=direct bs=1M
+  dd if=/dev/mapper/cryptsetupdev of=/tmp/cmpdata iflag=direct bs=4M count=4
+  cmp -n 16MB /tmp/cmpdata /tmp/testdata1
 
   # write via cryptsetup && compare
-  sudo dd if=/tmp/testdata2 of=/dev/mapper/cryptsetupdev conv=fdatasync
-  drop_caches
-  sudo cmp -n 16MB $LIBRBD_DEV /dev/mapper/cryptsetupdev
+  dd if=/tmp/testdata2 of=/dev/mapper/cryptsetupdev oflag=direct bs=1M
+  dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=4M count=4
+  cmp -n 16MB /tmp/cmpdata /tmp/testdata2
 }
 
 function get_nbd_device_paths {
@@ -73,7 +76,7 @@ if [[ $(uname) != "Linux" ]]; then
 fi
 
 
-if [[ $(($(ceph-conf --name client.${CEPH_ID} rbd_default_features) & 64)) != 0 ]]; then
+if [[ $(($(ceph-conf --name client.${CEPH_ID} --show-config-value rbd_default_features) & 64)) != 0 ]]; then
 	echo "LUKS encryption tests not supported alongside image journaling feature"
 	exit 0
 fi
