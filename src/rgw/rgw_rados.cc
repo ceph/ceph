@@ -9263,6 +9263,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   string etag;
   string content_type;
   ACLOwner owner;
+  bool appendable = false;
 
   object.meta.size = astate->size;
   object.meta.accounted_size = astate->accounted_size;
@@ -9282,6 +9283,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     if (r < 0) {
       ldpp_dout(dpp, 0) << "WARNING: could not decode policy for object: " << obj << dendl;
     }
+  }
+  iter = astate->attrset.find(RGW_ATTR_APPEND_PART_NUM);
+  if (iter != astate->attrset.end()) {
+    appendable = true;
   }
 
   if (manifest) {
@@ -9306,6 +9311,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   object.meta.content_type = content_type;
   object.meta.owner = owner.get_id().to_str();
   object.meta.owner_display_name = owner.get_display_name();
+  object.meta.appendable = appendable;
 
   // encode suggested updates
 
@@ -9314,6 +9320,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.mtime = object.meta.mtime;
   list_state.meta.category = main_category;
   list_state.meta.etag = etag;
+  list_state.meta.appendable = appendable;
   list_state.meta.content_type = content_type;
 
   librados::IoCtx head_obj_ctx; // initialize to data pool so we can get pool id
