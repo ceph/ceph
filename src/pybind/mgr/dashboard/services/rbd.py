@@ -250,6 +250,12 @@ class RbdService(object):
 
             stat = img.stat()
             stat['name'] = image_name
+
+            mirror_info = img.mirror_image_get_info()
+            stat['primary'] = None
+            if mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED:
+                stat['primary'] = mirror_info['primary']
+
             if img.old_format():
                 stat['unique_id'] = get_image_spec(pool_name, namespace, stat['block_name_prefix'])
                 stat['id'] = stat['unique_id']
