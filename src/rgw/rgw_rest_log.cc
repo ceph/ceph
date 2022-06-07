@@ -566,15 +566,9 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
   oldest_gen = logs.front().gen;
   latest_gen = logs.back().gen;
 
-  std::vector<std::pair<int, int>> gen_numshards;
-  for (auto gen = logs.front().gen; gen <= logs.back().gen; gen++) {
-    auto log = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
-    if (log == logs.end()) {
-      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
-      op_ret = -ENOENT;
-    }
-    const auto& num_shards = log->layout.in_index.layout.num_shards;
-    gen_numshards.push_back(std::make_pair(gen, num_shards));
+  for (auto& log : logs) {
+      uint32_t num_shards = log.layout.in_index.layout.num_shards;
+      gen_numshards.push_back(std::make_pair(log.gen, num_shards));
   }
 }
 
@@ -593,6 +587,7 @@ void RGWOp_BILog_Info::send_response() {
   encode_json("syncstopped", syncstopped, s->formatter);
   encode_json("oldest_gen", oldest_gen, s->formatter);
   encode_json("latest_gen", latest_gen, s->formatter);
+  //encode_json("gen_numshards", gen_numshards, s->formatter); TODO: add supporting encode/decode for std::pair
   s->formatter->close_section();
 
   flusher.flush();
