@@ -55,12 +55,6 @@
              let-row="row"
              let-value="value">
   <div *ngIf="row.state === 'Replaying'">
-    <span *ngIf="row.seconds_until_synced == 0">
-      synced
-    </span>
-    <span *ngIf="row.seconds_until_synced > 0">
-      {{row.seconds_until_synced | duration }} until synced
-    </span>
   </div>
   <ngb-progressbar *ngIf="row.state === 'Syncing'"
                     type="info"
