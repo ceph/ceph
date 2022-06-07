@@ -381,6 +381,12 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   _collect_and_send_global_metrics = cct->_conf.get_val<bool>(
     "client_collect_and_send_global_metrics");
 
+  mount_timeout = cct->_conf.get_val<std::chrono::seconds>(
+    "client_mount_timeout");
+
+  caps_release_delay = cct->_conf.get_val<std::chrono::seconds>(
+    "client_caps_release_delay");
+
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
@@ -1889,6 +1895,7 @@ int Client::make_request(MetaRequest *request,
 
   // and timestamp
   request->op_stamp = ceph_clock_now();
+  request->created = ceph::coarse_mono_clock::now();
 
   // make note
   mds_requests[tid] = request->get();
@@ -3673,8 +3680,8 @@ int Client::get_caps_used(Inode *in)
 void Client::cap_delay_requeue(Inode *in)
 {
   ldout(cct, 10) << __func__ << " on " << *in << dendl;
-  in->hold_caps_until = ceph_clock_now();
-  in->hold_caps_until += cct->_conf->client_caps_release_delay;
+
+  in->hold_caps_until = ceph::coarse_mono_clock::now() + caps_release_delay;
   delayed_list.push_back(&in->delay_cap_item);
 }
 
@@ -6087,7 +6094,7 @@ int Client::authenticate()
   }
 
   client_lock.unlock();
-  int r = monclient->authenticate(cct->_conf->client_mount_timeout);
+  int r = monclient->authenticate(std::chrono::duration<double>(mount_timeout).count());
   client_lock.lock();
   if (r < 0) {
     return r;
@@ -6708,8 +6715,8 @@ void Client::renew_and_flush_cap_releases()
 
   if (!mount_aborted && mdsmap->get_epoch()) {
     // renew caps?
-    utime_t el = ceph_clock_now() - last_cap_renew;
-    if (unlikely(el > mdsmap->get_session_timeout() / 3.0))
+    auto el = ceph::coarse_mono_clock::now() - last_cap_renew;
+    if (unlikely(utime_t(el) > mdsmap->get_session_timeout() / 3.0))
       renew_caps();
 
     flush_cap_releases();
@@ -6720,7 +6727,7 @@ void Client::tick()
 {
   ldout(cct, 20) << "tick" << dendl;
 
-  utime_t now = ceph_clock_now();
+  auto now = ceph::coarse_mono_clock::now();
 
   /*
    * If the mount() is not finished
@@ -6728,7 +6735,7 @@ void Client::tick()
   if (is_mounting() && !mds_requests.empty()) {
     MetaRequest *req = mds_requests.begin()->second;
 
-    if (req->op_stamp + cct->_conf->client_mount_timeout < now) {
+    if (req->created + mount_timeout < now) {
       req->abort(-CEPHFS_ETIMEDOUT);
       if (req->caller_cond) {
         req->kick = true;
@@ -6762,7 +6769,7 @@ void Client::tick()
   trim_cache(true);
 
   if (blocklisted && (is_mounted() || is_unmounting()) &&
-      last_auto_reconnect + 30 * 60 < now &&
+      last_auto_reconnect + std::chrono::seconds(30 * 60) < now &&
       cct->_conf.get_val<bool>("client_reconnect_stale")) {
     messenger->client_reset();
     fd_gen++; // invalidate open files
@@ -6923,7 +6930,7 @@ void Client::collect_and_send_global_metrics() {
 void Client::renew_caps()
 {
   ldout(cct, 10) << "renew_caps()" << dendl;
-  last_cap_renew = ceph_clock_now();
+  last_cap_renew = ceph::coarse_mono_clock::now();
 
   for (auto &p : mds_sessions) {
     ldout(cct, 15) << "renew_caps requesting from mds." << p.first << dendl;
@@ -15959,6 +15966,8 @@ const char** Client::get_tracked_conf_keys() const
     "client_oc_max_dirty",
     "client_oc_target_dirty",
     "client_oc_max_dirty_age",
+    "client_caps_release_delay",
+    "client_mount_timeout",
     NULL
   };
   return keys;
@@ -15995,6 +16004,14 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_collect_and_send_global_metrics")) {
     _collect_and_send_global_metrics = cct->_conf.get_val<bool>(
       "client_collect_and_send_global_metrics");
+  }
+  if (changed.count("client_caps_release_delay")) {
+    caps_release_delay = cct->_conf.get_val<std::chrono::seconds>(
+      "client_caps_release_delay");
+  }
+  if (changed.count("client_mount_timeout")) {
+    mount_timeout = cct->_conf.get_val<std::chrono::seconds>(
+      "client_mount_timeout");
   }
 }
 
