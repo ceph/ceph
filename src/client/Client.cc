@@ -2672,25 +2672,6 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
     return;
   }
 
-  if (-CEPHFS_ESTALE == reply->get_result()) { // see if we can get to proper MDS
-    ldout(cct, 20) << "got ESTALE on tid " << request->tid
-		   << " from mds." << request->mds << dendl;
-    request->send_to_auth = true;
-    request->resend_mds = choose_target_mds(request);
-    Inode *in = request->inode();
-    std::map<mds_rank_t, Cap>::const_iterator it;
-    if (request->resend_mds >= 0 &&
-	request->resend_mds == request->mds &&
-	(in == NULL ||
-         (it = in->caps.find(request->resend_mds)) != in->caps.end() ||
-         request->sent_on_mseq == it->second.mseq)) {
-      ldout(cct, 20) << "have to return ESTALE" << dendl;
-    } else {
-      request->caller_cond->notify_all();
-      return;
-    }
-  }
-  
   ceph_assert(!request->reply);
   request->reply = reply;
   insert_trace(request, session.get());
