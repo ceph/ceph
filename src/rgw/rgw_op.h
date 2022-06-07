@@ -437,6 +437,11 @@ public:
     *filter = nullptr;
     return 0;
   }
+
+  // get lua script to run as a "get object" filter 
+  int get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, 
+      RGWGetObj_Filter* cb);
+
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
@@ -1275,6 +1280,10 @@ public:
                                  rgw::sal::DataProcessor *cb) {
     return 0;
   }
+
+  // get lua script to run as a "put object" filter 
+  int get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
+      rgw::sal::DataProcessor* cb);
 
   int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
   int get_data(const off_t fst, const off_t lst, bufferlist& bl);

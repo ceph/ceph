@@ -4,6 +4,7 @@
 #include "common/async/yield_context.h"
 #include "rgw_sal_fwd.h"
 
+class DoutPrefixProvider;
 class lua_State;
 class rgw_user;
 namespace rgw::sal {
@@ -16,6 +17,8 @@ enum class context {
   preRequest,
   postRequest,
   background,
+  getData,
+  putData,
   none
 };
 
