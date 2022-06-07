@@ -787,7 +787,7 @@ function maybe_deduce_remote {
     else
         assert_fail "bad remote_type ->$remote_type<- in maybe_deduce_remote"
     fi
-    remote=$(git remote -v | grep --extended-regexp --ignore-case '(://|@)github.com(/|:)'${url_component}'/ceph(\s|\.|\/)' | head -n1 | cut -f 1)
+    remote=$(git remote -v | grep --extended-regexp --ignore-case '(://|@)github.com(/|:|:/)'${url_component}'/ceph(\s|\.|\/)' | head -n1 | cut -f 1)
     echo "$remote"
 }
 
