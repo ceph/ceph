@@ -41,42 +41,44 @@ export class ImageListComponent implements OnInit, OnDestroy {
     this.image_error.columns = [
       { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
       { prop: 'name', name: $localize`Image`, flexGrow: 2 },
-      { prop: 'description', name: $localize`Issue`, flexGrow: 4 },
       {
         prop: 'state',
         name: $localize`State`,
         cellTemplate: this.stateTmpl,
         flexGrow: 1
-      }
+      },
+      { prop: 'description', name: $localize`Issue`, flexGrow: 4 },
     ];
 
     this.image_syncing.columns = [
       { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
       { prop: 'name', name: $localize`Image`, flexGrow: 2 },
+			{
+        prop: 'state',
+        name: $localize`State`,
+        cellTemplate: this.stateTmpl,
+        flexGrow: 1
+      },
       {
         prop: 'progress',
         name: $localize`Progress`,
         cellTemplate: this.progressTmpl,
         flexGrow: 2
       },
-      {
-        prop: 'state',
-        name: $localize`State`,
-        cellTemplate: this.stateTmpl,
-        flexGrow: 1
-      }
+      { prop: 'bytes_per_second', name: $localize`Bytes per second`, flexGrow: 2 },
+			{ prop: 'entries_behind_primary', name: $localize`Entries behind primary`, flexGrow: 2 },
     ];
 
     this.image_ready.columns = [
       { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
       { prop: 'name', name: $localize`Image`, flexGrow: 2 },
-      { prop: 'description', name: $localize`Description`, flexGrow: 4 },
       {
         prop: 'state',
         name: $localize`State`,
         cellTemplate: this.stateTmpl,
         flexGrow: 1
-      }
+      },
+      { prop: 'description', name: $localize`Description`, flexGrow: 4 },
     ];
 
     this.subs = this.rbdMirroringService.subscribeSummary((data) => {
