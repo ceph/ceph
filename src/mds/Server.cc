@@ -3441,15 +3441,68 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
   }
 }
 
+struct C_MDS_TryOpenInode : public ServerContext {
+  MDRequestRef mdr;
+  inodeno_t ino;
+  C_MDS_TryOpenInode(Server *s, MDRequestRef& r, inodeno_t i) :
+    ServerContext(s), mdr(r), ino(i) {}
+  void finish(int r) override {
+    server->_try_open_ino(mdr, r, ino);
+  }
+};
+
+void Server::_try_open_ino(MDRequestRef& mdr, int r, inodeno_t ino)
+{
+  dout(10) << "_try_open_ino " << mdr.get() << " ino " << ino << " r=" << r << dendl;
+
+  // `r` is a rank if >=0, else an error code
+  if (r >= 0) {
+    mds_rank_t dest_rank(r);
+    if (dest_rank == mds->get_nodeid())
+      dispatch_client_request(mdr);
+    else
+      mdcache->request_forward(mdr, dest_rank);
+    return;
+  }
+
+  // give up
+  if (r == -CEPHFS_ENOENT || r == -CEPHFS_ENODATA)
+    r = -CEPHFS_ESTALE;
+  respond_to_request(mdr, r);
+}
+
 class C_MDS_TryFindInode : public ServerContext {
   MDRequestRef mdr;
+  MDCache *mdcache;
+  inodeno_t ino;
 public:
-  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
+  C_MDS_TryFindInode(Server *s, MDRequestRef& r, MDCache *m, inodeno_t i) :
+    ServerContext(s), mdr(r), mdcache(m), ino(i) {}
   void finish(int r) override {
-    if (r == -CEPHFS_ESTALE) // :( find_ino_peers failed
-      server->respond_to_request(mdr, r);
-    else
+    if (r == -CEPHFS_ESTALE) { // :( find_ino_peers failed
+      /*
+       * There has one case that when the MDS crashes and the
+       * openfiletable journal couldn't be flushed and then
+       * the replacing MDS is possibly won't load some already
+       * opened CInodes into the MDCache. And if the clients
+       * will retry some requests after reconnected, the MDS
+       * will return -ESTALE after failing to find the ino in
+       * all active peers.
+       *
+       * As a workaround users can run `ls -R ${mountpoint}`
+       * to list all the sub-files or sub-direcotries from the
+       * mountpoint.
+       *
+       * We need try to open the ino and try it again.
+       */
+      CInode *in = mdcache->get_inode(ino);
+      if (in && in->state_test(CInode::STATE_PURGING))
+        server->respond_to_request(mdr, r);
+      else
+        mdcache->open_ino(ino, (int64_t)-1, new C_MDS_TryOpenInode(server, mdr, ino));
+    } else {
       server->dispatch_client_request(mdr);
+    }
   }
 };
 
@@ -3489,8 +3542,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
       respond_to_request(mdr, r);
     } else if (r == -CEPHFS_ESTALE) {
       dout(10) << "FAIL on CEPHFS_ESTALE but attempting recovery" << dendl;
-      MDSContext *c = new C_MDS_TryFindInode(this, mdr);
-      mdcache->find_ino_peers(refpath.get_ino(), c);
+      inodeno_t ino = refpath.get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
     } else {
       dout(10) << "FAIL on error " << r << dendl;
       respond_to_request(mdr, r);
@@ -3575,7 +3628,8 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr,
   if (r < 0) {
     if (r == -CEPHFS_ESTALE) {
       dout(10) << "FAIL on CEPHFS_ESTALE but attempting recovery" << dendl;
-      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      inodeno_t ino = refpath.get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
       return nullptr;
     }
     respond_to_request(mdr, r);
@@ -3660,7 +3714,8 @@ Server::rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn)
   if (r != 0) {
     if (r == -CEPHFS_ESTALE) {
       dout(10) << "CEPHFS_ESTALE on path, attempting recovery" << dendl;
-      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      inodeno_t ino = refpath.get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
     } else if (r < 0) {
       respond_to_request(mdr, r);
     }
@@ -3672,7 +3727,8 @@ Server::rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn)
   if (r != 0) {
     if (r == -CEPHFS_ESTALE) {
       dout(10) << "CEPHFS_ESTALE on path2, attempting recovery" << dendl;
-      mdcache->find_ino_peers(refpath2.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      inodeno_t ino = refpath2.get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
     } else if (r < 0) {
       respond_to_request(mdr, r);
     }
@@ -6962,7 +7018,8 @@ void Server::handle_client_link(MDRequestRef& mdr)
     targeti = mdcache->get_inode(req->get_filepath2().get_ino());
     if (!targeti) {
       dout(10) << "CEPHFS_ESTALE on path2, attempting recovery" << dendl;
-      mdcache->find_ino_peers(req->get_filepath2().get_ino(), new C_MDS_TryFindInode(this, mdr));
+      inodeno_t ino = req->get_filepath2().get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
       return;
     }
     mdr->pin(targeti);
