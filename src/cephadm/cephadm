@@ -1131,8 +1131,9 @@ class Tracing(object):
         if daemon_type == 'jaeger-agent':
             assert 'collector_nodes' in config
             Tracing.components[daemon_type]['daemon_args'] = [
-                f'--reporter.grpc.host-port={config["collector_nodes"]} \
-                 --processor.jaeger-compact.server-host-port=6799']
+                f'--reporter.grpc.host-port={config["collector_nodes"]}',
+                '--processor.jaeger-compact.server-host-port=6799'
+            ]
 
 ##################################
 
