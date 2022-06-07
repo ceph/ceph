@@ -19,6 +19,7 @@
 #include "rgw_notify_event_type.h"
 #include "common/tracer.h"
 #include "rgw_datalog_notify.h"
+#include "include/random.h"
 
 class RGWGetDataCB;
 class RGWAccessListFilter;
@@ -363,7 +364,9 @@ class Store {
     /** Enable or disable a set of bucket.  e.g. if a User is suspended */
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled) = 0;
     /** Get a new request ID */
-    virtual uint64_t get_new_req_id() = 0;
+    virtual uint64_t get_new_req_id() {
+      return ceph::util::generate_random_number<uint64_t>();
+    }
     /** Get a handler for bucket sync policy. */
     virtual int get_sync_policy_handler(const DoutPrefixProvider* dpp,
 					std::optional<rgw_zone_id> zone,

@@ -3068,7 +3068,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   string req_id;
   if (!s) {
     // fake req_id
-    req_id = store->svc.zone_utils->unique_id(store->get_new_req_id());
+    req_id = store->svc.zone_utils->unique_id(store->store->get_new_req_id());
   } else {
     req_id = s->req_id;
   }

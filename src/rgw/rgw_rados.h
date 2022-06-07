@@ -514,10 +514,6 @@ public:
     return *this;
   }
 
-  uint64_t get_new_req_id() {
-    return ceph::util::generate_random_number<uint64_t>();
-  }
-
   librados::IoCtx* get_lc_pool_ctx() {
     return &lc_pool_ctx;
   }
