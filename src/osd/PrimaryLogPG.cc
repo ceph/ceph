@@ -3371,7 +3371,7 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
     if (!clone_obc) {
       break;
     }
-    if (recover_adjacent_clones(obc, op)) {
+    if (recover_adjacent_clones(clone_obc, op)) {
       return -EAGAIN;
     }
     get_adjacent_clones(clone_obc, obc_l, obc_g);
