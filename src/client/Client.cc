@@ -2330,15 +2330,6 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
       if (!session->seq && m->get_seq())
         session->seq = m->get_seq();
 
-      feature_bitset_t missing_features(CEPHFS_FEATURES_CLIENT_REQUIRED);
-      missing_features -= m->supported_features;
-      if (!missing_features.empty()) {
-	lderr(cct) << "mds." << from << " lacks required features '"
-		   << missing_features << "', closing session " << dendl;
-	_close_mds_session(session.get());
-	_closed_mds_session(session.get(), -CEPHFS_EPERM, true);
-	break;
-      }
       session->mds_features = std::move(m->supported_features);
       session->mds_metric_flags = std::move(m->metric_spec.metric_flags);
 
