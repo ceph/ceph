@@ -205,6 +205,7 @@ class RbdTest(DashboardTestCase):
         {
             "size": 1073741824,
             "obj_size": 4194304,
+            "mirror_mode": "journal",
             "num_objs": 256,
             "order": 22,
             "block_name_prefix": "rbd_data.10ae2ae8944a",
@@ -247,6 +248,7 @@ class RbdTest(DashboardTestCase):
                 'source': JLeaf(int),
                 'value': JLeaf(str),
             })),
+            'mirror_mode': JLeaf(str),
         })
         self.assertSchema(img, schema)
 
