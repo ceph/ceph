@@ -328,16 +328,18 @@ int process_request(rgw::sal::Store* const store,
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler, yield);
     goto done;
   }
+  s->lua_background = lua_background;
+  s->lua_manager = lua_manager.get();
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     std::string script;
-    auto rc = rgw::lua::read_script(s, lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    auto rc = rgw::lua::read_script(s, s->lua_manager, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_background);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
@@ -416,13 +418,13 @@ done:
       }
     }
     std::string script;
-    auto rc = rgw::lua::read_script(s, lua_manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    auto rc = rgw::lua::read_script(s, s->lua_manager, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_background);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }
