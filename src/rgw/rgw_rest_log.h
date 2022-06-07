@@ -53,6 +53,7 @@ class RGWOp_BILog_Info : public RGWRESTOp {
   bool syncstopped;
   uint64_t oldest_gen = 0;
   uint64_t latest_gen = 0;
+  std::vector<std::pair<uint64_t, uint32_t>> gen_numshards;
 
 public:
   RGWOp_BILog_Info() : bucket_ver(), master_ver(), syncstopped(false) {}
