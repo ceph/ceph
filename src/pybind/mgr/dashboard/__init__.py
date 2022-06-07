@@ -48,5 +48,13 @@ else:
         os.path.dirname(__file__),
         'frontend/dist'))
 
+    import rbd
+
+    # Api tests do not mock rbd as opposed to dashboard unit tests. Both
+    # use UNITTEST env variable.
+    if isinstance(rbd, mock.Mock):
+        rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL = 0
+        rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT = 1
+
 # DO NOT REMOVE: required for ceph-mgr to load a module
 from .module import Module, StandbyModule  # noqa: F401

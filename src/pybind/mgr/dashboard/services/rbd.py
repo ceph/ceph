@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=unused-argument
 import errno
+import json
+from enum import IntEnum
 
 import cherrypy
 import rbd
 
 from .. import mgr
+from ..exceptions import DashboardException
 from ..tools import ViewCache
 from .ceph_service import CephService
 
@@ -26,6 +29,20 @@ RBD_FEATURES_NAME_MAPPING = {
     rbd.RBD_FEATURE_DATA_POOL: "data-pool",
     rbd.RBD_FEATURE_OPERATIONS: "operations",
 }
+
+
+class MIRROR_IMAGE_MODE(IntEnum):
+    journal = rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL
+    snapshot = rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT
+
+
+def _rbd_support_remote(method_name: str, *args, **kwargs):
+    try:
+        return mgr.remote('rbd_support', method_name, *args, **kwargs)
+    except ImportError as ie:
+        raise DashboardException(f'rbd_support module not found {ie}')
+    except RuntimeError as ie:
+        raise DashboardException(f'rbd_support.{method_name} error: {ie}')
 
 
 def format_bitmask(features):
@@ -245,10 +262,22 @@ class RbdService(object):
         return total_used_size, snap_map
 
     @classmethod
-    def _rbd_image(cls, ioctx, pool_name, namespace, image_name):
+    def _rbd_image(cls, ioctx, pool_name, namespace, image_name):  # pylint: disable=R0912
         with rbd.Image(ioctx, image_name) as img:
-
             stat = img.stat()
+            mirror_mode = img.mirror_image_get_mode()
+            if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL:
+                stat['mirror_mode'] = 'journal'
+            elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+                stat['mirror_mode'] = 'snapshot'
+                schedule_status = json.loads(_rbd_support_remote(
+                    'mirror_snapshot_schedule_status')[1])
+                for scheduled_image in schedule_status['scheduled_images']:
+                    if scheduled_image['image'] == get_image_spec(pool_name, namespace, image_name):
+                        stat['schedule_info'] = scheduled_image
+            else:
+                stat['mirror_mode'] = 'unknown'
+
             stat['name'] = image_name
 
             mirror_info = img.mirror_image_get_info()
@@ -292,23 +321,34 @@ class RbdService(object):
             # snapshots
             stat['snapshots'] = []
             for snap in img.list_snaps():
+                try:
+                    snap['mirror_mode'] = MIRROR_IMAGE_MODE(img.mirror_image_get_mode()).name
+                except ValueError as ex:
+                    raise DashboardException(f'Unknown RBD Mirror mode: {ex}')
+
                 snap['timestamp'] = "{}Z".format(
                     img.get_snap_timestamp(snap['id']).isoformat())
-                snap['is_protected'] = img.is_protected_snap(snap['name'])
+
+                snap['is_protected'] = None
+                if mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+                    snap['is_protected'] = img.is_protected_snap(snap['name'])
                 snap['used_bytes'] = None
                 snap['children'] = []
-                img.set_snap(snap['name'])
-                for child_pool_name, child_image_name in img.list_children():
-                    snap['children'].append({
-                        'pool_name': child_pool_name,
-                        'image_name': child_image_name
-                    })
+
+                if mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+                    img.set_snap(snap['name'])
+                    for child_pool_name, child_image_name in img.list_children():
+                        snap['children'].append({
+                            'pool_name': child_pool_name,
+                            'image_name': child_image_name
+                        })
                 stat['snapshots'].append(snap)
 
             # disk usage
             img_flags = img.flags()
             if 'fast-diff' in stat['features_name'] and \
-                    not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags:
+                    not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags and \
+                    mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
                 snaps = [(s['id'], s['size'], s['name'])
                          for s in stat['snapshots']]
                 snaps.sort(key=lambda s: s[0])
@@ -437,7 +477,7 @@ class RBDSchedulerInterval:
 class RbdMirroringService:
 
     @classmethod
-    def enable_image(cls, image_name: str, pool_name: str, namespace: str, mode: str):
+    def enable_image(cls, image_name: str, pool_name: str, namespace: str, mode: MIRROR_IMAGE_MODE):
         rbd_image_call(pool_name, namespace, image_name,
                        lambda ioctx, image: image.mirror_image_enable(mode))
 
@@ -462,6 +502,10 @@ class RbdMirroringService:
                        lambda ioctx, image: image.mirror_image_resync())
 
     @classmethod
-    def snapshot_schedule(cls, image_spec: str, interval: str, start_time: str = ''):
-        mgr.remote('rbd_support', 'mirror_snapshot_schedule_add', image_spec,
-                   str(RBDSchedulerInterval(interval)), start_time)
+    def snapshot_schedule_add(cls, image_spec: str, interval: str):
+        _rbd_support_remote('mirror_snapshot_schedule_add', image_spec,
+                            str(RBDSchedulerInterval(interval)))
+
+    @classmethod
+    def snapshot_schedule_remove(cls, image_spec: str):
+        _rbd_support_remote('mirror_snapshot_schedule_remove', image_spec)

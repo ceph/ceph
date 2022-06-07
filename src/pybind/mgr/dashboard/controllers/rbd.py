@@ -5,7 +5,6 @@
 import logging
 import math
 from datetime import datetime
-from enum import Enum
 from functools import partial
 
 import rbd
@@ -15,9 +14,10 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
-from ..services.rbd import RbdConfiguration, RbdMirroringService, RbdService, \
-    RbdSnapshotService, format_bitmask, format_features, parse_image_spec, \
-    rbd_call, rbd_image_call
+from ..services.rbd import MIRROR_IMAGE_MODE, RbdConfiguration, \
+    RbdMirroringService, RbdService, RbdSnapshotService, format_bitmask, \
+    format_features, get_image_spec, parse_image_spec, rbd_call, \
+    rbd_image_call
 from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, \
     EndpointDoc, RESTController, Task, UpdatePermission, allow_empty_body
@@ -77,10 +77,6 @@ class Rbd(RESTController):
     ALLOW_DISABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "deep-flatten",
                               "journaling"}
 
-    class MIRROR_IMAGE_MODE(Enum):
-        journal = rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL
-        snapshot = rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT
-
     def _rbd_list(self, pool_name=None):
         if pool_name:
             pools = [pool_name]
@@ -114,8 +110,9 @@ class Rbd(RESTController):
 
     @RbdTask('create',
              {'pool_name': '{pool_name}', 'namespace': '{namespace}', 'image_name': '{name}'}, 2.0)
-    def create(self, name, pool_name, size, namespace=None, obj_size=None, features=None,
-               stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
+    def create(self, name, pool_name, size, namespace=None, schedule_interval='',
+               obj_size=None, features=None, stripe_unit=None, stripe_count=None,
+               data_pool=None, configuration=None, mirror_mode=None):
 
         size = int(size)
 
@@ -137,6 +134,13 @@ class Rbd(RESTController):
                              image_name=name).set_configuration(configuration)
 
         rbd_call(pool_name, namespace, _create)
+        if mirror_mode:
+            RbdMirroringService.enable_image(name, pool_name, namespace,
+                                             MIRROR_IMAGE_MODE[mirror_mode])
+
+        if schedule_interval:
+            image_spec = get_image_spec(pool_name, namespace, name)
+            RbdMirroringService.snapshot_schedule_add(image_spec, schedule_interval)
 
     @RbdTask('delete', ['{image_spec}'], 2.0)
     def delete(self, image_spec):
@@ -153,7 +157,9 @@ class Rbd(RESTController):
     @RbdTask('edit', ['{image_spec}', '{name}'], 4.0)
     def set(self, image_spec, name=None, size=None, features=None,
             configuration=None, enable_mirror=None, primary=None,
-            resync=False, mirror_mode=None, schedule_interval='', start_time=''):
+            resync=False, mirror_mode=None, schedule_interval='',
+            remove_scheduling=False):
+
         pool_name, namespace, image_name = parse_image_spec(image_spec)
 
         def _edit(ioctx, image):
@@ -193,7 +199,7 @@ class Rbd(RESTController):
             if enable_mirror and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_DISABLED:
                 RbdMirroringService.enable_image(
                     image_name, pool_name, namespace,
-                    self.MIRROR_IMAGE_MODE[mirror_mode].value)
+                    MIRROR_IMAGE_MODE[mirror_mode])
             elif (enable_mirror is False
                   and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED):
                 RbdMirroringService.disable_image(
@@ -210,7 +216,10 @@ class Rbd(RESTController):
                 RbdMirroringService.resync_image(image_name, pool_name, namespace)
 
             if schedule_interval:
-                RbdMirroringService.snapshot_schedule(image_spec, schedule_interval, start_time)
+                RbdMirroringService.snapshot_schedule_add(image_spec, schedule_interval)
+
+            if remove_scheduling:
+                RbdMirroringService.snapshot_schedule_remove(image_spec)
 
         return rbd_image_call(pool_name, namespace, image_name, _edit)
 
