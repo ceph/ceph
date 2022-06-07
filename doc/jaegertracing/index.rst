@@ -32,15 +32,24 @@ JAEGER DEPLOYMENT
 -----------------
 
 there are couple of ways to deploy jaeger.
+it can be done using cephadm, or manually.
+
 please refer to:
+
+`Cephadm Jaeger services deployment <../cephadm/services/tracing/>`_
 
 `jaeger deployment <https://www.jaegertracing.io/docs/1.25/deployment/>`_
 
 `jaeger performance tuning <https://www.jaegertracing.io/docs/1.25/performance-tuning/>`_
 
 
-In addition, spans are being sent to local jaeger agent, so the jaeger agent must be running on each host (not in all-in-one mode).
-otherwise, spans of hosts without active jaeger agent will be lost.
+Important Notes:
+^^^^^^^^^^^^^^^^
+
+- Spans are being sent to local jaeger agent, so the jaeger agent must be running on each host (not in all-in-one mode). otherwise, spans of hosts without active jaeger agent will be lost.
+
+- Ceph tracers are configured to sent tracers to agents that are listening to port 6799, so on manual jaeger deployment, option "--processor.jaeger-compact.server-host-port=6799" should be used.
+
 
 HOW TO ENABLE TRACING IN CEPH
 -----------------------------
