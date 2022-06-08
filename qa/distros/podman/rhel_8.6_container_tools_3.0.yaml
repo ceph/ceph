@@ -1,5 +1,5 @@
 os_type: rhel
-os_version: "8.5"
+os_version: "8.6"
 overrides:
   selinux:
     whitelist:
@@ -9,5 +9,5 @@ tasks:
     all:
     - sudo cp /etc/containers/registries.conf /etc/containers/registries.conf.backup
     - sudo dnf -y  module reset container-tools
-    - sudo dnf -y  module install container-tools:rhel8 --allowerasing --nobest
+    - sudo dnf -y  module install container-tools:3.0 --allowerasing --nobest
     - sudo cp /etc/containers/registries.conf.backup /etc/containers/registries.conf
