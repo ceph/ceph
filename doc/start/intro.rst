@@ -34,7 +34,7 @@ required when running Ceph File System clients.
   `REST API`_.  At least two managers are normally required for high
   availability.
 
-- **Ceph OSDs**: A :term:`Ceph OSD` (object storage daemon,
+- **Ceph OSDs**: An Object Storage Daemon (:term:`Ceph OSD`,
   ``ceph-osd``) stores data, handles data replication, recovery,
   rebalancing, and provides some monitoring information to Ceph
   Monitors and Managers by checking other Ceph OSD Daemons for a
