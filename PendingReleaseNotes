@@ -43,6 +43,9 @@
   * system
   * truncated
   * user_stats_sync
+* RGW: The beast frontend's HTTP access log line uses a new debug_rgw_access
+  configurable. This has the same defaults as debug_rgw, but can now be controlled
+  independently.
 
 >=17.2.1
 
