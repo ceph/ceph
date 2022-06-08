@@ -743,6 +743,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
         snappath = self.snapshot_path(snapname)
         rmsnap(self.fs, snappath)
+        self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
+        self.metadata_mgr.flush()
 
     def snapshot_info(self, snapname):
         if is_inherited_snap(snapname):
