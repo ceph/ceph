@@ -9,10 +9,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 FSID='00000000-0000-0000-0000-0000deadbeef'
 
 # images that are used
-IMAGE_MASTER=${IMAGE_MASTER:-'quay.ceph.io/ceph-ci/ceph:master'}
+IMAGE_MAIN=${IMAGE_MAIN:-'quay.ceph.io/ceph-ci/ceph:main'}
 IMAGE_PACIFIC=${IMAGE_PACIFIC:-'quay.ceph.io/ceph-ci/ceph:pacific'}
 #IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'quay.ceph.io/ceph-ci/ceph:octopus'}
-IMAGE_DEFAULT=${IMAGE_MASTER}
+IMAGE_DEFAULT=${IMAGE_MAIN}
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -168,7 +168,7 @@ $SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version \
 #$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
 #$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
 #    | grep 'ceph version 15'
-$SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
+$SUDO $CEPHADM_BIN --image $IMAGE_MAIN version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
 systemctl status docker > /dev/null && ( $CEPHADM --docker version | grep 'ceph version' ) || echo "docker not installed"
