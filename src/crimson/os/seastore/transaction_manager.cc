@@ -501,6 +501,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
       return rewrite_extent_iertr::now();
     }
     extent = updated;
+    ceph_assert(!extent->is_pending_io());
   }
 
   t.get_rewrite_version_stats().increment(extent->get_version());

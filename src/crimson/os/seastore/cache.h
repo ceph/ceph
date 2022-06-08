@@ -325,6 +325,7 @@ public:
           "{} {}~{} is absent(placeholder), reading ... -- {}",
           T::TYPE, offset, length, *ret);
       extents.replace(*ret, *cached);
+      on_cache(*ret);
 
       // replace placeholder in transactions
       while (!cached->transactions.empty()) {
@@ -451,20 +452,16 @@ public:
     } else {
       SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
                 t, T::TYPE, offset, length);
-      auto f = [&t](CachedExtent &ext) {
+      auto f = [&t, this](CachedExtent &ext) {
 	t.add_to_read_set(CachedExtentRef(&ext));
+	touch_extent(ext);
       };
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
 	get_extent<T>(
 	  offset, length, &metric_key,
 	  std::forward<Func>(extent_init_func), std::move(f))
-      ).si_then([this](auto ref) {
-	(void)this; // silence incorrect clang warning about captur
-	touch_extent(*ref);
-	return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
-	  std::move(ref));
-      });
+      );
     }
   }
   template <typename T>
@@ -539,19 +536,16 @@ private:
     } else {
       SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
                 t, type, offset, length, laddr);
-      auto f = [&t](CachedExtent &ext) {
+      auto f = [&t, this](CachedExtent &ext) {
 	t.add_to_read_set(CachedExtentRef(&ext));
+	touch_extent(ext);
       };
       auto src = t.get_src();
       return trans_intr::make_interruptible(
 	_get_extent_by_type(
 	  type, offset, laddr, length, &src,
 	  std::move(extent_init_func), std::move(f))
-      ).si_then([this](CachedExtentRef ret) {
-	touch_extent(*ret);
-	return get_extent_ertr::make_ready_future<CachedExtentRef>(
-	  std::move(ret));
-      });
+      );
     }
   }
 
@@ -1048,10 +1042,7 @@ private:
     }
 
     void add_to_lru(CachedExtent &extent) {
-      assert(
-	extent.is_clean() &&
-	!extent.is_pending() &&
-	!extent.is_placeholder());
+      assert(extent.is_clean() && !extent.is_placeholder());
       
       if (!extent.primary_ref_list_hook.is_linked()) {
 	contents += extent.get_length();
@@ -1077,9 +1068,7 @@ private:
     }
 
     void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_clean());
-      assert(!extent.is_pending());
-      assert(!extent.is_placeholder());
+      assert(extent.is_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
@@ -1090,10 +1079,7 @@ private:
     }
 
     void move_to_top(CachedExtent &extent) {
-      assert(
-	extent.is_clean() &&
-	!extent.is_pending() &&
-	!extent.is_placeholder());
+      assert(extent.is_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
@@ -1263,7 +1249,6 @@ private:
 
   /// Update lru for access to ref
   void touch_extent(CachedExtent &ext) {
-    assert(!ext.is_pending());
     if (ext.is_clean() && !ext.is_placeholder()) {
       lru.move_to_top(ext);
     }
