@@ -317,6 +317,10 @@ public:
     return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
   }
 
+  bool is_pending_io() const {
+    return !!io_wait_promise;
+  }
+
   /// Return journal location of oldest relevant delta, only valid while DIRTY
   auto get_dirty_from() const {
     ceph_assert(is_dirty());
