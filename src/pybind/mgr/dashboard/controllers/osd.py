@@ -14,10 +14,11 @@ from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_orchestrator_error, handle_send_command_error
 from ..services.orchestrator import OrchClient, OrchFeature
+from ..services.osd import HostStorageSummary, OsdDeploymentOptions
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
-    allow_empty_body
+    EndpointDoc, ReadPermission, RESTController, Task, UIRouter, \
+    UpdatePermission, allow_empty_body
 from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
 
@@ -44,6 +45,72 @@ EXPORT_INDIV_FLAGS_SCHEMA = {
 EXPORT_INDIV_FLAGS_GET_SCHEMA = {
     "osd": (int, "OSD ID"),
     "flags": ([str], "List of active flags")
+}
+
+
+class DeploymentOptions:
+    def __init__(self):
+        self.options = {
+            OsdDeploymentOptions.COST_CAPACITY:
+                HostStorageSummary(OsdDeploymentOptions.COST_CAPACITY,
+                                   title='Cost/Capacity-optimized',
+                                   desc='All the available HDDs are selected'),
+            OsdDeploymentOptions.THROUGHPUT:
+                HostStorageSummary(OsdDeploymentOptions.THROUGHPUT,
+                                   title='Throughput-optimized',
+                                   desc="HDDs/SSDs are selected for data"
+                                   "devices and SSDs/NVMes for DB/WAL devices"),
+            OsdDeploymentOptions.IOPS:
+                HostStorageSummary(OsdDeploymentOptions.IOPS,
+                                   title='IOPS-optimized',
+                                   desc='All the available NVMes are selected'),
+        }
+        self.recommended_option = None
+
+    def as_dict(self):
+        return {
+            'options': {k: v.as_dict() for k, v in self.options.items()},
+            'recommended_option': self.recommended_option
+        }
+
+
+predefined_drive_groups = {
+    OsdDeploymentOptions.COST_CAPACITY: {
+        'service_type': 'osd',
+        'service_id': 'cost_capacity',
+        'placement': {
+            'host_pattern': '*'
+        },
+        'data_devices': {
+            'rotational': 1
+        },
+        'encrypted': False
+    },
+    OsdDeploymentOptions.THROUGHPUT: {
+        'service_type': 'osd',
+        'service_id': 'throughput_optimized',
+        'placement': {
+            'host_pattern': '*'
+        },
+        'data_devices': {
+            'rotational': 1
+        },
+        'db_devices': {
+            'rotational': 0
+        },
+        'encrypted': False
+    },
+    OsdDeploymentOptions.IOPS: {
+        'service_type': 'osd',
+        'service_id': 'iops_optimized',
+        'placement': {
+            'host_pattern': '*'
+        },
+        'data_devices': {
+            'rotational': 0
+        },
+        'encrypted': False
+    },
 }
 
 
@@ -295,6 +362,18 @@ class Osd(RESTController):
             id=int(svc_id),
             weight=float(weight))
 
+    def _create_predefined_drive_group(self, data):
+        orch = OrchClient.instance()
+        option = OsdDeploymentOptions(data[0]['option'])
+        if option in list(OsdDeploymentOptions):
+            try:
+                predefined_drive_groups[
+                    option]['encrypted'] = data[0]['encrypted']
+                orch.osds.create([DriveGroupSpec.from_json(
+                    predefined_drive_groups[option])])
+            except (ValueError, TypeError, DriveGroupValidationError) as e:
+                raise DashboardException(e, component='osd')
+
     def _create_bare(self, data):
         """Create a OSD container that has no associated device.
 
@@ -334,6 +413,8 @@ class Osd(RESTController):
             return self._create_bare(data)
         if method == 'drive_groups':
             return self._create_with_drive_groups(data)
+        if method == 'predefined':
+            return self._create_predefined_drive_group(data)
         raise DashboardException(
             component='osd', http_status_code=400, msg='Unknown method: {}'.format(method))
 
@@ -407,6 +488,43 @@ class Osd(RESTController):
     def devices(self, svc_id):
         # (str) -> dict
         return CephService.send_command('mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+
+
+@UIRouter('/osd', Scope.OSD)
+@APIDoc("Dashboard UI helper function; not part of the public API", "OsdUI")
+class OsdUi(Osd):
+    @Endpoint('GET')
+    @ReadPermission
+    @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
+    @handle_orchestrator_error('host')
+    def deployment_options(self):
+        orch = OrchClient.instance()
+        hdds = 0
+        ssds = 0
+        nvmes = 0
+        res = DeploymentOptions()
+
+        for inventory_host in orch.inventory.list(hosts=None, refresh=True):
+            for device in inventory_host.devices.devices:
+                if device.available:
+                    if device.human_readable_type == 'hdd':
+                        hdds += 1
+                    else:
+                        ssds += 1
+                        # we still don't know how to infer nvmes
+                        # Tracker: https://tracker.ceph.com/issues/55728
+                        nvmes += 1
+
+        if hdds:
+            res.options[OsdDeploymentOptions.COST_CAPACITY].available = True
+            res.recommended_option = OsdDeploymentOptions.COST_CAPACITY
+        if ssds:
+            res.options[OsdDeploymentOptions.THROUGHPUT].available = True
+            res.recommended_option = OsdDeploymentOptions.THROUGHPUT
+        if nvmes:
+            res.options[OsdDeploymentOptions.IOPS].available = True
+
+        return res.as_dict()
 
 
 @APIRouter('/osd/flags', Scope.OSD)
