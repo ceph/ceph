@@ -3250,18 +3250,11 @@ int MotrObject::update_null_reference(const DoutPrefixProvider *dpp, rgw_bucket_
   bufferlist::const_iterator iter;
   bufferlist bl, bl_null_idx_val;
   rgw_bucket_dir_entry current_null_key_ref;
-  // Set the key and instance for multipart object from ent structure
-  if (ent.meta.category == RGWObjCategory::MultiMeta)
-  {
-    current_null_key_ref.key.name = ent.key.name;
-    current_null_key_ref.key.instance = ent.key.instance;
-  }
-  else
-  {
-    current_null_key_ref.key.name = this->get_name();
-    current_null_key_ref.key.instance = this->get_instance();
-  }
+ 
+  current_null_key_ref.key.name = this->get_name();
+  current_null_key_ref.key.instance = this->get_instance();
   current_null_key_ref.encode(bl_null_idx_val);
+
   int motr_rc = this->store->do_idx_op_by_name(bucket_index_iname,
                             M0_IC_GET, null_ref_key, bl);
   ldpp_dout(dpp, 20) <<__func__<< "GET null index entry, rc : " << motr_rc << dendl;
@@ -3744,22 +3737,23 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
     if(ret_rc < 0)
       return ret_rc;
 
-    key_name = ent.key.name + "[" + ent.key.instance + "]";
+    if(!ent.is_delete_marker()) {
+      // key_name = test_obj1[zWs1hl8neLT5wggBth5qjgOzUuXt20E]
+      key_name = ent.key.name + "[" + ent.key.instance + "]";
 
-    // fetch the version-id in case of null version-id
-    if(ent.key.instance == "null")
-    {
-      ret_rc = mobj_ver->fetch_null_obj_reference(dpp, key_name);
-      if(ret_rc < 0) {
-        ldpp_dout(dpp, 0) << __func__ << " : failed to get null object reference, ret_rc : "<< ret_rc << dendl;
-        return ret_rc;
+      //fetch the version-id in case of null version-id
+      if(ent.key.instance == "null") {
+        ret_rc = mobj_ver->fetch_null_obj_reference(dpp, key_name);
+        if(ret_rc < 0) {
+          ldpp_dout(dpp, 0) << __func__ << " : failed to get null object reference, ret_rc : "<< ret_rc << dendl;
+          return ret_rc;
+        }
       }
-    }
-
-    rc = store->get_upload_id(tenant_bkt_name, key_name, upload_id);
-    if (rc < 0) {
-      ldpp_dout(dpp, 0) << __func__ << ": ERROR: get_upload_id failed. rc = " << rc << dendl;
-      return rc;
+      rc = store->get_upload_id(tenant_bkt_name, key_name, upload_id);
+      if (rc < 0) {
+        ldpp_dout(dpp, 0) << __func__ << ": ERROR: get_upload_id failed. rc = " << rc << dendl;
+        return rc;
+      }
     }
   }
 
@@ -4025,7 +4019,6 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   MotrObject::Meta meta_dummy;
   meta_dummy.encode(update_bl);
 
-
   string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
   ldpp_dout(dpp, 20) << __func__ << ": target_obj name=" << target_obj->get_name()
                                   << " target_obj oid=" << target_obj->get_oid() << dendl;
@@ -4072,6 +4065,8 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
     // version entry instead of adding new null version entry.
     int ret_rc;
     ent.key.instance = target_obj->get_instance();
+
+    mobj_ver->set_instance(ent.key.instance);
     ret_rc = mobj_ver->update_null_reference(dpp, ent);
     ldpp_dout(dpp, 20) <<__func__<< ": update_null_reference rc : " << ret_rc << dendl;
   }
