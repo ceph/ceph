@@ -43,8 +43,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
-                             const rgw::auth::RemoteApplier::AuthInfo &info
-                            ) const override {
+                             const rgw::auth::RemoteApplier::AuthInfo &info) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
 			       implicit_tenant_context,
@@ -56,9 +55,10 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const std::optional<uint32_t>& perm_mask) const override {
+                            const std::optional<uint32_t>& perm_mask,
+                            const std::string& access_key_id) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
+      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask, access_key_id));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -109,8 +109,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
-                             const rgw::auth::RemoteApplier::AuthInfo &info
-                            ) const override {
+                             const rgw::auth::RemoteApplier::AuthInfo &info) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
                                implicit_tenant_context,
@@ -174,9 +173,10 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const std::optional<uint32_t>& perm_mask) const override {
+                            const std::optional<uint32_t>& perm_mask,
+                            const std::string& access_key_id) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
+      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask, access_key_id));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }

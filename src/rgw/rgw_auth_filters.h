@@ -118,6 +118,10 @@ public:
   void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override {     /* in/out */
     return get_decoratee().modify_request_state(dpp, s);
   }
+
+  void write_ops_log_entry(rgw_log_entry& entry) const override {
+    return get_decoratee().write_ops_log_entry(entry);
+  }
 };
 
 
