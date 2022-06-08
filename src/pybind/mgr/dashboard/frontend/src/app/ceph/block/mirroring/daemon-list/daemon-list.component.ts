@@ -4,7 +4,6 @@ import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
-import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
 
 @Component({
   selector: 'cd-mirroring-daemons',
@@ -18,37 +17,22 @@ export class DaemonListComponent implements OnInit, OnDestroy {
   subs: Subscription;
 
   data: [];
-  columns: {};
+  daemons: {};
+  empty: boolean;
 
   tableStatus = new TableStatusViewCache();
 
   constructor(
     private rbdMirroringService: RbdMirroringService,
-    private cephShortVersionPipe: CephShortVersionPipe
-  ) {}
+  ) {
+    this.empty = false;
+  }
 
   ngOnInit() {
-    this.columns = [
-      { prop: 'instance_id', name: $localize`Instance`, flexGrow: 2 },
-      { prop: 'id', name: $localize`ID`, flexGrow: 2 },
-      { prop: 'server_hostname', name: $localize`Hostname`, flexGrow: 2 },
-      {
-        prop: 'version',
-        name: $localize`Version`,
-        pipe: this.cephShortVersionPipe,
-        flexGrow: 2
-      },
-      {
-        prop: 'health',
-        name: $localize`Health`,
-        cellTemplate: this.healthTmpl,
-        flexGrow: 1
-      }
-    ];
-
     this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       this.data = data.content_data.daemons;
       this.tableStatus = new TableStatusViewCache(data.status);
+      this.daemons = this.countDaemons();
     });
   }
 
@@ -56,7 +40,32 @@ export class DaemonListComponent implements OnInit, OnDestroy {
     this.subs.unsubscribe();
   }
 
-  refresh() {
-    this.rbdMirroringService.refresh();
+  countDaemons(): {} {
+    let n = {unknown: 0, error: 0, warning: 0, success: 0};
+    this.empty = (this.data.length > 0) ? false : true; 
+    for (let i = 0; i < this.data.length; i++) {
+      let d = this.data[i];
+      if(d['health'] == 'OK')
+        n.success++;
+      else if (d['health'] == 'Error')
+        n.error++;
+      else if (d['health'] == 'Warning')
+        n.warning++;
+      else
+        n.unknown++;
+    }
+    return n;
   }
+
+  daemonStatus(s: string): string {
+    if (s === 'success')
+      return 'UP';
+    else if (s === 'error')
+      return 'DOWN';
+    else if (s === 'warning')
+      return 'WARNING';
+    else
+      return 'UNKNOWN';
+  }
+
 }

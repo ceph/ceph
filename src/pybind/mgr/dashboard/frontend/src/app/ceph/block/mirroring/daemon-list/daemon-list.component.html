@@ -1,13 +1,8 @@
-<cd-table [data]="data"
-          columnMode="flex"
-          [columns]="columns"
-          [autoReload]="-1"
-          (fetchData)="refresh()"
-          [status]="tableStatus">
-</cd-table>
+<ng-container *ngIf="empty">
+  <strong class="text-danger" i18n>There are no daemons</strong>
+</ng-container>
 
-<ng-template #healthTmpl
-             let-row="row"
-             let-value="value">
-  <span [ngClass]="row.health_color | mirrorHealthColor">{{ value }}</span>
-</ng-template>
+<ng-container *ngFor="let daemon of daemons | keyvalue">
+  <span *ngIf="daemon.value > 0" [ngClass]="daemon.key | mirrorHealthColor"
+     class="m-1" i18n>{{daemon.value}} {{daemonStatus(daemon.key)}}</span>
+</ng-container>
