@@ -20,9 +20,9 @@ describe('Mirroring page', () => {
   });
 
   it('should show text for all tabs', () => {
-    mirroring.getTabText(0).should('eq', 'Issues');
-    mirroring.getTabText(1).should('eq', 'Syncing');
-    mirroring.getTabText(2).should('eq', 'Ready');
+    mirroring.getTabText(0).should('eq', 'Issues (0)');
+    mirroring.getTabText(1).should('eq', 'Syncing (0)');
+    mirroring.getTabText(2).should('eq', 'Ready (0)');
   });
 
   describe('checks that edit mode functionality shows in the pools table', () => {
