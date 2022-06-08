@@ -18,6 +18,7 @@
 using crimson::osd::OSD;
 using crimson::osd::PG;
 using namespace crimson::common;
+using ceph::common::cmd_getval;
 
 
 namespace crimson::admin::pg {

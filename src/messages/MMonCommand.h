@@ -20,8 +20,8 @@
 #include <vector>
 #include <string>
 
-using TOPNSPC::common::cmdmap_from_json;
-using TOPNSPC::common::cmd_getval;
+using ceph::common::cmdmap_from_json;
+using ceph::common::cmd_getval;
 
 class MMonCommand final : public PaxosServiceMessage {
 public:
