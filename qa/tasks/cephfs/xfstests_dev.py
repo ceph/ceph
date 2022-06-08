@@ -209,8 +209,10 @@ class XFSTestsDev(CephFSTestCase):
             export CEPHFS_MOUNT_OPTIONS="-o name=admin,secret={self.get_admin_key()}{_options}"
             ''')
 
-       self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'local.config'),
-                                             xfstests_config_contents, sudo=True)
+        self.mount_a.client_remote.write_file(
+            join(self.xfstests_repo_path, 'local.config'),
+            xfstests_config_contents, sudo=True)
+        log.info(f'local.config\'s contents -\n{xfstests_config_contents}')
 
     def write_ceph_exclude(self):
         # These tests will fail or take too much time and will
