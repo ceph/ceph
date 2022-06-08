@@ -11,7 +11,6 @@ log = getLogger(__name__)
 
 
 # TODO: add code to run non-ACL tests too.
-# TODO: get tests running with SCRATCH_DEV and SCRATCH_DIR.
 # TODO: make xfstests-dev tests running without running `make install`.
 # TODO: make xfstests-dev compatible with ceph-fuse. xfstests-dev remounts
 # CephFS before running tests using kernel, so ceph-fuse mounts are never
@@ -201,18 +200,17 @@ class XFSTestsDev(CephFSTestCase):
         self.test_dev = mon_sock + ':/' + self.test_dirname
         self.scratch_dev = mon_sock + ':/' + self.scratch_dirname
 
-        xfstests_config_contents = dedent('''\
+        xfstests_config_contents = dedent(f'''\
             export FSTYP=ceph
-            export TEST_DEV={}
-            export TEST_DIR={}
-            export SCRATCH_DEV={}
-            export SCRATCH_MNT={}
-            export CEPHFS_MOUNT_OPTIONS="-o name=admin,secret={}{}"
-            ''').format(self.test_dev, self.test_dirs_mount_path, self.scratch_dev,
-                        self.scratch_dirs_mount_path, self.get_admin_key(), _options)
+            export TEST_DEV={self.test_dev}
+            export TEST_DIR={self.test_dirs_mount_path}
+            export SCRATCH_DEV={self.scratch_dev}
+            export SCRATCH_MNT={self.scratch_dirs_mount_path}
+            export CEPHFS_MOUNT_OPTIONS="-o name=admin,secret={self.get_admin_key()}{_options}"
+            ''')
 
-        self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'local.config'),
-                                              xfstests_config_contents, sudo=True)
+       self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'local.config'),
+                                             xfstests_config_contents, sudo=True)
 
     def write_ceph_exclude(self):
         # These tests will fail or take too much time and will
