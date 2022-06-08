@@ -1,5 +1,5 @@
 os_type: rhel
-os_version: "8.5"
+os_version: "8.6"
 overrides:
   selinux:
     whitelist:
