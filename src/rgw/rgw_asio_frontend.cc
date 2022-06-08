@@ -269,7 +269,7 @@ void handle_connection(boost::asio::io_context& context,
                       *env.auth_registry, &client, env.olog, y,
                       scheduler, &user, &latency,
                       env.ratelimiting->get_active(),
-                      &http_ret);
+                      &http_ret, env.lua_background);
 
       if (cct->_conf->subsys.should_gather(dout_subsys, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following

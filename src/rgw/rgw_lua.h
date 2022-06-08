@@ -15,6 +15,7 @@ namespace rgw::lua {
 enum class context {
   preRequest,
   postRequest,
+  background,
   none
 };
 
