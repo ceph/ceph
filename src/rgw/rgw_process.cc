@@ -273,10 +273,10 @@ int process_request(rgw::sal::Store* const store,
                     string* user,
                     ceph::coarse_real_clock::duration* latency,
                     std::shared_ptr<RateLimiter> ratelimit,
-                    int* http_ret)
+                    int* http_ret,
+                    rgw::lua::Background* lua_background)
 {
   int ret = client_io->init(g_ceph_context);
-
   dout(1) << "====== starting new request req=" << hex << req << dec
 	  << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
@@ -336,7 +336,7 @@ int process_request(rgw::sal::Store* const store,
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_background);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
@@ -419,7 +419,7 @@ done:
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script, lua_background);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }

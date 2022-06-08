@@ -30,6 +30,9 @@ extern void signal_shutdown();
 namespace rgw::dmclock {
   class Scheduler;
 }
+namespace rgw::lua {
+  class Background;
+}
 
 struct RGWProcessEnv {
   rgw::sal::Store* store;
@@ -40,6 +43,7 @@ struct RGWProcessEnv {
   std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
   //maybe there is a better place to store the rate limit data structure
   ActiveRateLimiter* ratelimiting;
+  rgw::lua::Background* lua_background;
 };
 
 class RGWFrontendConfig;
@@ -58,6 +62,7 @@ protected:
   RGWFrontendConfig* conf;
   int sock_fd;
   std::string uri_prefix;
+  rgw::lua::Background* lua_background;
 
   struct RGWWQ : public DoutPrefixProvider, public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
@@ -109,6 +114,7 @@ public:
       conf(conf),
       sock_fd(-1),
       uri_prefix(pe->uri_prefix),
+      lua_background(pe->lua_background),
       req_wq(this,
 	     ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
 	     ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
@@ -177,7 +183,8 @@ extern int process_request(rgw::sal::Store* store,
                            std::string* user,
                            ceph::coarse_real_clock::duration* latency,
                            std::shared_ptr<RateLimiter> ratelimit,
-                           int* http_ret = nullptr);
+                           int* http_ret = nullptr,
+                           rgw::lua::Background* lua_background = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,

@@ -163,7 +163,8 @@ set(librgw_common_srcs
   rgw_lua_utils.cc
   rgw_lua.cc
   rgw_bucket_encryption.cc
-  rgw_tracer.cc)
+  rgw_tracer.cc
+  rgw_lua_background.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -358,7 +359,10 @@ add_library(radosgw SHARED
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
-  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PRIVATE "${LUA_INCLUDE_DIR}")
+
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
 target_link_libraries(radosgw
