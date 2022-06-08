@@ -17,6 +17,9 @@ releases:
     releases:
       - version: 17.2.0
         released: 2022-04-19
+    releases:
+      - version: 17.2.1
+        released: 2022-06-15
 
   pacific:
     target_eol: 2023-06-01
