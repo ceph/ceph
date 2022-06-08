@@ -5964,6 +5964,8 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
     token.id,
     RGW_PERM_FULL_CONTROL,
     acct_privilege_t::IS_PLAIN_ACCT,
+    rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
     TYPE_LDAP
   };
 }
@@ -6074,7 +6076,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
-                                           k.subuser, std::nullopt);
+                                           k.subuser, std::nullopt, access_key_id);
   return result_t::grant(std::move(apl), completer_factory(k.key));
 }
 
@@ -6089,6 +6091,8 @@ rgw::auth::s3::STSEngine::get_creds_info(const STS::SessionToken& token) const n
     token.acct_name,
     token.perm_mask,
     (token.is_admin) ? acct_privilege_t::IS_ADMIN_ACCT: acct_privilege_t::IS_PLAIN_ACCT,
+    token.access_key_id,
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
     token.acct_type
   };
 }
@@ -6254,7 +6258,7 @@ rgw::auth::s3::STSEngine::authenticate(
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;
-    auto apl = local_apl_factory->create_apl_local(cct, s, user->get_info(), subuser, token.perm_mask);
+    auto apl = local_apl_factory->create_apl_local(cct, s, user->get_info(), subuser, token.perm_mask, std::string(_access_key_id));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
 }

@@ -316,7 +316,13 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
       formatter->close_section();
     }
   }
-
+  if (!entry.access_key_id.empty()) {
+    formatter->dump_string("access_key_id", entry.access_key_id);
+  }
+  if (!entry.subuser.empty()) {
+    formatter->dump_string("subuser", entry.subuser);
+  }
+  formatter->dump_bool("temp_url", entry.temp_url);
   formatter->close_section();
 }
 
@@ -595,6 +601,7 @@ int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, 
 
   if (s->auth.identity) {
     entry.identity_type = s->auth.identity->get_identity_type();
+    s->auth.identity->write_ops_log_entry(entry);
   } else {
     entry.identity_type = TYPE_NONE;
   }
