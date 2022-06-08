@@ -742,6 +742,11 @@ class Filesystem(MDSCluster):
     def run_client_payload(self, cmd):
         # avoid circular dep by importing here:
         from tasks.cephfs.fuse_mount import FuseMount
+
+        # Wait for at MDS daemons to be ready before mounting the
+        # ceph-fuse client in run_client_payload()
+        self.wait_for_daemons()
+
         d = misc.get_testdir(self._ctx)
         m = FuseMount(self._ctx, d, "admin", self.client_remote, cephfs_name=self.name)
         m.mount_wait()
