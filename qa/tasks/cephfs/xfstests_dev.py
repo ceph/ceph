@@ -185,9 +185,11 @@ class XFSTestsDev(CephFSTestCase):
         self.mount_a.client_remote.run(args=args, omit_sudo=False)
 
     def create_reqd_users(self):
-        self.mount_a.client_remote.run(args=['sudo', 'useradd', 'fsgqa'],
+        self.mount_a.client_remote.run(args=['sudo', 'useradd', '-m', 'fsgqa'],
                                        omit_sudo=False, check_status=False)
         self.mount_a.client_remote.run(args=['sudo', 'groupadd', 'fsgqa'],
+                                       omit_sudo=False, check_status=False)
+        self.mount_a.client_remote.run(args=['sudo', 'useradd', 'fsgqa2'],
                                        omit_sudo=False, check_status=False)
         self.mount_a.client_remote.run(args=['sudo', 'useradd',
                                              '123456-fsgqa'], omit_sudo=False,
