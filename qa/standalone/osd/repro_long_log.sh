@@ -42,10 +42,13 @@ function test_log_size()
 {
     local PGID=$1
     local EXPECTED=$2
+    local DUPS_EXPECTED=${3:-0}
     ceph tell osd.\* flush_pg_stats
     sleep 3
     ceph pg $PGID query | jq .info.stats.log_size
     ceph pg $PGID query | jq .info.stats.log_size | grep "${EXPECTED}"
+    ceph pg $PGID query | jq .info.stats.log_dups_size
+    ceph pg $PGID query | jq .info.stats.log_dups_size | grep "${DUPS_EXPECTED}"
 }
 
 function setup_log_test() {
@@ -67,7 +70,7 @@ function setup_log_test() {
     ceph tell osd.\* injectargs -- --osd-min-pg-log-entries 20 || return 1
     ceph tell osd.\* injectargs -- --osd-max-pg-log-entries 30 || return 1
     ceph tell osd.\* injectargs -- --osd-pg-log-trim-min 10 || return 1
-    ceph tell osd.\* injectargs -- --osd-pg-log-dups-tracked 10 || return 1
+    ceph tell osd.\* injectargs -- --osd_pg_log_dups_tracked 20 || return 1
 
     touch $dir/foo
     for i in $(seq 1 20)
@@ -106,10 +109,10 @@ function TEST_repro_long_log2()
     setup_log_test $dir || return 1
     local PRIMARY=$(ceph pg $PGID query  | jq '.info.stats.up_primary')
     kill_daemons $dir TERM osd.$PRIMARY || return 1
-    CEPH_ARGS="--osd-max-pg-log-entries=2 --no-mon-config" ceph-objectstore-tool --data-path $dir/$PRIMARY --pgid $PGID --op trim-pg-log || return 1
+    CEPH_ARGS="--osd-max-pg-log-entries=2 --osd-pg-log-dups-tracked=3 --no-mon-config" ceph-objectstore-tool --data-path $dir/$PRIMARY --pgid $PGID --op trim-pg-log || return 1
     activate_osd $dir $PRIMARY || return 1
     wait_for_clean || return 1
-    test_log_size $PGID 2 || return 1
+    test_log_size $PGID 21 18 || return 1
 }
 
 function TEST_trim_max_entries()
@@ -122,6 +125,7 @@ function TEST_trim_max_entries()
     ceph tell osd.\* injectargs -- --osd-min-pg-log-entries 2
     ceph tell osd.\* injectargs -- --osd-pg-log-trim-min 2
     ceph tell osd.\* injectargs -- --osd-pg-log-trim-max 4
+    ceph tell osd.\* injectargs -- --osd_pg_log_dups_tracked 0
 
     # adding log entries, should only trim 4 and add one each time
     rados -p test rm foo
@@ -146,6 +150,44 @@ function TEST_trim_max_entries()
     test_log_size $PGID 4 || return 1
     rados -p test rm foo
     test_log_size $PGID 3 || return 1
+}
+
+function TEST_trim_max_entries_with_dups()
+{
+    local dir=$1
+
+    setup_log_test $dir || return 1
+
+    ceph tell osd.\* injectargs -- --osd_target_pg_log_entries_per_osd 2 || return 1
+    ceph tell osd.\* injectargs -- --osd-min-pg-log-entries 2
+    ceph tell osd.\* injectargs -- --osd-pg-log-trim-min 2
+    ceph tell osd.\* injectargs -- --osd-pg-log-trim-max 4
+    ceph tell osd.\* injectargs -- --osd_pg_log_dups_tracked 20 || return 1
+
+    # adding log entries, should only trim 4 and add one each time
+    # dups should be trimmed to 1
+    rados -p test rm foo
+    test_log_size $PGID 18 2 || return 1
+    rados -p test rm foo
+    test_log_size $PGID 15 5 || return 1
+    rados -p test rm foo
+    test_log_size $PGID 12 8 || return 1
+    rados -p test rm foo
+    test_log_size $PGID 9 11 || return 1
+    rados -p test rm foo
+    test_log_size $PGID 6 14 || return 1
+    rados -p test rm foo
+    test_log_size $PGID 3 17 || return 1
+
+    # below trim_min
+    rados -p test rm foo
+    test_log_size $PGID 4 17 || return 1
+    rados -p test rm foo
+    test_log_size $PGID 3 17 || return 1
+    rados -p test rm foo
+    test_log_size $PGID 4 17 || return 1
+    rados -p test rm foo
+    test_log_size $PGID 3 17 || return 1
 }
 
 main repro-long-log "$@"
