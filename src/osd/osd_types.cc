@@ -2855,6 +2855,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_clean_scrub_stamp") << last_clean_scrub_stamp;
   f->dump_int("objects_scrubbed", objects_scrubbed);
   f->dump_int("log_size", log_size);
+  f->dump_int("log_dups_size", log_dups_size);
   f->dump_int("ondisk_log_size", ondisk_log_size);
   f->dump_bool("stats_invalid", stats_invalid);
   f->dump_bool("dirty_stats_invalid", dirty_stats_invalid);
@@ -2964,7 +2965,7 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(28, 22, bl);
+  ENCODE_START(29, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -3023,6 +3024,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_duration, bl);
   encode(objects_trimmed, bl);
   encode(snaptrim_duration, bl);
+  encode(log_dups_size, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -3031,7 +3033,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(28, bl);
+  DECODE_START(29, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3117,6 +3119,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(scrub_duration, bl);
       decode(objects_trimmed, bl);
       decode(snaptrim_duration, bl);
+    }
+    if (struct_v >= 29) {
+      decode(log_dups_size, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -3210,6 +3215,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.stats == r.stats &&
     l.stats_invalid == r.stats_invalid &&
     l.log_size == r.log_size &&
+    l.log_dups_size == r.log_dups_size &&
     l.ondisk_log_size == r.ondisk_log_size &&
     l.up == r.up &&
     l.acting == r.acting &&
