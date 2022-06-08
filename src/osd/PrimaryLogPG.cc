@@ -1038,7 +1038,14 @@ void PrimaryLogPG::do_command(
 
     f->close_section();
   }
-
+  else if (prefix == "log") {
+    
+    f->open_object_section("op_log");
+    f->open_object_section("pg_log_t");
+    recovery_state.get_pg_log().get_log().dump(f.get());
+    f->close_section();
+    f->close_section();
+  }
   else if (prefix == "mark_unfound_lost") {
     string mulcmd;
     cmd_getval(cmdmap, "mulcmd", mulcmd);
