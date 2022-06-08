@@ -283,7 +283,7 @@
       "service_type": "mds",
       "status": {
         "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "container_image_name": "quay.io/ceph-ci/ceph:main",
         "created": "2020-04-16T03:39:39.512721",
         "last_refresh": "2020-04-16T06:51:42.412980",
         "running": 2,
@@ -309,7 +309,7 @@
       "service_type": "mgr",
       "status": {
         "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "container_image_name": "quay.io/ceph-ci/ceph:main",
         "created": "2020-04-16T05:44:40.978366",
         "last_refresh": "2020-04-16T06:51:42.412919",
         "running": 2,
@@ -336,7 +336,7 @@
       "service_type": "nfs",
       "status": {
         "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "container_image_name": "quay.io/ceph-ci/ceph:main",
         "created": "2020-04-16T03:39:39.512721",
         "last_refresh": "2020-04-16T06:51:42.412980",
         "running": 1,
@@ -366,7 +366,7 @@
       "service_type": "iscsi",
       "status": {
         "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-        "container_image_name": "quay.io/ceph-ci/ceph:master",
+        "container_image_name": "quay.io/ceph-ci/ceph:main",
         "created": "2020-04-16T03:39:39.512721",
         "last_refresh": "2020-04-16T06:51:42.412980",
         "running": 1,
@@ -378,7 +378,7 @@
     {
       "container_id": "87d84858109d",
       "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "container_image_name": "quay.io/ceph-ci/ceph:main",
       "created": "2020-04-16T03:39:40.394999",
       "daemon_id": "xx.mgr0.nkchxn",
       "daemon_type": "mds",
@@ -392,7 +392,7 @@
     {
       "container_id": "07ff9b56bcb9",
       "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "container_image_name": "quay.io/ceph-ci/ceph:main",
       "created": "2020-04-16T03:39:41.318155",
       "daemon_id": "xx.osd0.ouawlt",
       "daemon_type": "mds",
@@ -406,7 +406,7 @@
     {
       "container_id": "459a982152c6",
       "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "container_image_name": "quay.io/ceph-ci/ceph:main",
       "created": "2020-04-16T03:36:31.577976",
       "daemon_id": "mgr0.gvlxbw",
       "daemon_type": "mgr",
@@ -420,7 +420,7 @@
     {
       "container_id": "37b7fc67390a",
       "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "container_image_name": "quay.io/ceph-ci/ceph:main",
       "created": "2020-04-16T05:44:41.551646",
       "daemon_id": "osd0.mnsbeq",
       "daemon_type": "mgr",
@@ -434,7 +434,7 @@
     {
       "container_id": "aeba86ca1655",
       "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "container_image_name": "quay.io/ceph-ci/ceph:main",
       "created": "2020-04-16T05:44:41.551646",
       "daemon_id": "vstart.osd0",
       "daemon_type": "nfs",
@@ -448,7 +448,7 @@
     {
       "container_id": "e695cd698d8a",
       "container_image_id": "36114e38494190b0c9d4b088c12e6e4086e8017b96b4d5fc14eb5406bd51b55b",
-      "container_image_name": "quay.io/ceph-ci/ceph:master",
+      "container_image_name": "quay.io/ceph-ci/ceph:main",
       "created": "2020-04-16T05:44:41.551646",
       "daemon_id": "iscsi.osd0.abc123",
       "daemon_type": "iscsi",
