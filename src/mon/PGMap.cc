@@ -1691,6 +1691,7 @@ void PGMap::dump_pg_stats_plain(
     tab.define_column("OMAP_BYTES*", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("OMAP_KEYS*", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LOG_DUPS", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("STATE_STAMP", TextTable::LEFT, TextTable::RIGHT);
@@ -1732,6 +1733,7 @@ void PGMap::dump_pg_stats_plain(
           << st.stats.sum.num_omap_bytes
           << st.stats.sum.num_omap_keys
           << st.log_size
+          << st.log_dups_size
           << st.ondisk_log_size
           << pg_state_string(st.state)
           << st.last_change
@@ -2319,6 +2321,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   tab.define_column("OMAP_BYTES*", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("OMAP_KEYS*", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("LOG_DUPS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("SINCE", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("VERSION", TextTable::LEFT, TextTable::RIGHT);
@@ -2346,6 +2349,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
         << st.stats.sum.num_omap_bytes
         << st.stats.sum.num_omap_keys
         << st.log_size
+        << st.log_dups_size
         << pg_state_string(st.state)
         << utimespan_str(now - st.last_change)
         << st.version
