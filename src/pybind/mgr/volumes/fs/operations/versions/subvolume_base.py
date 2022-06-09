@@ -16,6 +16,7 @@ from ..trash import create_trashcan, open_trashcan
 from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
 from .auth_metadata import AuthMetadataManager
+from .subvolume_attrs import SubvolumeStates
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ class SubvolumeBase(object):
     @property
     def state(self):
         """ Subvolume state, one of SubvolumeStates """
-        raise NotImplementedError
+        return SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
 
     @property
     def subvol_type(self):
@@ -329,7 +330,10 @@ class SubvolumeBase(object):
             self.metadata_mgr.refresh()
             log.debug("loaded subvolume '{0}'".format(self.subvolname))
             subvolpath = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH)
-            if not self.legacy_mode and self.base_path.decode('utf-8') != str(Path(subvolpath).parent):
+            # subvolume with retained snapshots has empty path, don't mistake it for
+            # fabricated metadata.
+            if (not self.legacy_mode and self.state != SubvolumeStates.STATE_RETAINED and
+                self.base_path.decode('utf-8') != str(Path(subvolpath).parent)):
                 raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
         except MetadataMgrException as me:
             if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
