@@ -9496,7 +9496,7 @@ void MDCache::handle_find_ino(const cref_t<MMDSFindIno> &m)
     dout(10) << " have " << r->path << " " << *in << dendl;
 
     /*
-     * If the the CInode was just created by using openc in current
+     * If the CInode was just created by using openc in current
      * auth MDS, but the client just sends a getattr request to another
      * replica MDS. Then here it will make a path of '#INODE-NUMBER'
      * only because the CInode hasn't been linked yet, and the replica

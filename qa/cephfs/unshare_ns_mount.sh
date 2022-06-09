@@ -459,7 +459,7 @@ function setup_bridge_and_nat() {
         return
     fi
 
-    # if it is the first time to run the the script or there
+    # if it is the first time to run the script or there
     # is no any network namespace exists, we need to setup
     # the $CEPH_BRX, if no --brxip is specified will use the
     # default $CEPH_BRX_IP/$NET_MASK

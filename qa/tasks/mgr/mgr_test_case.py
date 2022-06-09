@@ -132,7 +132,7 @@ class MgrTestCase(CephTestCase):
 
         initial_mgr_map = cls.mgr_cluster.get_mgr_map()
 
-        # check if the the module is configured as an always on module
+        # check if the module is configured as an always on module
         mgr_daemons = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
             "mgr", "metadata"))
 

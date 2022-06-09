@@ -179,7 +179,7 @@ public:
    *
    * Called after commit of delta.  State will be DIRTY.
    * Implementation may use this call to fixup any relative
-   * references in the the buffer with the passed
+   * references in the buffer with the passed
    * record_block_offset record location.
    */
   virtual void on_delta_write(paddr_t record_block_offset) {}

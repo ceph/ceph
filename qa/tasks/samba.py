@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 def get_sambas(ctx, roles):
     """
-    Scan for roles that are samba.  Yield the id of the the samba role
+    Scan for roles that are samba.  Yield the id of the samba role
     (samba.0, samba.1...)  and the associated remote site
 
     :param ctx: Context

@@ -204,7 +204,7 @@ Cycles::from_nanoseconds(uint64_t ns, double cycles_per_sec)
 /**
  * Busy wait for a given number of microseconds.
  * Callers should use this method in most reasonable cases as opposed to
- * usleep for accurate measurements. Calling usleep may put the the processor
+ * usleep for accurate measurements. Calling usleep may put the processor
  * in a low power mode/sleep state which reduces the clock frequency.
  * So, each time the process/thread wakes up from usleep, it takes some time
  * to ramp up to maximum frequency. Thus measurements often incur higher

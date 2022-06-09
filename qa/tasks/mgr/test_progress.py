@@ -347,7 +347,7 @@ class TestProgress(MgrTestCase):
 
     def test_turn_off_module(self):
         """
-        When the the module is turned off, there should not
+        When the module is turned off, there should not
         be any on going events or completed events.
         Also module should not accept any kind of Remote Event
         coming in from other module, however, once it is turned

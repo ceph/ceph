@@ -52,7 +52,7 @@
  *    because 13.2.z (mimic) did not care if its peers advertised this
  *    feature bit.
  *
- *  - In the second phase we stop advertising the the bit and call it
+ *  - In the second phase we stop advertising the bit and call it
  *    RETIRED.  This can normally be done 2 major releases
  *    following the one in which we marked the feature DEPRECATED.  In
  *    the above example, for 15.0.z (octopus) we can say:
