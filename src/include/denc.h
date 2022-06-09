@@ -338,7 +338,7 @@ struct denc_traits<T> {
 
 // NOTE: the overload resolution ensures that the legacy encode/decode methods
 // defined for int types is preferred to the ones  defined using the specialized
-// template, and hence get selected. This machinery prevents these these from
+// template, and hence get selected. This machinery prevents these from
 // getting glued into the legacy encode/decode methods; the overhead of setting
 // up a contiguous_appender etc is likely to be slower.
 namespace _denc {
