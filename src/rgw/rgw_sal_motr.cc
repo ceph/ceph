@@ -2515,7 +2515,7 @@ int MotrObject::create_mobj(const DoutPrefixProvider *dpp, uint64_t sz)
   int64_t lid = m0_layout_find_by_objsz(store->instance, nullptr, sz);
   if (lid <= 0) {
     ldpp_dout(dpp, 0) <<__func__<< ": failed to get lid: " << lid << dendl;
-    return lid == 0 ? -EINVAL : (int)lid;
+    return lid == 0 ? -EAGAIN : (int)lid;
   }
 
   M0_ASSERT(mobj == nullptr);
@@ -2811,7 +2811,7 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
   start = data.c_str();
   for (p = start; left > 0; left -= bs, p += bs, offset += bs) {
     if (left < bs) {
-      bs = this->get_optimal_bs(left);
+      bs = this->get_optimal_bs(left, true);
       mobj->ob_entity.en_flags |= M0_ENF_NO_RMW;
     }
     if (left < bs) {
@@ -2829,10 +2829,10 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
     op = nullptr;
     rc = m0_obj_op(this->mobj, M0_OC_WRITE, &ext, &buf, &attr, 0, 0, &op);
     if (rc != 0) {
-      ldpp_dout(dpp, 0) <<__func__<< ": write failed, m0_obj_op rc = "<< rc << dendl;
+      ldpp_dout(dpp, 0) <<__func__<< ": write failed, m0_obj_op rc="<< rc << dendl;
       ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-	   RGW_ADDB_FUNC_WRITE_MOBJ,
-	   RGW_ADDB_PHASE_ERROR);
+           RGW_ADDB_FUNC_WRITE_MOBJ,
+           RGW_ADDB_PHASE_ERROR);
       goto out;
     }
     ADDB(RGW_ADDB_REQUEST_TO_MOTR_ID, addb_logger.get_id(), m0_sm_id_get(&op->op_sm));
@@ -2842,10 +2842,10 @@ int MotrObject::write_mobj(const DoutPrefixProvider *dpp, bufferlist&& in_buffer
     m0_op_fini(op);
     m0_op_free(op);
     if (rc != 0) {
-      ldpp_dout(dpp, 0) <<__func__<< ": write failed, m0_op_wait rc = "<< rc << dendl;
+      ldpp_dout(dpp, 0) <<__func__<< ": write failed, m0_op_wait rc="<< rc << dendl;
       ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-	   RGW_ADDB_FUNC_WRITE_MOBJ,
-	   RGW_ADDB_PHASE_ERROR);
+           RGW_ADDB_FUNC_WRITE_MOBJ,
+           RGW_ADDB_PHASE_ERROR);
       goto out;
     }
   }
@@ -2867,18 +2867,18 @@ out:
 int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t end, RGWGetDataCB* cb)
 {
   int rc;
+  uint32_t flags = 0;
   unsigned bs, skip;
   int64_t left = end + 1, off;
+  uint64_t req_id;
   struct m0_op *op;
   struct m0_bufvec buf;
   struct m0_bufvec attr;
   struct m0_indexvec ext;
-  uint64_t req_id;
 
   req_id = addb_logger.get_id();
   ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-       RGW_ADDB_FUNC_READ_MOBJ,
-       RGW_ADDB_PHASE_START);
+       RGW_ADDB_FUNC_READ_MOBJ, RGW_ADDB_PHASE_START);
 
   ldpp_dout(dpp, 20) <<__func__<< ": start=" << start << " end=" << end << dendl;
 
@@ -2888,8 +2888,7 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t 
   if (rc < 0) {
     ldpp_dout(dpp, 0) <<__func__<< ": vecs alloc failed: rc="<< rc << dendl;
     ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-         RGW_ADDB_FUNC_READ_MOBJ,
-         RGW_ADDB_PHASE_ERROR);
+         RGW_ADDB_FUNC_READ_MOBJ, RGW_ADDB_PHASE_ERROR);
     goto out;
   }
 
@@ -2897,14 +2896,26 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t 
 
   for (off = 0; left > 0; left -= bs, off += bs) {
     if (left < bs)
-      bs = this->get_optimal_bs(left);
+      bs = this->get_optimal_bs(left); // multiple of groups
+
     if (start >= off + bs)
       continue; // to the next block
+
+    // At the last parity group we must read up to the last
+    // object's unit and provide the M0_OOF_LAST flag, so
+    // that in case of degraded read mode, libmotr could
+    // know which units to use for the data recovery.
+    if ((size_t)off + bs >= obj_size) {
+      bs = roundup(obj_size - off, get_unit_sz());
+      flags |= M0_OOF_LAST;
+    } else if (left < bs) {
+      // Somewhere in the middle of the object.
+      bs = this->get_optimal_bs(left, true); // multiple of units
+    }
+
+    // Skip reading the units which are not requested.
     if (start > off) {
-      // Skip reading the units which are not requested.
-      // Note: offset must be aligned to the unit size.
-      unsigned unit_sz = get_unit_sz();
-      skip = rounddown(start, unit_sz) - off;
+      skip = rounddown(start, get_unit_sz()) - off;
       off += skip;
       bs -= skip;
       left -= skip;
@@ -2920,12 +2931,11 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t 
     attr.ov_vec.v_count[0] = 0;
 
     op = nullptr;
-    rc = m0_obj_op(this->mobj, M0_OC_READ, &ext, &buf, &attr, 0, 0, &op);
+    rc = m0_obj_op(this->mobj, M0_OC_READ, &ext, &buf, &attr, 0, flags, &op);
     if (rc != 0) {
       ldpp_dout(dpp, 0) <<__func__<< ": motr op failed: rc=" << rc << dendl;
       ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-           RGW_ADDB_FUNC_READ_MOBJ,
-           RGW_ADDB_PHASE_ERROR);
+           RGW_ADDB_FUNC_READ_MOBJ, RGW_ADDB_PHASE_ERROR);
       goto out;
     }
     ADDB(RGW_ADDB_REQUEST_TO_MOTR_ID, addb_logger.get_id(), m0_sm_id_get(&op->op_sm));
@@ -2937,8 +2947,7 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t 
     if (rc != 0) {
       ldpp_dout(dpp, 0) <<__func__<< ": m0_op_wait failed: rc=" << rc << dendl;
       ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-           RGW_ADDB_FUNC_READ_MOBJ,
-           RGW_ADDB_PHASE_ERROR);
+           RGW_ADDB_FUNC_READ_MOBJ, RGW_ADDB_PHASE_ERROR);
       goto out;
     }
 
@@ -2959,8 +2968,7 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t 
   }
 
   ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-       RGW_ADDB_FUNC_READ_MOBJ,
-       RGW_ADDB_PHASE_DONE);
+       RGW_ADDB_FUNC_READ_MOBJ, RGW_ADDB_PHASE_DONE);
 
 out:
   m0_indexvec_free(&ext);
@@ -3335,9 +3343,10 @@ unsigned MotrObject::get_unit_sz()
   return m0_obj_layout_id_to_unit_size(lid);
 }
 
-// The optimal bs will be rounded up to the unit size, so
-// use M0_ENF_NO_RMW flag to avoid RMW for the last block.
-unsigned MotrObject::get_optimal_bs(unsigned len)
+// The optimal bs will be rounded up to the unit size, if last is true,
+// so use M0_OOF_LAST flag to avoid RMW for the last block.
+// Otherwise, bs will be rounded up to the group size.
+unsigned MotrObject::get_optimal_bs(unsigned len, bool last)
 {
   struct m0_pool_version *pver;
 
@@ -3365,8 +3374,10 @@ unsigned MotrObject::get_optimal_bs(unsigned len)
   max_bs = roundup(max_bs, grp_sz); // multiple of group size
   if (len >= max_bs)
     return max_bs;
-  else
+  else if (last)
     return roundup(len, unit_sz);
+  else
+    return roundup(len, grp_sz);
 }
 
 void MotrAtomicWriter::cleanup()
@@ -3412,8 +3423,7 @@ int MotrAtomicWriter::write()
   addb_logger.set_id(req_id);
 
   ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-       RGW_ADDB_FUNC_WRITE,
-       RGW_ADDB_PHASE_START);
+       RGW_ADDB_FUNC_WRITE, RGW_ADDB_PHASE_START);
   
   if (!obj.is_opened()) {
     rc = obj.create_mobj(dpp, left);
@@ -3433,12 +3443,10 @@ int MotrAtomicWriter::write()
   total_data_size += left;
 
   bs = obj.get_optimal_bs(left);
-  ldpp_dout(dpp, 20) <<__func__<< ": left=" << left << " bs=" << bs << dendl;
-
   bi = acc_data.begin();
   while (left > 0) {
     if (left < bs) {
-      bs = obj.get_optimal_bs(left);
+      bs = obj.get_optimal_bs(left, true);
       obj.mobj->ob_entity.en_flags |= M0_ENF_NO_RMW;
     }
     if (left < bs) {
@@ -3458,10 +3466,9 @@ int MotrAtomicWriter::write()
     op = nullptr;
     rc = m0_obj_op(obj.mobj, M0_OC_WRITE, &ext, &buf, &attr, 0, 0, &op);
     if (rc != 0) {
-      ldpp_dout(dpp, 0) <<__func__<< ": write failed, m0_obj_op rc = "<< rc << dendl;
+      ldpp_dout(dpp, 0) <<__func__<< ": write failed, m0_obj_op rc="<< rc << dendl;
       ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-	   RGW_ADDB_FUNC_WRITE,
-	   RGW_ADDB_PHASE_ERROR);
+           RGW_ADDB_FUNC_WRITE, RGW_ADDB_PHASE_ERROR);
       goto err;
     }
 
@@ -3473,22 +3480,20 @@ int MotrAtomicWriter::write()
     m0_op_fini(op);
     m0_op_free(op);
     if (rc != 0) {
-      ldpp_dout(dpp, 0) <<__func__<< ": write failed, m0_op_wait rc = "<< rc << dendl;
+      ldpp_dout(dpp, 0) <<__func__<< ": write failed, m0_op_wait rc="<< rc << dendl;
       goto err;
     }
   }
   acc_data.clear();
 
   ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-       RGW_ADDB_FUNC_WRITE,
-       RGW_ADDB_PHASE_DONE);
+       RGW_ADDB_FUNC_WRITE, RGW_ADDB_PHASE_DONE);
 
   return 0;
 
 err:
   ADDB(RGW_ADDB_REQUEST_ID, addb_logger.get_id(), 
-       RGW_ADDB_FUNC_WRITE,
-       RGW_ADDB_PHASE_ERROR);
+       RGW_ADDB_FUNC_WRITE, RGW_ADDB_PHASE_ERROR);
 
   this->cleanup();
   return rc;
