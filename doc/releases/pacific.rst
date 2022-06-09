@@ -1398,7 +1398,7 @@ Changelog
 * RGW - Don't move attrs before setting them (`pr#42320 <https://github.com/ceph/ceph/pull/42320>`_, Daniel Gryniewicz)
 * rgw : add check empty for sync url (`pr#42653 <https://github.com/ceph/ceph/pull/42653>`_, caolei)
 * rgw : add check for tenant provided in RGWCreateRole (`pr#42637 <https://github.com/ceph/ceph/pull/42637>`_, caolei)
-* rgw : modfiy error XML for deleterole (`pr#42639 <https://github.com/ceph/ceph/pull/42639>`_, caolei)
+* rgw : modify error XML for deleterole (`pr#42639 <https://github.com/ceph/ceph/pull/42639>`_, caolei)
 * rgw multisite: metadata sync treats all errors as 'transient' for retry (`pr#42656 <https://github.com/ceph/ceph/pull/42656>`_, Casey Bodley)
 * RGW Zipper - Make sure bucket list progresses (`pr#42625 <https://github.com/ceph/ceph/pull/42625>`_, Daniel Gryniewicz)
 * rgw/amqp/test: fix mock prototype for librabbitmq-0.11.0 (`pr#42649 <https://github.com/ceph/ceph/pull/42649>`_, Yuval Lifshitz)

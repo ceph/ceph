@@ -792,7 +792,7 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'enabled' : 'true'})
     assert ret == 400
 
-    # TESTCASE 'ratelimit' 'user' 'modifiy' 'enabled' 'max-read-bytes = 2' 'succeeds'
+    # TESTCASE 'ratelimit' 'user' 'modify' 'enabled' 'max-read-bytes = 2' 'succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user, 'enabled' : 'true', 'max-read-bytes' : '2'})
     assert ret == 200
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user})
@@ -801,7 +801,7 @@ def task(ctx, config):
     assert user_ratelimit['enabled'] == True
     assert user_ratelimit['max_read_bytes'] ==  2
 
-    # TESTCASE 'ratelimit' 'bucket' 'modifiy' 'enabled' 'max-write-bytes = 2' 'succeeds'
+    # TESTCASE 'ratelimit' 'bucket' 'modify' 'enabled' 'max-write-bytes = 2' 'succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket, 'enabled' : 'true', 'max-write-bytes' : '2'})
     assert ret == 200
     (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket})
