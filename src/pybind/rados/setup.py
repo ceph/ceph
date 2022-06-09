@@ -119,8 +119,8 @@ def check_sanity():
             output_dir=tmp_dir,
         )
 
-    except CompileError:
-        print('\nCompile Error: RADOS development headers not found', file=sys.stderr)
+    except CompileError as e:
+        print(f'\nCompile Error: RADOS development headers not found: {e}', file=sys.stderr)
         return False
     except LinkError:
         print('\nLink Error: RADOS library not found', file=sys.stderr)
