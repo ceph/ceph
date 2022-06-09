@@ -62,7 +62,7 @@ protected:
   public:
   DBNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type)
     : Notification(_obj, _src_obj, _type) {}
-    ~DBNotification() = default;
+    virtual ~DBNotification() = default;
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0;}
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
@@ -175,7 +175,7 @@ protected:
         acls() {
         }
 
-      ~DBBucket() { }
+      virtual ~DBBucket() { }
 
       virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
       virtual int list(const DoutPrefixProvider *dpp, ListParams&, int, ListResults&, optional_yield y) override;
@@ -314,7 +314,7 @@ protected:
         info.storage_classes = sc;
         zone_params->placement_pools["default"] = info;
       }
-      ~DBZone() {
+      virtual ~DBZone() {
 	delete realm;
 	delete zonegroup;
 	delete zone_public_config;
@@ -354,7 +354,7 @@ protected:
     DBStore* store;
     public:
     DBOIDCProvider(DBStore* _store) : store(_store) {}
-    ~DBOIDCProvider() = default;
+    virtual ~DBOIDCProvider() = default;
 
     virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) override { return 0; }
     virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant) override { return 0; }
@@ -652,7 +652,7 @@ protected:
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag);
-    ~DBAtomicWriter() = default;
+    virtual ~DBAtomicWriter() = default;
 
     // prepare to start processing object data
     virtual int prepare(optional_yield y) override;
@@ -700,7 +700,7 @@ public:
 		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t part_num, const std::string& part_num_str);
-    ~DBMultipartWriter() = default;
+    virtual ~DBMultipartWriter() = default;
 
     // prepare to start processing object data
     virtual int prepare(optional_yield y) override;
@@ -740,7 +740,7 @@ public:
     public:
       DBStore(): dbsm(nullptr), zone(this), cct(nullptr), dpp(nullptr),
                  use_lc_thread(false) {}
-      ~DBStore() { delete dbsm; }
+      virtual ~DBStore() { delete dbsm; }
 
       DBStore& set_run_lc_thread(bool _use_lc_thread) {
         use_lc_thread = _use_lc_thread;

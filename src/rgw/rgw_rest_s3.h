@@ -630,7 +630,7 @@ public:
     : RGWHandler_REST(),
       auth_registry(auth_registry) {
   }
-  ~RGWHandler_Auth_S3() override = default;
+  virtual ~RGWHandler_Auth_S3() override = default;
 
   static int validate_bucket_name(const std::string& bucket);
   static int validate_object_name(const std::string& bucket);
@@ -655,7 +655,7 @@ public:
     : RGWHandler_REST(),
       auth_registry(auth_registry) {
     }
-  ~RGWHandler_REST_S3() override = default;
+  virtual ~RGWHandler_REST_S3() override = default;
 
   int init(rgw::sal::Store* store,
            struct req_state *s,
@@ -679,7 +679,7 @@ public:
    RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
                               bool _isSTSEnabled, bool _isIAMEnabled, bool _isPSEnabled) :
       RGWHandler_REST_S3(auth_registry), isSTSEnabled(_isSTSEnabled), isIAMEnabled(_isIAMEnabled), isPSEnabled(_isPSEnabled) {}
-  ~RGWHandler_REST_Service_S3() override = default;
+  virtual ~RGWHandler_REST_Service_S3() override = default;
 };
 
 class RGWHandler_REST_Bucket_S3 : public RGWHandler_REST_S3 {

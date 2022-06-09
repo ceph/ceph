@@ -95,8 +95,9 @@ const std::string PACKAGE_LIST_OBJECT_NAME = "lua_package_allowlist";
 
 namespace bp = boost::process;
 
-int add_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, const std::string& package_name, bool allow_compilation) {
+int add_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name, bool allow_compilation) {
   // verify that luarocks can load this package
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
   const auto p = bp::search_path("luarocks");
   if (p.empty()) {
     return -ECHILD;
@@ -125,7 +126,7 @@ int add_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, opti
   
   //replace previous versions of the package
   const std::string package_name_no_version = package_name.substr(0, package_name.find(" "));
-  ret = remove_package(dpp, store, y, package_name_no_version);
+  ret = remove_package(dpp, rados, y, package_name_no_version);
   if (ret < 0) {
     return ret;
   }
@@ -135,7 +136,7 @@ int add_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, opti
   std::map<std::string, bufferlist> new_package{{package_name, empty_bl}};
   librados::ObjectWriteOperation op;
   op.omap_set(new_package);
-  ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+  ret = rgw_rados_operate(dpp, *(rados->getRados()->get_lc_pool_ctx()),
       PACKAGE_LIST_OBJECT_NAME, &op, y);
 
   if (ret < 0) {
@@ -144,13 +145,14 @@ int add_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, opti
   return 0;
 }
 
-int remove_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, const std::string& package_name) {
+int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, const std::string& package_name) {
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
   librados::ObjectWriteOperation op;
   size_t pos = package_name.find(" ");
   if (pos != package_name.npos) {
     // remove specfic version of the the package
     op.omap_rm_keys(std::set<std::string>({package_name}));
-    auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+    auto ret = rgw_rados_operate(dpp, *(rados->getRados()->get_lc_pool_ctx()),
         PACKAGE_LIST_OBJECT_NAME, &op, y);
     if (ret < 0) {
         return ret;
@@ -159,7 +161,7 @@ int remove_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, o
   }
   // otherwise, remove any existing versions of the package
   packages_t packages;
-  auto ret = list_packages(dpp, store, y, packages);
+  auto ret = list_packages(dpp, rados, y, packages);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -167,7 +169,7 @@ int remove_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, o
     const std::string package_no_version = package.substr(0, package.find(" "));
     if (package_no_version.compare(package_name) == 0) {
         op.omap_rm_keys(std::set<std::string>({package}));
-        ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+        ret = rgw_rados_operate(dpp, *(rados->getRados()->get_lc_pool_ctx()),
             PACKAGE_LIST_OBJECT_NAME, &op, y);
         if (ret < 0) {
             return ret;
@@ -177,7 +179,8 @@ int remove_package(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, o
   return 0;
 }
 
-int list_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, packages_t& packages) {
+int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& packages) {
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
   constexpr auto max_chunk = 1024U;
   std::string start_after;
   bool more = true;
@@ -186,7 +189,7 @@ int list_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, op
     librados::ObjectReadOperation op;
     packages_t packages_chunk;
     op.omap_get_keys2(start_after, max_chunk, &packages_chunk, &more, &rval);
-    const auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+    const auto ret = rgw_rados_operate(dpp, *(rados->getRados()->get_lc_pool_ctx()),
       PACKAGE_LIST_OBJECT_NAME, &op, nullptr, y);
   
     if (ret < 0) {
@@ -199,10 +202,11 @@ int list_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, op
   return 0;
 }
 
-int install_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, optional_yield y, packages_t& failed_packages, std::string& output) {
+int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Store* store, optional_yield y, packages_t& failed_packages, std::string& output) {
+  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
   // luarocks directory cleanup
   std::error_code ec;
-  const auto& luarocks_path = store->get_luarocks_path();
+  const auto& luarocks_path = rados->get_luarocks_path();
   if (std::filesystem::remove_all(luarocks_path, ec)
       == static_cast<std::uintmax_t>(-1) &&
       ec != std::errc::no_such_file_or_directory) {
@@ -213,7 +217,7 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
   }
 
   packages_t packages;
-  auto ret = list_packages(dpp, store, y, packages);
+  auto ret = list_packages(dpp, rados, y, packages);
   if (ret == -ENOENT) {
     // allowlist is empty 
     return 0;

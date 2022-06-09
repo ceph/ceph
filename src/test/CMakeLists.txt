@@ -78,7 +78,7 @@ if(NOT WIN32)
 endif(NOT WIN32)
 
 if(WITH_RADOSGW)
-  set(rgw_libs rgw_a)
+  set(rgw_libs rgw_a rados_sal)
   if(WITH_RADOSGW_AMQP_ENDPOINT)
     list(APPEND rgw_libs amqp_mock)
   endif()
@@ -128,7 +128,7 @@ target_link_libraries(test_build_libcommon ceph-common pthread ${CRYPTO_LIBS} ${
 
 if(WITH_RADOSGW)
   add_executable(test_build_librgw buildtest_skeleton.cc)
-  target_link_libraries(test_build_librgw rgw_a pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+  target_link_libraries(test_build_librgw rgw_a rados_sal pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_RADOSGW)
 
 if(WITH_LIBCEPHFS)

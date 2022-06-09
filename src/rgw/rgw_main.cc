@@ -20,13 +20,13 @@
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
+#include "rgw_rest_bucket.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
 #include "rgw_rest_admin.h"
 #include "rgw_rest_info.h"
 #include "rgw_rest_usage.h"
 #include "rgw_rest_user.h"
-#include "rgw_rest_bucket.h"
 #include "rgw_rest_metadata.h"
 #include "rgw_rest_log.h"
 #include "rgw_rest_config.h"
@@ -483,11 +483,10 @@ int radosgw_Main(int argc, const char **argv)
     store->set_luarocks_path(luarocks_path+"/"+g_conf()->name.to_str());
   }
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-  rgw::sal::RadosStore *rados = dynamic_cast<rgw::sal::RadosStore*>(store);
-  if (rados) { /* Supported for only RadosStore */
+  if (store->get_name() == "rados") { /* Supported for only RadosStore */
     rgw::lua::packages_t failed_packages;
     std::string output;
-    r = rgw::lua::install_packages(&dp, rados, null_yield, failed_packages, output);
+    r = rgw::lua::install_packages(&dp, store, null_yield, failed_packages, output);
     if (r < 0) {
       dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
     }
@@ -626,7 +625,7 @@ int radosgw_Main(int argc, const char **argv)
   int fe_count = 0;
 
   std::unique_ptr<rgw::lua::Background> lua_background;
-  if (rados) { /* Supported for only RadosStore */
+  if (store->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<rgw::lua::Background>(store, cct.get(), store->get_luarocks_path());
     lua_background->start();
   }
