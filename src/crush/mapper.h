@@ -18,7 +18,7 @@
  * crush_add_rule() for more information on how the rules are created,
  * populated and added to the crush __map__.
  *
- * The return value is the the number of items in the __result__
+ * The return value is the number of items in the __result__
  * array. If the caller asked for __result_max__ items and the return
  * value is X where X < __result_max__, the content of __result[0,X[__
  * is defined but the content of __result[X,result_max[__ is
