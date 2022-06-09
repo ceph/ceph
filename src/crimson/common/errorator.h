@@ -1336,7 +1336,7 @@ private:
   static void satisfy_with_result_of(PromiseT&& pr, Func&& func) {
     // this may use the protected variant of `seastar::future::forward_to()`
     // because:
-    //   1. `seastar::future` established a friendship with with all
+    //   1. `seastar::future` established a friendship with all
     //      specializations of `seastar::futurize`, including this
     //      one (we're in the `seastar` namespace!) WHILE
     //   2. any errorated future declares now the friendship with any
