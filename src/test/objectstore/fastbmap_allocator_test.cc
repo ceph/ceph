@@ -762,7 +762,7 @@ TEST(TestAllocatorLevel01, test_l2_contiguous_alignment)
 
     }
     {
-      // cleanup first 2M except except the last 4K chunk
+      // cleanup first 2M except the last 4K chunk
       interval_vector_t r;
       r.emplace_back(0, 2 * _1m - 0x1000);
       al2.free_l2(r);
