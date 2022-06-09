@@ -91,7 +91,7 @@ def ensure_associated_lvs(lvs, lv_tags):
                 device_uuid = lv.tags['ceph.{}_uuid'.format(type)]
             except KeyError:
                 # Bluestore will not have ceph.journal_uuid, and Filestore
-                # will not not have ceph.db_uuid
+                # will not have ceph.db_uuid
                 continue
 
             osd_device = disk.get_device_from_partuuid(device_uuid)
