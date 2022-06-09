@@ -285,6 +285,10 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
     return reply_op_error(pg, -EINVAL);
   }
 
+  if (!obc->obs.exists && !op_info.may_write()) {
+    return reply_op_error(pg, -ENOENT);
+  }
+
   return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
     [this, pg](auto submitted, auto all_completed) mutable {
     return submitted.then_interruptible([this, pg] {
