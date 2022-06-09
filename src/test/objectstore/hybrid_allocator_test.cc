@@ -196,7 +196,7 @@ TEST(HybridAllocator, basic)
     ASSERT_EQ(0, ha.get_bmap_free());
 
     // This will substitute chunk 0x4000~1000.
-    // Since new chunk insertion into into AvlAllocator:range_tree
+    // Since new chunk insertion into AvlAllocator:range_tree
     // happens immediately before 0x4000~1000 chunk care should be taken
     // to order operations properly and do not use already disposed iterator.
     ha.init_add_free(0, 0x2000);
