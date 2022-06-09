@@ -494,7 +494,7 @@ struct PolicyMetaTable : public EmptyMetaTable {
         pushstring(L, policy->id.get());
       }
     } else if (strcasecmp(index, "Statements") == 0) {
-      create_metatable<StatementsMetaTable>(L, &(policy->statements));
+      create_metatable<StatementsMetaTable>(L, false, &(policy->statements));
     } else {
       return error_unknown_field(L, index, TableName());
     }
