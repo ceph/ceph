@@ -179,9 +179,10 @@ class CapTester(CephFSTestCase):
             log.info(f'write perm was tested was successfully: data '
                      f'"{data}" was successfully written to file "{path}".')
 
-    def conduct_neg_test_for_write_caps(self):
+    def conduct_neg_test_for_write_caps(self, sudo_write=False):
         possible_errmsgs = ('permission denied', 'operation not permitted')
-        cmdargs = ['echo', 'some random data', Raw('|'), 'tee']
+        cmdargs = ['echo', 'some random data', Raw('|')]
+        cmdargs += ['sudo', 'tee'] if sudo_write else ['tee']
 
         # don't use data, cmd args to write are set already above.
         for mount, path, data in self.test_set:
