@@ -86,6 +86,48 @@ download_boost() {
         --exclude="$boost_version_underscore/tools/auto_index" \
         --exclude='doc' --exclude='more' --exclude='status'
     mv src/boost_${boost_version_underscore} src/boost
+    patch -p1 <<EOF
+From d9f06052e28873037db7f98629bce72182a42410 Mon Sep 17 00:00:00 2001
+From: Pat Riehecky <riehecky@fnal.gov>
+Date: Mon, 29 Jun 2020 10:51:58 -0500
+Subject: [PATCH] Convert Python 3.1+ to use public C API for filenames
+
+---
+ src/exec.cpp | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/src/exec.cpp b/src/exec.cpp
+index 171c6f4189..b2eabe59f6 100644
+--- a/src/boost/libs/python/src/exec.cpp
++++ b/src/boost/libs/python/src/exec.cpp
+@@ -104,14 +104,22 @@ object BOOST_PYTHON_DECL exec_file(char const *filename, object global, object l
+   if (local.is_none()) local = global;
+   // should be 'char const *' but older python versions don't use 'const' yet.
+   char *f = const_cast<char *>(filename);
+-  // Let python open the file to avoid potential binary incompatibilities.
+-#if PY_VERSION_HEX >= 0x03040000
+-  FILE *fs = _Py_fopen(f, "r");
++#if PY_VERSION_HEX >= 0x03010000
++  // Let python manage any UTF bits to avoid potential incompatibilities.
++  PyObject *fo = Py_BuildValue("s", f);
++  PyObject *fb = Py_None;
++  PyUnicode_FSConverter(fo, &fb);
++  f = PyBytes_AsString(fb);
++  FILE *fs = fopen(f, "r");
++  Py_DECREF(fo);
++  Py_DECREF(fb);
+ #elif PY_VERSION_HEX >= 0x03000000
++  // Let python open the file to avoid potential binary incompatibilities.
+   PyObject *fo = Py_BuildValue("s", f);
+-  FILE *fs = _Py_fopen(fo, "r");
++  FILE *fs = _Py_fopen(fo, "r"); // Private CPython API
+   Py_DECREF(fo);
+ #else
++  // Let python open the file to avoid potential binary incompatibilities.
+   PyObject *pyfile = PyFile_FromString(f, const_cast<char*>("r"));
+   if (!pyfile) throw std::invalid_argument(std::string(f) + " : no such file");
+   python::handle<> file(pyfile);
+EOF
     tar cf ${outfile}.boost.tar ${outfile}/src/boost
     rm -rf src/boost
 }
