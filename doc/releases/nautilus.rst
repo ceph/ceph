@@ -1151,7 +1151,7 @@ Changelog
 * cephfs: mds: add command that config individual client session (`issue#40811 <http://tracker.ceph.com/issues/40811>`_, `pr#32245 <https://github.com/ceph/ceph/pull/32245>`_, "Yan, Zheng")
 * cephfs: mds: "apply configuration changes through MDSRank" and "recall caps from quiescent sessions" and "drive cap recall while dropping cache" (`pr#30761 <https://github.com/ceph/ceph/pull/30761>`_, Patrick Donnelly, Jeff Layton)
 * cephfs: mds: fix assert(omap_num_objs <= MAX_OBJECTS) of OpenFileTable (`pr#32756 <https://github.com/ceph/ceph/pull/32756>`_, "Yan, Zheng")
-* cephfs: mds: fix revoking caps after after stale->resume circle (`pr#32909 <https://github.com/ceph/ceph/pull/32909>`_, "Yan, Zheng")
+* cephfs: mds: fix revoking caps after stale->resume circle (`pr#32909 <https://github.com/ceph/ceph/pull/32909>`_, "Yan, Zheng")
 * cephfs: mds: free heap memory may grow too large for some workloads (`pr#31802 <https://github.com/ceph/ceph/pull/31802>`_, Patrick Donnelly)
 * cephfs: MDSMonitor: warn if a new file system is being created with an EC default data pool (`pr#32600 <https://github.com/ceph/ceph/pull/32600>`_, Patrick Donnelly)
 * cephfs: mds: no assert on frozen dir when scrub path (`pr#32071 <https://github.com/ceph/ceph/pull/32071>`_, Zhi Zhang)

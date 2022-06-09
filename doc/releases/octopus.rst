@@ -4299,7 +4299,7 @@ Changelog
 * mds: fix is session in blacklist check in Server::apply_blacklist() (`issue#40061 <http://tracker.ceph.com/issues/40061>`_, `pr#28293 <https://github.com/ceph/ceph/pull/28293>`_, Yan, Zheng)
 * mds: Fix MDCache.h reorder compiler warnings (`pr#31409 <https://github.com/ceph/ceph/pull/31409>`_, Varsha Rao)
 * mds: fix null pointer dereference in Server::handle_client_link() (`pr#32722 <https://github.com/ceph/ceph/pull/32722>`_, Yan, Zheng)
-* mds: fix revoking caps after after stale->resume circle (`pr#31662 <https://github.com/ceph/ceph/pull/31662>`_, Yan, Zheng)
+* mds: fix revoking caps after stale->resume circle (`pr#31662 <https://github.com/ceph/ceph/pull/31662>`_, Yan, Zheng)
 * mds: fix SnapRealm::resolve_snapname for long name (`pr#27511 <https://github.com/ceph/ceph/pull/27511>`_, Yan, Zheng)
 * mds: fix use-after-free in Migrater (`pr#33291 <https://github.com/ceph/ceph/pull/33291>`_, Yan, Zheng)
 * mds: handle bad purge queue item encoding (`pr#33449 <https://github.com/ceph/ceph/pull/33449>`_, Yan, Zheng)

@@ -1044,7 +1044,7 @@ void Client::_finish_auth(const entity_addr_t& peer)
 
   ceph_assert(!active_con && !pending_conns.empty());
   // It's too early to toggle the `ready_to_send` flag. It will
-  // be set atfer finishing the MAuth exchange and draining out
+  // be set after finishing the MAuth exchange and draining out
   // the `pending_messages` queue.
   active_con = std::move(*found);
   *found = nullptr;
