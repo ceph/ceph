@@ -1093,6 +1093,7 @@ class CephadmServe:
                 image = ''
                 start_time = datetime_now()
                 ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
+                action = 'reconfigure' if reconfig else ('redeploy' if daemon_spec.name() in self.mgr.cache.get_daemon_names() else 'deploy')
 
                 if daemon_spec.daemon_type == 'container':
                     spec = cast(CustomContainerSpec,
@@ -1182,14 +1183,17 @@ class CephadmServe:
                 msg = "{} {} on host '{}'".format(
                     'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
                 if not code:
+                    self.mgr.daemon_action_history_store.record(daemon_spec.host, daemon_spec.name(), action, failed=False)
                     self.mgr.events.for_daemon(daemon_spec.name(), OrchestratorEvent.INFO, msg)
                 else:
-                    what = 'reconfigure' if reconfig else 'deploy'
+                    self.mgr.daemon_action_history_store.record(daemon_spec.host, daemon_spec.name(), action, failed=True)
                     self.mgr.events.for_daemon(
-                        daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
+                        daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {action}: {err}')
                 return msg
             except OrchestratorError:
                 redeploy = daemon_spec.name() in self.mgr.cache.get_daemon_names()
+                action = 'reconfigure' if reconfig else ('redeploy' if redeploy else 'deploy')
+                self.mgr.daemon_action_history_store.record(daemon_spec.host, daemon_spec.name(), action, failed=True)
                 if not reconfig and not redeploy:
                     # we have to clean up the daemon. E.g. keyrings.
                     servict_type = daemon_type_to_service(daemon_spec.daemon_type)
@@ -1224,6 +1228,9 @@ class CephadmServe:
             if not code:
                 # remove item from cache
                 self.mgr.cache.rm_daemon(host, name)
+                self.mgr.daemon_action_history_store.record(host, name, 'remove', failed=False)
+            else:
+                self.mgr.daemon_action_history_store.record(host, name, 'remove', failed=True)
             self.mgr.cache.invalidate_host_daemons(host)
 
             if not no_post_remove:

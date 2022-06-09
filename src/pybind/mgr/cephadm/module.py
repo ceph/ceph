@@ -39,7 +39,7 @@ from orchestrator.module import to_format, Format
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta, DaemonDescription, DaemonDescriptionStatus, handle_orch_error, \
     service_to_daemon_types
-from orchestrator._interface import GenericSpec
+from orchestrator._interface import GenericSpec, DaemonActionDescription
 from orchestrator._interface import daemon_type_to_service
 
 from . import utils
@@ -56,7 +56,7 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
     NodeExporterService, SNMPGatewayService, LokiService, PromtailService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
-    ClientKeyringStore, ClientKeyringSpec
+    ClientKeyringStore, ClientKeyringSpec, DaemonActionHistoryStore
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
@@ -549,6 +549,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.offline_watcher = OfflineHostWatcher(self)
         self.offline_watcher.start()
+
+        self.daemon_action_history_store = DaemonActionHistoryStore(self)
+        self.daemon_action_history_store.load()
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
@@ -1934,8 +1937,10 @@ Then run the following:
                 out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
                     daemon_spec.host, name, 'unit',
                     ['--name', name, a]))
+                self.daemon_action_history_store.record(daemon_spec.host, name, a, failed=False)
             except Exception:
                 self.log.exception(f'`{daemon_spec.host}: cephadm unit {name} {a}` failed')
+                self.daemon_action_history_store.record(daemon_spec.host, name, a, failed=False)
         self.cache.invalidate_host_daemons(daemon_spec.host)
         msg = "{} {} from host '{}'".format(action, name, daemon_spec.host)
         self.events.for_daemon(name, 'INFO', msg)
@@ -1995,6 +2000,47 @@ Then run the following:
         msg = "Scheduled to {} {} on host '{}'".format(action, daemon_name, dd.hostname)
         self._kick_serve_loop()
         return msg
+
+    @handle_orch_error
+    def daemon_action_ls(self, daemon_name: Optional[str] = None, host: Optional[str] = None) -> List[DaemonActionDescription]:
+        if host and host not in self.cache.scheduled_daemon_actions:
+            return []
+        if daemon_name:
+            if host:
+                try:
+                    self.cache.get_daemon(daemon_name, host)
+                except OrchestratorError:
+                    raise OrchestratorError(f'Daemon {daemon_name} does not exist on host {host}')
+            else:
+                try:
+                    daemon = self.cache.get_daemon(daemon_name)
+                    host = daemon.hostname
+                except OrchestratorError:
+                    raise OrchestratorError(f'Daemon {daemon_name} does not exist.')
+            assert host is not None  # for mypy. Should be set to a real value if we reach here
+            action = self.cache.get_scheduled_daemon_action(host, daemon_name)
+            if action is not None:
+                return [DaemonActionDescription(host=host, daemon_name=daemon_name, action=action, status='scheduled')]
+            return []
+        elif host:
+            scheduled_host_actions = self.cache.scheduled_daemon_actions[host]
+            return [DaemonActionDescription(host=host, daemon_name=k, action=v, status='scheduled') for k, v in scheduled_host_actions.items()]
+        else:
+            scheduled_actions = self.cache.scheduled_daemon_actions
+            dads = []
+            for host, actions in scheduled_actions.items():
+                for dname, action in actions.items():
+                    dads.append(DaemonActionDescription(host=host, daemon_name=dname, action=action, status='scheduled'))
+            return dads
+
+    @handle_orch_error
+    def daemon_action_history(self,
+                              daemon_name: Optional[str] = None,
+                              host: Optional[str] = None,
+                              count: int = 10,
+                              failure_only: bool = False) -> List[DaemonActionDescription]:
+        actions = self.daemon_action_history_store.get_history(daemon_name, host, count, failure_only)
+        return [DaemonActionDescription.from_json(a) for a in actions]
 
     @handle_orch_error
     def remove_daemons(self, names):

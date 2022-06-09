@@ -529,6 +529,32 @@ class Orchestrator(object):
         # assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
+    def daemon_action_ls(self, daemon_name: Optional[str] = None, host: Optional[str] = None) -> OrchResult[List['DaemonActionDescription']]:
+        """
+        View currently scheduled daemon action (start/stop/restart/reconfig/redeploy)
+
+        :param daemon_name: name of specific daemon you only want to see action for
+        :param host: name of specific host you only want to see actions for
+        :rtype: OrchResult
+        """
+        raise NotImplementedError()
+
+    def daemon_action_history(self,
+                              daemon_name: Optional[str] = None,
+                              host: Optional[str] = None,
+                              count: int = 10,
+                              failure_only: bool = False) -> OrchResult[List['DaemonActionDescription']]:
+        """
+        View up to last 100 completed (failed or succeeded) daemon actions
+
+        :param daemon_name: name of specific daemon you only want to see action history for
+        :param host: name of specific host you only want to see action history for
+        :param count: max number of actions in history to be dispayed. Must be less thaan 200
+        :param failure_only: only show actions that failed
+        :rtype: OrchResult
+        """
+        raise NotImplementedError()
+
     def create_osds(self, drive_group: DriveGroupSpec) -> OrchResult[str]:
         """
         Create one or more OSDs within a single Drive Group.
@@ -1268,6 +1294,45 @@ class ServiceDescription(object):
 
 
 yaml.add_representer(ServiceDescription, ServiceDescription.yaml_representer)
+
+
+class DaemonActionDescription(object):
+    """
+    Class used for displaying a daemon action
+    """
+
+    def __init__(self,
+                 host: str,
+                 daemon_name: str,
+                 action: str,
+                 status: str = 'unknown',
+                 timestamp: Optional[str] = None):
+        self.host = host
+        self.daemon_name = daemon_name
+        self.action = action
+        self.status = status
+        self.timestamp = timestamp
+
+    def to_json(self) -> Dict[str, str]:
+        j = {
+            'host': self.host,
+            'daemon_name': self.daemon_name,
+            'action': self.action,
+            'status': self.status,
+        }
+        if self.timestamp:
+            j['timestamp'] = self.timestamp
+        return j
+
+    @classmethod
+    def from_json(cls, dad: Dict[str, str]) -> 'DaemonActionDescription':
+        j: Dict[str, Any] = {'host': '', 'daemon_name': '', 'action': '', 'status': 'unknown'}
+        for val in ['host', 'daemon_name', 'action', 'status']:
+            if val in dad:
+                j[val] = dad[val]
+        if 'timestamp' in dad:
+            j['timestamp'] = dad['timestamp']
+        return cls(**j)
 
 
 class InventoryFilter(object):

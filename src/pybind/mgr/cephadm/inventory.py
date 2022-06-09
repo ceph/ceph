@@ -405,6 +405,68 @@ class ClientKeyringStore():
             self.save()
 
 
+class DaemonActionHistoryStore():
+    def __init__(self, mgr):
+        # type: (CephadmOrchestrator) -> None
+        self.mgr: CephadmOrchestrator = mgr
+        self.mgr = mgr
+        self.max_size = 100
+        self.action_history: List[Dict[str, str]] = []
+
+    def load(self) -> None:
+        c = self.mgr.get_store('action_history') or b'{}'
+        j = json.loads(c)
+        if 'actions' in j:
+            for action in j['actions']:
+                self.action_history.append(action)
+
+    def save(self) -> None:
+        data_json = {'actions': self.action_history}
+        self.mgr.set_store('action_history', json.dumps(data_json))
+
+    def record(self, host: str, daemon_name: str, action: str, failed: bool = False) -> None:
+        self.action_history.insert(0, {'host': host,
+                                       'daemon_name': daemon_name,
+                                       'action': action,
+                                       'status': 'failed' if failed else 'succeeded',
+                                       'timestamp': datetime_to_str(datetime_now())})
+        if len(self.action_history) > self.max_size:
+            self.action_history.pop()
+        self.save()
+
+    def get_history(self,
+                    daemon_name: Optional[str] = None,
+                    host: Optional[str] = None,
+                    count: Optional[int] = None,
+                    failure_only: bool = False) -> List[Dict[str, str]]:
+        def passes_filters(action: Dict[str, str], d_name: Optional[str] = None,
+                           hostname: Optional[str] = None, fail_only: bool = False) -> bool:
+            logger.info(action)
+            logger.info(hostname)
+            if not action:
+                return False
+            if d_name and action['daemon_name'] != d_name:
+                return False
+            if hostname and action['host'] != hostname:
+                return False
+            if fail_only and action['status'] != 'failed':
+                return False
+            return True
+
+        if count is None:
+            count = self.max_size
+        found = 0
+        res = []
+        history = self.action_history.copy()
+        for a in history:
+            if passes_filters(a, daemon_name, host, failure_only):
+                res.append(a)
+                found += 1
+            if found == count:
+                break
+        return res
+
+
 class HostCache():
     """
     HostCache stores different things:

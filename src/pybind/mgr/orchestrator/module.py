@@ -29,7 +29,8 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
     ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, \
-    GenericSpec, DaemonDescriptionStatus, SNMPGatewaySpec, MDSSpec
+    GenericSpec, DaemonDescriptionStatus, SNMPGatewaySpec, MDSSpec, \
+    DaemonActionDescription
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -1018,6 +1019,63 @@ Usage:
         completion = self.remove_daemons(names)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_read_command('orch daemon get-scheduled-actions')
+    def _daemon_action_ls(self,
+                          _end_positional_: int = 0,
+                          daemon_name: Optional[str] = None,
+                          host: Optional[str] = None,
+                          format: Format = Format.plain) -> HandleCommandResult:
+        """View currently scheduled daemon actions"""
+        if daemon_name and '.' not in daemon_name:
+            raise OrchestratorError('%s is not a valid daemon name' % daemon_name)
+        completion = self.daemon_action_ls(daemon_name, host)
+        actions = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(actions, format, many=True, cls=DaemonActionDescription))
+        elif actions:
+            out: str = ''
+            max_daemon_name_length = max([len(a.daemon_name) for a in actions])
+            for a in actions:
+                out += f'{a.daemon_name.ljust(max_daemon_name_length)} scheduled for {a.action} on host {a.host}\n'
+            return HandleCommandResult(stdout=out)
+        else:
+            return HandleCommandResult()
+
+    @_cli_read_command('orch daemon action-history')
+    def _daemon_action_history(self,
+                               _end_positional_: int = 0,
+                               daemon_name: Optional[str] = None,
+                               hostname: Optional[str] = None,
+                               count: int = 10,
+                               failure_only: bool = False,
+                               format: Format = Format.plain) -> HandleCommandResult:
+        """View currently scheduled daemon actions"""
+        if daemon_name and '.' not in daemon_name:
+            raise OrchestratorError('%s is not a valid daemon name' % daemon_name)
+        completion = self.daemon_action_history(daemon_name, hostname, count, failure_only)
+        actions = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(actions, format, many=True, cls=DaemonActionDescription))
+        elif actions:
+            out: str = ''
+            max_daemon_name_length = max([len(a.daemon_name) for a in actions])
+
+            def past_tense(s: str) -> str:
+                if s == 'reconfigure':
+                    return s + 'd'
+                elif s == 'stop':
+                    return s + 'ped'
+                elif s == 'reset-failed':
+                    return s
+                else:
+                    return s + 'ed'
+
+            for a in actions:
+                out += f'{a.daemon_name.ljust(max_daemon_name_length)} {past_tense(a.action)} on host {a.host} at {a.timestamp}\n'
+            return HandleCommandResult(stdout=out)
+        else:
+            return HandleCommandResult()
 
     @_cli_write_command('orch rm')
     def _service_rm(self,
