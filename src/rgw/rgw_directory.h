@@ -16,7 +16,7 @@
 using namespace std;
 
 class RGWDirectory{
-public:
+	public:
 	RGWDirectory() {}
 	virtual ~RGWDirectory(){ cout << "RGW Directory is destroyed!";}
 	CephContext *cct;
@@ -43,18 +43,18 @@ public:
 
 	virtual ~RGWObjectDirectory() { cout << "RGWObject Directory is destroyed!";}
 
-	void findClient(string key, cpp_redis::client *client);
-	int delKey(string key);
-	int existKey(string key, cpp_redis::client *client);
-	int setValue(cache_obj *ptr);
-	int getValue(cache_obj *ptr);
-	int updateField(cache_obj *ptr, string field, string value);
-	int delValue(cache_obj *ptr);
-	int setTTL(cache_obj *ptr, int seconds);
-	vector<pair<vector<string>, time_t>> get_aged_keys(time_t startTime_t, time_t endTime_t);
+	//void findClient(string key, cpp_redis::client *client);
+	//int delKey(string key);
+	//int existKey(string key, cpp_redis::client *client);
+	//int setValue(cache_obj *ptr);
+	//int getValue(cache_obj *ptr);
+	//int updateField(cache_obj *ptr, string field, string value);
+	//int delValue(cache_obj *ptr);
+	//int setTTL(cache_obj *ptr, int seconds);
+	//vector<pair<vector<string>, time_t>> get_aged_keys(time_t startTime_t, time_t endTime_t);
 
 private:
-	string buildIndex(cache_obj *ptr);
+	//string buildIndex(cache_obj *ptr);
 	
 
 };
@@ -69,20 +69,20 @@ public:
 	virtual ~RGWBlockDirectory() { cout << "RGWObject Directory is destroyed!";}
 
 	void findClient(string key, cpp_redis::client *client);
-	int delKey(string key);
+	//int delKey(string key);
 	int existKey(string key, cpp_redis::client *client);
 	int setValue(cache_block *ptr);
 	int getValue(cache_block *ptr);
-	int getValue(cache_block *ptr, string key);
-	int updateField(cache_block *ptr, string field, string value);
-	int updateField(string key, string field, string value);
-	int updateGlobalWeight(string key,  size_t weight , bool evict);
-	int resetGlobalWeight(string key);
-	int delValue(cache_block *ptr);
-	int delValue(string key);
-	int updateAccessCount(string key, int incr);
-	int setTTL(cache_block *ptr, int seconds);
-	int getHosts(string key, string hosts);
+	//int getValue(cache_block *ptr, string key);
+	//int updateField(cache_block *ptr, string field, string value);
+	//int updateField(string key, string field, string value);
+	//int updateGlobalWeight(string key,  size_t weight , bool evict);
+	//int resetGlobalWeight(string key);
+	//int delValue(cache_block *ptr);
+	//int delValue(string key);
+	//int updateAccessCount(string key, int incr);
+	//int setTTL(cache_block *ptr, int seconds);
+	//int getHosts(string key, string hosts);
   	/* //////// Unused for directory ///////
 	int setAvgCacheWeight(int64_t avg_weight);
 	int getAvgCacheWeight(string endpoint);

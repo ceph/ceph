@@ -11,6 +11,7 @@
 #include <list>
 #define dout_subsys ceph_subsys_rgw
 
+/* //////////////////////////////////////////////////////
 void tokenize(string &str, char delim, list<string> &out)
 {
 	size_t start;
@@ -22,7 +23,7 @@ void tokenize(string &str, char delim, list<string> &out)
 		out.push_back(str.substr(start, end - start));
 	}
 }
-
+///////////////////////////////////////////////////// */
 
 static const uint16_t crc16tab[256]= {
   0x0000,0x1021,0x2042,0x3063,0x4084,0x50a5,0x60c6,0x70e7,
@@ -89,6 +90,7 @@ unsigned int hash_slot(const char *key, int keylen) {
   return crc16(key+s+1,e-s-1) & 16383;
 }
 
+/* ///////////////////////////////////
 inline const string BoolToString(bool b)
 {	
   return b ? "true" : "false";
@@ -142,8 +144,6 @@ HomeLocation stringToHome(string home)
 	return HomeLocation::BACKEND;
 }
 
-
-
 string protocolToString( int enumVal )
 {
   switch(enumVal)
@@ -159,8 +159,6 @@ string protocolToString( int enumVal )
 	  return "Not recognized..";
   }
 }
-
-
 
 BackendProtocol stringToProtocol(string protocol)
 {
@@ -193,7 +191,6 @@ string timeToString(time_t time)
 }
 
 
-
 void RGWObjectDirectory::findClient(string key, cpp_redis::client *client){
   int slot = 0;
   slot = hash_slot(key.c_str(), key.size());
@@ -213,6 +210,7 @@ void RGWObjectDirectory::findClient(string key, cpp_redis::client *client){
 
   }
 }
+*/
 
 void RGWBlockDirectory::findClient(string key, cpp_redis::client *client){
   int slot = 0;
@@ -240,17 +238,18 @@ void RGWBlockDirectory::findClient(string key, cpp_redis::client *client){
 
 
 
-
 /* builds the index for the directory
  * based on bucket_name, obj_name, and chunk_id
  */
+/* //////////////////////////////////////////////
 string RGWObjectDirectory::buildIndex(cache_obj *ptr){
   // ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
   ///////// Changes for directory testing ////////
-  ldout(cct,5) << "Sam: bucket name" << ptr->bucket_name << " with object name " << ptr->obj_name << dendl;
-  return ptr->bucket_name + "_" + ptr->obj_name;
+  ldout(cct,5) << "Sam: object name " << ptr->obj_name << dendl;
+  return ptr->obj_name;
 }
-
+/////////////////////////////////////// */
+///
 string RGWBlockDirectory::buildIndex(cache_block *ptr){
   // ldout(cct,10) << __func__ << "found the block entry "<< key << " hosts " << hosts << dendl;
   ///////// Changes for directory testing ////////
@@ -261,6 +260,7 @@ string RGWBlockDirectory::buildIndex(cache_block *ptr){
  * 1 if the key exists.
  * 0 if the key does not exist.
  */
+/* ///////////////////////////////////////////////////
 int RGWObjectDirectory::existKey(string key, cpp_redis::client *client){
 
   ldout(cct,10) << __func__ << "  key1 " << key << dendl;
@@ -286,6 +286,7 @@ int RGWObjectDirectory::existKey(string key, cpp_redis::client *client){
   ldout(cct,10) << __func__ << "  key3 " << key <<" result:" <<result <<dendl;
   return result;
 }
+/////////////////////////////////////////// */
 
 int RGWBlockDirectory::existKey(string key,cpp_redis::client *client){
 
@@ -310,6 +311,7 @@ int RGWBlockDirectory::existKey(string key,cpp_redis::client *client){
   return result;
 }
 
+/* ///////////////////////////////////////////////
 int RGWBlockDirectory::resetGlobalWeight(string key){
   auto start = chrono::steady_clock::now();
   cpp_redis::client client;
@@ -327,7 +329,9 @@ int RGWBlockDirectory::resetGlobalWeight(string key){
 //  client.commit();
 
 }
+/////////////////////////////////////////// */
 
+/* /////////////////////////////////////////////////////////////////////
 int RGWBlockDirectory::updateGlobalWeight(string key,  size_t weight , bool evict){
   auto start = chrono::steady_clock::now();
   cpp_redis::client client;
@@ -396,6 +400,9 @@ int RGWBlockDirectory::updateGlobalWeight(string key,  size_t weight , bool evic
   ldout(cct,10) << __func__ <<" block2 key:" << key <<dendl;
   return result;
 }
+//////////////////////////////////////////////////////////////////////////////// */
+
+/* ////////////////////////////////////////////////
 int RGWBlockDirectory::updateField(string key, string field, string value){
 
   vector<pair<string, string>> list;
@@ -441,8 +448,9 @@ int RGWBlockDirectory::updateField(cache_block *ptr, string field, string value)
 
   return 0;
 }
+///////////////////////////////////////////////// */
 
-
+/* //////////////////////////////////////////
 int RGWObjectDirectory::delValue(cache_obj *ptr){
   int result = 0;
   vector<string> keys;
@@ -509,7 +517,6 @@ int RGWBlockDirectory::delValue(cache_block *ptr){
   }
 }
 
-
 int RGWBlockDirectory::updateAccessCount(string key, int incr){
   int result = 0;
   //  int incr = 1;
@@ -527,8 +534,9 @@ int RGWBlockDirectory::updateAccessCount(string key, int incr){
   return result-1;
 
 }
+///////////////////////////////////////////////////////// */
 
-
+/* //////////////////////////////////////////
 int RGWBlockDirectory::delValue(string key){
   int result = 0;
   vector<string> keys;
@@ -546,10 +554,12 @@ int RGWBlockDirectory::delValue(string key){
   client.sync_commit(std::chrono::milliseconds(1000));
   return result-1;
 }
+///////////////////////////////////////// */
 
 /* adding a key to the directory
  * if the key exists, it will be deleted and then the new value be added
  */
+/* /////////////////////////////////////
 int RGWObjectDirectory::setValue(cache_obj *ptr){
 
   cpp_redis::client client;
@@ -573,19 +583,19 @@ int RGWObjectDirectory::setValue(cache_obj *ptr){
 
   //creating a list of key's properties
   list.push_back(make_pair("key", key));
-  list.push_back(make_pair("owner", ptr->owner));
-  list.push_back(make_pair("obj_acl", ptr->acl));
-  list.push_back(make_pair("aclTimeStamp", to_string(ptr->aclTimeStamp)));
+  //list.push_back(make_pair("owner", ptr->owner));
+  //list.push_back(make_pair("obj_acl", ptr->acl));
+  //list.push_back(make_pair("aclTimeStamp", to_string(ptr->aclTimeStamp)));
   list.push_back(make_pair("hosts", hosts));
   //list.push_back(make_pair("dirty", BoolToString(ptr->dirty)));
   list.push_back(make_pair("size", to_string(ptr->size_in_bytes)));
-  list.push_back(make_pair("creationTime", to_string(ptr->creationTime)));
-  list.push_back(make_pair("lastAccessTime", to_string(ptr->lastAccessTime)));
-  list.push_back(make_pair("etag", ptr->etag));
-  list.push_back(make_pair("backendProtocol", protocolToString(ptr->backendProtocol)));
-  list.push_back(make_pair("bucket_name", ptr->bucket_name));
+  //list.push_back(make_pair("creationTime", to_string(ptr->creationTime)));
+  //list.push_back(make_pair("lastAccessTime", to_string(ptr->lastAccessTime)));
+  //list.push_back(make_pair("etag", ptr->etag));
+  //list.push_back(make_pair("backendProtocol", protocolToString(ptr->backendProtocol)));
+  //list.push_back(make_pair("bucket_name", ptr->bucket_name));
   list.push_back(make_pair("obj_name", ptr->obj_name));
-  list.push_back(make_pair("home_location", homeToString(ptr->home_location)));
+  //list.push_back(make_pair("home_location", homeToString(ptr->home_location)));
   //list.push_back(make_pair("intermediate", BoolToString(ptr->intermediate)));
   //list.push_back(make_pair("mapping_id", ptr->mapping_id));
   //list.push_back(make_pair("offset", to_string(ptr->offset)));
@@ -594,7 +604,7 @@ int RGWObjectDirectory::setValue(cache_obj *ptr){
   keys.push_back(key);
 
   //making key and time a pair
-  timeKey.emplace(to_string(ptr->creationTime),key);
+  //timeKey.emplace(to_string(ptr->creationTime),key);
 
   findClient(key, &client);
   if (!(client.is_connected())){
@@ -618,6 +628,7 @@ int RGWObjectDirectory::setValue(cache_obj *ptr){
 	return -1;
 
 }
+*/ /////////////////////////////////////////////////////////////////
 
 /*int RGWBlockDirectory::getAvgCacheWeight(string endpoint){
   ldout(cct,10) <<__func__<<" endpoint: " << endpoint<<  dendl;
@@ -689,14 +700,14 @@ int RGWBlockDirectory::setValue(cache_block *ptr){
 	vector<pair<string, string>> list;
 	//creating a list of key's properties
 	list.push_back(make_pair("key", key));
-	list.push_back(make_pair("owner", ptr->c_obj.owner));
+	//list.push_back(make_pair("owner", ptr->c_obj.owner));
 	list.push_back(make_pair("hosts", endpoint));
 	list.push_back(make_pair("size", to_string(ptr->size_in_bytes)));
 	list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
 	list.push_back(make_pair("obj_name", ptr->c_obj.obj_name));
-	list.push_back(make_pair("block_id", to_string(ptr->block_id)));
-	list.push_back(make_pair("lastAccessTime", to_string(ptr->lastAccessTime)));
-	list.push_back(make_pair("accessCount", "0"));
+	//list.push_back(make_pair("block_id", to_string(ptr->block_id)));
+	//list.push_back(make_pair("lastAccessTime", to_string(ptr->lastAccessTime)));
+	//list.push_back(make_pair("accessCount", "0"));
 	//list.push_back(make_pair("accessCount", to_string(ptr->access_count)));
 	client.hmset(key, list, [&result](cpp_redis::reply &reply){
 		if (!reply.is_null())
@@ -748,11 +759,11 @@ int RGWBlockDirectory::setValue(cache_block *ptr){
 	}
 	vector<pair<string, string>> list;
 	list.push_back(make_pair("hosts", hosts));
-	list.push_back(make_pair("lastAccessTime", to_string(ptr->lastAccessTime)));
+	//list.push_back(make_pair("lastAccessTime", to_string(ptr->lastAccessTime)));
 	client.hmset(key, list, [&result](cpp_redis::reply &reply){
 //		result = reply.as_string();
 		});
-	client.hincrby(key, "accessCount", ptr->access_count, [&result](cpp_redis::reply &reply){});
+	//client.hincrby(key, "accessCount", ptr->access_count, [&result](cpp_redis::reply &reply){});
 	client.sync_commit(std::chrono::milliseconds(1000));
 	//client.sync_commit(std::chrono::milliseconds(1000));
 	//client.exec();
@@ -761,6 +772,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr){
   }
 }
 
+/* ////////////////////////////////////////////////////////
 int RGWObjectDirectory::setTTL(cache_obj *ptr, int seconds){
 
   int result;
@@ -794,10 +806,10 @@ int RGWBlockDirectory::setTTL(cache_block *ptr, int seconds){
   return result-1;
 
 }
+/////////////////////////////////////////////////////////////// */
 
 
-
-
+/* ///////////////////////////////////////////////
 int RGWObjectDirectory::getValue(cache_obj *ptr){
 
   //delete the existing key,
@@ -813,66 +825,68 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
   ldout(cct,10) << __func__ << " object in func getValue "<< key << dendl;
   if (existKey(key, &client)){
   try{
-	string owner;
-	string obj_acl;
-	string aclTimeStamp;
+	//string owner;
+	//string obj_acl;
+	//string aclTimeStamp;
 	string hosts;
-	string dirty;
+	//string dirty;
 	string size;
-	string creationTime;
-	string lastAccessTime;
-	string etag;
-	string backendProtocol;
-	string bucket_name;
+	//string creationTime;
+	//string lastAccessTime;
+	//string etag;
+	//string backendProtocol;
+	//string bucket_name;
 	string obj_name;
-	string home_location;
-	string intermediate;
-	string mapping_id;
-	string offset;
+	//string home_location;
+	//string intermediate;
+	//string mapping_id;
+	//string offset;
 
 	//fields will be filled by the redis hmget functoin
 	std::vector<std::string> fields;
 	fields.push_back("key");
-	fields.push_back("owner");
-	fields.push_back("obj_acl");
-	fields.push_back("aclTimeStamp");
+	//fields.push_back("owner");
+	//fields.push_back("obj_acl");
+	//fields.push_back("aclTimeStamp");
 	fields.push_back("hosts");
-	fields.push_back("dirty");
+	//fields.push_back("dirty");
 	fields.push_back("size");
-	fields.push_back("creationTime");
-	fields.push_back("lastAccessTime");
-	fields.push_back("etag");
-	fields.push_back("backendProtocol");
-	fields.push_back("bucket_name");
+	//fields.push_back("creationTime");
+	//fields.push_back("lastAccessTime");
+	//fields.push_back("etag");
+	//fields.push_back("backendProtocol");
+	//fields.push_back("bucket_name");
 	fields.push_back("obj_name");
-	fields.push_back("home_location");
-	fields.push_back("intermediate");
-	fields.push_back("mapping_id");
-	fields.push_back("offset");
+	//fields.push_back("home_location");
+	//fields.push_back("intermediate");
+	//fields.push_back("mapping_id");
+	//fields.push_back("offset");
 
 	ldout(cct,10) << __func__ << " key exist so read field "<< key << dendl;
-	  client.hmget(key, fields, [&key, &owner, &obj_acl, &aclTimeStamp, &hosts, &dirty, &size, &creationTime, &lastAccessTime, &etag, &backendProtocol, &bucket_name, &obj_name, &home_location, &intermediate, &mapping_id, &offset, &key_exist](cpp_redis::reply& reply){
+	client.hmget(key, fields, [&key, &hosts, &size, &obj_name, &key_exist](cpp_redis::reply& reply){
+	//client.hmget(key, fields, [&key, &owner, &obj_acl, &aclTimeStamp, &hosts, &dirty, &size, &creationTime, &lastAccessTime, &etag, &backendProtocol, &bucket_name, &obj_name, &home_location, &intermediate, &mapping_id, &offset, &key_exist](cpp_redis::reply& reply){
+	//client.hmget(key, fields, [&key, &hosts, &obj_name, &key_exist](cpp_redis::reply& reply){
 		if (reply.is_array()){
 		  auto arr = reply.as_array();
 		  if (!arr[0].is_null()){
 			key_exist = 0;
 			key = arr[0].as_string();
-			owner = arr[1].as_string();
-			obj_acl = arr[2].as_string();
-			aclTimeStamp = arr[3].as_string();
+			//owner = arr[1].as_string();
+			//obj_acl = arr[2].as_string();
+			//aclTimeStamp = arr[3].as_string();
 			hosts = arr[4].as_string();
-			dirty = arr[5].as_string();
+			//dirty = arr[5].as_string();
 			size = arr[6].as_string();
-			creationTime  = arr[7].as_string();
-			lastAccessTime = arr[8].as_string();
-			etag = arr[9].as_string();
-			backendProtocol = arr[10].as_string();
-			bucket_name = arr[11].as_string();
+			//creationTime  = arr[7].as_string();
+			//lastAccessTime = arr[8].as_string();
+			//etag = arr[9].as_string();
+			//backendProtocol = arr[10].as_string();
+			//bucket_name = arr[11].as_string();
 			obj_name = arr[12].as_string();
-			home_location = arr[13].as_string();
-			intermediate = arr[14].as_string();
-			mapping_id = arr[15].as_string();
-			offset = arr[16].as_string();
+			//home_location = arr[13].as_string();
+			//intermediate = arr[14].as_string();
+			//mapping_id = arr[15].as_string();
+			//offset = arr[16].as_string();
 		  }
 		}
 	  });
@@ -886,11 +900,11 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
 	ldout(cct,10) << __func__ << "found the entry  "<< key << "host "<< hosts << dendl;
 	stringstream sloction(hosts);
 	string tmp;
-	ptr->owner = owner;
-	ptr->acl = obj_acl;
+	//ptr->owner = owner;
+	//ptr->acl = obj_acl;
 	
 	// ptr->aclTimeStamp = stoi(aclTimeStamp);
-	ptr->aclTimeStamp = stoull(aclTimeStamp);
+	//ptr->aclTimeStamp = stoull(aclTimeStamp);
 	//host1_host2_host3_...
 	while(getline(sloction, tmp, '_'))
 	  ptr->hosts_list.push_back(tmp);
@@ -898,13 +912,13 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
 	//ptr->dirty = StringToBool(dirty);
 	//ptr->intermediate = StringToBool(intermediate);
 	ptr->size_in_bytes = stoull(size);
-	ptr->creationTime = stoull(creationTime);
-	ptr->lastAccessTime = stoull(lastAccessTime);
-	ptr->etag = etag;
-	ptr->backendProtocol = stringToProtocol(backendProtocol);
-	ptr->bucket_name = bucket_name;
+	//ptr->creationTime = stoull(creationTime);
+	//ptr->lastAccessTime = stoull(lastAccessTime);
+	//ptr->etag = etag;
+	//ptr->backendProtocol = stringToProtocol(backendProtocol);
+	//ptr->bucket_name = bucket_name;
 	ptr->obj_name = obj_name;
-	ptr->home_location = stringToHome(home_location);
+	//ptr->home_location = stringToHome(home_location);
 	//ptr->mapping_id = mapping_id;
 	//ptr->offset = stoull(offset);
 //	client.disconnect(true);
@@ -916,7 +930,9 @@ int RGWObjectDirectory::getValue(cache_obj *ptr){
   }
   return key_exist;
 }
+*/ /////////////////////////////////////////////////////
 
+/* /////////////////////////////////////
 int RGWBlockDirectory::getValue(cache_block *ptr, string key){
   auto start = chrono::steady_clock::now();
   cpp_redis::client client;
@@ -945,7 +961,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr, string key){
 	std::vector<std::string> fields;
 	fields.push_back("key");
 	fields.push_back("hosts");
-	fields.push_back("size");
+	//fields.push_back("size");
 	fields.push_back("bucket_name");
 	fields.push_back("obj_name");
 	fields.push_back("block_id");
@@ -1006,7 +1022,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr, string key){
   return key_exist;
 
 }
-
+////////////////////////////////////////////// */
 
 int RGWBlockDirectory::getValue(cache_block *ptr){
   int key_exist = -1;
@@ -1029,22 +1045,23 @@ int RGWBlockDirectory::getValue(cache_block *ptr){
 	string size;
 	string bucket_name;
 	string obj_name;
-	string block_id;
-	string access_count;
-	string owner;
+	//string block_id;
+	//string access_count;
+	//string owner;
 	std::vector<std::string> fields;
 	fields.push_back("key");
 	fields.push_back("hosts");
 	fields.push_back("size");
 	fields.push_back("bucket_name");
 	fields.push_back("obj_name");
-	fields.push_back("block_id");
-	fields.push_back("accessCount");
-	fields.push_back("owner");
+	//fields.push_back("block_id");
+	//fields.push_back("accessCount");
+	//fields.push_back("owner");
 
 	try {
 
-	  client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &block_id, &access_count, &owner, &key_exist](cpp_redis::reply &reply){
+	  client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply &reply){
+	  //client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &block_id, &access_count, &owner, &key_exist](cpp_redis::reply &reply){
 		  if (reply.is_array()) {
 			auto arr = reply.as_array();
 			if (!arr[0].is_null()) {
@@ -1054,9 +1071,9 @@ int RGWBlockDirectory::getValue(cache_block *ptr){
 			  size = arr[2].as_string();
 			  bucket_name = arr[3].as_string();
 			  obj_name = arr[4].as_string();
-			  block_id  = arr[5].as_string();
-			  access_count = arr[6].as_string();
-			  owner = arr[7].as_string();
+			  //block_id  = arr[5].as_string();
+			  //access_count = arr[6].as_string();
+			  //owner = arr[7].as_string();
 		 }}
 		});
 
@@ -1069,7 +1086,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr){
 	ldout(cct,5) << __func__ << "Sam: found the block entry "<< key << " hosts " << hosts << dendl;
 	stringstream sloction(hosts);
 	string tmp;
-	ptr->c_obj.owner = owner;
+	//ptr->c_obj.owner = owner;
 
 	//host1_host2_host3_...
 	while(getline(sloction, tmp, '_')){
@@ -1085,8 +1102,8 @@ int RGWBlockDirectory::getValue(cache_block *ptr){
 	ptr->size_in_bytes = stoull(size);
 	ptr->c_obj.bucket_name = bucket_name;
 	ptr->c_obj.obj_name = obj_name;
-	ptr->block_id = stoull(block_id);
-	ptr->access_count = stoull(access_count);
+	//ptr->block_id = stoull(block_id);
+	//ptr->access_count = stoull(access_count);
 	}
 	
 	catch(exception &e) {
@@ -1100,6 +1117,8 @@ int RGWBlockDirectory::getValue(cache_block *ptr){
 /* returns all the keys between startTime and endTime 
  * as a vector of <bucket_name, object_name, chunk_id, owner, creationTime> vectors
  */
+
+/* //////////////////////////////////////////////////////////////
 vector<pair<vector<string>, time_t>> RGWObjectDirectory::get_aged_keys(time_t startTime_t, time_t endTime_t){
   vector<pair<string, string>> list;
   vector<pair<vector<string>, time_t>> keys; //return aged keys
@@ -1107,8 +1126,7 @@ vector<pair<vector<string>, time_t>> RGWObjectDirectory::get_aged_keys(time_t st
   string time;
   string startTime = to_string(startTime_t);
   string endTime = to_string(endTime_t);
-
-  /*
+  */ /* 
 	 std::string dirKey = "keyObjectDirectory";
 	 client1.zrangebyscore(dirKey, startTime, endTime, true, [&key, &time, &list](cpp_redis::reply &reply){
 	 auto arr = reply.as_array();
@@ -1148,9 +1166,8 @@ vector<pair<vector<string>, time_t>> RGWObjectDirectory::get_aged_keys(time_t st
 
   }
 
-*/
+*/ /*
   return keys;
 }
-
-
+*/ ////////////////////////////////////////////////////////////
 
