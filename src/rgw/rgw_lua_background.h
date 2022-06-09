@@ -13,14 +13,14 @@ namespace rgw::lua {
 constexpr const int INIT_EXECUTE_INTERVAL = 5;
 
 //Writeable meta table named RGW with mutex protection
-using BackgroundMapValue = std::variant<std::string, int64_t, double, bool>;
+using BackgroundMapValue = std::variant<std::string, long long int, double, bool>;
 using BackgroundMap  = std::unordered_map<std::string, BackgroundMapValue>;
 
 inline void pushvalue(lua_State* L, const std::string& value) {
   pushstring(L, value);
 }
 
-inline void pushvalue(lua_State* L, int64_t value) {
+inline void pushvalue(lua_State* L, long long value) {
   lua_pushinteger(L, value);
 }
 
@@ -111,7 +111,7 @@ struct RGWTable : EmptyMetaTable {
       case LUA_TNUMBER:
          if (lua_isinteger(L, 3)) {
           value = lua_tointeger(L, 3);
-          len = sizeof(int64_t);
+          len = sizeof(long long int);
          } else {
           value = lua_tonumber(L, 3);
           len = sizeof(double);
