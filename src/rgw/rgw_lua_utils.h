@@ -64,6 +64,12 @@ constexpr auto THREE_UPVALS = 3;
 constexpr auto FOUR_UPVALS  = 4;
 constexpr auto FIVE_UPVALS  = 5;
 
+constexpr auto FIRST_UPVAL    = 1;
+constexpr auto SECOND_UPVAL   = 2;
+constexpr auto THIRD_UPVAL    = 3;
+constexpr auto FOURTH_UPVAL   = 4;
+constexpr auto FIFTH_UPVAL    = 5;
+
 constexpr auto NO_RETURNVAL    = 0;
 constexpr auto ONE_RETURNVAL    = 1;
 constexpr auto TWO_RETURNVALS   = 2;
@@ -94,12 +100,12 @@ constexpr auto FOUR_RETURNVALS  = 4;
 //   using Type = MyStruct;
 //
 //   static int IndexClosure(lua_State* L) {
-//     const auto value = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+//     const auto value = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 //     ...
 //   }
 
 //   static int NewIndexClosure(lua_State* L) {
-//     auto value = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(1)));
+//     auto value = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 //     ...
 //   }
 // };
@@ -212,7 +218,7 @@ typedef int MetaTableClosure(lua_State* L);
 
 template<typename MapType=std::map<std::string, std::string>>
 int StringMapWriteableNewIndex(lua_State* L) {
-  const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(1)));
+  const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
   const char* index = luaL_checkstring(L, 2);
 
@@ -241,7 +247,7 @@ struct StringMapMetaTable : public EmptyMetaTable {
   static std::string Name() {return TableName() + "Meta";}
 
   static int IndexClosure(lua_State* L) {
-    const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -259,7 +265,7 @@ struct StringMapMetaTable : public EmptyMetaTable {
   }
 
   static int PairsClosure(lua_State* L) {
-    auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     ceph_assert(map);
     lua_pushlightuserdata(L, map);
     lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
@@ -271,7 +277,7 @@ struct StringMapMetaTable : public EmptyMetaTable {
   
   static int stateless_iter(lua_State* L) {
     // based on: http://lua-users.org/wiki/GeneralizedPairsAndIpairs
-    auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     typename MapType::const_iterator next_it;
     if (lua_isnil(L, -1)) {
       next_it = map->begin();
@@ -297,7 +303,7 @@ struct StringMapMetaTable : public EmptyMetaTable {
   }
 
   static int LenClosure(lua_State* L) {
-    const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     lua_pushinteger(L, map->size());
 

@@ -44,8 +44,8 @@ struct RGWTable : EmptyMetaTable {
   static int increment_by(lua_State* L);
 
   static int IndexClosure(lua_State* L) {
-    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(1)));
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(2)));
+    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, INCREMENT) == 0) {
@@ -75,8 +75,8 @@ struct RGWTable : EmptyMetaTable {
   }
 
   static int LenClosure(lua_State* L) {
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(2)));
-    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     std::lock_guard l(mtx);
 
@@ -86,8 +86,8 @@ struct RGWTable : EmptyMetaTable {
   }
 
   static int NewIndexClosure(lua_State* L) {
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(2)));
-    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     const auto index = luaL_checkstring(L, 2);
     
     if (strcasecmp(index, INCREMENT) == 0 || strcasecmp(index, DECREMENT) == 0) {
@@ -139,7 +139,7 @@ struct RGWTable : EmptyMetaTable {
   }
 
   static int PairsClosure(lua_State* L) {
-    auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     ceph_assert(map);
     lua_pushlightuserdata(L, map);
     lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
@@ -151,7 +151,7 @@ struct RGWTable : EmptyMetaTable {
   
   static int stateless_iter(lua_State* L) {
     // based on: http://lua-users.org/wiki/GeneralizedPairsAndIpairs
-    auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     typename BackgroundMap::const_iterator next_it;
     if (lua_isnil(L, -1)) {
       next_it = map->begin();
