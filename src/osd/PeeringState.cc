@@ -4164,6 +4164,8 @@ void PeeringState::append_log(
 
   psdout(10) << __func__ << " approx pg log length =  "
 	     << pg_log.get_log().approx_size() << dendl;
+  psdout(10) << __func__ << " dups pg log length =  "
+	     << pg_log.get_log().dups.size() << dendl;
   psdout(10) << __func__ << " transaction_applied = "
 	     << transaction_applied << dendl;
   if (!transaction_applied || async)
