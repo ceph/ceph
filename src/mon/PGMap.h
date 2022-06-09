@@ -551,7 +551,7 @@ public:
 namespace reweight {
 /* Assign a lower weight to overloaded OSDs.
  *
- * The OSDs that will get a lower weight are those with with a utilization
+ * The OSDs that will get a lower weight are those with a utilization
  * percentage 'oload' percent greater than the average utilization.
  */
   int by_utilization(const OSDMap &osd_map,
