@@ -23,11 +23,11 @@ contributed under the terms of the applicable license.
 
 ## Checking out the source
 
-You can clone from github with
+You can clone from GitHub with
 
 	git clone git@github.com:ceph/ceph
 
-or, if you are not a github user,
+or, if you are not a GitHub user,
 
 	git clone https://github.com/ceph/ceph.git
 

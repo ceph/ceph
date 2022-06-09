@@ -9,7 +9,7 @@
   pip install githubpy GitPython requests
 
 Generate a github access token; this is needed as the anonymous access
-to Github's API will easily hit the limit even with a single invocation.
+to GitHub's API will easily hit the limit even with a single invocation.
 For details see:
 https://help.github.com/articles/creating-an-access-token-for-command-line-use/
 
@@ -350,7 +350,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--token",
         default=os.getenv("GITHUB_ACCESS_TOKEN"),
-        help="Github Access Token ($GITHUB_ACCESS_TOKEN otherwise)",
+        help="GitHub Access Token ($GITHUB_ACCESS_TOKEN otherwise)",
     )
     parser.add_argument("--use-tags", default=False,
                         help="Use github tags to guess the component")
