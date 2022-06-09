@@ -72,6 +72,14 @@ class ESubtreeMap;
 
 enum {
   l_mdc_first = 3000,
+
+  // dir updates for replication
+  l_mdc_dir_update,
+  l_mdc_dir_update_receipt,
+  l_mdc_dir_try_discover,
+  l_mdc_dir_send_discover,
+  l_mdc_dir_handle_discover,
+
   // How many inodes currently in stray dentries
   l_mdc_num_strays,
   // How many stray dentries are currently delayed for purge due to refs
