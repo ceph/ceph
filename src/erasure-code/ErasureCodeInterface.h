@@ -249,7 +249,7 @@ namespace ceph {
     virtual unsigned int get_coding_chunk_count() const = 0;
 
     /**
-     * Return the number of sub chunks chunks created by a call to the
+     * Return the number of sub chunks created by a call to the
      * **encode** method. Each chunk can be viewed as union of sub-chunks
      * For the case of array codes, the sub-chunk count > 1, where as the
      * scalar codes have sub-chunk count = 1.
