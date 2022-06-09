@@ -226,7 +226,7 @@ lock_mtab (void) {
 				if (fcntl (lockfile_fd, F_SETLKW, &flock) == -1) {
 					int errsv = errno;
 					(void) unlink(linktargetfile);
-					die (EX_FILEIO, "can't lock lock file %s: %s",
+					die (EX_FILEIO, "can't lock file %s: %s",
 					     _PATH_MOUNTED_LOCK, (errno == EINTR) ?
 					     "timed out" : strerror (errsv));
 				}
