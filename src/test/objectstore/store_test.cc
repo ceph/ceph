@@ -9929,7 +9929,7 @@ static bool is_hugepaged(const bufferptr& bp)
   return ibp.is_raw_marked<BlockDevice::hugepaged_raw_marker_t>();
 }
 
-// disabled by default b/c of the dependency on huge page ssome test
+// disabled by default b/c of the dependency on huge page some test
 // environments might not offer without extra configuration.
 TEST_P(StoreTestDeferredSetup, DISABLED_BluestoreHugeReads)
 {

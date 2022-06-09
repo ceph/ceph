@@ -5762,7 +5762,7 @@ options:
   default: 64_K
   with_legacy: true
 # ext4 allows 4k xattrs total including some smallish extra fields and the
-# keys.  We're allowing 2 512 inline attrs in addition some some filestore
+# keys.  We're allowing 2 512 inline attrs in addition some filestore
 # replay attrs.  After accounting for those, we still need to fit up to
 # two attrs of this value.  That means we need this value to be around 1k
 # to be safe.  This is hacky, but it's not worth complicating the code
