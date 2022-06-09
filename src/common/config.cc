@@ -563,7 +563,7 @@ void md_config_t::parse_env(unsigned entity_type,
   if (pod_request && pod_limit) {
     // If both LIMIT and REQUEST are set, ensure that we use the
     // min of request and limit*ratio.  This is important
-    // because k8s set set LIMIT == REQUEST if only LIMIT is
+    // because k8s set LIMIT == REQUEST if only LIMIT is
     // specified, and we want to apply the ratio in that case,
     // even though REQUEST is present.
     pod_request = std::min<uint64_t>(pod_request, pod_limit);
