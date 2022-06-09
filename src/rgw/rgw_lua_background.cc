@@ -21,7 +21,7 @@ int RGWTable::increment_by(lua_State* L) {
   const auto index = luaL_checkstring(L, 1);
 
   // by default we increment by 1/-1
-  const auto default_inc = (decrement ? -1 : 1);
+  const long long int default_inc = (decrement ? -1 : 1);
   BackgroundMapValue inc_by = default_inc;
   if (args == 2) {
     if (lua_isinteger(L, 2)) {
@@ -40,12 +40,12 @@ int RGWTable::increment_by(lua_State* L) {
     auto& value = it->second;
     if (std::holds_alternative<double>(value) && std::holds_alternative<double>(inc_by)) {
       value = std::get<double>(value) + std::get<double>(inc_by);
-    } else if (std::holds_alternative<int64_t>(value) && std::holds_alternative<int64_t>(inc_by)) {
-      value = std::get<int64_t>(value) + std::get<int64_t>(inc_by);
-    } else if (std::holds_alternative<double>(value) && std::holds_alternative<int64_t>(inc_by)) {
-      value = std::get<double>(value) + static_cast<double>(std::get<int64_t>(inc_by));
-    } else if (std::holds_alternative<int64_t>(value) && std::holds_alternative<double>(inc_by)) {
-      value = static_cast<double>(std::get<int64_t>(value)) + std::get<double>(inc_by);
+    } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<long long int>(inc_by)) {
+      value = std::get<long long int>(value) + std::get<long long int>(inc_by);
+    } else if (std::holds_alternative<double>(value) && std::holds_alternative<long long int>(inc_by)) {
+      value = std::get<double>(value) + static_cast<double>(std::get<long long int>(inc_by));
+    } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<double>(inc_by)) {
+      value = static_cast<double>(std::get<long long int>(value)) + std::get<double>(inc_by);
     } else {
       mtx.unlock();
       return luaL_error(L, "can increment only numeric values");

@@ -875,7 +875,7 @@ TEST(TestRGWLuaBackground, TableValues)
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
   EXPECT_EQ(get_table_value<double>(lua_background, "key3"), 42.2);
   EXPECT_TRUE(get_table_value<bool>(lua_background, "key4"));
 }
@@ -894,7 +894,7 @@ TEST(TestRGWLuaBackground, TablePersist)
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
   
   request_script = R"(
     RGW["key3"] = RGW["key1"]
@@ -904,9 +904,9 @@ TEST(TestRGWLuaBackground, TablePersist)
   rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key3"), "string value");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key4"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key4"), 42);
 }
 
 TEST(TestRGWLuaBackground, TableValuesFromRequest)
@@ -929,7 +929,7 @@ TEST(TestRGWLuaBackground, TableValuesFromRequest)
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key1"), -99);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key1"), -99);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key2"), "hi");
   EXPECT_EQ(get_table_value<double>(lua_background, "key3"), -9.9);
   EXPECT_EQ(get_table_value<bool>(lua_background, "key4"), true);
@@ -955,7 +955,7 @@ TEST(TestRGWLuaBackground, TableInvalidValue)
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_NE(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "val1");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
   EXPECT_EQ(get_table_value<double>(lua_background, "key3"), 42.2);
   EXPECT_EQ(get_table_value<bool>(lua_background, "key4"), true);
 }
@@ -977,9 +977,9 @@ TEST(TestRGWLuaBackground, TableErase)
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key3"), "another string value");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "size"), 4);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "size"), 4);
   
   request_script = R"(
     -- erase key1
@@ -992,9 +992,9 @@ TEST(TestRGWLuaBackground, TableErase)
   rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key3"), "another string value");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "size"), 3);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "size"), 3);
 }
 
 TEST(TestRGWLuaBackground, TableIterate)
@@ -1017,10 +1017,10 @@ TEST(TestRGWLuaBackground, TableIterate)
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "", request_script, &lua_background);
   ASSERT_EQ(rc, 0);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string value");
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
   EXPECT_EQ(get_table_value<double>(lua_background, "key3"), 42.2);
   EXPECT_TRUE(get_table_value<bool>(lua_background, "key4"));
-  EXPECT_EQ(get_table_value<int64_t>(lua_background, "size"), 5);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "size"), 5);
 }
 
 TEST(TestRGWLuaBackground, TableIncrement)
