@@ -193,6 +193,7 @@ void D3nDataCache::d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c)
   ldout(cct, 5) << "Sam: added c_obj.obj_name to c_blk is: " << c->c_blk->c_obj.obj_name << dendl; 
   int rgwObjSetValue = blk_dir->setValue(c->c_blk); 
   ldout(cct, 5) << "Sam: setObjValue: " << rgwObjSetValue << dendl; 
+  ldout(cct, 5) << "Sam: getObjValue: " << blk_dir->getValue(c->c_blk) << dendl;
   delete c->c_blk; 
   c->c_blk = nullptr;
   /////// End of directory changes ////////
