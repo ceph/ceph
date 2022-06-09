@@ -20,7 +20,7 @@
   
      --decompile|-d map    decompile a crush map to source
      [--outfn|-o outfile]
-                           specify output for for (de)compilation
+                           specify output for (de)compilation
      --compile|-c map.txt  compile a map from source
      --enable-unsafe-tunables
                            compile with unsafe tunables

@@ -140,7 +140,7 @@ void usage()
   cout << "\n";
   cout << "   --decompile|-d map    decompile a crush map to source\n";
   cout << "   [--outfn|-o outfile]\n";
-  cout << "                         specify output for for (de)compilation\n";
+  cout << "                         specify output for (de)compilation\n";
   cout << "   --compile|-c map.txt  compile a map from source\n";
   cout << "   --enable-unsafe-tunables\n";
   cout << "                         compile with unsafe tunables\n";
