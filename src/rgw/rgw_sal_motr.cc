@@ -1203,15 +1203,16 @@ int MotrBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max,
   int rc;
   if (max == 0)  // Return an emtpy response.
     return 0;
-  max++;  // Fetch an extra key if available to ensure presence of next obj.
-  vector<string> keys(max);
-  vector<bufferlist> vals(max);
+
   string tenant_bkt_name = get_bucket_name(info.bucket.tenant, info.bucket.name);
 
   ldpp_dout(dpp, 20) << __func__ << ": bucket=" << tenant_bkt_name
                     << " prefix=" << params.prefix
                     << " marker=" << params.marker
-                    << " max=" << max - 1 << dendl;
+                    << " max=" << max << dendl;
+  int batch_size = 100;
+  vector<string> keys(batch_size);
+  vector<bufferlist> vals(batch_size);
 
   // Retrieve all `max` number of pairs.
   string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
@@ -1230,40 +1231,62 @@ int MotrBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max,
       keys[0].append(" ");
   }
 
-  rc = store->next_query_by_name(bucket_index_iname, keys, vals, params.prefix,
-                                                                 params.delim);
-  if (rc < 0) {
-    ldpp_dout(dpp, 0) << __func__ << ": ERROR: next_query_by_name failed, rc = " << rc << dendl;
-    return rc;
-  }
-
-  // Check if an extra key was fetched or not
-  if (rc == max) {
-    // One extra key is successfully fetched.
-    results.is_truncated = true;
-    results.next_marker = keys[max - 2];
-    rc--;
-  } else {
-    results.is_truncated = false;
-  }
-
-  // Process the returned pairs to add into ListResults.
-  int i = 0;
-  for (; i < rc; ++i) {
-    if (vals[i].length() == 0) {
-      results.common_prefixes[keys[i]] = true;
-    } else {
-      rgw_bucket_dir_entry ent;
-      auto iter = vals[i].cbegin();
-      ent.decode(iter);
-      std::string null_ref_key = ent.key.name + "/null";
-      if(keys[i] == null_ref_key)
-        continue;
-      if (params.list_versions || ent.is_visible())
-        results.objs.emplace_back(std::move(ent));
+  results.is_truncated = false;
+  int keycount=0;
+  std::string next_key;
+  while (keycount <= max) {
+    if(!next_key.empty())
+      keys[0] = next_key;
+    rc = store->next_query_by_name(bucket_index_iname, keys, vals, params.prefix,
+                                   params.delim);
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) << __func__ << ": ERROR: next_query_by_name failed, rc = " << rc << dendl;
+      return rc;
     }
+    ldpp_dout(dpp, 20) << __func__ << ": items: " << rc << dendl;
+    // Process the returned pairs to add into ListResults.
+     for (int i = 0; i < rc; ++i) {
+      ldpp_dout(dpp, 70) << __func__ << ": key["<<i<<"] :"<<keys[i]<<dendl;
+      if(i == 0 && !next_key.empty()) {
+        ldpp_dout(dpp, 70) << __func__ << ": skipping previous next_key: " << next_key << dendl;
+        continue;
+      }
+      if (vals[i].length() == 0) {
+        results.common_prefixes[keys[i]] = true;
+      } else {
+        rgw_bucket_dir_entry ent;
+        auto iter = vals[i].cbegin();
+        ent.decode(iter);
+        std::string null_ref_key = ent.key.name + "/null";
+        if(keys[i] == null_ref_key){
+          ldpp_dout(dpp, 70) << __func__ << ": skipping key "<<keys[i]<<dendl;
+            continue;
+        }
+        if ( params.list_versions || ent.is_visible()) {
+          if (keycount < max) {
+            results.objs.emplace_back(std::move(ent));
+            ldpp_dout(dpp, 70) << __func__ << ": adding key "<<keys[i]<<" to result"<<dendl;
+          }
+          if (keycount == max) {
+            // One extra key is successfully fetched.
+            results.next_marker = keys[i-1];
+            results.is_truncated = true;
+            ldpp_dout(dpp, 20) << __func__ << ": adding key "<<keys[i-1]<<" to next_marker"<<dendl;
+            break;
+          }
+          keycount++;
+        }
+      }
+    }
+    if(rc == 0 || rc < batch_size || results.is_truncated) {
+      break;
+    }
+    next_key = keys[rc-1]; // next marker key
+    keys.clear();
+    vals.clear();
+    keys.resize(batch_size);
+    vals.resize(batch_size);
   }
-
   return 0;
 }
 
@@ -4898,8 +4921,8 @@ int MotrStore::next_query_by_name(string idx_name,
 
   // Only the first element for keys needs to be set for NEXT query.
   // The keys will be set will the returned keys from motr index.
-  ldout(cctx, 20) <<__func__<< ": index=" << idx_name
-                  << " prefix=" << prefix << " delim=" << delim << dendl;
+  ldout(cctx, 20) <<__func__<< ": index=" << idx_name << " keys[0]=" << key_out[0]
+                  << " prefix=" << prefix << " delim=" << delim  << dendl;
   keys[0].assign(key_out[0].begin(), key_out[0].end());
   for (i = 0; i < (int)val_out.size(); i += k, k = 0) {
     rc = do_idx_next_op(&idx, keys, vals);
