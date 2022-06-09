@@ -2048,7 +2048,11 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   rgw_bucket_category_stats& bkt_stat = bkt_header.stats[RGWObjCategory::Main];
   bkt_stat.num_entries--;
   bkt_stat.total_size -= ent.meta.size;
-  bkt_stat.actual_size -= ent.meta.size;
+
+  uint64_t lid = M0_OBJ_LAYOUT_ID(source->mobj->ob_attr.oa_layout_id);
+  uint64_t unit_sz = m0_obj_layout_id_to_unit_size(lid);
+  uint64_t size_rounded = roundup(ent.meta.size, unit_sz);
+  bkt_stat.actual_size -= size_rounded;
 
   bl.clear();
   bkt_header.encode(bl);
@@ -3435,7 +3439,10 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   rgw_bucket_category_stats& bkt_stat = bkt_header.stats[RGWObjCategory::Main];
   bkt_stat.num_entries++;
   bkt_stat.total_size += total_data_size;
-  bkt_stat.actual_size += total_data_size;
+  uint64_t lid = M0_OBJ_LAYOUT_ID(obj.meta.layout_id);
+  uint64_t unit_sz = m0_obj_layout_id_to_unit_size(lid);
+  uint64_t size_rounded = roundup(ent.meta.size, unit_sz);
+  bkt_stat.actual_size += size_rounded;
 
   bl.clear();
   bkt_header.encode(bl);
