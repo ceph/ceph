@@ -1405,7 +1405,7 @@ Changelog
 * rgw/http/notifications: support content type in HTTP POST messages (`pr#42644 <https://github.com/ceph/ceph/pull/42644>`_, Yuval Lifshitz)
 * rgw/multisite: return correct error code when op fails (`pr#42646 <https://github.com/ceph/ceph/pull/42646>`_, Yuval Lifshitz)
 * rgw/notification: add exception handling for persistent notification thread (`pr#42647 <https://github.com/ceph/ceph/pull/42647>`_, Yuval Lifshitz)
-* rgw/notification: fix persistent notification hang when ack-levl=none (`pr#40696 <https://github.com/ceph/ceph/pull/40696>`_, Yuval Lifshitz)
+* rgw/notification: fix persistent notification hang when ack-level=none (`pr#40696 <https://github.com/ceph/ceph/pull/40696>`_, Yuval Lifshitz)
 * rgw/notification: fixing the "persistent=false" flag (`pr#40695 <https://github.com/ceph/ceph/pull/40695>`_, Yuval Lifshitz)
 * rgw/notifications: delete bucket notification object when empty (`pr#42631 <https://github.com/ceph/ceph/pull/42631>`_, Yuval Lifshitz)
 * rgw/notifications: support metadata filter in CompleteMultipartUpload and Copy events (`pr#42321 <https://github.com/ceph/ceph/pull/42321>`_, Yuval Lifshitz)

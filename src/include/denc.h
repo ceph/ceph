@@ -156,8 +156,8 @@ template<typename T> int DencDumper<T>::i = 0;
 
 /*
 
-  top level level functions look like so
-  ======================================
+  top level functions look like so
+  ================================
 
     inline void denc(const T& o, size_t& p, uint64_t features=0);
     inline void denc(const T& o, ceph::buffer::list::contiguous_appender& p,
