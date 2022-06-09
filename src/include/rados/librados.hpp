@@ -1044,7 +1044,7 @@ inline namespace v14_2_0 {
      * Asynchronously read from an object at a particular snapshot
      *
      * This is the same as normal aio_read, except that it chooses
-     * the snapshot to read from from its arguments instead of the
+     * the snapshot to read from its arguments instead of the
      * internal IoCtx state.
      *
      * The return value of the completion will be number of bytes read on
@@ -1068,7 +1068,7 @@ inline namespace v14_2_0 {
      * particular snapshot
      *
      * This is the same as normal aio_sparse_read, except that it chooses
-     * the snapshot to read from from its arguments instead of the
+     * the snapshot to read from its arguments instead of the
      * internal IoCtx state.
      *
      * m will be filled in with a map of extents in the object,
