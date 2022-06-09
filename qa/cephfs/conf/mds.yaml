@@ -3,6 +3,7 @@ overrides:
     conf:
       mds:
         debug mds: 20
+        debug mds balancer: 20
         debug ms: 1
         mds debug frag: true
         mds debug scatterstat: true
