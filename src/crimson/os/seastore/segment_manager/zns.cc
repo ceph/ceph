@@ -7,14 +7,10 @@
 
 #include "crimson/os/seastore/segment_manager/zns.h"
 #include "crimson/common/config_proxy.h"
-#include "crimson/common/log.h"
+#include "crimson/os/seastore/logging.h"
 #include "include/buffer.h"
 
-namespace {
-seastar::logger &logger(){
-  return crimson::get_logger(ceph_subsys_seastore_device);
-}
-}
+SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore::segment_manager::zns {
 
@@ -24,19 +20,19 @@ static open_device_ret open_device(
   const std::string &path,
   seastar::open_flags mode)
 {
+  LOG_PREFIX(ZNSSegmentManager::open_device);
   return seastar::file_stat(
     path, seastar::follow_symlink::yes
-  ).then([mode, &path](auto stat) mutable{
-    return seastar::open_file_dma(path, mode).then([=](auto file){
-      logger().error(
-	"open_device: open successful, size {}",
-	stat.size);
+  ).then([FNAME, mode, &path](auto stat) mutable {
+    return seastar::open_file_dma(path, mode).then([=](auto file) {
+       DEBUG("open of device {} successful, size {}",
+        path,
+        stat.size);
       return std::make_pair(file, stat);
     });
   }).handle_exception(
-    [](auto e) -> open_device_ret {
-      logger().error(
-	"open_device: got error {}",
+    [FNAME](auto e) -> open_device_ret {
+	ERROR("got error {}",
 	e);
       return crimson::ct_error::input_output_error::make();
     }
@@ -50,6 +46,7 @@ static zns_sm_metadata_t make_metadata(
   size_t zone_capacity,
   size_t num_zones)
 {
+  LOG_PREFIX(ZNSSegmentManager::make_metadata);
   using crimson::common::get_conf;
   
   auto config_size = get_conf<Option::size_t>(
@@ -59,15 +56,12 @@ static zns_sm_metadata_t make_metadata(
   
   auto config_segment_size = get_conf<Option::size_t>(
     "seastore_segment_size");
-  logger().error("CONFIG SIZE: {}", config_segment_size);
+  INFO("config segment size: {}", config_segment_size);
   size_t zones_per_segment = config_segment_size / zone_capacity;
-  
   size_t segments = (num_zones - 1) * zones_per_segment;
   
-  logger().debug(
-    "{}: size {}, block_size {}, allocated_size {}, configured_size {}, "
+  INFO("size {}, block_size {}, allocated_size {}, configured_size {}, "
     "segment_size {}",
-    __func__,
     data.size,
     data.block_size,
     data.allocated_size,
@@ -153,8 +147,8 @@ static write_ertr::future<> do_write(
   uint64_t offset,
   bufferptr &bptr)
 {
-  logger().debug(
-    "zns: do_write offset {} len {}",
+  LOG_PREFIX(ZNSSegmentManager::do_write);
+  DEBUG("offset {} len {}",
     offset,
     bptr.length());
   return device.dma_write(
@@ -162,9 +156,8 @@ static write_ertr::future<> do_write(
     bptr.c_str(),
     bptr.length() 
   ).handle_exception(
-    [](auto e) -> write_ertr::future<size_t> {
-      logger().error(
-        "do_write: dma_write got error {}",
+    [FNAME](auto e) -> write_ertr::future<size_t> {
+      ERROR("dma_write got error {}",
         e);
       return crimson::ct_error::input_output_error::make();
     }
@@ -182,8 +175,8 @@ static write_ertr::future<> do_writev(
   bufferlist&& bl,
   size_t block_size)
 {
-  logger().error(
-    "block: do_writev offset {} len {}",
+  LOG_PREFIX(ZNSSegmentManager::do_writev);
+  DEBUG("offset {} len {}",
     offset,
     bl.length());
   // writev requires each buffer to be aligned to the disks' block
@@ -196,9 +189,8 @@ static write_ertr::future<> do_writev(
     offset,
     std::move(iov)
   ).handle_exception(
-    [](auto e) -> write_ertr::future<size_t> {
-      logger().error(
-	"do_writev: dma_write got error {}",
+    [FNAME](auto e) -> write_ertr::future<size_t> {
+      ERROR("dma_write got error {}",
 	e);
       return crimson::ct_error::input_output_error::make();
     }
@@ -218,15 +210,16 @@ write_metadata(seastar::file &device, zns_sm_metadata_t sb)
 	 sb.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
-    [=, &device](auto &bp){
-      logger().error("BLOCK SIZE: {}", sb.block_size);
+    [=, &device](auto &bp) {
+      LOG_PREFIX(ZNSSegmentManager::write_metadata);
+      DEBUG("block_size {}", sb.block_size);
       bufferlist bl;
       encode(sb, bl);
       auto iter = bl.begin();
       assert(bl.length() < sb.block_size);
-      logger().error("{}", bl.length());
+      DEBUG("buffer length {}", bl.length());
       iter.copy(bl.length(), bp.c_str());
-      logger().debug("write_metadata: doing writeout");
+      DEBUG("doing writeout");
       return do_write(device, 0, bp);
     });
 }
@@ -237,9 +230,9 @@ static read_ertr::future<> do_read(
   size_t len,
   bufferptr &bptr)
 {
+  LOG_PREFIX(ZNSSegmentManager::do_read);
   assert(len <= bptr.length());
-  logger().debug(
-    "block: do_read offset {} len {}",
+  DEBUG("offset {} len {}",
     offset,
     len);
   return device.dma_read(
@@ -247,9 +240,8 @@ static read_ertr::future<> do_read(
     bptr.c_str(),
     len
   ).handle_exception(
-    [](auto e) -> read_ertr::future<size_t> {
-      logger().error(
-        "do_read: dma_read got error {}",
+    [FNAME](auto e) -> read_ertr::future<size_t> {
+      ERROR("dma_read got error {}",
         e);
       return crimson::ct_error::input_output_error::make();
     }
@@ -305,7 +297,8 @@ ZNSSegmentManager::mount_ret ZNSSegmentManager::mount()
 ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
   device_config_t config)
 {
-  logger().error("ZNSSegmentManager::mkfs: starting");
+  LOG_PREFIX(ZNSSegmentManager::mkfs);
+  INFO("starting, device_path {}", device_path);
   return seastar::do_with(
     seastar::file{},
     seastar::stat_data{},
@@ -313,7 +306,6 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
     size_t(),
     size_t(),
     [=](auto &device, auto &stat, auto &sb, auto &zone_size, auto &nr_zones){
-      logger().error("ZNSSegmentManager::mkfs path {}", device_path);
       return open_device(
 	device_path, 
 	seastar::open_flags::rw
@@ -333,7 +325,7 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
 	  return reset_device(device, zone_size, nr_zones);
 	}).then([&] {
 	  return get_zone_capacity(device, zone_size, nr_zones); 
-	}).then([&, config] (auto zone_capacity){
+	}).then([&, FNAME, config] (auto zone_capacity){
 	  sb = make_metadata(
 	    config.meta, 
 	    stat, 
@@ -343,13 +335,13 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
 	  metadata = sb;
 	  stats.metadata_write.increment(
 	    ceph::encoded_sizeof_bounded<zns_sm_metadata_t>());
-	  logger().error("WROTE TO STATS");
+	  DEBUG("Wrote to stats.");
 	  return write_metadata(device, sb);
-	}).finally([&] {
-	  logger().error("CLOSING DEVICE");
+	}).finally([&, FNAME] {
+	  DEBUG("Closing device.");
 	  return device.close(); 
-	}).safe_then([] {
-	  logger().error("RETURNING FROM MKFS");
+	}).safe_then([FNAME] {
+	  DEBUG("Returning from mkfs.");
 	  return mkfs_ertr::now();
 	});
       });
@@ -393,6 +385,7 @@ blk_open_zone_ret blk_open_zone(seastar::file &device, blk_zone_range &range){
 ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
   segment_id_t id)
 {
+  LOG_PREFIX(ZNSSegmentManager::open);
   return seastar::do_with(
     blk_zone_range{},
     [=] (auto &range){
@@ -407,7 +400,7 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
       );
     }
   ).safe_then([=] {
-    logger().error("open _segment: open successful");
+    DEBUG("segment open successful");
     return open_ertr::future<SegmentRef>(
       open_ertr::ready_future_marker{},
       SegmentRef(new ZNSSegment(*this, id))
@@ -443,6 +436,7 @@ blk_close_zone_ret blk_close_zone(
 ZNSSegmentManager::release_ertr::future<> ZNSSegmentManager::release(
   segment_id_t id) 
 {
+  LOG_PREFIX(ZNSSegmentManager::release);
   return seastar::do_with(
     blk_zone_range{},
     [=] (auto &range){
@@ -457,7 +451,7 @@ ZNSSegmentManager::release_ertr::future<> ZNSSegmentManager::release(
       );
     }
   ).safe_then([=] {
-    logger().error("release _segment: release successful");
+    DEBUG("segment release successful");
     return release_ertr::now();
   });
 }
@@ -467,17 +461,16 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
   size_t len,
   ceph::bufferptr &out)
 {
+  LOG_PREFIX(ZNSSegmentManager::read);
   auto& seg_addr = addr.as_seg_paddr();
   if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {
-    logger().error(
-      "ZNSSegmentManager::read: invalid segment {}",
+    ERROR("invalid segment {}",
       addr);
     return crimson::ct_error::invarg::make();
   }
   
   if (seg_addr.get_segment_off() + len > metadata.zone_size) {
-    logger().error(
-      "ZNSSegmentManager::read: invalid offset {}~{}!",
+    ERROR("invalid offset {}, len {}",
       addr,
       len);
     return crimson::ct_error::invarg::make();
@@ -492,6 +485,7 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
 Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
   segment_id_t id, seastore_off_t write_pointer)
 {
+  LOG_PREFIX(ZNSSegmentManager::close);
   return seastar::do_with(
     blk_zone_range{},
     [=] (auto &range){
@@ -506,7 +500,7 @@ Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
       );
     }
   ).safe_then([=] {
-    logger().error("open _segment: open successful");
+    DEBUG("close successful");
     return Segment::close_ertr::now();
   });
 }
@@ -516,12 +510,11 @@ Segment::write_ertr::future<> ZNSSegmentManager::segment_write(
   ceph::bufferlist bl,
   bool ignore_check)
 {
+  LOG_PREFIX(ZNSSegmentManager::segment_write);
   assert(addr.get_device_id() == get_device_id());
   assert((bl.length() % metadata.block_size) == 0);
   auto& seg_addr = addr.as_seg_paddr();
-  logger().debug(
-    "BlockSegmentManager::segment_write: "
-    "segment_write to segment {} at offset {}, physical offset {}, len {}",
+  DEBUG("write to segment {} at offset {}, physical offset {}, len {}",
     seg_addr.get_segment_id(),
     seg_addr.get_segment_off(),
     get_offset(addr),
@@ -570,10 +563,9 @@ Segment::close_ertr::future<> ZNSSegment::close()
 Segment::write_ertr::future<> ZNSSegment::write(
   seastore_off_t offset, ceph::bufferlist bl)
 {
+  LOG_PREFIX(ZNSSegment::write);
   if (offset < write_pointer || offset % manager.metadata.block_size != 0) {
-    logger().error(
-      "ZNSSegmentManager::ZNSSegment::write: "
-      "invalid segment write on segment {} to offset {}",
+    ERROR("invalid segment write on segment {} to offset {}",
       id,
       offset);
     return crimson::ct_error::invarg::make();
