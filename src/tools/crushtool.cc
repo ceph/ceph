@@ -205,7 +205,7 @@ void usage()
   cout << "   --dump                dump the crush map\n";
   cout << "   --tree                print map summary as a tree\n";
   cout << "   --bucket-tree         print bucket map summary as a tree\n";
-  cout << "   --bucket-name         specify bucket bucket name for bucket-tree\n";
+  cout << "   --bucket-name         specify bucket name for bucket-tree\n";
   cout << "   --check [max_id]      check if any item is referencing an unknown name/type\n";
   cout << "   -i mapfn --show-location id\n";
   cout << "                         show location for given device id\n";
