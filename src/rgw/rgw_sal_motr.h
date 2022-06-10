@@ -791,7 +791,7 @@ class MotrAtomicWriter : public Writer {
   // Process a bufferlist
   virtual int process(bufferlist&& data, uint64_t offset) override;
 
-  int write();
+  int write(bool last=false);
 
   // complete the operation and make its result visible to clients
   virtual int complete(size_t accounted_size, const std::string& etag,
