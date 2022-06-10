@@ -901,6 +901,17 @@ void rgw_build_iam_environment(rgw::sal::Store* store,
     s->env.emplace("aws:UserAgent", i->second);
   }
 
+  i = m.find("QUERY_STRING"); {
+    std::size_t pos = (i->second).find("versionId");
+    if( pos != string::npos) {
+      std::size_t pos2 = (i->second).find("&", pos);
+      if( pos2 == string::npos) //end of the string reached
+        s->env.emplace("s3:VersionId", (i->second).substr(pos + 10));
+      else
+        s->env.emplace("s3:VersionId", (i->second).substr(pos + 10, pos2 - 10));
+    }
+  }
+
   if (s->user) {
     // What to do about aws::userid? One can have multiple access
     // keys so that isn't really suitable. Do we have a durable
