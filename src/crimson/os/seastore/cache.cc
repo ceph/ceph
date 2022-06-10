@@ -494,6 +494,7 @@ void Cache::register_metrics()
   auto register_tree_metrics = [&labels_by_src, &onode_label, &omap_label, this](
       const sm::label_instance& tree_label,
       uint64_t& tree_depth,
+      int64_t& tree_extents_num,
       counter_by_src_t<tree_efforts_t>& committed_tree_efforts,
       counter_by_src_t<tree_efforts_t>& invalidated_tree_efforts) {
     metrics.add_group(
@@ -505,6 +506,12 @@ void Cache::register_metrics()
           sm::description("the depth of tree"),
           {tree_label}
         ),
+	sm::make_counter(
+	  "tree_extents_num",
+	  tree_extents_num,
+	  sm::description("num of extents of the tree"),
+	  {tree_label}
+	)
       }
     );
     for (auto& [src, src_label] : labels_by_src) {
@@ -566,21 +573,25 @@ void Cache::register_metrics()
   register_tree_metrics(
       onode_label,
       stats.onode_tree_depth,
+      stats.onode_tree_extents_num,
       stats.committed_onode_tree_efforts,
       stats.invalidated_onode_tree_efforts);
   register_tree_metrics(
       omap_label,
       stats.omap_tree_depth,
+      stats.omap_tree_extents_num,
       stats.committed_omap_tree_efforts,
       stats.invalidated_omap_tree_efforts);
   register_tree_metrics(
       lba_label,
       stats.lba_tree_depth,
+      stats.lba_tree_extents_num,
       stats.committed_lba_tree_efforts,
       stats.invalidated_lba_tree_efforts);
   register_tree_metrics(
       backref_label,
       stats.backref_tree_depth,
+      stats.backref_tree_extents_num,
       stats.committed_backref_tree_efforts,
       stats.invalidated_backref_tree_efforts);
 
@@ -1259,11 +1270,15 @@ record_t Cache::prepare_record(
   if (t.lba_tree_stats.depth) {
     stats.lba_tree_depth = t.lba_tree_stats.depth;
   }
+  stats.lba_tree_extents_num += t.lba_tree_stats.extents_num_delta;
+  ceph_assert(stats.lba_tree_extents_num >= 0);
   get_by_src(stats.committed_lba_tree_efforts, trans_src
       ).increment(t.lba_tree_stats);
   if (t.backref_tree_stats.depth) {
     stats.backref_tree_depth = t.backref_tree_stats.depth;
   }
+  stats.backref_tree_extents_num += t.backref_tree_stats.extents_num_delta;
+  ceph_assert(stats.backref_tree_extents_num >= 0);
   get_by_src(stats.committed_backref_tree_efforts, trans_src
       ).increment(t.backref_tree_stats);
 
