@@ -1032,11 +1032,6 @@ void RGWGetObjTags::execute(optional_yield y)
   s->object->set_atomic();
 
   op_ret = s->object->get_obj_attrs(y, this);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
-        << " ret=" << op_ret << dendl;
-    return;
-  }
 
   attrs = s->object->get_attrs();
   auto tags = attrs.find(RGW_ATTR_TAGS);

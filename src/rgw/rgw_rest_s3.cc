@@ -632,6 +632,8 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
 
 void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 {
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
   dump_start(s);
@@ -709,15 +711,11 @@ void RGWPutObjTags_ObjStore_S3::send_response()
 
 void RGWDeleteObjTags_ObjStore_S3::send_response()
 {
-  int r = op_ret;
-  if (r == -ENOENT)
-    r = 0;
-  if (!r)
-    r = STATUS_NO_CONTENT;
-
-  set_req_state_err(s, r);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, this);
+  end_header(s, this, "application/xml");
+  dump_start(s);
 }
 
 void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
