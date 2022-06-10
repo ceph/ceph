@@ -565,7 +565,7 @@ private:
     auto start_iter = backref_inserted_set.lower_bound(
       start,
       backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_inserted_set.upper_bound(
+    auto end_iter = backref_inserted_set.lower_bound(
       end,
       backref_buf_entry_t::cmp_t());
     std::set<
@@ -587,7 +587,7 @@ private:
     auto start_iter = backref_remove_set.lower_bound(
       start,
       backref_buf_entry_t::cmp_t());
-    auto end_iter = backref_remove_set.upper_bound(
+    auto end_iter = backref_remove_set.lower_bound(
       end,
       backref_buf_entry_t::cmp_t());
     std::set<
