@@ -948,7 +948,8 @@ SegmentCleaner::gc_reclaim_space_ret SegmentCleaner::gc_reclaim_space()
 		  return _retrieve_live_extents(
 		    t, std::move(backrefs), extents);
 		}).si_then([this, &seq, &t](auto nseq) {
-		  if (nseq != JOURNAL_SEQ_NULL && nseq > seq)
+		  if (nseq != JOURNAL_SEQ_NULL &&
+		      (nseq > seq || seq == JOURNAL_SEQ_NULL))
 		    seq = nseq;
 		  auto fut = BackrefManager::merge_cached_backrefs_iertr::now();
 		  if (seq != JOURNAL_SEQ_NULL) {
