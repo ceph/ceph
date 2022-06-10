@@ -679,11 +679,16 @@ int CephContext::_do_command(
 CephContext::CephContext(uint32_t module_type_,
                          enum code_environment_t code_env,
                          int init_flags_)
+  :CephContext(module_type_, create_options{code_env, init_flags_, nullptr})
+{}
+
+CephContext::CephContext(uint32_t module_type_,
+			 const create_options& options)
   : nref(1),
-    _conf{code_env == CODE_ENVIRONMENT_DAEMON},
+    _conf{options.code_env == CODE_ENVIRONMENT_DAEMON},
     _log(NULL),
     _module_type(module_type_),
-    _init_flags(init_flags_),
+    _init_flags(options.init_flags),
     _set_uid(0),
     _set_gid(0),
     _set_uid_string(),
@@ -703,7 +708,11 @@ CephContext::CephContext(uint32_t module_type_,
 #endif
     crush_location(this)
 {
-  _log = new ceph::logging::Log(&_conf->subsys);
+  if (options.create_log) {
+    _log = options.create_log(&_conf->subsys);
+  } else {
+    _log = new ceph::logging::Log(&_conf->subsys);
+  }
 
   _log_obs = new LogObs(_log);
   _conf.add_observer(_log_obs);
