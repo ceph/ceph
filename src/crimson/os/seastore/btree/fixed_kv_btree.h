@@ -1402,6 +1402,7 @@ private:
       root.set_location(nroot->get_paddr());
       root.set_depth(iter.get_depth());
       get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
+      get_tree_stats<self_type>(c.trans).extents_num_delta++;
       root_dirty = true;
     }
 
@@ -1431,6 +1432,7 @@ private:
         *right);
       c.cache.retire_extent(c.trans, pos.node);
 
+      get_tree_stats<self_type>(c.trans).extents_num_delta++;
       return std::make_pair(left, right);
     };
 
@@ -1546,6 +1548,7 @@ private:
                   iter.internal.pop_back();
                   root.set_depth(iter.get_depth());
                   get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
+                  get_tree_stats<self_type>(c.trans).extents_num_delta--;
                   root_dirty = true;
                 } else {
                   SUBTRACET(seastore_fixedkv_tree, "no need to collapse root", c.trans);
@@ -1656,6 +1659,7 @@ private:
         SUBTRACET(seastore_fixedkv_tree, "l: {}, r: {}, replacement: {}", c.trans, *l, *r, *replacement);
         c.cache.retire_extent(c.trans, l);
         c.cache.retire_extent(c.trans, r);
+        get_tree_stats<self_type>(c.trans).extents_num_delta--;
       } else {
         LOG_PREFIX(FixedKVBtree::merge_level);
         auto [replacement_l, replacement_r, pivot] =
