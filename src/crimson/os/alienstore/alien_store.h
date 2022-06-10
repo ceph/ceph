@@ -137,6 +137,7 @@ private:
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string type;
   const std::string path;
+  const ConfigValues values;
   uint64_t used_bytes = 0;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
