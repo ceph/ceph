@@ -299,6 +299,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
     RESTArgs::get_int64(s, "max-size-kb", old_max_size_kb, &max_size_kb, &has_max_size_kb);
     if (has_max_size_kb)
       quota.max_size = max_size_kb * 1024;
+    RESTArgs::get_bool(s, "check-on-raw", old_quota->check_on_raw, &quota.check_on_raw);
     RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
   }
 
