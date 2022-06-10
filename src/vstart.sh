@@ -252,6 +252,7 @@ options:
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--fsid <uuid>: use the specified uuid for the cluster ID instead of generating a random one
 \n
 EOF
 
@@ -532,6 +533,11 @@ case $1 in
         with_jaeger=1
         echo "with_jaeger $with_jaeger"
         ;;
+    --fsid)
+        [ -z "$2" ] && usage_exit
+        fsid="$2"
+        shift
+        ;;
     *)
         usage_exit
 esac
@@ -686,7 +692,7 @@ prepare_conf() {
         num ganesha = $GANESHA_DAEMON_NUM
 
 [global]
-        fsid = $(uuidgen)
+        fsid = ${fsid:-`uuidgen`}
         osd failsafe full ratio = .99
         mon osd full ratio = .99
         mon osd nearfull ratio = .99
