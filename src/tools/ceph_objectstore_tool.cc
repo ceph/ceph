@@ -447,7 +447,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
     ostringstream oss;
     ceph_assert(struct_ver > 0);
     PGLog::read_log_and_missing(
-      g_ceph_context, fs, ch,
+      fs, ch,
       pgid.make_pgmeta_oid(),
       info, log, missing,
       oss,
