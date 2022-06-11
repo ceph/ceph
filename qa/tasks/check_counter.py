@@ -30,6 +30,9 @@ class CheckCounter(Task):
         counters:
             mds:
                 - "mds.dir_split"
+                -
+                    name: "mds.dir_update"
+                    min: 3
     - workunit: ...
     """
 
@@ -54,6 +57,7 @@ class CheckCounter(Task):
                              self.ctx.daemons.get_daemon(daemon_type, daemon_id))
                             for daemon_id in daemon_ids])
 
+            expected = set()
             seen = set()
 
             for daemon_id, daemon in daemons.items():
@@ -73,22 +77,29 @@ class CheckCounter(Task):
                     continue
 
                 for counter in counters:
-                    subsys, counter_id = counter.split(".")
+                    if isinstance(counter, dict):
+                        name = counter['name']
+                        minval = counter['min']
+                    else:
+                        name = counter
+                        minval = 1
+                    expected.add(name)
+                    subsys, counter_id = name.split(".")
                     if subsys not in perf_dump or counter_id not in perf_dump[subsys]:
                         log.warning("Counter '{0}' not found on daemon {1}.{2}".format(
-                            counter, daemon_type, daemon_id))
+                            name, daemon_type, daemon_id))
                         continue
                     value = perf_dump[subsys][counter_id]
 
                     log.info("Daemon {0}.{1} {2}={3}".format(
-                        daemon_type, daemon_id, counter, value
+                        daemon_type, daemon_id, name, value
                     ))
 
-                    if value > 0:
-                        seen.add(counter)
+                    if value >= minval:
+                        seen.add(name)
 
             if not dry_run:
-                unseen = set(counters) - set(seen)
+                unseen = set(expected) - set(seen)
                 if unseen:
                     raise RuntimeError("The following counters failed to be set "
                                        "on {0} daemons: {1}".format(
