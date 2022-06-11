@@ -8,6 +8,8 @@
 #include <string.h>
 #include <netdb.h>
 
+#include <fmt/format.h>
+
 #include "common/Formatter.h"
 
 bool entity_name_t::parse(std::string_view s)
@@ -413,13 +415,9 @@ std::string entity_addr_t::ip_only_to_str() const
 
 std::string entity_addr_t::ip_n_port_to_str() const
 {
-  std::string addr;
-  addr += ip_only_to_str();
   if (is_ipv6()) {
-    addr = '[' + addr + ']';
+    return fmt::format("[{}]:{}", ip_only_to_str(), get_port());
+  } else {
+    return fmt::format("{}:{}", ip_only_to_str(), get_port());
   }
-  addr += ':';
-  addr += std::to_string(get_port());
-  return addr;
 }
-
