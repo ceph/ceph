@@ -235,6 +235,13 @@ class ScrubQueue {
      */
     std::atomic_bool updated{false};
 
+    /**
+     * the scrubber is waiting for locked objects to be unlocked.
+     * Set after a grace period has passed.
+     */
+    bool blocked{false};
+    utime_t blocked_since{};
+
     utime_t penalty_timeout{0, 0};
 
     CephContext* cct;
@@ -376,6 +383,11 @@ class ScrubQueue {
   void dec_scrubs_remote();
   void dump_scrub_reservations(ceph::Formatter* f) const;
 
+  /// counting the number of PGs stuck while scrubbing, waiting for objects
+  void mark_pg_scrub_blocked(spg_t blocked_pg);
+  void clear_pg_scrub_blocked(spg_t blocked_pg);
+  int get_blocked_pgs_count() const;
+
   /**
    * Pacing the scrub operation by inserting delays (mostly between chunks)
    *
@@ -459,6 +471,18 @@ class ScrubQueue {
   // the counters used to manage scrub activity parallelism:
   int scrubs_local{0};
   int scrubs_remote{0};
+
+  /**
+   * The scrubbing of PGs might be delayed if the scrubbed chunk of objects is
+   * locked by some other operation. A bug might cause this to be an infinite
+   * delay. If that happens, the OSDs "scrub resources" (i.e. the
+   * counters that limit the number of concurrent scrub operations) might
+   * be exhausted.
+   * We do issue a cluster-log warning in such occasions, but that message is
+   * easy to miss. The 'some pg is blocked' global flag is used to note the
+   * existence of such a situation in the scrub-queue log messages.
+   */
+  std::atomic_int_fast16_t blocked_scrubs_cnt{0};
 
   std::atomic_bool a_pg_is_reserving{false};
 
