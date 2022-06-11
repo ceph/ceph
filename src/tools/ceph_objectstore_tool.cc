@@ -736,6 +736,82 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
   return 0;
 }
 
+int do_trim_pg_log_dups(ObjectStore *store, const coll_t &coll,
+		   pg_info_t &info, const spg_t &pgid,
+		   epoch_t map_epoch,
+		   PastIntervals &past_intervals)
+{
+  ghobject_t oid = pgid.make_pgmeta_oid();
+  struct stat st;
+  auto ch = store->open_collection(coll);
+  int r = store->stat(ch, oid, &st);
+  ceph_assert(r == 0);
+  ceph_assert(st.st_size == 0);
+
+  const size_t max_dup_entries = g_ceph_context->_conf->osd_pg_log_dups_tracked;
+  ceph_assert(max_dup_entries > 0);
+  const size_t max_chunk_size = g_ceph_context->_conf->osd_pg_log_trim_max;
+  ceph_assert(max_chunk_size > 0);
+
+  cout << "max_dup_entries=" << max_dup_entries
+       << " max_chunk_size=" << max_chunk_size << std::endl;
+  if (dry_run) {
+    cout << "Dry run enabled, so when many chunks are needed,"
+	 << " the trimming will never stop!" << std::endl;
+  }
+
+  set<string> keys_to_keep;
+  size_t num_removed = 0;
+  do {
+    set<string> keys_to_trim;
+    {
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch, oid);
+    if (!p)
+      break;
+    for (p->seek_to_first(); p->valid(); p->next()) {
+      if (p->key()[0] == '_')
+	continue;
+      if (p->key() == "can_rollback_to")
+	continue;
+      if (p->key() == "divergent_priors")
+	continue;
+      if (p->key() == "rollback_info_trimmed_to")
+	continue;
+      if (p->key() == "may_include_deletes_in_missing")
+	continue;
+      if (p->key().substr(0, 7) == string("missing"))
+	continue;
+      if (p->key().substr(0, 4) != string("dup_"))
+	continue;
+      keys_to_keep.insert(p->key());
+      if (keys_to_keep.size() > max_dup_entries) {
+	auto oldest_to_keep = keys_to_keep.begin();
+      	keys_to_trim.emplace(*oldest_to_keep);
+	keys_to_keep.erase(oldest_to_keep);
+      }
+      if (keys_to_trim.size() >= max_chunk_size) {
+	break;
+      }
+    }
+    } // deconstruct ObjectMapIterator
+    // delete the keys
+    num_removed = keys_to_trim.size();
+    if (!dry_run && !keys_to_trim.empty()) {
+      cout << "Removing keys " << *keys_to_trim.begin() << " - " << *keys_to_trim.rbegin() << std::endl;
+      ObjectStore::Transaction t;
+      t.omap_rmkeys(coll, oid, keys_to_trim);
+      store->queue_transaction(ch, std::move(t));
+      ch->flush();
+    }
+  } while (num_removed == max_chunk_size);
+
+  // compact the db since we just removed a bunch of data
+  cerr << "Finished trimming, now compacting..." << std::endl;
+  if (!dry_run)
+    store->compact();
+  return 0;
+}
+
 const int OMAP_BATCH_SIZE = 25;
 void get_omap_batch(ObjectMap::ObjectMapIterator &iter, map<string, bufferlist> &oset)
 {
@@ -3219,12 +3295,12 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory for info, log, remove, export, export-remove, mark-complete, trim-pg-log, and mandatory for apply-layout-settings if --pool is not specified")
+     "PG id, mandatory for info, log, remove, export, export-remove, mark-complete, trim-pg-log, trim-pg-log-dups and mandatory for apply-layout-settings if --pool is not specified")
     ("pool", po::value<string>(&pool),
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, list-slow-omap, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log, statfs]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log, trim-pg-log-dups statfs]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -3793,7 +3869,8 @@ int main(int argc, char **argv)
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
       || op == "export-remove" || op == "mark-complete"
       || op == "reset-last-complete"
-      || op == "trim-pg-log") &&
+      || op == "trim-pg-log"
+      || op == "trim-pg-log-dups") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
@@ -4020,9 +4097,9 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log") {
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, statfs)"
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, trim-pg-log-dups statfs)"
 	 << std::endl;
     usage(desc);
     ret = 1;
@@ -4374,6 +4451,15 @@ int main(int argc, char **argv)
 	goto out;
       }
       cout << "Finished trimming pg log" << std::endl;
+      goto out;
+    } else if (op == "trim-pg-log-dups") {
+      ret = do_trim_pg_log_dups(fs.get(), coll, info, pgid,
+			   map_epoch, past_intervals);
+      if (ret < 0) {
+	cerr << "Error trimming pg log dups: " << cpp_strerror(ret) << std::endl;
+	goto out;
+      }
+      cout << "Finished trimming pg log dups" << std::endl;
       goto out;
     } else if (op == "reset-last-complete") {
       if (!force) {
