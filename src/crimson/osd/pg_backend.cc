@@ -80,18 +80,18 @@ PGBackend::load_metadata(const hobject_t& oid)
     coll,
     ghobject_t{oid, ghobject_t::NO_GEN, shard})).safe_then_interruptible(
       [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
-	loaded_object_md_t::ref ret(new loaded_object_md_t());
-	if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
-	  bufferlist bl = std::move(oiiter->second);
-	  ret->os = ObjectState(
-	    object_info_t(bl, oid),
-	    true);
-	} else {
-	  logger().error(
-	    "load_metadata: object {} present but missing object info",
-	    oid);
-	  return crimson::ct_error::object_corrupted::make();
-	}
+        loaded_object_md_t::ref ret(new loaded_object_md_t());
+        if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
+          bufferlist bl = std::move(oiiter->second);
+          ret->os = ObjectState(
+            object_info_t(bl, oid),
+            true);
+        } else {
+          logger().error(
+            "load_metadata: object {} present but missing object info",
+            oid);
+          return crimson::ct_error::object_corrupted::make();
+        }
 
         if (oid.is_head()) {
           // Returning object_corrupted when the object exsits and the
@@ -121,22 +121,22 @@ PGBackend::load_metadata(const hobject_t& oid)
               "load_metadata: object {} present but missing snapset",
               oid);
             return crimson::ct_error::object_corrupted::make();
-	  }
-	}
+          }
+        }
 
-	return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
-	  std::move(ret));
+        return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+          std::move(ret));
       }, crimson::ct_error::enoent::handle([oid] {
-	logger().debug(
-	  "load_metadata: object {} doesn't exist, returning empty metadata",
-	  oid);
-	return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
-	  new loaded_object_md_t{
-	    ObjectState(
-	      object_info_t(oid),
-	      false),
-	    oid.is_head() ? (new crimson::osd::SnapSetContext(oid)) : nullptr
-	  });
+        logger().debug(
+          "load_metadata: object {} doesn't exist, returning empty metadata",
+          oid);
+        return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+          new loaded_object_md_t{
+            ObjectState(
+              object_info_t(oid),
+              false),
+            oid.is_head() ? (new crimson::osd::SnapSetContext(oid)) : nullptr
+          });
       }));
 }
 
