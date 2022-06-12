@@ -22,18 +22,20 @@ class RGWMPObj;
 struct RGWUploadPartInfo {
   uint32_t num;
   uint64_t size;
+  uint64_t size_rounded{0};
   uint64_t accounted_size{0};
   std::string etag;
   ceph::real_time modified;
   RGWObjManifest manifest;
   RGWCompressionInfo cs_info;
 
-  RGWUploadPartInfo() : num(0), size(0) {}
+  RGWUploadPartInfo() : num(0), size(0), size_rounded(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 2, bl);
     encode(num, bl);
     encode(size, bl);
+    encode(size_rounded, bl);
     encode(etag, bl);
     encode(modified, bl);
     encode(manifest, bl);
@@ -45,6 +47,7 @@ struct RGWUploadPartInfo {
     DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(num, bl);
     decode(size, bl);
+    decode(size_rounded, bl);
     decode(etag, bl);
     decode(modified, bl);
     if (struct_v >= 3)
