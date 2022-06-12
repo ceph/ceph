@@ -20,7 +20,8 @@ class Group(GroupTemplate):
     NO_GROUP_NAME = "_nogroup"
 
     def __init__(self, fs, vol_spec, groupname):
-        assert groupname != Group.NO_GROUP_NAME
+        if groupname == Group.NO_GROUP_NAME:
+            raise VolumeException(-errno.EPERM, "Operation not permitted for group '{0}' as it is an internal group.".format(groupname))
         self.fs = fs
         self.user_id = None
         self.group_id = None
