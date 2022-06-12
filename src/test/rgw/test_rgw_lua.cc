@@ -340,6 +340,39 @@ TEST(TestRGWLua, Bucket)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, WriteBucket)
+{
+  const std::string script = R"(
+    assert(Request.Bucket)
+    assert(Request.Bucket.Name == "myname")
+    Request.Bucket.Name = "othername"
+  )";
+
+  DEFINE_REQ_STATE;
+  s.init_state.url_bucket = "myname";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+  ASSERT_EQ(s.init_state.url_bucket, "othername");
+}
+
+TEST(TestRGWLua, WriteBucketFail)
+{
+  const std::string script = R"(
+    assert(Request.Bucket)
+    assert(Request.Bucket.Name == "myname")
+    Request.Bucket.Name = "othername"
+  )";
+
+  DEFINE_REQ_STATE;
+  rgw_bucket b;
+  b.name = "myname";
+  s.bucket.reset(new sal::RadosBucket(nullptr, b));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+}
+
 TEST(TestRGWLua, GenericAttributes)
 {
   const std::string script = R"(
