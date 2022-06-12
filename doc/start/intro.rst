@@ -49,10 +49,10 @@ required when running Ceph File System clients.
   Ceph Storage Cluster.
 
 Ceph stores data as objects within logical storage pools. Using the
-:term:`CRUSH` algorithm, Ceph calculates which placement group should
-contain the object, and further calculates which Ceph OSD Daemon
-should store the placement group.  The CRUSH algorithm enables the
-Ceph Storage Cluster to scale, rebalance, and recover dynamically.
+:term:`CRUSH` algorithm, Ceph calculates which placement group (PG) should
+contain the object, and which OSD should store the placement group.  The
+CRUSH algorithm enables the Ceph Storage Cluster to scale, rebalance, and
+recover dynamically.
 
 .. _REST API: ../../mgr/restful
 
