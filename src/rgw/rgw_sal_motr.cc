@@ -1795,6 +1795,13 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   if (rc < 0)
     return rc;
 
+  // In case of un-versioned/suspended case,
+  // GET and HEAD object output should ignore versiodId field.
+  if (!source->have_instance()) {
+    if (ent.key.instance == "null")
+      ent.key.instance.clear();
+  }
+
   // Set source object's attrs. The attrs is key/value map and is used
   // in send_response_data() to set attributes, including etag.
   bufferlist etag_bl;
