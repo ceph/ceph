@@ -56,8 +56,6 @@ function munge_debian_control {
     shift
     local with_seastar=$1
     shift
-    local for_make_check=$1
-    shift
     local control=$1
     case "$version" in
         *squeeze*|*wheezy*)
@@ -71,9 +69,6 @@ function munge_debian_control {
     if $with_jaeger; then
 	sed -i -e 's/^# Jaeger[[:space:]]//g' $control
 	sed -i -e 's/^# Crimson      libyaml-cpp-dev,/d' $control
-    fi
-    if $for_make_check; then
-        sed -i 's/^# Make-Check[[:space:]]/             /g' $control
     fi
     echo $control
 }
@@ -336,7 +331,7 @@ else
 
         in_jenkins && echo "CI_DEBUG: Running munge_debian_control() in install-deps.sh"
 	backports=""
-	control=$(munge_debian_control "$VERSION" "$with_seastar" "$for_make_check" "debian/control")
+	control=$(munge_debian_control "$VERSION" "$with_seastar" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"
@@ -346,8 +341,15 @@ else
 	# make a metapackage that expresses the build dependencies,
 	# install it, rm the .deb; then uninstall the package as its
 	# work is done
+	build_profiles=""
+	if $for_make_check; then
+	    build_profiles+=",pkg.ceph.check"
+	fi
         in_jenkins && echo "CI_DEBUG: Running mk-build-deps in install-deps.sh"
-	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
+	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
+	      --build-profiles "${build_profiles#,}" \
+	      --install --remove \
+	      --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
         in_jenkins && echo "CI_DEBUG: Removing ceph-build-deps"
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
