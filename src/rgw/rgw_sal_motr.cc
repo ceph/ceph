@@ -2744,7 +2744,7 @@ out:
   return rc;
 }
 
-int MotrObject::fetch_null_obj_reference(const DoutPrefixProvider *dpp, std::string& prev_null_obj_key)
+int MotrObject::fetch_null_obj_reference(const DoutPrefixProvider *dpp, std::string& prev_null_obj_key, bool raise_error)
 {
   int rc = 0;
   // Read the null index entry
@@ -2760,12 +2760,13 @@ int MotrObject::fetch_null_obj_reference(const DoutPrefixProvider *dpp, std::str
     rc = this->store->do_idx_op_by_name(bucket_index_iname,
                               M0_IC_GET, null_ref_key, bl);
     ldpp_dout(dpp, 20) <<__func__<< ":  GET null index entry "<< null_ref_key <<", rc = "<< rc << dendl;
-    //  first put there will be no null ref entry present in bucket and rc = -ENOENT.
-    if (rc == -ENOENT){
+    // For the first put-object, null ref entry will not be present in the bucket and rc = -ENOENT.
+    // Handle motr return code for above scenario.
+    if (rc == -ENOENT && raise_error == false) {
       rc = 0;
       return rc;
     }
-    if (rc < 0){
+    if (rc < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": ERROR: Failed to get key- "<< null_ref_key <<"from index rc=" << rc << dendl;
       return rc;
     }
@@ -2777,7 +2778,7 @@ int MotrObject::fetch_null_obj_reference(const DoutPrefixProvider *dpp, std::str
   return rc;
 }
 
-int MotrObject::fetch_null_obj(const DoutPrefixProvider *dpp, bufferlist& bl)
+int MotrObject::fetch_null_obj(const DoutPrefixProvider *dpp, bufferlist& bl, bool raise_error)
 {
   int rc = 0;
   string tenant_bkt_name = get_bucket_name(this->get_bucket()->get_tenant(), this->get_bucket()->get_name());
@@ -2786,7 +2787,7 @@ int MotrObject::fetch_null_obj(const DoutPrefixProvider *dpp, bufferlist& bl)
 
   // Get content of the key and replace it's instance with null
   // then add into cache
-  rc = this->fetch_null_obj_reference(dpp, null_obj_key);
+  rc = this->fetch_null_obj_reference(dpp, null_obj_key, raise_error);
   if (rc < 0)
      return rc;
   // 1st put, no null reference entry present in bucket.
@@ -3328,14 +3329,15 @@ int MotrObject::overwrite_null_obj(const DoutPrefixProvider *dpp)
   std::string obj_type = "simple object";
   rgw_bucket_dir_entry old_ent;
   bufferlist old_check_bl;
-  rc = this->fetch_null_obj(dpp, old_check_bl);
+  bool raise_error = false;
+  rc = this->fetch_null_obj(dpp, old_check_bl, raise_error);
   if (rc < 0) {
     ldpp_dout(dpp, 0) <<__func__<< ": Failed to fetch null object, rc : " << rc << dendl;
     return rc;
   }
   //TODO: Remove this call in optimization tkt CORTX-31977
   std::string null_obj_key;
-  rc = this->fetch_null_obj_reference(dpp, null_obj_key);
+  rc = this->fetch_null_obj_reference(dpp, null_obj_key, raise_error);
   if (rc < 0) {
     ldpp_dout(dpp, 0) <<__func__<< ": Failed to fetch null reference key, rc : " << rc << dendl;
     return rc;
