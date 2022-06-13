@@ -20,7 +20,7 @@
 -->
 
 ## Contribution Guidelines
-- To sign and title your commits, please refer to [Submitting Patches to Ceph](https://github.com/ceph/ceph/blob/master/SubmittingPatches.rst).
+- To sign and title your commits, please refer to [Submitting Patches to Ceph](https://github.com/ceph/ceph/blob/main/SubmittingPatches.rst).
 
 - If you are submitting a fix for a stable branch (e.g. "pacific"), please refer to [Submitting Patches to Ceph - Backports](https://github.com/ceph/ceph/blob/master/SubmittingPatches-backports.rst) for the proper workflow.
 
