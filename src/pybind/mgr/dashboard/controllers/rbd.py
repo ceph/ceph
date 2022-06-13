@@ -5,6 +5,7 @@ from __future__ import absolute_import
 
 import logging
 import math
+import cherrypy
 from datetime import datetime
 from functools import partial
 
@@ -79,31 +80,37 @@ class Rbd(RESTController):
     ALLOW_DISABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "deep-flatten",
                               "journaling"}
 
-    def _rbd_list(self, pool_name=None):
+    def _rbd_list(self, pool_name=None, offset=0, limit=5):
         if pool_name:
             pools = [pool_name]
         else:
             pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
 
         result = []
-        for pool in pools:
-            # pylint: disable=unbalanced-tuple-unpacking
-            status, value = RbdService.rbd_pool_list(pool)
-            for i, image in enumerate(value):
-                value[i]['configuration'] = RbdConfiguration(
-                    pool, image['namespace'], image['name']).list()
-            result.append({'status': status, 'value': value, 'pool_name': pool})
-        return result
+        images, num_total_images = RbdService.rbd_pool_list(pools, offset=offset, limit=limit)
+        cherrypy.response.headers['X-Total-Count'] = num_total_images
+        pool_result = {}
+        for i, image in enumerate(images):
+            pool = image['pool']
+            if pool not in pool_result:
+                pool_result[pool] = {'status': 1, 'value': [], 'pool_name': image['pool']}
+            pool_result[pool]['value'].append(image)
+                
+            images[i]['configuration'] = RbdConfiguration(
+                pool, image['namespace'], image['name']).list()
+        return list(pool_result.values())
 
     @handle_rbd_error()
     @handle_rados_error('pool')
     @EndpointDoc("Display Rbd Images",
                  parameters={
                      'pool_name': (str, 'Pool Name'),
+                     'limit': (int, 'limit'),
+                     'offset': (int, 'offset'),
                  },
                  responses={200: RBD_SCHEMA})
-    def list(self, pool_name=None):
-        return self._rbd_list(pool_name)
+    def list(self, pool_name=None, offset: int = 0, limit: int = 5):
+        return self._rbd_list(pool_name, offset=offset, limit=limit)
 
     @handle_rbd_error()
     @handle_rados_error('pool')
@@ -528,7 +535,7 @@ class RbdNamespace(RESTController):
     def delete(self, pool_name, namespace):
         with mgr.rados.open_ioctx(pool_name) as ioctx:
             # pylint: disable=unbalanced-tuple-unpacking
-            _, images = RbdService.rbd_pool_list(pool_name, namespace)
+            images, _ = RbdService.rbd_pool_list([pool_name], namespace=namespace)
             if images:
                 raise DashboardException(
                     msg='Namespace contains images which must be deleted first',
@@ -542,7 +549,7 @@ class RbdNamespace(RESTController):
             namespaces = self.rbd_inst.namespace_list(ioctx)
             for namespace in namespaces:
                 # pylint: disable=unbalanced-tuple-unpacking
-                _, images = RbdService.rbd_pool_list(pool_name, namespace)
+                images, _ = RbdService.rbd_pool_list([pool_name], namespace=namespace)
                 result.append({
                     'namespace': namespace,
                     'num_images': len(images) if images else 0

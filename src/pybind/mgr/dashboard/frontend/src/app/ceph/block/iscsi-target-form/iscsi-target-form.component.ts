@@ -88,7 +88,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
   ngOnInit() {
     const promises: any[] = [
       this.iscsiService.listTargets(),
-      this.rbdService.list(),
+				this.rbdService.list({'offset': 0, 'limit': 5}),
       this.iscsiService.portals(),
       this.iscsiService.settings(),
       this.iscsiService.version()
