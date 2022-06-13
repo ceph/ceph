@@ -557,3 +557,13 @@ options:
   - mds_client
   flags:
   - runtime
+- name: client_quota
+  type: bool
+  level: advanced
+  desc: Enable quota enforcement
+  long_desc: Enable quota_bytes and quota_files enforcement for the client.
+  default: true
+  services:
+  - mds_client
+  flags:
+  - runtime

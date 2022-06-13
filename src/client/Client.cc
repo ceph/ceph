@@ -11205,9 +11205,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   ceph_assert(root != nullptr);
   InodeRef quota_root = root->quota.is_enable() ? root : get_quota_root(root.get(), perms);
 
-  // get_quota_root should always give us something
-  // because client quotas are always enabled
-  ceph_assert(quota_root != nullptr);
+  // get_quota_root should always give us something if client quotas are
+  // enabled
+  ceph_assert(cct->_conf.get_val<bool>("client_quota") == false || quota_root != nullptr);
 
   if (quota_root && cct->_conf->client_quota_df && quota_root->quota.max_bytes) {
 
@@ -14063,7 +14063,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     else
       return -CEPHFS_EROFS;
   }
-  if (fromdir != todir) {
+  if (cct->_conf.get_val<bool>("client_quota") && fromdir != todir) {
     Inode *fromdir_root =
       fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
     Inode *todir_root =
@@ -15454,6 +15454,10 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 {
   Inode *quota_in = root_ancestor;
   SnapRealm *realm = in->snaprealm;
+
+  if (!cct->_conf.get_val<bool>("client_quota"))
+    return NULL;
+
   while (realm) {
     ldout(cct, 10) << __func__ << " realm " << realm->ino << dendl;
     if (realm->ino != in->ino) {
@@ -15479,6 +15483,9 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
 				   std::function<bool (const Inode &in)> test)
 {
+  if (!cct->_conf.get_val<bool>("client_quota"))
+    return false;
+
   while (true) {
     ceph_assert(in != NULL);
     if (test(*in)) {

@@ -102,13 +102,15 @@ FS Subvolume groups
 
 Create a subvolume group using::
 
-    $ ceph fs subvolumegroup create <vol_name> <group_name> [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>]
+    $ ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>]
 
 The command succeeds even if the subvolume group already exists.
 
 When creating a subvolume group you can specify its data pool layout (see
-:doc:`/cephfs/file-layouts`), uid, gid, and file mode in octal numerals. By default, the
-subvolume group is created with an octal file mode '755', uid '0', gid '0' and data pool
+:doc:`/cephfs/file-layouts`), uid, gid, file mode in octal numerals and
+size in bytes. The size of the subvolume group is specified by setting
+a quota on it (see :doc:`/cephfs/quota`). By default, the subvolume group
+is created with an octal file mode '755', uid '0', gid '0' and data pool
 layout of its parent directory.
 
 
@@ -130,6 +132,36 @@ List subvolume groups using::
 
 .. note:: Subvolume group snapshot feature is no longer supported in mainline CephFS (existing group
           snapshots can still be listed and deleted)
+
+Fetch the metadata of a subvolume group using::
+
+    $ ceph fs subvolumegroup info <vol_name> <group_name>
+
+The output format is json and contains fields as follows.
+
+* atime: access time of subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
+* mtime: modification time of subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
+* ctime: change time of subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
+* uid: uid of subvolume group path
+* gid: gid of subvolume group path
+* mode: mode of subvolume group path
+* mon_addrs: list of monitor addresses
+* bytes_pcent: quota used in percentage if quota is set, else displays "undefined"
+* bytes_quota: quota size in bytes if quota is set, else displays "infinite"
+* bytes_used: current used size of the subvolume group in bytes
+* created_at: time of creation of subvolume group in the format "YYYY-MM-DD HH:MM:SS"
+* data_pool: data pool the subvolume group belongs to
+
+Resize a subvolume group using::
+
+    $ ceph fs subvolumegroup resize <vol_name> <group_name> <new_size> [--no_shrink]
+
+The command resizes the subvolume group quota using the size specified by 'new_size'.
+The '--no_shrink' flag prevents the subvolume group to shrink below the current used
+size of the subvolume group.
+
+The subvolume group can be resized to an infinite size by passing 'inf' or 'infinite'
+as the new_size.
 
 Remove a snapshot of a subvolume group using::
 
