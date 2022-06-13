@@ -3402,9 +3402,14 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   ent.meta.etag = etag;
   ent.meta.owner = owner.to_str();
   ent.meta.owner_display_name = obj.get_bucket()->get_owner()->get_display_name();
-  uint64_t lid = M0_OBJ_LAYOUT_ID(obj.meta.layout_id);
-  uint64_t unit_sz = m0_obj_layout_id_to_unit_size(lid);
-  uint64_t size_rounded = roundup(ent.meta.size, unit_sz);
+  uint64_t size_rounded = 0;
+  // For 0kb Object layout_id will not be available.
+  if(ent.meta.size != 0)
+  {
+    uint64_t lid = M0_OBJ_LAYOUT_ID(obj.meta.layout_id);
+    uint64_t unit_sz = m0_obj_layout_id_to_unit_size(lid);
+    size_rounded = roundup(ent.meta.size, unit_sz);
+  }
   RGWBucketInfo &info = obj.get_bucket()->get_info();
 
   // Set version and current flag in case of both versioning enabled and suspended case.
@@ -4269,9 +4274,14 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
   info.num = part_num;
   info.etag = etag;
   info.size = actual_part_size;
-  uint64_t lid = M0_OBJ_LAYOUT_ID(part_obj->meta.layout_id);
-  uint64_t unit_sz = m0_obj_layout_id_to_unit_size(lid);
-  uint64_t size_rounded = roundup(info.size, unit_sz);
+  uint64_t size_rounded = 0;
+  //For 0kb Object layout_id will not be available. 
+  if(info.size != 0)
+  {
+    uint64_t lid = M0_OBJ_LAYOUT_ID(part_obj->meta.layout_id);
+    uint64_t unit_sz = m0_obj_layout_id_to_unit_size(lid);
+    size_rounded = roundup(info.size, unit_sz);
+  }
   info.size_rounded = size_rounded;
   info.accounted_size = accounted_size;
   info.modified = real_clock::now();
