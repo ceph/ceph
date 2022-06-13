@@ -362,6 +362,68 @@ public:
     });
   }
 
+  /**
+   * map_existing_extent
+   *
+   * Allocates a new extent at given existing_paddr that must be absolute and
+   * reads disk to fill the extent.
+   * The common usage is that remove the LogicalCachedExtent (laddr~length at paddr)
+   * and map extent to multiple new extents.
+   * placement_hint and generation should follow the original extent.
+   */
+  using map_existing_extent_iertr =
+    alloc_extent_iertr::extend_ertr<Device::read_ertr>;
+  template <typename T>
+  using map_existing_extent_ret =
+    map_existing_extent_iertr::future<TCachedExtentRef<T>>;
+  template <typename T>
+  map_existing_extent_ret<T> map_existing_extent(
+    Transaction &t,
+    laddr_t laddr_hint,
+    paddr_t existing_paddr,
+    extent_len_t length,
+    placement_hint_t placement_hint = placement_hint_t::HOT,
+    reclaim_gen_t gen = DIRTY_GENERATION) {
+    LOG_PREFIX(TransactionManager::map_existing_extent);
+    ceph_assert(existing_paddr.is_absolute());
+    assert(t.is_retired(laddr_hint, length, existing_paddr));
+
+    auto bp = ceph::bufferptr(buffer::create_page_aligned(length));
+    bp.zero();
+
+    // ExtentPlacementManager::alloc_new_extent will make a new
+    // (relative/temp) paddr, so make extent directly
+    auto ext = CachedExtent::make_cached_extent_ref<T>(std::move(bp));
+
+    ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
+	      existing_paddr,
+	      placement_hint,
+	      gen);
+
+    t.add_fresh_extent(ext);
+
+    return lba_manager->alloc_extent(
+      t,
+      laddr_hint,
+      length,
+      existing_paddr
+    ).si_then([ext=std::move(ext), laddr_hint, &t, this, FNAME](auto &&ref) {
+      SUBDEBUGT(seastore_tm, "map existing extent: {}, laddr_hint: {} pin: {}",
+		t, *ext, laddr_hint, *ref);
+      ceph_assert(laddr_hint == ref->get_key());
+      ext->set_pin(std::move(ref));
+      return epm->read(
+        ext->get_paddr(),
+	ext->get_length(),
+	ext->get_bptr()
+      ).safe_then([ext=std::move(ext)] {
+	return map_existing_extent_iertr::make_ready_future<TCachedExtentRef<T>>
+	  (std::move(ext));
+      });
+    });
+  }
+
+
   using reserve_extent_iertr = alloc_extent_iertr;
   using reserve_extent_ret = reserve_extent_iertr::future<LBAPinRef>;
   reserve_extent_ret reserve_region(
