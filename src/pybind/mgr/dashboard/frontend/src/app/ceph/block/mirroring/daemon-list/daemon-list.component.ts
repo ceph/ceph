@@ -16,15 +16,13 @@ export class DaemonListComponent implements OnInit, OnDestroy {
 
   subs: Subscription;
 
-  data: [];
+  data: any[];
   daemons: {};
   empty: boolean;
 
   tableStatus = new TableStatusViewCache();
 
-  constructor(
-    private rbdMirroringService: RbdMirroringService,
-  ) {
+  constructor(private rbdMirroringService: RbdMirroringService) {
     this.empty = false;
   }
 
@@ -41,31 +39,32 @@ export class DaemonListComponent implements OnInit, OnDestroy {
   }
 
   countDaemons(): {} {
-    let n = {unknown: 0, error: 0, warning: 0, success: 0};
-    this.empty = (this.data.length > 0) ? false : true; 
+    const daemon_states = { unknown: 0, error: 0, warning: 0, success: 0 };
+    this.empty = this.data.length > 0 ? false : true;
     for (let i = 0; i < this.data.length; i++) {
-      let d = this.data[i];
-      if(d['health'] == 'OK')
-        n.success++;
-      else if (d['health'] == 'Error')
-        n.error++;
-      else if (d['health'] == 'Warning')
-        n.warning++;
-      else
-        n.unknown++;
+      const daemon_data = this.data[i];
+      if (daemon_data['health'] === 'OK') {
+        daemon_states.success++;
+      } else if (daemon_data['health'] === 'Error') {
+        daemon_states.error++;
+      } else if (daemon_data['health'] === 'Warning') {
+        daemon_states.warning++;
+      } else {
+        daemon_states.unknown++;
+      }
     }
-    return n;
+    return daemon_states;
   }
 
-  daemonStatus(s: string): string {
-    if (s === 'success')
+  daemonStatus(daemon_status: string): string {
+    if (daemon_status === 'success') {
       return 'UP';
-    else if (s === 'error')
+    } else if (daemon_status === 'error') {
       return 'DOWN';
-    else if (s === 'warning')
+    } else if (daemon_status === 'warning') {
       return 'WARNING';
-    else
+    } else {
       return 'UNKNOWN';
+    }
   }
-
 }

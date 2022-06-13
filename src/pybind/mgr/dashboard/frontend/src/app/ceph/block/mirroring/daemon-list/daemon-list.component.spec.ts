@@ -25,4 +25,15 @@ describe('DaemonListComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('should return daemons states', () => {
+    component.data = [
+      { health: 'Error' },
+      { health: 'Warning' },
+      { health: 'OK' },
+      { health: 'OK' }
+    ];
+    const result = component.countDaemons();
+    expect(result).toStrictEqual({ unknown: 0, error: 1, warning: 1, success: 2 });
+  });
 });

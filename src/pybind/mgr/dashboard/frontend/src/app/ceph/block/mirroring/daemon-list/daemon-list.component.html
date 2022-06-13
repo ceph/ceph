@@ -1,8 +1,11 @@
 <ng-container *ngIf="empty">
-  <strong class="text-danger" i18n>There are no daemons</strong>
+  <strong class="text-danger"
+          i18n>There are no daemons</strong>
 </ng-container>
 
 <ng-container *ngFor="let daemon of daemons | keyvalue">
-  <span *ngIf="daemon.value > 0" [ngClass]="daemon.key | mirrorHealthColor"
-     class="m-1" i18n>{{daemon.value}} {{daemonStatus(daemon.key)}}</span>
+  <span *ngIf="daemon.value > 0"
+        [ngClass]="daemon.key | mirrorHealthColor"
+        class="m-1"
+        i18n>{{daemon.value}} {{daemonStatus(daemon.key)}}</span>
 </ng-container>
