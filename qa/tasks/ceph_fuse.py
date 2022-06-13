@@ -72,6 +72,20 @@ def task(ctx, config):
               mount_timeout: 120 # default is 30, give up if /sys/ is not populated
         - interactive:
 
+    Example that creates and mounts a subvol:
+
+        overrides:
+          ceph:
+            subvols:
+              create: 2
+              subvol_options: "--namespace-isolated --size 25000000000"
+          ceph-fuse:
+            client.0:
+              mount_subvol_num: 0
+          kclient:
+            client.1:
+              mount_subvol_num: 1
+
     :param ctx: Context
     :param config: Configuration
     """
