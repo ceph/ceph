@@ -1384,7 +1384,6 @@ class TracingSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config,
             networks=networks)
-        self.service_type = service_type
         self.without_query = without_query
         self.es_nodes = es_nodes
 

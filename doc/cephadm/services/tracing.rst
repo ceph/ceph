@@ -28,7 +28,7 @@ Jaeger services consist of 3 services:
 Jaeger requires a database for the traces. we use ElasticSearch (version 6) by default.
 
 
-To deploy jaeger tracing service, without ElasticSearch:
+To deploy jaeger tracing service, when not using your own ElasticSearch:
 
 #. Deploy jaeger services, with a new elasticsearch container:
 
@@ -41,5 +41,5 @@ To deploy jaeger tracing service, without ElasticSearch:
 
      .. prompt:: bash #
 
-        ceph orch apply jaeger --without-query -es_nodes=ip:port,..
+        ceph orch apply jaeger --without-query --es_nodes=ip:port,..
 
