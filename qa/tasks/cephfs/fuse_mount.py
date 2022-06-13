@@ -113,8 +113,12 @@ class FuseMount(CephFSMount):
             mount_cmd += ['--id', self.client_id]
         if self.client_keyring_path and self.client_id:
             mount_cmd += ['-k', self.client_keyring_path]
-        if self.cephfs_mntpt:
-            mount_cmd += ["--client_mountpoint=" + self.cephfs_mntpt]
+
+        self.validate_subvol_options()
+
+        assert(self.cephfs_mntpt)
+        mount_cmd += ["--client_mountpoint=" + self.cephfs_mntpt]
+
         if self.cephfs_name:
             mount_cmd += ["--client_fs=" + self.cephfs_name]
         if mntopts:
