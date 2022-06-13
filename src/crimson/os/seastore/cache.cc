@@ -1261,8 +1261,15 @@ record_t Cache::prepare_record(
     if (t.onode_tree_stats.depth) {
       stats.onode_tree_depth = t.onode_tree_stats.depth;
     }
+    if (t.omap_tree_stats.depth) {
+      stats.omap_tree_depth = t.omap_tree_stats.depth;
+    }
+    stats.onode_tree_extents_num += t.onode_tree_stats.extents_num_delta;
+    ceph_assert(stats.onode_tree_extents_num >= 0);
     get_by_src(stats.committed_onode_tree_efforts, trans_src
         ).increment(t.onode_tree_stats);
+    stats.omap_tree_extents_num += t.omap_tree_stats.extents_num_delta;
+    ceph_assert(stats.omap_tree_extents_num >= 0);
     get_by_src(stats.committed_omap_tree_efforts, trans_src
         ).increment(t.omap_tree_stats);
   }

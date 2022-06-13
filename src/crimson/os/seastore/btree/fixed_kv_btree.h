@@ -319,6 +319,7 @@ public:
     root_leaf->set_meta(meta);
     root_leaf->pin.set_range(meta);
     get_tree_stats<self_type>(c.trans).depth = 1u;
+    get_tree_stats<self_type>(c.trans).extents_num_delta++;
     return phy_tree_root_t{root_leaf->get_paddr(), 1u};
   }
 
