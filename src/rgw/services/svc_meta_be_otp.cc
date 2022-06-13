@@ -46,7 +46,8 @@ int RGWSI_MetaBackend_OTP::get_entry(RGWSI_MetaBackend::Context *_ctx,
                                      RGWSI_MetaBackend::GetParams& _params,
                                      RGWObjVersionTracker *objv_tracker,
                                      optional_yield y,
-                                     const DoutPrefixProvider *dpp)
+                                     const DoutPrefixProvider *dpp,
+                                     bool get_raw_attrs)
 {
   RGWSI_MBOTP_GetParams& params = static_cast<RGWSI_MBOTP_GetParams&>(_params);
 

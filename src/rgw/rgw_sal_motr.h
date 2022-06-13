@@ -914,6 +914,10 @@ class MotrStore : public Store {
     virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
         bufferlist& in_data, JSONParser *jp, req_info& info,
         optional_yield y) override;
+    virtual int forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y) override;
     virtual Zone* get_zone() { return &zone; }
     virtual std::string zone_unique_id(uint64_t unique_num) override;
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
@@ -966,6 +970,7 @@ class MotrStore : public Store {
         std::string trust_policy="",
         std::string max_session_duration_str="",
         std::multimap<std::string, std::string> tags={}) override;
+    virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
     virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
     virtual int get_roles(const DoutPrefixProvider *dpp,
         optional_yield y,

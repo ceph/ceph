@@ -203,9 +203,85 @@ void RGWCreateRole::execute(optional_yield y)
     op_ret = -EINVAL;
     return;
   }
-  op_ret = role->create(s, true, y);
+
+  std::string role_id;
+
+  if (!store->is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("Path");
+    s->info.args.remove("AssumeRolePolicyDocument");
+    s->info.args.remove("MaxSessionDuration");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+    auto& val_map = s->info.args.get_params();
+    for (auto it = val_map.begin(); it!= val_map.end(); it++) {
+      if (it->first.find("Tags.member.") == 0) {
+        val_map.erase(it);
+      }
+    }
+
+    RGWUserInfo info = s->user->get_info();
+    const auto& it = info.access_keys.begin();
+    RGWAccessKey key;
+    if (it != info.access_keys.end()) {
+      key.id = it->first;
+      RGWAccessKey cred = it->second;
+      key.key = cred.key;
+    }
+    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
+
+    XMLObj* create_role_resp_obj = parser.find_first("CreateRoleResponse");;
+    if (!create_role_resp_obj) {
+      ldpp_dout(this, 5) << "ERROR: unexpected xml: CreateRoleResponse" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    XMLObj* create_role_res_obj = create_role_resp_obj->find_first("CreateRoleResult");
+    if (!create_role_res_obj) {
+      ldpp_dout(this, 5) << "ERROR: unexpected xml: CreateRoleResult" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    XMLObj* role_obj = nullptr;
+    if (create_role_res_obj) {
+      role_obj = create_role_res_obj->find_first("Role");
+    }
+    if (!role_obj) {
+      ldpp_dout(this, 5) << "ERROR: unexpected xml: Role" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    try {
+      if (role_obj) {
+        RGWXMLDecoder::decode_xml("RoleId", role_id, role_obj, true);
+      }
+    } catch (RGWXMLDecoder::err& err) {
+      ldpp_dout(this, 5) << "ERROR: unexpected xml: RoleId" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    ldpp_dout(this, 0) << "role_id decoded from master zonegroup response is" << role_id << dendl;
+  }
+
+  op_ret = role->create(s, true, role_id, y);
   if (op_ret == -EEXIST) {
     op_ret = -ERR_ROLE_EXISTS;
+    return;
   }
 
   if (op_ret == 0) {
@@ -236,15 +312,52 @@ int RGWDeleteRole::get_params()
 
 void RGWDeleteRole::execute(optional_yield y)
 {
+  bool is_master = true;
+  int master_op_ret = 0;
   op_ret = get_params();
   if (op_ret < 0) {
     return;
   }
 
+  if (!store->is_meta_master()) {
+    is_master = false;
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+
+    RGWUserInfo info = s->user->get_info();
+    const auto& it = info.access_keys.begin();
+    RGWAccessKey key;
+    if (it != info.access_keys.end()) {
+      key.id = it->first;
+      RGWAccessKey cred = it->second;
+      key.key = cred.key;
+    }
+    master_op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    if (master_op_ret < 0) {
+      op_ret = master_op_ret;
+      ldpp_dout(this, 0) << "forward_iam_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   op_ret = _role->delete_obj(s, y);
 
   if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_ROLE_FOUND;
+    //Role has been deleted since metadata from master has synced up
+    if (!is_master && master_op_ret == 0) {
+      op_ret = 0;
+    } else {
+      op_ret = -ERR_NO_ROLE_FOUND;
+    }
+    return;
   }
   if (!op_ret) {
     s->formatter->open_object_section("DeleteRoleResponse");
@@ -350,6 +463,35 @@ void RGWModifyRole::execute(optional_yield y)
     return;
   }
 
+  if (!store->is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("PolicyDocument");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+
+    RGWUserInfo info = s->user->get_info();
+    const auto& it = info.access_keys.begin();
+    RGWAccessKey key;
+    if (it != info.access_keys.end()) {
+      key.id = it->first;
+      RGWAccessKey cred = it->second;
+      key.key = cred.key;
+    }
+    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
+  }
+
   _role->update_trust_policy(trust_policy);
   op_ret = _role->update(this, y);
 
@@ -440,6 +582,36 @@ void RGWPutRolePolicy::execute(optional_yield y)
   op_ret = get_params();
   if (op_ret < 0) {
     return;
+  }
+
+  if (!store->is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("PolicyName");
+    s->info.args.remove("PolicyDocument");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+
+    RGWUserInfo info = s->user->get_info();
+    const auto& it = info.access_keys.begin();
+    RGWAccessKey key;
+    if (it != info.access_keys.end()) {
+      key.id = it->first;
+      RGWAccessKey cred = it->second;
+      key.key = cred.key;
+    }
+    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
   }
 
   _role->set_perm_policy(policy_name, perm_policy);
@@ -545,9 +717,39 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
     return;
   }
 
+  if (!store->is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("PolicyName");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+
+    RGWUserInfo info = s->user->get_info();
+    const auto& it = info.access_keys.begin();
+    RGWAccessKey key;
+    if (it != info.access_keys.end()) {
+      key.id = it->first;
+      RGWAccessKey cred = it->second;
+      key.key = cred.key;
+    }
+    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
+  }
+
   op_ret = _role->delete_policy(this, policy_name);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
+    return;
   }
 
   if (op_ret == 0) {
@@ -582,6 +784,40 @@ void RGWTagRole::execute(optional_yield y)
   op_ret = get_params();
   if (op_ret < 0) {
     return;
+  }
+
+  if (!store->is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+    auto& val_map = s->info.args.get_params();
+    for (auto it = val_map.begin(); it!= val_map.end(); it++) {
+      if (it->first.find("Tags.member.") == 0) {
+        val_map.erase(it);
+      }
+    }
+
+    RGWUserInfo info = s->user->get_info();
+    const auto& it = info.access_keys.begin();
+    RGWAccessKey key;
+    if (it != info.access_keys.end()) {
+      key.id = it->first;
+      RGWAccessKey cred = it->second;
+      key.key = cred.key;
+    }
+    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
   }
 
   op_ret = _role->set_tags(this, tags);
@@ -662,6 +898,44 @@ void RGWUntagRole::execute(optional_yield y)
   op_ret = get_params();
   if (op_ret < 0) {
     return;
+  }
+
+  if (!store->is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+    auto& val_map = s->info.args.get_params();
+    std::vector<std::multimap<std::string, std::string>::iterator> iters;
+    for (auto it = val_map.begin(); it!= val_map.end(); it++) {
+      if (it->first.find("Tags.member.") == 0) {
+        iters.emplace_back(it);
+      }
+    }
+
+    for (auto& it : iters) {
+      val_map.erase(it);
+    }
+    RGWUserInfo info = s->user->get_info();
+    const auto& it = info.access_keys.begin();
+    RGWAccessKey key;
+    if (it != info.access_keys.end()) {
+      key.id = it->first;
+      RGWAccessKey cred = it->second;
+      key.key = cred.key;
+    }
+    op_ret = store->forward_iam_request_to_master(s, key, nullptr, bl_post_body, &parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
   }
 
   _role->erase_tags(tagKeys);
