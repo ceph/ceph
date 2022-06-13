@@ -88,6 +88,17 @@ class CachedExtent : public boost::intrusive_ref_counter<
                            //  during write, contents match disk, version == 0
     DIRTY,                 // Same as CLEAN, but contents do not match disk,
                            //  version > 0
+    EXIST_CLEAN,           // Similar to CLEAN, but its metadata not yet
+			   //  persisted to disk.
+    			   //  In Transaction::write_set and existing_block_list.
+			   //  After transaction commits, state becomes CLEAN
+			   //  and add extent to Cache. Modifing such extents
+			   //  will cause state turn to EXIST_MUTATION_PENDING.
+    EXIST_MUTATION_PENDING,// Similar to MUTATION_PENDING, but its prior_instance
+			   //  is empty.
+			   //  In Transaction::write_set, existing_block_list and
+			   //  mutated_block_list. State becomes DIRTY and it is
+			   //  added to Cache after transaction commits.
     INVALID                // Part of no ExtentIndex set
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
@@ -268,7 +279,8 @@ public:
   /// Returns true if extent is part of an open transaction
   bool is_pending() const {
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
-      state == extent_state_t::MUTATION_PENDING;
+      state == extent_state_t::MUTATION_PENDING ||
+      state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
   /// Returns true if extent has a pending delta
@@ -286,7 +298,18 @@ public:
     ceph_assert(is_valid());
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
            state == extent_state_t::CLEAN ||
-           state == extent_state_t::CLEAN_PENDING;
+           state == extent_state_t::CLEAN_PENDING ||
+           state == extent_state_t::EXIST_CLEAN;
+  }
+
+  /// Ruturns true if data is persisted while metadata isn't
+  bool is_exist_clean() const {
+    return state == extent_state_t::EXIST_CLEAN;
+  }
+
+  /// Returns true if the extent with EXTIST_CLEAN is modified
+  bool is_exist_mutation_pending() const {
+    return state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
   /// Returns true if extent is dirty (has deltas on disk)
@@ -838,8 +861,11 @@ protected:
   virtual void logical_on_delta_write() {}
 
   void on_delta_write(paddr_t record_block_offset) final {
-    assert(get_prior_instance());
-    pin->take_pin(*(get_prior_instance()->cast<LogicalCachedExtent>()->pin));
+    assert(is_exist_mutation_pending() ||
+	   get_prior_instance());
+    if (get_prior_instance()) {
+      pin->take_pin(*(get_prior_instance()->cast<LogicalCachedExtent>()->pin));
+    }
     logical_on_delta_write();
   }
 
