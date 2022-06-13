@@ -1,0 +1,32 @@
+name: Run tox tests
+on: pull_request
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      cephadm: ${{ steps.filter.outputs.cephadm }}
+    steps:
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            cephadm:
+              - 'src/cephadm/cephadm'
+              - 'src/cephadm/**/*.py'
+              - 'src/cephadm/tox.ini'
+  cephadm:
+    needs: changes
+    runs-on: ubuntu-latest
+    if: ${{ needs.changes.outputs.cephadm == 'true' }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.7"
+      - name: Install tox
+        run: pip install tox
+      - name: Run tox
+        run: tox
+        working-directory: "src/cephadm/"
