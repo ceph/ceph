@@ -2324,3 +2324,43 @@ class TestNetworkValidation:
         # invalid IPv6 and valid subnets list
         with pytest.raises(Exception):
             rc = cd.ip_in_sublets('fe80:2030:31:24', 'fe80::/64')
+
+
+class TestSysctl:
+    @mock.patch('cephadm.sysctl_get')
+    def test_filter_sysctl_settings(self, sysctl_get):
+        ctx = cd.CephadmContext()
+        input = [
+            # comment-only lines should be ignored
+            "# just a comment",
+            # As should whitespace-only lines",
+            "   \t ",
+            "   =  \t  ",
+            # inline comments are stripped when querying
+            "something = value # inline comment",
+            "fs.aio-max-nr = 1048576",
+            "kernel.pid_max = 4194304",
+            "vm.lowmem_reserve_ratio = 256\t256\t32\t0\t0",
+            "  vm.max_map_count       =            65530    ",
+            "  vm.max_map_count       =            65530    ",
+        ]
+        sysctl_get.side_effect = [
+            "value",
+            "1",
+            "4194304",
+            "256\t256\t32\t0\t0",
+            "65530",
+            "something else",
+        ]
+        result = cd.filter_sysctl_settings(ctx, input)
+        assert len(sysctl_get.call_args_list) == 6
+        assert sysctl_get.call_args_list[0].args[1] == "something"
+        assert sysctl_get.call_args_list[1].args[1] == "fs.aio-max-nr"
+        assert sysctl_get.call_args_list[2].args[1] == "kernel.pid_max"
+        assert sysctl_get.call_args_list[3].args[1] == "vm.lowmem_reserve_ratio"
+        assert sysctl_get.call_args_list[4].args[1] == "vm.max_map_count"
+        assert sysctl_get.call_args_list[5].args[1] == "vm.max_map_count"
+        assert result == [
+            "fs.aio-max-nr = 1048576",
+            "  vm.max_map_count       =            65530    ",
+        ]
