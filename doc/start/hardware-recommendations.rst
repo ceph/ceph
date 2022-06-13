@@ -375,34 +375,46 @@ multiple OSDs per host.
 Networks
 ========
 
-Provision at least 10Gbps+ networking in your racks. Replicating 1TB of data
-across a 1Gbps network takes 3 hours, and 10TBs takes 30 hours! By contrast,
-with a 10Gbps network, the replication times would be 20 minutes and 1 hour
-respectively. In a petabyte-scale cluster, failure of an OSD drive is an
-expectation, not an exception. System administrators will appreciate PGs
-recovering from a ``degraded`` state to an ``active + clean`` state as rapidly
-as possible, with price / performance tradeoffs taken into consideration.
-Additionally, some deployment tools employ VLANs to make  hardware and network
-cabling more manageable. VLANs using 802.1q protocol require VLAN-capable NICs
-and Switches. The added hardware expense may be offset by the operational cost
-savings for network setup and maintenance. When using VLANs to handle VM
+Provision at least 10Gbps+ networking in your racks. 
+
+Speed
+-----
+
+It takes three hours to replicate 1TB of data across a 1Gbps network and it
+takes thirty hours to replicate 10TB across a 1Gbps network. But it takes only
+twenty minutes to replicate 1TB of data across a 10Gbps network, and it takes
+only one hour to replicate 10TB across a 10Gpbs network. 
+
+Cost
+----
+
+In a petabyte-scale cluster, OSD failure is certain on a long enough timeline.
+The faster that a placement group (PG) can recover from a ``degraded`` state to
+an ``active + clean`` state, the better. Of course, when provisioning your network, you will have to balance price against performance. 
+
+Some deployment tools employ VLANs to make hardware and network cabling more
+manageable. VLANs that use the 802.1q protocol require VLAN-capable NICs and
+switches. The added expense of this hardware may be offset by the operational
+cost savings on network setup and maintenance. When using VLANs to handle VM
 traffic between the cluster and compute stacks (e.g., OpenStack, CloudStack,
 etc.), there is additional value in using 10G Ethernet or better; 40Gb or
 25/50/100 Gb networking as of 2020 is common for production clusters.
 
-Top-of-rack routers for each network also need to be able to communicate with
+Top-of-rack routers for each network must be able to communicate with
 spine routers that have even faster throughput, often 40Gbp/s or more.
 
 
+Baseboard Management Controller (BMC)
+-------------------------------------
+
 Your server hardware should have a Baseboard Management Controller (BMC).
 Administration and deployment tools may also use BMCs extensively, especially
-via IPMI or Redfish, so consider
-the cost/benefit tradeoff of an out-of-band network for administration.
-Hypervisor SSH access, VM image uploads, OS image installs, management sockets,
-etc. can impose significant loads on a network.  Running three networks may seem
-like overkill, but each traffic path represents a potential capacity, throughput
-and/or performance bottleneck that you should carefully consider before
-deploying a large scale data cluster.
+via IPMI or Redfish, so consider the cost/benefit tradeoff of an out-of-band
+network for administration.  Hypervisor SSH access, VM image uploads, OS image
+installs, management sockets, etc. can impose significant loads on a network.
+Running three networks may seem like overkill, but each traffic path represents
+a potential capacity, throughput and/or performance bottleneck that you should
+carefully consider before deploying a large scale data cluster.
  
 
 Failure Domains
