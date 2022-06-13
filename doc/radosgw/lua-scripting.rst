@@ -309,16 +309,26 @@ The ``Request.Log()`` function prints the requests into the operations log. This
 Background Context
 --------------------
 The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.
-
-The ``RGW`` Lua table is accessible from all contexts and saves data written to it
-during execution so that it may be read and used later during other executions, from the same context of a different one.
-
 - Background script execution default interval is 5 seconds.
 
+Global ``RGW`` Table
+--------------------
+The ``RGW`` Lua table is accessible from all contexts and saves data written to it
+during execution so that it may be read and used later during other executions, from the same context of a different one.
 - Each RGW instance has its own private and ephemeral ``RGW`` Lua table that is lost when the daemon restarts. Note that ``background`` context scripts will run on every instance.
+- The maximum number of entries in the table is 100,000. Each entry has a string key a value with a combined length of no more than 1KB.
+A Lua script will abort with an error if the number of entries or entry size exceeds these limits.
+- The ``RGW`` Lua table uses string indeces and can store values of type: string, integer, double and boolean
 
-- The maximum number of entries in the table is 100,000. Each entry has a key and string value with a combined length of no more than 1KB. 
-  A Lua script will abort with an error if the number of entries or entry size exceeds these limits.
+Increment/Decrement Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Since entries in the ``RGW`` table could be accessed from multiple places at the same time we need a way
+to atomically increment and decrement numeric values in it. For that the following functions should be used:
+- ``RGW.increment(<key>, [value])`` would increment the value of ``key`` by ``value`` if value is provided or by 1 if not
+- ``RGW.decrement(<key>, [value])`` would decrement the value of ``key`` by ``value`` if value is provided or by 1 if not
+- if the value of ``key`` is not numeric, the execution of the script would fail
+- if we try to increment or decrement by non-numeric values, the execution of the script would fail
+
 
 Lua Code Samples
 ----------------

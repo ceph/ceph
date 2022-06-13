@@ -9,6 +9,52 @@
 
 namespace rgw::lua {
 
+const char* RGWTable::INCREMENT = "increment";
+const char* RGWTable::DECREMENT = "decrement";
+
+int RGWTable::increment_by(lua_State* L) {
+  const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+  auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+  auto decrement = lua_toboolean(L, lua_upvalueindex(THIRD_UPVAL));
+
+  const auto args = lua_gettop(L);
+  const auto index = luaL_checkstring(L, 1);
+
+  // by default we increment by 1/-1
+  const long long int default_inc = (decrement ? -1 : 1);
+  BackgroundMapValue inc_by = default_inc;
+  if (args == 2) {
+    if (lua_isinteger(L, 2)) {
+      inc_by = lua_tointeger(L, 2)*default_inc;
+    } else if (lua_isnumber(L, 2)){
+      inc_by = lua_tonumber(L, 2)*static_cast<double>(default_inc);
+    } else {
+      return luaL_error(L, "can increment only by numeric values");
+    }
+  }
+
+  std::unique_lock l(mtx);
+
+  const auto it = map->find(std::string(index));
+  if (it != map->end()) {
+    auto& value = it->second;
+    if (std::holds_alternative<double>(value) && std::holds_alternative<double>(inc_by)) {
+      value = std::get<double>(value) + std::get<double>(inc_by);
+    } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<long long int>(inc_by)) {
+      value = std::get<long long int>(value) + std::get<long long int>(inc_by);
+    } else if (std::holds_alternative<double>(value) && std::holds_alternative<long long int>(inc_by)) {
+      value = std::get<double>(value) + static_cast<double>(std::get<long long int>(inc_by));
+    } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<double>(inc_by)) {
+      value = static_cast<double>(std::get<long long int>(value)) + std::get<double>(inc_by);
+    } else {
+      mtx.unlock();
+      return luaL_error(L, "can increment only numeric values");
+    }
+  }
+
+  return 0;
+}
+
 Background::Background(rgw::sal::Store* store,
     CephContext* cct,
       const std::string& luarocks_path,
@@ -64,20 +110,15 @@ int Background::read_script() {
   return rgw::lua::read_script(&dp, store, tenant, null_yield, rgw::lua::context::background, rgw_script);
 }
 
-const std::string Background::empty_table_value;
+const BackgroundMapValue Background::empty_table_value;
 
-const std::string& Background::get_table_value(const std::string& key) const {
+const BackgroundMapValue& Background::get_table_value(const std::string& key) const {
   std::unique_lock cond_lock(table_mutex);
   const auto it = rgw_map.find(key);
   if (it == rgw_map.end()) {
     return empty_table_value;
   }
   return it->second;
-}
-
-void Background::put_table_value(const std::string& key, const std::string& value) {
-  std::unique_lock cond_lock(table_mutex);
-  rgw_map[key] = value;
 }
 
 //(1) Loads the script from the object if not paused
