@@ -1111,7 +1111,6 @@ class Tracing(object):
         },
         'jaeger-agent': {
             'image': DEFAULT_JAEGER_AGENT_IMAGE,
-            'envs': ''
         },
         'jaeger-collector': {
             'image': DEFAULT_JAEGER_COLLECTOR_IMAGE,
@@ -3013,7 +3012,7 @@ def get_container(ctx: CephadmContext,
         name = '%s.%s' % (daemon_type, daemon_id)
         config = get_parm(ctx.config_json)
         Tracing.set_configuration(config, daemon_type)
-        envs.extend(Tracing.components[daemon_type]['envs'])
+        envs.extend(Tracing.components[daemon_type].get('envs', []))
     elif daemon_type == NFSGanesha.daemon_type:
         entrypoint = NFSGanesha.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)

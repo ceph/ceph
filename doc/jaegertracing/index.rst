@@ -48,7 +48,7 @@ Important Notes:
 
 - Spans are being sent to local jaeger agent, so the jaeger agent must be running on each host (not in all-in-one mode). otherwise, spans of hosts without active jaeger agent will be lost.
 
-- Ceph tracers are configured to sent tracers to agents that are listening to port 6799, so on manual jaeger deployment, option "--processor.jaeger-compact.server-host-port=6799" should be used.
+- Ceph tracers are configured to send tracers to agents that are listening to port 6799, so on manual jaeger deployment, option "--processor.jaeger-compact.server-host-port=6799" should be used.
 
 
 HOW TO ENABLE TRACING IN CEPH
