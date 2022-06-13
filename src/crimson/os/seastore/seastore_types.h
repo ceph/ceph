@@ -552,6 +552,10 @@ public:
     return !is_zero() && !is_null();
   }
 
+  bool is_absolute() const {
+    return get_device_id() <= DEVICE_ID_MAX_VALID;
+  }
+
   DENC(paddr_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.dev_addr, p);

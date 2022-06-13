@@ -389,7 +389,8 @@ TransactionManager::submit_transaction_direct(
       // ...but add_pin from parent->leaf
       std::vector<CachedExtentRef> lba_to_link;
       std::vector<CachedExtentRef> backref_to_link;
-      lba_to_link.reserve(tref.get_fresh_block_stats().num);
+      lba_to_link.reserve(tref.get_fresh_block_stats().num +
+			  tref.get_existing_block_stats().valid_num);
       backref_to_link.reserve(tref.get_fresh_block_stats().num);
       tref.for_each_fresh_block([&](auto &e) {
 	if (e->is_valid()) {
@@ -399,6 +400,12 @@ TransactionManager::submit_transaction_direct(
 	    backref_to_link.push_back(e);
 	}
       });
+
+      for (auto &e: tref.get_existing_block_list()) {
+	if (e->is_valid()) {
+	  lba_to_link.push_back(e);
+	}
+      }
 
       lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
       backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
