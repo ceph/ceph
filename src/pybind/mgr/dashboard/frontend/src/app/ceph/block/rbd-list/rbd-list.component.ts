@@ -4,6 +4,8 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Observable, Subscriber } from 'rxjs';
 
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableServerSideService } from '~/app/shared/services/cd-table-server-side.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
@@ -73,6 +75,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   tableStatus = new TableStatusViewCache();
   selection = new CdTableSelection();
   icons = Icons;
+	count: number = 0;
+	private tableContext: CdTableFetchDataContext = null;
 
   modalRef: NgbModalRef;
 
@@ -121,7 +125,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     public taskListService: TaskListService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n
-  ) {
+	) {
     super();
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
@@ -344,15 +348,18 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       ].includes(task.name);
     };
 
-    this.taskListService.init(
-      () => this.rbdService.list(),
-      (resp) => this.prepareResponse(resp),
-      (images) => (this.images = images),
-      () => this.onFetchError(),
-      taskFilter,
-      itemFilter,
-      this.builders
-    );
+		console.log(taskFilter);
+		console.log(itemFilter);
+		console.log(this.builders);
+    // this.taskListService.init(
+		// 	(context: CdTableFetchDataContext) => this.rbdService.list(context.toParams()),
+		// 	(resp) => this.prepareResponse(resp),
+    //   (images) => (this.images = images),
+    //   () => this.onFetchError(),
+    //   taskFilter,
+    //   itemFilter,
+    //   this.builders
+    // );
   }
 
   onFetchError() {
@@ -360,10 +367,22 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     this.tableStatus = new TableStatusViewCache(ViewCacheStatus.ValueException);
   }
 
-  prepareResponse(resp: any[]): any[] {
-    let images: any[] = [];
+	getRbdImages(context: CdTableFetchDataContext = null){
+		if(context !== null) {
+			this.tableContext = context;
+		}
+		console.log(context);
+		this.rbdService.list(this.tableContext.toParams()).
+			subscribe((resp: any) => {
+				console.log(resp);
+				this.prepareResponse(resp);
+			});
+	}
+	prepareResponse(resp: any[]): any[] {
+		let images: any[] = [];
     const viewCacheStatusMap = {};
 
+		console.log(resp);
     resp.forEach((pool) => {
       if (_.isUndefined(viewCacheStatusMap[pool.status])) {
         viewCacheStatusMap[pool.status] = [];
@@ -404,6 +423,13 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       }
     });
 
+		console.group('reponse');
+		console.log(resp);
+		console.log(resp[0].headers);
+		this.count = CdTableServerSideService.getCount(resp[0]);
+		console.log(this.count);
+		this.images = images;
+		console.groupEnd();
     return images;
   }
 
@@ -626,3 +652,30 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     return false;
   }
 }
+
+
+/*
+	for pool in pools
+	  for namespace in namespaces
+		  refs = get_image_refs
+			for ref in refs:
+			   get_data(ref)
+	 
+@ttl_cache(5)
+def get_refs();
+  joint_refs = []
+	for pool in pools
+	  for namespace in namespaces
+		  refs = get_image_refs
+			for ref in refs:
+			  joint_refs.append(ref)
+	return joint_refs
+
+sort(joint_refs)
+		for ref in joint_refs[offset:offset+limit]:
+get_data(ref)
+
+
+
+	  
+*/

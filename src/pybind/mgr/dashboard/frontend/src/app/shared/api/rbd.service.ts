@@ -36,27 +36,30 @@ export class RbdService {
     });
   }
 
-  get(imageSpec: ImageSpec) {
-    return this.http.get(`api/block/image/${imageSpec.toStringEncoded()}`);
+	get(imageSpec: ImageSpec) {
+		return this.http.get(`api/block/image/${imageSpec.toStringEncoded()}`);
   }
 
-  list() {
-    return this.http.get<RbdPool[]>('api/block/image').pipe(
-      map((pools) =>
-        pools.map((pool) => {
-          pool.value.map((image) => {
+  list(params: any) {
+		return this.http.get<RbdPool[]>('api/block/image', {params: params, observe: 'response'}).pipe(
+			map((response: any) => {
+				console.log(response);
+        return response['body'].map((pool: any) => {
+          pool.value.map((image: any) => {
             if (!image.configuration) {
               return image;
             }
-            image.configuration.map((option) =>
+            image.configuration.map((option: any) =>
               Object.assign(option, this.rbdConfigurationService.getOptionByName(option.name))
             );
             return image;
           });
+					pool['headers'] = response.headers;
           return pool;
         })
-      )
-    );
+			}
+				 )
+		);
   }
 
   copy(imageSpec: ImageSpec, rbd: any) {

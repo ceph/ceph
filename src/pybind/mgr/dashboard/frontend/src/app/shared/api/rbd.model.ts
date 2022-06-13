@@ -4,6 +4,7 @@ export interface RbdPool {
   pool_name: string;
   status: number;
   value: RbdImage[];
+	headers: any;
 }
 
 export interface RbdImage {
