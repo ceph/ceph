@@ -16,6 +16,10 @@ if(WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND rgw_libs Boost::filesystem)
 endif()
 
+if(WITH_JAEGER)
+  list(APPEND rgw_libs ${jaeger_base})
+endif()
+
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)

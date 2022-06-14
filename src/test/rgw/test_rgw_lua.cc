@@ -157,7 +157,11 @@ auto g_cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
 
 CctCleaner cleaner(g_cct);
 
+tracing::Tracer tracer;
+
 #define DEFINE_REQ_STATE RGWEnv e; req_state s(g_cct, &e, 0);
+#define INIT_TRACE tracer.init("test"); \
+                   s.trace = tracer.start_trace("test", true);
 
 TEST(TestRGWLua, EmptyScript)
 {
@@ -1161,3 +1165,50 @@ TEST(TestRGWLuaBackground, TableIncrementError)
   ASSERT_NE(rc, 0);
 }
 
+TEST(TestRGWLua, TracingSetAttribute)
+{
+  const std::string script = R"(
+    Request.Trace.SetAttribute("str-attr", "value")
+    Request.Trace.SetAttribute("int-attr", 42)
+    Request.Trace.SetAttribute("double-attr", 42.5)
+  )";
+
+  DEFINE_REQ_STATE;
+  INIT_TRACE;
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, TracingSetBadAttribute)
+{
+  const std::string script = R"(
+    Request.Trace.SetAttribute("attr", nil)
+  )";
+
+  DEFINE_REQ_STATE;
+  INIT_TRACE;
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  #ifdef HAVE_JAEGER
+   ASSERT_NE(rc, 0);
+  #else
+   ASSERT_EQ(rc, 0);
+  #endif
+}
+
+TEST(TestRGWLua, TracingAddEvent)
+{
+  const std::string script = R"(
+    event_attrs = {}
+    event_attrs["x"] = "value-x"
+    event_attrs[42] = 42
+    event_attrs[42.5] = 42.5
+    event_attrs["y"] = "value-y"
+
+    Request.Trace.AddEvent("my_event", event_attrs)
+  )";
+
+  DEFINE_REQ_STATE;
+  INIT_TRACE;
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_EQ(rc, 0);
+}
