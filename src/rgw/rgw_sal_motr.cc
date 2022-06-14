@@ -5306,7 +5306,7 @@ int MotrStore::next_query_by_name(string idx_name,
 
 out:
   m0_idx_fini(&idx);
-  return rc <= 0 ? rc : i + k;
+  return rc < 0 ? rc : i + k;
 }
 
 int MotrStore::delete_motr_idx_by_name(string iname)
