@@ -86,7 +86,11 @@
 %endif
 %endif
 %bcond_with seastar
+%if 0%{?suse_version}
+%bcond_with jaeger
+%else
 %bcond_without jaeger
+%endif
 %if 0%{?fedora} || 0%{?suse_version} >= 1500
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
@@ -1362,8 +1366,8 @@ cmake .. \
 %if 0%{with system_pmdk}
     -DWITH_SYSTEM_PMDK:BOOL=ON \
 %endif
-%if 0%{with jaeger}
-    -DWITH_JAEGER:BOOL=ON \
+%if 0%{without jaeger}
+    -DWITH_JAEGER:BOOL=OFF \
 %endif
 %if 0%{?suse_version}
     -DBOOST_J:STRING=%{jobs} \
