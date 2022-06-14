@@ -441,6 +441,8 @@ class PgScrubber : public ScrubPgIF,
     return false;
   }
 
+  void update_scrub_stats(ceph::coarse_real_clock::time_point now_is) final;
+
   int asok_debug(std::string_view cmd,
 		 std::string param,
 		 Formatter* f,
@@ -881,6 +883,10 @@ class PgScrubber : public ScrubPgIF,
 
   void persist_scrub_results(inconsistent_objs_t&& all_errors);
   void apply_snap_mapper_fixes(const std::vector<snap_mapper_fix_t>& fix_list);
+
+  // our latest periodic 'publish_stats_to_osd()'. Required frequency depends on
+  // scrub state.
+  ceph::coarse_real_clock::time_point m_last_stat_upd{};
 
   // ------------ members used if we are a replica
 

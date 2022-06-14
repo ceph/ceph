@@ -724,7 +724,7 @@ ScrubQueue::ScrubQContainer ScrubQueue::list_registered_jobs() const
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
-// ScrubJob - scrub resource management
+// ScrubQueue - scrub resource management
 
 bool ScrubQueue::can_inc_scrubs() const
 {
