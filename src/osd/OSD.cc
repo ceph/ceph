@@ -7536,6 +7536,8 @@ MPGStats* OSD::collect_pg_stats()
   min_last_epoch_clean = get_osdmap_epoch();
   min_last_epoch_clean_pgs.clear();
 
+  auto now_is = ceph::coarse_real_clock::now();
+
   std::set<int64_t> pool_set;
   vector<PGRef> pgs;
   _get_pgs(&pgs);
@@ -7545,7 +7547,7 @@ MPGStats* OSD::collect_pg_stats()
     if (!pg->is_primary()) {
       continue;
     }
-    pg->with_pg_stats([&](const pg_stat_t& s, epoch_t lec) {
+    pg->with_pg_stats(now_is, [&](const pg_stat_t& s, epoch_t lec) {
 	m->pg_stat[pg->pg_id.pgid] = s;
 	min_last_epoch_clean = std::min(min_last_epoch_clean, lec);
 	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
