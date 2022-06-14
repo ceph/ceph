@@ -6229,6 +6229,8 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
     pl->send_pg_created(pgid);
   }
 
+  psdout(1) << __func__ << " AllReplicasActivated Activating complete" << dendl;
+
   ps->info.history.last_epoch_started = ps->info.last_epoch_started;
   ps->info.history.last_interval_started = ps->info.last_interval_started;
   ps->dirty_info = true;
