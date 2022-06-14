@@ -1314,7 +1314,7 @@ Subcommand ``cache-mode`` specifies the caching mode for cache tier <pool>.
 
 Usage::
 
-	ceph osd tier cache-mode <poolname> writeback|readproxy|readonly|none
+	ceph osd tier cache-mode <poolname> writeback|proxy|readproxy|readonly|none
 
 Subcommand ``remove`` removes the tier <tierpool> (the second one) from base pool
 <pool> (the first one).
@@ -1615,9 +1615,9 @@ Options
 
 	Make less verbose.
 
-.. option:: -f {json,json-pretty,xml,xml-pretty,plain}, --format
+.. option:: -f {json,json-pretty,xml,xml-pretty,plain,yaml}, --format
 
-	Format of output.
+	Format of output. Note: yaml is only valid for orch commands. 
 
 .. option:: --connect-timeout CLUSTER_TIMEOUT
 

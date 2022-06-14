@@ -39,7 +39,7 @@ function eval_actual_expected_val() {
     then
      echo "Success: " $actual_value "=" $expected_value
     else
-      echo "Error: " $actual_value "!=" $expected_value  
+      echo "Error: " $actual_value "!=" $expected_value
       exit 1
     fi
 }
@@ -51,7 +51,7 @@ ceph mgr module enable pg_autoscaler
 
 # pg_num_min
 ceph osd pool create meta0 16
-ceph osd pool create bulk0 16  --bulk
+ceph osd pool create bulk0 16 --bulk
 ceph osd pool create bulk1 16 --bulk
 ceph osd pool create bulk2 16 --bulk
 ceph osd pool set meta0 pg_autoscale_mode on

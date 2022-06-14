@@ -827,10 +827,10 @@ int RGWSI_Zone::init_zg_from_period(const DoutPrefixProvider *dpp, optional_yiel
       }
     }
     const auto& endpoints = master->second.endpoints;
-    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), endpoints, zg.api_name));
+    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, zg.get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zg.api_name));
     if (!current_period->get_master_zonegroup().empty() &&
         zg.get_id() == current_period->get_master_zonegroup()) {
-      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), endpoints, zg.api_name);
+      rest_master_conn = new RGWRESTConn(cct, zg.get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zg.api_name);
     }
   }
 
@@ -894,7 +894,7 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield
       }
     }
     const auto& endpoints = master->second.endpoints;
-    rest_master_conn = new RGWRESTConn(cct, this, zonegroup->get_id(), endpoints, zonegroup->api_name);
+    rest_master_conn = new RGWRESTConn(cct, zonegroup->get_id(), endpoints, zone_params->system_key, zonegroup->get_id(), zonegroup->api_name);
   }
 
   return 0;
@@ -950,8 +950,8 @@ int RGWSI_Zone::convert_regionmap(const DoutPrefixProvider *dpp, optional_yield 
     }
   }
 
-  current_period->set_user_quota(zonegroupmap.user_quota);
-  current_period->set_bucket_quota(zonegroupmap.bucket_quota);
+  current_period->set_user_quota(zonegroupmap.quota.user_quota);
+  current_period->set_bucket_quota(zonegroupmap.quota.bucket_quota);
 
   // remove the region_map so we don't try to convert again
   ret = sysobj.wop().remove(dpp, y);
@@ -1108,8 +1108,14 @@ bool RGWSI_Zone::need_to_log_metadata() const
 
 bool RGWSI_Zone::can_reshard() const
 {
-  return current_period->get_id().empty() ||
-    (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup());
+  if (current_period->get_id().empty()) {
+    return true; // no realm
+  }
+  if (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup()) {
+    return true; // single zone/zonegroup
+  }
+  // 'resharding' feature enabled in zonegroup
+  return zonegroup->supports(rgw::zone_features::resharding);
 }
 
 /**

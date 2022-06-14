@@ -436,6 +436,98 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         formHelper.expectError('frontend_port', 'pattern');
         formHelper.expectError('monitor_port', 'pattern');
       });
+
+      it('should not show private key field with ssl enabled', () => {
+        formHelper.setValue('ssl', true);
+        fixture.detectChanges();
+        const ssl_key = fixture.debugElement.query(By.css('#ssl_key'));
+        expect(ssl_key).toBeNull();
+      });
+
+      it('should test .pem file with ssl enabled', () => {
+        const pemCert = `
+-----BEGIN CERTIFICATE-----
+iJ5IbgzlKPssdYwuAEI3yPZxX/g5vKBrgcyD3LttLL/DlElq/1xCnwVrv7WROSNu
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+mn/S7BNBEC7AGe5ajmN+8hBTGdACUXe8rwMNrtTy/MwBZ0VpJsAAjJh+aptZh5yB
+-----END CERTIFICATE-----
+-----BEGIN RSA PRIVATE KEY-----
+x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
+-----END RSA PRIVATE KEY-----`;
+        formHelper.setValue('ssl', true);
+        formHelper.setValue('ssl_cert', pemCert);
+        fixture.detectChanges();
+        formHelper.expectValid('ssl_cert');
+      });
+    });
+
+    describe('should test service snmp-gateway', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'snmp-gateway');
+        formHelper.setValue('snmp_destination', '192.168.20.1:8443');
+      });
+
+      it('should test snmp-gateway service with V2c', () => {
+        formHelper.setValue('snmp_version', 'V2c');
+        formHelper.setValue('snmp_community', 'public');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'snmp-gateway',
+          placement: {},
+          unmanaged: false,
+          snmp_version: 'V2c',
+          snmp_destination: '192.168.20.1:8443',
+          credentials: {
+            snmp_community: 'public'
+          }
+        });
+      });
+
+      it('should test snmp-gateway service with V3', () => {
+        formHelper.setValue('snmp_version', 'V3');
+        formHelper.setValue('engine_id', '800C53F00000');
+        formHelper.setValue('auth_protocol', 'SHA');
+        formHelper.setValue('privacy_protocol', 'DES');
+        formHelper.setValue('snmp_v3_auth_username', 'testuser');
+        formHelper.setValue('snmp_v3_auth_password', 'testpass');
+        formHelper.setValue('snmp_v3_priv_password', 'testencrypt');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'snmp-gateway',
+          placement: {},
+          unmanaged: false,
+          snmp_version: 'V3',
+          snmp_destination: '192.168.20.1:8443',
+          engine_id: '800C53F00000',
+          auth_protocol: 'SHA',
+          privacy_protocol: 'DES',
+          credentials: {
+            snmp_v3_auth_username: 'testuser',
+            snmp_v3_auth_password: 'testpass',
+            snmp_v3_priv_password: 'testencrypt'
+          }
+        });
+      });
+
+      it('should submit invalid snmp destination', () => {
+        formHelper.setValue('snmp_version', 'V2c');
+        formHelper.setValue('snmp_destination', '192.168.20.1');
+        formHelper.setValue('snmp_community', 'public');
+        formHelper.expectError('snmp_destination', 'snmpDestinationPattern');
+      });
+
+      it('should submit invalid snmp engine id', () => {
+        formHelper.setValue('snmp_version', 'V3');
+        formHelper.setValue('snmp_destination', '192.168.20.1');
+        formHelper.setValue('engine_id', 'AABBCCDDE');
+        formHelper.setValue('auth_protocol', 'SHA');
+        formHelper.setValue('privacy_protocol', 'DES');
+        formHelper.setValue('snmp_v3_auth_username', 'testuser');
+        formHelper.setValue('snmp_v3_auth_password', 'testpass');
+
+        formHelper.expectError('engine_id', 'snmpEngineIdPattern');
+      });
     });
 
     describe('check edit fields', () => {

@@ -29,11 +29,41 @@ EphemeralSegmentManagerRef create_test_ephemeral() {
     new EphemeralSegmentManager(DEFAULT_TEST_EPHEMERAL));
 }
 
+device_config_t get_ephemeral_device_config(
+    std::size_t index, std::size_t num_devices)
+{
+  assert(num_devices > index);
+  magic_t magic = 0xabcd;
+  auto type = device_type_t::SEGMENTED;
+  bool is_major_device;
+  secondary_device_set_t secondary_devices;
+  if (index == 0) {
+    is_major_device = true;
+    for (std::size_t secondary_index = index + 1;
+         secondary_index < num_devices;
+         ++secondary_index) {
+      device_id_t secondary_id = static_cast<device_id_t>(secondary_index);
+      secondary_devices.insert({
+        secondary_index, device_spec_t{magic, type, secondary_id}
+      });
+    }
+  } else { // index > 0
+    is_major_device = false;
+  }
+
+  device_id_t id = static_cast<device_id_t>(index);
+  seastore_meta_t meta = {};
+  return {is_major_device,
+          device_spec_t{magic, type, id},
+          meta,
+          secondary_devices};
+}
+
 EphemeralSegment::EphemeralSegment(
   EphemeralSegmentManager &manager, segment_id_t id)
   : manager(manager), id(id) {}
 
-segment_off_t EphemeralSegment::get_write_capacity() const
+seastore_off_t EphemeralSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
@@ -46,7 +76,7 @@ Segment::close_ertr::future<> EphemeralSegment::close()
 }
 
 Segment::write_ertr::future<> EphemeralSegment::write(
-  segment_off_t offset, ceph::bufferlist bl)
+  seastore_off_t offset, ceph::bufferlist bl)
 {
   if (offset < write_pointer || offset % manager.config.block_size != 0)
     return crimson::ct_error::invarg::make();
@@ -67,6 +97,16 @@ Segment::close_ertr::future<> EphemeralSegmentManager::segment_close(segment_id_
   return Segment::close_ertr::now().safe_then([] {
     return seastar::sleep(std::chrono::milliseconds(1));
   });
+}
+
+EphemeralSegmentManager::mkfs_ret
+EphemeralSegmentManager::mkfs(device_config_t _config)
+{
+  logger().info(
+    "Mkfs ephemeral segment manager with {}",
+    _config);
+  device_config = _config;
+  return mkfs_ertr::now();
 }
 
 Segment::write_ertr::future<> EphemeralSegmentManager::segment_write(
@@ -94,11 +134,9 @@ Segment::write_ertr::future<> EphemeralSegmentManager::segment_write(
 
 EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
 {
-  logger().debug(
+  logger().info(
     "Initing ephemeral segment manager with config {}",
     config);
-
-  meta = seastore_meta_t{};
 
   if (config.block_size % (4<<10) != 0) {
     return crimson::ct_error::invarg::make();

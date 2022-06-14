@@ -28,7 +28,6 @@ Premier
 -------
 
 * `Bloomberg <https://bloomberg.com>`_
-* `China Mobile <https://www.chinamobileltd.com/>`_
 * `DigitalOcean <https://www.digitalocean.com/>`_
 * `Intel <http://www.intel.com/>`_
 * `OVH <https://www.ovh.com/>`_
@@ -44,6 +43,7 @@ General
 -------
 
 * `ARM <http://www.arm.com/>`_
+* `ArvanCloud <https://www.arvancloud.com>`_
 * `Canonical <https://www.canonical.com/>`_
 * `Cloudbase Solutions <https://cloudbase.it/>`_
 * `Clyso <https://www.clyso.com/en/>`_
@@ -52,7 +52,6 @@ General
 * `ISS <http://iss-integration.com/>`_
 * `Linode <https://linode.com/>`_
 * `OSNexus <https://osnexus.com/>`_
-* `QCT <https://www.qct.io/>`_
 * `SinoRail <http://www.sinorail.com/>`_
 * `Vexxhost <https://vexxhost.com>`_
 

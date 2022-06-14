@@ -56,14 +56,14 @@ class ActivePyModules
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
-  TTLCache<string, PyObject*> ttl_cache;
+  TTLCache<std::string, PyObject*> ttl_cache;
 public:
   Finisher cmd_finisher;
 private:
   DaemonServer &server;
   PyModuleRegistry &py_module_registry;
 
-  map<std::string,ProgressEvent> progress_events;
+  std::map<std::string,ProgressEvent> progress_events;
 
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
 
@@ -124,6 +124,7 @@ public:
       const MDSPerfMetricQuery &query,
       const std::optional<MDSPerfMetricLimit> &limit);
   void remove_mds_perf_query(MetricQueryID query_id);
+  void reregister_mds_perf_queries();
   PyObject *get_mds_perf_counters(MetricQueryID query_id);
 
   bool get_store(const std::string &module_name,

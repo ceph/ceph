@@ -298,5 +298,8 @@ public:
   virtual void encode_obj(bufferlist *bl) {}
 };
 
+void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& key, std::string& name, int *shard_id);
+void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& section, const std::string& key, std::string& name);
+void rgw_shard_name(const std::string& prefix, unsigned shard_id, std::string& name);
 
 #endif

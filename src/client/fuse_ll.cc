@@ -24,6 +24,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#if defined(__linux__)
+#include <libgen.h>
+#include <sys/vfs.h>
+#include <sys/xattr.h>
+#include <linux/magic.h>
+#endif
+
 // ceph
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -52,6 +59,14 @@
 #define MAJOR(dev)	((unsigned int) ((dev) >> MINORBITS))
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
+
+#if defined(__linux__)
+#ifndef FUSE_SUPER_MAGIC
+#define FUSE_SUPER_MAGIC 0x65735546
+#endif
+
+#define _CEPH_CLIENT_ID	"ceph.client_id"
+#endif
 
 using namespace std;
 
@@ -162,6 +177,84 @@ public:
 
   struct fuse_args args;
 };
+
+#if defined(__linux__)
+static int already_fuse_mounted(const char *path, bool &already_mounted)
+{
+  struct statx path_statx;
+  struct statx parent_statx;
+  char path_copy[PATH_MAX] = {0};
+  char *parent_path = NULL;
+  int err = 0;
+
+  already_mounted = false;
+
+  strncpy(path_copy, path, sizeof(path_copy)-1);
+  parent_path = dirname(path_copy);
+
+  // get stat information for original path
+  if (-1 == statx(AT_FDCWD, path, AT_STATX_DONT_SYNC, STATX_INO, &path_statx)) {
+    err = errno;
+    derr << "fuse_ll: already_fuse_mounted: statx(" << path << ") failed with error "
+      << cpp_strerror(err) << dendl;
+    return err;
+  }
+
+  // if path isn't directory, then it can't be a mountpoint.
+  if (!(path_statx.stx_mode & S_IFDIR)) {
+    err = EINVAL;
+    derr << "fuse_ll: already_fuse_mounted: "
+      << path << " is not a directory" << dendl;
+    return err;
+  }
+
+  // get stat information for parent path
+  if (-1 == statx(AT_FDCWD, parent_path, AT_STATX_DONT_SYNC, STATX_INO, &parent_statx)) {
+    err = errno;
+    derr << "fuse_ll: already_fuse_mounted: statx(" << parent_path << ") failed with error "
+      << cpp_strerror(err) << dendl;
+    return err;
+  }
+
+  // if original path and parent have different device ids,
+  // then the path is a mount point
+  // or, if they refer to the same path, then it's probably
+  // the root directory '/' and therefore path is a mountpoint
+  if( path_statx.stx_dev_major != parent_statx.stx_dev_major ||
+      path_statx.stx_dev_minor != parent_statx.stx_dev_minor ||
+      ( path_statx.stx_dev_major == parent_statx.stx_dev_major &&
+	path_statx.stx_dev_minor == parent_statx.stx_dev_minor &&
+	path_statx.stx_ino == parent_statx.stx_ino
+      )
+    ) {
+    struct statfs path_statfs;
+    if (-1 == statfs(path, &path_statfs)) {
+      err = errno;
+      derr << "fuse_ll: already_fuse_mounted: statfs(" << path << ") failed with error "
+        << cpp_strerror(err) << dendl;
+      return err;
+    }
+
+    if(FUSE_SUPER_MAGIC == path_statfs.f_type) {
+      // if getxattr returns positive length means value exist for ceph.client_id
+      // then ceph fuse is already mounted on path
+      char client_id[128] = {0};
+      if (getxattr(path, _CEPH_CLIENT_ID, &client_id, sizeof(client_id)) > 0) {
+	already_mounted = true;
+	derr << path << " already mounted by " << client_id << dendl;
+      }
+    }
+  }
+
+  return err;
+}
+#else // non-linux platforms
+static int already_fuse_mounted(const char *path, bool &already_mounted)
+{
+  already_mounted = false;
+  return 0;
+}
+#endif
 
 static int getgroups(fuse_req_t req, gid_t **sgids)
 {
@@ -1349,6 +1442,20 @@ int CephFuse::Handle::init(int argc, const char *argv[])
 
 int CephFuse::Handle::start()
 {
+  bool is_mounted = false;
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  int err = already_fuse_mounted(opts.mountpoint, is_mounted);
+#else
+  int err = already_fuse_mounted(mountpoint, is_mounted);
+#endif
+  if (err) {
+    return err;
+  }
+
+  if (is_mounted) {
+    return EBUSY;
+  }
+
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   se = fuse_session_new(&args, &fuse_ll_oper, sizeof(fuse_ll_oper), this);
   if (!se) {

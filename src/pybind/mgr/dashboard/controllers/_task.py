@@ -37,27 +37,32 @@ class Task:
 
         return arg_map
 
+    def _get_metadata(self, arg_map):
+        metadata = {}
+        for k, v in self.metadata.items():
+            if isinstance(v, str) and v and v[0] == '{' and v[-1] == '}':
+                param = v[1:-1]
+                try:
+                    pos = int(param)
+                    metadata[k] = arg_map[pos]
+                except ValueError:
+                    if param.find('.') == -1:
+                        metadata[k] = arg_map[param]
+                    else:
+                        path = param.split('.')
+                        metadata[k] = arg_map[path[0]]
+                        for i in range(1, len(path)):
+                            metadata[k] = metadata[k][path[i]]
+            else:
+                metadata[k] = v
+        return metadata
+
     def __call__(self, func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             arg_map = self._gen_arg_map(func, args, kwargs)
-            metadata = {}
-            for k, v in self.metadata.items():
-                if isinstance(v, str) and v and v[0] == '{' and v[-1] == '}':
-                    param = v[1:-1]
-                    try:
-                        pos = int(param)
-                        metadata[k] = arg_map[pos]
-                    except ValueError:
-                        if param.find('.') == -1:
-                            metadata[k] = arg_map[param]
-                        else:
-                            path = param.split('.')
-                            metadata[k] = arg_map[path[0]]
-                            for i in range(1, len(path)):
-                                metadata[k] = metadata[k][path[i]]
-                else:
-                    metadata[k] = v
+            metadata = self._get_metadata(arg_map)
+
             task = TaskManager.run(self.name, metadata, func, args, kwargs,
                                    exception_handler=self.exception_handler)
             try:

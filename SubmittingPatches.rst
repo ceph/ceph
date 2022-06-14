@@ -173,7 +173,7 @@ able to refer to the bug tracker easily.
 
 Here is an example showing a properly-formed commit message::
 
-     doc: add "--foo" option to bar
+     doc/rados/mumble: Add "--foo" option to bar
 
      This commit updates the man page for bar with the newly added "--foo"
      option.

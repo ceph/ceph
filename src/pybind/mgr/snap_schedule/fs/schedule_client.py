@@ -25,7 +25,13 @@ SNAP_DB_PREFIX = 'snap_db'
 # increment this every time the db schema changes and provide upgrade code
 SNAP_DB_VERSION = '0'
 SNAP_DB_OBJECT_NAME = f'{SNAP_DB_PREFIX}_v{SNAP_DB_VERSION}'
+# scheduled snapshots are tz suffixed
+SNAPSHOT_TS_FORMAT_TZ = '%Y-%m-%d-%H_%M_%S_%Z'
+# for backward compat snapshot name parsing
 SNAPSHOT_TS_FORMAT = '%Y-%m-%d-%H_%M_%S'
+# length of timestamp format (without tz suffix)
+# e.g.: scheduled-2022-04-19-05_39_00_UTC (len = "2022-04-19-05_39_00")
+SNAPSHOT_TS_FORMAT_LEN = 19
 SNAPSHOT_PREFIX = 'scheduled'
 
 log = logging.getLogger(__name__)
@@ -70,6 +76,7 @@ def get_prune_set(candidates: Set[Tuple[cephfs.DirEntry, datetime]],
     PRUNING_PATTERNS = OrderedDict([
         # n is for keep last n snapshots, uses the snapshot name timestamp
         # format for lowest granularity
+        # NOTE: prune set has tz suffix stripped out.
         ("n", SNAPSHOT_TS_FORMAT),
         # TODO remove M for release
         ("M", '%Y-%m-%d-%H_%M'),
@@ -110,6 +117,10 @@ def get_prune_set(candidates: Set[Tuple[cephfs.DirEntry, datetime]],
         keep = keep[:MAX_SNAPS_PER_PATH]
     return candidates - set(keep)
 
+def snap_name_to_timestamp(scheduled_snap_name: str) -> str:
+    """ extract timestamp from a schedule snapshot with tz suffix stripped out """
+    ts = scheduled_snap_name.lstrip(f'{SNAPSHOT_PREFIX}-')
+    return ts[0:SNAPSHOT_TS_FORMAT_LEN]
 
 class DBInfo():
     def __init__(self, fs: str, db: sqlite3.Connection):
@@ -144,8 +155,6 @@ class SnapSchedClient(CephfsClient):
 
     def __init__(self, mgr: Any) -> None:
         super(SnapSchedClient, self).__init__(mgr)
-        # TODO maybe iterate over all fs instance in fsmap and load snap dbs?
-        #
         # Each db connection is now guarded by a Lock; this is required to
         # avoid concurrent DB transactions when more than one paths in a
         # file-system are scheduled at the same interval eg. 1h; without the
@@ -154,6 +163,14 @@ class SnapSchedClient(CephfsClient):
         self.sqlite_connections: Dict[str, DBInfo] = {}
         self.active_timers: Dict[Tuple[str, str], List[Timer]] = {}
         self.conn_lock: Lock = Lock()  # lock to protect add/lookup db connections
+
+        # restart old schedules
+        for fs_name in self.get_all_filesystems():
+            with self.get_schedule_db(fs_name) as conn_mgr:
+                db = conn_mgr.dbinfo.db
+                sched_list = Schedule.list_all_schedules(db, fs_name)
+                for sched in sched_list:
+                    self.refresh_snap_timers(fs_name, sched.path, db)
 
     @property
     def allow_minute_snaps(self) -> None:
@@ -269,7 +286,7 @@ class SnapSchedClient(CephfsClient):
                                                       start=start)[0]
                     time = datetime.now(timezone.utc)
                     with open_filesystem(self, fs_name) as fs_handle:
-                        snap_ts = time.strftime(SNAPSHOT_TS_FORMAT)
+                        snap_ts = time.strftime(SNAPSHOT_TS_FORMAT_TZ)
                         snap_name = f'{path}/.snap/{SNAPSHOT_PREFIX}-{snap_ts}'
                         fs_handle.mkdir(snap_name, 0o755)
                     log.info(f'created scheduled snapshot of {path}')
@@ -302,8 +319,7 @@ class SnapSchedClient(CephfsClient):
                         if dir_.d_name.decode('utf-8').startswith(f'{SNAPSHOT_PREFIX}-'):
                             log.debug(f'add {dir_.d_name} to pruning')
                             ts = datetime.strptime(
-                                dir_.d_name.decode('utf-8').lstrip(f'{SNAPSHOT_PREFIX}-'),
-                                SNAPSHOT_TS_FORMAT)
+                                snap_name_to_timestamp(dir_.d_name.decode('utf-8')), SNAPSHOT_TS_FORMAT)
                             prune_candidates.add((dir_, ts))
                         else:
                             log.debug(f'skipping dir entry {dir_.d_name}')

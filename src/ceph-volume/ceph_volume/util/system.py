@@ -5,6 +5,7 @@ import pwd
 import platform
 import tempfile
 import uuid
+import subprocess
 from ceph_volume import process, terminal
 from . import as_string
 
@@ -32,12 +33,39 @@ else:
     BLOCKDIR = '/sys/block'
     ROOTGROUP = 'root'
 
+host_rootfs = '/rootfs'
+run_host_cmd = [
+        'nsenter',
+        '--mount={}/proc/1/ns/mnt'.format(host_rootfs),
+        '--ipc={}/proc/1/ns/ipc'.format(host_rootfs),
+        '--net={}/proc/1/ns/net'.format(host_rootfs),
+        '--uts={}/proc/1/ns/uts'.format(host_rootfs)
+]
 
 def generate_uuid():
     return str(uuid.uuid4())
 
+def find_executable_on_host(locations=[], executable='', binary_check='/bin/ls'):
+    paths = ['{}/{}'.format(location, executable) for location in locations]
+    command = []
+    command.extend(run_host_cmd + [binary_check] + paths)
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
+        close_fds=True
+    )
+    stdout = as_string(process.stdout.read())
+    if stdout:
+        executable_on_host = stdout.split('\n')[0]
+        logger.info('Executable {} found on the host, will use {}'.format(executable, executable_on_host))
+        return executable_on_host
+    else:
+        logger.warning('Executable {} not found on the host, will return {} as-is'.format(executable, executable))
+        return executable
 
-def which(executable):
+def which(executable, run_on_host=False):
     """find the location of an executable"""
     def _get_path(executable, locations):
         for location in locations:
@@ -45,13 +73,6 @@ def which(executable):
             if os.path.exists(executable_path) and os.path.isfile(executable_path):
                 return executable_path
         return None
-
-    path = os.getenv('PATH', '')
-    path_locations = path.split(':')
-    exec_in_path = _get_path(executable, path_locations)
-    if exec_in_path:
-        return exec_in_path
-    mlogger.warning('Executable {} not in PATH: {}'.format(executable, path))
 
     static_locations = (
         '/usr/local/bin',
@@ -61,14 +82,26 @@ def which(executable):
         '/usr/sbin',
         '/sbin',
     )
-    exec_in_static_locations = _get_path(executable, static_locations)
-    if exec_in_static_locations:
-        mlogger.warning('Found executable under {}, please ensure $PATH is set correctly!'.format(exec_in_static_locations))
-        return exec_in_static_locations
-    # fallback to just returning the argument as-is, to prevent a hard fail,
-    # and hoping that the system might have the executable somewhere custom
-    return executable
 
+    if not run_on_host:
+        path = os.getenv('PATH', '')
+        path_locations = path.split(':')
+        exec_in_path = _get_path(executable, path_locations)
+        if exec_in_path:
+            return exec_in_path
+        mlogger.warning('Executable {} not in PATH: {}'.format(executable, path))
+
+        exec_in_static_locations = _get_path(executable, static_locations)
+        if exec_in_static_locations:
+            mlogger.warning('Found executable under {}, please ensure $PATH is set correctly!'.format(exec_in_static_locations))
+            return exec_in_static_locations
+    else:
+        executable = find_executable_on_host(static_locations, executable)
+
+    # At this point, either `find_executable_on_host()` found an executable on the host
+    # or we fallback to just returning the argument as-is, to prevent a hard fail, and
+    # hoping that the system might have the executable somewhere custom
+    return executable
 
 def get_ceph_user_ids():
     """

@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <iostream>
+#include <fstream>
 #include <random>
 
 #include <seastar/apps/lib/stop_signal.hh>
@@ -19,80 +20,57 @@
 
 #include "auth/KeyRing.h"
 #include "common/ceph_argparse.h"
+#include "common/config_tracker.h"
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/fatal_signal.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "global/pidfile.h"
-
 #include "osd.h"
 
+using namespace std::literals;
 namespace bpo = boost::program_options;
-using config_t = crimson::common::ConfigProxy;
-using std::string;
 
 seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_osd);
 }
 
 void usage(const char* prog) {
-  std::cout << "usage: " << prog << "\n"
-            << "  -i <ID>\n";
+  std::cout << "usage: " << prog << std::endl;
   generic_server_usage();
 }
 
-auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_end)
+auto partition_args(int argc, const char *argv[])
 {
-  // collect all options consumed by seastar::app_template
-  auto parsed = bpo::command_line_parser(std::distance(argv_begin, argv_end),
-                                         argv_begin)
-    .options(app.get_options_description())
-    .style(bpo::command_line_style::default_style &
-           ~bpo::command_line_style::allow_guessing)
-    .allow_unregistered().run();
-  auto unknown_args = bpo::collect_unrecognized(parsed.options,
-                                                bpo::include_positional);
-  std::vector<const char*> ceph_args, app_args;
-  // ceph_argparse_early_args() and
-  // seastar::smp::get_options_description() use "-c" for different
-  // options. and ceph wins
-  auto consume_conf_arg = [&](char** argv) {
-    if (std::strcmp(*argv, "-c") == 0) {
-      std::cout << "warn: apply '-c FILE' as ceph option" << std::endl;
-      ceph_args.push_back(*argv++);
-      if (argv != argv_end) {
-        ceph_args.push_back(*argv++);
+  auto seastar_n_early_args = [=] {
+    class DummyTracker : public ConfigTracker {
+      bool is_tracking(const std::string& name) const override {
+        return false;
       }
-    }
-    return argv;
-  };
-  auto unknown = unknown_args.begin();
-  auto consume_unknown_arg = [&](char** argv) {
-    for (; unknown != unknown_args.end() &&
-           argv != argv_end &&
-           *unknown == *argv; ++argv, ++unknown) {
-      ceph_args.push_back(*argv);
-    }
-    return argv;
-  };
-  for (auto argv = argv_begin; argv != argv_end;) {
-    if (auto next_arg = consume_conf_arg(argv); next_arg != argv) {
-      argv = next_arg;
-    } else if (auto next_arg = consume_unknown_arg(argv); next_arg != argv) {
-      argv = next_arg;
-    } else {
-      app_args.push_back(*argv++);
-    }
-  }
-  return make_pair(std::move(ceph_args), std::move(app_args));
+    };
+    DummyTracker dt;
+    ConfigValues config_values;
+    md_config_t config(config_values, dt, true);
+    std::vector<const char *> seastar_n_early_args{argv, argv + argc};
+    // pull off the stuff from seastar_n_early_args that we'll give to local_conf
+    config.parse_argv(config_values, dt, seastar_n_early_args, CONF_CMDLINE);
+    return seastar_n_early_args;
+  }();
+  
+  // Now that we have a filtered seastar_n_early_args, populate config_proxy_args without them
+  std::vector<const char*> config_proxy_args;
+  std::set_difference(argv, argv + argc,
+                      std::begin(seastar_n_early_args), std::end(seastar_n_early_args),
+                      std::back_inserter(config_proxy_args));
+  return make_pair(std::move(config_proxy_args), std::move(seastar_n_early_args));
 }
 
 using crimson::common::local_conf;
 
 seastar::future<> make_keyring()
 {
-  const auto path = local_conf().get_val<string>("keyring");
+  const auto path = local_conf().get_val<std::string>("keyring");
   return seastar::file_exists(path).then([path](bool exists) {
     KeyRing keyring;
     EntityName name{local_conf()->name};
@@ -196,7 +174,22 @@ static void override_seastar_opts(std::vector<const char*>& args)
   }
 }
 
-int main(int argc, char* argv[])
+static std::ofstream maybe_set_logger()
+{
+  std::ofstream log_file_stream;
+  if (auto log_file = local_conf()->log_file; !log_file.empty()) {
+    log_file_stream.open(log_file, std::ios::app | std::ios::out);
+    try {
+      seastar::throw_system_error_on(log_file_stream.fail());
+    } catch (const std::system_error& e) {
+      ceph_abort_msg(fmt::format("unable to open log file: {}", e.what()));
+    }
+    logger().set_ostream(log_file_stream);
+  }
+  return log_file_stream;
+}
+
+int main(int argc, const char* argv[])
 {
   seastar::app_template::config app_cfg;
   app_cfg.name = "Crimson";
@@ -211,22 +204,21 @@ int main(int argc, char* argv[])
     ("no-mon-config", "do not retrieve configuration from monitors on boot")
     ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
      "Prometheus port. Set to zero to disable")
-    ("prometheus_address", bpo::value<string>()->default_value("0.0.0.0"),
+    ("prometheus_address", bpo::value<std::string>()->default_value("0.0.0.0"),
      "Prometheus listening address")
-    ("prometheus_prefix", bpo::value<string>()->default_value("osd"),
+    ("prometheus_prefix", bpo::value<std::string>()->default_value("osd"),
      "Prometheus metrics prefix");
 
-  auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
-  if (ceph_argparse_need_usage(ceph_args) ||
-      ceph_argparse_need_usage(app_args)) {
+  auto [config_proxy_args, seastar_n_early_args] = partition_args(argc, argv);
+  if (ceph_argparse_need_usage(seastar_n_early_args)) {
     usage(argv[0]);
   }
-  override_seastar_opts(app_args);
+  override_seastar_opts(seastar_n_early_args);
   std::string cluster_name{"ceph"};
   std::string conf_file_list;
   // ceph_argparse_early_args() could _exit(), while local_conf() won't ready
   // until it's started. so do the boilerplate-settings parsing here.
-  auto init_params = ceph_argparse_early_args(ceph_args,
+  auto init_params = ceph_argparse_early_args(seastar_n_early_args,
                                               CEPH_ENTITY_TYPE_OSD,
                                               &cluster_name,
                                               &conf_file_list);
@@ -234,8 +226,8 @@ int main(int argc, char* argv[])
   using crimson::common::sharded_conf;
   using crimson::common::sharded_perf_coll;
   try {
-    return app.run(app_args.size(), const_cast<char**>(app_args.data()),
-      [&, &ceph_args=ceph_args] {
+    return app.run(seastar_n_early_args.size(), const_cast<char**>(seastar_n_early_args.data()),
+      [&, &config_proxy_args=config_proxy_args] {
       auto& config = app.configuration();
       return seastar::async([&] {
         try {
@@ -246,11 +238,11 @@ int main(int argc, char* argv[])
               seastar::log_level::debug
             );
           }
-	  if (config.count("trace")) {
-	    seastar::global_logger_registry().set_all_loggers_level(
+          if (config.count("trace")) {
+            seastar::global_logger_registry().set_all_loggers_level(
               seastar::log_level::trace
             );
-	  }
+          }
           sharded_conf().start(init_params.name, cluster_name).get();
           auto stop_conf = seastar::defer([] {
             sharded_conf().stop().get();
@@ -261,7 +253,11 @@ int main(int argc, char* argv[])
           });
           local_conf().parse_config_files(conf_file_list).get();
           local_conf().parse_env().get();
-          local_conf().parse_argv(ceph_args).get();
+          local_conf().parse_argv(config_proxy_args).get();
+          auto log_file_stream = maybe_set_logger();
+          auto reset_logger = seastar::defer([] {
+            logger().set_ostream(std::cerr);
+          });
           if (const auto ret = pidfile_write(local_conf()->pid_file);
               ret == -EACCES || ret == -EAGAIN) {
             ceph_abort_msg(
@@ -285,9 +281,9 @@ int main(int argc, char* argv[])
             }));
 
             seastar::prometheus::config prom_config;
-            prom_config.prefix = config["prometheus_prefix"].as<string>();
+            prom_config.prefix = config["prometheus_prefix"].as<std::string>();
             seastar::prometheus::start(prom_server, prom_config).get();
-            seastar::net::inet_address prom_addr(config["prometheus_address"].as<string>());
+            seastar::net::inet_address prom_addr(config["prometheus_address"].as<std::string>());
             prom_server.listen(seastar::socket_address{prom_addr, prom_port})
               .handle_exception([=] (auto ep) {
               std::cerr << seastar::format("Could not start Prometheus API server on {}:{}: {}\n",

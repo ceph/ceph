@@ -21,6 +21,7 @@ import { IscsiTargetListComponent } from './iscsi-target-list/iscsi-target-list.
 import { IscsiComponent } from './iscsi/iscsi.component';
 import { MirroringModule } from './mirroring/mirroring.module';
 import { OverviewComponent as RbdMirroringComponent } from './mirroring/overview/overview.component';
+import { PoolEditModeModalComponent } from './mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component';
 import { RbdConfigurationFormComponent } from './rbd-configuration-form/rbd-configuration-form.component';
 import { RbdConfigurationListComponent } from './rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
@@ -139,7 +140,14 @@ const routes: Routes = [
     path: 'mirroring',
     component: RbdMirroringComponent,
     canActivate: [FeatureTogglesGuardService],
-    data: { breadcrumbs: 'Mirroring' }
+    data: { breadcrumbs: 'Mirroring' },
+    children: [
+      {
+        path: `${URLVerbs.EDIT}/:pool_name`,
+        component: PoolEditModeModalComponent,
+        outlet: 'modal'
+      }
+    ]
   },
   // iSCSI
   {

@@ -79,6 +79,24 @@ List volumes using::
 
     $ ceph fs volume ls
 
+Rename a volume using::
+
+    $ ceph fs volume rename <vol_name> <new_vol_name> [--yes-i-really-mean-it]
+
+Renaming a volume can be an expensive operation. It does the following:
+
+- renames the orchestrator managed MDS service to match the <new_vol_name>.
+  This involves launching a MDS service with <new_vol_name> and bringing down
+  the MDS service with <vol_name>.
+- renames the file system matching <vol_name> to <new_vol_name>
+- changes the application tags on the data and metadata pools of the file system
+  to <new_vol_name>
+- renames the  metadata and data pools of the file system.
+
+The CephX IDs authorized to <vol_name> need to be reauthorized to <new_vol_name>. Any
+on-going operations of the clients using these IDs may be disrupted. Mirroring is
+expected to be disabled on the volume.
+
 FS Subvolume groups
 -------------------
 
@@ -194,7 +212,7 @@ Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Fetch the metadata of a subvolume using::
+Fetch the information of a subvolume using::
 
     $ ceph fs subvolume info <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
@@ -242,6 +260,31 @@ List subvolumes using::
 
 .. note:: subvolumes that are removed but have snapshots retained, are also listed.
 
+Set custom metadata on the subvolume as a key-value pair using::
+
+    $ ceph fs subvolume metadata set <vol_name> <subvol_name> <key_name> <value> [--group_name <subvol_group_name>]
+
+.. note:: If the key_name already exists then the old value will get replaced by the new value.
+
+.. note:: key_name and value should be a string of ASCII characters (as specified in python's string.printable). key_name is case-insensitive and always stored in lower case.
+
+.. note:: Custom metadata on a subvolume is not preserved when snapshotting the subvolume, and hence, is also not preserved when cloning the subvolume snapshot.
+
+Get custom metadata set on the subvolume using the metadata key::
+
+    $ ceph fs subvolume metadata get <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>]
+
+List custom metadata (key-value pairs) set on the subvolume using::
+
+    $ ceph fs subvolume metadata ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Remove custom metadata set on the subvolume using the metadata key::
+
+    $ ceph fs subvolume metadata rm <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>] [--force]
+
+Using the '--force' flag allows the command to succeed that would otherwise
+fail if the metadata key did not exist.
+
 Create a snapshot of a subvolume using::
 
     $ ceph fs subvolume snapshot create <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
@@ -260,7 +303,7 @@ List snapshots of a subvolume using::
 
     $ ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Fetch the metadata of a snapshot using::
+Fetch the information of a snapshot using::
 
     $ ceph fs subvolume snapshot info <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
@@ -270,6 +313,31 @@ The output format is json and contains fields as follows.
 * data_pool: data pool the snapshot belongs to
 * has_pending_clones: "yes" if snapshot clone is in progress otherwise "no"
 * size: snapshot size in bytes
+
+Set custom metadata on the snapshot as a key-value pair using::
+
+    $ ceph fs subvolume snapshot metadata set <vol_name> <subvol_name> <snap_name> <key_name> <value> [--group_name <subvol_group_name>]
+
+.. note:: If the key_name already exists then the old value will get replaced by the new value.
+
+.. note:: The key_name and value should be a string of ASCII characters (as specified in python's string.printable). The key_name is case-insensitive and always stored in lower case.
+
+.. note:: Custom metadata on a snapshots is not preserved when snapshotting the subvolume, and hence, is also not preserved when cloning the subvolume snapshot.
+
+Get custom metadata set on the snapshot using the metadata key::
+
+    $ ceph fs subvolume snapshot metadata get <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>]
+
+List custom metadata (key-value pairs) set on the snapshot using::
+
+    $ ceph fs subvolume snapshot metadata ls <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+Remove custom metadata set on the snapshot using the metadata key::
+
+    $ ceph fs subvolume snapshot metadata rm <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>] [--force]
+
+Using the '--force' flag allows the command to succeed that would otherwise
+fail if the metadata key did not exist.
 
 Cloning Snapshots
 -----------------
@@ -322,8 +390,14 @@ A clone can be in one of the following states:
 #. `in-progress` : Clone operation is in progress
 #. `complete`    : Clone operation has successfully finished
 #. `failed`      : Clone operation has failed
+#. `canceled`    : Clone operation is cancelled by user
 
-Sample output from an `in-progress` clone operation::
+The reason for a clone failure is shown as below:
+
+#. `errno`     : error number
+#. `error_msg` : failure error string
+
+Sample output of an `in-progress` clone operation::
 
   $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
   $ ceph fs clone status cephfs clone1
@@ -334,6 +408,28 @@ Sample output from an `in-progress` clone operation::
         "volume": "cephfs",
         "subvolume": "subvol1",
         "snapshot": "snap1"
+      }
+    }
+  }
+
+.. note:: The `failure` section will be shown only if the clone is in failed or cancelled state
+
+Sample output of a `failed` clone operation::
+
+  $ ceph fs subvolume snapshot clone cephfs subvol1 snap1 clone1
+  $ ceph fs clone status cephfs clone1
+  {
+    "status": {
+      "state": "failed",
+      "source": {
+        "volume": "cephfs",
+        "subvolume": "subvol1",
+        "snapshot": "snap1"
+        "size": "104857600"
+      },
+      "failure": {
+        "errno": "122",
+        "errstr": "Disk quota exceeded"
       }
     }
   }

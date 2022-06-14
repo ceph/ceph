@@ -349,7 +349,7 @@ distributions, execute the following:
 
 .. prompt:: bash $
 
-	sudo apt-get install gcc python-dev python-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
+	sudo apt-get install gcc python-dev python3-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
 	sudo apt-get install python-sphinx
 
 For Fedora distributions, execute the following:

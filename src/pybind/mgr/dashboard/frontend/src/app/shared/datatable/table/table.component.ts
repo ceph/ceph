@@ -308,6 +308,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     } else {
       this.useData();
     }
+
+    if (this.selectionType === 'single') {
+      this.table.selectCheck = this.singleSelectCheck.bind(this);
+    }
   }
 
   initUserConfig() {
@@ -325,8 +329,12 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.userConfig.columns) {
       this.updateUserColumns();
     } else {
-      this.localColumns.forEach((c, i) => {
-        c.isHidden = this.userConfig.columns[i].isHidden;
+      this.userConfig.columns.forEach((col) => {
+        for (let i = 0; i < this.localColumns.length; i++) {
+          if (this.localColumns[i].prop === col.prop) {
+            this.localColumns[i].isHidden = col.isHidden;
+          }
+        }
       });
     }
   }
@@ -664,21 +672,22 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (this.updateSelectionOnRefresh === 'never') {
       return;
     }
-    const newSelected: any[] = [];
+    const newSelected = new Set();
     this.selection.selected.forEach((selectedItem) => {
       for (const row of this.data) {
         if (selectedItem[this.identifier] === row[this.identifier]) {
-          newSelected.push(row);
+          newSelected.add(row);
         }
       }
     });
+    const newSelectedArray = Array.from(newSelected.values());
     if (
       this.updateSelectionOnRefresh === 'onChange' &&
-      _.isEqual(this.selection.selected, newSelected)
+      _.isEqual(this.selection.selected, newSelectedArray)
     ) {
       return;
     }
-    this.selection.selected = newSelected;
+    this.selection.selected = newSelectedArray;
     this.onSelect(this.selection);
   }
 
@@ -705,6 +714,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       this.selection.selected = $event['selected'];
     }
     this.updateSelection.emit(_.clone(this.selection));
+  }
+
+  private singleSelectCheck(row: any) {
+    return this.selection.selected.indexOf(row) === -1;
   }
 
   toggleColumn(column: CdTableColumn) {

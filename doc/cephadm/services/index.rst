@@ -252,7 +252,7 @@ Daemons can be explicitly placed on hosts by simply specifying them:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="host1 host2 host3"
+    ceph orch apply prometheus --placement="host1 host2 host3"
 
 Or in YAML:
 
@@ -269,7 +269,7 @@ MONs and other services may require some enhanced network specifications:
 
    .. prompt:: bash #
 
-    orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
+    ceph orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
 
 where ``[v2:1.2.3.4:3300,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
@@ -315,7 +315,7 @@ this command:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="label:mylabel"
+    ceph orch apply prometheus --placement="label:mylabel"
 
 Or in YAML:
 
@@ -334,7 +334,7 @@ Daemons can be placed on hosts as well:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement='myhost[1-3]'
+    ceph orch apply prometheus --placement='myhost[1-3]'
 
 Or in YAML:
 
@@ -348,7 +348,7 @@ To place a service on *all* hosts, use ``"*"``:
 
    .. prompt:: bash #
 
-    orch apply node-exporter --placement='*'
+    ceph orch apply node-exporter --placement='*'
 
 Or in YAML:
 
@@ -366,19 +366,19 @@ By specifying ``count``, only the number of daemons specified will be created:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement=3
+    ceph orch apply prometheus --placement=3
 
 To deploy *daemons* on a subset of hosts, specify the count:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="2 host1 host2 host3"
+    ceph orch apply prometheus --placement="2 host1 host2 host3"
 
 If the count is bigger than the amount of hosts, cephadm deploys one per host:
 
    .. prompt:: bash #
 
-    orch apply prometheus --placement="3 host1 host2"
+    ceph orch apply prometheus --placement="3 host1 host2"
 
 The command immediately above results in two Prometheus daemons.
 
@@ -401,6 +401,30 @@ YAML can also be used to specify limits on hosts:
         - host1
         - host2
         - host3
+
+.. _cephadm_co_location:
+
+Co-location of daemons
+----------------------
+
+Cephadm supports the deployment of multiple daemons on the same host:
+
+.. code-block:: yaml
+
+    service_type: rgw
+    placement:
+      label: rgw
+      count-per-host: 2
+
+The main reason for deploying multiple daemons per host is an additional
+performance benefit for running multiple RGW and MDS daemons on the same host.
+
+See also: 
+
+* :ref:`cephadm_mgr_co_location`.
+* :ref:`cephadm-rgw-designated_gateways`.
+
+This feature was introduced in Pacific.
 
 Algorithm description
 ---------------------
@@ -454,6 +478,32 @@ candidate hosts.
 
    If there are fewer hosts selected by the placement specification than
    demanded by ``count``, cephadm will deploy only on the selected hosts.
+
+Extra Container Arguments
+=========================
+
+.. warning:: 
+  The arguments provided for extra container args are limited to whatever arguments are available for a `run` command from whichever container engine you are using. Providing any arguments the `run` command does not support (or invalid values for arguments) will cause the daemon to fail to start.
+
+
+Cephadm supports providing extra miscellaneous container arguments for
+specific cases when they may be necessary. For example, if a user needed
+to limit the amount of cpus their mon daemons make use of they could apply
+a spec like
+
+.. code-block:: yaml
+
+    service_type: mon
+    service_name: mon
+    placement:
+      hosts:
+        - host1
+        - host2
+        - host3
+    extra_container_args:
+      -  "--cpus=2"
+
+which would cause each mon daemon to be deployed with `--cpus=2`.
 
 .. _orch-rm:
 

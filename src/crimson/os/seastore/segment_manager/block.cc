@@ -4,6 +4,10 @@
 #include <sys/mman.h>
 #include <string.h>
 
+#include <fmt/format.h>
+
+#include <seastar/core/metrics.hh>
+
 #include "include/buffer.h"
 
 #include "crimson/common/config_proxy.h"
@@ -23,6 +27,28 @@ SET_SUBSYS(seastore_device);
  * - DEBUG: INFO details, major read and write operations
  * - TRACE: DEBUG details
  */
+
+using segment_state_t = crimson::os::seastore::Segment::segment_state_t;
+
+template <> struct fmt::formatter<segment_state_t>: fmt::formatter<std::string_view> {
+  // parse is inherited from formatter<string_view>.
+  template <typename FormatContext>
+  auto format(segment_state_t s, FormatContext& ctx) {
+    std::string_view name = "unknown";
+    switch (s) {
+    case segment_state_t::EMPTY:
+      name = "empty";
+      break;
+    case segment_state_t::OPEN:
+      name = "open";
+      break;
+    case segment_state_t::CLOSED:
+      name = "closed";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
 
 namespace crimson::os::seastore::segment_manager::block {
 
@@ -170,7 +196,7 @@ SegmentStateTracker::read_in(
 static
 block_sm_superblock_t make_superblock(
   device_id_t device_id,
-  segment_manager_config_t sm_config,
+  device_config_t sm_config,
   const seastar::stat_data &data)
 {
   LOG_PREFIX(block_make_superblock);
@@ -208,12 +234,7 @@ block_sm_superblock_t make_superblock(
     segments,
     tracker_off,
     first_seg_off,
-    sm_config.major_dev,
-    sm_config.magic,
-    sm_config.dtype,
-    sm_config.device_id,
-    sm_config.meta,
-    std::move(sm_config.secondary_devices)
+    std::move(sm_config)
   };
 }
 
@@ -360,7 +381,7 @@ BlockSegment::BlockSegment(
   BlockSegmentManager &manager, segment_id_t id)
   : manager(manager), id(id) {}
 
-segment_off_t BlockSegment::get_write_capacity() const
+seastore_off_t BlockSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
@@ -371,7 +392,7 @@ Segment::close_ertr::future<> BlockSegment::close()
 }
 
 Segment::write_ertr::future<> BlockSegment::write(
-  segment_off_t offset, ceph::bufferlist bl)
+  seastore_off_t offset, ceph::bufferlist bl)
 {
   LOG_PREFIX(BlockSegment::write);
   auto paddr = paddr_t::make_seg_paddr(id, offset);
@@ -410,7 +431,7 @@ Segment::write_ertr::future<> BlockSegment::write(
 }
 
 Segment::close_ertr::future<> BlockSegmentManager::segment_close(
-    segment_id_t id, segment_off_t write_pointer)
+    segment_id_t id, seastore_off_t write_pointer)
 {
   LOG_PREFIX(BlockSegmentManager::segment_close);
   auto s_id = id.device_segment_id();
@@ -460,7 +481,7 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
     auto sd = p.second;
     return read_superblock(device, sd);
   }).safe_then([=](auto sb) {
-    set_device_id(sb.device_id);
+    set_device_id(sb.config.spec.id);
     INFO("D{} read {}", get_device_id(), sb);
     sb.validate();
     superblock = sb;
@@ -491,10 +512,10 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
 }
 
 BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
-  segment_manager_config_t sm_config)
+  device_config_t sm_config)
 {
   LOG_PREFIX(BlockSegmentManager::mkfs);
-  set_device_id(sm_config.device_id);
+  set_device_id(sm_config.spec.id);
   INFO("D{} path={}, {}", get_device_id(), device_path, sm_config);
   return seastar::do_with(
     seastar::file{},
@@ -663,9 +684,8 @@ void BlockSegmentManager::register_metrics()
   LOG_PREFIX(BlockSegmentManager::register_metrics);
   DEBUG("D{}", get_device_id());
   namespace sm = seastar::metrics;
-  sm::label label("device_id");
   std::vector<sm::label_instance> label_instances;
-  label_instances.push_back(label(get_device_id()));
+  label_instances.push_back(sm::label_instance("device_id", get_device_id()));
   stats.reset();
   metrics.add_group(
     "segment_manager",

@@ -243,18 +243,23 @@ Deployments utilizing Nautilus (or later revisions of Luminous and Mimic)
 that have no pre-Luminous cients may instead wish to instead enable the
 `balancer`` module for ``ceph-mgr``.
 
-Add/remove an IP address to/from the blocklist. When adding an address,
+Add/remove an IP address or CIDR range to/from the blocklist.
+When adding to the blocklist,
 you can specify how long it should be blocklisted in seconds; otherwise,
 it will default to 1 hour. A blocklisted address is prevented from
-connecting to any OSD. Blocklisting is most often used to prevent a
-lagging metadata server from making bad changes to data on the OSDs.
+connecting to any OSD. If you blocklist an IP or range containing an OSD, be aware
+that OSD will also be prevented from performing operations on its peers where it
+acts as a client. (This includes tiering and copy-from functionality.)
+
+If you want to blocklist a range (in CIDR format), you may do so by
+including the ``range`` keyword.
 
 These commands are mostly only useful for failure testing, as
 blocklists are normally maintained automatically and shouldn't need
 manual intervention. ::
 
-	ceph osd blocklist add ADDRESS[:source_port] [TIME]
-	ceph osd blocklist rm ADDRESS[:source_port]
+	ceph osd blocklist ["range"] add ADDRESS[:source_port][/netmask_bits] [TIME]
+	ceph osd blocklist ["range"] rm ADDRESS[:source_port][/netmask_bits]
 
 Creates/deletes a snapshot of a pool. ::
 

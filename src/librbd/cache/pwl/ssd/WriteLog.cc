@@ -197,7 +197,7 @@ bool WriteLog<I>::initialize_pool(Context *on_finish,
       return false;
     }
   } else {
-    m_cache_state->present = true;
+    ceph_assert(m_cache_state->present);
     r = create_and_open_bdev();
     if (r < 0) {
       on_finish->complete(r);
@@ -271,8 +271,6 @@ void WriteLog<I>::remove_pool_file() {
       lderr(m_image_ctx.cct) << "failed to remove empty pool \""
                              << this->m_log_pool_name << "\": " << dendl;
     } else {
-      m_cache_state->clean = true;
-      m_cache_state->empty = true;
       m_cache_state->present = false;
     }
   } else {
@@ -537,9 +535,13 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops) {
 
   for (auto &operation : ops) {
     auto &log_entry = operation->get_log_entry();
-    log_entry->ram_entry.entry_valid = 1;
+    log_entry->ram_entry.set_entry_valid(true);
     m_log_entries.push_back(log_entry);
     ldout(m_image_ctx.cct, 20) << "operation=[" << *operation << "]" << dendl;
+  }
+  if (m_cache_state->empty && !m_log_entries.empty()) {
+    m_cache_state->empty = false;
+    this->update_image_cache_state();
   }
 }
 
@@ -813,6 +815,10 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
           this->m_bytes_allocated -= allocated_bytes;
           ceph_assert(this->m_bytes_cached >= cached_bytes);
           this->m_bytes_cached -= cached_bytes;
+          if (!m_cache_state->empty && m_log_entries.empty()) {
+            m_cache_state->empty = true;
+            this->update_image_cache_state();
+          }
 
           ldout(m_image_ctx.cct, 20)
             << "Finished root update: initial_first_valid_entry="

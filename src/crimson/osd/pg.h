@@ -31,6 +31,7 @@
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
+#include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/recovery_backend.h"
@@ -54,7 +55,6 @@ namespace crimson::os {
 }
 
 namespace crimson::osd {
-class ClientRequest;
 class OpsExecuter;
 
 class PG : public boost::intrusive_ref_counter<
@@ -68,8 +68,10 @@ class PG : public boost::intrusive_ref_counter<
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
 
   ClientRequest::PGPipeline client_request_pg_pipeline;
-  PeeringEvent::PGPipeline peering_request_pg_pipeline;
+  PGPeeringPipeline peering_request_pg_pipeline;
   RepRequest::PGPipeline replicated_request_pg_pipeline;
+
+  ClientRequest::Orderer client_request_orderer;
 
   spg_t pgid;
   pg_shard_t pg_whoami;
@@ -460,8 +462,8 @@ public:
     return get_info().history.same_interval_since;
   }
 
-  const auto& get_pool() const {
-    return peering_state.get_pool();
+  const auto& get_pgpool() const {
+    return peering_state.get_pgpool();
   }
   pg_shard_t get_primary() const {
     return peering_state.get_primary();
@@ -592,30 +594,28 @@ private:
     ObjectContextRef obc,
     std::vector<OSDOp>& ops,
     const OpInfo &op_info,
-    const do_osd_ops_params_t& params,
+    const do_osd_ops_params_t &&params,
     do_osd_ops_success_func_t success_func,
     do_osd_ops_failure_func_t failure_func);
   template <class Ret, class SuccessFunc, class FailureFunc>
   do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
     seastar::lw_shared_ptr<OpsExecuter> ox,
     std::vector<OSDOp>& ops,
-    const OpInfo &op_info,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   std::tuple<interruptible_future<>, interruptible_future<>>
   submit_transaction(
-    const OpInfo& op_info,
-    const std::vector<OSDOp>& ops,
     ObjectContextRef&& obc,
     ceph::os::Transaction&& txn,
-    osd_op_params_t&& oop);
+    osd_op_params_t&& oop,
+    std::vector<pg_log_entry_t>&& log_entries);
   interruptible_future<> repair_object(
     const hobject_t& oid,
     eversion_t& v);
 
 private:
-  OSDMapGate osdmap_gate;
+  PG_OSDMapGate osdmap_gate;
   ShardServices &shard_services;
 
   cached_map_t osdmap;
@@ -702,7 +702,7 @@ public:
   interruptible_future<std::tuple<bool, int>> already_complete(const osd_reqid_t& reqid);
   int get_recovery_op_priority() const {
     int64_t pri = 0;
-    get_pool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+    get_pgpool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
     return  pri > 0 ? pri : crimson::common::local_conf()->osd_recovery_op_priority;
   }
   seastar::future<> mark_unfound_lost(int) {
@@ -723,28 +723,13 @@ private:
   // continuations here.
   bool stopping = false;
 
-  class WaitForActiveBlocker : public BlockerT<WaitForActiveBlocker> {
-    PG *pg;
-
-    const spg_t pgid;
-    seastar::shared_promise<> p;
-
-  protected:
-    void dump_detail(Formatter *f) const;
-
-  public:
-    static constexpr const char *type_name = "WaitForActiveBlocker";
-
-    WaitForActiveBlocker(PG *pg) : pg(pg) {}
-    void on_active();
-    blocking_future<> wait();
-    seastar::future<> stop();
-  } wait_for_active_blocker;
+  PGActivationBlocker wait_for_active_blocker;
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
   friend class ClientRequest;
   friend struct CommonClientRequest;
   friend class PGAdvanceMap;
+  template <class T>
   friend class PeeringEvent;
   friend class RepRequest;
   friend class BackfillRecovery;
@@ -797,6 +782,10 @@ struct PG::do_osd_ops_params_t {
   uint64_t get_features() const {
     return features;
   }
+  // Only used by InternalClientRequest, no op flags
+  bool has_flag(uint32_t flag) const {
+    return false;
+ }
   crimson::net::ConnectionRef conn;
   osd_reqid_t reqid;
   utime_t mtime;

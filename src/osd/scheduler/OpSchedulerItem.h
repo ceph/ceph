@@ -25,7 +25,7 @@
 
 
 class OSD;
-class OSDShard;
+struct OSDShard;
 
 namespace ceph::osd::scheduler {
 

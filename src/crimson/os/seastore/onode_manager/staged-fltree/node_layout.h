@@ -608,7 +608,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(_right_impl.node_type() == NODE_TYPE);
     assert(_right_impl.field_type() == FIELD_TYPE);
     auto& right_impl = dynamic_cast<NodeLayoutT&>(_right_impl);
-    SUBINFO(seastore_onode,
+    SUBDEBUG(seastore_onode,
         "begin at insert_pos({}), insert_stage={}, insert_size={}B ...",
         _insert_pos, insert_stage, insert_size);
     if (unlikely(LOGGER(seastore_onode).is_enabled(seastar::log_level::debug))) {
@@ -798,7 +798,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     assert(p_value);
 
     auto split_pos = normalize(split_at.get_pos());
-    SUBINFO(seastore_onode,
+    SUBDEBUG(seastore_onode,
         "done  at insert_pos({}), insert_stage={}, insert_size={}B, "
         "split_at({}), is_insert_left={}, split_size={}B(target={}B)",
         _insert_pos, insert_stage, insert_size, split_pos,

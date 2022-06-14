@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <wait.h>
 #include <cap-ng.h>
+#include <getopt.h>
 
 #include "common/module.h"
 #include "common/secret.h"
@@ -18,8 +19,9 @@
 #endif
 
 bool verboseflag = false;
+bool fakeflag = false;
 bool skip_mtab_flag = false;
-bool v2_addrs = false;
+bool v2_addrs = true;
 bool no_fallback = false;
 bool ms_mode_specified = false;
 bool mon_addr_specified = false;
@@ -201,6 +203,10 @@ static int parse_old_dev(const char *dev_str, struct ceph_mount_info *cmi,
 		cmi->cmi_mons = strndup(dev_str, len);
 		if (!cmi->cmi_mons)
 			return -ENOMEM;
+		mon_addr_specified = true;
+	} else {
+		/* reset mon_addr=<> mount option */
+		mon_addr_specified = false;
 	}
 
 	mount_path++;
@@ -296,11 +302,9 @@ static int parse_new_dev(const char *dev_str, struct ceph_mount_info *cmi,
 	}
 
 	/* new-style dev - force using v2 addrs first */
-	if (!ms_mode_specified && !mon_addr_specified) {
-		v2_addrs = true;
-		append_opt("ms_mode", CEPH_DEFAULT_V2_MS_MODE, cmi,
-			   opt_pos);
-	}
+	if (!ms_mode_specified && !mon_addr_specified)
+	  append_opt("ms_mode", CEPH_DEFAULT_V2_MS_MODE, cmi,
+		     opt_pos);
 
 	cmi->format = MOUNT_DEV_FORMAT_NEW;
 	return 0;
@@ -321,8 +325,12 @@ static int parse_dev(const char *dev_str, struct ceph_mount_info *cmi,
 	return ret;
 }
 
-/* resolve monitor host and record in option string */
-static int finalize_src(struct ceph_mount_info *cmi, int *opt_pos)
+/* resolve monitor host and optionally record in option string.
+ * use opt_pos to determine if the caller wants to record the
+ * resolved address in mount option (c.f., mount_old_device_format).
+ */
+static int finalize_src(struct ceph_mount_info *cmi, int *opt_pos,
+			char **resolved_addr)
 {
 	char *src;
         size_t len = strlen(cmi->cmi_mons);
@@ -335,8 +343,13 @@ static int finalize_src(struct ceph_mount_info *cmi, int *opt_pos)
 	if (!src)
 		return -1;
 
-	resolved_mon_addr_as_mount_opt(src);
-	append_opt("mon_addr", src, cmi, opt_pos);
+	mount_ceph_debug("mount.ceph: resolved to: \"%s\"\n", src);
+	if (opt_pos) {
+		resolved_mon_addr_as_mount_opt(src);
+		append_opt("mon_addr", src, cmi, opt_pos);
+	} else if (resolved_addr) {
+                *resolved_addr = strdup(src);
+        }
 	free(src);
 	return 0;
 }
@@ -626,7 +639,15 @@ out:
 static int parse_arguments(int argc, char *const *const argv,
 		const char **src, const char **node, const char **opts)
 {
-	int i;
+	int opt = 0;
+	static struct option long_options[] = {
+		{ "help",    no_argument,        0,  'h' },
+		{ "no-mtab", no_argument,        0,  'n' },
+		{ "verbose", no_argument,        0,  'v' },
+		{ "fake",    no_argument,        0,  'f' },
+		{ "options", required_argument,  0,  'o' },
+		{ 0,         0,                  0,  0   }
+	};
 
 	if (argc < 2) {
 		// There were no arguments. Just show the usage.
@@ -645,23 +666,25 @@ static int parse_arguments(int argc, char *const *const argv,
 
 	// Parse the remaining options
 	*opts = EMPTY_STRING;
-	for (i = 3; i < argc; ++i) {
-		if (!strcmp("-h", argv[i]))
-			return 1;
-		else if (!strcmp("-n", argv[i]))
-			skip_mtab_flag = true;
-		else if (!strcmp("-v", argv[i]))
-			verboseflag = true;
-		else if (!strcmp("-o", argv[i])) {
-			++i;
-			if (i >= argc) {
-				fprintf(stderr, "Option -o requires an argument.\n\n");
+	while ((opt = getopt_long(argc, argv, "hnvfo:",
+					long_options, NULL)) != -1) {
+		switch (opt) {
+			case 'h' : // -h or --help
+				return 1;
+			case 'n' : // -n or --no-mtab
+				skip_mtab_flag = true;
+				break;
+			case 'v' : // -v or --verbose
+				verboseflag = true;
+				break;
+			case 'f' : // -f or --fake
+				fakeflag = true;
+				break;
+			case 'o' : // -o or --options
+				*opts = optarg;
+				break;
+			default:
 				return -EINVAL;
-			}
-			*opts = argv[i];
-                } else {
-			fprintf(stderr, "Can't understand option: '%s'\n\n", argv[i]);
-			return -EINVAL;
 		}
 	}
 	return 0;
@@ -683,10 +706,11 @@ static void usage(const char *prog_name)
 	printf("usage: %s [src] [mount-point] [-n] [-v] [-o ceph-options]\n",
 		prog_name);
 	printf("options:\n");
-	printf("\t-h: Print this help\n");
-	printf("\t-n: Do not update /etc/mtab\n");
-	printf("\t-v: Verbose\n");
-	printf("\tceph-options: refer to mount.ceph(8)\n");
+	printf("\t-h, --help\tPrint this help\n");
+	printf("\t-n, --no-mtab\tDo not update /etc/mtab\n");
+	printf("\t-v, --verbose\tVerbose\n");
+	printf("\t-f, --fake\tFake mount, do not actually mount\n");
+	printf("ceph-options: refer to mount.ceph(8)\n");
 	printf("\n");
 }
 
@@ -703,6 +727,15 @@ static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 	free(cmi->cmi_path);
 	free(cmi->cmi_mons);
 	free(cmi->cmi_conf);
+}
+
+static int call_mount_system_call(const char *rsrc, const char *node, struct ceph_mount_info *cmi)
+{
+	int r = 0;
+	if (!fakeflag) {
+		r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	}
+	return r;
 }
 
 static int mount_new_device_format(const char *node, struct ceph_mount_info *cmi)
@@ -731,7 +764,7 @@ static int mount_new_device_format(const char *node, struct ceph_mount_info *cmi
 	if (cmi->cmi_opts)
 		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel\n",
 				 cmi->cmi_opts);
-	r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	r = call_mount_system_call(rsrc, node, cmi);
 	if (r)
 		r = -errno;
 	free(rsrc);
@@ -743,13 +776,37 @@ static int mount_old_device_format(const char *node, struct ceph_mount_info *cmi
 	int r;
 	int len = 0;
 	int pos = 0;
-	char *mon_addr;
+	char *mon_addr = NULL;
 	char *rsrc = NULL;
 
 	r = remove_opt(cmi, "mon_addr", &mon_addr);
 	if (r) {
 		fprintf(stderr, "failed to switch using old device format\n");
 		return -EINVAL;
+	}
+
+	/* if we reach here and still have a v2 addr, we'd need to
+	 * refresh with v1 addrs, since we'll be not passing ms_mode
+	 * with the old syntax.
+	 */
+	if (v2_addrs && !ms_mode_specified && !mon_addr_specified) {
+		mount_ceph_debug("mount.ceph: switching to using v1 address with old syntax\n");
+		v2_addrs = false;
+		free(mon_addr);
+		free(cmi->cmi_mons);
+		mon_addr = NULL;
+		cmi->cmi_mons = NULL;
+		fetch_config_info(cmi);
+		if (!cmi->cmi_mons) {
+			fprintf(stderr, "unable to determine (v1) mon addresses\n");
+			return -EINVAL;
+		}
+		r = finalize_src(cmi, NULL, &mon_addr);
+		if (r) {
+			fprintf(stderr, "failed to resolve (v1) mon addresses\n");
+			return -EINVAL;
+		}
+		remove_opt(cmi, "ms_mode", NULL);
 	}
 
 	pos = strlen(cmi->cmi_opts);
@@ -771,7 +828,7 @@ static int mount_old_device_format(const char *node, struct ceph_mount_info *cmi
 		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel\n",
 				 cmi->cmi_opts);
 
-	r = mount(rsrc, node, "ceph", cmi->cmi_flags, cmi->cmi_opts);
+	r = call_mount_system_call(rsrc, node, cmi);
 	free(mon_addr);
 	free(rsrc);
 
@@ -814,10 +871,10 @@ static int do_mount(const char *dev, const char *node,
 	bool fallback = true;
 
         /* no v2 addresses available via config - try v1 addresses */
-	if (!cmi->cmi_mons &&
+	if (v2_addrs &&
+	    !cmi->cmi_mons &&
 	    !ms_mode_specified &&
-	    !mon_addr_specified &&
-	    cmi->format == MOUNT_DEV_FORMAT_NEW) {
+	    !mon_addr_specified) {
 		mount_ceph_debug("mount.ceph: switching to using v1 address\n");
 		v2_addrs = false;
 		fetch_config_info(cmi);
@@ -830,7 +887,7 @@ static int do_mount(const char *dev, const char *node,
 	}
 
 	pos = strlen(cmi->cmi_opts);
-	retval = finalize_src(cmi, &pos);
+	retval = finalize_src(cmi, &pos, NULL);
 	if (retval) {
 		fprintf(stderr, "failed to resolve source\n");
 		return -EINVAL;

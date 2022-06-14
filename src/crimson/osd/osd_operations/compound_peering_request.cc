@@ -12,6 +12,7 @@
 #include "crimson/common/exception.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
+#include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/compound_peering_request.h"
 
 namespace {
@@ -51,7 +52,7 @@ public:
       ceph_assert(ctx.transaction.empty());
       return seastar::now();
     } else {
-      return osd.get_shard_services().dispatch_context_transaction(
+      return shard_services.dispatch_context_transaction(
 	pg->get_collection_ref(), ctx);
     }
   }
@@ -82,9 +83,8 @@ std::vector<crimson::OperationRef> handle_pg_create(
         pgid, m->epoch,
         pi, history);
     } else {
-      auto op = osd.get_shard_services().start_operation<PeeringSubEvent>(
+      auto op = osd.start_pg_operation<PeeringSubEvent>(
 	  state,
-	  osd,
 	  conn,
 	  osd.get_shard_services(),
 	  pg_shard_t(),
@@ -100,30 +100,13 @@ std::vector<crimson::OperationRef> handle_pg_create(
   return ret;
 }
 
-struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
-  static constexpr const char * type_name = "CompoundOpBlocker";
-
-  std::vector<crimson::OperationRef> subops;
-  SubOpBlocker(std::vector<crimson::OperationRef> &&subops)
-    : subops(subops) {}
-
-  virtual void dump_detail(Formatter *f) const {
-    f->open_array_section("dependent_operations");
-    {
-      for (auto &i : subops) {
-	i->dump_brief(f);
-      }
-    }
-    f->close_section();
-  }
-};
-
 } // namespace
 
 namespace crimson::osd {
 
 CompoundPeeringRequest::CompoundPeeringRequest(
-  OSD &osd, crimson::net::ConnectionRef conn, Ref<Message> m)
+  OSD &osd,
+  crimson::net::ConnectionRef conn, Ref<Message> m)
   : osd(osd),
     conn(conn),
     m(m)
@@ -142,6 +125,7 @@ void CompoundPeeringRequest::dump_detail(Formatter *f) const
 seastar::future<> CompoundPeeringRequest::start()
 {
   logger().info("{}: starting", *this);
+  track_event<StartEvent>();
   auto state = seastar::make_lw_shared<compound_state>();
   auto blocker = std::make_unique<SubOpBlocker>(
     [&] {
@@ -157,12 +141,13 @@ seastar::future<> CompoundPeeringRequest::start()
   logger().info("{}: about to fork future", *this);
   return crimson::common::handle_system_shutdown(
     [this, ref, blocker=std::move(blocker), state]() mutable {
-    return with_blocking_future(
-      blocker->make_blocking_future(state->promise.get_future())
-    ).then([this, blocker=std::move(blocker)](auto &&ctx) {
+    return with_blocking_event<SubOpBlocker::BlockingEvent>([&] (auto&& trigger) {
+      return trigger.maybe_record_blocking(state->promise.get_future(), *blocker);
+    }).then([this, blocker=std::move(blocker)](auto &&ctx) {
       logger().info("{}: sub events complete", *this);
       return osd.get_shard_services().dispatch_context_messages(std::move(ctx));
     }).then([this, ref=std::move(ref)] {
+      track_event<CompletionEvent>();
       logger().info("{}: complete", *this);
     });
   });

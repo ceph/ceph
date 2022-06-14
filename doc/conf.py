@@ -54,7 +54,7 @@ html_theme_options = {
     'display_version': False,
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,
-    'vcs_pageview_mode': '',
+    'vcs_pageview_mode': 'edit',
     'style_nav_header_background': '#eee',
     # Toc options
     'collapse_navigation': True,
@@ -167,7 +167,8 @@ breathe_domain_by_extension = {'py': 'py',
 breathe_doxygen_config_options = {
     'EXPAND_ONLY_PREDEF': 'YES',
     'MACRO_EXPANSION': 'YES',
-    'PREDEFINED': 'CEPH_RADOS_API= '
+    'PREDEFINED': 'CEPH_RADOS_API= ',
+    'WARN_IF_UNDOCUMENTED': 'NO',
 }
 
 # graphviz options

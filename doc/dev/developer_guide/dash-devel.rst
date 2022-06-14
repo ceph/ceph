@@ -446,6 +446,14 @@ Start E2E tests by running::
   $ sudo chown -R $(id -un) src/pybind/mgr/dashboard/frontend/{dist,node_modules,src/environments}
   $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
 
+Note:
+  In fedora 35, there can occur a permission error when trying to mount the shared_folders. This can be
+  fixed by running::
+
+    $ sudo setfacl -R -m u:qemu:rwx <abs-path-to-your-user-home>
+
+  or also by setting the appropriate permission to your $HOME directory
+
 You can also start a cluster in development mode (so the frontend build starts in watch mode and you
 only have to reload the page for the changes to be reflected) by running::
 

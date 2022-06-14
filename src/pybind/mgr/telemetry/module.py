@@ -28,6 +28,7 @@ ALL_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
 LICENSE = 'sharing-1-0'
 LICENSE_NAME = 'Community Data License Agreement - Sharing - Version 1.0'
 LICENSE_URL = 'https://cdla.io/sharing-1-0/'
+NO_SALT_CNT = 0
 
 # Latest revision of the telemetry report.  Bump this each time we make
 # *any* change.
@@ -65,6 +66,9 @@ class Collection(str, enum.Enum):
     ident_base = 'ident_base'
     perf_perf = 'perf_perf'
     basic_mds_metadata = 'basic_mds_metadata'
+    basic_pool_usage = 'basic_pool_usage'
+    basic_usage_by_class = 'basic_usage_by_class'
+    basic_rook_v01 = 'basic_rook_v01'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -102,7 +106,54 @@ MODULE_COLLECTION : List[Dict] = [
         "description": "MDS metadata",
         "channel": "basic",
         "nag": False
-    }
+    },
+    {
+        "name": Collection.basic_pool_usage,
+        "description": "Default pool application and usage statistics",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_usage_by_class,
+        "description": "Default device class usage statistics",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_rook_v01,
+        "description": "Basic Rook deployment data",
+        "channel": "basic",
+        "nag": True
+    },
+]
+
+ROOK_KEYS_BY_COLLECTION : List[Tuple[str, Collection]] = [
+        # Note: a key cannot be both a node and a leaf, e.g.
+        # "rook/a/b"
+        # "rook/a/b/c"
+        ("rook/version", Collection.basic_rook_v01),
+        ("rook/kubernetes/version", Collection.basic_rook_v01),
+        ("rook/csi/version", Collection.basic_rook_v01),
+        ("rook/node/count/kubernetes-total", Collection.basic_rook_v01),
+        ("rook/node/count/with-ceph-daemons", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-rbd-plugin", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-cephfs-plugin", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-nfs-plugin", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/total", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/rbd", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/cephfs", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/nfs", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/bucket", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/total", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/portable", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/non-portable", Collection.basic_rook_v01),
+        ("rook/cluster/mon/count", Collection.basic_rook_v01),
+        ("rook/cluster/mon/allow-multiple-per-node", Collection.basic_rook_v01),
+        ("rook/cluster/mon/max-id", Collection.basic_rook_v01),
+        ("rook/cluster/mon/pvc/enabled", Collection.basic_rook_v01),
+        ("rook/cluster/mon/stretch/enabled", Collection.basic_rook_v01),
+        ("rook/cluster/network/provider", Collection.basic_rook_v01),
+        ("rook/cluster/external-mode", Collection.basic_rook_v01),
 ]
 
 class Module(MgrModule):
@@ -393,6 +444,28 @@ class Module(MgrModule):
             'active_changed': sorted(list(active)),
         }
 
+    def anonymize_entity_name(self, entity_name:str) -> str:
+        if '.' not in entity_name:
+            self.log.debug(f"Cannot split entity name ({entity_name}), no '.' is found")
+            return entity_name
+
+        (etype, eid) = entity_name.split('.', 1)
+        m = hashlib.sha1()
+        salt = ''
+        if self.salt is not None:
+            salt = self.salt
+        # avoid asserting that salt exists
+        if not self.salt:
+            # do not set self.salt to a temp value
+            salt = f"no_salt_found_{NO_SALT_CNT}"
+            NO_SALT_CNT += 1
+            self.log.debug(f"No salt found, created a temp one: {salt}")
+        m.update(salt.encode('utf-8'))
+        m.update(eid.encode('utf-8'))
+        m.update(salt.encode('utf-8'))
+
+        return  etype + '.' + m.hexdigest()
+
     def get_heap_stats(self) -> Dict[str, dict]:
         # Initialize result dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(int))
@@ -414,23 +487,28 @@ class Module(MgrModule):
             else:
                 if 'tcmalloc heap stats' in outs:
                     values = [int(i) for i in outs.split() if i.isdigit()]
-                    if len(values) != 12:
-                        self.log.debug('Received unexpected output: | outs: {} ' \
-                                '| values: {} |'.format(outs, values))
-                        return {}
-
-                    categories = ['use_by_application', 'page_heap_freelist',
-                                  'central_cache_freelist', 'transfer_cache_freelist',
-                                  'thread_cache_freelists', 'malloc_metadata',
-                                  'actual_memory_used', 'released_to_os',
-                                  'virtual_address_space_used', 'spans_in_use',
-                                  'thread_heaps_in_use', 'tcmalloc_page_size']
-
+                    # `categories` must be ordered this way for the correct output to be parsed
+                    categories = ['use_by_application',
+                                  'page_heap_freelist',
+                                  'central_cache_freelist',
+                                  'transfer_cache_freelist',
+                                  'thread_cache_freelists',
+                                  'malloc_metadata',
+                                  'actual_memory_used',
+                                  'released_to_os',
+                                  'virtual_address_space_used',
+                                  'spans_in_use',
+                                  'thread_heaps_in_use',
+                                  'tcmalloc_page_size']
+                    if len(values) != len(categories):
+                        self.log.debug('Received unexpected output from osd.{}; number of values should match the number of expected categories:\n' \
+                                'values: len={} {} ~ categories: len={} {} ~ outs: {}'.format(osd_id, len(values), values, len(categories), categories, outs))
+                        continue
                     osd = 'osd.' + str(osd_id)
                     result[osd] = dict(zip(categories, values))
                 else:
-                    self.log.debug('No heap stats available: {}'.format(outs))
-                    return {}
+                    self.log.debug('No heap stats available on osd.{}: {}'.format(osd_id, outs))
+                    continue
 
         return result
 
@@ -465,8 +543,8 @@ class Module(MgrModule):
                     else:
                         self.log.debug("Incorrect mode specified in get_mempool")
                 except (json.decoder.JSONDecodeError, KeyError) as e:
-                    self.log.debug("Error caught: {}".format(e))
-                    return {}
+                    self.log.debug("Error caught on osd.{}: {}".format(osd_id, e))
+                    continue
 
         return result
 
@@ -576,10 +654,10 @@ class Module(MgrModule):
                 # I am also putting in a catch for a KeyError since it could
                 # happen where the code is assuming that a key exists in the
                 # schema when it doesn't. In either case, we'll handle that
-                # by returning an empty dict.
+                # by continuing and collecting what we can from other osds.
                 except (json.decoder.JSONDecodeError, KeyError) as e:
-                    self.log.debug("Error caught: {}".format(e))
-                    return list()
+                    self.log.debug("Error caught on osd.{}: {}".format(osd_id, e))
+                    continue
 
         return list(result.values())
 
@@ -591,19 +669,15 @@ class Module(MgrModule):
 
         # collect application metadata from osd_map
         osd_map = self.get('osd_map')
-        app_dict = {}
-        for pool in osd_map['pools']:
-            app_dict[pool['pool']] = pool['application_metadata']
+        application_metadata = {pool['pool']: pool['application_metadata'] for pool in osd_map['pools']}
 
         # add application to each pool from pg_dump
         for pool in result:
-            poolid = pool['poolid']
-            # Check that the pool has an application. If it does not,
-            # the application dict will be empty.
-            if app_dict[poolid]:
-                pool['application'] = list(app_dict[poolid].keys())[0]
-            else:
-                pool['application'] = ""
+            pool['application'] = []
+            # Only include default applications
+            for application in application_metadata[pool['poolid']]:
+                if application in ['cephfs', 'mgr', 'rbd', 'rgw']:
+                    pool['application'].append(application)
 
         return result
 
@@ -676,17 +750,27 @@ class Module(MgrModule):
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
             lambda: defaultdict(lambda: defaultdict(int))))
 
-        for daemon in all_perf_counters:
+        # 'separated' mode
+        anonymized_daemon_dict = {}
+
+        for daemon, all_perf_counters_by_daemon in all_perf_counters.items():
+            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
+
+            if mode == 'separated':
+                # anonymize individual daemon names except osds
+                if (daemon_type != 'osd'):
+                    anonymized_daemon = self.anonymize_entity_name(daemon)
+                    anonymized_daemon_dict[anonymized_daemon] = daemon
+                    daemon = anonymized_daemon
 
             # Calculate num combined daemon types if in aggregated mode
             if mode == 'aggregated':
-                daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
                 if 'num_combined_daemons' not in result[daemon_type]:
                     result[daemon_type]['num_combined_daemons'] = 1
                 else:
                     result[daemon_type]['num_combined_daemons'] += 1
 
-            for collection in all_perf_counters[daemon]:
+            for collection in all_perf_counters_by_daemon:
                 # Split the collection to avoid redundancy in final report; i.e.:
                 #   bluestore.kv_flush_lat, bluestore.kv_final_lat -->
                 #   bluestore: kv_flush_lat, kv_final_lat
@@ -706,12 +790,12 @@ class Module(MgrModule):
                 if mode == 'separated':
                     # Add value to result
                     result[daemon][col_0][col_1]['value'] = \
-                            all_perf_counters[daemon][collection]['value']
+                            all_perf_counters_by_daemon[collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in all_perf_counters[daemon][collection]:
+                    if 'count' in all_perf_counters_by_daemon[collection]:
                         result[daemon][col_0][col_1]['count'] = \
-                                all_perf_counters[daemon][collection]['count']
+                                all_perf_counters_by_daemon[collection]['count']
                 elif mode == 'aggregated':
                     # Not every rgw daemon has the same schema. Specifically, each rgw daemon
                     # has a uniquely-named collection that starts off identically (i.e.
@@ -725,17 +809,21 @@ class Module(MgrModule):
                     # the files are of type 'pair' (real-integer-pair, integer-integer pair).
                     # In those cases, the value is a dictionary, and not a number.
                     #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
-                    if isinstance(all_perf_counters[daemon][collection]['value'], numbers.Number):
+                    if isinstance(all_perf_counters_by_daemon[collection]['value'], numbers.Number):
                         result[daemon_type][col_0][col_1]['value'] += \
-                                all_perf_counters[daemon][collection]['value']
+                                all_perf_counters_by_daemon[collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in all_perf_counters[daemon][collection]:
+                    if 'count' in all_perf_counters_by_daemon[collection]:
                         result[daemon_type][col_0][col_1]['count'] += \
-                                all_perf_counters[daemon][collection]['count']
+                                all_perf_counters_by_daemon[collection]['count']
                 else:
                     self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
                     return {}
+
+        if mode == 'separated':
+            # for debugging purposes only, this data is never reported
+            self.log.debug('Anonymized daemon mapping for telemetry perf_counters (anonymized: real): {}'.format(anonymized_daemon_dict))
 
         return result
 
@@ -756,12 +844,16 @@ class Module(MgrModule):
     def gather_device_report(self) -> Dict[str, Dict[str, Dict[str, str]]]:
         try:
             time_format = self.remote('devicehealth', 'get_time_format')
-        except Exception:
+        except Exception as e:
+            self.log.debug('Unable to format time: {}'.format(e))
             return {}
         cutoff = datetime.utcnow() - timedelta(hours=self.interval * 2)
         min_sample = cutoff.strftime(time_format)
 
         devices = self.get('devices')['devices']
+        if not devices:
+            self.log.debug('Unable to get device info from the mgr.')
+            return {}
 
         # anon-host-id -> anon-devid -> { timestamp -> record }
         res: Dict[str, Dict[str, Dict[str, str]]] = {}
@@ -771,13 +863,15 @@ class Module(MgrModule):
                 # this is a map of stamp -> {device info}
                 m = self.remote('devicehealth', 'get_recent_device_metrics',
                                 devid, min_sample)
-            except Exception:
+            except Exception as e:
+                self.log.debug('Unable to get recent metrics from device with id "{}": {}'.format(devid, e))
                 continue
 
             # anonymize host id
             try:
                 host = d['location'][0]['host']
-            except (KeyError, IndexError):
+            except (KeyError, IndexError) as e:
+                self.log.debug('Unable to get host from device with id "{}": {}'.format(devid, e))
                 continue
             anon_host = self.get_store('host-id/%s' % host)
             if not anon_host:
@@ -844,6 +938,7 @@ class Module(MgrModule):
             service_map = self.get('service_map')
             fs_map = self.get('fs_map')
             df = self.get('df')
+            df_pools = {pool['id']: pool for pool in df['pools']}
 
             report['created'] = mon_map['created']
 
@@ -892,8 +987,7 @@ class Module(MgrModule):
                         if k in ['k', 'm', 'plugin', 'technique',
                                  'crush-failure-domain', 'l']
                     }
-                cast(List[Dict[str, Any]], report['pools']).append(
-                    {
+                pool_data = {
                         'pool': pool['pool'],
                         'pg_num': pool['pg_num'],
                         'pgp_num': pool['pg_placement_num'],
@@ -906,7 +1000,39 @@ class Module(MgrModule):
                         'erasure_code_profile': ec_profile,
                         'cache_mode': pool['cache_mode'],
                     }
-                )
+
+                # basic_pool_usage collection
+                if self.is_enabled_collection(Collection.basic_pool_usage):
+                    pool_data['application'] = []
+                    for application in pool['application_metadata']:
+                        # Only include default applications
+                        if application in ['cephfs', 'mgr', 'rbd', 'rgw']:
+                            pool_data['application'].append(application)
+                    pool_stats = df_pools[pool['pool']]['stats']
+                    pool_data['stats'] = { # filter out kb_used
+                                            'avail_raw': pool_stats['avail_raw'],
+                                            'bytes_used': pool_stats['bytes_used'],
+                                            'compress_bytes_used': pool_stats['compress_bytes_used'],
+                                            'compress_under_bytes': pool_stats['compress_under_bytes'],
+                                            'data_bytes_used': pool_stats['data_bytes_used'],
+                                            'dirty': pool_stats['dirty'],
+                                            'max_avail': pool_stats['max_avail'],
+                                            'objects': pool_stats['objects'],
+                                            'omap_bytes_used': pool_stats['omap_bytes_used'],
+                                            'percent_used': pool_stats['percent_used'],
+                                            'quota_bytes': pool_stats['quota_bytes'],
+                                            'quota_objects': pool_stats['quota_objects'],
+                                            'rd': pool_stats['rd'],
+                                            'rd_bytes': pool_stats['rd_bytes'],
+                                            'stored': pool_stats['stored'],
+                                            'stored_data': pool_stats['stored_data'],
+                                            'stored_omap': pool_stats['stored_omap'],
+                                            'stored_raw': pool_stats['stored_raw'],
+                                            'wr': pool_stats['wr'],
+                                            'wr_bytes': pool_stats['wr_bytes']
+                        }
+
+                cast(List[Dict[str, Any]], report['pools']).append(pool_data)
                 if 'rbd' in pool['application_metadata']:
                     rbd_num_pools += 1
                     ioctx = self.rados.open_ioctx(pool['pool_name'])
@@ -1027,6 +1153,12 @@ class Module(MgrModule):
                 'total_bytes': df['stats']['total_bytes'],
                 'total_avail_bytes': df['stats']['total_avail_bytes']
             }
+            # basic_usage_by_class collection
+            if self.is_enabled_collection(Collection.basic_usage_by_class):
+                report['usage']['stats_by_class'] = {} # type: ignore
+                for device_class in df['stats_by_class']:
+                    if device_class in ['hdd', 'ssd', 'nvme']:
+                        report['usage']['stats_by_class'][device_class] = df['stats_by_class'][device_class] # type: ignore
 
             services: DefaultDict[str, int] = defaultdict(int)
             for key, value in service_map['services'].items():
@@ -1069,6 +1201,9 @@ class Module(MgrModule):
                     'active': False
                 }
 
+            # Rook
+            self.get_rook_data(report)
+
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
 
@@ -1087,6 +1222,42 @@ class Module(MgrModule):
         # sent to a different endpoint.
 
         return report
+
+    def get_rook_data(self, report: Dict[str, object]) -> None:
+        r, outb, outs = self.mon_command({
+            'prefix': 'config-key dump',
+            'format': 'json'
+        })
+        if r != 0:
+            return
+        try:
+            config_kv_dump = json.loads(outb)
+        except json.decoder.JSONDecodeError:
+            return
+
+        for elem in ROOK_KEYS_BY_COLLECTION:
+            # elem[0] is the full key path (e.g. "rook/node/count/with-csi-nfs-plugin")
+            # elem[1] is the Collection this key belongs to
+            if self.is_enabled_collection(elem[1]):
+                self.add_kv_to_report(report, elem[0], config_kv_dump.get(elem[0]))
+
+    def add_kv_to_report(self, report: Dict[str, object], key_path: str, value: Any) -> None:
+        last_node = key_path.split('/')[-1]
+        for node in key_path.split('/')[0:-1]:
+            if node not in report:
+                report[node] = {}
+            report = report[node]  # type: ignore
+
+            # sanity check of keys correctness
+            if not isinstance(report, dict):
+                self.log.error(f"'{key_path}' is an invalid key, expected type 'dict' but got {type(report)}")
+                return
+
+        if last_node in report:
+            self.log.error(f"'{key_path}' is an invalid key, last part must not exist at this point")
+            return
+
+        report[last_node] = value
 
     def _try_post(self, what: str, url: str, report: Dict[str, Dict[str, str]]) -> Optional[str]:
         self.log.info('Sending %s to: %s' % (what, url))
@@ -1268,23 +1439,27 @@ class Module(MgrModule):
             elif e == self.EndPoint.device:
                 if 'device' in self.get_active_channels():
                     devices = self.gather_device_report()
-                    assert devices
-                    num_devs = 0
-                    num_hosts = 0
-                    for host, ls in devices.items():
-                        self.log.debug('host %s devices %s' % (host, ls))
-                        if not len(ls):
-                            continue
-                        fail_reason = self._try_post('devices', self.device_url,
-                                                     ls)
-                        if fail_reason:
-                            failed.append(fail_reason)
-                        else:
-                            num_devs += len(ls)
-                            num_hosts += 1
-                    if num_devs:
-                        success.append('Reported %d devices across %d hosts' % (
-                            num_devs, len(devices)))
+                    if devices:
+                        num_devs = 0
+                        num_hosts = 0
+                        for host, ls in devices.items():
+                            self.log.debug('host %s devices %s' % (host, ls))
+                            if not len(ls):
+                                continue
+                            fail_reason = self._try_post('devices', self.device_url,
+                                                         ls)
+                            if fail_reason:
+                                failed.append(fail_reason)
+                            else:
+                                num_devs += len(ls)
+                                num_hosts += 1
+                        if num_devs:
+                            success.append('Reported %d devices from %d hosts across a total of %d hosts' % (
+                                num_devs, num_hosts, len(devices)))
+                    else:
+                        fail_reason = 'Unable to send device report: Device channel is on, but the generated report was empty.'
+                        failed.append(fail_reason)
+                        self.log.error(fail_reason)
         if failed:
             return 1, '', '\n'.join(success + failed)
         return 0, '', '\n'.join(success)

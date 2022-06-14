@@ -30,7 +30,7 @@ options:
 - name: osd_smart_report_timeout
   type: uint
   level: advanced
-  desc: Timeout (in seconds) for smarctl to run, default is set to 5
+  desc: Timeout (in seconds) for smartctl to run, default is set to 5
   default: 5
 # verify backend can support configured max object name length
 - name: osd_check_max_object_name_len_on_startup
@@ -739,6 +739,15 @@ options:
   default: 32
   flags:
   - startup
+- name: osd_aggregated_slow_ops_logging
+  type: bool
+  level: advanced
+  desc: Allow OSD daemon to send an aggregated slow ops to the cluster log
+  fmt_desc: If set to ``true``, the OSD daemon will send slow ops information in 
+    an aggregated format to the cluster log else sends every slow op to the
+    cluster log.
+  default: true
+  with_legacy: true
 - name: osd_op_num_threads_per_shard
   type: int
   level: advanced
@@ -1269,3 +1278,9 @@ options:
   default: 1
   flags:
   - runtime
+- name: osd_rocksdb_iterator_bounds_enabled
+  desc: Whether omap iterator bounds are applied to rocksdb iterator ReadOptions
+  type: bool
+  level: dev
+  default: true
+  with_legacy: true

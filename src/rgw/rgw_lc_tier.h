@@ -25,7 +25,6 @@ struct RGWLCCloudTierCtx {
   std::string storage_class;
 
   rgw::sal::Object *obj;
-  RGWObjectCtx& rctx;
 
   /* Remote */
   RGWRESTConn& conn;
@@ -42,10 +41,10 @@ struct RGWLCCloudTierCtx {
   RGWLCCloudTierCtx(CephContext* _cct, const DoutPrefixProvider *_dpp,
       rgw_bucket_dir_entry& _o, rgw::sal::Store *_store,
       RGWBucketInfo &_binfo, rgw::sal::Object *_obj,
-      RGWObjectCtx& _rctx, RGWRESTConn& _conn, std::string& _bucket,
+      RGWRESTConn& _conn, std::string& _bucket,
       std::string& _storage_class) :
     cct(_cct), dpp(_dpp), o(_o), store(_store), bucket_info(_binfo),
-    obj(_obj), rctx(_rctx), conn(_conn), target_bucket_name(_bucket),
+    obj(_obj), conn(_conn), target_bucket_name(_bucket),
     target_storage_class(_storage_class) {}
 };
 

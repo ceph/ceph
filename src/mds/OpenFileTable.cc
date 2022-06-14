@@ -1090,7 +1090,7 @@ void OpenFileTable::_prefetch_dirfrags()
       ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
 
-    if (!(++num_opening_dirfrags % 1000))
+    if (!(++num_opening_dirfrags % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -1129,6 +1129,8 @@ void OpenFileTable::_prefetch_inodes()
       destroyed_inos_set.insert(it.second.begin(), it.second.end());
   }
 
+  mdcache->open_ino_batch_start();
+
   for (auto& [ino, anchor] : loaded_anchor_map) {
     if (destroyed_inos_set.count(ino))
 	continue;
@@ -1164,9 +1166,11 @@ void OpenFileTable::_prefetch_inodes()
       mdcache->open_ino(ino, pool, fin, false);
     }
 
-    if (!(num_opening_inodes % 1000))
+    if (!(num_opening_inodes % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
+
+  mdcache->open_ino_batch_submit();
 
   _open_ino_finish(inodeno_t(0), 0);
 }

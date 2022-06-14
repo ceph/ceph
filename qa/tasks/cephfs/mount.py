@@ -21,6 +21,10 @@ from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
+
+UMOUNT_TIMEOUT = 300
+
+
 class CephFSMount(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
@@ -452,7 +456,8 @@ class CephFSMount(object):
     def umount(self):
         raise NotImplementedError()
 
-    def umount_wait(self, force=False, require_clean=False, timeout=None):
+    def umount_wait(self, force=False, require_clean=False,
+                    timeout=UMOUNT_TIMEOUT):
         """
 
         :param force: Expect that the mount will not shutdown cleanly: kill
@@ -572,12 +577,16 @@ class CephFSMount(object):
 
     def get_key_from_keyfile(self):
         # XXX: don't call run_shell(), since CephFS might be unmounted.
-        keyring = self.client_remote.run(
-            args=['sudo', 'cat', self.client_keyring_path], stdout=StringIO(),
-            omit_sudo=False).stdout.getvalue()
+        keyring = self.client_remote.read_file(self.client_keyring_path).\
+            decode()
+
         for line in keyring.split('\n'):
             if line.find('key') != -1:
                 return line[line.find('=') + 1 : ].strip()
+
+        raise RuntimeError('Key not found in keyring file '
+                           f'{self.client_keyring_path}. Its contents are -\n'
+                           f'{keyring}')
 
     @property
     def config_path(self):
@@ -688,25 +697,30 @@ class CephFSMount(object):
         if sudo:
             args.append('sudo')
         args += ['adjust-ulimits', 'daemon-helper', 'kill', py_version, '-c', pyscript]
-        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE, stdout=StringIO())
+        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE,
+                                      stdout=StringIO(), omit_sudo=(not sudo))
 
     def run_python(self, pyscript, py_version='python3', sudo=False):
         p = self._run_python(pyscript, py_version, sudo=sudo)
         p.wait()
         return p.stdout.getvalue().strip()
 
-    def run_shell(self, args, timeout=900, **kwargs):
-        args = args.split() if isinstance(args, str) else args
-        kwargs.pop('omit_sudo', False)
+    def run_shell(self, args, timeout=300, **kwargs):
+        omit_sudo = kwargs.pop('omit_sudo', False)
         sudo = kwargs.pop('sudo', False)
         cwd = kwargs.pop('cwd', self.mountpoint)
         stdout = kwargs.pop('stdout', StringIO())
         stderr = kwargs.pop('stderr', StringIO())
 
         if sudo:
-            args.insert(0, 'sudo')
+            if isinstance(args, list):
+                args.insert(0, 'sudo')
+            elif isinstance(args, str):
+                args = 'sudo ' + args
 
-        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout, stdout=stdout, stderr=stderr, **kwargs)
+        return self.client_remote.run(args=args, cwd=cwd, timeout=timeout,
+                                      stdout=stdout, stderr=stderr,
+                                      omit_sudo=omit_sudo, **kwargs)
 
     def run_shell_payload(self, payload, **kwargs):
         return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
@@ -833,6 +847,31 @@ class CephFSMount(object):
         # This wait would not be sufficient if the file had already
         # existed, but it's simple and in practice users of open_background
         # are not using it on existing files.
+        self.wait_for_visible(basename)
+
+        return rproc
+
+    def open_dir_background(self, basename):
+        """
+        Create and hold a capability to a directory.
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.hostfs_mntpt, basename)
+
+        pyscript = dedent("""
+            import time
+            import os
+
+            os.mkdir("{path}")
+            fd = os.open("{path}", os.O_RDONLY)
+            while True:
+                time.sleep(1)
+            """).format(path=path)
+
+        rproc = self._run_python(pyscript)
+        self.background_procs.append(rproc)
+
         self.wait_for_visible(basename)
 
         return rproc

@@ -269,7 +269,7 @@ void handle_connection(boost::asio::io_context& context,
                       *env.auth_registry, &client, env.olog, y,
                       scheduler, &user, &latency,
                       env.ratelimiting->get_active(),
-                      &http_ret);
+                      &http_ret, env.lua_background);
 
       if (cct->_conf->subsys.should_gather(dout_subsys, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following
@@ -671,8 +671,8 @@ class ExpandMetaVar {
 
 public:
   ExpandMetaVar(rgw::sal::Zone* zone_svc) {
-    meta_map["realm"] = zone_svc->get_realm().get_name();
-    meta_map["realm_id"] = zone_svc->get_realm().get_id();
+    meta_map["realm"] = zone_svc->get_realm_name();
+    meta_map["realm_id"] = zone_svc->get_realm_id();
     meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
     meta_map["zonegroup_id"] = zone_svc->get_zonegroup().get_id();
     meta_map["zone"] = zone_svc->get_name();

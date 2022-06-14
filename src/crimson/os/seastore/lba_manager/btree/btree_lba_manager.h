@@ -15,15 +15,34 @@
 #include "common/interval_map.h"
 #include "crimson/osd/exceptions.h"
 
+#include "crimson/os/seastore/btree/fixed_kv_btree.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/cache.h"
-#include "crimson/os/seastore/segment_manager.h"
 
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree.h"
+#include "crimson/os/seastore/btree/btree_range_pin.h"
 
 namespace crimson::os::seastore::lba_manager::btree {
+
+class BtreeLBAPin : public BtreeNodePin<laddr_t, paddr_t> {
+public:
+  BtreeLBAPin() = default;
+  BtreeLBAPin(
+    CachedExtentRef parent,
+    lba_map_val_t &val,
+    lba_node_meta_t &&meta)
+    : BtreeNodePin(
+	parent,
+	val.paddr,
+	val.len,
+	std::forward<lba_node_meta_t>(meta))
+  {}
+};
+
+using LBABtree = FixedKVBtree<
+  laddr_t, lba_map_val_t, LBAInternalNode,
+  LBALeafNode, BtreeLBAPin, LBA_BLOCK_SIZE>;
 
 /**
  * BtreeLBAManager
@@ -44,9 +63,7 @@ namespace crimson::os::seastore::lba_manager::btree {
  */
 class BtreeLBAManager : public LBAManager {
 public:
-  BtreeLBAManager(
-    SegmentManager &segment_manager,
-    Cache &cache);
+  BtreeLBAManager(Cache &cache);
 
   mkfs_ret mkfs(
     Transaction &t) final;
@@ -82,8 +99,18 @@ public:
   }
 
   void complete_transaction(
-    Transaction &t) final;
+    Transaction &t,
+    std::vector<CachedExtentRef> &,
+    std::vector<CachedExtentRef> &) final;
 
+  /**
+   * init_cached_extent
+   *
+   * Checks whether e is live (reachable from lba tree) and drops or initializes
+   * accordingly.
+   *
+   * Returns if e is live.
+   */
   init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) final;
@@ -102,7 +129,7 @@ public:
     Transaction &t,
     CachedExtentRef extent) final;
 
-  update_le_mapping_ret update_mapping(
+  update_mapping_ret update_mapping(
     Transaction& t,
     laddr_t laddr,
     paddr_t prev_addr,
@@ -113,92 +140,33 @@ public:
     extent_types_t type,
     paddr_t addr,
     laddr_t laddr,
-    segment_off_t len) final;
+    seastore_off_t len) final;
 
   void add_pin(LBAPin &pin) final {
     auto *bpin = reinterpret_cast<BtreeLBAPin*>(&pin);
-    pin_set.add_pin(bpin->pin);
-    bpin->parent = nullptr;
+    pin_set.add_pin(bpin->get_range_pin());
+    bpin->set_parent(nullptr);
   }
 
   ~BtreeLBAManager();
 private:
-  SegmentManager &segment_manager;
   Cache &cache;
 
-  btree_pin_set_t pin_set;
+  btree_pin_set_t<laddr_t> pin_set;
 
-  op_context_t get_context(Transaction &t) {
-    return op_context_t{cache, t, &pin_set};
+  struct {
+    uint64_t num_alloc_extents = 0;
+    uint64_t num_alloc_extents_iter_nexts = 0;
+  } stats;
+
+  op_context_t<laddr_t> get_context(Transaction &t) {
+    return op_context_t<laddr_t>{cache, t, &pin_set};
   }
 
-  static btree_range_pin_t &get_pin(CachedExtent &e);
+  static btree_range_pin_t<laddr_t> &get_pin(CachedExtent &e);
 
   seastar::metrics::metric_group metrics;
   void register_metrics();
-  template <typename F, typename... Args>
-  auto with_btree(
-    op_context_t c,
-    F &&f) {
-    return cache.get_root(
-      c.trans
-    ).si_then([this, c, f=std::forward<F>(f)](RootBlockRef croot) mutable {
-      return seastar::do_with(
-	LBABtree(croot->get_root().lba_root),
-	[this, c, croot, f=std::move(f)](auto &btree) mutable {
-	  return f(
-	    btree
-	  ).si_then([this, c, croot, &btree] {
-	    if (btree.is_root_dirty()) {
-	      auto mut_croot = cache.duplicate_for_write(
-		c.trans, croot
-	      )->cast<RootBlock>();
-	      mut_croot->get_root().lba_root = btree.get_root_undirty();
-	    }
-	    return base_iertr::now();
-	  });
-	});
-    });
-  }
-
-  template <typename State, typename F>
-  auto with_btree_state(
-    op_context_t c,
-    State &&init,
-    F &&f) {
-    return seastar::do_with(
-      std::forward<State>(init),
-      [this, c, f=std::forward<F>(f)](auto &state) mutable {
-	(void)this; // silence incorrect clang warning about capture
-	return with_btree(c, [&state, f=std::move(f)](auto &btree) mutable {
-	  return f(btree, state);
-	}).si_then([&state] {
-	  return seastar::make_ready_future<State>(std::move(state));
-	});
-      });
-  }
-
-  template <typename State, typename F>
-  auto with_btree_state(
-    op_context_t c,
-    F &&f) {
-    return with_btree_state<State, F>(c, State{}, std::forward<F>(f));
-  }
-
-  template <typename Ret, typename F>
-  auto with_btree_ret(
-    op_context_t c,
-    F &&f) {
-    return with_btree_state<Ret>(
-      c,
-      [f=std::forward<F>(f)](auto &btree, auto &ret) mutable {
-	return f(
-	  btree
-	).si_then([&ret](auto &&_ret) {
-	  ret = std::move(_ret);
-	});
-      });
-  }
 
   /**
    * update_refcount
@@ -212,16 +180,16 @@ private:
     int delta);
 
   /**
-   * update_mapping
+   * _update_mapping
    *
    * Updates mapping, removes if f returns nullopt
    */
-  using update_mapping_iertr = ref_iertr;
-  using update_mapping_ret = ref_iertr::future<lba_map_val_t>;
+  using _update_mapping_iertr = ref_iertr;
+  using _update_mapping_ret = ref_iertr::future<lba_map_val_t>;
   using update_func_t = std::function<
     lba_map_val_t(const lba_map_val_t &v)
     >;
-  update_mapping_ret update_mapping(
+  _update_mapping_ret _update_mapping(
     Transaction &t,
     laddr_t addr,
     update_func_t &&f);

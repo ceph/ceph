@@ -231,9 +231,9 @@ the default zone group first.
 
 ::
 
-    # radosgw-admin zonegroup remove --rgw-zonegroup=default --rgw-zone=default
+    # radosgw-admin zonegroup delete --rgw-zonegroup=default --rgw-zone=default
     # radosgw-admin period update --commit
-    # radosgw-admin zone rm --rgw-zone=default
+    # radosgw-admin zone delete --rgw-zone=default
     # radosgw-admin period update --commit
     # radosgw-admin zonegroup delete --rgw-zonegroup=default
     # radosgw-admin period update --commit
@@ -410,7 +410,7 @@ Delete the default zone if needed.
 
 ::
 
-    # radosgw-admin zone rm --rgw-zone=default
+    # radosgw-admin zone delete --rgw-zone=default
 
 Finally, delete the default pools in your Ceph storage cluster if
 needed.
@@ -1487,6 +1487,66 @@ instance.
 |                                     | zone group. We do not recommend   |         |                       |
 |                                     | changing this setting.            |         |                       |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
+
+
+Zone Features
+=============
+
+Some multisite features require support from all zones before they can be enabled. Each zone lists its ``supported_features``, and each zonegroup lists its ``enabled_features``. Before a feature can be enabled in the zonegroup, it must be supported by all of its zones.
+
+On creation of new zones and zonegroups, all known features are supported/enabled. After upgrading an existing multisite configuration, however, new features must be enabled manually.
+
+Supported Features
+------------------
+
++---------------------------+---------+
+| Feature                   | Release |
++===========================+=========+
+| :ref:`feature_resharding` | Quincy  |
++---------------------------+---------+
+
+.. _feature_resharding:
+
+resharding
+~~~~~~~~~~
+
+Allows buckets to be resharded in a multisite configuration without interrupting the replication of their objects. When ``rgw_dynamic_resharding`` is enabled, it runs on each zone independently, and zones may choose different shard counts for the same bucket. When buckets are resharded manunally with ``radosgw-admin bucket reshard``, only that zone's bucket is modified. A zone feature should only be marked as supported after all of its radosgws and osds have upgraded.
+
+
+Commands
+-----------------
+
+Add support for a zone feature
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On the cluster that contains the given zone::
+
+    $ radosgw-admin zone modify --rgw-zone={zone-name} --enable-feature={feature-name}
+    $ radosgw-admin period update --commit
+
+Remove support for a zone feature
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On the cluster that contains the given zone::
+
+    $ radosgw-admin zone modify --rgw-zone={zone-name} --disable-feature={feature-name}
+    $ radosgw-admin period update --commit
+
+Enable a zonegroup feature
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On any cluster in the realm::
+
+    $ radosgw-admin zonegroup modify --rgw-zonegroup={zonegroup-name} --enable-feature={feature-name}
+    $ radosgw-admin period update --commit
+
+Disable a zonegroup feature
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On any cluster in the realm::
+
+    $ radosgw-admin zonegroup modify --rgw-zonegroup={zonegroup-name} --disable-feature={feature-name}
+    $ radosgw-admin period update --commit
 
 
 .. _`Pools`: ../pools

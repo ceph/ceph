@@ -149,15 +149,20 @@ void RGWCoroutine::set_stack(RGWCoroutinesStack *s)
 
 void RGWCoroutine::init_new_io(RGWIOProvider *io_provider)
 {
+  ceph_assert(stack); // if there's no stack, io_provider won't be uninitialized
   stack->init_new_io(io_provider);
 }
 
 void RGWCoroutine::set_io_blocked(bool flag) {
-  stack->set_io_blocked(flag);
+  if (stack) {
+    stack->set_io_blocked(flag);
+  }
 }
 
 void RGWCoroutine::set_sleeping(bool flag) {
-  stack->set_sleeping(flag);
+  if (stack) {
+    stack->set_sleeping(flag);
+  }
 }
 
 int RGWCoroutine::io_block(int ret, int64_t io_id) {
@@ -165,6 +170,9 @@ int RGWCoroutine::io_block(int ret, int64_t io_id) {
 }
 
 int RGWCoroutine::io_block(int ret, const rgw_io_id& io_id) {
+  if (!stack) {
+    return 0;
+  }
   if (stack->consume_io_finish(io_id)) {
     return 0;
   }
@@ -174,7 +182,9 @@ int RGWCoroutine::io_block(int ret, const rgw_io_id& io_id) {
 }
 
 void RGWCoroutine::io_complete(const rgw_io_id& io_id) {
-  stack->io_complete(io_id);
+  if (stack) {
+    stack->io_complete(io_id);
+  }
 }
 
 void RGWCoroutine::StatusItem::dump(Formatter *f) const {
@@ -236,10 +246,6 @@ RGWCoroutinesStack::~RGWCoroutinesStack()
 
   for (auto stack : spawned.entries) {
     stack->put();
-  }
-
-  if (preallocated_stack) {
-    preallocated_stack->put();
   }
 }
 
@@ -312,12 +318,7 @@ RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCorout
 
   rgw_spawned_stacks *s = (source_op ? &source_op->spawned : &spawned);
 
-  RGWCoroutinesStack *stack = preallocated_stack;
-  if (!stack) {
-    stack = env->manager->allocate_stack();
-  }
-  preallocated_stack = nullptr;
-
+  RGWCoroutinesStack *stack = env->manager->allocate_stack();
   s->add_pending(stack);
   stack->parent = this;
 
@@ -336,14 +337,6 @@ RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCorout
 RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
 {
   return spawn(NULL, op, wait);
-}
-
-RGWCoroutinesStack *RGWCoroutinesStack::prealloc_stack()
-{
-  if (!preallocated_stack) {
-    preallocated_stack = env->manager->allocate_stack();
-  }
-  return preallocated_stack;
 }
 
 int RGWCoroutinesStack::wait(const utime_t& interval)
@@ -922,16 +915,6 @@ void RGWCoroutine::call(RGWCoroutine *op)
 RGWCoroutinesStack *RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
 {
   return stack->spawn(this, op, wait);
-}
-
-RGWCoroutinesStack *RGWCoroutine::prealloc_stack()
-{
-  return stack->prealloc_stack();
-}
-
-uint64_t RGWCoroutine::prealloc_stack_id()
-{
-  return prealloc_stack()->get_id();
 }
 
 bool RGWCoroutine::collect(int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id) /* returns true if needs to be called again */

@@ -35,6 +35,15 @@
 #include "erasure-code/ErasureCode.h"
 #include "ceph_erasure_code_benchmark.h"
 
+using std::endl;
+using std::cerr;
+using std::cout;
+using std::map;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
 namespace po = boost::program_options;
 
 int ErasureCodeBench::setup(int argc, char** argv) {
@@ -175,7 +184,7 @@ int ErasureCodeBench::encode()
   }
   utime_t begin_time = ceph_clock_now();
   for (int i = 0; i < max_iterations; i++) {
-    map<int,bufferlist> encoded;
+    std::map<int,bufferlist> encoded;
     code = erasure_code->encode(want_to_encode, in, &encoded);
     if (code)
       return code;

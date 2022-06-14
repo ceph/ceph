@@ -186,6 +186,8 @@ List all collections with::
   NAME                  STATUS                                               DESC
   basic_base            REPORTING                                            Basic information about the cluster (capacity, number and type of daemons, version, etc.)
   basic_mds_metadata    NOT REPORTING: NOT OPTED-IN                          MDS metadata
+  basic_pool_usage      NOT REPORTING: NOT OPTED-IN                          Default pool application and usage statistics
+  basic_usage_by_class  NOT REPORTING: NOT OPTED-IN                          Default device class usage statistics
   crash_base            REPORTING                                            Information about daemon crashes (daemon type and version, backtrace, etc.)
   device_base           REPORTING                                            Information about device health metrics
   ident_base            NOT REPORTING: CHANNEL ident IS OFF                  User-provided identifying information about the cluster

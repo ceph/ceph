@@ -69,7 +69,7 @@ def health_status_to_number(status: str) -> int:
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
-DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
+DF_POOL = ['max_avail', 'avail_raw', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes',
            'compress_bytes_used', 'compress_under_bytes', 'bytes_used', 'percent_used']
 
@@ -106,7 +106,7 @@ OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode')
 
-RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
+RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
@@ -554,7 +554,8 @@ class Module(MgrModule):
             'server_port',
             type='int',
             default=DEFAULT_PORT,
-            desc='the port on which the module listens for HTTP requests'
+            desc='the port on which the module listens for HTTP requests',
+            runtime=True
         ),
         Option(
             'scrape_interval',
@@ -819,6 +820,31 @@ class Module(MgrModule):
 
         return metrics
 
+    def get_server_addr(self) -> str:
+        """
+        Return the current mgr server IP.
+        """
+        server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
+        if server_addr in ['::', '0.0.0.0']:
+            return self.get_mgr_ip()
+        return server_addr
+
+    def config_notify(self) -> None:
+        """
+        This method is called whenever one of our config options is changed.
+        """
+        # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
+        # if we omit the line: cherrypy.server.httpserver = None
+        # then the cherrypy server is not restarted correctly
+        self.log.info('Restarting engine...')
+        cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
+        server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
+        self.set_uri(build_url(scheme='http', host=self.get_server_addr(), port=server_port, path='/'))
+        cherrypy.config.update({'server.socket_port': server_port})
+        cherrypy.engine.start()
+        self.log.info('Engine started.')
+
     @profile_method()
     def get_health(self) -> None:
 
@@ -911,7 +937,7 @@ class Module(MgrModule):
         # export standby mds metadata, default standby fs_id is '-1'
         for standby in fs_map['standbys']:
             id_ = standby['name']
-            host, version = servers.get((id_, 'mds'), ('', ''))
+            host, version, _ = servers.get((id_, 'mds'), ('', '', ''))
             addr, rank = standby['addr'], standby['rank']
             self.metrics['mds_metadata'].set(1, (
                 'mds.{}'.format(id_), '-1',
@@ -933,7 +959,7 @@ class Module(MgrModule):
             self.log.debug('mdsmap: {}'.format(fs['mdsmap']))
             for gid, daemon in fs['mdsmap']['info'].items():
                 id_ = daemon['name']
-                host, version = servers.get((id_, 'mds'), ('', ''))
+                host, version, _ = servers.get((id_, 'mds'), ('', '', ''))
                 self.metrics['mds_metadata'].set(1, (
                     'mds.{}'.format(id_), fs['id'],
                     host, daemon['addr'],
@@ -947,11 +973,11 @@ class Module(MgrModule):
         for mon in mon_status['monmap']['mons']:
             rank = mon['rank']
             id_ = mon['name']
-            host_version = servers.get((id_, 'mon'), ('', ''))
+            mon_version = servers.get((id_, 'mon'), ('', '', ''))
             self.metrics['mon_metadata'].set(1, (
-                'mon.{}'.format(id_), host_version[0],
+                'mon.{}'.format(id_), mon_version[0],
                 mon['public_addr'].rsplit(':', 1)[0], rank,
-                host_version[1]
+                mon_version[1]
             ))
             in_quorum = int(rank in mon_status['quorum'])
             self.metrics['mon_quorum_status'].set(in_quorum, (
@@ -973,7 +999,7 @@ class Module(MgrModule):
                        for module in mgr_map['available_modules']}
 
         for mgr in all_mgrs:
-            host, version = servers.get((mgr, 'mgr'), ('', ''))
+            host, version, _ = servers.get((mgr, 'mgr'), ('', '', ''))
             if mgr == active:
                 _state = 1
             else:
@@ -1031,13 +1057,13 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
-    def get_service_list(self) -> Dict[Tuple[str, str], Tuple[str, str]]:
+    def get_service_list(self) -> Dict[Tuple[str, str], Tuple[str, str, str]]:
         ret = {}
         for server in self.list_servers():
-            version = cast(str, server.get('ceph_version', ''))
             host = cast(str, server.get('hostname', ''))
             for service in cast(List[ServiceInfoT], server.get('services', [])):
-                ret.update({(service['id'], service['type']): (host, version)})
+                ret.update({(service['id'], service['type']): (
+                    host, service['ceph_version'], service.get('name', ''))})
         return ret
 
     @profile_method()
@@ -1075,7 +1101,7 @@ class Module(MgrModule):
                               "skipping output".format(id_))
                 continue
 
-            host_version = servers.get((str(id_), 'osd'), ('', ''))
+            osd_version = servers.get((str(id_), 'osd'), ('', '', ''))
 
             # collect disk occupation metadata
             osd_metadata = self.get_metadata("osd", str(id_))
@@ -1092,10 +1118,10 @@ class Module(MgrModule):
                 c_addr,
                 dev_class,
                 f_iface,
-                host_version[0],
+                osd_version[0],
                 obj_store,
                 p_addr,
-                host_version[1]
+                osd_version[1]
             ))
 
             # collect osd status
@@ -1200,11 +1226,11 @@ class Module(MgrModule):
         for key, value in servers.items():
             service_id, service_type = key
             if service_type == 'rgw':
-                hostname, version = value
+                hostname, version, name = value
                 self.metrics['rgw_metadata'].set(
                     1,
-                    ('{}.{}'.format(service_type, service_id),
-                     hostname, version)
+                    ('{}.{}'.format(service_type, name),
+                     hostname, version, service_id)
                 )
             elif service_type == 'rbd-mirror':
                 mirror_metadata = self.get_metadata('rbd-mirror', service_id)
@@ -1732,9 +1758,7 @@ class Module(MgrModule):
         })
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        if server_addr in ['::', '0.0.0.0']:
-            server_addr = self.get_mgr_ip()
-        self.set_uri(build_url(scheme='http', host=server_addr, port=server_port, path='/'))
+        self.set_uri(build_url(scheme='http', host=self.get_server_addr(), port=server_port, path='/'))
 
         cherrypy.tree.mount(Root(), "/")
         self.log.info('Starting engine...')
@@ -1746,6 +1770,7 @@ class Module(MgrModule):
         # tell metrics collection thread to stop collecting new metrics
         self.metrics_thread.stop()
         cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
         self.log.info('Engine stopped.')
         self.shutdown_rbd_stats()
         # wait for the metrics collection thread to stop
@@ -1842,6 +1867,7 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event.wait()
         self.shutdown_event.clear()
         cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
         self.log.info('Engine stopped.')
 
     def shutdown(self) -> None:

@@ -144,8 +144,8 @@ def test_ceph_volume_command_0():
     spec.validate()
     inventory = _mk_inventory(_mk_device()*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd'
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_1():
@@ -157,9 +157,9 @@ def test_ceph_volume_command_1():
     spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
-                   '--db-devices /dev/sdc /dev/sdd --yes --no-systemd')
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
+                   '--db-devices /dev/sdc /dev/sdd --yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_2():
@@ -175,10 +175,10 @@ def test_ceph_volume_command_2():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
-                   '--yes --no-systemd')
+                   '--yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_3():
@@ -195,11 +195,11 @@ def test_ceph_volume_command_3():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd '
                    '--wal-devices /dev/sde /dev/sdf --dmcrypt '
-                   '--yes --no-systemd')
+                   '--yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_4():
@@ -219,11 +219,11 @@ def test_ceph_volume_command_4():
                               _mk_device(size="10.0 GB", rotational=False)*2
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
                    '--block-wal-size 500M --block-db-size 500M --dmcrypt '
-                   '--osds-per-device 3 --yes --no-systemd')
+                   '--osds-per-device 3 --yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_5():
@@ -236,8 +236,8 @@ def test_ceph_volume_command_5():
         spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --filestore --yes --no-systemd'
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --filestore --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_6():
@@ -252,10 +252,10 @@ def test_ceph_volume_command_6():
         spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == ('lvm batch --no-auto /dev/sdc /dev/sdd '
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == ('lvm batch --no-auto /dev/sdc /dev/sdd '
                    '--journal-size 500M --journal-devices /dev/sda /dev/sdb '
-                   '--filestore --yes --no-systemd')
+                   '--filestore --yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_7():
@@ -267,8 +267,8 @@ def test_ceph_volume_command_7():
     spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, ['0', '1']).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --osd-ids 0 1 --yes --no-systemd'
+    cmds = translate.to_ceph_volume(sel, ['0', '1']).run()
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --osd-ids 0 1 --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_8():
@@ -285,8 +285,8 @@ def test_ceph_volume_command_8():
                               _mk_device(rotational=False, size="349.0 GB", model='INTEL SSDPED1K375GA')  # wal/db
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc --yes --no-systemd'
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_9():
@@ -298,5 +298,39 @@ def test_ceph_volume_command_9():
     spec.validate()
     inventory = _mk_inventory(_mk_device()*2)
     sel = drive_selection.DriveSelection(spec, inventory)
-    cmd = translate.to_ceph_volume(sel, []).run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --data-allocate-fraction 0.8 --yes --no-systemd'
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --data-allocate-fraction 0.8 --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+
+def test_raw_ceph_volume_command_0():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
+                          data_devices=DeviceSelection(rotational=True),
+                          db_devices=DeviceSelection(rotational=False),
+                          method='raw',
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device(rotational=True) +  # data
+                              _mk_device(rotational=True) +  # data
+                              _mk_device(rotational=False) +  # db
+                              _mk_device(rotational=False)  # db
+                              )
+    exp_cmds = ['raw prepare --bluestore --data /dev/sda --block.db /dev/sdc', 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sdd']
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd in exp_cmds for cmd in cmds), f'Expected {exp_cmds} to match {cmds}'
+
+def test_raw_ceph_volume_command_1():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
+                          data_devices=DeviceSelection(rotational=True),
+                          db_devices=DeviceSelection(rotational=False),
+                          method='raw',
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device(rotational=True) +  # data
+                              _mk_device(rotational=True) +  # data
+                              _mk_device(rotational=False) # db
+                              )
+    sel = drive_selection.DriveSelection(spec, inventory)
+    with pytest.raises(ValueError):
+        cmds = translate.to_ceph_volume(sel, []).run()

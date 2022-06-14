@@ -387,6 +387,10 @@ void LogMonitor::log_external(const LogEntry& le)
   }
 
   if (g_conf()->mon_cluster_log_to_file) {
+    if (this->log_rotated.exchange(false)) {
+      this->log_external_close_fds();
+    }
+
     auto p = channel_fds.find(channel);
     int fd;
     if (p == channel_fds.end()) {
@@ -411,7 +415,7 @@ void LogMonitor::log_external(const LogEntry& le)
     }
 
     if (fd >= 0) {
-      fmt::format_to(file_log_buffer, "{}\n", le);
+      fmt::format_to(std::back_inserter(file_log_buffer), "{}\n", le);
       int err = safe_write(fd, file_log_buffer.data(), file_log_buffer.size());
       file_log_buffer.clear();
       if (err < 0) {

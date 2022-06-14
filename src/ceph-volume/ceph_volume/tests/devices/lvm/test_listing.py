@@ -62,7 +62,7 @@ class TestPrettyReport(object):
 
 class TestList(object):
 
-    def test_empty_full_json_zero_exit_status(self, is_root,factory,capsys):
+    def test_empty_full_json_zero_exit_status(self, fake_call, is_root, factory, capsys):
         args = factory(format='json', device=None)
         lvm.listing.List([]).list(args)
         stdout, stderr = capsys.readouterr()
@@ -74,7 +74,7 @@ class TestList(object):
         stdout, stderr = capsys.readouterr()
         assert stdout == '{}\n'
 
-    def test_empty_full_zero_exit_status(self, is_root, factory):
+    def test_empty_full_zero_exit_status(self, fake_call, is_root, factory):
         args = factory(format='pretty', device=None)
         with pytest.raises(SystemExit):
             lvm.listing.List([]).list(args)

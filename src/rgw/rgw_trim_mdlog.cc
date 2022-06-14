@@ -30,6 +30,15 @@ class PurgeLogShardsCR : public RGWShardCollectCR {
 
   static constexpr int max_concurrent = 16;
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to remove mdlog shard: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   PurgeLogShardsCR(rgw::sal::RadosStore* store, const RGWMetadataLog* mdlog,
                    const rgw_pool& pool, int num_shards)
@@ -144,7 +153,7 @@ connection_map make_peer_connections(rgw::sal::RadosStore* store,
   for (auto& g : zonegroups) {
     for (auto& z : g.second.zones) {
       std::unique_ptr<RGWRESTConn> conn{
-        new RGWRESTConn(store->ctx(), store->svc()->zone, z.first.id, z.second.endpoints, g.second.api_name)};
+        new RGWRESTConn(store->ctx(), store, z.first.id, z.second.endpoints, g.second.api_name)};
       connections.emplace(z.first.id, std::move(conn));
     }
   }
@@ -264,6 +273,15 @@ class MetaMasterTrimShardCollectCR : public RGWShardCollectCR {
   std::string oid;
   const rgw_meta_sync_status& sync_status;
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to trim mdlog shard: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   MetaMasterTrimShardCollectCR(MasterTrimEnv& env, RGWMetadataLog *mdlog,
                                const rgw_meta_sync_status& sync_status)
@@ -315,6 +333,17 @@ class MetaMasterStatusCollectCR : public RGWShardCollectCR {
   MasterTrimEnv& env;
   connection_map::iterator c;
   std::vector<rgw_meta_sync_status>::iterator s;
+
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to fetch metadata sync status: "
+          << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   explicit MetaMasterStatusCollectCR(MasterTrimEnv& env)
     : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),
@@ -521,6 +550,15 @@ class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
   RGWMetaSyncEnv meta_env; //< for RGWListRemoteMDLogShardCR
   int shard_id{0};
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to trim mdlog shard: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   MetaPeerTrimShardCollectCR(PeerTrimEnv& env, RGWMetadataLog *mdlog)
     : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),
@@ -677,9 +715,48 @@ class MetaPeerTrimPollCR : public MetaTrimPollCR {
   {}
 };
 
+namespace {
+bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store) {
+  bool retval = true;
+  auto current = store->svc()->mdlog->get_period_history()->get_current();
+  const auto& period = current.get_period();
+  for (const auto& [_, zonegroup] : period.get_map().zonegroups) {
+    if (zonegroup.endpoints.empty()) {
+      ldpp_dout(dpp, -1)
+	<< __PRETTY_FUNCTION__ << ":" << __LINE__
+	<< " WARNING: Cluster is is misconfigured! "
+	<< " Zonegroup " << zonegroup.get_name()
+	<< " (" << zonegroup.get_id() << ") in Realm "
+	<< period.get_realm_name() << " ( " << period.get_realm() << ") "
+	<< " has no endpoints!" << dendl;
+    }
+    for (const auto& [_, zone] : zonegroup.zones) {
+      if (zone.endpoints.empty()) {
+	ldpp_dout(dpp, -1)
+	  << __PRETTY_FUNCTION__ << ":" << __LINE__
+	  << " ERROR: Cluster is is misconfigured! "
+	  << " Zone " << zone.name << " (" << zone.id << ") in Zonegroup "
+	  << zonegroup.get_name() << " ( " << zonegroup.get_id()
+	  << ") in Realm " << period.get_realm_name()
+	  << " ( " << period.get_realm() << ") "
+	  << " has no endpoints! Trimming is impossible." << dendl;
+	retval = false;
+      }
+    }
+  }
+  return retval;
+}
+}
+
 RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store, RGWHTTPManager *http,
                                       int num_shards, utime_t interval)
 {
+  if (!sanity_check_endpoints(dpp, store)) {
+    ldpp_dout(dpp, -1)
+      << __PRETTY_FUNCTION__ << ":" << __LINE__
+      << " ERROR: Cluster is is misconfigured! Refusing to trim." << dendl;
+      return nullptr;
+  }
   if (store->svc()->zone->is_meta_master()) {
     return new MetaMasterTrimPollCR(dpp, store, http, num_shards, interval);
   }
@@ -705,6 +782,12 @@ RGWCoroutine* create_admin_meta_log_trim_cr(const DoutPrefixProvider *dpp, rgw::
                                             RGWHTTPManager *http,
                                             int num_shards)
 {
+  if (!sanity_check_endpoints(dpp, store)) {
+    ldpp_dout(dpp, -1)
+      << __PRETTY_FUNCTION__ << ":" << __LINE__
+      << " ERROR: Cluster is is misconfigured! Refusing to trim." << dendl;
+      return nullptr;
+  }
   if (store->svc()->zone->is_meta_master()) {
     return new MetaMasterAdminTrimCR(dpp, store, http, num_shards);
   }

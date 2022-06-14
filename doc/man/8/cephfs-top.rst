@@ -43,18 +43,6 @@ Descriptions of fields
 
    cap hit rate
 
-.. describe:: rlat
-
-   read latency
-
-.. describe:: wlat
-
-   write latency
-
-.. describe:: mlat
-
-   metadata latency
-
 .. describe:: dlease
 
    dentry lease rate
@@ -95,6 +83,29 @@ Descriptions of fields
 
    speed of write IOs compared with the last refresh
 
+.. describe:: rlatavg
+
+   average read latency
+
+.. describe:: rlatsd
+
+   standard deviation (variance) for read latency
+
+.. describe:: wlatavg
+
+   average write latency
+
+.. describe:: wlatsd
+
+   standard deviation (variance) for write latency
+
+.. describe:: mlatavg
+
+   average metadata latency
+
+.. describe:: mlatsd
+
+   standard deviation (variance) for metadata latency
 
 Availability
 ============

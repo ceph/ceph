@@ -14,8 +14,9 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
-from ..services.rbd import RbdConfiguration, RbdService, RbdSnapshotService, \
-    format_bitmask, format_features, parse_image_spec, rbd_call, \
+from ..services.rbd import MIRROR_IMAGE_MODE, RbdConfiguration, \
+    RbdMirroringService, RbdService, RbdSnapshotService, format_bitmask, \
+    format_features, get_image_spec, parse_image_spec, rbd_call, \
     rbd_image_call
 from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, \
@@ -109,8 +110,9 @@ class Rbd(RESTController):
 
     @RbdTask('create',
              {'pool_name': '{pool_name}', 'namespace': '{namespace}', 'image_name': '{name}'}, 2.0)
-    def create(self, name, pool_name, size, namespace=None, obj_size=None, features=None,
-               stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
+    def create(self, name, pool_name, size, namespace=None, schedule_interval='',
+               obj_size=None, features=None, stripe_unit=None, stripe_count=None,
+               data_pool=None, configuration=None, mirror_mode=None):
 
         size = int(size)
 
@@ -132,6 +134,13 @@ class Rbd(RESTController):
                              image_name=name).set_configuration(configuration)
 
         rbd_call(pool_name, namespace, _create)
+        if mirror_mode:
+            RbdMirroringService.enable_image(name, pool_name, namespace,
+                                             MIRROR_IMAGE_MODE[mirror_mode])
+
+        if schedule_interval:
+            image_spec = get_image_spec(pool_name, namespace, name)
+            RbdMirroringService.snapshot_schedule_add(image_spec, schedule_interval)
 
     @RbdTask('delete', ['{image_spec}'], 2.0)
     def delete(self, image_spec):
@@ -146,7 +155,11 @@ class Rbd(RESTController):
         return rbd_call(pool_name, namespace, rbd_inst.remove, image_name)
 
     @RbdTask('edit', ['{image_spec}', '{name}'], 4.0)
-    def set(self, image_spec, name=None, size=None, features=None, configuration=None):
+    def set(self, image_spec, name=None, size=None, features=None,
+            configuration=None, enable_mirror=None, primary=None,
+            resync=False, mirror_mode=None, schedule_interval='',
+            remove_scheduling=False):
+
         pool_name, namespace, image_name = parse_image_spec(image_spec)
 
         def _edit(ioctx, image):
@@ -165,22 +178,48 @@ class Rbd(RESTController):
                 # check disabled features
                 _sort_features(curr_features, enable=False)
                 for feature in curr_features:
-                    if feature not in features and feature in self.ALLOW_DISABLE_FEATURES:
-                        if feature not in format_bitmask(image.features()):
-                            continue
+                    if (feature not in features
+                       and feature in self.ALLOW_DISABLE_FEATURES
+                       and feature in format_bitmask(image.features())):
                         f_bitmask = format_features([feature])
                         image.update_features(f_bitmask, False)
                 # check enabled features
                 _sort_features(features)
                 for feature in features:
-                    if feature not in curr_features and feature in self.ALLOW_ENABLE_FEATURES:
-                        if feature in format_bitmask(image.features()):
-                            continue
+                    if (feature not in curr_features
+                       and feature in self.ALLOW_ENABLE_FEATURES
+                       and feature not in format_bitmask(image.features())):
                         f_bitmask = format_features([feature])
                         image.update_features(f_bitmask, True)
 
             RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).set_configuration(
                 configuration)
+
+            mirror_image_info = image.mirror_image_get_info()
+            if enable_mirror and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_DISABLED:
+                RbdMirroringService.enable_image(
+                    image_name, pool_name, namespace,
+                    MIRROR_IMAGE_MODE[mirror_mode])
+            elif (enable_mirror is False
+                  and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED):
+                RbdMirroringService.disable_image(
+                    image_name, pool_name, namespace)
+
+            if primary and not mirror_image_info['primary']:
+                RbdMirroringService.promote_image(
+                    image_name, pool_name, namespace)
+            elif primary is False and mirror_image_info['primary']:
+                RbdMirroringService.demote_image(
+                    image_name, pool_name, namespace)
+
+            if resync:
+                RbdMirroringService.resync_image(image_name, pool_name, namespace)
+
+            if schedule_interval:
+                RbdMirroringService.snapshot_schedule_add(image_spec, schedule_interval)
+
+            if remove_scheduling:
+                RbdMirroringService.snapshot_schedule_remove(image_spec)
 
         return rbd_image_call(pool_name, namespace, image_name, _edit)
 
@@ -275,7 +314,13 @@ class RbdSnapshot(RESTController):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
 
         def _create_snapshot(ioctx, img, snapshot_name):
-            img.create_snap(snapshot_name)
+            mirror_info = img.mirror_image_get_info()
+            mirror_mode = img.mirror_image_get_mode()
+            if (mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED
+                    and mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT):
+                img.mirror_image_create_snapshot()
+            else:
+                img.create_snap(snapshot_name)
 
         return rbd_image_call(pool_name, namespace, image_name, _create_snapshot,
                               snapshot_name)

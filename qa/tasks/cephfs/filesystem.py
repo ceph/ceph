@@ -250,7 +250,7 @@ class CephCluster(object):
 
     def json_asok(self, command, service_type, service_id, timeout=None):
         if timeout is None:
-            timeout = 15*60
+            timeout = 300
         command.insert(0, '--format=json')
         proc = self.mon_manager.admin_socket(service_type, service_id, command, timeout=timeout)
         response_data = proc.stdout.getvalue().strip()
@@ -263,18 +263,12 @@ class CephCluster(object):
             log.debug("_json_asok output empty")
             return None
 
-    def is_addr_blocklisted(self, addr=None):
-        if addr is None:
-            log.warn("Couldn't get the client address, so the blocklisted "
-                     "status undetermined")
-            return False
-
-        blocklist = json.loads(self.mon_manager.run_cluster_cmd(
-            args=["osd", "blocklist", "ls", "--format=json"],
-            stdout=StringIO()).stdout.getvalue())
-        for b in blocklist:
-            if addr == b["addr"]:
-                return True
+    def is_addr_blocklisted(self, addr):
+        blocklist = json.loads(self.mon_manager.raw_cluster_cmd(
+            "osd", "dump", "--format=json"))['blocklist']
+        if addr in blocklist:
+            return True
+        log.warn(f'The address {addr} is not blocklisted')
         return False
 
 

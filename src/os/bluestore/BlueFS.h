@@ -83,6 +83,10 @@ public:
   virtual uint8_t select_prefer_bdev(void* hint) = 0;
   virtual void get_paths(const std::string& base, paths& res) const = 0;
   virtual void dump(std::ostream& sout) = 0;
+
+  /* used for sanity checking of vselector */
+  virtual BlueFSVolumeSelector* clone_empty() const { return nullptr; }
+  virtual bool compare(BlueFSVolumeSelector* other) { return true; };
 };
 
 struct bluefs_shared_alloc_context_t {
@@ -423,7 +427,7 @@ private:
   int _flush_range_F(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
-  int _flush_special(FileWriter *h);
+  uint64_t _flush_special(FileWriter *h);
   int _fsync(FileWriter *h);
 
 #ifdef HAVE_LIBAIO
@@ -511,7 +515,11 @@ private:
   unsigned get_super_length() {
     return 4096;
   }
-
+  void _maybe_check_vselector_LNF() {
+    if (cct->_conf->bluefs_check_volume_selector_often) {
+      _check_vselector_LNF();
+    }
+  }
 public:
   BlueFS(CephContext* cct);
   ~BlueFS();
@@ -552,7 +560,9 @@ public:
   void dump_block_extents(std::ostream& out);
 
   /// get current extents that we own for given block device
-  int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
+  void foreach_block_extents(
+    unsigned id,
+    std::function<void(uint64_t, uint32_t)> cb);
 
   int open_for_write(
     std::string_view dir,
@@ -578,6 +588,7 @@ public:
   int mkdir(std::string_view dirname);
   int rmdir(std::string_view dirname);
   bool wal_is_rotational();
+  bool db_is_rotational();
 
   bool dir_exists(std::string_view dirname);
   int stat(std::string_view dirname, std::string_view filename,
@@ -661,6 +672,7 @@ private:
 			       size_t read_offset,
 			       size_t read_len,
 			       bufferlist* bl);
+  void _check_vselector_LNF();
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {

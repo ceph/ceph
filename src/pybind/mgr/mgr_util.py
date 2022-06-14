@@ -321,6 +321,15 @@ class CephfsClient(Generic[Module_T]):
             return fs['mdsmap']['metadata_pool']
         return None
 
+    def get_all_filesystems(self) -> List[str]:
+        fs_list: List[str] = []
+        fs_map = self.mgr.get('fs_map')
+        if fs_map['filesystems']:
+            for fs in fs_map['filesystems']:
+                fs_list.append(fs['mdsmap']['fs_name'])
+        return fs_list
+
+
 
 @contextlib.contextmanager
 def open_filesystem(fsc: CephfsClient, fs_name: str) -> Generator["cephfs.LibCephFS", None, None]:
@@ -768,18 +777,18 @@ def _pairwise(iterable: Iterable[T]) -> Generator[Tuple[Optional[T], T], None, N
 
 def to_pretty_timedelta(n: datetime.timedelta) -> str:
     if n < datetime.timedelta(seconds=120):
-        return str(n.seconds) + 's'
+        return str(int(n.total_seconds())) + 's'
     if n < datetime.timedelta(minutes=120):
-        return str(n.seconds // 60) + 'm'
+        return str(int(n.total_seconds()) // 60) + 'm'
     if n < datetime.timedelta(hours=48):
-        return str(n.seconds // 3600) + 'h'
+        return str(int(n.total_seconds()) // 3600) + 'h'
     if n < datetime.timedelta(days=14):
-        return str(n.days) + 'd'
+        return str(int(n.total_seconds()) // (3600*24)) + 'd'
     if n < datetime.timedelta(days=7*12):
-        return str(n.days // 7) + 'w'
+        return str(int(n.total_seconds()) // (3600*24*7)) + 'w'
     if n < datetime.timedelta(days=365*2):
-        return str(n.days // 30) + 'M'
-    return str(n.days // 365) + 'y'
+        return str(int(n.total_seconds()) // (3600*24*30)) + 'M'
+    return str(int(n.total_seconds()) // (3600*24*365)) + 'y'
 
 
 def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]], Callable[..., T]]:

@@ -1,7 +1,7 @@
-Sphinx == 3.5.4
+Sphinx == 4.4.0
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
 git+https://github.com/vlasovskikh/funcparserlib.git
-breathe >= 4.20.0
+breathe >= 4.20.0,!=4.33
 cryptography
 Jinja2
 pyyaml >= 5.1.2
@@ -10,9 +10,10 @@ pcpp
 prettytable
 sphinx-autodoc-typehints
 sphinx-prompt
-sphinx_rtd_theme == 0.5.2
+sphinx_rtd_theme == 1.0.0
 Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-openapi
 sphinxcontrib-seqdiag
 mistune < 2.0.0
+natsort

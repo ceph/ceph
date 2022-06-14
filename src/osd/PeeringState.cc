@@ -3238,6 +3238,8 @@ void PeeringState::split_into(
   child->info.stats.parent_split_bits = split_bits;
   info.stats.stats_invalid = true;
   child->info.stats.stats_invalid = true;
+  child->info.stats.objects_trimmed = 0;
+  child->info.stats.snaptrim_duration = 0.0;
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
 

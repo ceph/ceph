@@ -475,7 +475,9 @@ def test_service_name(s_type, s_id, s_name):
 @pytest.mark.parametrize(
     's_type,s_id',
     [
-        ('mds', 's:id'),
+        ('mds', 's:id'), # MDS service_id cannot contain an invalid char ':'
+        ('mds', '1abc'), # MDS service_id cannot start with a numeric digit
+        ('mds', ''),     # MDS service_id cannot be empty
         ('rgw', '*s_id'),
         ('nfs', 's/id'),
         ('iscsi', 's@id'),
