@@ -22,7 +22,7 @@ operations needed by the ``cephadm`` to manage the node such as:
 
 During the initial cluster bootstrp the ``cephadm`` binary creates a minimal cluster
 deploying a ceph ``mon`` and a ceph ``mgr``. By default a monitoring stack is deployed
-as well. 
+as well.
 
 
 The ``cephadm``  mgr module is Python component that runs as part of the Ceph mgr
