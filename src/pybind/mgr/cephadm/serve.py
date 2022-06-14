@@ -1047,6 +1047,8 @@ class CephadmServe:
             self.mgr.cache.update_client_file(host, path, digest, mode, uid, gid)
             updated_files = True
         for path in old_files.keys():
+            if path == '/etc/ceph/ceph.conf':
+                continue
             self.log.info(f'Removing {host}:{path}')
             with self._remote_connection(host) as tpl:
                 conn, connr = tpl
