@@ -98,7 +98,7 @@ def create_users(ctx, config):
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
     
-    if ctx.sts_variable:
+    if ctx.sts_variable or ctx.iam_variable:
         users = {'s3 main': 'foo', 's3 alt': 'bar', 's3 tenant': 'testx$tenanteduser', 'iam': 'foobar'}
         for client in config['clients']:
             s3tests_conf = config['s3tests_conf'][client]
@@ -453,7 +453,7 @@ def run_tests(ctx, config):
         else:
             args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
         # civetweb > 1.8 && beast parsers are strict on rfc2616
-        attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616","!test_of_sts","!webidentity_test"]
+        attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616","!test_of_sts","!webidentity_test","!test_of_iam"]
         if client_config.get('calling-format') != 'ordinary':
             attrs += ['!fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
@@ -582,6 +582,17 @@ def task(ctx, config):
               cloudtier_tests: True
               rgw_server: client.0
 
+    To run any iam-tests don't forget to set a config variable named 'iam_tests' to 'True' as follows::
+
+        tasks:
+        - ceph:
+        - rgw: [client.0]
+        - s3tests:
+            client.0:
+              extra_attrs: ["test_of_iam"]
+              iam_tests: True
+              rgw_server: client.0
+
     """
     assert hasattr(ctx, 'rgw'), 's3tests must run after the rgw task'
     assert config is None or isinstance(config, list) \
@@ -622,6 +633,11 @@ def task(ctx, config):
         else:
             ctx.dbstore_variable = False
 
+        if 'iam_tests' in client_config:
+            ctx.iam_variable = True
+        else:
+            ctx.iam_variable = False
+
         #This will be the structure of config file when you want to run webidentity_test (sts-test)
         if ctx.sts_variable and "TOKEN" in os.environ:
             for client in clients:
@@ -646,8 +662,8 @@ def task(ctx, config):
                     }
                 )
 
-        elif ctx.sts_variable:
-            #This will be the structure of config file when you want to run assume_role_test and get_session_token_test (sts-test)
+        elif ctx.sts_variable or ctx.iam_variable:
+            #This will be the structure of config file when you want to run assume_role_test and get_session_token_test (sts-test) or iam-tests
             for client in clients:
                 endpoint = ctx.rgw.role_endpoints.get(client)
                 assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
