@@ -502,6 +502,29 @@ struct AccumulateIOCtxt{
   uint64_t total_bufer_sz = 0;
 };
 
+class MotrCopyObj_Filter : public RGWGetDataCB {
+public:
+  virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override { return 0; }
+  MotrCopyObj_Filter() {}
+  virtual ~MotrCopyObj_Filter() override {}
+};
+
+class MotrCopyObj_CB : public MotrCopyObj_Filter
+{
+  const DoutPrefixProvider* m_dpp;
+  std::shared_ptr<rgw::sal::Writer> m_dst_writer;
+  off_t write_offset;
+
+public:
+  explicit MotrCopyObj_CB(const DoutPrefixProvider* dpp, 
+                         std::shared_ptr<rgw::sal::Writer> dst_writer) : 
+                         m_dpp(dpp),
+                         m_dst_writer(dst_writer),
+                         write_offset(0) {}
+  virtual ~MotrCopyObj_CB() override {}
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
+};
+
 class MotrObject : public Object {
   private:
     MotrStore *store;
@@ -604,6 +627,21 @@ class MotrObject : public Object {
         bool prevent_versioning = false) override;
     virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
         bool keep_index_consistent, optional_yield y) override;
+    int copy_object_same_zone(RGWObjectCtx& obj_ctx, User* user,
+        req_info* info, const rgw_zone_id& source_zone,
+        rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
+        rgw::sal::Bucket* src_bucket,
+        const rgw_placement_rule& dest_placement,
+        ceph::real_time* src_mtime, ceph::real_time* mtime,
+        const ceph::real_time* mod_ptr, const ceph::real_time* unmod_ptr,
+        bool high_precision_time,
+        const char* if_match, const char* if_nomatch,
+        AttrsMod attrs_mod, bool copy_if_newer, Attrs& attrs,
+        RGWObjCategory category, uint64_t olh_epoch,
+        boost::optional<ceph::real_time> delete_at,
+        std::string* version_id, std::string* tag, std::string* etag,
+        void (*progress_cb)(off_t, void *), void* progress_data,
+        const DoutPrefixProvider* dpp, optional_yield y);
     virtual int copy_object(RGWObjectCtx& obj_ctx, User* user,
         req_info* info, const rgw_zone_id& source_zone,
         rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,

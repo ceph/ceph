@@ -1483,26 +1483,10 @@ int MotrObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
   *_state = state;
 
   // Get object's metadata (those stored in rgw_bucket_dir_entry).
-  bufferlist bl;
-  string tenant_bkt_name = get_bucket_name(this->get_bucket()->get_tenant(), this->get_bucket()->get_name());
-  if (this->store->get_obj_meta_cache()->get(dpp, this->get_key().to_str(), bl)) {
-    // Cache misses.
-    string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
-    int rc = this->store->do_idx_op_by_name(bucket_index_iname,
-                                  M0_IC_GET, this->get_key().to_str(), bl);
-    if (rc < 0) {
-      ldpp_dout(dpp, 0) << __func__ << ": failed to get object's entry from bucket index. rc = " << rc << dendl;
-      return rc;
-    }
-
-    // Put into cache.
-    this->store->get_obj_meta_cache()->put(dpp, this->get_key().to_str(), bl);
-  }
-
   rgw_bucket_dir_entry ent;
-  bufferlist& blr = bl;
-  auto iter = blr.cbegin();
-  ent.decode(iter);
+  int rc = this->get_bucket_dir_ent(dpp, ent);
+  if (rc < 0)
+    return rc;
 
   // Set object's type.
   this->category = ent.meta.category;
@@ -1809,7 +1793,6 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   ldpp_dout(dpp, 20) <<__func__<< ": object's etag: " << ent.meta.etag << dendl;
   etag_bl.append(etag.c_str(), etag.size());
   source->get_attrs().emplace(std::move(RGW_ATTR_ETAG), std::move(etag_bl));
-
   source->set_key(ent.key);
   source->set_obj_size(ent.meta.size);
   source->category = ent.meta.category;
@@ -1909,7 +1892,14 @@ int MotrObject::MotrReadOp::iterate(const DoutPrefixProvider* dpp, int64_t off, 
 
 int MotrObject::MotrReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)
 {
-  //return 0;
+  if (source == nullptr)
+    return -ENODATA;
+  rgw::sal::Attrs &attrs = source->get_attrs();
+  auto iter = attrs.find(name);
+  if (iter != attrs.end()) {
+    dest = iter->second;
+    return 0;
+  }
   return -ENODATA;
 }
 
@@ -2176,6 +2166,174 @@ int MotrObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astat
   return 0;
 }
 
+int MotrCopyObj_CB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+{
+  int rc = 0;
+  ldpp_dout(m_dpp, 20) << "Offset = " << bl_ofs << " Length = "
+                       << " Write Offset = " << write_offset << bl_len << dendl;
+
+
+  //offset is zero and bufferlength is equal to bl_len
+  if (!bl_ofs && bl_len == bl.length()) {
+    bufferptr bptr(bl.c_str(), bl_len);
+    bufferlist blist;
+    blist.push_back(bptr);
+    rc = m_dst_writer->process(std::move(blist), write_offset);
+    if(rc < 0){
+      ldpp_dout(m_dpp, 20) << "ERROR: writer process bl_ofs=0 && " <<
+                          "bl_len = " << bl.length() << " Write Offset = " <<
+                          write_offset << "failed rc = " << rc << dendl;
+    }
+    write_offset += bl_len;
+    return rc;
+  }
+  
+  bufferptr bp(bl.c_str() + bl_ofs, bl_len);
+  bufferlist new_bl;
+  new_bl.push_back(bp);
+
+  rc = m_dst_writer->process(std::move(new_bl), write_offset);
+  if(rc < 0){
+    ldpp_dout(m_dpp, 20) << "ERROR: writer process failed rc = " << rc
+                         << " Write Offset = " << write_offset << dendl;
+    return rc;
+  }
+  write_offset += bl_len;
+
+  ldpp_dout(m_dpp, 20) << "MotrCopyObj_CB handle_data called rc = " << rc << dendl;
+  return rc;
+}
+
+
+int MotrObject::copy_object_same_zone(RGWObjectCtx& obj_ctx,
+    User* user,
+    req_info* info,
+    const rgw_zone_id& source_zone,
+    rgw::sal::Object* dest_object,
+    rgw::sal::Bucket* dest_bucket,
+    rgw::sal::Bucket* src_bucket,
+    const rgw_placement_rule& dest_placement,
+    ceph::real_time* src_mtime,
+    ceph::real_time* mtime,
+    const ceph::real_time* mod_ptr,
+    const ceph::real_time* unmod_ptr,
+    bool high_precision_time,
+    const char* if_match,
+    const char* if_nomatch,
+    AttrsMod attrs_mod,
+    bool copy_if_newer,
+    Attrs& attrs,
+    RGWObjCategory category,
+    uint64_t olh_epoch,
+    boost::optional<ceph::real_time> delete_at,
+    std::string* version_id,
+    std::string* tag,
+    std::string* etag,
+    void (*progress_cb)(off_t, void *),
+    void* progress_data,
+    const DoutPrefixProvider* dpp,
+    optional_yield y)
+{
+  int rc = 0;
+  std::string ver_id;
+  std::string req_id;
+
+  ldpp_dout(dpp, 20) << "Src Object Name : " << this->get_key().get_oid() << dendl;
+  ldpp_dout(dpp, 20) << "Dest Object Name : " << dest_object->get_key().get_oid() << dendl;
+
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op = this->get_read_op(&obj_ctx);
+
+  // prepare read op
+  read_op->params.lastmod = src_mtime;
+  read_op->params.if_match = if_match;
+  read_op->params.if_nomatch = if_nomatch;
+  read_op->params.mod_ptr = mod_ptr;
+  read_op->params.unmod_ptr = unmod_ptr;
+
+  rc = read_op->prepare(y, dpp);
+  if(rc < 0){
+    ldpp_dout(dpp, 20) << "ERROR: read op prepare failed rc = " << rc << dendl;
+    return rc;
+  }
+
+  if(version_id){
+    ver_id = *version_id;
+  }
+  if(tag){
+    req_id = *tag;
+  }
+
+  // prepare write op
+  std::shared_ptr<rgw::sal::Writer> dst_writer = store->get_atomic_writer(dpp, y,
+        dest_object->clone(),
+        user->get_id(), obj_ctx,
+        &dest_placement, olh_epoch, req_id);
+
+  rc = dst_writer->prepare(y);
+  if(rc < 0){
+    ldpp_dout(dpp, 20) << "ERROR: writer prepare failed rc = " << rc << dendl;
+    return rc;
+  }
+
+  // Create filter object.
+  MotrCopyObj_CB cb(dpp, dst_writer);
+  MotrCopyObj_Filter* filter = &cb;
+
+  // Get offsets.
+  int64_t cur_ofs = 0, cur_end = obj_size;
+  rc = this->range_to_ofs(obj_size, cur_ofs, cur_end);
+  if (rc < 0){
+    ldpp_dout(dpp, 20) << "ERROR: read op range_to_ofs failed rc = " << rc << dendl;
+    return rc;
+  }
+
+  // read::iterate -> handle_data() -> write::process
+  rc = read_op->iterate(dpp, cur_ofs, cur_end, filter, y);
+  if (rc < 0){
+    ldpp_dout(dpp, 20) << "ERROR: read op iterate failed rc = " << rc << dendl;
+    return rc;
+  }
+
+  real_time time = ceph::real_clock::now();
+  if(mtime){
+    *mtime = time;
+  }
+
+  //fetch etag.
+  bufferlist bl;
+  rc = read_op->get_attr(dpp, RGW_ATTR_ETAG, bl, y);
+  if (rc < 0){
+    ldpp_dout(dpp, 20) << "ERROR: read op iterate failed rc = " << rc << dendl;
+    return rc;
+  }
+  string etag_str;
+  etag_str.assign(bl.c_str(), bl.length());
+
+  if(etag){
+    *etag = etag_str;
+  }
+
+  real_time del_time;
+
+  // write::complete - overwrite and md handling done here
+  rc = dst_writer->complete(obj_size, etag_str,
+                      mtime, time,
+                      attrs,
+                      del_time,
+                      if_match,
+                      if_nomatch,
+                      nullptr,
+                      nullptr,
+                      nullptr,
+                      y);
+  if (rc < 0){
+    ldpp_dout(dpp, 20) << "ERROR: writer complete failed rc = " << rc << dendl;
+    return rc;
+  }
+
+  return rc;
+}
+
 int MotrObject::copy_object(RGWObjectCtx& obj_ctx,
     User* user,
     req_info* info,
@@ -2205,7 +2363,66 @@ int MotrObject::copy_object(RGWObjectCtx& obj_ctx,
     const DoutPrefixProvider* dpp,
     optional_yield y)
 {
-      return 0;
+  int rc = 0;
+  auto& src_zonegrp = src_bucket->get_info().zonegroup;
+  auto& dest_zonegrp = dest_bucket->get_info().zonegroup;
+
+  if(src_zonegrp.compare(dest_zonegrp) != 0){
+    ldpp_dout(dpp, 0) << __func__ << "Unsupported Action Requested." << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
+
+  ldpp_dout(dpp, 20) << __func__ << "Src and Dest Zonegroups are same."
+                    << "src_zonegrp : " << src_zonegrp
+                    << "dest_zonegrp : " << dest_zonegrp << dendl;
+
+  //
+  // Check if src object is encrypted.
+  rgw::sal::Attrs &src_attrs = this->get_attrs();
+  if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
+    // Current implementation does not follow S3 spec and even
+    // may result in data corruption silently when copying
+    // multipart objects acorss pools. So reject COPY operations
+    //on encrypted objects before it is fully functional.
+    ldpp_dout(dpp, 0) << "ERROR: copy op for encrypted object has not been implemented." << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
+
+  rc = copy_object_same_zone(obj_ctx,
+                            user,
+                            info,
+                            source_zone,
+                            dest_object,
+                            dest_bucket,
+                            src_bucket,
+                            dest_placement,
+                            src_mtime,
+                            mtime,
+                            mod_ptr,
+                            unmod_ptr,
+                            high_precision_time,
+                            if_match,
+                            if_nomatch,
+                            attrs_mod,
+                            copy_if_newer,
+                            attrs,
+                            category,
+                            olh_epoch,
+                            delete_at,
+                            version_id,
+                            tag,
+                            etag,
+                            progress_cb,
+                            progress_data,
+                            dpp,
+                            y);
+  if (rc < 0){
+    ldpp_dout(dpp, 20) << "ERROR: copy_object_same_zone failed rc = " << rc << dendl;
+    return rc;
+  }
+
+  ldpp_dout(dpp, 20) << "Copy op completed rc = " << rc << dendl;
+  return rc;
 }
 
 int MotrObject::swift_versioning_restore(RGWObjectCtx* obj_ctx,
@@ -2726,7 +2943,14 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t 
     skip = 0;
     if (start > off)
       skip = start - off;
-    cb->handle_data(bl, skip, (left < bs ? left : bs) - skip);
+    if(cb){
+      ldpp_dout(dpp, 20) << __func__  << " call cb to process data" << dendl;
+      cb->handle_data(bl, skip, (left < bs ? left : bs) - skip);
+      if (rc != 0){
+        ldpp_dout(dpp, 0) << __func__ << " handle_data failed rc =" << rc << dendl;
+        goto out;
+      }
+    }
 
     addb_logger.set_id(req_id);
   }
