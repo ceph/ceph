@@ -114,7 +114,7 @@ struct fmt::formatter<pg_t> {
   template <typename FormatContext>
   auto format(const pg_t& pg, FormatContext& ctx)
   {
-    return fmt::format_to(ctx.out(), "{}.{}", pg.pool(), pg.m_seed);
+    return fmt::format_to(ctx.out(), "{}.{:x}", pg.pool(), pg.m_seed);
   }
 };
 
