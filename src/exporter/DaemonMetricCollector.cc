@@ -99,8 +99,6 @@ void DaemonMetricCollector::dump_asok_metrics() {
     std::string pid_path =
         boost_string_to_std(pid_file_json["pid_file"].as_string());
     std::string pid_str = read_file_to_string(pid_path);
-    std::cout << daemon_name << std::endl;
-    std::cout << pid_str << std::endl;
     if (!pid_path.size()) {
       continue;
     }
@@ -178,9 +176,12 @@ std::string DaemonMetricCollector::get_process_metrics(
     struct pstat stat = read_pid_stat(pid);
     int clk_tck = sysconf(_SC_CLK_TCK);
     double start_time_seconds = stat.start_time / (double)clk_tck;
-    double total_time_seconds = (stat.utime + stat.stime) / (double)clk_tck;
+		double user_time = stat.utime / (double)clk_tck;
+		double kernel_time = stat.stime / (double)clk_tck;
+    double total_time_seconds = user_time + kernel_time;
     double uptime = std::stod(uptimes[0]);
     double elapsed_time = uptime - start_time_seconds;
+		double idle_time = elapsed_time  - total_time_seconds;
     double usage = total_time_seconds * 100 / elapsed_time;
 
     std::string labels = "ceph_daemon=";
@@ -192,6 +193,12 @@ std::string DaemonMetricCollector::get_process_metrics(
     add_metric(ss, stat.num_threads, "ceph_exporter_num_threads",
                "Number of threads used by daemon", "gauge", labels);
     add_metric(ss, usage, "ceph_exporter_cpu_usage", "CPU usage of a daemon",
+               "gauge", labels);
+    add_metric(ss, kernel_time, "ceph_exporter_cpu_kernel", "Process time in kernel mode",
+               "gauge", labels);
+    add_metric(ss, user_time, "ceph_exporter_cpu_user", "Process time in user mode",
+               "gauge", labels);
+    add_metric(ss, idle_time, "ceph_exporter_cpu_user", "Process idle time",
                "gauge", labels);
     add_metric(ss, stat.vm_size, "ceph_exporter_vm_size", "dec",
                "Virtual memory used in a daemon", labels);
