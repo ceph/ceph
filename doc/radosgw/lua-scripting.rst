@@ -330,6 +330,19 @@ to atomically increment and decrement numeric values in it. For that the followi
 - if we try to increment or decrement by non-numeric values, the execution of the script would fail
 
 
+Tracing
+~~~~~~~
+Tracing functions can be used only in `postRequest` context.
+
+- ``Request.Trace.SetAttribute()`` - sets the attribute for the request's trace.
+  Takes two arguments. The first is the `key`, which should be a string. The second is the value, which can either be a string or a number.
+  Using the attribute, you can locate specific traces.
+
+- ``Request.Trace.AddEvent()`` - adds an event to the first span of the request's trace
+  An event is defined by event name, event time, and zero or more event attributes.
+  Therefore, the function accepts one or two arguments. A string containing the event name should be the first argument, followed by the event attributes, which is optional for events without attributes.
+  An event's attributes must be a table of strings.
+
 Lua Code Samples
 ----------------
 - Print information on source and destination objects in case of copy:
@@ -479,4 +492,22 @@ In the `preRequest` context:
   end
 
 Note that changing `Request.Trace.Enable` does not change the tracer's state, but disables or enables the tracing for the request only.
+
+
+- Add Information for requests traces
+
+in `postRequest` context, we can add attributes and events to the request's trace.
+
+.. code-block:: lua
+
+  Request.Trace.AddEvent("lua script execution started")
+
+  Request.Trace.SetAttribute("HTTPStatusCode", Request.Response.HTTPStatusCode)
+
+  event_attrs = {}
+  for k,v in pairs(Request.GenericAttributes) do
+    event_attrs[k] = v
+  end
+
+  Request.Trace.AddEvent("second event", event_attrs)
 
