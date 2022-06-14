@@ -18,7 +18,7 @@ def get_key_size_from_conf():
     key_size = conf.ceph.get_safe(
         'osd',
         'osd_dmcrypt_key_size',
-        default='512')
+        default='512', check_valid=False)
 
     if key_size not in ['256', '512']:
         logger.warning(("Invalid value set for osd_dmcrypt_key_size ({}). "
