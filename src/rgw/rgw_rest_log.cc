@@ -568,7 +568,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   for (auto& log : logs) {
       uint32_t num_shards = log.layout.in_index.layout.num_shards;
-      gen_numshards.push_back(std::make_pair(log.gen, num_shards));
+      generations.push_back({log.gen, num_shards});
   }
 }
 
@@ -587,7 +587,7 @@ void RGWOp_BILog_Info::send_response() {
   encode_json("syncstopped", syncstopped, s->formatter);
   encode_json("oldest_gen", oldest_gen, s->formatter);
   encode_json("latest_gen", latest_gen, s->formatter);
-  //encode_json("gen_numshards", gen_numshards, s->formatter); TODO: add supporting encode/decode for std::pair
+  encode_json("generations", generations, s->formatter);
   s->formatter->close_section();
 
   flusher.flush();
