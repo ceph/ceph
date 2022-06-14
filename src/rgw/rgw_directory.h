@@ -73,6 +73,7 @@ public:
 	int existKey(string key, cpp_redis::client *client);
 	int setValue(cache_block *ptr);
 	int getValue(cache_block *ptr);
+	int setGetValue(cache_block *ptr);
 	//int getValue(cache_block *ptr, string key);
 	//int updateField(cache_block *ptr, string field, string value);
 	//int updateField(string key, string field, string value);
@@ -89,6 +90,7 @@ public:
   	///////////////////////////////////// */
 private:
 	string buildIndex(cache_block *ptr);
+	cpp_redis::client client;
 };
 
 
