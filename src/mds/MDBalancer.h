@@ -74,7 +74,7 @@ public:
 
   void handle_mds_failure(mds_rank_t who);
 
-  int dump_loads(Formatter *f) const;
+  int dump_loads(Formatter *f, int64_t depth = -1) const;
 
 private:
   typedef struct {
