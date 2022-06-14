@@ -19,8 +19,9 @@ from ..services.rbd import MIRROR_IMAGE_MODE, RbdConfiguration, \
     format_features, get_image_spec, parse_image_spec, rbd_call, \
     rbd_image_call
 from ..tools import ViewCache, str_to_bool
-from . import APIDoc, APIRouter, CreatePermission, DeletePermission, \
-    EndpointDoc, RESTController, Task, UpdatePermission, allow_empty_body
+from . import APIDoc, APIRouter, BaseController, CreatePermission, \
+    DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
+    Task, UIRouter, UpdatePermission, allow_empty_body
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +301,20 @@ class Rbd(RESTController):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
         rbd_inst = rbd.RBD()
         return rbd_call(pool_name, namespace, rbd_inst.trash_move, image_name, delay)
+
+
+@UIRouter('/block/rbd')
+class RbdStatus(BaseController):
+    @EndpointDoc("Display RBD Image feature status")
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': True, 'message': None}
+        if not CephService.get_pool_list('rbd'):
+            status['available'] = False
+            status['message'] = 'No RBD pools in the cluster. Please create a pool '\
+                                'with the "rbd" application label.'  # type: ignore
+        return status
 
 
 @APIRouter('/block/image/{image_spec}/snap', Scope.RBD_IMAGE)

@@ -35,7 +35,7 @@ export class NavigationPageHelper extends PageHelper {
     {
       menu: 'Block',
       submenus: [
-        { menu: 'Images', component: 'cd-rbd-list' },
+        { menu: 'Images', component: 'cd-error' },
         { menu: 'Mirroring', component: 'cd-mirroring' },
         { menu: 'iSCSI', component: 'cd-iscsi' }
       ]
@@ -52,9 +52,10 @@ export class NavigationPageHelper extends PageHelper {
   }
 
   checkNavigations(navs: any) {
-    // The nfs-ganesha and RGW status requests are mocked to ensure that this method runs in time
-    cy.intercept('/api/nfs-ganesha/status', { fixture: 'nfs-ganesha-status.json' });
-    cy.intercept('/api/rgw/status', { fixture: 'rgw-status.json' });
+    // The nfs-ganesha, RGW, and block/rbd status requests are mocked to ensure that this method runs in time
+    cy.intercept('/ui-api/nfs-ganesha/status', { fixture: 'nfs-ganesha-status.json' });
+    cy.intercept('/ui-api/rgw/status', { fixture: 'rgw-status.json' });
+    cy.intercept('/ui-api/block/rbd/status', { fixture: 'block-rbd-status.json' });
 
     navs.forEach((nav: any) => {
       cy.contains('.simplebar-content li.nav-item a', nav.menu).click();
