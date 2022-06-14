@@ -187,7 +187,7 @@ file `CONTRIBUTING.rst`_ in the top-level directory of the source-code
 tree. There may be some overlap between this guide and that file.
 
 .. _`CONTRIBUTING.rst`:
-  https://github.com/ceph/ceph/blob/master/CONTRIBUTING.rst
+  https://github.com/ceph/ceph/blob/main/CONTRIBUTING.rst
 
 All newcomers are encouraged to read that file carefully.
 
@@ -289,7 +289,7 @@ See :ref:`kubernetes-dev`
 Backporting
 -----------
 
-All bugfixes should be merged to the ``master`` branch before being
+All bugfixes should be merged to the ``main`` branch before being
 backported. To flag a bugfix for backporting, make sure it has a
 `tracker issue`_ associated with it and set the ``Backport`` field to a
 comma-separated list of previous releases (e.g. "hammer,jewel") that you think
