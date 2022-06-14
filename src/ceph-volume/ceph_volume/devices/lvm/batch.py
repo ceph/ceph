@@ -119,14 +119,10 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
                 continue
             # any LV present is considered a taken slot
             occupied_slots = len(dev.lvs)
-            # prior to v15.2.8, db/wal deployments were grouping multiple fast devices into single VGs - we need to
-            # multiply requested_slots (per device) by the number of devices in the VG in order to ensure that
-            # abs_size is calculated correctly from vg_size
-            slots_for_vg = len(vg_devices) * requested_slots
             dev_size = dev.vg_size[0]
             # this only looks at the first vg on device, unsure if there is a better
             # way
-            abs_size = disk.Size(b=int(dev_size / slots_for_vg))
+            abs_size = disk.Size(b=int(dev_size / requested_slots))
             free_size = dev.vg_free[0]
             relative_size = int(abs_size) / dev_size
             if requested_size:
