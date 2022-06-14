@@ -2665,6 +2665,13 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
   ldout(cct, 20) << __func__ << " got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
 
+  // correct sessions ?
+  if (request->mds != mds_num) {
+    ldout(cct, 0) << "got a stale reply from mds." << mds_num
+            << " instead of mds." << request->mds << dendl;
+    return;
+  }
+
   if (request->got_unsafe && !is_safe) {
     //duplicate response
     ldout(cct, 0) << "got a duplicate reply on tid " << tid << " from mds "
