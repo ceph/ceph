@@ -23,6 +23,7 @@ using std::ostream;
 using std::string;
 
 using ceph::bufferlist;
+using ceph::JSONFormatter;
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
@@ -248,6 +249,12 @@ void PaxosService::propose_pending()
 	ceph_abort_msg("bad return value for C_Committed");
     }
   };
+  dout(10) << __func__ << " JR propose_pending" << dendl;
+  dout(10) << __func__ << " transaction dump:\n";
+  JSONFormatter f(true);
+  t->dump(&f);
+  f.flush(*_dout);
+  *_dout << dendl;
   paxos.queue_pending_finisher(new C_Committed(this));
   paxos.trigger_propose();
 }

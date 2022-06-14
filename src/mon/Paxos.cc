@@ -651,8 +651,8 @@ void Paxos::begin(bufferlist& v)
   // note which pn this pending value is for.
   t->put(get_name(), "pending_v", last_committed + 1);
   t->put(get_name(), "pending_pn", accepted_pn);
-
-  dout(30) << __func__ << " transaction dump:\n";
+  dout(10) << __func__ << " JR begin" << dendl;
+  dout(10) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t->dump(&f);
   f.flush(*_dout);
@@ -681,6 +681,8 @@ void Paxos::begin(bufferlist& v)
     commit_start();
     return;
   }
+
+  dout(10) << "JR quorum size: " << mon.get_quorum().size() << dendl;
 
   // ask others to accept it too!
   for (auto p = mon.get_quorum().begin();
@@ -803,6 +805,7 @@ void Paxos::handle_accept(MonOpRequestRef op)
   // stale state.
   // FIXME: we can improve this with an additional lease revocation message
   // that doesn't block for the persist.
+  dout(10) << "JR quorum size: " << mon.get_quorum().size() << dendl;
   if (accepted == mon.get_quorum()) {
     // yay, commit!
     dout(10) << " got majority, committing, done with update" << dendl;
@@ -858,8 +861,8 @@ void Paxos::commit_start()
   // decode the value and apply its transaction to the store.
   // this value can now be read from last_committed.
   decode_append_transaction(t, new_value);
-
-  dout(30) << __func__ << " transaction dump:\n";
+  dout(10) << __func__ << " JR commit_start()" << dendl;
+  dout(10) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t->dump(&f);
   f.flush(*_dout);
@@ -1404,7 +1407,14 @@ void Paxos::restart()
     dout(10) << __func__ << " flushed" << dendl;
   }
   state = STATE_RECOVERING;
-
+  if (pending_proposal) {
+    dout(10) << __func__ << " JR restart" << dendl;
+    dout(10) << __func__ << " discarding transactions:\n";
+    JSONFormatter f(true);
+    pending_proposal->dump(&f);
+    f.flush(*_dout);
+    *_dout << dendl;
+  }
   // discard pending transaction
   pending_proposal.reset();
 
@@ -1539,7 +1549,8 @@ void Paxos::propose_pending()
 
   dout(10) << __func__ << " " << (last_committed + 1)
 	   << " " << bl.length() << " bytes" << dendl;
-  dout(30) << __func__ << " transaction dump:\n";
+  dout(10) << __func__ << " JR propose_pending" << dendl;
+  dout(10) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   pending_proposal->dump(&f);
   f.flush(*_dout);
