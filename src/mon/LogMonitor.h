@@ -166,6 +166,7 @@ private:
   
   void tick() override;  // check state, take actions
 
+  void dump_info(Formatter *f);
   void check_subs();
   void check_sub(Subscription *s);
 

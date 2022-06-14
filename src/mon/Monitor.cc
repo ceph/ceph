@@ -3711,6 +3711,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dump_info(f.get());
     authmon()->dump_info(f.get());
     mgrstatmon()->dump_info(f.get());
+    logmon()->dump_info(f.get());
 
     paxos->dump_info(f.get());
 
