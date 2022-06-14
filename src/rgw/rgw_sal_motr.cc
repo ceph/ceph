@@ -876,7 +876,7 @@ int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_childre
                       << " bucket = " << tenant_bkt_name << dendl;
 
   // 5. Remove the bucket from user info index. (unlink user)
-  ret = this->unlink_user(dpp, owner, y);
+  ret = this->unlink_user(dpp, info.owner, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << __func__ << ": ERROR: unlink_user failed rc = " << ret << dendl;
     return ret;
@@ -1021,12 +1021,12 @@ int MotrBucket::link_user(const DoutPrefixProvider* dpp, User* new_user, optiona
 
 }
 
-int MotrBucket::unlink_user(const DoutPrefixProvider* dpp, User* new_user, optional_yield y)
+int MotrBucket::unlink_user(const DoutPrefixProvider* dpp, const rgw_user &bucket_owner, optional_yield y)
 {
   // Remove the user into the user info index.
   bufferlist bl;
   string tenant_bkt_name = get_bucket_name(info.bucket.tenant, info.bucket.name);
-  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.to_str();
+  string user_info_idx_name = "motr.rgw.user.info." + bucket_owner.id;
   return store->do_idx_op_by_name(user_info_idx_name,
                                   M0_IC_DEL, tenant_bkt_name, bl);
 }

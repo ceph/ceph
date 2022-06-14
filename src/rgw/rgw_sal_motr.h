@@ -360,7 +360,7 @@ class MotrBucket : public Bucket {
     virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats = false) override;
     int link_user(const DoutPrefixProvider* dpp, User* new_user, optional_yield y);
-    int unlink_user(const DoutPrefixProvider* dpp, User* new_user, optional_yield y);
+    int unlink_user(const DoutPrefixProvider* dpp, const rgw_user &bucket_owner, optional_yield y);
     int create_bucket_index();
     int create_multipart_indices();
     virtual int read_stats(const DoutPrefixProvider *dpp, int shard_id,
