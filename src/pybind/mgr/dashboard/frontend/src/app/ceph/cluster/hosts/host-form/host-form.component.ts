@@ -32,6 +32,7 @@ export class HostFormComponent extends CdForm implements OnInit {
   pageURL: string;
   hostPattern = false;
   labelsOption: Array<SelectOption> = [];
+  hideMaintenance: boolean;
 
   messages = new SelectMessages({
     empty: $localize`There are no labels.`,
@@ -91,7 +92,7 @@ export class HostFormComponent extends CdForm implements OnInit {
         validators: [CdValidators.ip()]
       }),
       labels: new FormControl([]),
-      maintenance: new FormControl({ value: false, disabled: this.pageURL !== 'hosts' })
+      maintenance: new FormControl(false)
     });
   }
 
