@@ -126,6 +126,7 @@ extensions = [
     'ceph_commands',
     'ceph_releases',
     'ceph_confval',
+    'sphinxcontrib.mermaid',
     'sphinxcontrib.openapi',
     'sphinxcontrib.seqdiag',
     ]
