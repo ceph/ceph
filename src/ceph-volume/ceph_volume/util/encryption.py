@@ -1,13 +1,14 @@
 import base64
 import os
 import logging
-from ceph_volume import process, conf
+from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 def get_key_size_from_conf():
     """
@@ -135,6 +136,7 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     name = 'client.osd-lockbox.%s' % osd_fsid
     config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
 
+    mlogger.info(f'Running ceph config-key get {config_key}')
     stdout, stderr, returncode = process.call(
         [
             'ceph',
@@ -145,7 +147,8 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
             'get',
             config_key
         ],
-        show_command=True
+        show_command=True,
+        logfile_verbose=False
     )
     if returncode != 0:
         raise RuntimeError('Unable to retrieve dmcrypt secret')
