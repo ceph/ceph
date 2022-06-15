@@ -102,7 +102,7 @@ shows the resource control parameters set by the profile:
 +------------------------+-------------+--------+-------+
 | background recovery    | 25%         | 1      | 100%  |
 +------------------------+-------------+--------+-------+
-| background best-effort | 25%         | 1      | MAX   |
+| background best-effort | 25%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 
 high_recovery_ops
@@ -120,7 +120,7 @@ parameters set by the profile:
 +------------------------+-------------+--------+-------+
 | background recovery    | 60%         | 2      | 200%  |
 +------------------------+-------------+--------+-------+
-| background best-effort | 1 (MIN)     | 1      | MAX   |
+| background best-effort | 1 (MIN)     | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 
 balanced
@@ -139,7 +139,7 @@ within the OSD.
 +------------------------+-------------+--------+-------+
 | background recovery    | 40%         | 1      | 150%  |
 +------------------------+-------------+--------+-------+
-| background best-effort | 20%         | 1      | MAX   |
+| background best-effort | 20%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 
 .. note:: Across the built-in profiles, internal background best-effort clients
@@ -245,6 +245,145 @@ following command can be used to switch to the *high_recovery_ops* profile:
 
 And that's it! You are ready to run workloads on the cluster and check if the
 QoS requirements are being met.
+
+
+Switching Between Built-in and Custom Profiles
+==============================================
+
+There may be situations requiring switching from a built-in profile to the
+*custom* profile and vice-versa. The following sections outline the steps to
+accomplish this.
+
+Steps to Switch From a Built-in to the Custom Profile
+-----------------------------------------------------
+
+The following command can be used to switch to the *custom* profile:
+
+  .. prompt:: bash #
+
+    ceph config set osd osd_mclock_profile custom
+
+For example, to change the profile to *custom* on all OSDs, the following
+command can be used:
+
+  .. prompt:: bash #
+
+    ceph config set osd osd_mclock_profile custom
+
+After switching to the *custom* profile, the desired mClock configuration
+option may be modified. For example, to change the client reservation IOPS
+allocation for a specific OSD (say osd.0), the following command can be used:
+
+  .. prompt:: bash #
+
+    ceph config set osd.0 osd_mclock_scheduler_client_res 3000
+
+.. important:: Care must be taken to change the reservations of other services like
+   recovery and background best effort accordingly to ensure that the sum of the
+   reservations do not exceed the maximum IOPS capacity of the OSD.
+
+.. tip::  The reservation and limit parameter allocations are per-shard based on
+   the type of backing device (HDD/SSD) under the OSD. See
+   :confval:`osd_op_num_shards_hdd` and :confval:`osd_op_num_shards_ssd` for
+   more details.
+
+Steps to Switch From the Custom Profile to a Built-in Profile
+-------------------------------------------------------------
+
+Switching from the *custom* profile to a built-in profile requires an
+intermediate step of removing the custom settings from the central config
+database for the changes to take effect.
+
+The following sequence of commands can be used to switch to a built-in profile:
+
+#. Set the desired built-in profile using:
+
+   .. prompt:: bash #
+
+     ceph config set osd <mClock Configuration Option>
+
+   For example, to set the built-in profile to ``high_client_ops`` on all
+   OSDs, run the following command:
+
+   .. prompt:: bash #
+
+     ceph config set osd osd_mclock_profile high_client_ops
+#. Determine the existing custom mClock configuration settings in the central
+   config database using the following command:
+
+   .. prompt:: bash #
+
+     ceph config dump
+#. Remove the custom mClock configuration settings determined in the previous
+   step from the central config database:
+
+   .. prompt:: bash #
+
+     ceph config rm osd <mClock Configuration Option>
+
+   For example, to remove the configuration option
+   :confval:`osd_mclock_scheduler_client_res` that was set on all OSDs, run the
+   following command:
+
+   .. prompt:: bash #
+
+     ceph config rm osd osd_mclock_scheduler_client_res
+#. After all existing custom mClock configuration settings have been removed
+   from the central config database, the configuration settings pertaining to
+   ``high_client_ops`` will come into effect. For e.g., to verify the settings
+   on osd.0 use:
+
+   .. prompt:: bash #
+
+     ceph config show osd.0
+
+Switch Temporarily Between mClock Profiles
+------------------------------------------
+
+To switch between mClock profiles on a temporary basis, the following commands
+may be used to override the settings:
+
+.. warning:: This section is for advanced users or for experimental testing. The
+   recommendation is to not use the below commands on a running cluster as it
+   could have unexpected outcomes.
+
+.. note:: The configuration changes on an OSD using the below commands are
+   ephemeral and are lost when it restarts. It is also important to note that
+   the config options overridden using the below commands cannot be modified
+   further using the *ceph config set osd.N ...* command. The changes will not
+   take effect until a given OSD is restarted. This is intentional, as per the
+   config subsystem design. However, any further modification can still be made
+   ephemerally using the commands mentioned below.
+
+#. Run the *injectargs* command as shown to override the mclock settings:
+
+   .. prompt:: bash #
+
+     ceph tell osd.N injectargs '--<mClock Configuration Option>=<value>'
+
+   For example, the following command overrides the
+   :confval:`osd_mclock_profile` option on osd.0:
+
+   .. prompt:: bash #
+
+     ceph tell osd.0 injectargs '--osd_mclock_profile=high_recovery_ops'
+
+
+#. An alternate command that can be used is:
+
+   .. prompt:: bash #
+
+     ceph daemon osd.N config set <mClock Configuration Option> <value>
+
+   For example, the following command overrides the
+   :confval:`osd_mclock_profile` option on osd.0:
+
+   .. prompt:: bash #
+
+     ceph daemon osd.0 config set osd_mclock_profile high_recovery_ops
+
+The individual QoS-related config options for the *custom* profile can also be
+modified ephemerally using the above commands.
 
 
 OSD Capacity Determination (Automated)
