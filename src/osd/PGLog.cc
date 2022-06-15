@@ -131,10 +131,18 @@ void PGLog::IndexedLog::trim(
     }
   }
 
-  while (!dups.empty()) {
+  // we can hit an inflated `dups` b/c of https://tracker.ceph.com/issues/53729
+  // the idea is to slowly trim them over a prolonged period of time and mix
+  // omap deletes with writes (if we're here, a new log entry got added) to
+  // neither: 1) blow size of single Transaction nor 2) generate-n-accumulate
+  // large amount of tombstones in BlueStore's RocksDB.
+  // if trimming immediately is a must, then the ceph-objectstore-tool is
+  // the way to go.
+  const size_t max_dups = cct->_conf->osd_pg_log_dups_tracked;
+  for (size_t max_dups_to_trim = cct->_conf->osd_pg_log_trim_max;
+       max_dups_to_trim > 0 && dups.size() > max_dups;
+       max_dups_to_trim--) {
     const auto& e = *dups.begin();
-    if (e.version.version >= earliest_dup_version)
-      break;
     lgeneric_subdout(cct, osd, 20) << "trim dup " << e << dendl;
     if (trimmed_dups)
       trimmed_dups->insert(e.get_key_name());
