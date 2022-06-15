@@ -3538,7 +3538,7 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
             f.write('\n'.join(lines))
 
     conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
-    lines: Optional[List] = None
+    lines: List = []
 
     if daemon_type == 'osd':
         lines = OSD.get_sysctl_settings()
@@ -3546,12 +3546,42 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
         lines = HAproxy.get_sysctl_settings()
     elif daemon_type == 'keepalived':
         lines = Keepalived.get_sysctl_settings()
+    lines = filter_sysctl_settings(ctx, lines)
 
     # apply the sysctl settings
     if lines:
         Path(ctx.sysctl_dir).mkdir(mode=0o755, exist_ok=True)
         _write(conf, lines)
         call_throws(ctx, ['sysctl', '--system'])
+
+
+def sysctl_get(ctx: CephadmContext, variable: str) -> Union[str, None]:
+    """
+    Read a sysctl setting by executing 'sysctl -b {variable}'
+    """
+    out, err, code = call(ctx, ['sysctl', '-b', variable])
+    return out or None
+
+
+def filter_sysctl_settings(ctx: CephadmContext, lines: List[str]) -> List[str]:
+    """
+    Given a list of sysctl settings, examine the system's current configuration
+    and return those which are not currently set as described.
+    """
+    def test_setting(desired_line: str) -> bool:
+        # Remove any comments
+        comment_start = desired_line.find('#')
+        if comment_start != -1:
+            desired_line = desired_line[:comment_start]
+        desired_line = desired_line.strip()
+        if not desired_line or desired_line.isspace():
+            return False
+        setting, desired_value = map(lambda s: s.strip(), desired_line.split('='))
+        if not setting or not desired_value:
+            return False
+        actual_value = sysctl_get(ctx, setting)
+        return desired_value != actual_value
+    return list(filter(test_setting, lines))
 
 
 def migrate_sysctl_dir(ctx: CephadmContext, fsid: str) -> None:
