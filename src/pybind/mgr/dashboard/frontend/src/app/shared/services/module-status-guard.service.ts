@@ -85,7 +85,8 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
               button_title: config.button_title,
               uiConfig: config.uiConfig,
               uiApiPath: config.uiApiPath,
-              icon: Icons.wrench
+              icon: Icons.wrench,
+              component: config.component
             }
           });
         }

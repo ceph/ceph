@@ -2,48 +2,61 @@
   <title>Error Page</title>
   <base target="_blank">
 </head>
-<div class="dashboard row">
-  <div class="text-center content">
-    <br>
-    <div *ngIf="header && message; else elseBlock">
-    <i class="{{ icon }}"
-       aria-hidden="true"></i>
-    <br><br><br>
-    <h3><b>{{ header }}</b></h3>
-      <br>
-    <h4>{{ message }}</h4>
-    </div>
-    <ng-template #elseBlock>
-      <i class="fa fa-exclamation-triangle"
-         aria-hidden="true"></i>
-      <br><br><br>
-      <h3 i18n><b>Page not Found</b></h3>
-        <br>
-      <h4 i18n>Sorry, we couldn’t find what you were looking for.
-      The page you requested may have been changed or moved.</h4>
-    </ng-template>
-    <div *ngIf="section">
-      <h4 i18n>Please consult the <a href="{{ docUrl }}">documentation</a> on how to configure and enable
-        the {{ section_info }} management functionality.</h4>
-    </div>
-    <br><br>
-    <div *ngIf="(button_name && button_route) || bootstrap; else dashboardButton">
-      <button class="btn btn-primary"
-              [routerLink]="button_route"
-              *ngIf="button_name && button_route && !bootstrap"
-              i18n>{{ button_name }}</button>
+<div class="container h-75">
+  <div class="row h-100 justify-content-center align-items-center">
+    <div class="blank-page">
+      <div *ngIf="header && message; else elseBlock">
+        <i [ngClass]="icon"
+          class="mx-auto d-block"></i>
 
-      <button class="btn btn-primary"
-              (click)="doBootstrap()"
-              *ngIf="bootstrap"
-              i18n>{{ button_name }}</button>
+        <div class="mt-4 text-center">
+          <h3><b>{{ header }}</b></h3>
+          <h4 class="mt-3"
+              *ngIf="header !== message">{{ message }}</h4>
+            <h4 *ngIf="section"
+                i18n>Please consult the <a href="{{ docUrl }}">documentation</a> on how to configure and enable
+                     the {{ sectionInfo }} management functionality.</h4>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <div class="text-center"
+             *ngIf="(buttonName && buttonRoute) || uiConfig; else dashboardButton">
+          <button class="btn btn-primary"
+                  [routerLink]="buttonRoute"
+                  *ngIf="!uiConfig; else configureButtonTpl"
+                  i18n>{{ buttonName }}</button>
+        </div>
+      </div>
     </div>
-    <ng-template #dashboardButton>
-    <div>
-      <button class="btn btn-primary"
-              [routerLink]="'/dashboard'"
-              i18n>Go To Dashboard</button>
-    </div>
-    </ng-template>
   </div>
 </div>
+
+<ng-template #configureButtonTpl>
+  <button class="btn btn-primary"
+          (click)="doConfigure()"
+          [attr.title]="buttonTitle"
+          *ngIf="uiConfig"
+          i18n>{{ buttonName }}</button>
+</ng-template>
+
+
+<ng-template #elseBlock>
+  <i class="fa fa-exclamation-triangle mx-auto d-block text-danger"></i>
+
+  <div class="mt-4 text-center">
+    <h3 i18n><b>Page not Found</b></h3>
+
+    <h4 class="mt-4"
+        i18n>Sorry, we couldn’t find what you were looking for.
+             The page you requested may have been changed or moved.</h4>
+  </div>
+</ng-template>
+
+<ng-template #dashboardButton>
+  <div class="mt-4 text-center">
+    <button class="btn btn-primary"
+            [routerLink]="'/dashboard'"
+            i18n>Go To Dashboard</button>
+  </div>
+</ng-template>

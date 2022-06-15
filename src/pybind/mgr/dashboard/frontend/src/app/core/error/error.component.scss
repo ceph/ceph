@@ -9,35 +9,6 @@ i {
   margin-top: 120px;
 }
 
-.text-center {
-  background-color: vv.$body-bg-alt;
-}
-
-.dashboard {
-  background-color: vv.$body-bg-alt;
-  height: 100%;
-  position: relative;
-}
-
-.content {
-  left: 50%;
-  position: absolute;
-  top: 40%;
-  transform: translate(-50%, -50%);
-  width: 100%;
-}
-
-.row {
-  display: block;
-  margin-left: -29px;
-  margin-right: -29px;
-  padding-top: 10em;
-}
-
-.fa-exclamation-triangle {
-  color: vv.$danger;
-}
-
 .fa-lock {
   color: vv.$danger;
 }
