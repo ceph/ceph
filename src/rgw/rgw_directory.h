@@ -68,12 +68,13 @@ public:
 	}
 	virtual ~RGWBlockDirectory() { cout << "RGWObject Directory is destroyed!";}
 
-	void findClient(string key, cpp_redis::client *client);
+	void findClient(string key, cpp_redis::client *client, int port);
 	//int delKey(string key);
 	int existKey(string key, cpp_redis::client *client);
+	int setValue(cache_block *ptr, int port);
 	int setValue(cache_block *ptr);
+	int getValue(cache_block *ptr, int port);
 	int getValue(cache_block *ptr);
-	int setGetValue(cache_block *ptr);
 	//int getValue(cache_block *ptr, string key);
 	//int updateField(cache_block *ptr, string field, string value);
 	//int updateField(string key, string field, string value);
