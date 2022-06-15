@@ -5,6 +5,8 @@ import time
 import subprocess
 import json
 import boto3
+import botocore.exceptions
+import os
 
 """
 Rgw manual and dynamic resharding  testing against a running instance
@@ -29,6 +31,7 @@ SECRET_KEY = 'LnEsqNNqZIpkzauboDcLXLcYaWwLQ3Kop0zAnKIn'
 BUCKET_NAME1 = 'myfoo'
 BUCKET_NAME2 = 'mybar'
 VER_BUCKET_NAME = 'myver'
+INDEX_POOL = 'default.rgw.buckets.index'
 
 
 def exec_cmd(cmd):
@@ -45,15 +48,6 @@ def exec_cmd(cmd):
         log.error('command failed')
         log.error(e)
         return False
-
-
-def get_radosgw_port():
-    out = exec_cmd('sudo netstat -nltp | grep radosgw')
-    log.debug('output: %s' % out)
-    x = out.decode('utf8').split(" ")
-    port = [i for i in x if ':' in i][0].split(':')[1]
-    log.info('radosgw port: %s' % port)
-    return port
 
 
 class BucketStats:
@@ -118,14 +112,22 @@ def main():
                               verify=False,
                               config=None,
                               )
+        try:
+            list(conn.buckets.limit(1)) # just verify we can list buckets
+        except botocore.exceptions.ConnectionError as e:
+            print(e)
+            raise
+        print('connected to', endpoint)
         return conn
 
-    port = get_radosgw_port()
-
-    if port == '80':
-        connection = boto_connect(port, ssl=False, proto='http')
-    elif port == '443':
-        connection = boto_connect(port, ssl=True, proto='https')
+    try:
+        connection = boto_connect('80', False, 'http')
+    except botocore.exceptions.ConnectionError:
+        try: # retry on non-privileged http port
+            connection = boto_connect('8000', False, 'http')
+        except botocore.exceptions.ConnectionError:
+            # retry with ssl
+            connection = boto_connect('443', True, 'https')
 
     # create a bucket
     bucket1 = connection.create_bucket(Bucket=BUCKET_NAME1)
@@ -218,6 +220,35 @@ def main():
     assert new_bucket2_acl == bucket2_acl
     new_ver_bucket_acl = connection.BucketAcl(VER_BUCKET_NAME).load()
     assert new_ver_bucket_acl == ver_bucket_acl
+
+    # TESTCASE 'check reshard removes olh entries with empty name'
+    log.debug(' test: reshard removes olh entries with empty name')
+    bucket1.objects.all().delete()
+
+    # get name of shard 0 object, add a bogus olh entry with empty name
+    bucket_shard0 = '.dir.%s.0' % get_bucket_stats(BUCKET_NAME1).bucket_id
+    if 'CEPH_ROOT' in os.environ:
+      k = '%s/qa/workunits/rgw/olh_noname_key' % os.environ['CEPH_ROOT']
+      v = '%s/qa/workunits/rgw/olh_noname_val' % os.environ['CEPH_ROOT']
+    else:
+      k = 'olh_noname_key'
+      v = 'olh_noname_val'
+    exec_cmd('rados -p %s setomapval %s --omap-key-file %s < %s' % (INDEX_POOL, bucket_shard0, k, v))
+
+    # check that bi list has one entry with empty name
+    cmd = exec_cmd('radosgw-admin bi list --bucket %s' % BUCKET_NAME1)
+    json_op = json.loads(cmd.decode('utf-8', 'ignore')) # ignore utf-8 can't decode 0x80
+    assert len(json_op) == 1
+    assert json_op[0]['entry']['key']['name'] == ''
+
+    # reshard to prune the bogus olh
+    cmd = exec_cmd('radosgw-admin bucket reshard --bucket %s --num-shards %s --yes-i-really-mean-it' % (BUCKET_NAME1, 1))
+
+    # get new name of shard 0 object, check that bi list has zero entries
+    bucket_shard0 = '.dir.%s.0' % get_bucket_stats(BUCKET_NAME1).bucket_id
+    cmd = exec_cmd('radosgw-admin bi list --bucket %s' % BUCKET_NAME1)
+    json_op = json.loads(cmd)
+    assert len(json_op) == 0
 
     # Clean up
     log.debug("Deleting bucket %s", BUCKET_NAME1)
