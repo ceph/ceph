@@ -34,19 +34,21 @@ template <typename I>
 void PromoteRequest<I>::send() {
   CephContext *cct = m_image_ctx->cct;
   bool requires_orphan = false;
+  uint64_t rollback_snap_id = CEPH_NOSNAP;
+
   if (!util::can_create_primary_snapshot(m_image_ctx, false, true,
                                          &requires_orphan,
-                                         &m_rollback_snap_id)) {
+                                         &rollback_snap_id)) {
     lderr(cct) << "cannot promote" << dendl;
     finish(-EINVAL);
     return;
-  } else if (m_rollback_snap_id == CEPH_NOSNAP && !requires_orphan) {
+  } else if (rollback_snap_id == CEPH_NOSNAP && !requires_orphan) {
     create_promote_snapshot();
     return;
   }
 
   ldout(cct, 15) << "requires_orphan=" << requires_orphan << ", "
-                 << "rollback_snap_id=" << m_rollback_snap_id << dendl;
+                 << "rollback_snap_id=" << rollback_snap_id << dendl;
   create_orphan_snapshot();
 }
 
@@ -256,18 +258,17 @@ void PromoteRequest<I>::rollback() {
     ldout(cct, 15) << "latest rollback_snap_id=" << rollback_snap_id << dendl;
   }
 
-  if (m_rollback_snap_id == CEPH_NOSNAP) {
+  if (rollback_snap_id == CEPH_NOSNAP) {
     create_promote_snapshot();
     return;
   }
 
-  CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << dendl;
 
   std::shared_lock owner_locker{m_image_ctx->owner_lock};
   std::shared_lock image_locker{m_image_ctx->image_lock};
 
-  auto info = m_image_ctx->get_snap_info(m_rollback_snap_id);
+  auto info = m_image_ctx->get_snap_info(rollback_snap_id);
   ceph_assert(info != nullptr);
   auto snap_namespace = info->snap_namespace;
   auto snap_name = info->name;

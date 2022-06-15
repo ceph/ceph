@@ -82,7 +82,6 @@ private:
   std::string m_global_image_id;
   Context *m_on_finish;
 
-  uint64_t m_rollback_snap_id = CEPH_NOSNAP;
   bool m_lock_acquired = false;
   NoOpProgressContext m_progress_ctx;
 
