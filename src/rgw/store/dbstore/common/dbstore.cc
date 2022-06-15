@@ -750,6 +750,7 @@ int DB::Bucket::List::list_objects(const DoutPrefixProvider *dpp, int64_t max,
   int ret = 0;
   DB *store = target->get_store();
   int64_t count = 0;
+  std::string prev_obj;
 
   DBOpParams db_params = {};
   store->InitializeParams(dpp, &db_params);
@@ -769,13 +770,29 @@ int DB::Bucket::List::list_objects(const DoutPrefixProvider *dpp, int64_t max,
   }
 
   for (auto& entry : db_params.op.obj.list_entries) {
+
     if (!params.list_versions) {
-      if (!(entry.flags & rgw_bucket_dir_entry::FLAG_CURRENT) || 
-           (entry.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER)) {
+      if (entry.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+        prev_obj = entry.key.name;
         // skip all non-current entries and delete_marker
         continue;
       }
+      if (entry.key.name == prev_obj) {
+        // non current versions..skip the entry
+        continue;
+      }
+      entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+    } else {
+      if (entry.key.name != prev_obj) {
+        // current version
+        entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+      } else {
+        entry.flags &= ~(rgw_bucket_dir_entry::FLAG_CURRENT);
+        entry.flags |= rgw_bucket_dir_entry::FLAG_VER;
+      }
     }
+
+    prev_obj = entry.key.name;
 
     if (count >= max) {
       *is_truncated = true;
@@ -1241,36 +1258,40 @@ int DB::Object::get_obj_state(const DoutPrefixProvider *dpp,
 
   DBOpParams params = {};
   RGWObjState* s;
-  ret = get_object_impl(dpp, params);
 
-  if (ret && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) <<"get_object_impl failed err:(" <<ret<<")" << dendl;
-    goto out;
-  }
+  if (!obj.key.instance.empty()) {
+    /* Versionid provided. Fetch the object */
+    ret = get_object_impl(dpp, params);
 
-  /* Check if its a versioned object */
-  if (follow_olh && params.op.obj.state.obj.key.instance.empty()) {
-    if ((ret == -ENOENT) || (params.op.obj.flags & rgw_bucket_dir_entry::FLAG_VER)) { // NEWWWW
-      ret = list_versioned_objects(dpp, params.op.obj.list_entries);
+    if (ret && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) <<"get_object_impl failed err:(" <<ret<<")" << dendl;
+      goto out;
+    }
+  } else {
+    /* Instance is empty. May or may not be versioned object.
+     * List all the versions and read the most recent entry */
+    ret = list_versioned_objects(dpp, params.op.obj.list_entries);
 
-      if (params.op.obj.list_entries.size() != 0) {
-        /* versioned object. Read the latest version object provided its not a
-         * delete marker */
-        auto& ent = params.op.obj.list_entries.front();
-        if (ent.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
-          ret = -ENOENT;
-          ldpp_dout(dpp, 0) <<" Latest is delete marker -  err:(" <<ret<<")" << dendl;
-          goto out;
-        }
-        params.op.obj.state.obj.key.instance = ent.key.instance;
-    
-        ret = get_object_impl(dpp, params);
-
-        if (ret) {
-          ldpp_dout(dpp, 0) <<"get_object_impl of versioned object failed err:(" <<ret<<")" << dendl;
-          goto out;
-        }
+    if (params.op.obj.list_entries.size() != 0) {
+       /* Ensure its not a delete marker */
+      auto& ent = params.op.obj.list_entries.front();
+      if (ent.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+        ret = -ENOENT;
+        goto out;
       }
+      store->InitializeParams(dpp, &params);
+      InitializeParamsfromObject(dpp, &params);
+      params.op.obj.state.obj.key = ent.key;
+    
+      ret = get_object_impl(dpp, params);
+
+      if (ret) {
+        ldpp_dout(dpp, 0) <<"get_object_impl of versioned object failed err:(" <<ret<<")" << dendl;
+        goto out;
+      }
+    } else {
+      ret = -ENOENT;
+      return ret;
     }
   }
 
@@ -1652,109 +1673,6 @@ int DB::Object::Write::write_data(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-/*
- * If versioned, 
- * - check if the old version of the object already exists
- *   if exists,
- *     - set its version-id/instance to "null" if instance was empty
- *     - demote it to NON_CURRENT 
- * - create versioned object with FLAG_CURRENT set 
- *
- * XXX: call this function under a lock or sqlite transaction to prevent
- * parallel object uploads marking both the versions as FLAG_CURRENT;
- *
- */
-int DB::Object::Write::write_versioned_obj(const DoutPrefixProvider *dpp, DBOpParams& params) {
-  DB *store = target->get_store();
-  int ret = -1;
-  DBOpParams obj_params = {};
-  uint64_t version_num = 0;
-
-  store->InitializeParams(dpp, &obj_params);
-  target->InitializeParamsfromObject(dpp, &obj_params);
-
-  /* Check if already exists */
-  obj_params.op.obj.state.obj.key.instance.clear();
-  ret = target->list_versioned_objects(dpp, obj_params.op.obj.list_entries);
-  
-  if (ret && ret != -ENOENT) {
-    ldpp_dout(dpp, 0)<<"ListVersionedObjects of object (" << obj_params.op.obj.state.obj.key.name << ") failed err:(" <<ret<<")" << dendl;
-    return ret;
-  }
-
-  for (auto& ent : obj_params.op.obj.list_entries) {
-    ret = target->update_obj_next_version(dpp, ent, false, version_num); // demote previous version
-    if (ret != ENOENT) {
-      break;
-    }
-    // continue to next object version
-  }
-
-  if (ret) {
-    ldpp_dout(dpp, 0)<<"demote_next_version of object (" << obj_params.op.obj.state.obj.key.name << ") failed err:(" <<ret<<")" << dendl;
-    return ret;
-  }
-
-  params.op.obj.version_num = ++version_num;
-
-  /* Put Object */
-  params.op.obj.flags |= rgw_bucket_dir_entry::FLAG_VER;
-  ret = store->ProcessOp(dpp, "PutObject", &params);
-  if (ret) {
-    ldpp_dout(dpp, 0)<<"In PutObject failed err:(" <<ret<<")" << dendl;
-  }
-
-  return ret;
-}
-
-/* promote or demote next object version */
-int DB::Object::update_obj_next_version(const DoutPrefixProvider *dpp,
-                                rgw_bucket_dir_entry &obj_entry,
-                                bool promote, uint64_t& version_num) {
-  int ret = -1;
-  DBOpParams params = {};
-
-  params.op.obj.state.obj.key.name  = obj_entry.key.name;
-  params.op.obj.state.obj.key.instance  = obj_entry.key.instance;
-
-  // fetch the last version of the object
-  store->InitializeParams(dpp, &params);
-  params.op.bucket.info.bucket.name = bucket_info.bucket.name;
-
-  ret = get_object_impl(dpp, params);
-
-  if (ret) { // do nothing as its best effort? 
-    ldpp_dout(dpp, 0)<<"In demote_object_next_ver get of prev version(" << params.op.obj.obj_id << ") failed err:(" <<ret<<")" << dendl;
-    goto out;
-  }
-
-  if (params.op.obj.state.obj.key.instance.empty()) {
-    /* This means, previous version of object exists which was created before
-     * versioning is enabled on the bucket.
-     *
-     * Set its instance to "null" and mark it as versioned.
-     */
-    params.op.obj.state.obj.key.instance = "null";
-    params.op.obj.flags |= rgw_bucket_dir_entry::FLAG_VER;
-  }
-  version_num = params.op.obj.version_num;
-
-  if (promote) {
-    params.op.obj.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-  } else {
-    params.op.obj.flags &= ~(rgw_bucket_dir_entry::FLAG_CURRENT);
-  }
-  params.op.obj.flags |= rgw_bucket_dir_entry::FLAG_VER;
-
-  ret = store->ProcessOp(dpp, "PutObject", &params); // XXX: can be UpdateObject?
-
-  if (ret) { // do nothing as its best effort? 
-    ldpp_dout(dpp, 0)<<"Put of Old version of object failed err:(" <<ret<<")" << dendl;
-  }
-out :
-    return ret;
-}
-
 /* Write metadata & head object data */
 int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
     uint64_t size, uint64_t accounted_size,
@@ -1855,6 +1773,7 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   params.op.obj.state.size = size;
   params.op.obj.state.accounted_size = accounted_size;
   params.op.obj.owner = target->get_bucket_info().owner.id;
+  params.op.obj.category = meta.category;
 
   if (meta.mtime) {
     *meta.mtime = meta.set_mtime;
@@ -1863,24 +1782,20 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   params.op.query_str = "meta";
   params.op.obj.obj_id = target->obj_id;
 
-  params.op.obj.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-
   /* Check if versioned */
   bool is_versioned = !target->obj.key.instance.empty() && (target->obj.key.instance != "null");
   params.op.obj.is_versioned = is_versioned;
 
-  if (!is_versioned) {
-    ret = store->ProcessOp(dpp, "PutObject", &params);
-    if (ret) {
-      ldpp_dout(dpp, 0)<<"In PutObject failed err:(" <<ret<<")" << dendl;
-      goto out;
-    }
-    return ret;
+  if (is_versioned && (params.op.obj.category == RGWObjCategory::Main)) {
+    /* versioned object */
+    params.op.obj.flags |= rgw_bucket_dir_entry::FLAG_VER;
+  }
+  ret = store->ProcessOp(dpp, "PutObject", &params);
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In PutObject failed err:(" <<ret<<")" << dendl;
+    goto out;
   }
 
-  /* versioned object */
-  params.op.obj.flags |= rgw_bucket_dir_entry::FLAG_VER;
-  ret = write_versioned_obj(dpp, params);
 
 out:
   if (ret < 0) {
@@ -1904,6 +1819,10 @@ int DB::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, 
 int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
   int ret = 0;
   DBOpParams del_params = {};
+  bool versioning_enabled = ((params.versioning_status & BUCKET_VERSIONED) == BUCKET_VERSIONED); 
+  bool versioning_suspended = ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == BUCKET_VERSIONS_SUSPENDED); 
+  bool regular_obj = true;
+  std::string versionid = target->obj.key.instance;
 
   ret = target->get_object_impl(dpp, del_params);
 
@@ -1912,22 +1831,70 @@ int DB::Object::Delete::delete_obj(const DoutPrefixProvider *dpp) {
     return ret;
   }
 
-  if (!ret && !(del_params.op.obj.flags & 
-         (rgw_bucket_dir_entry::FLAG_DELETE_MARKER | rgw_bucket_dir_entry::FLAG_VER))) {
-    /* Non versioned objects. Simple delete */
-    ret = delete_obj_impl(dpp, del_params);
-    return ret;
+  regular_obj = (del_params.op.obj.category == RGWObjCategory::Main);
+  if (!ret) {
+    if (!versionid.empty()) {
+      // version-id is provided
+      ret = delete_obj_impl(dpp, del_params);
+      return ret;
+    } else { // version-id is empty..
+      /*
+       * case: bucket_versioned
+       *    create_delete_marker;
+       * case: bucket_suspended
+       *    delete entry
+       *    create delete marker with version-id null;
+       * default:
+       *   just delete the entry
+       */
+      if (versioning_suspended && regular_obj) {
+        ret = delete_obj_impl(dpp, del_params);
+        ret = create_dm(dpp, del_params);
+      } else if (versioning_enabled && regular_obj) {
+        ret = create_dm(dpp, del_params);
+      } else {
+        ret = delete_obj_impl(dpp, del_params);
+      }
+    }
+  } else { // ret == -ENOENT
+     /* case: VersionID given
+      *     return -ENOENT
+      * else: // may or may not be versioned object
+      *     Listversionedobjects
+      *     if (list_entries.empty()) {
+      *         nothing to do..return ENOENT
+      *     } else {
+      *         read top entry
+      *         if (top.flags | FLAG_DELETE_MARKER) {
+      *            // nothing to do
+      *            return -ENOENT;
+      *          }
+      *          if (bucket_versioned)  {
+      *            // create delete marker with new version-id
+      *          } else if (bucket_suspended) {
+      *            // create delete marker with version-id null
+      *          }
+      *          bucket cannot be in unversioned state post having versions
+      *     }
+      */
+     if (!versionid.empty()) {
+       return -ENOENT;
+     }
+     ret = target->list_versioned_objects(dpp, del_params.op.obj.list_entries);
+     if (ret) {
+        ldpp_dout(dpp, 0)<<"ListVersionedObjects failed err:(" <<ret<<")" << dendl;
+        return ret;
+     }
+    if (del_params.op.obj.list_entries.empty()) {
+      return -ENOENT;
+    }
+    auto &ent = del_params.op.obj.list_entries.front();
+    if (ent.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+      // for now do not create another delete marker..just exit
+      return 0;
+    }
+    ret = create_dm(dpp, del_params);
   }
-
-  /* check if it is versioned object. */
-  ret = target->list_versioned_objects(dpp, del_params.op.obj.list_entries);
-
-  if (!del_params.op.obj.list_entries.empty()) {
-    ret = delete_versioned_obj(dpp, del_params);
-  } else {
-    ret = -ENOENT;
-  }
-
   return ret;
 }
 
@@ -1965,102 +1932,44 @@ int DB::Object::Delete::delete_obj_impl(const DoutPrefixProvider *dpp,
  *  - create a delete marker with 
  *    - new version/instanceID (if bucket versioned)
  *    - null versionID (if versioning suspended)
- *    - demote the current version entry
- *  XXX: If delete_marker is the latest version, another delete_marker
- *    is not created for now (for any subsequent deletes) . Will revisit this if
- *    needed.
- *
- * b) If versionID provided,
- *  - delete that particular entry
- *  - Incase the entry is current entry, promote next object version to CURRENT.
- *
- * XXX: call this function under a lock or sqlite transaction to prevent
- * parallel object uploads marking both the versions as FLAG_CURRENT;
  */
-int DB::Object::Delete::delete_versioned_obj(const DoutPrefixProvider *dpp,
+int DB::Object::Delete::create_dm(const DoutPrefixProvider *dpp,
                                              DBOpParams& del_params) {
 
   DB *store = target->get_store();
-  bool versioning_enabled = (params.versioning_status & BUCKET_VERSIONED); 
+  bool versioning_suspended = ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == BUCKET_VERSIONS_SUSPENDED); 
   int ret = -1;
   DBOpParams olh_params = {};
   std::string version_id;
   DBOpParams next_params = del_params;
 
   version_id = del_params.op.obj.state.obj.key.instance;
-  auto &ent = del_params.op.obj.list_entries.front();
-  uint64_t version_num = MAX_VERSIONED_OBJECTS;
 
-  if (version_id.empty()) {
-    /* create delete marker */
+  DBOpParams dm_params = del_params;
 
-    if (ent.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
-      // for now do not create another delete marker..just exit
-      return 0;
-    }
-    DBOpParams dm_params = del_params;
+  // create delete marker
 
-    //demote current entry
-    target->update_obj_next_version(dpp, ent, false, version_num); //XXX: not checking return status
+  store->InitializeParams(dpp, &dm_params);
+  target->InitializeParamsfromObject(dpp, &dm_params);
+  dm_params.op.obj.category = RGWObjCategory::None;
 
-    // create delete marker
-    store->InitializeParams(dpp, &dm_params);
-    target->InitializeParamsfromObject(dpp, &dm_params);
-
-    if (!versioning_enabled) {
-      dm_params.op.obj.state.obj.key.instance = "null";
-    } else {
-      store->gen_rand_obj_instance_name(&dm_params.op.obj.state.obj.key);
-      dm_params.op.obj.obj_id = dm_params.op.obj.state.obj.key.instance;
-    }
-
-    dm_params.op.obj.flags |= (rgw_bucket_dir_entry::FLAG_DELETE_MARKER);
-    dm_params.op.obj.flags |= (rgw_bucket_dir_entry::FLAG_CURRENT);
-    dm_params.op.obj.version_num = ++version_num; // max obj version list
-
-    ret = store->ProcessOp(dpp, "PutObject", &dm_params);
-
-    if (ret) {
-      ldpp_dout(dpp, 0) << "delete_olh: failed to create delete marker - err:(" <<ret<<")" << dendl;
-      return ret;
-    }
+  if (versioning_suspended) {
+    dm_params.op.obj.state.obj.key.instance = "null";
   } else {
-    // delete paritcular version-id
-    DBOpParams dm_params = {};
-
-    store->InitializeParams(dpp, &dm_params);
-    target->InitializeParamsfromObject(dpp, &dm_params);
-
-    dm_params.op.obj.state.obj.key.instance = version_id;
-
-    ret = target->get_object_impl(dpp, dm_params);
-
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "get obj of versioned object failed - err:(" <<ret<<")" << dendl;
-      return ret;
-    }
-    ret = delete_obj_impl(dpp, dm_params);
-    if (dm_params.op.obj.flags & rgw_bucket_dir_entry::FLAG_CURRENT) {
-      bool found = false;
-      std::list<rgw_bucket_dir_entry>::iterator e;
-      for (e = del_params.op.obj.list_entries.begin(); e != del_params.op.obj.list_entries.end(); e++) {
-
-        if (e->key.instance == version_id) {
-          e++;
-          if (e != del_params.op.obj.list_entries.end()) {
-            found = true;
-          }
-            break;
-        }
-      }
-      if (found) {
-        uint64_t version_num = 0;
-        rgw_bucket_dir_entry& e1 = *e;
-        target->update_obj_next_version(dpp, e1, true, version_num);
-      }
-    }
+    store->gen_rand_obj_instance_name(&dm_params.op.obj.state.obj.key);
+    dm_params.op.obj.obj_id = dm_params.op.obj.state.obj.key.instance;
   }
 
+  dm_params.op.obj.flags |= (rgw_bucket_dir_entry::FLAG_DELETE_MARKER);
+
+  ret = store->ProcessOp(dpp, "PutObject", &dm_params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0) << "delete_olh: failed to create delete marker - err:(" <<ret<<")" << dendl;
+    return ret;
+  }
+  result.delete_marker = true;
+  result.version_id = dm_params.op.obj.state.obj.key.instance;
   return ret;
 }
 
