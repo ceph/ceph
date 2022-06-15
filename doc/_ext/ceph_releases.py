@@ -6,11 +6,15 @@
 # into the glory that follows:
 import json
 import yaml
+import jinja2
 import sphinx
 import datetime
 from docutils.parsers.rst import Directive
 from docutils import nodes
 from sphinx.util import logging
+
+logger = logging.getLogger(__name__)
+
 
 class CephReleases(Directive):
     has_content = False
@@ -114,6 +118,77 @@ class CephReleases(Directive):
 
         return [table]
 
+
+RELEASES_TEMPLATE = '''
+.. mermaid::
+
+   gantt
+       dateFormat  YYYY-MM-DD
+       axisFormat  %Y
+       section Active Releases
+{% for release in active_releases %}
+       {{ release.code_name }} (latest {{ release.last_version }}): done, {{ release.debute_date }},{{ release.lifetime }}d
+{% endfor %}
+       section Archived Releases
+{% for release in archived_releases %}
+       {{ release.code_name }} (latest {{ release.last_version }}): done, {{ release.debute_date }},{{ release.lifetime }}d
+{% endfor %}
+'''
+
+
+class ReleasesGantt(Directive):
+    has_content = True
+    required_arguments = 1
+    optional_arguments = 0
+    final_argument_whitespace = False
+
+    template = jinja2.Environment().from_string(RELEASES_TEMPLATE)
+
+    def _render_time_line(self, filename):
+        try:
+            with open(filename) as f:
+                releases = yaml.safe_load(f)['releases']
+        except Exception as e:
+            message = f'Unable read release file: "{filename}": {e}'
+            self.error(message)
+
+        active_releases = []
+        archived_releases = []
+        # just update `releases` with extracted info
+        for code_name, info in releases.items():
+            last_release = info['releases'][0]
+            first_release = info['releases'][-1]
+            last_version = last_release['version']
+            debute_date = first_release['released']
+            if 'actual_eol' in info:
+                lifetime = info['actual_eol'] - first_release['released']
+            else:
+                lifetime = info['target_eol'] - first_release['released']
+            release = dict(code_name=code_name,
+                           last_version=last_version,
+                           debute_date=debute_date,
+                           lifetime=lifetime.days)
+            if 'actual_eol' in info:
+                archived_releases.append(release)
+            else:
+                active_releases.append(release)
+        rendered = self.template.render(active_releases=active_releases,
+                                        archived_releases=archived_releases)
+        return rendered.splitlines()
+
+    def run(self):
+        filename = self.arguments[0]
+        document = self.state.document
+        env = document.settings.env
+        rel_filename, filename = env.relfn2path(filename)
+        env.note_dependency(filename)
+        lines = self._render_time_line(filename)
+        lineno = self.lineno - self.state_machine.input_offset - 1
+        source = self.state_machine.input_lines.source(lineno)
+        self.state_machine.insert_input(lines, source)
+        return []
+
+
 class CephTimeline(Directive):
     has_content = False
     required_arguments = 4
@@ -207,9 +282,69 @@ class CephTimeline(Directive):
 
         return [table]
 
+
+TIMELINE_TEMPLATE = '''
+.. mermaid::
+
+   gantt
+       dateFormat  YYYY-MM-DD
+       axisFormat  %Y-%m
+{% if title %}
+       title       {{title}}
+{% endif %}
+{% for display_release in display_releases %}
+       section {{ display_release }}
+{%if releases[display_release].actual_eol %}
+       End of life:             crit,            {{ releases[display_release].actual_eol }},4d
+{% else %}
+       End of life (estimated): crit,            {{ releases[display_release].target_eol }},4d
+{% endif %}
+{% for release in releases[display_release].releases %}
+       {{ release.version }}:   milestone, done, {{ release.released }},0d
+{% endfor %}
+{% endfor %}
+'''
+
+
+class TimeLineGantt(Directive):
+    has_content = True
+    required_arguments = 2
+    optional_arguments = 0
+    final_argument_whitespace = True
+
+    template = jinja2.Environment().from_string(TIMELINE_TEMPLATE)
+
+    def _render_time_line(self, filename, display_releases):
+        try:
+            with open(filename) as f:
+                releases = yaml.safe_load(f)['releases']
+        except Exception as e:
+            message = f'Unable read release file: "{filename}": {e}'
+            self.error(message)
+
+        rendered = self.template.render(display_releases=display_releases,
+                                        releases=releases)
+        return rendered.splitlines()
+
+    def run(self):
+        filename = self.arguments[0]
+        display_releases = self.arguments[1].split()
+        document = self.state.document
+        env = document.settings.env
+        rel_filename, filename = env.relfn2path(filename)
+        env.note_dependency(filename)
+        lines = self._render_time_line(filename, display_releases)
+        lineno = self.lineno - self.state_machine.input_offset - 1
+        source = self.state_machine.input_lines.source(lineno)
+        self.state_machine.insert_input(lines, source)
+        return []
+
+
 def setup(app):
     app.add_directive('ceph_releases', CephReleases)
+    app.add_directive('ceph_releases_gantt', ReleasesGantt)
     app.add_directive('ceph_timeline', CephTimeline)
+    app.add_directive('ceph_timeline_gantt', TimeLineGantt)
     return {
         'parallel_read_safe': True,
         'parallel_write_safe': True
