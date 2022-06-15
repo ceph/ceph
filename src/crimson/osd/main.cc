@@ -15,6 +15,7 @@
 #include <seastar/core/thread.hh>
 #include <seastar/http/httpd.hh>
 #include <seastar/net/inet_address.hh>
+#include <seastar/util/closeable.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/std-compat.hh>
 
@@ -244,13 +245,9 @@ int main(int argc, const char* argv[])
             );
           }
           sharded_conf().start(init_params.name, cluster_name).get();
-          auto stop_conf = seastar::defer([] {
-            sharded_conf().stop().get();
-          });
+          auto stop_conf = seastar::deferred_stop(sharded_conf());
           sharded_perf_coll().start().get();
-          auto stop_perf_coll = seastar::defer([] {
-            sharded_perf_coll().stop().get();
-          });
+          auto stop_perf_coll = seastar::deferred_stop(sharded_perf_coll());
           local_conf().parse_config_files(conf_file_list).get();
           local_conf().parse_env().get();
           local_conf().parse_argv(config_proxy_args).get();
@@ -276,9 +273,7 @@ int main(int argc, const char* argv[])
           if (uint16_t prom_port = config["prometheus_port"].as<uint16_t>();
               prom_port != 0) {
             prom_server.start("prometheus").get();
-            stop_prometheus = seastar::make_shared(seastar::defer([&] {
-              prom_server.stop().get();
-            }));
+            stop_prometheus = seastar::make_shared(seastar::deferred_stop(prom_server));
 
             seastar::prometheus::config prom_config;
             prom_config.prefix = config["prometheus_prefix"].as<std::string>();
@@ -314,9 +309,7 @@ int main(int argc, const char* argv[])
                            std::ref(*store),
                            cluster_msgr, client_msgr,
                            hb_front_msgr, hb_back_msgr).get();
-          auto stop_osd = seastar::defer([&] {
-            osd.stop().get();
-          });
+          auto stop_osd = seastar::deferred_stop(osd);
           if (config.count("mkkey")) {
             make_keyring().get();
           }
