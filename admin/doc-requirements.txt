@@ -1,4 +1,4 @@
-Sphinx == 4.4.0
+Sphinx == 4.5.0
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
 git+https://github.com/vlasovskikh/funcparserlib.git
 breathe >= 4.20.0,!=4.33
@@ -8,7 +8,7 @@ pyyaml >= 5.1.2
 Cython
 pcpp
 prettytable
-sphinx-autodoc-typehints
+sphinx-autodoc-typehints == 1.18.3
 sphinx-prompt
 sphinx_rtd_theme == 1.0.0
 Sphinx-Substitution-Extensions
