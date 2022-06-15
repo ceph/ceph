@@ -749,6 +749,9 @@ public:
   void get_full_osd_counts(std::set<int> *full, std::set<int> *backfill,
 			   std::set<int> *nearfull) const;
 
+  void get_out_of_subnet_osd_counts(CephContext *cct,
+                                    std::string const &public_network,
+                                    std::set<int> *unreachable) const;
 
   /***** cluster state *****/
   /* osds */
