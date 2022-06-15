@@ -13,6 +13,7 @@ sphinx-prompt
 sphinx_rtd_theme == 1.0.0
 Sphinx-Substitution-Extensions
 typed-ast
+sphinxcontrib-mermaid
 sphinxcontrib-openapi
 sphinxcontrib-seqdiag
 mistune < 2.0.0
