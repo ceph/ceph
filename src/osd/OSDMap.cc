@@ -38,6 +38,7 @@
 #include "crush/CrushTreeDumper.h"
 #include "common/Clock.h"
 #include "mon/PGMap.h"
+#include "common/pick_address.h"
 
 using std::list;
 using std::make_pair;
@@ -1629,6 +1630,27 @@ void OSDMap::get_full_osd_counts(set<int> *full, set<int> *backfill,
 	backfill->emplace(i);
       else if (osd_state[i] & CEPH_OSD_NEARFULL)
 	nearfull->emplace(i);
+    }
+  }
+}
+
+void OSDMap::get_out_of_subnet_osd_counts(CephContext *cct,
+                                          std::string const &public_network,
+                                          set<int> *unreachable) const
+{
+  unreachable->clear();
+  for (int i = 0; i < max_osd; i++) {
+    if (exists(i) && is_up(i)) {
+      if (const auto& addrs = get_addrs(i).v; addrs.size() >= 2) {
+        auto v1_addr = addrs[0].ip_only_to_str();
+        if (!is_addr_in_subnet(cct, public_network, v1_addr)) {
+          unreachable->emplace(i);
+        }
+        auto v2_addr = addrs[1].ip_only_to_str();
+        if (!is_addr_in_subnet(cct, public_network, v2_addr)) {
+          unreachable->emplace(i);
+        }
+      }
     }
   }
 }
@@ -7239,6 +7261,29 @@ void OSDMap::check_health(CephContext *cct,
     if (weight1 != weight2) {
       ss << "Stretch mode buckets have different weights!";
       checks->add("UNEVEN_WEIGHTS_STRETCH_MODE", HEALTH_WARN, ss.str(), 0);
+    }
+  }
+
+  // PUBLIC ADDRESS IS IN SUBNET MASK
+  {
+    auto public_network = cct->_conf.get_val<std::string>("public_network");
+
+    if (!public_network.empty()) {
+      set<int> unreachable;
+      get_out_of_subnet_osd_counts(cct, public_network, &unreachable);
+      if (unreachable.size()) {
+        ostringstream ss;
+        ss << unreachable.size()
+           << " osds(s) "
+           << (unreachable.size() == 1 ? "is" : "are")
+           << " not reachable";
+        auto& d = checks->add("OSD_UNREACHABLE", HEALTH_ERR, ss.str(), unreachable.size());
+        for (auto& i: unreachable) {
+          ostringstream ss;
+          ss << "osd." << i << "'s public address is not in '" << public_network << "' subnet";
+          d.detail.push_back(ss.str());
+        }
+      }
     }
   }
 }
