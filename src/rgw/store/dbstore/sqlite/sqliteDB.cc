@@ -42,7 +42,7 @@ using namespace std;
 
 #define SQL_BIND_TEXT(dpp, stmt, index, str, sdb)			\
   do {								\
-      rc = sqlite3_bind_text(stmt, index, str, -1, SQLITE_TRANSIENT); 	\
+    rc = sqlite3_bind_text(stmt, index, str, -1, SQLITE_TRANSIENT); 	\
     if (rc != SQLITE_OK) {					      	\
       ldpp_dout(dpp, 0)<<"sqlite bind text failed for index("     	\
       <<index<<"), str("<<str<<") in stmt("   	\
@@ -194,6 +194,9 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
     }
     if (params->object_view.empty()) {
       params->object_view = getObjectView(bucket);
+    }
+    if (params->object_trigger.empty()) {
+      params->object_trigger = getObjectTrigger(bucket);
     }
     p_params.object_table = params->object_table;
     p_params.objectdata_table = params->objectdata_table;
@@ -790,6 +793,22 @@ int SQLiteDB::createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *param
     ldpp_dout(dpp, 0)<<"CreateObjectTable failed " << dendl;
 
   ldpp_dout(dpp, 20)<<"CreateObjectTable suceeded " << dendl;
+
+  return ret;
+}
+
+int SQLiteDB::createObjectTableTrigger(const DoutPrefixProvider *dpp, DBOpParams *params)
+{
+  int ret = -1;
+  string schema;
+
+  schema = CreateTableSchema("ObjectTrigger", params);
+
+  ret = exec(dpp, schema.c_str(), NULL);
+  if (ret)
+    ldpp_dout(dpp, 0)<<"CreateObjectTableTrigger failed " << dendl;
+
+  ldpp_dout(dpp, 20)<<"CreateObjectTableTrigger suceeded " << dendl;
 
   return ret;
 }
@@ -1431,6 +1450,7 @@ int SQLInsertBucket::Execute(const DoutPrefixProvider *dpp, struct DBOpParams *p
 
   (void)createObjectTable(dpp, params);
   (void)createObjectDataTable(dpp, params);
+  (void)createObjectTableTrigger(dpp, params);
 out:
   return ret;
 }
@@ -1764,7 +1784,12 @@ int SQLPutObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
 {
   int index = -1;
   int rc = 0;
+  int VersionNum = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
@@ -1851,7 +1876,7 @@ int SQLPutObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.is_versioned, sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.version_num, sdb);
-  SQL_BIND_INT(dpp, stmt, index, params->op.obj.version_num, sdb);
+  SQL_BIND_INT(dpp, stmt, index, VersionNum, sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.pg_ver, sdb);
   SQL_BIND_INT(dpp, stmt, index, params->op.obj.state.pg_ver, sdb);
@@ -1946,6 +1971,10 @@ int SQLDeleteObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
+
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
@@ -1989,6 +2018,10 @@ int SQLGetObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params)
   int index = -1;
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
@@ -2064,6 +2097,10 @@ int SQLUpdateObject::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
     ldpp_dout(dpp, 0)<<"In SQLUpdateObject invalid query_str:" <<
       params->op.query_str << dendl;
     goto out;
+  }
+
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
   }
 
   SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_name, sdb);
@@ -2276,6 +2313,10 @@ int SQLListBucketObjects::Bind(const DoutPrefixProvider *dpp, struct DBOpParams 
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
+
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
@@ -2325,6 +2366,10 @@ int SQLListVersionedObjects::Bind(const DoutPrefixProvider *dpp, struct DBOpPara
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
+
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
@@ -2370,6 +2415,10 @@ int SQLPutObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   int index = -1;
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
 
@@ -2448,6 +2497,10 @@ int SQLUpdateObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
+
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.obj.obj_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.obj.state.obj.key.name.c_str(), sdb);
 
@@ -2499,6 +2552,10 @@ int SQLGetObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *par
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
 
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
+
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
@@ -2546,6 +2603,10 @@ int SQLDeleteObjectData::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *
   int index = -1;
   int rc = 0;
   struct DBOpPrepareParams p_params = PrepareParams;
+
+  if (params->op.obj.state.obj.key.instance.empty()) {
+    params->op.obj.state.obj.key.instance = "null";
+  }
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);

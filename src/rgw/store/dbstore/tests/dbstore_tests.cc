@@ -112,6 +112,30 @@ namespace {
 
       void TearDown() {
       }
+
+      int write_object(const DoutPrefixProvider *dpp, DBOpParams params) {
+        DB::Object op_target(db, params.op.bucket.info,
+                             params.op.obj.state.obj);
+        DB::Object::Write write_op(&op_target);
+        map<string, bufferlist> setattrs;
+        ret = write_op.prepare(dpp);
+        if (ret)
+          return ret;
+
+        write_op.meta.mtime = &bucket_mtime;
+        write_op.meta.category = RGWObjCategory::Main;
+        write_op.meta.owner = params.op.user.uinfo.user_id;
+
+        bufferlist b1 = params.op.obj.head_data;
+        write_op.meta.data = &b1;
+
+        bufferlist b2;
+        encode("ACL", b2);
+        setattrs[RGW_ATTR_ACL] = b2;
+
+        ret = write_op.write_meta(0, params.op.obj.state.size, b1.length()+1, setattrs);
+        return ret;
+      }
   };
 }
 
@@ -681,6 +705,7 @@ TEST_F(DBStoreTest, GetObject) {
   decode(data, params.op.obj.head_data);
   ASSERT_EQ(data, "HELLO WORLD");
   ASSERT_EQ(params.op.obj.state.size, 12);
+  cout << "versionNum :" << params.op.obj.version_num << "\n";
 }
 
 TEST_F(DBStoreTest, GetObjectState) {
@@ -698,12 +723,14 @@ TEST_F(DBStoreTest, GetObjectState) {
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(s->size, 12);
   ASSERT_EQ(s->is_olh, false);
+  cout << "versionNum :" << params.op.obj.version_num << "\n";
 
   /* Recheck with get_state API */
   ret = op_target.get_state(dpp, &s, false);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(s->size, 12);
   ASSERT_EQ(s->is_olh, false);
+  cout << "versionNum :" << params.op.obj.version_num << "\n";
 }
 
 TEST_F(DBStoreTest, ObjAttrs) {
@@ -762,29 +789,17 @@ TEST_F(DBStoreTest, ObjAttrs) {
 TEST_F(DBStoreTest, WriteObject) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
-  map<string, bufferlist> setattrs;
   params.op.obj.state.obj.key.name = "object3";
   params.op.obj.state.obj.key.instance = "inst3";
   DB::Object op_target(db, params.op.bucket.info,
       params.op.obj.state.obj);
-  DB::Object::Write write_op(&op_target);
-  ret = write_op.prepare(dpp);
-  ASSERT_EQ(ret, 0);
-
-  write_op.meta.mtime = &bucket_mtime;
-  write_op.meta.category = RGWObjCategory::Main;
-  write_op.meta.owner = params.op.user.uinfo.user_id;
 
   bufferlist b1;
   encode("HELLO WORLD - Object3", b1);
-  cout<<"XXXXXXXXX Insert b1.length " << b1.length() << "\n";
-  write_op.meta.data = &b1;
+  params.op.obj.head_data = b1;
+  params.op.obj.state.size = 22;
 
-  bufferlist b2;
-  encode("ACL", b2);
-  setattrs[RGW_ATTR_ACL] = b2;
-
-  ret = write_op.write_meta(0, 22, 25, setattrs);
+  ret = write_object(dpp, params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -913,7 +928,7 @@ TEST_F(DBStoreTest, WriteVersionedObject) {
   encode("HELLO WORLD", b1);
   params.op.obj.head_data = b1;
   params.op.obj.state.size = 12;
-  ret = write_op.write_versioned_obj(dpp, params);
+  ret = write_object(dpp, params);
   ASSERT_EQ(ret, 0);
 
   /* Version2 */
@@ -922,7 +937,7 @@ TEST_F(DBStoreTest, WriteVersionedObject) {
   encode("HELLO WORLD ABC", b1);
   params.op.obj.head_data = b1;
   params.op.obj.state.size = 16;
-  ret = write_op.write_versioned_obj(dpp, params);
+  ret = write_object(dpp, params);
   ASSERT_EQ(ret, 0);
 
   /* Version3 */
@@ -931,7 +946,7 @@ TEST_F(DBStoreTest, WriteVersionedObject) {
   encode("HELLO WORLD A", b1);
   params.op.obj.head_data = b1;
   params.op.obj.state.size = 14;
-  ret = write_op.write_versioned_obj(dpp, params);
+  ret = write_object(dpp, params);
   ASSERT_EQ(ret, 0);
 }
 
@@ -949,14 +964,7 @@ TEST_F(DBStoreTest, ListVersionedObject) {
 
   i = 2;
   for (auto ent: params.op.obj.list_entries) {
-    string is_current = (ent.flags & rgw_bucket_dir_entry::FLAG_CURRENT)? "true" : "false";
-    cout << "ent.name: " << ent.key.name << ". ent.instance: " << ent.key.instance << " is:current = " << is_current << "\n";
 
-    if (i == 2) {
-      ASSERT_EQ(is_current, "true");
-    } else {
-      ASSERT_EQ(is_current, "false");
-    }
 
     ASSERT_EQ(ent.key.instance, instances[i]);
     i--;
@@ -1018,16 +1026,13 @@ TEST_F(DBStoreTest, DeleteVersionedObject) {
 
   i = 3;
   for (auto ent: params.op.obj.list_entries) {
-    string is_current = (ent.flags & rgw_bucket_dir_entry::FLAG_CURRENT)? "true" : "false";
     string is_delete_marker = (ent.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER)? "true" : "false";
     cout << "ent.name: " << ent.key.name << ". ent.instance: " << ent.key.instance << " is_delete_marker = " << is_delete_marker << "\n";
 
     if (i == 3) {
       ASSERT_EQ(is_delete_marker, "true");
-      ASSERT_EQ(is_current, "true");
       dm_instance = ent.key.instance;
     } else {
-      ASSERT_EQ(is_current, "false");
       ASSERT_EQ(is_delete_marker, "false");
       ASSERT_EQ(ent.key.instance, instances[i]);
     }
@@ -1082,14 +1087,10 @@ TEST_F(DBStoreTest, DeleteVersionedObject) {
 
   i = 1;
   for (auto ent: params.op.obj.list_entries) {
-    string is_current = (ent.flags & rgw_bucket_dir_entry::FLAG_CURRENT)? "true" : "false";
-    cout << "ent.name: " << ent.key.name << ". ent.instance: " << ent.key.instance << " is_current = " << is_current << "\n";
 
     if (i == 1) {
-      ASSERT_EQ(is_current, "true");
       dm_instance = ent.key.instance;
     } else {
-      ASSERT_EQ(is_current, "false");
       ASSERT_EQ(ent.key.instance, instances[i]);
     }
 

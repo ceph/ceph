@@ -94,7 +94,7 @@ struct DBOpObjectInfo {
 
   /* for versioned objects */
   bool is_versioned;
-  uint64_t version_num = 1; // default value for plain entries (non-versioned)
+  uint64_t version_num = 0;
 };
 
 struct DBOpObjectDataInfo {
@@ -148,6 +148,7 @@ struct DBOpParams {
   DBOpInfo op;
 
   std::string objectdata_table;
+  std::string object_trigger;
   std::string object_view;
   std::string quota_table;
   std::string lc_head_table;
@@ -292,7 +293,6 @@ struct DBOpObjectPrepareInfo {
   static constexpr const char* new_obj_name = ":new_obj_name";
   static constexpr const char* new_obj_instance = ":new_obj_instance";
   static constexpr const char* new_obj_ns  = ":new_obj_ns";
-  static constexpr const char* versions = ":versions";
 };
 
 struct DBOpObjectDataPrepareInfo {
@@ -339,6 +339,7 @@ struct DBOpPrepareParams {
 
 
   std::string objectdata_table;
+  std::string object_trigger;
   std::string object_view;
   std::string quota_table;
   std::string lc_head_table;
@@ -490,6 +491,15 @@ class DBOp {
       FOREIGN KEY (OwnerID) \
       REFERENCES '{}' (UserID) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
+    static constexpr std::string_view CreateObjectTableTriggerQ =
+      "CREATE TRIGGER IF NOT EXISTS '{}' \
+          AFTER INSERT ON '{}' \
+       BEGIN \
+          UPDATE '{}' \
+          SET VersionNum = (SELECT COALESCE(max(VersionNum), 0) from '{}' where ObjName = new.ObjName) + 1 \
+          where ObjName = new.ObjName and ObjInstance = new.ObjInstance; \
+       END;";
+
     static constexpr std::string_view CreateObjectTableQ =
       /* Corresponds to rgw::sal::Object
        *
@@ -569,7 +579,6 @@ class DBOp {
       IsMultipart     BOOL,   \
       MPPartsList    BLOB,   \
       HeadData  BLOB,   \
-      VERSIONS BLOB,    \
       PRIMARY KEY (ObjName, ObjInstance, BucketName), \
       FOREIGN KEY (BucketName) \
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
@@ -662,6 +671,12 @@ class DBOp {
         return fmt::format(CreateObjectTableQ,
             params->object_table,
             params->bucket_table);
+      if (!type.compare("ObjectTrigger"))
+        return fmt::format(CreateObjectTableTriggerQ,
+            params->object_trigger,
+            params->object_table,
+            params->object_table,
+            params->object_table);
       if (!type.compare("ObjectData"))
         return fmt::format(CreateObjectDataTableQ,
             params->objectdata_table,
@@ -995,9 +1010,10 @@ class PutObjectOp: virtual public DBOp {
        ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
        TailPlacementRuleName, TailPlacementStorageClass, \
        ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
-       HeadData, Versions)     \
+       HeadData)     \
       VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
+          {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
+          {}, {}, {}, \
           {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})";
 
   public:
@@ -1016,7 +1032,8 @@ class PutObjectOp: virtual public DBOp {
           params.op.obj.accounted_size, params.op.obj.mtime,
           params.op.obj.epoch, params.op.obj.obj_tag, params.op.obj.tail_tag,
           params.op.obj.write_tag, params.op.obj.fake_tag, params.op.obj.shadow_obj,
-          params.op.obj.has_data, params.op.obj.is_versioned, params.op.obj.version_num,
+          params.op.obj.has_data, params.op.obj.is_versioned,
+          params.op.obj.version_num,
           params.op.obj.pg_ver, params.op.obj.zone_short_id,
           params.op.obj.obj_version, params.op.obj.obj_version_tag,
           params.op.obj.obj_attrs, params.op.obj.head_size,
@@ -1029,7 +1046,7 @@ class PutObjectOp: virtual public DBOp {
           params.op.obj.manifest_part_objs,
           params.op.obj.manifest_part_rules, params.op.obj.omap,
           params.op.obj.is_multipart, params.op.obj.mp_parts,
-          params.op.obj.head_data, params.op.obj.versions);
+          params.op.obj.head_data);
     }
 };
 
@@ -1062,7 +1079,7 @@ class GetObjectOp: virtual public DBOp {
       ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
       TailPlacementRuleName, TailPlacementStorageClass, \
       ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
-      HeadData, Versions from '{}' \
+      HeadData from '{}' \
       where BucketName = {} and ObjName = {} and ObjInstance = {}";
 
   public:
@@ -1092,7 +1109,7 @@ class ListBucketObjectsOp: virtual public DBOp {
       ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
       TailPlacementRuleName, TailPlacementStorageClass, \
       ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, HeadData from '{}' \
-      where BucketName = {} and ObjName >= {} and ObjName LIKE {} ORDER BY ObjName ASC LIMIT {}";
+      where BucketName = {} and ObjName >= {} and ObjName LIKE {} ORDER BY ObjName ASC, VersionNum DESC LIMIT {}";
   public:
     virtual ~ListBucketObjectsOp() {}
 
@@ -1123,7 +1140,7 @@ class ListVersionedObjectsOp: virtual public DBOp {
       ObjID, TailInstance, HeadPlacementRuleName, HeadPlacementRuleStorageClass, \
       TailPlacementRuleName, TailPlacementStorageClass, \
       ManifestPartObjs, ManifestPartRules, Omap, IsMultipart, MPPartsList, \
-      HeadData, Versions from '{}' \
+      HeadData from '{}' \
       where BucketName = {} and ObjName = {} ORDER BY VersionNum DESC LIMIT {}";
   public:
     virtual ~ListVersionedObjectsOp() {}
@@ -1163,7 +1180,7 @@ class UpdateObjectOp: virtual public DBOp {
        HeadPlacementRuleName = {}, HeadPlacementRuleStorageClass = {}, \
        TailPlacementRuleName = {}, TailPlacementStorageClass = {}, \
        ManifestPartObjs = {}, ManifestPartRules = {}, Omap = {}, \
-       IsMultipart = {}, MPPartsList = {}, HeadData = {}, Versions = {} \
+       IsMultipart = {}, MPPartsList = {}, HeadData = {} \
        WHERE ObjName = {} and ObjInstance = {} and BucketName = {}";
 
   public:
@@ -1219,7 +1236,7 @@ class UpdateObjectOp: virtual public DBOp {
           params.op.obj.manifest_part_objs,
           params.op.obj.manifest_part_rules, params.op.obj.omap,
           params.op.obj.is_multipart, params.op.obj.mp_parts,
-          params.op.obj.head_data, params.op.obj.versions,
+          params.op.obj.head_data, 
           params.op.obj.obj_name, params.op.obj.obj_instance,
           params.op.bucket.bucket_name);
       }
@@ -1525,6 +1542,8 @@ class DB {
       return db_name+"_"+bucket+"_objectdata_table"; }
     const std::string getObjectView(std::string bucket) {
       return db_name+"_"+bucket+"_object_view"; }
+    const std::string getObjectTrigger(std::string bucket) {
+      return db_name+"_"+bucket+"_object_trigger"; }
 
     std::map<std::string, class ObjectOp*> getObjectMap();
 
@@ -1894,7 +1913,6 @@ class DB {
             bool assume_noent, bool modify_tail);
         int write_meta(const DoutPrefixProvider *dpp, uint64_t size,
 	    uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
-        int write_versioned_obj(const DoutPrefixProvider *dpp, DBOpParams& params);
       };
 
       struct Delete {
@@ -1930,7 +1948,7 @@ class DB {
 
         int delete_obj(const DoutPrefixProvider *dpp);
         int delete_obj_impl(const DoutPrefixProvider *dpp, DBOpParams& del_params);
-        int delete_versioned_obj(const DoutPrefixProvider *dpp, DBOpParams& del_params);
+        int create_dm(const DoutPrefixProvider *dpp, DBOpParams& del_params);
       };
 
       /* XXX: the parameters may be subject to change. All we need is bucket name
@@ -1969,9 +1987,6 @@ class DB {
           const RGWBucketInfo& bucket_info, const rgw_obj& obj,
           off_t ofs, off_t end, uint64_t max_chunk_size,
           iterate_obj_cb cb, void *arg);
-      int update_obj_next_version(const DoutPrefixProvider *dpp,
-                                  rgw_bucket_dir_entry &obj_entry,
-                                  bool promote, uint64_t& version_num);
     };
     int get_obj_iterate_cb(const DoutPrefixProvider *dpp,
         const raw_obj& read_obj, off_t obj_ofs,
