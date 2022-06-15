@@ -600,7 +600,7 @@ namespace rgw {
       ops_log_file->start();
       olog_manifold->add_sink(ops_log_file);
     }
-    olog_manifold->add_sink(new OpsLogRados(store->getRados()));
+    olog_manifold->add_sink(new OpsLogRados(store));
     olog = olog_manifold;
 
     int port = 80;
