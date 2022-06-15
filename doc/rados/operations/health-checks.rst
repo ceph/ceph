@@ -522,6 +522,16 @@ Since this migration can take a considerable amount of time to complete, we
 recommend that you begin the process well in advance of any update to Reef or
 to later releases.
 
+OSD_UNREACHABLE
+_______________
+
+Registered v1/v2 public address of one or more OSD(s) is/are out of the
+defined `public_network` subnet, which will prevent these unreachable OSDs
+from communicating with ceph clients properly.
+
+Even though these unreachable OSDs are in up state, rados clients
+will hang till TCP timeout before erroring out due to this inconsistency.
+
 POOL_FULL
 _________
 
