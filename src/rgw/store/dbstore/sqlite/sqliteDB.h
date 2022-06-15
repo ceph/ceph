@@ -51,6 +51,7 @@ class SQLiteDB : public DB, virtual public DBOp {
     int createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createObjectView(const DoutPrefixProvider *dpp, DBOpParams *params);
+    int createObjectTableTrigger(const DoutPrefixProvider *dpp, DBOpParams *params);
     int createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params);
     void populate_object_params(const DoutPrefixProvider *dpp,
                                 struct DBOpPrepareParams& p_params,
