@@ -2354,6 +2354,41 @@ class TestSubvolumes(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_retain_snapshot_rm_idempotency(self):
+        """
+        ensure subvolume deletion of a subvolume which is already deleted with retain snapshots option passes.
+        After subvolume deletion with retain snapshots, the subvolume exists until the trash directory (resides inside subvolume)
+        is cleaned up. The subvolume deletion issued while the trash directory is not empty, should pass and should
+        not error out with EAGAIN.
+        """
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=256)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # remove with snapshot retention
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
+
+        # remove snapshots (removes retained volume)
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume (check idempotency)
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOENT:
+                self.fail(f"expected subvolume rm to pass with error: {os.strerror(ce.exitstatus)}")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
 
 class TestSubvolumeGroupSnapshots(TestVolumesHelper):
     """Tests for FS subvolume group snapshot operations."""
