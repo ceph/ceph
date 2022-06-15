@@ -1752,6 +1752,7 @@ public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
+  bool check_previously_completed(const DoutPrefixProvider* dpp, const RGWMultiCompleteUpload* parts);
   void complete() override;
 
   virtual int get_params(optional_yield y) = 0;
