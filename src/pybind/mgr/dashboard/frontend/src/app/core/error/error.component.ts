@@ -25,14 +25,19 @@ export class ErrorComponent implements OnDestroy, OnInit {
   docUrl: string;
   source: string;
   routerSubscription: Subscription;
-  bootstrap: string;
+  uiConfig: string;
   uiApiPath: string;
-  button_route: string;
-  button_name: string;
+  buttonRoute: string;
+  buttonName: string;
+  buttonTitle: string;
+  component: string;
 
-  constructor(private router: Router, private docService: DocService,
+  constructor(
+    private router: Router,
+    private docService: DocService,
     private http: HttpClient,
-    private notificationService: NotificationService, ) {}
+    private notificationService: NotificationService
+  ) {}
 
   ngOnInit() {
     this.fetchData();
@@ -43,27 +48,18 @@ export class ErrorComponent implements OnDestroy, OnInit {
       });
   }
 
-  doBootstrap() {
+  doConfigure() {
     this.http.post(`ui-api/${this.uiApiPath}/configure`, {}).subscribe({
       next: () => {
-        this.notificationService.show(
-          NotificationType.info,
-          'Configuring RBD Mirroring'
-        );
+        this.notificationService.show(NotificationType.info, `Configuring ${this.component}`);
       },
       error: (error: any) => {
-        this.notificationService.show(
-          NotificationType.error,
-          error
-        );
+        this.notificationService.show(NotificationType.error, error);
       },
       complete: () => {
         setTimeout(() => {
           this.router.navigate([this.uiApiPath]);
-          this.notificationService.show(
-            NotificationType.success,
-            'Configured RBD Mirroring'
-          );
+          this.notificationService.show(NotificationType.success, `Configured ${this.component}`);
         }, 3000);
       }
     });
@@ -79,15 +75,21 @@ export class ErrorComponent implements OnDestroy, OnInit {
       this.message = history.state.message;
       this.header = history.state.header;
       this.section = history.state.section;
+<<<<<<< HEAD
       this.section_info = history.state.section_info;
       this.button_name = history.state.button_name;
       this.button_route = history.state.button_route;
+=======
+      this.sectionInfo = history.state.section_info;
+>>>>>>> 5b33f500f5d (mgr/dashboard: Error page cleanup)
       this.icon = history.state.icon;
       this.source = history.state.source;
-      this.bootstrap = history.state.bootstrap;
+      this.uiConfig = history.state.uiConfig;
       this.uiApiPath = history.state.uiApiPath;
-      this.button_route = history.state.button_route;
-      this.button_name = history.state.button_name;
+      this.buttonRoute = history.state.button_route;
+      this.buttonName = history.state.button_name;
+      this.buttonTitle = history.state.button_title;
+      this.component = history.state.component;
       this.docUrl = this.docService.urlGenerator(this.section);
     } catch (error) {
       this.router.navigate(['/error']);
