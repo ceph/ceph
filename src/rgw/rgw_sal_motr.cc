@@ -2002,38 +2002,41 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
       // generate version-id for delete marker.
       result.delete_marker = true;
       source->gen_rand_obj_instance_name();
-      // if latest version is null version, then delete the null version-object and
-      // add reference of delete-marker in null reference key.
-      if (ent.key.instance == "null") {
+      std::string del_marker_ver_id = source->get_instance();
+
+      result.version_id = del_marker_ver_id;
+      if (!info.versioning_enabled()) {
+        // for suspended bucket delete-marker's version-id = "null"
         result.version_id = "null";
-        source->set_instance(ent.key.instance);
-        rc = source->remove_mobj_and_index_entry(
+        // if latest version is null version, then delete the null version-object and
+        // add reference of delete-marker in null reference key.
+        if (ent.key.instance == "null") {
+          source->set_instance(ent.key.instance);
+          rc = source->remove_mobj_and_index_entry(
             dpp, ent, delete_key, bucket_index_iname, tenant_bkt_name);
-        if (rc < 0) {
-          ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. key- "<< delete_key << dendl;
-          return rc;
+          if (rc < 0) {
+            ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. key- "<< delete_key << dendl;
+            return rc;
+          }
         }
-        // delete null version key and update null reference entry.
+        source->set_instance(del_marker_ver_id);
+        // update delete-marker reference in null reference key.
         rc = source->update_null_reference(dpp, ent);
         if (rc<0) {
           ldpp_dout(dpp, 0) << "Failed to update null reference key bucket." << dendl;
           return rc;
         }
-      } else {
-        result.version_id = source->get_instance();
-        // update is-latest=false for current version entry.
-        ldpp_dout(dpp, 20)<<__func__<< " Updating previous version entries " << dendl;
-        rc = source->update_version_entries(dpp);
-        if (rc < 0)
-          return rc;
       }
+      // update is-latest=false for current version entry.
+      ldpp_dout(dpp, 20) << __func__ << " Updating previous version entries " << dendl;
+      rc = source->update_version_entries(dpp);
+      if (rc < 0)
+        return rc;
       // creating a delete marker
       bufferlist del_mark_bl;
       rgw_bucket_dir_entry ent_del_marker;
       ent_del_marker.key.name = source->get_name();
-      ent_del_marker.key.instance = source->get_instance();
-      if (ent.key.instance == "null")
-        ent_del_marker.key.instance = "null";
+      ent_del_marker.key.instance = result.version_id;
       ent_del_marker.meta.owner = params.obj_owner.get_id().to_str();
       ent_del_marker.meta.owner_display_name = params.obj_owner.get_display_name();
       ent_del_marker.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER | rgw_bucket_dir_entry::FLAG_CURRENT;
