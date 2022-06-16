@@ -153,9 +153,11 @@ class TrashPurgeScheduleHandler:
         self.condition.notify()
 
     def enqueue(self, now, pool_id, namespace):
-
         schedule = self.schedules.find(pool_id, namespace)
         if not schedule:
+            self.log.debug(
+                "TrashPurgeScheduleHandler: no schedule for {}/{}".format(
+                    pool_id, namespace))
             return
 
         schedule_time = schedule.next_run(now)
@@ -187,6 +189,10 @@ class TrashPurgeScheduleHandler:
         return namespace, 0
 
     def remove_from_queue(self, pool_id, namespace):
+        self.log.debug(
+            "TrashPurgeScheduleHandler: descheduling {}/{}".format(
+                pool_id, namespace))
+
         empty_slots = []
         for schedule_time, namespaces in self.queue.items():
             if (pool_id, namespace) in namespaces:
