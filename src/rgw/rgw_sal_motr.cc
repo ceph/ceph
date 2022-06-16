@@ -2885,6 +2885,7 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t 
     if ((size_t)off + bs >= obj_size) {
       bs = roundup(obj_size - off, get_unit_sz());
       flags |= M0_OOF_LAST;
+      ldpp_dout(dpp, 20) <<__func__<< ": off=" << off << " bs=" << bs << " obj_size=" << obj_size << dendl;
     } else if (left < bs) {
       // Somewhere in the middle of the object.
       bs = this->get_optimal_bs(left, true); // multiple of units
@@ -3241,6 +3242,7 @@ int MotrObject::get_part_objs(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 20) << __func__ << ": off = " << off << ", size = " << part_size << dendl;
       mobj->part_off = off;
       mobj->part_size = part_size;
+      mobj->set_obj_size(part_size);
       mobj->part_num = part_num;
       mobj->meta = mmpart->meta;
 
