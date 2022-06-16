@@ -81,6 +81,14 @@ class TrashPurgeScheduleHandler:
 
         self.load_schedules()
 
+        with self.lock:
+            if not self.schedules:
+                self.log.debug("TrashPurgeScheduleHandler: no schedules")
+                self.pools = {}
+                self.queue = {}
+                self.last_refresh_pools = datetime.now()
+                return
+
         pools = {}
 
         for pool_id, pool_name in get_rbd_pools(self.module).items():
