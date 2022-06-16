@@ -2935,10 +2935,11 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t start, int64_t 
     if (start > off)
       skip = start - off;
     if(cb){
-      ldpp_dout(dpp, 20) << __func__  << " call cb to process data" << dendl;
+      ldpp_dout(dpp, 20) <<__func__<< ": return data, skip=" << skip
+                         << " bs=" << bs << " left=" << left << dendl;
       cb->handle_data(bl, skip, (left < bs ? left : bs) - skip);
       if (rc != 0){
-        ldpp_dout(dpp, 0) << __func__ << " handle_data failed rc =" << rc << dendl;
+        ldpp_dout(dpp, 0) <<__func__<< ": handle_data failed rc=" << rc << dendl;
         goto out;
       }
     }
@@ -3439,11 +3440,9 @@ int MotrAtomicWriter::write(bool last)
       acc_data.clear();
       acc_data.append(tmp.c_str(), bs); // make it a single buf
       bi = acc_data.begin();
-      left = bs;
     }
     ldpp_dout(dpp, 20) <<__func__<< ": left=" << left << " bs=" << bs << dendl;
     done = this->populate_bvec(bs, bi);
-    left -= done;
 
     if (last)
       flags |= M0_OOF_LAST;
@@ -3469,7 +3468,8 @@ int MotrAtomicWriter::write(bool last)
       goto err;
     }
 
-    total_data_size += done;
+    total_data_size += left < done ? left : done;
+    left            -= left < done ? left : done;
   }
 
   if (last) {
