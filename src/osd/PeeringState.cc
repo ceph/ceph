@@ -6284,6 +6284,14 @@ void PeeringState::Active::all_activated_and_committed()
   ps->send_lease();
   ps->schedule_renew_lease();
 
+  pg_shard_t auth_log_shard;
+  bool history_les_bound = false;
+  ps->choose_acting(auth_log_shard, false, &history_les_bound);
+  if (!ps->want_acting.empty() && ps->want_acting != ps->acting) {
+    psdout(10) << "all_activated_and_committed NeedActingChange" << dendl;
+    post_event(PeeringState::NeedActingChange());
+    return;
+  }
   // Degraded?
   ps->update_calc_stats();
   if (ps->info.stats.stats.sum.num_objects_degraded) {

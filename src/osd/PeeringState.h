@@ -865,6 +865,7 @@ public:
       boost::statechart::custom_reaction< MTrim >,
       boost::statechart::custom_reaction< Backfilled >,
       boost::statechart::custom_reaction< ActivateCommitted >,
+      boost::statechart::custom_reaction< NeedActingChange >,
       boost::statechart::custom_reaction< AllReplicasActivated >,
       boost::statechart::custom_reaction< DeferRecovery >,
       boost::statechart::custom_reaction< DeferBackfill >,
@@ -911,6 +912,9 @@ public:
       return discard_event();
     }
     boost::statechart::result react(const DoRecovery&) {
+      return discard_event();
+    }
+    boost::statechart::result react(const NeedActingChange&) {
       return discard_event();
     }
     boost::statechart::result react(const CheckReadable&);
