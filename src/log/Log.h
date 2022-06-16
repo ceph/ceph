@@ -116,7 +116,6 @@ private:
   bool m_stop = false;
 
   std::size_t m_max_new = DEFAULT_MAX_NEW;
-  std::size_t m_max_recent = DEFAULT_MAX_RECENT;
 
   bool m_inject_segv = false;
 
