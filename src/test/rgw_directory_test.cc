@@ -42,15 +42,11 @@ TEST_F(DirectoryFixture, DirectoryInit) {
   ASSERT_EQ(c_blk->hosts_list[1], redisHost);
 }
 
-TEST_F(DirectoryFixture, SetValueTest) {
+TEST_F(DirectoryFixture, SetGetValueTest) {
   int setReturn = blk_dir->setValue(c_blk, stoi(portStr));
-
-  EXPECT_EQ(setReturn, 0);
-}
-
-TEST_F(DirectoryFixture, GetValueTest) {
   int getReturn = blk_dir->getValue(c_blk, stoi(portStr));
 
+  EXPECT_EQ(setReturn, 0);
   EXPECT_EQ(getReturn, 0);
 }
 
