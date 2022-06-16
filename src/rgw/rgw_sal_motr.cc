@@ -1026,7 +1026,7 @@ int MotrBucket::unlink_user(const DoutPrefixProvider* dpp, const rgw_user &bucke
   // Remove the user into the user info index.
   bufferlist bl;
   string tenant_bkt_name = get_bucket_name(info.bucket.tenant, info.bucket.name);
-  string user_info_idx_name = "motr.rgw.user.info." + bucket_owner.id;
+  string user_info_idx_name = "motr.rgw.user.info." + bucket_owner.to_str();
   return store->do_idx_op_by_name(user_info_idx_name,
                                   M0_IC_DEL, tenant_bkt_name, bl);
 }
