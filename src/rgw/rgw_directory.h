@@ -66,7 +66,10 @@ public:
 	void init(CephContext *_cct) {
 		cct = _cct;
 	}
-	virtual ~RGWBlockDirectory() { cout << "RGWObject Directory is destroyed!";}
+	virtual ~RGWBlockDirectory() { 
+		cout << "RGWObject Directory is destroyed!";
+		client.disconnect(true);
+	}
 
 	void findClient(string key, cpp_redis::client *client, int port);
 	//int delKey(string key);
