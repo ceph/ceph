@@ -63,7 +63,7 @@ class TrashPurgeScheduleHandler:
         self.queue = {}
         self.pools = {}
         self.refresh_pools()
-        self.log.debug("scheduler queue is initialized")
+        self.log.debug("TrashPurgeScheduleHandler: queue is initialized")
 
     def load_schedules(self):
         self.log.info("TrashPurgeScheduleHandler: load_schedules")
@@ -161,8 +161,9 @@ class TrashPurgeScheduleHandler:
         schedule_time = schedule.next_run(now)
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
-        self.log.debug("schedule {}/{} at {}".format(
-            pool_id, namespace, schedule_time))
+        self.log.debug(
+            "TrashPurgeScheduleHandler: scheduling {}/{} at {}".format(
+                pool_id, namespace, schedule_time))
         ns_spec = (pool_id, namespace)
         if ns_spec not in self.queue[schedule_time]:
             self.queue[schedule_time].append((pool_id, namespace))
@@ -197,7 +198,7 @@ class TrashPurgeScheduleHandler:
 
     def add_schedule(self, level_spec, interval, start_time):
         self.log.debug(
-            "add_schedule: level_spec={}, interval={}, start_time={}".format(
+            "TrashPurgeScheduleHandler: add_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
         with self.lock:
@@ -209,7 +210,7 @@ class TrashPurgeScheduleHandler:
 
     def remove_schedule(self, level_spec, interval, start_time):
         self.log.debug(
-            "remove_schedule: level_spec={}, interval={}, start_time={}".format(
+            "TrashPurgeScheduleHandler: remove_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
         with self.lock:
@@ -220,7 +221,9 @@ class TrashPurgeScheduleHandler:
         return 0, "", ""
 
     def list(self, level_spec):
-        self.log.debug("list: level_spec={}".format(level_spec.name))
+        self.log.debug(
+            "TrashPurgeScheduleHandler: list: level_spec={}".format(
+                level_spec.name))
 
         with self.lock:
             result = self.schedules.to_list(level_spec)
@@ -228,7 +231,9 @@ class TrashPurgeScheduleHandler:
         return 0, json.dumps(result, indent=4, sort_keys=True), ""
 
     def status(self, level_spec):
-        self.log.debug("status: level_spec={}".format(level_spec.name))
+        self.log.debug(
+            "TrashPurgeScheduleHandler: status: level_spec={}".format(
+                level_spec.name))
 
         scheduled = []
         with self.lock:
