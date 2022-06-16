@@ -163,8 +163,8 @@ Fixing the Bug
 
 .. _synchronizing:
 
-Synchronizing Local Master with Upstream Master
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Synchronizing Local Main with Upstream Main
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In your local git environment, there is a copy of the ``main`` branch in
 ``remotes/origin/main``. This is called "local main". This copy of the
