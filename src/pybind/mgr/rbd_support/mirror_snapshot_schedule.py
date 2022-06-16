@@ -634,9 +634,11 @@ class MirrorSnapshotScheduleHandler:
         self.condition.notify()
 
     def enqueue(self, now: datetime, pool_id: str, namespace: str, image_id: str) -> None:
-
         schedule = self.schedules.find(pool_id, namespace, image_id)
         if not schedule:
+            self.log.debug(
+                "MirrorSnapshotScheduleHandler: no schedule for {}/{}/{}".format(
+                    pool_id, namespace, image_id))
             return
 
         schedule_time = schedule.next_run(now)
@@ -668,6 +670,10 @@ class MirrorSnapshotScheduleHandler:
         return image, 0.0
 
     def remove_from_queue(self, pool_id: str, namespace: str, image_id: str) -> None:
+        self.log.debug(
+            "MirrorSnapshotScheduleHandler: descheduling {}/{}/{}".format(
+                pool_id, namespace, image_id))
+
         empty_slots = []
         image_spec = ImageSpec(pool_id, namespace, image_id)
         for schedule_time, images in self.queue.items():
