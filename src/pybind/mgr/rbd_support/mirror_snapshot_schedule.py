@@ -512,6 +512,7 @@ class MirrorSnapshotScheduleHandler:
 
         with self.lock:
             if not self.schedules:
+                self.log.debug("MirrorSnapshotScheduleHandler: no schedules")
                 self.watchers.unregister_all()
                 self.images = {}
                 self.queue = {}
