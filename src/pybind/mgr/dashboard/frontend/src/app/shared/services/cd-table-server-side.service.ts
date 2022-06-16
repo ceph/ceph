@@ -5,10 +5,9 @@ import { Injectable } from '@angular/core';
   providedIn: 'root'
 })
 export class CdTableServerSideService {
-
-  constructor() { }
+  constructor() {}
 
   static getCount(resp: HttpResponse<any>): number {
-    return Number(resp.headers.get('X-Total-Count'))
+    return Number(resp.headers.get('X-Total-Count'));
   }
 }

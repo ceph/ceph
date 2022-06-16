@@ -5,7 +5,7 @@ export class PageInfo {
   count: number;
 
   // Current page (current row = offset x limit or pageSize)
-  offset: number = 0;
+  offset = 0;
 
   // Max. number of rows fetched from the server
   limit: number = PAGE_LIMIT;

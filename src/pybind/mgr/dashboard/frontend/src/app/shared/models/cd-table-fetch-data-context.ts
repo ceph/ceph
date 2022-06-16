@@ -1,5 +1,6 @@
-import { HttpParams } from "@angular/common/http";
-import { PageInfo } from "./cd-table-paging";
+import { HttpParams } from '@angular/common/http';
+
+import { PageInfo } from './cd-table-paging';
 
 export class CdTableFetchDataContext {
   errorConfig = {
@@ -13,22 +14,21 @@ export class CdTableFetchDataContext {
    * reset the data table to the correct state.
    */
   error: Function;
-  pageInfo: PageInfo = new PageInfo;
+  pageInfo: PageInfo = new PageInfo();
 
   constructor(error: () => void) {
     this.error = error;
   }
 
-	toParams(): HttpParams {
-		if (this.pageInfo.limit === null) {
-			this.pageInfo.limit = 0;
-		}
-		return new HttpParams({
-			fromObject: {
-				offset: String(this.pageInfo.offset * this.pageInfo.limit),
-				limit: String(this.pageInfo.limit)
-			}
-		});
-
-	}
+  toParams(): HttpParams {
+    if (this.pageInfo.limit === null) {
+      this.pageInfo.limit = 0;
+    }
+    return new HttpParams({
+      fromObject: {
+        offset: String(this.pageInfo.offset * this.pageInfo.limit),
+        limit: String(this.pageInfo.limit)
+      }
+    });
+  }
 }

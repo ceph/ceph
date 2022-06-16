@@ -11,7 +11,7 @@ import { TaskMessageService } from './task-message.service';
 export class TaskListService implements OnDestroy {
   summaryDataSubscription: Subscription;
 
-  getUpdate: () => Observable<object>;
+  getUpdate: (context?: any) => Observable<object>;
   preProcessing: (_: any) => any[];
   setList: (_: any[]) => void;
   onFetchError: (error: any) => void;
@@ -42,7 +42,7 @@ export class TaskListService implements OnDestroy {
    * @memberof TaskListService
    */
   init(
-    getUpdate: () => Observable<object>,
+    getUpdate: (context?: any) => Observable<object>,
     preProcessing: (_: any) => any[],
     setList: (_: any[]) => void,
     onFetchError: (error: any) => void,
@@ -64,8 +64,8 @@ export class TaskListService implements OnDestroy {
     }, this.onFetchError);
   }
 
-  fetch() {
-    this.getUpdate().subscribe((resp: any) => {
+  fetch(context: any = null) {
+    this.getUpdate(context).subscribe((resp: any) => {
       this.updateData(resp, this.summary['executing_tasks'].filter(this.taskFilter));
     }, this.onFetchError);
   }

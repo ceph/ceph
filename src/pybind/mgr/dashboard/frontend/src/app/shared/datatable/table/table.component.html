@@ -173,6 +173,7 @@
                  [headerHeight]="header ? 'auto' : 0"
                  [footerHeight]="footer ? 'auto' : 0"
 								 [count]="count"
+								 [externalPaging]="serverSide"
                  [limit]="userConfig.limit > 0 ? userConfig.limit : undefined"
                  [offset]="userConfig.offset >= 0 ? userConfig.offset : 0"
                  (page)="changePage($event)"

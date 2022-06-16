@@ -113,7 +113,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    * prevent triggering fetchData when initializing the table.
    */
   @Input()
-  autoReload: number = 5000;
+  autoReload = 5000;
 
   // Which row property is unique for a row. If the identifier is not specified in any
   // column, then the property name of the first column is used. Defaults to 'id'.
@@ -154,14 +154,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   // Support server-side pagination/sorting/etc.
   @Input()
-  serverSide: boolean = false;
+  serverSide = false;
 
   /*
   Only required when serverSide is enabled.
   It should be provided by the server via "X-Total-Count" HTTP Header
   */
   @Input()
-  count: number = 0;
+  count = 0;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
@@ -624,10 +624,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (value > 0) {
       this.userConfig.limit = value;
     }
-		if (this.serverSide) {
-			this.reloadData();
-		}
-	}
+    if (this.serverSide) {
+      this.reloadData();
+    }
+  }
 
   reloadData() {
     if (!this.updating) {
@@ -657,7 +657,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.reloadData();
   }
 
- changePage(pageInfo: PageInfo) {
+  changePage(pageInfo: PageInfo) {
     this.userConfig.offset = pageInfo.offset;
     this.userConfig.limit = pageInfo.limit;
     if (this.serverSide) {
