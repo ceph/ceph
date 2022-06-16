@@ -1,0 +1,5 @@
+{
+    "name": "Ceph Developer Environment",
+    "image": "quay.io/centos/centos:stream8",
+    "postCreateCommand": ".devcontainer/postCreate.sh",
+}
