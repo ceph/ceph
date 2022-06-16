@@ -64,7 +64,7 @@ class TrashPurgeScheduleHandler:
         # pool_id => {namespace => pool_name}
         self.pools: Dict[str, Dict[str, str]] = {}
         self.refresh_pools()
-        self.log.debug("scheduler queue is initialized")
+        self.log.debug("TrashPurgeScheduleHandler: queue is initialized")
 
     def load_schedules(self) -> None:
         self.log.info("TrashPurgeScheduleHandler: load_schedules")
@@ -162,8 +162,9 @@ class TrashPurgeScheduleHandler:
         schedule_time = schedule.next_run(now)
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
-        self.log.debug("schedule {}/{} at {}".format(
-            pool_id, namespace, schedule_time))
+        self.log.debug(
+            "TrashPurgeScheduleHandler: scheduling {}/{} at {}".format(
+                pool_id, namespace, schedule_time))
         ns_spec = (pool_id, namespace)
         if ns_spec not in self.queue[schedule_time]:
             self.queue[schedule_time].append((pool_id, namespace))
@@ -201,7 +202,7 @@ class TrashPurgeScheduleHandler:
                      interval: str,
                      start_time: Optional[str]) -> Tuple[int, str, str]:
         self.log.debug(
-            "add_schedule: level_spec={}, interval={}, start_time={}".format(
+            "TrashPurgeScheduleHandler: add_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
         with self.lock:
@@ -216,7 +217,7 @@ class TrashPurgeScheduleHandler:
                         interval: Optional[str],
                         start_time: Optional[str]) -> Tuple[int, str, str]:
         self.log.debug(
-            "remove_schedule: level_spec={}, interval={}, start_time={}".format(
+            "TrashPurgeScheduleHandler: remove_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
         with self.lock:
@@ -227,7 +228,9 @@ class TrashPurgeScheduleHandler:
         return 0, "", ""
 
     def list(self, level_spec: LevelSpec) -> Tuple[int, str, str]:
-        self.log.debug("list: level_spec={}".format(level_spec.name))
+        self.log.debug(
+            "TrashPurgeScheduleHandler: list: level_spec={}".format(
+                level_spec.name))
 
         with self.lock:
             result = self.schedules.to_list(level_spec)
@@ -235,7 +238,9 @@ class TrashPurgeScheduleHandler:
         return 0, json.dumps(result, indent=4, sort_keys=True), ""
 
     def status(self, level_spec: LevelSpec) -> Tuple[int, str, str]:
-        self.log.debug("status: level_spec={}".format(level_spec.name))
+        self.log.debug(
+            "TrashPurgeScheduleHandler: status: level_spec={}".format(
+                level_spec.name))
 
         scheduled = []
         with self.lock:
