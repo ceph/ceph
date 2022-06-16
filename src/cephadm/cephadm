@@ -925,9 +925,9 @@ class CephExporter(object):
     daemon_type = 'ceph-exporter'
     entrypoint = '/usr/bin/ceph-exporter'
 
-    # port_map = {
-    #     'ceph-exporter': 9926,
-    # }
+    port_map = {
+        'ceph-exporter': 9926,
+    }
     DEFAULT_PORT = 9926
 
     def __init__(self,
@@ -940,9 +940,6 @@ class CephExporter(object):
         self.daemon_id = daemon_id
         self.image = image
 
-        self.uid = config_json.get('uid', 0)
-        self.gid = config_json.get('gid', 0)
-
         self.sock_dir = config_json.get('sock-dir', '/var/run/ceph/')
         self.addrs = config_json.get('addrs', socket.gethostbyname(socket.gethostname()))
         self.port = config_json.get('port', self.DEFAULT_PORT)
@@ -951,7 +948,7 @@ class CephExporter(object):
 
     @classmethod
     def init(cls, ctx: CephadmContext, fsid: str,
-             daemon_id: Union[int, str]) -> 'SNMPGateway':
+             daemon_id: Union[int, str]) -> 'CephExporter':
         assert ctx.config_json
         return cls(ctx, fsid, daemon_id,
                    get_parm(ctx.config_json), ctx.image)
@@ -964,11 +961,11 @@ class CephExporter(object):
 
     def get_daemon_args(self) -> List[str]:
         args = [
-            f'--sock-dir {self.sock_dir}',
-            f'--addrs {self.addrs}',
-            f'--port {self.port}',
-            f'--prio-limit {self.prio_limit}',
-            f'--stats-period {self.stats_period}',
+            f'--sock-dir={self.sock_dir}',
+            f'--addrs={self.addrs}',
+            f'--port={self.port}',
+            f'--prio-limit={self.prio_limit}',
+            f'--stats-period={self.stats_period}',
         ]
         return args
 
@@ -1365,7 +1362,6 @@ def get_supported_daemons():
     supported_daemons.extend(Monitoring.components)
     supported_daemons.append(NFSGanesha.daemon_type)
     supported_daemons.append(CephIscsi.daemon_type)
-    supported_daemons.append(CephExporter.daemon_type)
     supported_daemons.append(CustomContainer.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
@@ -2876,7 +2872,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
     # type: (CephadmContext, str, str, Union[int, str, None], Optional[bool]) -> Dict[str, str]
     mounts = dict()
 
-    if daemon_type in Ceph.daemons and daemon_type != 'ceph-exporter':
+    if daemon_type in Ceph.daemons:
         if fsid:
             run_path = os.path.join('/var/run/ceph', fsid)
             if os.path.exists(run_path):
@@ -2890,7 +2886,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
                 journald_sock_dir = '/run/systemd/journal'
                 mounts[journald_sock_dir] = journald_sock_dir
 
-    if daemon_type in Ceph.daemons and daemon_id and daemon_type != 'ceph-exporter':
+    if daemon_type in Ceph.daemons and daemon_id:
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         if daemon_type == 'rgw':
             cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (daemon_id)
@@ -2900,7 +2896,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[data_dir] = cdata_dir + ':z'
         if not no_config:
             mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
-        if daemon_type in ['rbd-mirror', 'cephfs-mirror', 'crash']:
+        if daemon_type in ['rbd-mirror', 'cephfs-mirror', 'crash', 'ceph-exporter']:
             # these do not search for their keyrings in a data directory
             mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, daemon_id)
 
@@ -2983,10 +2979,6 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             data_dir = re.sub(r'\.tcmu$', '', data_dir)
         log_dir = get_log_dir(fsid, ctx.log_dir)
         mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
-
-    if daemon_type == CephExporter.daemon_type:
-        assert daemon_id
-        mounts.update(CephExporter.get_container_mounts())
 
     if daemon_type == Keepalived.daemon_type:
         assert daemon_id
@@ -5954,17 +5946,6 @@ def command_deploy(ctx):
         c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
-                      reconfig=ctx.reconfig,
-                      ports=daemon_ports)
-
-    elif daemon_type == CephExporter.daemon_type:
-        if not ctx.reconfig and not redeploy and not daemon_ports:
-            daemon_ports = list(CephExporter.port_map.values())
-
-        uid = 0
-        gid = 0
-        c = get_container_with_extra_args(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       reconfig=ctx.reconfig,
                       ports=daemon_ports)
 
