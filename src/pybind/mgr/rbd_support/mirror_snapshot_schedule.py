@@ -465,7 +465,7 @@ class MirrorSnapshotScheduleHandler:
         self.images = {}
         self.watchers = Watchers(self)
         self.refresh_images()
-        self.log.debug("scheduler queue is initialized")
+        self.log.debug("MirrorSnapshotScheduleHandler: queue is initialized")
 
     def load_schedules(self):
         self.log.info("MirrorSnapshotScheduleHandler: load_schedules")
@@ -611,8 +611,9 @@ class MirrorSnapshotScheduleHandler:
         schedule_time = schedule.next_run(now)
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
-        self.log.debug("schedule image {}/{}/{} at {}".format(
-            pool_id, namespace, image_id, schedule_time))
+        self.log.debug(
+            "MirrorSnapshotScheduleHandler: scheduling {}/{}/{} at {}".format(
+                pool_id, namespace, image_id, schedule_time))
         image_spec = (pool_id, namespace, image_id)
         if image_spec not in self.queue[schedule_time]:
             self.queue[schedule_time].append((pool_id, namespace, image_id))
@@ -647,7 +648,7 @@ class MirrorSnapshotScheduleHandler:
 
     def add_schedule(self, level_spec, interval, start_time):
         self.log.debug(
-            "add_schedule: level_spec={}, interval={}, start_time={}".format(
+            "MirrorSnapshotScheduleHandler: add_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
         with self.lock:
@@ -659,7 +660,7 @@ class MirrorSnapshotScheduleHandler:
 
     def remove_schedule(self, level_spec, interval, start_time):
         self.log.debug(
-            "remove_schedule: level_spec={}, interval={}, start_time={}".format(
+            "MirrorSnapshotScheduleHandler: remove_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
         with self.lock:
@@ -670,7 +671,9 @@ class MirrorSnapshotScheduleHandler:
         return 0, "", ""
 
     def list(self, level_spec):
-        self.log.debug("list: level_spec={}".format(level_spec.name))
+        self.log.debug(
+            "MirrorSnapshotScheduleHandler: list: level_spec={}".format(
+                level_spec.name))
 
         with self.lock:
             result = self.schedules.to_list(level_spec)
@@ -678,7 +681,9 @@ class MirrorSnapshotScheduleHandler:
         return 0, json.dumps(result, indent=4, sort_keys=True), ""
 
     def status(self, level_spec):
-        self.log.debug("status: level_spec={}".format(level_spec.name))
+        self.log.debug(
+            "MirrorSnapshotScheduleHandler: status: level_spec={}".format(
+                level_spec.name))
 
         scheduled_images = []
         with self.lock:
