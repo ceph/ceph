@@ -119,6 +119,12 @@ You can stop the upgrade process at any time by running the following command:
 
   ceph orch upgrade stop
 
+Post upgrade actions
+====================
+
+In case the new version is based on ``cephadm``, once done with the upgrade the user
+has to update the ``cephadm`` package (or ceph-common package in case the user
+doesn't use ``cephadm shell``) to a version compatible with the new version.
 
 Potential problems
 ==================
