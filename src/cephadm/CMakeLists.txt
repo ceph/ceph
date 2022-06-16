@@ -7,9 +7,11 @@ set(bin_target_file ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cephadm)
 
 add_custom_command(
   OUTPUT "${bin_target_file}"
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cephadm.py
+  DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/cephadm.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/build.py
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-  COMMAND bash build.sh ${bin_target_file}
+  COMMAND ${Python3_EXECUTABLE} build.py ${bin_target_file}
 )
 
 add_custom_target(cephadm ALL
