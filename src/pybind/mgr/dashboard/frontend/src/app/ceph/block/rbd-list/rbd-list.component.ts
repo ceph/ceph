@@ -4,8 +4,6 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Observable, Subscriber } from 'rxjs';
 
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
-import { CdTableServerSideService } from '~/app/shared/services/cd-table-server-side.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
@@ -17,6 +15,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ImageSpec } from '~/app/shared/models/image-spec';
@@ -25,6 +24,7 @@ import { Task } from '~/app/shared/models/task';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { CdTableServerSideService } from '~/app/shared/services/cd-table-server-side.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -75,8 +75,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   tableStatus = new TableStatusViewCache();
   selection = new CdTableSelection();
   icons = Icons;
-	count: number = 0;
-	private tableContext: CdTableFetchDataContext = null;
+  count = 0;
+  private tableContext: CdTableFetchDataContext = null;
 
   modalRef: NgbModalRef;
 
@@ -125,7 +125,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     public taskListService: TaskListService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n
-	) {
+  ) {
     super();
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
@@ -348,18 +348,15 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       ].includes(task.name);
     };
 
-		console.log(taskFilter);
-		console.log(itemFilter);
-		console.log(this.builders);
-    // this.taskListService.init(
-		// 	(context: CdTableFetchDataContext) => this.rbdService.list(context.toParams()),
-		// 	(resp) => this.prepareResponse(resp),
-    //   (images) => (this.images = images),
-    //   () => this.onFetchError(),
-    //   taskFilter,
-    //   itemFilter,
-    //   this.builders
-    // );
+    this.taskListService.init(
+      (context) => this.getRbdImages(context),
+      (resp) => this.prepareResponse(resp),
+      (images) => (this.images = images),
+      () => this.onFetchError(),
+      taskFilter,
+      itemFilter,
+      this.builders
+    );
   }
 
   onFetchError() {
@@ -367,48 +364,19 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     this.tableStatus = new TableStatusViewCache(ViewCacheStatus.ValueException);
   }
 
-	getRbdImages(context: CdTableFetchDataContext = null){
-		if(context !== null) {
-			this.tableContext = context;
-		}
-		console.log(context);
-		this.rbdService.list(this.tableContext.toParams()).
-			subscribe((resp: any) => {
-				console.log(resp);
-				this.prepareResponse(resp);
-			});
-	}
-	prepareResponse(resp: any[]): any[] {
-		let images: any[] = [];
-    const viewCacheStatusMap = {};
+  getRbdImages(context: CdTableFetchDataContext = null) {
+    if (context !== null) {
+      this.tableContext = context;
+    }
+    return this.rbdService.list(this.tableContext.toParams());
+  }
 
-		console.log(resp);
+  prepareResponse(resp: any[]): any[] {
+    let images: any[] = [];
+
     resp.forEach((pool) => {
-      if (_.isUndefined(viewCacheStatusMap[pool.status])) {
-        viewCacheStatusMap[pool.status] = [];
-      }
-      viewCacheStatusMap[pool.status].push(pool.pool_name);
       images = images.concat(pool.value);
     });
-
-    let status: number;
-    if (viewCacheStatusMap[ViewCacheStatus.ValueException]) {
-      status = ViewCacheStatus.ValueException;
-    } else if (viewCacheStatusMap[ViewCacheStatus.ValueStale]) {
-      status = ViewCacheStatus.ValueStale;
-    } else if (viewCacheStatusMap[ViewCacheStatus.ValueNone]) {
-      status = ViewCacheStatus.ValueNone;
-    }
-
-    if (status) {
-      const statusFor =
-        (viewCacheStatusMap[status].length > 1 ? 'pools ' : 'pool ') +
-        viewCacheStatusMap[status].join();
-
-      this.tableStatus = new TableStatusViewCache(status, statusFor);
-    } else {
-      this.tableStatus = new TableStatusViewCache();
-    }
 
     images.forEach((image) => {
       if (image.schedule_info !== undefined) {
@@ -423,13 +391,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       }
     });
 
-		console.group('reponse');
-		console.log(resp);
-		console.log(resp[0].headers);
-		this.count = CdTableServerSideService.getCount(resp[0]);
-		console.log(this.count);
-		this.images = images;
-		console.groupEnd();
+    this.count = CdTableServerSideService.getCount(resp[0]);
+    this.images = images;
     return images;
   }
 
@@ -653,14 +616,13 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   }
 }
 
-
 /*
 	for pool in pools
 	  for namespace in namespaces
 		  refs = get_image_refs
 			for ref in refs:
 			   get_data(ref)
-	 
+
 @ttl_cache(5)
 def get_refs();
   joint_refs = []
@@ -675,7 +637,4 @@ sort(joint_refs)
 		for ref in joint_refs[offset:offset+limit]:
 get_data(ref)
 
-
-
-	  
 */
