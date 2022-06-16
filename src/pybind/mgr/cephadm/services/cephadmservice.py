@@ -485,7 +485,6 @@ class CephService(CephadmService):
                 'prefix': 'auth get',
                 'entity': entity,
             })
-
         config = self.mgr.get_minimal_ceph_conf()
 
         if extra_ceph_config:
@@ -1017,23 +1016,26 @@ class CephExporterService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
+        spec = cast(CephExporterSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_spec.daemon_id),
+                                             ['mon', 'profile ceph-exporter',
+                                              'mon', 'allow r',
+                                              'mgr', 'allow r',
+                                              'osd', 'allow r'])
+        exporter_config = {}
+        if spec.sock_dir:
+            exporter_config.update({'sock-dir': spec.sock_dir})
+        if spec.port:
+            exporter_config.update({'port': spec.port})
+        if spec.prio_limit:
+            exporter_config.update({'prio-limit': spec.prio_limit})
+        if spec.stats_period:
+            exporter_config.update({'stats-period': spec.stats_period})               
+        daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config = daemon_spec.final_config + exporter_config
+        logger.info("eni mane %s", daemon_spec.final_config)
         return daemon_spec
-
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
-        deps: List[str] = []
-
-        spec = cast(CephExporterService, self.mgr.spec_store[daemon_spec.service_name].spec)
-        config = {
-            "sock-dir": spec.sock_dir,
-            "addrs": spec.addrs,
-            "port": spec.port,
-            "prio-limit": spec.prio_limit,
-            "stats-period": spec.stats_period,
-        }
-
-        return config, sorted(deps)
 
 
 class CephfsMirrorService(CephService):
