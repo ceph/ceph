@@ -4,10 +4,10 @@
 
 import logging
 import math
-import cherrypy
 from datetime import datetime
 from functools import partial
 
+import cherrypy
 import rbd
 
 from .. import mgr
@@ -84,7 +84,6 @@ class Rbd(RESTController):
         else:
             pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
 
-        result = []
         images, num_total_images = RbdService.rbd_pool_list(pools, offset=offset, limit=limit)
         cherrypy.response.headers['X-Total-Count'] = num_total_images
         pool_result = {}
@@ -93,7 +92,7 @@ class Rbd(RESTController):
             if pool not in pool_result:
                 pool_result[pool] = {'value': [], 'pool_name': image['pool']}
             pool_result[pool]['value'].append(image)
-                
+
             images[i]['configuration'] = RbdConfiguration(
                 pool, image['namespace'], image['name']).list()
         return list(pool_result.values())
