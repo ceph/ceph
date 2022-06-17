@@ -7,7 +7,6 @@
 using namespace std;
 
 string portStr;
-string oid = "sam-oid";
 string redisHost = "";
 string host = "127.0.0.1";
 
@@ -18,7 +17,9 @@ class DirectoryFixture: public ::testing::Test {
       c_blk = new cache_block();
 
       c_blk->hosts_list.push_back(redisHost);
-      c_blk->c_obj.obj_name = oid;
+      c_blk->size_in_bytes = 123; 
+      c_blk->c_obj.bucket_name = "testBucket";
+      c_blk->c_obj.obj_name = "samoid";
     } 
 
     virtual void TearDown() {
@@ -33,13 +34,14 @@ class DirectoryFixture: public ::testing::Test {
     cache_block* c_blk;
 };
 
+// Successful initialization
 TEST_F(DirectoryFixture, DirectoryInit) {
   ASSERT_NE(blk_dir, nullptr);
   ASSERT_NE(c_blk, nullptr);
   ASSERT_NE((int)portStr.length(), (int)0);
-  ASSERT_EQ(c_blk->hosts_list[0], redisHost);
 }
 
+// Successful Set and Get Value Calls
 TEST_F(DirectoryFixture, SetGetValueTest) {
   int setReturn = blk_dir->setValue(c_blk, stoi(portStr));
   int getReturn = blk_dir->getValue(c_blk, stoi(portStr));
@@ -48,22 +50,54 @@ TEST_F(DirectoryFixture, SetGetValueTest) {
   EXPECT_EQ(getReturn, 0);
 }
 
+// Redis Server Key Check
 TEST(DirectoryTest, RedisTest) {
   cpp_redis::client client;
+  int key_exist = -1;
+  string key;
+  string hosts;
+  string size;
+  string bucket_name;
+  string obj_name;
+  std::vector<std::string> fields;
+
+  fields.push_back("key");
+  fields.push_back("hosts");
+  fields.push_back("size");
+  fields.push_back("bucket_name");
+  fields.push_back("obj_name");
 
   client.connect(host, stoi(portStr), nullptr, 0, 5, 1000);
-
-  client.get(oid, [](cpp_redis::reply& reply) {
-    EXPECT_EQ(reply.as_string(), oid);
-  });
-
   ASSERT_EQ((bool)client.is_connected(), (bool)1);
+
+  client.hmget("samoid", fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      key_exist = 0;
+      key = arr[0].as_string();
+      hosts = arr[1].as_string();
+      size = arr[2].as_string();
+      bucket_name = arr[3].as_string();
+      obj_name = arr[4].as_string();
+    }
+  });
+  
+  client.sync_commit(std::chrono::milliseconds(1000));
+
+  EXPECT_EQ(key_exist, 0);
+  EXPECT_EQ(key, "samoid");
+  EXPECT_EQ(hosts, redisHost);
+  EXPECT_EQ(size, "123");
+  EXPECT_EQ(bucket_name, "testBucket");
+  EXPECT_EQ(obj_name, "samoid");
 }
 
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
 
-  if (argc == 1) 
+  // Other ports can be passed to the program
+  if (argc == 1)
     portStr = "6379";
   else
     portStr = argv[1];
