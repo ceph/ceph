@@ -48,6 +48,7 @@
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSPeerRequest.h"
 #include "messages/MMDSSnapUpdate.h"
+#include "messages/MMDSSnapUpdateReply.h"
 
 #include "osdc/Filer.h"
 #include "CInode.h"
@@ -865,8 +866,10 @@ class MDCache {
   SnapRealm *get_global_snaprealm() const { return global_snaprealm; }
   void create_global_snaprealm();
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients=true);
-  void send_snap_update(CInode *in, version_t stid, int snap_op);
+  void send_snap_update(MDRequestRef& mdr, CInode *in, version_t stid, int snap_op,
+                        MDSContext *onfinish=nullptr);
   void handle_snap_update(const cref_t<MMDSSnapUpdate> &m);
+  void handle_snap_update_reply(const cref_t<MMDSSnapUpdateReply> &m);
   void notify_global_snaprealm_update(int snap_op);
 
   // -- stray --

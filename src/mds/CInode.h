@@ -333,6 +333,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
+  static const int PIN_SNAPUPDATE =       25;
 
   // -- dump flags --
   static const int DUMP_INODE_STORE_BASE = (1 << 0);
@@ -399,6 +400,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const uint64_t WAIT_TRUNC       = (1<<2);
   static const uint64_t WAIT_FLOCK       = (1<<3);
   static const uint64_t WAIT_UNLINK      = (1<<4);
+  static const uint64_t WAIT_SNAPUPDATE  = (1<<5);
 
   static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
@@ -1115,6 +1117,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // -- caps -- (new)
   // client caps
   client_t loner_cap = -1, want_loner_cap = -1;
+
+  uint32_t snap_update_ref = 0;
 
 protected:
   ceph_lock_state_t *get_fcntl_lock_state() {

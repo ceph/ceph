@@ -89,6 +89,7 @@ class MDSCacheObject {
   const static uint64_t WAIT_ORDERED	 = (1ull<<61);
   const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
   const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
+  const static uint64_t WAIT_SNAPUPDATE  = (1ull<<58);
 
   elist<MDSCacheObject*>::item item_scrub;   // for scrub inode or dir
 

@@ -8262,7 +8262,9 @@ void MDCache::dispatch(const cref_t<Message> &m)
   case MSG_MDS_SNAPUPDATE:
     handle_snap_update(ref_cast<MMDSSnapUpdate>(m));
     break;
-    
+  case MSG_MDS_SNAPUPDATEREPLY:
+    handle_snap_update_reply(ref_cast<MMDSSnapUpdateReply>(m));
+    break;
   default:
     derr << "cache unknown message " << m->get_type() << dendl;
     ceph_abort_msg("cache unknown message");
@@ -9986,7 +9988,8 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
     send_snaps(updates);
 }
 
-void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
+void MDCache::send_snap_update(MDRequestRef& mdr, CInode *in, version_t stid,
+                               int snap_op, MDSContext *onfinish)
 {
   dout(10) << __func__ << " " << *in << " stid " << stid << dendl;
   ceph_assert(in->is_auth());
@@ -10008,10 +10011,15 @@ void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
       m->snap_blob = snap_blob;
       mds->send_message_mds(m, p);
     }
-  }
 
-  if (stid > 0)
-    notify_global_snaprealm_update(snap_op);
+    if (onfinish) {
+      in->snap_update_ref += mds_set.size();
+      in->get(CInode::PIN_SNAPUPDATE);
+      in->add_waiter(CInode::WAIT_SNAPUPDATE, onfinish);
+    }
+  } else if (onfinish) {
+    onfinish->complete(0);
+  }
 }
 
 void MDCache::handle_snap_update(const cref_t<MMDSSnapUpdate> &m)
@@ -10019,8 +10027,10 @@ void MDCache::handle_snap_update(const cref_t<MMDSSnapUpdate> &m)
   mds_rank_t from = mds_rank_t(m->get_source().num());
   dout(10) << __func__ << " " << *m << " from mds." << from << dendl;
 
+  auto reply = make_message<MMDSSnapUpdateReply>(m->get_ino(), m->get_tid());
   if (mds->get_state() < MDSMap::STATE_RESOLVE &&
       mds->get_want_state() != CEPH_MDS_STATE_RESOLVE) {
+    mds->send_message(reply, m->get_connection());
     return;
   }
 
@@ -10049,6 +10059,29 @@ void MDCache::handle_snap_update(const cref_t<MMDSSnapUpdate> &m)
 	}
       }
       do_realm_invalidate_and_update_notify(in, m->get_snap_op(), notify_clients);
+    }
+  }
+  mds->send_message(reply, m->get_connection());
+}
+
+void MDCache::handle_snap_update_reply(const cref_t<MMDSSnapUpdateReply> &m)
+{
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+  dout(10) << __func__ << " " << *m << " from mds." << from << dendl;
+
+  if (mds->get_state() < MDSMap::STATE_RESOLVE &&
+      mds->get_want_state() != CEPH_MDS_STATE_RESOLVE) {
+    return;
+  }
+
+  CInode *in = get_inode(m->get_ino());
+  if (in) {
+    in->snap_update_ref--;
+    if (!in->snap_update_ref) {
+      MDSContext::vec finished;
+      in->take_waiting(CInode::WAIT_SNAPUPDATE, finished);
+      mds->queue_waiters(finished);
+      in->put(CInode::PIN_SNAPUPDATE);
     }
   }
 }
