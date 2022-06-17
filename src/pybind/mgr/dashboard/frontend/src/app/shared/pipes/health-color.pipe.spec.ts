@@ -6,7 +6,7 @@ class CssHelperStub extends CssHelper {
     if (propertyName === 'health-color-healthy') {
       return 'fakeGreen';
     }
-    if (propertyName === 'health-color-warning') {
+    if (propertyName === 'health-color-warning-wcag-aa-large-text') {
       return 'fakeOrange';
     }
     if (propertyName === 'health-color-error') {

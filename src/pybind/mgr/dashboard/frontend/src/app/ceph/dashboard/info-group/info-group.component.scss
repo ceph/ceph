@@ -1,6 +1,12 @@
+@use './src/styles/vendor/variables' as vv;
+
 .info-group-title {
   font-size: 1.75rem;
   margin: 0 0 0.5vw 0.5vw;
+}
+
+.popover-icon {
+  color: vv.$primary-wcag-aa-large-text;
 }
 
 .popover-icon:focus {
