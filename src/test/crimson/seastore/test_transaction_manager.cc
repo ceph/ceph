@@ -402,7 +402,7 @@ struct transaction_manager_test_t :
       [this, &tracker](auto &t) {
 	return backref_manager->scan_mapped_space(
 	  t,
-	  [&tracker, this](auto offset, auto len, depth_t) {
+	  [&tracker, this](auto offset, auto len, depth_t, extent_types_t) {
 	    if (offset.get_addr_type() == addr_types_t::SEGMENT &&
 		!backref_manager->backref_should_be_removed(offset)) {
 	      logger().debug("check_usage: tracker alloc {}~{}",
