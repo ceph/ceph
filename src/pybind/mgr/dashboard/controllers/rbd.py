@@ -28,7 +28,6 @@ from . import APIDoc, APIRouter, BaseController, CreatePermission, \
 logger = logging.getLogger(__name__)
 
 RBD_SCHEMA = ([{
-    "status": (int, 'Status of the image'),
     "value": ([str], ''),
     "pool_name": (str, 'pool name')
 }])
@@ -93,7 +92,7 @@ class Rbd(RESTController):
         for i, image in enumerate(images):
             pool = image['pool']
             if pool not in pool_result:
-                pool_result[pool] = {'status': 1, 'value': [], 'pool_name': image['pool']}
+                pool_result[pool] = {'value': [], 'pool_name': image['pool']}
             pool_result[pool]['value'].append(image)
                 
             images[i]['configuration'] = RbdConfiguration(

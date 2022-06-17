@@ -11,7 +11,6 @@ import rbd
 
 from .. import mgr
 from ..exceptions import DashboardException
-from ..tools import ViewCache
 from .ceph_service import CephService
 
 try:
@@ -422,7 +421,6 @@ class RbdService(object):
         rbd_inst = rbd.RBD()
         for pool in pool_names:
             with mgr.rados.open_ioctx(pool) as ioctx:
-                result = []
                 if namespace:
                     namespaces = [namespace]
                 else:
@@ -442,7 +440,9 @@ class RbdService(object):
     def rbd_pool_list(cls, pool_names: List[str], namespace=None, offset=0, limit=0):
         offset = int(offset)
         limit = int(limit)
-        if limit < 0:
+        # let's use -1 to denotate we want ALL images for now. Iscsi currently gathers
+        # all images therefore, we need this.
+        if limit < -1:
             return []
 
         refs = cls._rbd_pool_image_refs(pool_names, namespace)
@@ -450,9 +450,12 @@ class RbdService(object):
         # transform to list so that we can count
         for i in refs:
             image_refs.append(i)
-            
+
         result = []
-        for image_ref in sorted(image_refs, key=lambda v: v['name'])[offset:offset+limit]:
+        end = offset + limit
+        if limit == -1:
+            end = len(image_refs)
+        for image_ref in sorted(image_refs, key=lambda v: v['name'])[offset:end]:
             with mgr.rados.open_ioctx(image_ref['pool']) as ioctx:
                 ioctx.set_namespace(image_ref['namespace'])
                 try:
