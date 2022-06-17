@@ -80,7 +80,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
     list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
     list.push_back(make_pair("obj_name", ptr->c_obj.obj_name));
     list.push_back(make_pair("hosts", ptr->hosts_list[0]));
-
+    
     client.hmset(key, list, [&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
         result = reply.as_string();
@@ -108,9 +108,9 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
       
       client.sync_commit(std::chrono::milliseconds(1000));
     }
-	catch(exception &e) {
-	  return 0;
-	}
+    catch(exception &e) {
+      return 0; 
+    }
 
     string hosts;
     stringstream ss;
@@ -199,7 +199,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr, int port) {
     string tmp;
     vector<pair<string, string>> list;
     
-    list.push_back(make_pair("hosts", hosts));
+    list.push_back(make_pair("hosts", ptr->hosts_list[0]));
     client.hmset(key, list, [&result](cpp_redis::reply &reply) {});
     client.sync_commit(std::chrono::milliseconds(1000));
     
