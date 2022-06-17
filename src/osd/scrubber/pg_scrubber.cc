@@ -127,7 +127,7 @@ bool PgScrubber::verify_against_abort(epoch_t epoch_to_verify)
 	   << " vs last-aborted: " << m_last_aborted << dendl;
 
   // if we were not aware of the abort before - kill the scrub.
-  if (epoch_to_verify > m_last_aborted) {
+  if (epoch_to_verify >= m_last_aborted) {
     scrub_clear_state();
     m_last_aborted = std::max(epoch_to_verify, m_epoch_start);
   }
@@ -146,9 +146,7 @@ bool PgScrubber::should_abort() const
       dout(10) << "nodeep_scrub set, aborting" << dendl;
       return true;
     }
-  }
-
-  if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
+  } else if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
       m_pg->pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) {
     dout(10) << "noscrub set, aborting" << dendl;
     return true;
