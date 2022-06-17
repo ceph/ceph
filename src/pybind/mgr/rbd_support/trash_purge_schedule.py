@@ -71,8 +71,7 @@ class TrashPurgeScheduleHandler:
 
         schedules = Schedules(self)
         schedules.load()
-        with self.lock:
-            self.schedules = schedules
+        self.schedules = schedules
 
     def refresh_pools(self):
         elapsed = (datetime.now() - self.last_refresh_pools).total_seconds()
@@ -81,9 +80,8 @@ class TrashPurgeScheduleHandler:
 
         self.log.debug("TrashPurgeScheduleHandler: refresh_pools")
 
-        self.load_schedules()
-
         with self.lock:
+            self.load_schedules()
             if not self.schedules:
                 self.log.debug("TrashPurgeScheduleHandler: no schedules")
                 self.pools = {}
@@ -127,24 +125,23 @@ class TrashPurgeScheduleHandler:
             pools[pool_id][namespace] = pool_name
 
     def rebuild_queue(self):
-        with self.lock:
-            now = datetime.now()
+        now = datetime.now()
 
-            # don't remove from queue "due" images
-            now_string = datetime.strftime(now, "%Y-%m-%d %H:%M:00")
+        # don't remove from queue "due" images
+        now_string = datetime.strftime(now, "%Y-%m-%d %H:%M:00")
 
-            for schedule_time in list(self.queue):
-                if schedule_time > now_string:
-                    del self.queue[schedule_time]
+        for schedule_time in list(self.queue):
+            if schedule_time > now_string:
+                del self.queue[schedule_time]
 
-            if not self.schedules:
-                return
+        if not self.schedules:
+            return
 
-            for pool_id, namespaces in self.pools.items():
-                for namespace in namespaces:
-                    self.enqueue(now, pool_id, namespace)
+        for pool_id, namespaces in self.pools.items():
+            for namespace in namespaces:
+                self.enqueue(now, pool_id, namespace)
 
-            self.condition.notify()
+        self.condition.notify()
 
     def refresh_queue(self, current_pools):
         now = datetime.now()
@@ -218,11 +215,10 @@ class TrashPurgeScheduleHandler:
             "TrashPurgeScheduleHandler: add_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
+        # TODO: optimize to rebuild only affected part of the queue
         with self.lock:
             self.schedules.add(level_spec, interval, start_time)
-
-        # TODO: optimize to rebuild only affected part of the queue
-        self.rebuild_queue()
+            self.rebuild_queue()
         return 0, "", ""
 
     def remove_schedule(self, level_spec, interval, start_time):
@@ -230,11 +226,10 @@ class TrashPurgeScheduleHandler:
             "TrashPurgeScheduleHandler: remove_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
+        # TODO: optimize to rebuild only affected part of the queue
         with self.lock:
             self.schedules.remove(level_spec, interval, start_time)
-
-        # TODO: optimize to rebuild only affected part of the queue
-        self.rebuild_queue()
+            self.rebuild_queue()
         return 0, "", ""
 
     def list(self, level_spec):

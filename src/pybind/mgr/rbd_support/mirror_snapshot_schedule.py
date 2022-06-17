@@ -473,8 +473,7 @@ class MirrorSnapshotScheduleHandler:
 
         schedules = Schedules(self)
         schedules.load(namespace_validator, image_validator)
-        with self.lock:
-            self.schedules = schedules
+        self.schedules = schedules
 
     def refresh_images(self):
         elapsed = (datetime.now() - self.last_refresh_images).total_seconds()
@@ -483,9 +482,8 @@ class MirrorSnapshotScheduleHandler:
 
         self.log.debug("MirrorSnapshotScheduleHandler: refresh_images")
 
-        self.load_schedules()
-
         with self.lock:
+            self.load_schedules()
             if not self.schedules:
                 self.log.debug("MirrorSnapshotScheduleHandler: no schedules")
                 self.watchers.unregister_all()
@@ -565,25 +563,24 @@ class MirrorSnapshotScheduleHandler:
                     pool_name, e))
 
     def rebuild_queue(self):
-        with self.lock:
-            now = datetime.now()
+        now = datetime.now()
 
-            # don't remove from queue "due" images
-            now_string = datetime.strftime(now, "%Y-%m-%d %H:%M:00")
+        # don't remove from queue "due" images
+        now_string = datetime.strftime(now, "%Y-%m-%d %H:%M:00")
 
-            for schedule_time in list(self.queue):
-                if schedule_time > now_string:
-                    del self.queue[schedule_time]
+        for schedule_time in list(self.queue):
+            if schedule_time > now_string:
+                del self.queue[schedule_time]
 
-            if not self.schedules:
-                return
+        if not self.schedules:
+            return
 
-            for pool_id in self.images:
-                for namespace in self.images[pool_id]:
-                    for image_id in self.images[pool_id][namespace]:
-                        self.enqueue(now, pool_id, namespace, image_id)
+        for pool_id in self.images:
+            for namespace in self.images[pool_id]:
+                for image_id in self.images[pool_id][namespace]:
+                    self.enqueue(now, pool_id, namespace, image_id)
 
-            self.condition.notify()
+        self.condition.notify()
 
     def refresh_queue(self, current_images):
         now = datetime.now()
@@ -661,11 +658,10 @@ class MirrorSnapshotScheduleHandler:
             "MirrorSnapshotScheduleHandler: add_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
+        # TODO: optimize to rebuild only affected part of the queue
         with self.lock:
             self.schedules.add(level_spec, interval, start_time)
-
-        # TODO: optimize to rebuild only affected part of the queue
-        self.rebuild_queue()
+            self.rebuild_queue()
         return 0, "", ""
 
     def remove_schedule(self, level_spec, interval, start_time):
@@ -673,11 +669,10 @@ class MirrorSnapshotScheduleHandler:
             "MirrorSnapshotScheduleHandler: remove_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
+        # TODO: optimize to rebuild only affected part of the queue
         with self.lock:
             self.schedules.remove(level_spec, interval, start_time)
-
-        # TODO: optimize to rebuild only affected part of the queue
-        self.rebuild_queue()
+            self.rebuild_queue()
         return 0, "", ""
 
     def list(self, level_spec):
