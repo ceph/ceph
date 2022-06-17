@@ -30,6 +30,32 @@
 #include "include/elist.h"
 #include "include/rados/rados_types.hpp"
 
+#include "messages/MCacheExpire.h"
+#include "messages/MClientQuota.h"
+#include "messages/MClientRequest.h"
+#include "messages/MClientSnap.h"
+#include "messages/MDentryLink.h"
+#include "messages/MDentryUnlink.h"
+#include "messages/MDirUpdate.h"
+#include "messages/MDiscover.h"
+#include "messages/MDiscoverReply.h"
+#include "messages/MGatherCaps.h"
+#include "messages/MGenericMessage.h"
+#include "messages/MInodeFileCaps.h"
+#include "messages/MLock.h"
+#include "messages/MMDSCacheRejoin.h"
+#include "messages/MMDSFindIno.h"
+#include "messages/MMDSFindInoReply.h"
+#include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSFragmentNotifyAck.h"
+#include "messages/MMDSOpenIno.h"
+#include "messages/MMDSOpenInoReply.h"
+#include "messages/MMDSResolve.h"
+#include "messages/MMDSResolveAck.h"
+#include "messages/MMDSPeerRequest.h"
+#include "messages/MMDSSnapUpdate.h"
+#include "messages/MMDSSnapUpdateReply.h"
+
 #include "osdc/Filer.h"
 #include "CInode.h"
 #include "CDentry.h"
@@ -1057,8 +1083,10 @@ private:
   SnapRealm *get_global_snaprealm() const { return global_snaprealm; }
   void create_global_snaprealm();
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients=true);
-  void send_snap_update(CInode *in, version_t stid, int snap_op);
+  void send_snap_update(const MDRequestRef& mdr, CInode *in, version_t stid, int snap_op,
+                        MDSContext *onfinish=nullptr);
   void handle_snap_update(const cref_t<MMDSSnapUpdate> &m);
+  void handle_snap_update_reply(const cref_t<MMDSSnapUpdateReply> &m);
   void notify_global_snaprealm_update(int snap_op);
 
   // -- stray --
