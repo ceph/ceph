@@ -47,6 +47,7 @@ CircularBoundedJournal::mkfs(const mkfs_config_t& config)
       convert_abs_addr_to_paddr(
 	device->get_block_size(),
 	config.device_id)};
+  head.alloc_tail = head.journal_tail;
   head.device_id = config.device_id;
   encode(head, bl);
   header = head;
@@ -272,10 +273,12 @@ Journal::replay_ret CircularBoundedJournal::replay(
     DEBUG("header : {}", header);
     initialized = true;
     written_to.segment_seq = NULL_SEG_SEQ;
-    set_written_to(get_journal_tail());
+    auto tail = get_journal_tail() <= get_alloc_tail() ?
+      get_journal_tail() : get_alloc_tail();
+    set_written_to(tail);
     return seastar::do_with(
       bool(false),
-      rbm_abs_addr(get_rbm_addr(get_journal_tail())),
+      rbm_abs_addr(get_rbm_addr(tail)),
       std::move(delta_handler),
       segment_seq_t(NULL_SEG_SEQ),
       [this, FNAME](auto &is_rolled, auto &cursor_addr, auto &d_handler, auto &expected_seq) {
@@ -338,12 +341,14 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	    journal_seq_t{expected_seq, addr});
 	  return seastar::do_with(
 	    std::move(*maybe_record_deltas_list),
-	    [write_result,
+	    [this,
+	    write_result,
 	    &d_handler,
 	    FNAME](auto& record_deltas_list) {
 	    return crimson::do_for_each(
 	      record_deltas_list,
-	      [write_result,
+	      [this,
+	      write_result,
 	      &d_handler, FNAME](record_deltas_t& record_deltas) {
 	      auto locator = record_locator_t{
 		record_deltas.record_block_base,
@@ -354,15 +359,16 @@ Journal::replay_ret CircularBoundedJournal::replay(
 		  locator);
 	      return crimson::do_for_each(
 		record_deltas.deltas,
-		[locator,
+		[this,
+		locator,
 		&d_handler](auto& p) {
 		auto& modify_time = p.first;
 		auto& delta = p.second;
 		return d_handler(
 		  locator,
 		  delta,
-		  locator.write_result.start_seq,
-		  locator.write_result.start_seq,
+		  header.journal_tail,
+		  header.alloc_tail,
 		  modify_time).discard_result();
 	      });
 	    }).safe_then([]() {

@@ -201,6 +201,7 @@ public:
 
     // start offset of CircularBoundedJournal in the device
     journal_seq_t journal_tail;
+    journal_seq_t alloc_tail;
 
     device_id_t device_id;
 
@@ -212,6 +213,7 @@ public:
       denc(v.size, p);
 
       denc(v.journal_tail, p);
+      denc(v.alloc_tail, p);
 
       denc(v.device_id, p);
 
@@ -248,12 +250,18 @@ public:
     return get_total_size() - get_used_size();
   }
 
-  write_ertr::future<> update_journal_tail(journal_seq_t seq) {
+  write_ertr::future<> update_journal_tail(
+    journal_seq_t seq,
+    journal_seq_t alloc_info) {
     header.journal_tail = seq;
+    header.alloc_tail = alloc_info;
     return write_header();
   }
   journal_seq_t get_journal_tail() const {
     return header.journal_tail;
+  }
+  journal_seq_t get_alloc_tail() const {
+    return header.alloc_tail;
   }
 
   write_ertr::future<> write_header();
