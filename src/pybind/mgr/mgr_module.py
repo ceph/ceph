@@ -1948,6 +1948,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_remove_mds_perf_query(query_id)
 
     @API.expose
+
+    def reregister_mds_perf_queries(self) -> None:
+        """
+        Re-register MDS perf queries.
+        """
+        return self._ceph_reregister_mds_perf_queries()
+
     def get_mds_perf_counters(self, query_id: int) -> Optional[Dict[str, List[PerfCounterT]]]:
         """
         Get stats collected for an MDS perf query.
