@@ -5133,7 +5133,7 @@ public:
     }
 
     if (adjust_realm) {
-      mds->mdcache->send_snap_update(in, 0, snap_op);
+      mds->mdcache->send_snap_update(mdr, in, 0, snap_op);
       mds->mdcache->do_realm_invalidate_and_update_notify(in, snap_op);
     }
 
@@ -7489,7 +7489,7 @@ void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *ta
 
   if (adjust_realm) {
     int op = CEPH_SNAP_OP_SPLIT;
-    mds->mdcache->send_snap_update(targeti, 0, op);
+    mds->mdcache->send_snap_update(mdr, targeti, 0, op);
     mds->mdcache->do_realm_invalidate_and_update_notify(targeti, op);
   }
 
@@ -7784,7 +7784,7 @@ void Server::_logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool ad
 
   if (adjust_realm) {
     int op = CEPH_SNAP_OP_SPLIT;
-    mds->mdcache->send_snap_update(targeti, 0, op);
+    mds->mdcache->send_snap_update(mdr, targeti, 0, op);
     mds->mdcache->do_realm_invalidate_and_update_notify(targeti, op);
   }
 
@@ -11134,6 +11134,28 @@ void Server::handle_client_mksnap(const MDRequestRef& mdr)
   mdlog->flush();
 }
 
+struct C_MDS_mksnap_finish_final : public ServerContext {
+  MDRequestRef mdr;
+  CInode *in;
+  version_t stid;
+  int snap_op;
+
+  C_MDS_mksnap_finish_final(Server *s, MDRequestRef& m, CInode *i, version_t v, int o) :
+    ServerContext(s), mdr(m), in(i), stid(v), snap_op(o) {}
+  void finish(int r) override {
+    server->_mksnap_finish_final(mdr, in, stid, snap_op);
+  }
+};
+
+void Server::_mksnap_finish_final(MDRequestRef& mdr, CInode *in, version_t stid, int op)
+{
+  if (stid > 0) {
+    mdcache->notify_global_snaprealm_update(op);
+  }
+  mdcache->do_realm_invalidate_and_update_notify(in, op);
+  respond_to_request(mdr, 0);
+}
+
 void Server::_mksnap_finish(const MDRequestRef& mdr, CInode *diri, SnapInfo &info)
 {
   dout(10) << "_mksnap_finish " << *mdr << " " << info << dendl;
@@ -11147,16 +11169,15 @@ void Server::_mksnap_finish(const MDRequestRef& mdr, CInode *diri, SnapInfo &inf
   // create snap
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  // notify other mds
-  mdcache->send_snap_update(diri, mdr->more()->stid, op);
-
-  mdcache->do_realm_invalidate_and_update_notify(diri, op);
-
   // yay
   mdr->in[0] = diri;
   mdr->snapid = info.snapid;
   mdr->tracei = diri;
-  respond_to_request(mdr, 0);
+
+  // notify other mds
+  auto stid = mdr->more()->stid;
+  mdcache->send_snap_update(mdr, diri, stid, op,
+                            new C_MDS_mksnap_finish_final(this, mdr, diri, stid, op));
 }
 
 
@@ -11266,6 +11287,31 @@ void Server::handle_client_rmsnap(const MDRequestRef& mdr)
   mdlog->flush();
 }
 
+struct C_MDS_rmsnap_finish_final : public ServerContext {
+  MDRequestRef mdr;
+  CInode *in;
+  version_t stid;
+  int snap_op;
+
+  C_MDS_rmsnap_finish_final(Server *s, MDRequestRef& m, CInode *i, version_t v, int o) :
+    ServerContext(s), mdr(m), in(i), stid(v), snap_op(o) {}
+  void finish(int r) override {
+    server->_rmsnap_finish_final(mdr, in, stid, snap_op);
+  }
+};
+
+void Server::_rmsnap_finish_final(MDRequestRef& mdr, CInode *in, version_t stid, int op)
+{
+  if (stid > 0) {
+    mdcache->notify_global_snaprealm_update(op);
+  }
+  mdcache->do_realm_invalidate_and_update_notify(in, op);
+  respond_to_request(mdr, 0);
+
+  // purge snapshot data
+  in->purge_stale_snap_data(in->snaprealm->get_snaps());
+}
+
 void Server::_rmsnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 {
   dout(10) << "_rmsnap_finish " << *mdr << " " << snapid << dendl;
@@ -11277,19 +11323,15 @@ void Server::_rmsnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snap
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  // notify other mds
-  mdcache->send_snap_update(diri, mdr->more()->stid, CEPH_SNAP_OP_DESTROY);
-
-  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_DESTROY);
-
   // yay
   mdr->in[0] = diri;
   mdr->tracei = diri;
   mdr->snapid = snapid;
-  respond_to_request(mdr, 0);
 
-  // purge snapshot data
-  diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
+  // notify other mds
+  int op = CEPH_SNAP_OP_DESTROY;
+  mdcache->send_snap_update(mdr, diri, stid, op,
+                            new C_MDS_rmsnap_finish_final(this, mdr, diri, stid, op));
 }
 
 struct C_MDS_renamesnap_finish : public ServerLogContext {
@@ -11410,26 +11452,48 @@ void Server::handle_client_renamesnap(const MDRequestRef& mdr)
   mdlog->flush();
 }
 
+struct C_MDS_renamesnap_finish_final : public ServerContext {
+  MDRequestRef mdr;
+  CInode *in;
+  version_t stid;
+  int snap_op;
+
+  C_MDS_renamesnap_finish_final(Server *s, MDRequestRef& m, CInode *i, version_t v, int o) :
+    ServerContext(s), mdr(m), in(i), stid(v), snap_op(o) {}
+  void finish(int r) override {
+    server->_renamesnap_finish_final(mdr, in, stid, snap_op);
+  }
+};
+
+void Server::_renamesnap_finish_final(MDRequestRef& mdr, CInode *in, version_t stid, int op)
+{
+  if (stid > 0) {
+    mdcache->notify_global_snaprealm_update(op);
+  }
+  mdcache->do_realm_invalidate_and_update_notify(in, op);
+  respond_to_request(mdr, 0);
+}
+
 void Server::_renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 {
   dout(10) << "_renamesnap_finish " << *mdr << " " << snapid << dendl;
 
   mdr->apply();
 
-  mds->snapclient->commit(mdr->more()->stid, mdr->ls);
+  auto stid = mdr->more()->stid;
+  mds->snapclient->commit(stid, mdr->ls);
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
-
-  // notify other mds
-  mdcache->send_snap_update(diri, mdr->more()->stid, CEPH_SNAP_OP_UPDATE);
-
-  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE);
 
   // yay
   mdr->in[0] = diri;
   mdr->tracei = diri;
   mdr->snapid = snapid;
-  respond_to_request(mdr, 0);
+
+  // notify other mds
+  int op = CEPH_SNAP_OP_UPDATE;
+  mdcache->send_snap_update(mdr, diri, stid, op,
+                            new C_MDS_renamesnap_finish_final(this, mdr, diri, stid, op));
 }
 
 void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
