@@ -16,6 +16,7 @@ from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
 class TrashPurgeScheduleHandler:
     MODULE_OPTION_NAME = "trash_purge_schedule"
     SCHEDULE_OID = "rbd_trash_purge_schedule"
+    REFRESH_DELAY_SECONDS = 60.0
 
     lock = Lock()
     condition = Condition(lock)
@@ -35,11 +36,11 @@ class TrashPurgeScheduleHandler:
         try:
             self.log.info("TrashPurgeScheduleHandler: starting")
             while True:
-                self.refresh_pools()
+                refresh_delay = self.refresh_pools()
                 with self.lock:
                     (ns_spec, wait_time) = self.dequeue()
                     if not ns_spec:
-                        self.condition.wait(min(wait_time, 60))
+                        self.condition.wait(min(wait_time, refresh_delay))
                         continue
                 pool_id, namespace = ns_spec
                 self.trash_purge(pool_id, namespace)
@@ -74,9 +75,10 @@ class TrashPurgeScheduleHandler:
         with self.lock:
             self.schedules = schedules
 
-    def refresh_pools(self) -> None:
-        if (datetime.now() - self.last_refresh_pools).seconds < 60:
-            return
+    def refresh_pools(self) -> float:
+        elapsed = (datetime.now() - self.last_refresh_pools).total_seconds()
+        if elapsed < self.REFRESH_DELAY_SECONDS:
+            return self.REFRESH_DELAY_SECONDS - elapsed
 
         self.log.debug("TrashPurgeScheduleHandler: refresh_pools")
 
@@ -88,7 +90,7 @@ class TrashPurgeScheduleHandler:
                 self.pools = {}
                 self.queue = {}
                 self.last_refresh_pools = datetime.now()
-                return
+                return self.REFRESH_DELAY_SECONDS
 
         pools: Dict[str, Dict[str, str]] = {}
 
@@ -104,6 +106,7 @@ class TrashPurgeScheduleHandler:
             self.pools = pools
 
         self.last_refresh_pools = datetime.now()
+        return self.REFRESH_DELAY_SECONDS
 
     def load_pool(self, ioctx: rados.Ioctx, pools: Dict[str, Dict[str, str]]) -> None:
         pool_id = str(ioctx.get_pool_id())
