@@ -8,9 +8,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
-import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
-import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
@@ -88,9 +86,6 @@ describe('RbdListComponent', () => {
       spyOn(component.table, 'reset');
       summaryService['summaryDataSource'].error(undefined);
       expect(component.table.reset).toHaveBeenCalled();
-      expect(component.tableStatus).toEqual(
-        new TableStatusViewCache(ViewCacheStatus.ValueException)
-      );
     });
   });
 
@@ -121,7 +116,7 @@ describe('RbdListComponent', () => {
     });
 
     it('should display N/A for Provisioned & Total Provisioned columns if disk usage is null', () => {
-      rbdServiceListSpy.and.callFake(() => of([{ pool_name: 'rbd', status: 1, value: images }]));
+      rbdServiceListSpy.and.callFake(() => of([{ pool_name: 'rbd', value: images }]));
       fixture.detectChanges();
       const spanWithoutFastDiff = fixture.debugElement.nativeElement.querySelectorAll(
         '.datatable-body-cell-label span'
@@ -133,7 +128,7 @@ describe('RbdListComponent', () => {
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
 
-      rbdServiceListSpy.and.callFake(() => of([{ pool_name: 'rbd', status: 1, value: images }]));
+      rbdServiceListSpy.and.callFake(() => of([{ pool_name: 'rbd', value: images }]));
       fixture.detectChanges();
 
       const spanWithFastDiff = fixture.debugElement.nativeElement.querySelectorAll(
@@ -257,9 +252,7 @@ describe('RbdListComponent', () => {
       addImage('c');
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
-      spyOn(rbdService, 'list').and.callFake(() =>
-        of([{ pool_name: 'rbd', status: 1, value: images }])
-      );
+      spyOn(rbdService, 'list').and.callFake(() => of([{ pool_name: 'rbd', value: images }]));
       fixture.detectChanges();
     });
 

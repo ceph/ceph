@@ -12,7 +12,6 @@ import { CriticalConfirmationModalComponent } from '~/app/shared/components/crit
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -361,7 +360,6 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
 
   onFetchError() {
     this.table.reset(); // Disable loading indicator.
-    this.tableStatus = new TableStatusViewCache(ViewCacheStatus.ValueException);
   }
 
   getRbdImages(context: CdTableFetchDataContext = null) {
@@ -615,26 +613,3 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     return false;
   }
 }
-
-/*
-	for pool in pools
-	  for namespace in namespaces
-		  refs = get_image_refs
-			for ref in refs:
-			   get_data(ref)
-
-@ttl_cache(5)
-def get_refs();
-  joint_refs = []
-	for pool in pools
-	  for namespace in namespaces
-		  refs = get_image_refs
-			for ref in refs:
-			  joint_refs.append(ref)
-	return joint_refs
-
-sort(joint_refs)
-		for ref in joint_refs[offset:offset+limit]:
-get_data(ref)
-
-*/
