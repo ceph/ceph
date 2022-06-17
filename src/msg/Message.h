@@ -47,6 +47,7 @@
 #define MSG_MON_JOIN               68
 #define MSG_MON_SYNC		   69
 #define MSG_MON_PING               140
+#define MSG_MON_SHUTDOWN           141
 
 /* monitor <-> mon admin tool */
 #define MSG_MON_COMMAND            50

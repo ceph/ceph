@@ -124,6 +124,7 @@ class MMonScrub;
 class MMonSubscribeAck;
 class MMonSubscribe;
 class MMonSync;
+class MMonShutdown;
 class MOSDAlive;
 class MOSDBackoff;
 class MOSDBeacon;

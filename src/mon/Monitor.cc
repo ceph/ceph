@@ -55,6 +55,8 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
+#include "messages/MMonShutdown.h"
+
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 
@@ -1018,6 +1020,21 @@ void Monitor::update_logger()
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
+  // if we are in quorum we let Paxos know we shutdown.
+  // else Paxos will already not consider us as part of
+  // the quorum.
+  if (exited_quorum.is_zero()) {
+    for (set<int>::iterator p = quorum.begin();
+        p != quorum.end();
+        ++p) {
+      if (*p == rank)
+        continue;
+      dout(10) << " sending mon_shutdown to mon."
+        << monmap->get_name(*p) << dendl;
+      MMonShutdown *m = new MMonShutdown(name);
+      send_mon_message(m, *p);
+    }
+  }
 
   lock.lock();
 
@@ -4683,6 +4700,15 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_MON_JOIN:
       op->set_type_service();
       paxos_service[PAXOS_MONMAP]->dispatch(op);
+      return;
+
+    // mon_shutdown
+    case MSG_MON_SHUTDOWN:
+      if (!op->get_session()->is_capable("mon", MON_CAP_X)) {
+        //can't send these!
+        return;
+      }
+      paxos->handle_shutdown_mon(op);
       return;
 
     // paxos

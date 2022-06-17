@@ -624,6 +624,12 @@ public:
       q.push_back(monmap->get_name(*p));
     return q;
   }
+  std::set<std::string> get_quorum_names_set() {
+    std::set<std::string> q;
+    for (auto p = quorum.begin(); p != quorum.end(); ++p)
+      q.insert(monmap->get_name(*p));
+    return q;
+  }
   uint64_t get_quorum_con_features() const {
     return quorum_con_features;
   }

@@ -16,6 +16,7 @@
 #include "Paxos.h"
 #include "Monitor.h"
 #include "messages/MMonPaxos.h"
+#include "messages/MMonShutdown.h"
 
 #include "mon/mon_types.h"
 #include "common/config.h"
@@ -564,7 +565,8 @@ void Paxos::handle_last(MonOpRequestRef op)
     }
     
     // is that everyone?
-    if (num_last == mon.get_quorum().size()) {
+    // Take into account any shutdown monitors.
+    if (num_last == mon.get_quorum().size() - shutdown_mons.size()) {
       // cancel timeout event
       mon.timer.cancel_event(collect_timeout_event);
       collect_timeout_event = 0;
@@ -629,6 +631,8 @@ void Paxos::begin(bufferlist& v)
   // accept it ourselves
   accepted.clear();
   accepted.insert(mon.rank);
+  accepted_name.clear();
+  accepted_name.insert(mon.monmap->get_name(mon.rank));
   new_value = v;
 
   if (last_committed == 0) {
@@ -796,17 +800,32 @@ void Paxos::handle_accept(MonOpRequestRef op)
   ceph_assert(is_updating() || is_updating_previous());
   ceph_assert(accepted.count(from) == 0);
   accepted.insert(from);
+  accepted_name.insert(mon.monmap->get_name(from));
   dout(10) << " now " << accepted << " have accepted" << dendl;
 
   ceph_assert(g_conf()->paxos_kill_at != 6);
 
   // only commit (and expose committed state) when we get *all* quorum
-  // members to accept.  otherwise, they may still be sharing the now
-  // stale state.
+  // members - shutdown_mons to accept because we need to take into account
+  // monitors that have been purposely shutdown to avoid unnecessary
+  // restart of Paxos which can cause pending transactions to be lost.
+  // We need more than just a majority because monitors may still be sharing 
+  // the now stale state.
   // FIXME: we can improve this with an additional lease revocation message
   // that doesn't block for the persist.
-  dout(10) << "JR quorum size: " << mon.get_quorum().size() << dendl;
-  if (accepted == mon.get_quorum()) {
+
+  auto mon_quorum = mon.get_quorum_names_set();
+  for (auto p = shutdown_mons.begin();
+       p != shutdown_mons.end();
+       ++p) {
+    if (mon_quorum.count(*p)) {
+      dout(10) << "Disregarding mon." << *p
+        << " as part of the quorum since it's down." << dendl;
+      mon_quorum.erase(*p);
+    }
+  }
+
+  if (accepted_name == mon_quorum) {
     // yay, commit!
     dout(10) << " got majority, committing, done with update" << dendl;
     op->mark_paxos_event("commit_start");
@@ -1353,6 +1372,9 @@ void Paxos::leader_init()
   cancel_events();
   new_value.clear();
 
+  // clear shutdown_mons
+  shutdown_mons.clear();
+
   // discard pending transaction
   pending_proposal.reset();
 
@@ -1382,6 +1404,9 @@ void Paxos::peon_init()
 
   // start a timer, in case the leader never manages to issue a lease
   reset_lease_timeout();
+
+  // clear shutdown_mons
+  shutdown_mons.clear();
 
   // discard pending transaction
   pending_proposal.reset();
@@ -1415,6 +1440,8 @@ void Paxos::restart()
     f.flush(*_dout);
     *_dout << dendl;
   }
+  // clear shutdown_mon
+  shutdown_mons.clear();
   // discard pending transaction
   pending_proposal.reset();
 
@@ -1428,6 +1455,27 @@ void Paxos::reset_pending_committing_finishers()
 {
   committing_finishers.splice(committing_finishers.end(), pending_finishers);
   finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
+}
+
+void Paxos::handle_shutdown_mon(MonOpRequestRef op)
+{
+  if (op->get_req()->get_type() != MSG_MON_SHUTDOWN) {
+    dout(0) << "Got unexpected message type " << op->get_req()->get_type()
+	    << " in Paxos::handle_shutdown_mon, aborting!" << dendl;
+    ceph_abort();
+  }
+  auto *req = op->get_req<MMonShutdown>();
+  string mon_name = req->name;
+  dout(10) << __func__ << " mon." << mon_name << dendl;
+  if (mon.get_quorum_names_set().count(mon_name)) {
+    shutdown_mons.insert(mon_name);
+    dout(10) << "Paxos accepts information about mon."
+      << mon_name << " being down." << dendl;
+  } else {
+    dout(10) << "mon." << mon_name << " exists in quorum "
+      << " disgarding information about mon."
+      << mon_name << " being down." << dendl;
+  }
 }
 
 void Paxos::dispatch(MonOpRequestRef op)

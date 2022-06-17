@@ -345,6 +345,9 @@ MESSAGE(MMonSubscribe)
 #include "messages/MMonSubscribeAck.h"
 MESSAGE(MMonSubscribeAck)
 
+#include "messages/MMonShutdown.h"
+MESSAGE(MMonShutdown)
+
 #include "messages/MOSDAlive.h"
 MESSAGE(MOSDAlive)
 

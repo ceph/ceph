@@ -548,6 +548,13 @@ private:
    * (when all the quorum members have accepted the proposal).
    */
   std::set<int>   accepted;
+
+  /**
+   * The same as *accepted* but this set keeps track of the name rather than rank
+   * of the monitor.
+   */
+  std::set<std::string> accepted_name;
+
   /**
    * Callback to trigger a new election if the proposal is not accepted by the
    * full quorum within a given timeframe.
@@ -597,6 +604,12 @@ private:
    * this list.  When it commits, these finishers are notified.
    */
   std::list<Context*> committing_finishers;
+  /**
+   * List of Monitors that have been shutdown.
+   # This gets populated through the function handle_shutdown_mon.
+   * The list will be cleared in every time we restart paxos.
+   */
+  std::set<std::string> shutdown_mons;
   /**
    * This function re-triggers pending_ and committing_finishers
    * safely, so as to maintain existing system invariants. In particular
@@ -1074,6 +1087,13 @@ public:
   }
 
   void dispatch(MonOpRequestRef op);
+  
+  /**
+   * When a monitor gets shutdown, we recieve the name of the
+   * monitor and use this information to make better decision
+   * in the ACCEPT phase of Paxos.
+   */
+  void handle_shutdown_mon(MonOpRequestRef op);
 
   void read_and_prepare_transactions(MonitorDBStore::TransactionRef tx,
 				     version_t from, version_t last);

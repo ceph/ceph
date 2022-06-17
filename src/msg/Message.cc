@@ -44,6 +44,7 @@
 #include "messages/MMonSync.h"
 #include "messages/MMonPing.h"
 #include "messages/MMonScrub.h"
+#include "messages/MMonShutdown.h"
 
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
@@ -399,6 +400,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_MON_PAXOS:
     m = make_message<MMonPaxos>();
+    break;
+  case MSG_MON_SHUTDOWN:
+    m = make_message<MMonShutdown>();
     break;
   case MSG_CONFIG:
     m = make_message<MConfig>();
