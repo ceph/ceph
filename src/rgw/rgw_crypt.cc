@@ -1273,7 +1273,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 int rgw_s3_prepare_decrypt(struct req_state* s,
                        map<string, bufferlist>& attrs,
                        std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses)
+                       std::map<std::string, std::string>& crypt_http_responses, bool get_data)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
@@ -1376,6 +1376,12 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     }
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
+    if (!get_data) {
+      crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
+      crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = key_id;
+      return 0;
+    }
+
     std::string actual_key;
     res = reconstitute_actual_key_from_kms(s, s->cct, attrs, actual_key);
     if (res != 0) {

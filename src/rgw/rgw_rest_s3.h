@@ -55,7 +55,7 @@ public:
   void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }
   int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                          RGWGetObj_Filter* cb,
-                         bufferlist* manifest_bl) override;
+                         bufferlist* manifest_bl, bool get_data) override;
 };
 
 class RGWGetObjTags_ObjStore_S3 : public RGWGetObjTags_ObjStore

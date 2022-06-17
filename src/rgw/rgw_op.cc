@@ -2279,7 +2279,7 @@ void RGWGetObj::execute(optional_yield y)
 
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   op_ret = this->get_decrypt_filter(&decrypt, filter,
-                                    attr_iter != attrs.end() ? &(attr_iter->second) : nullptr);
+                                    attr_iter != attrs.end() ? &(attr_iter->second) : nullptr, get_data);
   if (decrypt != nullptr) {
     filter = decrypt.get();
   }
