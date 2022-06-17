@@ -56,14 +56,13 @@ template <typename I>
 void PromoteRequest<I>::create_orphan_snapshot() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << dendl;
-  bool requires_orphan = false;
 
   auto ctx = create_context_callback<
     PromoteRequest<I>,
     &PromoteRequest<I>::handle_create_orphan_snapshot>(this);
 
   auto req = CreateNonPrimaryRequest<I>::create(
-    m_image_ctx, false, "", CEPH_NOSNAP, {}, {}, requires_orphan, ctx);
+    m_image_ctx, false, "", CEPH_NOSNAP, {}, {}, nullptr, ctx);
   req->send();
 }
 

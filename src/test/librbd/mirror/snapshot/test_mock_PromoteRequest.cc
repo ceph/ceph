@@ -177,7 +177,7 @@ public:
                                           bool result) {
     EXPECT_CALL(mock_utils,
                 can_create_primary_snapshot(_, false, force, _, _))
-      .WillRepeatedly(DoAll(
+      .WillOnce(DoAll(
                   WithArgs<3,4 >(Invoke(
                     [requires_orphan, rollback_snap_id]
                     (bool* orphan, uint64_t *snap_id) {
@@ -187,6 +187,20 @@ public:
                   Return(result)));
   }
 
+  void expect_can_create_primary_snapshot_no_orphan(MockUtils &mock_utils, bool force,
+                                          uint64_t rollback_snap_id,
+					  bool result) {
+    EXPECT_CALL(mock_utils,
+                can_create_primary_snapshot(_, false, force, _, _))
+                //can_create_primary_snapshot(_, false, force, nullptr, _))
+      .WillOnce(DoAll(
+                  WithArgs<4 >(Invoke(
+                    [rollback_snap_id]
+                    (uint64_t *snap_id) {
+                      *snap_id = rollback_snap_id;
+                    })),
+                  Return(result)));
+  }
   void expect_create_orphan_snapshot(
       MockTestImageCtx &mock_image_ctx,
       MockCreateNonPrimaryRequest &mock_create_non_primary_request, int r) {
@@ -309,7 +323,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessForce) {
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
-  expect_can_create_primary_snapshot(mock_utils, true, true, CEPH_NOSNAP, true);
+  expect_can_create_primary_snapshot_no_orphan(mock_utils, true, CEPH_NOSNAP, true);
 
   SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
@@ -348,7 +362,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
-  expect_can_create_primary_snapshot(mock_utils, true, false, 123, true);
+  expect_can_create_primary_snapshot_no_orphan(mock_utils, true, 123, true);
 
   SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
@@ -388,7 +402,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessForceRollbackLatestSnapshot)
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
-  expect_can_create_primary_snapshot(mock_utils, true, true, 456, true);
+  expect_can_create_primary_snapshot_no_orphan(mock_utils, true, 456, true);
   SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
   expect_rollback(mock_image_ctx, 456, &snap_info, 0);
