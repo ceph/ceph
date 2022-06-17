@@ -12,7 +12,7 @@
           selectionType="single"
           [hasDetails]="true"
           [status]="tableStatus"
-          [autoReload]="5000"
+          [autoReload]="-1"
           (fetchData)="taskListService.fetch($event)"
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
