@@ -649,10 +649,8 @@ void AsyncCleaner::update_journal_tails(
   journal_seq_t alloc_tail)
 {
   LOG_PREFIX(AsyncCleaner::update_journal_tails);
-  if (disable_trim) return;
 
   if (dirty_tail != JOURNAL_SEQ_NULL) {
-    assert(dirty_tail.offset.get_addr_type() != paddr_types_t::RANDOM_BLOCK);
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 journal_head >= dirty_tail);
     if (journal_dirty_tail != JOURNAL_SEQ_NULL &&
@@ -672,7 +670,6 @@ void AsyncCleaner::update_journal_tails(
   if (alloc_tail != JOURNAL_SEQ_NULL) {
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 journal_head >= alloc_tail);
-    assert(alloc_tail.offset.get_addr_type() != paddr_types_t::RANDOM_BLOCK);
     if (journal_alloc_tail != JOURNAL_SEQ_NULL &&
         journal_alloc_tail > alloc_tail) {
       ERROR("journal_alloc_tail {} => {} is backwards!",
@@ -1202,9 +1199,6 @@ void AsyncCleaner::start_gc()
   LOG_PREFIX(AsyncCleaner::start_gc);
   ceph_assert(state == cleaner_state_t::SCAN_SPACE);
   state = cleaner_state_t::READY;
-  if (disable_trim) {
-    return;
-  }
   INFO("done, start GC, {}", gc_stat_printer_t{this, true});
   ceph_assert(journal_head != JOURNAL_SEQ_NULL);
   ceph_assert(journal_alloc_tail != JOURNAL_SEQ_NULL);
@@ -1376,8 +1370,7 @@ segment_id_t AsyncCleaner::get_next_reclaim_segment() const
 void AsyncCleaner::log_gc_state(const char *caller) const
 {
   LOG_PREFIX(AsyncCleaner::log_gc_state);
-  if (LOCAL_LOGGER.is_enabled(seastar::log_level::debug) &&
-      !disable_trim) {
+  if (LOCAL_LOGGER.is_enabled(seastar::log_level::debug)) {
     DEBUG("caller {}, {}", caller, gc_stat_printer_t{this, true});
   }
 }
@@ -1385,9 +1378,6 @@ void AsyncCleaner::log_gc_state(const char *caller) const
 seastar::future<>
 AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 {
-  if (disable_trim) {
-    return seastar::now();
-  }
   ceph_assert(is_ready());
   // The pipeline configuration prevents another IO from entering
   // prepare until the prior one exits and clears this.
@@ -1430,7 +1420,6 @@ AsyncCleaner::reserve_projected_usage(std::size_t projected_usage)
 
 void AsyncCleaner::release_projected_usage(std::size_t projected_usage)
 {
-  if (disable_trim) return;
   ceph_assert(is_ready());
   ceph_assert(stats.projected_used_bytes >= projected_usage);
   stats.projected_used_bytes -= projected_usage;
