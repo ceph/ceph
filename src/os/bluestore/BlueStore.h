@@ -2651,7 +2651,6 @@ private:
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _close_db();
-  void _close_db_leave_bluefs();
   int _open_fm(KeyValueDB::Transaction t,
                bool read_only,
                bool db_avail,

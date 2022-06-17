@@ -6747,13 +6747,6 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   return 0;
 }
 
-void BlueStore::_close_db_leave_bluefs()
-{
-  ceph_assert(db);
-  delete db;
-  db = nullptr;
-}
-
 void BlueStore::_close_db()
 {
   dout(10) << __func__ << ":read_only=" << db_was_opened_read_only
@@ -6800,7 +6793,9 @@ void BlueStore::_close_db()
     dout(10) << __func__ << " statfs persisted." << dendl;
     ceph_assert(r >= 0);
   }
-  _close_db_leave_bluefs();
+  ceph_assert(db);
+  delete db;
+  db = nullptr;
 
   if (do_destage && fm && fm->is_null_manager()) {
     int ret = store_allocator(alloc);
