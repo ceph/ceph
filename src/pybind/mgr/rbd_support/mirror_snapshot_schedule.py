@@ -446,6 +446,7 @@ class MirrorSnapshotScheduleHandler:
     MODULE_OPTION_NAME = "mirror_snapshot_schedule"
     MODULE_OPTION_NAME_MAX_CONCURRENT_SNAP_CREATE = "max_concurrent_snap_create"
     SCHEDULE_OID = "rbd_mirror_snapshot_schedule"
+    REFRESH_DELAY_SECONDS = 60.0
 
     lock = Lock()
     condition = Condition(lock)
@@ -470,11 +471,11 @@ class MirrorSnapshotScheduleHandler:
         try:
             self.log.info("MirrorSnapshotScheduleHandler: starting")
             while True:
-                self.refresh_images()
+                refresh_delay = self.refresh_images()
                 with self.lock:
                     (image_spec, wait_time) = self.dequeue()
                     if not image_spec:
-                        self.condition.wait(min(wait_time, 60))
+                        self.condition.wait(min(wait_time, refresh_delay))
                         continue
                 pool_id, namespace, image_id = image_spec
                 self.create_snapshot_requests.add(pool_id, namespace, image_id)
@@ -502,9 +503,10 @@ class MirrorSnapshotScheduleHandler:
         with self.lock:
             self.schedules = schedules
 
-    def refresh_images(self) -> None:
-        if (datetime.now() - self.last_refresh_images).seconds < 60:
-            return
+    def refresh_images(self) -> float:
+        elapsed = (datetime.now() - self.last_refresh_images).total_seconds()
+        if elapsed < self.REFRESH_DELAY_SECONDS:
+            return self.REFRESH_DELAY_SECONDS - elapsed
 
         self.log.debug("MirrorSnapshotScheduleHandler: refresh_images")
 
@@ -517,7 +519,7 @@ class MirrorSnapshotScheduleHandler:
                 self.images = {}
                 self.queue = {}
                 self.last_refresh_images = datetime.now()
-                return
+                return self.REFRESH_DELAY_SECONDS
 
         epoch = int(datetime.now().strftime('%s'))
         images: Dict[str, Dict[str, Dict[str, str]]] = {}
@@ -535,6 +537,7 @@ class MirrorSnapshotScheduleHandler:
 
         self.watchers.unregister_stale(epoch)
         self.last_refresh_images = datetime.now()
+        return self.REFRESH_DELAY_SECONDS
 
     def load_pool_images(self,
                          ioctx: rados.Ioctx,
