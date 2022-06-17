@@ -284,11 +284,15 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     return cbj->get_used_size();
   }
   void update_journal_tail(rbm_abs_addr addr, uint32_t len) {
-    cbj->update_journal_tail(
-      journal_seq_t{0,
-	convert_abs_addr_to_paddr(
+    paddr_t paddr =
+      convert_abs_addr_to_paddr(
 	  addr + len,
-	  cbj->get_device_id())}).unsafe_get0();
+	  cbj->get_device_id());
+    journal_seq_t seq = {0, paddr};
+    cbj->update_journal_tail(
+      seq,
+      seq
+    ).unsafe_get0();
   }
   void set_written_to(journal_seq_t seq) {
     cbj->set_written_to(seq);
