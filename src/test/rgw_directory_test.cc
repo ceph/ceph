@@ -8,7 +8,8 @@ using namespace std;
 
 string portStr;
 string oid = "sam-oid";
-string redisHost = "127.0.0.1:" + portStr;
+string redisHost = "";
+string host = "127.0.0.1";
 
 class DirectoryFixture: public ::testing::Test {
   protected:
@@ -16,9 +17,7 @@ class DirectoryFixture: public ::testing::Test {
       blk_dir = new RGWBlockDirectory();
       c_blk = new cache_block();
 
-      c_blk->hosts_list.push_back("127.0.0.1:8000");
       c_blk->hosts_list.push_back(redisHost);
-      
       c_blk->c_obj.obj_name = oid;
     } 
 
@@ -38,8 +37,7 @@ TEST_F(DirectoryFixture, DirectoryInit) {
   ASSERT_NE(blk_dir, nullptr);
   ASSERT_NE(c_blk, nullptr);
   ASSERT_NE((int)portStr.length(), (int)0);
-  ASSERT_EQ(c_blk->hosts_list[0], "127.0.0.1:8000");
-  ASSERT_EQ(c_blk->hosts_list[1], redisHost);
+  ASSERT_EQ(c_blk->hosts_list[0], redisHost);
 }
 
 TEST_F(DirectoryFixture, SetGetValueTest) {
@@ -52,7 +50,6 @@ TEST_F(DirectoryFixture, SetGetValueTest) {
 
 TEST(DirectoryTest, RedisTest) {
   cpp_redis::client client;
-  string host = "127.0.0.1";
 
   client.connect(host, stoi(portStr), nullptr, 0, 5, 1000);
 
@@ -70,6 +67,8 @@ int main(int argc, char *argv[]) {
     portStr = "6379";
   else
     portStr = argv[1];
-
+  
+  redisHost = "127.0.0.1:" + portStr;
+  
   return RUN_ALL_TESTS();
 }
