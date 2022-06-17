@@ -154,6 +154,18 @@ paths:
         name: pool_name
         schema:
           type: string
+      - default: 0
+        description: offset
+        in: query
+        name: offset
+        schema:
+          type: integer
+      - default: 5
+        description: limit
+        in: query
+        name: limit
+        schema:
+          type: integer
       responses:
         '200':
           content:
@@ -164,9 +176,6 @@ paths:
                     pool_name:
                       description: pool name
                       type: string
-                    status:
-                      description: Status of the image
-                      type: integer
                     value:
                       description: ''
                       items:
@@ -174,7 +183,6 @@ paths:
                       type: array
                   type: object
                 required:
-                - status
                 - value
                 - pool_name
                 type: array

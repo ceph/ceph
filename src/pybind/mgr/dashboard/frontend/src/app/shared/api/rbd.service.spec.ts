@@ -1,6 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { ImageSpec } from '../models/image-spec';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
@@ -55,8 +56,10 @@ describe('RbdService', () => {
   });
 
   it('should call list', () => {
-    service.list().subscribe();
-    const req = httpTesting.expectOne('api/block/image');
+    /* tslint:disable:no-empty */
+    const context = new CdTableFetchDataContext(() => {});
+    service.list(context.toParams()).subscribe();
+    const req = httpTesting.expectOne('api/block/image?offset=0&limit=10');
     expect(req.request.method).toBe('GET');
   });
 
