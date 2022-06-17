@@ -975,6 +975,34 @@ public:
     };
   };
 
+  void update_tree_extents_num(extent_types_t type, int64_t delta) {
+    switch (type) {
+    case extent_types_t::LADDR_INTERNAL:
+      [[fallthrough]];
+    case extent_types_t::LADDR_LEAF:
+      stats.lba_tree_extents_num += delta;
+      ceph_assert(stats.lba_tree_extents_num >= 0);
+      return;
+    case extent_types_t::OMAP_INNER:
+      [[fallthrough]];
+    case extent_types_t::OMAP_LEAF:
+      stats.omap_tree_extents_num += delta;
+      ceph_assert(stats.lba_tree_extents_num >= 0);
+      return;
+    case extent_types_t::ONODE_BLOCK_STAGED:
+      stats.onode_tree_extents_num += delta;
+      ceph_assert(stats.onode_tree_extents_num >= 0);
+      return;
+    case extent_types_t::BACKREF_INTERNAL:
+      [[fallthrough]];
+    case extent_types_t::BACKREF_LEAF:
+      stats.backref_tree_extents_num += delta;
+      ceph_assert(stats.backref_tree_extents_num >= 0);
+      return;
+    default:
+      return;
+    }
+  }
 private:
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
