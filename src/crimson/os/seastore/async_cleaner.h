@@ -784,14 +784,6 @@ private:
 
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
 
-  /**
-   * disable_trim
-   *
-   * added to enable unit testing of CircularBoundedJournal before
-   * proper support is added to AsyncCleaner.
-   * Should be removed once proper support is added. TODO
-   */
-  bool disable_trim = false;
 public:
   AsyncCleaner(
     config_t config,
@@ -917,10 +909,6 @@ public:
 
   bool debug_check_space(const SpaceTrackerI &tracker) {
     return space_tracker->equals(tracker);
-  }
-
-  void set_disable_trim(bool val) {
-    disable_trim = val;
   }
 
   using work_ertr = ExtentCallbackInterface::extent_mapping_ertr;
@@ -1218,6 +1206,9 @@ private:
     }
   }
   std::size_t get_segments_reclaimable() const {
+    if (get_journal_type() == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
+      return 0;
+    }
     assert(segments.get_num_closed() >= get_segments_in_journal_closed());
     return segments.get_num_closed() - get_segments_in_journal_closed();
   }
@@ -1310,13 +1301,11 @@ private:
    */
   bool should_block_on_trim() const {
     assert(init_complete);
-    if (disable_trim) return false;
     return get_tail_limit() > get_journal_tail();
   }
 
   bool should_block_on_reclaim() const {
     assert(init_complete);
-    if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1367,7 +1356,6 @@ private:
    */
   bool gc_should_reclaim_space() const {
     assert(init_complete);
-    if (disable_trim) return false;
     if (get_segments_reclaimable() == 0) {
       return false;
     }
@@ -1395,7 +1383,6 @@ private:
    * True if gc should be running.
    */
   bool gc_should_run() const {
-    if (disable_trim) return false;
     ceph_assert(init_complete);
     return gc_should_reclaim_space()
       || gc_should_trim_dirty()

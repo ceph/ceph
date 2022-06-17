@@ -628,7 +628,6 @@ TransactionManagerRef make_transaction_manager(
     const std::vector<Device*> &secondary_devices,
     bool is_test)
 {
-  LOG_PREFIX(make_transaction_manager);
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba_manager::create_lba_manager(*cache);
@@ -680,9 +679,6 @@ TransactionManagerRef make_transaction_manager(
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
     async_cleaner->set_journal_type(journal_type_t::CIRCULARBOUNDED_JOURNAL);
-    async_cleaner->set_disable_trim(true);
-    ERROR("disabling journal trimming since support for CircularBoundedJournal "
-          "hasn't been added yet");
   }
   epm->init_ool_writers(
       *async_cleaner,
