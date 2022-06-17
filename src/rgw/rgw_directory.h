@@ -24,16 +24,9 @@ struct cache_block {
   std::vector<std::string> hosts_list; // list of hostnames <ip:post> of block locations
 };
 
-struct cache_obj {
-  std::string bucket_name; // s3 bucket name
-  std::string obj_name; //s3 obj name
-};
-
-struct cache_block {
-  cache_obj c_obj;
-  uint64_t size_in_bytes; // block size_in_bytes
-  std::vector<std::string> hosts_list; // list of hostnames <ip:post> of block locations
-};
+class RGWDirectory {
+  public:
+    RGWDirectory() {}
     CephContext *cct;
 };
 
