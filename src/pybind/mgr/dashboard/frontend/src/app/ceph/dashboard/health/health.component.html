@@ -21,7 +21,9 @@
           <ng-container *ngTemplateOutlet="logsLink"></ng-container>
           <ul>
             <li *ngFor="let check of healthData.health.checks">
-              <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
+              <span [ngStyle]="check.severity | healthColor"
+                    [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
+              {{ check.type }}</span>: {{ check.summary.message }}
             </li>
           </ul>
         </ng-template>
@@ -29,13 +31,14 @@
              [ngStyle]="healthData.health.status | healthColor"
              [ngbPopover]="healthChecks"
              popoverClass="info-card-popover-cluster-status">
-          {{ healthData.health.status }} <i *ngIf="healthData.health?.status != 'HEALTH_OK'"
-                                            class="fa fa-exclamation-triangle"></i>
+          {{ healthData.health.status | healthLabel | uppercase }}
+          <i *ngIf="healthData.health?.status != 'HEALTH_OK'"
+             class="fa fa-exclamation-triangle"></i>
         </div>
       </ng-container>
       <ng-container *ngIf="!healthData.health?.checks?.length">
         <div [ngStyle]="healthData.health.status | healthColor">
-          {{ healthData.health.status }}
+          {{ healthData.health.status | healthLabel | uppercase }}
         </div>
       </ng-container>
     </cd-info-card>
