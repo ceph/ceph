@@ -65,10 +65,7 @@ void PrepareRemoteImageRequest<I>::handle_get_remote_image_id(int r) {
   dout(10) << "r=" << r << ", "
            << "remote_image_id=" << m_remote_image_id << dendl;
 
-  if (r == -ENOENT) {
-    finish(r);
-    return;
-  } else if (r < 0) {
+  if (r < 0) {
     finish(r);
     return;
   }

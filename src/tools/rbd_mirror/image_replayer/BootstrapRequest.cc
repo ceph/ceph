@@ -135,7 +135,7 @@ void BootstrapRequest<I>::handle_prepare_local_image(int r) {
   if (r == -ENOENT) {
     dout(10) << "local image does not exist" << dendl;
   } else if (r < 0) {
-    derr << "error preparing local image for replay" << cpp_strerror(r)
+    derr << "error preparing local image for replay: " << cpp_strerror(r)
          << dendl;
     finish(r);
     return;
@@ -200,7 +200,8 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
     }
     return;
   } else if (r < 0) {
-    derr << "error retrieving remote image id" << cpp_strerror(r) << dendl;
+    derr << "error preparing remote image for replay: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
