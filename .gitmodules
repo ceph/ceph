@@ -72,3 +72,6 @@
 [submodule "src/utf8proc"]
 	path = src/utf8proc
 	url = https://github.com/JuliaStrings/utf8proc
+[submodule "src/jaegertracing/opentelemetry-cpp"]
+	path = src/jaegertracing/opentelemetry-cpp
+	url = https://github.com/open-telemetry/opentelemetry-cpp.git
