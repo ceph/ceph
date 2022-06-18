@@ -80,7 +80,8 @@ options:
 - name: osd_recovery_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next recovery or backfill op
+  desc: Time in seconds to sleep before next recovery or backfill op. This setting
+    overrides _ssd, _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op.
     Increasing this value will slow down recovery operation while
     client operations will be less impacted.
@@ -125,7 +126,8 @@ options:
 - name: osd_snap_trim_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next snap trim (overrides values below)
+  desc: Time in seconds to sleep before next snap trim. This setting overrides _ssd,
+    _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before next snap trim op.
     Increasing this value will slow down snap trimming.
     This option overrides backend specific variants.
@@ -1249,8 +1251,8 @@ options:
 - name: osd_delete_sleep
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next removal transaction (overrides values
-    below)
+  desc: Time in seconds to sleep before next removal transaction. This setting
+    overrides _ssd, _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before the next removal transaction. This
     throttles the PG deletion process.
   default: 0
