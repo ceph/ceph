@@ -986,7 +986,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplayDisconnected) {
 
   // prepare replay
   expect_prepare_replay(mock_state_builder, false, false, 0);
-  expect_is_disconnected(mock_state_builder, false);
+  expect_is_disconnected(mock_state_builder, true);
 
   // close remote image
   expect_replay_requires_remote_image(mock_state_builder, false);
