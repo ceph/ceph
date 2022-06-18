@@ -36,16 +36,21 @@ StateBuilder<I>::~StateBuilder() {
 }
 
 template <typename I>
-bool StateBuilder<I>::is_local_primary() const  {
-  return (!local_image_id.empty() &&
-          local_promotion_state == librbd::mirror::PROMOTION_STATE_PRIMARY);
+bool StateBuilder<I>::is_local_primary() const {
+  if (local_promotion_state == librbd::mirror::PROMOTION_STATE_PRIMARY) {
+    ceph_assert(!local_image_id.empty());
+    return true;
+  }
+  return false;
 }
 
 template <typename I>
 bool StateBuilder<I>::is_linked() const {
-  return ((local_promotion_state ==
-             librbd::mirror::PROMOTION_STATE_NON_PRIMARY) &&
-          is_linked_impl());
+  if (local_promotion_state == librbd::mirror::PROMOTION_STATE_NON_PRIMARY) {
+    ceph_assert(!local_image_id.empty());
+    return is_linked_impl();
+  }
+  return false;
 }
 
 template <typename I>
