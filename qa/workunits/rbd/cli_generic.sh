@@ -1310,6 +1310,20 @@ test_mirror_snapshot_schedule() {
     test "$(rbd mirror snapshot schedule status -p rbd2/ns1 --image test1 --format xml |
         $XMLSTARLET sel -t -v '//scheduled_images/image/image')" = 'rbd2/ns1/test1'
 
+    rbd mirror image demote rbd2/ns1/test1
+    for i in `seq 12`; do
+        rbd mirror snapshot schedule status | grep 'rbd2/ns1/test1' || break
+        sleep 10
+    done
+    rbd mirror snapshot schedule status | expect_fail grep 'rbd2/ns1/test1'
+
+    rbd mirror image promote rbd2/ns1/test1
+    for i in `seq 12`; do
+        rbd mirror snapshot schedule status | grep 'rbd2/ns1/test1' && break
+        sleep 10
+    done
+    rbd mirror snapshot schedule status | grep 'rbd2/ns1/test1'
+
     rbd mirror snapshot schedule add 1h 00:15
     test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 00:15:00'
     rbd mirror snapshot schedule ls -R | grep 'every 1h starting at 00:15:00'
@@ -1331,11 +1345,11 @@ test_mirror_snapshot_schedule() {
     test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
 
     rbd rm rbd2/ns1/test1
-
     for i in `seq 12`; do
         rbd mirror snapshot schedule status | grep 'rbd2/ns1/test1' || break
         sleep 10
     done
+    rbd mirror snapshot schedule status | expect_fail grep 'rbd2/ns1/test1'
 
     rbd mirror snapshot schedule remove
     test "$(rbd mirror snapshot schedule ls -R --format json)" = "[]"
