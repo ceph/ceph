@@ -53,7 +53,6 @@
 #include "messages/MOSDPGReadyToMerge.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
-#include "messages/MOSDScrub.h"
 #include "messages/MRoute.h"
 #include "messages/MMonGetPurgedSnaps.h"
 #include "messages/MMonGetPurgedSnapsReply.h"

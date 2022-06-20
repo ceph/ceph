@@ -165,7 +165,6 @@ class MOSDRepOpReply;
 class MOSDRepScrub;
 class MOSDRepScrubMap;
 class MOSDScrub2;
-class MOSDScrub;
 class MOSDScrubReserve;
 class MPGStatsAck;
 class MPGStats;

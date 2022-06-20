@@ -113,7 +113,6 @@
 
 #include "messages/MOSDAlive.h"
 
-#include "messages/MOSDScrub.h"
 #include "messages/MOSDScrub2.h"
 
 #include "messages/MCommand.h"
@@ -7348,57 +7347,10 @@ void OSD::_dispatch(Message *m)
     break;
 
     // osd
-  case MSG_OSD_SCRUB:
-    handle_scrub(static_cast<MOSDScrub*>(m));
-    break;
-
   case MSG_COMMAND:
     handle_command(static_cast<MCommand*>(m));
     return;
   }
-}
-
-// remove me post-nautilus
-void OSD::handle_scrub(MOSDScrub *m)
-{
-  dout(10) << "handle_scrub " << *m << dendl;
-  if (!require_mon_or_mgr_peer(m)) {
-    m->put();
-    return;
-  }
-  if (m->fsid != monc->get_fsid()) {
-    dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid()
-	    << dendl;
-    m->put();
-    return;
-  }
-
-  vector<spg_t> spgs;
-  _get_pgids(&spgs);
-
-  if (!m->scrub_pgs.empty()) {
-    vector<spg_t> v;
-    for (auto pgid : m->scrub_pgs) {
-      spg_t pcand;
-      if (get_osdmap()->get_primary_shard(pgid, &pcand) &&
-	  std::find(spgs.begin(), spgs.end(), pcand) != spgs.end()) {
-	v.push_back(pcand);
-      }
-    }
-    spgs.swap(v);
-  }
-
-  for (auto pgid : spgs) {
-    enqueue_peering_evt(
-      pgid,
-      PGPeeringEventRef(
-	std::make_shared<PGPeeringEvent>(
-	  get_osdmap_epoch(),
-	  get_osdmap_epoch(),
-	  PeeringState::RequestScrub(m->deep, m->repair))));
-  }
-
-  m->put();
 }
 
 void OSD::handle_fast_scrub(MOSDScrub2 *m)

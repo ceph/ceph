@@ -405,9 +405,6 @@ MESSAGE(MOSDPing)
 #include "messages/MOSDRepScrub.h"
 MESSAGE(MOSDRepScrub)
 
-#include "messages/MOSDScrub.h"
-MESSAGE(MOSDScrub)
-
 #include "messages/MOSDScrub2.h"
 MESSAGE(MOSDScrub2)
 
