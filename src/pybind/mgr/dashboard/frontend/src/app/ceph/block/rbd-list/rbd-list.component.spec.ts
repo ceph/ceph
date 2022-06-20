@@ -319,6 +319,7 @@ describe('RbdListComponent', () => {
           'Edit',
           'Copy',
           'Flatten',
+          'Resync',
           'Delete',
           'Move to Trash',
           'Remove Scheduling'
@@ -326,7 +327,7 @@ describe('RbdListComponent', () => {
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,update': {
-        actions: ['Create', 'Edit', 'Copy', 'Flatten', 'Remove Scheduling'],
+        actions: ['Create', 'Edit', 'Copy', 'Flatten', 'Resync', 'Remove Scheduling'],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,delete': {
@@ -338,11 +339,11 @@ describe('RbdListComponent', () => {
         primary: { multiple: 'Create', executing: 'Copy', single: 'Copy', no: 'Create' }
       },
       'update,delete': {
-        actions: ['Edit', 'Flatten', 'Delete', 'Move to Trash', 'Remove Scheduling'],
+        actions: ['Edit', 'Flatten', 'Resync', 'Delete', 'Move to Trash', 'Remove Scheduling'],
         primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       update: {
-        actions: ['Edit', 'Flatten', 'Remove Scheduling'],
+        actions: ['Edit', 'Flatten', 'Resync', 'Remove Scheduling'],
         primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       delete: {
