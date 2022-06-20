@@ -7,7 +7,7 @@ wget -q http://download.ceph.com/qa/$file
 
 real=`md5sum $file | awk '{print $1}'`
 
-for f in `seq 1 20`
+for f in `seq 1 100`
 do
     echo $f
     cp $file a
