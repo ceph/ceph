@@ -2008,7 +2008,6 @@ private:
 			ObjectStore *store,
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami, std::string& osdspec_affinity);
 
-  void handle_scrub(class MOSDScrub *m);
   void handle_fast_scrub(class MOSDScrub2 *m);
   void handle_osd_ping(class MOSDPing *m);
 
