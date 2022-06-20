@@ -116,15 +116,6 @@ void PrepareRemoteImageRequest<I>::handle_get_mirror_info(int r) {
     dout(5) << "remote image mirroring is being disabled" << dendl;
     finish(-ENOENT);
     return;
-  } else if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY &&
-             (state_builder == nullptr ||
-              state_builder->local_image_id.empty() ||
-              state_builder->local_promotion_state ==
-                librbd::mirror::PROMOTION_STATE_UNKNOWN)) {
-    // no local image and remote isn't primary -- don't sync it
-    dout(5) << "remote image is not primary -- not syncing" << dendl;
-    finish(-EREMOTEIO);
-    return;
   }
 
   switch (m_mirror_image.mode) {
