@@ -28,12 +28,12 @@ describe('DaemonListComponent', () => {
 
   it('should return daemons states', () => {
     component.data = [
-      { health: 'Error' },
-      { health: 'Warning' },
-      { health: 'OK' },
-      { health: 'OK' }
+      { health_color: 'error' },
+      { health_color: 'warning' },
+      { health_color: 'success' },
+      { health_color: 'success' }
     ];
     const result = component.countDaemons();
-    expect(result).toStrictEqual({ unknown: 0, error: 1, warning: 1, success: 2 });
+    expect(result).toStrictEqual({ info: 0, error: 1, warning: 1, success: 2 });
   });
 });

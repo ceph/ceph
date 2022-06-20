@@ -39,32 +39,17 @@ export class DaemonListComponent implements OnInit, OnDestroy {
   }
 
   countDaemons(): {} {
-    const daemon_states = { unknown: 0, error: 0, warning: 0, success: 0 };
+    const daemon_states = { info: 0, error: 0, warning: 0, success: 0 };
     this.empty = this.data.length > 0 ? false : true;
     for (let i = 0; i < this.data.length; i++) {
-      const daemon_data = this.data[i];
-      if (daemon_data['health'] === 'OK') {
-        daemon_states.success++;
-      } else if (daemon_data['health'] === 'Error') {
-        daemon_states.error++;
-      } else if (daemon_data['health'] === 'Warning') {
-        daemon_states.warning++;
-      } else {
-        daemon_states.unknown++;
-      }
+      const health_color = this.data[i]['health_color'];
+      daemon_states[health_color]++;
     }
     return daemon_states;
   }
 
   daemonStatus(daemon_status: string): string {
-    if (daemon_status === 'success') {
-      return 'UP';
-    } else if (daemon_status === 'error') {
-      return 'DOWN';
-    } else if (daemon_status === 'warning') {
-      return 'WARNING';
-    } else {
-      return 'UNKNOWN';
-    }
+    const display_names = {success: 'UP', error: 'DOWN', warning: 'WARNING', info: 'UNKNOWN'};
+    return display_names[daemon_status];
   }
 }
