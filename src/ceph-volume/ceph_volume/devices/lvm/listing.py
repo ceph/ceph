@@ -101,6 +101,8 @@ class List(object):
 
         report = {}
 
+        pvs = api.get_pvs()
+
         for lv in lvs:
             if not api.is_ceph_device(lv):
                 continue
@@ -109,8 +111,7 @@ class List(object):
             report.setdefault(osd_id, [])
             lv_report = lv.as_dict()
 
-            pvs = api.get_pvs(filters={'lv_uuid': lv.lv_uuid})
-            lv_report['devices'] = [pv.name for pv in pvs] if pvs else []
+            lv_report['devices'] = [pv.name for pv in pvs if pv.lv_uuid == lv.lv_uuid] if pvs else []
             report[osd_id].append(lv_report)
 
             phys_devs = self.create_report_non_lv_device(lv)
