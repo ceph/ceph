@@ -1,3 +1,4 @@
+import errno
 import json
 import logging
 import os
@@ -214,12 +215,16 @@ class KernelMount(CephFSMount):
         stdout = StringIO()
         stderr = StringIO()
         try:
-            self.run_shell_payload(f"sudo dd if={path}", timeout=(5*60),
-                stdout=stdout, stderr=stderr)
+            self.run_shell_payload(f"sudo dd if={path}", timeout=(5 * 60),
+                                   stdout=stdout, stderr=stderr)
             return stdout.getvalue()
         except CommandFailedError:
             if 'no such file or directory' in stderr.getvalue().lower():
-                return None
+                return errno.ENOENT
+            elif 'not a directory' in stderr.getvalue().lower():
+                return errno.ENOTDIR
+            elif 'permission denied' in stderr.getvalue().lower():
+                return errno.EACCES
             raise
 
     def _get_global_id(self):
@@ -351,8 +356,23 @@ echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
         return epoch, barrier
 
     def get_op_read_count(self):
-        buf = self.read_debug_file("metrics/size")
-        if buf is None:
-            return 0
-        else:
-            return int(re.findall(r'read.*', buf)[0].split()[1])
+        stdout = StringIO()
+        stderr = StringIO()
+        try:
+            path = os.path.join(self._get_debug_dir(), "metrics/size")
+            self.run_shell(f"sudo stat {path}", stdout=stdout,
+                           stderr=stderr, cwd=None)
+            buf = self.read_debug_file("metrics/size")
+        except CommandFailedError:
+            if 'no such file or directory' in stderr.getvalue().lower() \
+                    or 'not a directory' in stderr.getvalue().lower():
+                try:
+                    path = os.path.join(self._get_debug_dir(), "metrics")
+                    self.run_shell(f"sudo stat {path}", stdout=stdout,
+                                   stderr=stderr, cwd=None)
+                    buf = self.read_debug_file("metrics")
+                except CommandFailedError:
+                    return errno.ENOENT
+            else:
+                return 0
+        return int(re.findall(r'read.*', buf)[0].split()[1])
