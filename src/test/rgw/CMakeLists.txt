@@ -16,6 +16,10 @@ if(WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND rgw_libs Boost::filesystem)
 endif()
 
+if(WITH_JAEGER)
+  list(APPEND rgw_libs ${jaeger_base})
+endif()
+
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
@@ -51,6 +55,16 @@ target_link_libraries(unittest_rgw_reshard_wait ${rgw_libs})
 set(test_rgw_a_src test_rgw_common.cc)
 add_library(test_rgw_a STATIC ${test_rgw_a_src})
 target_link_libraries(test_rgw_a ${rgw_libs})
+
+add_executable(bench_rgw_ratelimit bench_rgw_ratelimit.cc)
+target_link_libraries(bench_rgw_ratelimit ${rgw_libs})
+
+add_executable(bench_rgw_ratelimit_gc bench_rgw_ratelimit_gc.cc )
+target_link_libraries(bench_rgw_ratelimit_gc ${rgw_libs})
+
+add_executable(unittest_rgw_ratelimit test_rgw_ratelimit.cc $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_rgw_ratelimit ${rgw_libs})
+add_ceph_unittest(unittest_rgw_ratelimit)
 
 # ceph_test_rgw_manifest
 set(test_rgw_manifest_srcs test_rgw_manifest.cc)
@@ -217,5 +231,5 @@ target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
 
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
-target_link_libraries(unittest_rgw_lua ${rgw_libs} ${LUA_LIBRARIES})
+target_link_libraries(unittest_rgw_lua ${rgw_libs})
 

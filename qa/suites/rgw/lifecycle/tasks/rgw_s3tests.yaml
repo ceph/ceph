@@ -1,0 +1,20 @@
+tasks:
+- install:
+- ceph:
+- rgw: [client.0]
+- s3tests:
+    client.0:
+      force-branch: ceph-master
+      rgw_server: client.0
+      storage classes: LUKEWARM, FROZEN
+      extra_attrs: ["lifecycle"]
+      lc_debug_interval: 10
+overrides:
+  ceph:
+    conf:
+      client:
+        debug rgw: 20
+        rgw lc debug interval: 10
+        storage classes: LUKEWARM, FROZEN
+  rgw:
+    storage classes: LUKEWARM, FROZEN

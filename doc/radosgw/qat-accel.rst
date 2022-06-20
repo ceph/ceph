@@ -69,21 +69,82 @@ hardware is available and QAT is capable to handle it.
 
 Configuration
 =============
-1. QAT based Encryption for RGW 
+#. Prerequisites
 
-Edit the Ceph configuration file to make use of QAT based crypto plugin::
+   Make sure the QAT driver with version v1.7.L.4.14.0 or higher has been installed.
+   Remember to set an environment variable "ICP_ROOT" for your QAT driver package
+   root directory. 
 
-    plugin crypto accelerator = crypto_qat
+   To enable the QAT based encryption and compression, user needs to modify the QAT
+   configuration files. For example, for Intel QuickAssist Adapter 8970 product, revise 
+   c6xx_dev0/1/2.conf in the directory ``/etc/`` and keep them the same, e.g.:
 
-2. QAT Support for Compression
+   .. code-block:: ini
+        
+      #...
+      # User Process Instance Section
+      ##############################################
+      [CEPH]
+      NumberCyInstances = 1
+      NumberDcInstances = 1
+      NumProcesses = 8
+      LimitDevAccess = 1
+      # Crypto - User instance #0
+      Cy0Name = "SSL0"
+      Cy0IsPolled = 1
+      # List of core affinities
+      Cy0CoreAffinity = 0
+       
+      # Data Compression - User instance #0
+      Dc0Name = "Dc0"
+      Dc0IsPolled = 1
+      # List of core affinities
+      Dc0CoreAffinity = 0
 
-One CMake option have to be used to trigger QAT based compression::
+#. QAT based Encryption for RGW 
 
-    -DWITH_QATZIP=ON
+   The CMake option ``WITH_QAT=ON`` must be configured. If you build Ceph from
+   source code (see: :ref:`build-ceph`), navigate to your cloned Ceph repository 
+   and execute the following:
 
-Edit the Ceph configuration file to enable QAT support for compression::
+   .. prompt:: bash $ 
 
-    qat compressor enabled=true
+      cd ceph
+      ./do_cmake.sh -DWITH_QAT=ON
+      cd build
+      ininja
+
+   .. note::
+     The section name of the QAT configuration files must be ``CEPH`` since 
+     the section name is set as "CEPH" in Ceph cropto source code.
+  
+   Then, edit the Ceph configuration file to make use of QAT based crypto plugin::
+
+      plugin crypto accelerator = crypto_qat
+
+#. QAT Support for Compression
+
+   Before starting, make sure both QAT driver and `QATzip`_  have been installed. Besides 
+   "ICP_ROOT", remember to set the environment variable "QZ_ROOT" for the root directory
+   of your QATzip source tree.
+
+   The following CMake options have to be configured to trigger QAT based compression
+   when building Ceph:
+  
+   .. prompt:: bash $
+
+      ./do_cmake.sh -DWITH_QAT=ON -DWITH_QATZIP=ON
+
+   Then, set an environment variable to clarify the section name of User Process Instance
+   Section in QAT configuration files, e.g.:
+  
+   .. prompt:: bash $
+
+      export QAT_SECTION_NAME=CEPH
+
+   Next, edit the Ceph configuration file to enable QAT support for compression::
+
+      qat compressor enabled=true
 
 
 .. _QAT Support for Compression: https://github.com/ceph/ceph/pull/19714

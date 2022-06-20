@@ -12,36 +12,14 @@
 #define LOGGER(subname_) crimson::get_logger(ceph_subsys_##subname_)
 #define LOG_PREFIX(x) constexpr auto FNAME = #x
 
-#ifdef NDEBUG
-
 #define LOG(level_, MSG, ...) \
   LOCAL_LOGGER.log(level_, "{}: " MSG, FNAME , ##__VA_ARGS__)
 #define LOGT(level_, MSG, t, ...) \
-  LOCAL_LOGGER.log(level_, "{}({}): " MSG, FNAME, (void*)&t , ##__VA_ARGS__)
+  LOCAL_LOGGER.log(level_, "{} {}: " MSG, (void*)&t, FNAME , ##__VA_ARGS__)
 #define SUBLOG(subname_, level_, MSG, ...) \
   LOGGER(subname_).log(level_, "{}: " MSG, FNAME , ##__VA_ARGS__)
 #define SUBLOGT(subname_, level_, MSG, t, ...) \
-  LOGGER(subname_).log(level_, "{}({}): " MSG, FNAME, (void*)&t , ##__VA_ARGS__)
-
-#else
-
-// do compile-time format string validation
-using namespace fmt::literals;
-template<seastar::log_level lv>
-void _LOG(seastar::logger& logger, std::string_view info) {
-  logger.log(lv, info.data());
-}
-
-#define LOG(level_, MSG, ...) \
-  _LOG<level_>(LOCAL_LOGGER, "{}: " MSG ## _format(FNAME , ##__VA_ARGS__))
-#define LOGT(level_, MSG, t_, ...) \
-  _LOG<level_>(LOCAL_LOGGER, "{}({}): " MSG ## _format(FNAME, (void*)&t_ , ##__VA_ARGS__))
-#define SUBLOG(subname_, level_, MSG, ...) \
-  _LOG<level_>(LOGGER(subname_), "{}: " MSG ## _format(FNAME , ##__VA_ARGS__))
-#define SUBLOGT(subname_, level_, MSG, t_, ...) \
-  _LOG<level_>(LOGGER(subname_), "{}({}): " MSG ## _format(FNAME, (void*)&t_ , ##__VA_ARGS__))
-
-#endif
+  LOGGER(subname_).log(level_, "{} {}: " MSG, (void*)&t, FNAME , ##__VA_ARGS__)
 
 #define TRACE(...) LOG(seastar::log_level::trace, __VA_ARGS__)
 #define TRACET(...) LOGT(seastar::log_level::trace, __VA_ARGS__)

@@ -53,6 +53,23 @@ by a standby.
 If you want to preempt failover, you can explicitly mark a ceph-mgr
 daemon as failed using ``ceph mgr fail <mgr name>``.
 
+Performance and Scalability
+---------------------------
+
+All the mgr modules share a cache that can be enabled with
+``ceph config set mgr mgr_ttl_cache_expire_seconds <seconds>``, where seconds
+is the time to live of the cached python objects.
+
+It is recommended to enable the cache with a 10 seconds TTL when there are 500+
+osds or 10k+ pgs as internal structures might increase in size, and cause latency
+issues when requesting large structures. As an example, an OSDMap with 1000 osds
+has a aproximate size of 4MiB. With heavy load, on a 3000 osd cluster there has
+been a 1.5x improvement enabling the cache.
+
+Furthermore, you can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve perf
+counters of a mgr module. In ``mgr.cache_hit`` and ``mgr.cache_miss`` you'll find the
+hit/miss ratio of the mgr cache.
+
 Using modules
 -------------
 
@@ -65,7 +82,7 @@ using the commands ``ceph mgr module enable <module>`` and
 If a module is *enabled* then the active ceph-mgr daemon will load
 and execute it.  In the case of modules that provide a service,
 such as an HTTP server, the module may publish its address when it
-is loaded.  To see the addresses of such modules, use the command 
+is loaded.  To see the addresses of such modules, use the command
 ``ceph mgr services``.
 
 Some modules may also implement a special standby mode which runs on

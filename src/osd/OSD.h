@@ -94,7 +94,7 @@ class MMonGetPurgedSnapsReply;
 
 class OSD;
 
-class OSDService {
+class OSDService : public Scrub::ScrubSchedListener {
   using OpSchedulerItem = ceph::osd::scheduler::OpSchedulerItem;
 public:
   OSD *osd;
@@ -147,7 +147,7 @@ public:
     superblock = block;
   }
 
-  int get_nodeid() const { return whoami; }
+  int get_nodeid() const final { return whoami; }
 
   std::atomic<epoch_t> max_oldest_map;
 private:
@@ -290,7 +290,9 @@ public:
    * @param allow_requested_repair_only
    * @return a Scrub::attempt_t detailing either a success, or the failure reason.
    */
-  Scrub::schedule_result_t initiate_a_scrub(spg_t pgid, bool allow_requested_repair_only);
+  Scrub::schedule_result_t initiate_a_scrub(
+    spg_t pgid,
+    bool allow_requested_repair_only) final;
 
 
  private:
@@ -1061,6 +1063,7 @@ struct OSDShard {
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
   void update_scheduler_config();
+  std::string get_scheduler_type();
 
   OSDShard(
     int id,
@@ -1591,7 +1594,7 @@ protected:
     : public ShardedThreadPool::ShardedWQ<OpSchedulerItem>
   {
     OSD *osd;
-
+    bool m_fast_shutdown = false;
   public:
     ShardedOpWQ(OSD *o,
 		ceph::timespan ti,
@@ -1608,6 +1611,8 @@ protected:
 
     /// try to do some work
     void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb) override;
+
+    void stop_for_fast_shutdown();
 
     /// enqueue a new item
     void _enqueue(OpSchedulerItem&& item) override;
@@ -2062,6 +2067,7 @@ private:
                          double *elapsed,
                          std::ostream& ss);
   int mon_cmd_set_config(const std::string &key, const std::string &val);
+  bool unsupported_objstore_for_qos();
 
   void scrub_purged_snaps();
   void probe_smart(const std::string& devid, std::ostream& ss);

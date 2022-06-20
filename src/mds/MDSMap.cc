@@ -94,6 +94,7 @@ CompatSet MDSMap::get_compat_set_v16_2_4() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_ENCODING);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_OMAPDIRFRAG);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
@@ -931,6 +932,10 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     }
   }
 
+  /* All MDS since at least v14.0.0 understand INLINE */
+  /* TODO: remove after R is released */
+  compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+
   for (auto& p: mds_info) {
     static const CompatSet empty;
     auto& info = p.second;
@@ -938,6 +943,9 @@ void MDSMap::decode(bufferlist::const_iterator& p)
       /* bootstrap old compat; mds_info_t::decode does not have access to MDSMap */
       info.compat = compat;
     }
+    /* All MDS since at least v14.0.0 understand INLINE */
+    /* TODO: remove after R is released */
+    info.compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
   }
 
   DECODE_FINISH(p);
@@ -1127,7 +1135,7 @@ bool MDSMap::is_degraded() const {
 
 void MDSMap::set_min_compat_client(ceph_release_t version)
 {
-  vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
+  vector<size_t> bits;
 
   if (version >= ceph_release_t::octopus)
     bits.push_back(CEPHFS_FEATURE_OCTOPUS);

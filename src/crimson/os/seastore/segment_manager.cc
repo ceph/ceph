@@ -11,12 +11,45 @@
 #endif
 
 namespace{
-  seastar::logger &logger(){
-    return crimson::get_logger(ceph_subsys_seastore_device);
-  }
+
+#ifdef HAVE_ZNS
+seastar::logger &logger(){
+  return crimson::get_logger(ceph_subsys_seastore_device);
+}
+#endif
+
 }
 
 namespace crimson::os::seastore {
+
+std::ostream& operator<<(std::ostream& out, const block_sm_superblock_t& sb)
+{
+  out << "superblock("
+      << "size=" << sb.size
+      << ", segment_size=" << sb.segment_size
+      << ", block_size=" << sb.block_size
+      << ", segments=" << sb.segments
+      << ", tracker_offset=" << sb.tracker_offset
+      << ", first_segment_offset=" << sb.first_segment_offset
+      << ", config=" << sb.config
+      << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream &out, Segment::segment_state_t s)
+{
+  using state_t = Segment::segment_state_t;
+  switch (s) {
+  case state_t::EMPTY:
+    return out << "EMPTY";
+  case state_t::OPEN:
+    return out << "OPEN";
+  case state_t::CLOSED:
+    return out << "CLOSED";
+  default:
+    return out << "INVALID_SEGMENT_STATE!";
+  }
+}
 
 seastar::future<crimson::os::seastore::SegmentManagerRef>
 SegmentManager::get_segment_manager(

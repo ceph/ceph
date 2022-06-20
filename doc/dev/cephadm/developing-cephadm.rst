@@ -32,7 +32,7 @@ cephadm/cephadm script into memory.)
   for mon or mgr.
 - You'll see health warnings from cephadm about stray daemons--that's because
   the vstart-launched daemons aren't controlled by cephadm.
-- The default image is ``quay.io/ceph-ci/ceph:master``, but you can change
+- The default image is ``quay.io/ceph-ci/ceph:main``, but you can change
   this by passing ``-o container_image=...`` or ``ceph config set global container_image ...``.
 
 
@@ -53,15 +53,16 @@ conf and keyring in your build dir, so that the ``bin/ceph ...`` CLI works
 There are a few advantages here:
 
 - The cluster is a "normal" cephadm cluster that looks and behaves
-  just like a user's cluster would.  In contract, vstart and teuthology
-  clusters tend to be special in subtle (and not-so-subtle) ways.
+  just like a user's cluster would.  In contrast, vstart and teuthology
+  clusters tend to be special in subtle (and not-so-subtle) ways (e.g.
+  having the ``lockdep`` turned on).
 
 To start a test cluster::
 
   sudo ../src/cstart.sh
 
-The last line of this will be a line you can cut+paste to update the
-container image.  For instance::
+The last line of the output will be a line you can cut+paste to update
+the container image.  For instance::
 
   sudo ../src/script/cpatch -t quay.io/ceph-ci/ceph:8f509f4e
 
@@ -263,9 +264,18 @@ In order to setup Cephadm's box run::
 
 .. note:: It is recommended to run box with verbose (-v).
 
-After getting all needed images we can run::
+After getting all needed images we can create a simple cluster without osds and hosts with::
 
-  sudo box -v cluster start --osds 3 --hosts 3
+  sudo box -v cluster start
+
+If you want to deploy the cluster with more osds and hosts::
+  # 3 osds and 3 hosts by default
+  sudo box -v cluster start --extended
+  # explicitly change number of hosts and osds
+  sudo box -v cluster start --extended --osds 5 --hosts 5
+
+Without the extended option, explicitly adding either more hosts or osds won't change the state
+of the cluster.
 
 .. note:: Cluster start will try to setup even if cluster setup was not called.
 .. note:: Osds are created with loopback devices and hence, sudo is needed to

@@ -68,6 +68,7 @@ $chart-color-purple: #3c3d99 !default;
 $chart-color-center-text: #151515 !default;
 $chart-color-center-text-description: #72767b !default;
 $chart-color-tooltip-background: $black !default;
+$chart-danger: #c9190b !default;
 
 // Typography
 
@@ -108,4 +109,3 @@ $screen-md-max: calc(#{$screen-lg-min} - 1px) !default;
 $screen-lg-max: calc(#{$screen-xl-min} - 1px) !default;
 
 $navbar-height: 43px !default;
-$top-notification-height: 37.6px !default;

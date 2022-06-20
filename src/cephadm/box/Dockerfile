@@ -2,6 +2,11 @@
 FROM centos:8 as centos-systemd
 ENV container docker
 ENV CEPHADM_PATH=/usr/local/sbin/cephadm
+
+# Centos met EOL and the content of the CentOS 8 repos has been moved to vault.centos.org
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-Linux-*
+RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=https://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*
+
 RUN dnf -y install chrony firewalld lvm2 \
   openssh-server openssh-clients python3 \
   yum-utils sudo which && dnf clean all
@@ -23,7 +28,5 @@ EXPOSE 22
 
 FROM centos-systemd-docker
 WORKDIR /root
-# VOLUME /var/run/docker.sock
-COPY start /usr/local/bin
 
 CMD [ "/usr/sbin/init" ]

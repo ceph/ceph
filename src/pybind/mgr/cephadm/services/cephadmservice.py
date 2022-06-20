@@ -2,6 +2,8 @@ import errno
 import json
 import logging
 import re
+import socket
+import time
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
     Optional, Dict, Any, Tuple, NewType, cast
@@ -37,7 +39,8 @@ class CephadmDaemonDeploySpec:
                  ip: Optional[str] = None,
                  ports: Optional[List[int]] = None,
                  rank: Optional[int] = None,
-                 rank_generation: Optional[int] = None):
+                 rank_generation: Optional[int] = None,
+                 extra_container_args: Optional[List[str]] = None):
         """
         A data struction to encapsulate `cephadm deploy ...
         """
@@ -72,6 +75,8 @@ class CephadmDaemonDeploySpec:
         self.rank: Optional[int] = rank
         self.rank_generation: Optional[int] = rank_generation
 
+        self.extra_container_args = extra_container_args
+
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
@@ -96,6 +101,7 @@ class CephadmDaemonDeploySpec:
             ports=dd.ports,
             rank=dd.rank,
             rank_generation=dd.rank_generation,
+            extra_container_args=dd.extra_container_args,
         )
 
     def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
@@ -110,6 +116,7 @@ class CephadmDaemonDeploySpec:
             ports=self.ports,
             rank=self.rank,
             rank_generation=self.rank_generation,
+            extra_container_args=self.extra_container_args,
         )
 
 
@@ -171,6 +178,10 @@ class CephadmService(metaclass=ABCMeta):
             rank: Optional[int] = None,
             rank_generation: Optional[int] = None,
     ) -> CephadmDaemonDeploySpec:
+        try:
+            eca = spec.extra_container_args
+        except AttributeError:
+            eca = None
         return CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
@@ -181,6 +192,7 @@ class CephadmService(metaclass=ABCMeta):
             ip=ip,
             rank=rank,
             rank_generation=rank_generation,
+            extra_container_args=eca,
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -229,9 +241,14 @@ class CephadmService(metaclass=ABCMeta):
                 self.mgr.log.warning(f"Unable to update caps for {entity}")
         return keyring
 
-    def _inventory_get_addr(self, hostname: str) -> str:
-        """Get a host's address with its hostname."""
-        return self.mgr.inventory.get_addr(hostname)
+    def _inventory_get_fqdn(self, hostname: str) -> str:
+        """Get a host's FQDN with its hostname.
+
+           If the FQDN can't be resolved, the address from the inventory will
+           be returned instead.
+        """
+        addr = self.mgr.inventory.get_addr(hostname)
+        return socket.getfqdn(addr)
 
     def _set_service_url_on_dashboard(self,
                                       service_name: str,
@@ -656,19 +673,31 @@ class MgrService(CephService):
         return DaemonDescription()
 
     def fail_over(self) -> None:
-        if not self.mgr_map_has_standby():
-            raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
-                'daemon', 'mgr' + self.mgr.get_mgr_id()))
+        # this has been seen to sometimes transiently fail even when there are multiple
+        # mgr daemons. As long as there are multiple known mgr daemons, we should retry.
+        class NoStandbyError(OrchestratorError):
+            pass
+        no_standby_exc = NoStandbyError('Need standby mgr daemon', event_kind_subject=(
+            'daemon', 'mgr' + self.mgr.get_mgr_id()))
+        for sleep_secs in [2, 8, 15]:
+            try:
+                if not self.mgr_map_has_standby():
+                    raise no_standby_exc
+                self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
+                                           'INFO', 'Failing over to other MGR')
+                logger.info('Failing over to other MGR')
 
-        self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
-                                   'INFO', 'Failing over to other MGR')
-        logger.info('Failing over to other MGR')
-
-        # fail over
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'mgr fail',
-            'who': self.mgr.get_mgr_id(),
-        })
+                # fail over
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'mgr fail',
+                    'who': self.mgr.get_mgr_id(),
+                })
+                return
+            except NoStandbyError:
+                logger.info(
+                    f'Failed to find standby mgr for failover. Retrying in {sleep_secs} seconds')
+                time.sleep(sleep_secs)
+        raise no_standby_exc
 
     def mgr_map_has_standby(self) -> bool:
         """
@@ -986,6 +1015,18 @@ class CrashService(CephService):
 class CephfsMirrorService(CephService):
     TYPE = 'cephfs-mirror'
 
+    def config(self, spec: ServiceSpec) -> None:
+        # make sure mirroring module is enabled
+        mgr_map = self.mgr.get('mgr_map')
+        mod_name = 'mirroring'
+        if mod_name not in mgr_map.get('services', {}):
+            self.mgr.check_mon_command({
+                'prefix': 'mgr module enable',
+                'module': mod_name
+            })
+            # we shouldn't get here (mon will tell the mgr to respawn), but no
+            # harm done if we do.
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
@@ -1015,7 +1056,7 @@ class CephadmAgent(CephService):
 
         keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_id, host=host), [])
         daemon_spec.keyring = keyring
-        self.mgr.cache.agent_keys[host] = keyring
+        self.mgr.agent_cache.agent_keys[host] = keyring
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/ceph_argparse.h"
 #include <seastar/core/app-template.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
@@ -12,6 +13,8 @@
 #include "crimson/net/Errors.h"
 #include "crimson/net/Fwd.h"
 #include "crimson/net/Socket.h"
+
+using crimson::common::local_conf;
 
 namespace {
 
@@ -462,11 +465,21 @@ future<> test_preemptive_down() {
 
 }
 
-int main(int argc, char** argv)
+seastar::future<int> do_test(seastar::app_template& app)
 {
-  seastar::app_template app;
-  return app.run(argc, argv, [] {
-    return seastar::futurize_invoke([] {
+  std::vector<const char*> args;
+  std::string cluster;
+  std::string conf_file_list;
+  auto init_params = ceph_argparse_early_args(args,
+                                              CEPH_ENTITY_TYPE_CLIENT,
+                                              &cluster,
+                                              &conf_file_list);
+  return crimson::common::sharded_conf().start(init_params.name, cluster)
+  .then([conf_file_list] {
+    return local_conf().parse_config_files(conf_file_list);
+  }).then([] {
+      return local_conf().set_val("ms_inject_internal_delays", "0")
+    .then([] {
       return test_refused();
     }).then([] {
       return test_bind_same();
@@ -485,9 +498,21 @@ int main(int argc, char** argv)
       // Seastar has bugs to have events undispatched during shutdown,
       // which will result in memory leak and thus fail LeakSanitizer.
       return seastar::sleep(100ms);
-    }).handle_exception([] (auto eptr) {
-      std::cout << "Test failure" << std::endl;
-      return seastar::make_exception_future<>(eptr);
     });
+  }).then([] {
+    return crimson::common::sharded_conf().stop();
+  }).then([] {
+    return 0;
+  }).handle_exception([] (auto eptr) {
+    logger.error("Test failed: got exception {}", eptr);
+    return 1;
+  });
+}
+
+int main(int argc, char** argv)
+{
+  seastar::app_template app;
+  return app.run(argc, argv, [&app] {
+    return do_test(app);
   });
 }

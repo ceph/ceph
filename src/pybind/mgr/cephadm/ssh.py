@@ -6,13 +6,13 @@ from threading import Thread
 from contextlib import contextmanager
 from io import StringIO
 from shlex import quote
-from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable
+from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union
 from orchestrator import OrchestratorError
 
 try:
     import asyncssh
 except ImportError:
-    asyncssh = None
+    asyncssh = None  # type: ignore
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -58,7 +58,7 @@ class SSHManager:
                                  host: str,
                                  addr: Optional[str] = None,
                                  ) -> "SSHClientConnection":
-        if not self.cons.get(host):
+        if not self.cons.get(host) or host not in self.mgr.inventory:
             if not addr and host in self.mgr.inventory:
                 addr = self.mgr.inventory.get_addr(host)
 
@@ -75,7 +75,11 @@ class SSHManager:
 
             with self.redirect_log(host, addr):
                 try:
-                    conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name], known_hosts=None, config=[self.mgr.ssh_config_fname], preferred_auth=['publickey'])
+                    ssh_options = asyncssh.SSHClientConnectionOptions(
+                        keepalive_interval=7, keepalive_count_max=3)
+                    conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name],
+                                                  known_hosts=None, config=[self.mgr.ssh_config_fname],
+                                                  preferred_auth=['publickey'], options=ssh_options)
                 except OSError:
                     raise
                 except asyncssh.Error:
@@ -85,14 +89,14 @@ class SSHManager:
             self.cons[host] = conn
 
         self.mgr.offline_hosts_remove(host)
-        conn = self.cons.get(host)
-        return conn
+
+        return self.cons[host]
 
     @contextmanager
     def redirect_log(self, host: str, addr: str) -> Iterator[None]:
         log_string = StringIO()
         ch = logging.StreamHandler(log_string)
-        ch.setLevel(logging.DEBUG)
+        ch.setLevel(logging.INFO)
         asyncssh_logger.addHandler(ch)
 
         try:
@@ -100,8 +104,7 @@ class SSHManager:
         except OSError as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}" + \
-                '\n' + f'Log: {log_content}'
+            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there. {str(e)}"
             logger.exception(msg)
             raise OrchestratorError(msg)
         except asyncssh.Error as e:
@@ -133,20 +136,35 @@ class SSHManager:
                                addr: Optional[str] = None,
                                ) -> Tuple[str, str, int]:
         conn = await self._remote_connection(host, addr)
-        cmd = "sudo " + " ".join(quote(x) for x in cmd)
+        sudo_prefix = "sudo " if self.mgr.ssh_user != 'root' else ""
+        cmd = sudo_prefix + " ".join(quote(x) for x in cmd)
         logger.debug(f'Running command: {cmd}')
         try:
+            r = await conn.run('sudo true', check=True, timeout=5)
             r = await conn.run(cmd, input=stdin)
         # handle these Exceptions otherwise you might get a weird error like TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
-        except (asyncssh.ChannelOpenError, Exception) as e:
+        except (asyncssh.ChannelOpenError, asyncssh.ProcessError, Exception) as e:
             # SSH connection closed or broken, will create new connection next call
             logger.debug(f'Connection to {host} failed. {str(e)}')
             await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
             raise OrchestratorError(f'Unable to reach remote host {host}. {str(e)}')
-        out = r.stdout.rstrip('\n')
-        err = r.stderr.rstrip('\n')
-        return out, err, r.returncode
+
+        def _rstrip(v: Union[bytes, str, None]) -> str:
+            if not v:
+                return ''
+            if isinstance(v, str):
+                return v.rstrip('\n')
+            if isinstance(v, bytes):
+                return v.decode().rstrip('\n')
+            raise OrchestratorError(
+                f'Unable to parse ssh output with type {type(v)} from remote host {host}')
+
+        out = _rstrip(r.stdout)
+        err = _rstrip(r.stderr)
+        rc = r.returncode if r.returncode else 0
+
+        return out, err, rc
 
     def execute_command(self,
                         host: str,
@@ -192,11 +210,7 @@ class SSHManager:
             await self._check_execute_command(host, ['mkdir', '-p', '/tmp' + dirname], addr=addr)
             tmp_path = '/tmp' + path + '.new'
             await self._check_execute_command(host, ['touch', tmp_path], addr=addr)
-            if uid is not None and gid is not None and mode is not None:
-                # shlex quote takes str or byte object, not int
-                await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
-                await self._check_execute_command(host, ['chmod', oct(mode)[2:], tmp_path], addr=addr)
-            elif self.mgr.ssh_user != 'root':
+            if self.mgr.ssh_user != 'root':
                 assert self.mgr.ssh_user
                 await self._check_execute_command(host, ['chown', '-R', self.mgr.ssh_user, tmp_path], addr=addr)
                 await self._check_execute_command(host, ['chmod', str(644), tmp_path], addr=addr)
@@ -206,6 +220,10 @@ class SSHManager:
                 f.flush()
                 conn = await self._remote_connection(host, addr)
                 await asyncssh.scp(f.name, (conn, tmp_path))
+            if uid is not None and gid is not None and mode is not None:
+                # shlex quote takes str or byte object, not int
+                await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
+                await self._check_execute_command(host, ['chmod', oct(mode)[2:], tmp_path], addr=addr)
             await self._check_execute_command(host, ['mv', tmp_path, path], addr=addr)
         except Exception as e:
             msg = f"Unable to write {host}:{path}: {e}"

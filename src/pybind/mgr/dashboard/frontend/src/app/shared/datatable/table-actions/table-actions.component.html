@@ -6,6 +6,7 @@
             [ngClass]="{'disabled': disableSelectionAction(currentAction)}"
             (click)="useClickAction(currentAction)"
             [routerLink]="useRouterLink(currentAction)"
+            [attr.aria-label]="currentAction.name"
             [preserveFragment]="currentAction.preserveFragment ? '' : null">
       <i [ngClass]="[currentAction.icon]"></i>
       <span>{{ currentAction.name }}</span>
@@ -31,8 +32,9 @@
                 (click)="useClickAction(action)"
                 [routerLink]="useRouterLink(action)"
                 [preserveFragment]="action.preserveFragment ? '' : null"
-                [disabled]="disableSelectionAction(action)">
-          <i [ngClass]="[action.icon]"></i>
+                [disabled]="disableSelectionAction(action)"
+                [attr.aria-label]="action.name">
+          <i [ngClass]="[action.icon, 'action-icon']"></i>
           <span>{{ action.name }}</span>
         </button>
       </ng-container>

@@ -15,8 +15,6 @@ cat <<EOF >> crush.map.txt
 rule stretch_rule {
         id 1
         type replicated
-        min_size 1
-        max_size 10
         step take site1
         step chooseleaf firstn 2 type host
         step emit
@@ -27,8 +25,6 @@ rule stretch_rule {
 rule stretch_rule2 {
         id 2
         type replicated
-        min_size 1
-        max_size 10
         step take site1
         step chooseleaf firstn 2 type host
         step emit
@@ -39,8 +35,6 @@ rule stretch_rule2 {
 rule stretch_rule3 {
         id 3
         type replicated
-        min_size 1
-        max_size 10
         step take site1
         step chooseleaf firstn 2 type host
         step emit

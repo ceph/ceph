@@ -4,6 +4,7 @@
 #pragma once
 
 #include <random>
+#include <boost/iterator/counting_iterator.hpp>
 
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/cache.h"
@@ -13,6 +14,8 @@
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
+#include "crimson/os/seastore/random_block_manager/nvmedevice.h"
+#include "crimson/os/seastore/journal/circular_bounded_journal.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -21,8 +24,18 @@ using namespace crimson::os::seastore;
 class EphemeralTestState {
 protected:
   segment_manager::EphemeralSegmentManagerRef segment_manager;
+  std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
+  std::unique_ptr<nvme_device::NVMeBlockDevice> rb_device;
+  tm_make_config_t tm_config = tm_make_config_t::get_test_segmented_journal();
 
-  EphemeralTestState() = default;
+  EphemeralTestState(std::size_t num_segment_managers) {
+    assert(num_segment_managers > 0);
+    secondary_segment_managers.resize(num_segment_managers - 1);
+  }
+
+  std::size_t get_num_devices() const {
+    return secondary_segment_managers.size() + 1;
+  }
 
   virtual void _init() = 0;
   void init() {
@@ -41,23 +54,63 @@ protected:
   void restart() {
     _teardown().get0();
     destroy();
-    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
+    segment_manager->remount();
+    for (auto &sec_sm : secondary_segment_managers) {
+      sec_sm->remount();
+    }
     init();
     _mount().handle_error(crimson::ct_error::assert_all{}).get0();
   }
 
-  seastar::future<> tm_setup() {
+  seastar::future<> tm_setup(
+    tm_make_config_t config = tm_make_config_t::get_test_segmented_journal()) {
+    tm_config = config;
     segment_manager = segment_manager::create_test_ephemeral();
-    init();
+    for (auto &sec_sm : secondary_segment_managers) {
+      sec_sm = segment_manager::create_test_ephemeral();
+    }
+    if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
+      auto config =
+	journal::CircularBoundedJournal::mkfs_config_t::get_default();
+      rb_device.reset(new nvme_device::TestMemory(config.total_size));
+      rb_device->set_device_id(
+	1 << (std::numeric_limits<device_id_t>::digits - 1));
+    }
     return segment_manager->init(
     ).safe_then([this] {
+      return crimson::do_for_each(
+        secondary_segment_managers.begin(),
+        secondary_segment_managers.end(),
+        [](auto &sec_sm)
+      {
+        return sec_sm->init();
+      });
+    }).safe_then([this] {
+      return segment_manager->mkfs(
+        segment_manager::get_ephemeral_device_config(0, get_num_devices()));
+    }).safe_then([this] {
+      return seastar::do_with(std::size_t(0), [this](auto &cnt) {
+        return crimson::do_for_each(
+          secondary_segment_managers.begin(),
+          secondary_segment_managers.end(),
+          [this, &cnt](auto &sec_sm)
+        {
+          ++cnt;
+          return sec_sm->mkfs(
+            segment_manager::get_ephemeral_device_config(cnt, get_num_devices()));
+        });
+      });
+    }).safe_then([this] {
+      init();
       return _mkfs();
     }).safe_then([this] {
       return _teardown();
     }).safe_then([this] {
       destroy();
-      static_cast<segment_manager::EphemeralSegmentManager*>(
-	&*segment_manager)->remount();
+      segment_manager->remount();
+      for (auto &sec_sm : secondary_segment_managers) {
+        sec_sm->remount();
+      }
       init();
       return _mount();
     }).handle_error(crimson::ct_error::assert_all{});
@@ -66,48 +119,16 @@ protected:
   seastar::future<> tm_teardown() {
     return _teardown().then([this] {
       segment_manager.reset();
+      for (auto &sec_sm : secondary_segment_managers) {
+        sec_sm.reset();
+      }
+      rb_device.reset();
     });
   }
 };
 
-auto get_transaction_manager(
-  SegmentManager &segment_manager) {
-  auto scanner = std::make_unique<ExtentReader>();
-  scanner->add_segment_manager(&segment_manager);
-  auto& scanner_ref = *scanner.get();
-  auto segment_cleaner = std::make_unique<SegmentCleaner>(
-    SegmentCleaner::config_t::get_default(),
-    std::move(scanner),
-    true);
-  auto journal = std::make_unique<Journal>(segment_manager, scanner_ref);
-  auto cache = std::make_unique<Cache>(scanner_ref);
-  auto lba_manager = lba_manager::create_lba_manager(segment_manager, *cache);
-
-  auto epm = std::make_unique<ExtentPlacementManager>(*cache, *lba_manager);
-
-  epm->add_allocator(
-    device_type_t::SEGMENTED,
-    std::make_unique<SegmentedAllocator>(
-      *segment_cleaner,
-      segment_manager,
-      *lba_manager,
-      *journal,
-      *cache));
-
-  journal->set_segment_provider(&*segment_cleaner);
-
-  return std::make_unique<TransactionManager>(
-    segment_manager,
-    std::move(segment_cleaner),
-    std::move(journal),
-    std::move(cache),
-    std::move(lba_manager),
-    std::move(epm),
-    scanner_ref);
-}
-
 auto get_seastore(SeaStore::MDStoreRef mdstore, SegmentManagerRef sm) {
-  auto tm = get_transaction_manager(*sm);
+  auto tm = make_transaction_manager(tm_make_config_t::get_test_segmented_journal());
   auto cm = std::make_unique<collection_manager::FlatCollectionManager>(*tm);
   return std::make_unique<SeaStore>(
     "",
@@ -123,14 +144,31 @@ class TMTestState : public EphemeralTestState {
 protected:
   TransactionManagerRef tm;
   LBAManager *lba_manager;
+  BackrefManager *backref_manager;
+  Cache* cache;
   SegmentCleaner *segment_cleaner;
 
-  TMTestState() : EphemeralTestState() {}
+  TMTestState() : EphemeralTestState(1) {}
+
+  TMTestState(std::size_t num_devices) : EphemeralTestState(num_devices) {}
 
   virtual void _init() override {
-    tm = get_transaction_manager(*segment_manager);
+    tm = make_transaction_manager(tm_config);
+    tm->add_device(segment_manager.get(), true);
+    if (tm_config.j_type == journal_type_t::CIRCULARBOUNDED_JOURNAL) {
+      tm->add_device(rb_device.get(), false);
+      static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
+	add_device(rb_device.get());
+    }
+    if (get_num_devices() > 1) {
+      for (auto &sec_sm : secondary_segment_managers) {
+        tm->add_device(sec_sm.get(), false);
+      }
+    }
     segment_cleaner = tm->get_segment_cleaner();
     lba_manager = tm->get_lba_manager();
+    backref_manager = tm->get_backref_manager();
+    cache = tm->get_cache();
   }
 
   virtual void _destroy() override {
@@ -160,10 +198,28 @@ protected:
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() {
-    return tm->mkfs(
-    ).handle_error(
-      crimson::ct_error::assert_all{"Error in teardown"}
-    );
+    if (tm_config.j_type == journal_type_t::SEGMENT_JOURNAL) {
+      return tm->mkfs(
+      ).handle_error(
+	crimson::ct_error::assert_all{"Error in mkfs"}
+      );
+    } else {
+      auto config = journal::CircularBoundedJournal::mkfs_config_t::get_default();
+      return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->mkfs(
+	config
+      ).safe_then([this]() {
+	return static_cast<journal::CircularBoundedJournal*>(tm->get_journal())->
+	  open_device_read_header(journal::CBJOURNAL_START_ADDRESS
+	).safe_then([this](auto addr) {
+	  return tm->mkfs(
+	  ).handle_error(
+	    crimson::ct_error::assert_all{"Error in mkfs"}
+	  );
+	});
+      }).handle_error(
+	crimson::ct_error::assert_all{"Error in mkfs"}
+      );
+    }
   }
 
   auto create_mutate_transaction() {
@@ -217,7 +273,7 @@ public:
     return mount_ertr::now(); // we handle this above
   }
 
-  mkfs_ret mkfs(segment_manager_config_t c) final {
+  mkfs_ret mkfs(device_config_t c) final {
     return mkfs_ertr::now(); // we handle this above
   }
 
@@ -227,10 +283,6 @@ public:
 
   secondary_device_set_t& get_secondary_devices() final {
     return sm.get_secondary_devices();
-  }
-
-  device_spec_t get_device_spec() const final {
-    return sm.get_device_spec();
   }
 
   magic_t get_magic() const final {
@@ -251,8 +303,8 @@ public:
   }
 
   size_t get_size() const final { return sm.get_size(); }
-  segment_off_t get_block_size() const final { return sm.get_block_size(); }
-  segment_off_t get_segment_size() const final {
+  seastore_off_t get_block_size() const final { return sm.get_block_size(); }
+  seastore_off_t get_segment_size() const final {
     return sm.get_segment_size();
   }
   const seastore_meta_t &get_meta() const final {
@@ -297,7 +349,7 @@ class SeaStoreTestState : public EphemeralTestState {
 protected:
   std::unique_ptr<SeaStore> seastore;
 
-  SeaStoreTestState() : EphemeralTestState() {}
+  SeaStoreTestState() : EphemeralTestState(1) {}
 
   virtual void _init() final {
     seastore = get_seastore(

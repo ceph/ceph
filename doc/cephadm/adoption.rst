@@ -34,7 +34,7 @@ Preparation
    latest stable release of Ceph is the default. You might be upgrading from an
    earlier Ceph release at the same time that you're performing this
    conversion; if you are upgrading from an earlier release, make sure to
-   follow any upgrade-releated instructions for that release.
+   follow any upgrade-related instructions for that release.
 
    Pass the image to cephadm with the following command:
 

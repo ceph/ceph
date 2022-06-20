@@ -217,16 +217,38 @@ to create a iSCSI target and export a RBD image as LUN 0.
        > /disks> cd /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts
        > /iscsi-target...eph-igw/hosts>  create iqn.1994-05.com.redhat:rh7-client
 
-#. Set the client's CHAP username to myiscsiusername and password to
-   myiscsipassword:
+#. Set the initiator CHAP username and password which the target would
+   use when authenticating the initiator:
 
    .. code-block:: console
 
-       > /iscsi-target...at:rh7-client>  auth username=myiscsiusername password=myiscsipassword
+       > /iscsi-target...at:rh7-client>  auth username=myusername password=mypassword
 
    .. warning::
       CHAP must always be configured. Without CHAP, the target will
       reject any login requests.
+
+   To use mutual (bidirectional) authentication, also set the target CHAP
+   username and password which the initiator would use when authenticating
+   the target:
+
+   .. code-block:: console
+
+       > /iscsi-target...at:rh7-client>  auth username=myusername password=mypassword mutual_username=mytgtusername mutual_password=mytgtpassword
+
+   .. note::
+      CHAP usernames must be between 8 and 64 characters long.  Valid
+      characters: ``0`` to ``9``, ``a`` to ``z``, ``A`` to ``Z``, ``@``,
+      ``_``, ``-``, ``.``, ``:``.
+
+   .. note::
+      CHAP passwords must be between 12 and 16 characters long.  Valid
+      characters: ``0`` to ``9``, ``a`` to ``z``, ``A`` to ``Z``, ``@``,
+      ``_``, ``-``, ``/``.
+
+   .. note::
+      For mutual CHAP, initiator and target usernames and passwords
+      must not be the same.
 
 #. Add the disk to the client:
 

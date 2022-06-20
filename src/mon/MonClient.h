@@ -158,7 +158,7 @@ struct MonClientPinger : public Dispatcher,
   int wait_for_reply(double timeout = 0.0) {
     std::unique_lock locker{lock};
     if (timeout <= 0) {
-      timeout = cct->_conf->client_mount_timeout;
+      timeout = std::chrono::duration<double>(cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count();
     }
     done = false;
     if (ping_recvd_cond.wait_for(locker,

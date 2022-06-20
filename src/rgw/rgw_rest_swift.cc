@@ -178,7 +178,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             global_stats,
             policies_stats,
             s->user->get_attrs(),
-            s->user->get_info().user_quota,
+            s->user->get_info().quota.user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
@@ -284,7 +284,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             global_stats,
             policies_stats,
             s->user->get_attrs(),
-            s->user->get_info().user_quota,
+            s->user->get_info().quota.user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
@@ -352,7 +352,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, s->bucket.get(), bucket_quota,
+  dump_container_metadata(s, s->bucket.get(), quota.bucket_quota,
                           s->bucket->get_info().website_conf);
 
   s->formatter->open_array_section_with_attrs("container",
@@ -559,7 +559,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
             global_stats,
             policies_stats,
             attrs,
-            s->user->get_info().user_quota,
+            s->user->get_info().quota.user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
   }
 
@@ -575,7 +575,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket.get(), bucket_quota,
+    dump_container_metadata(s, bucket.get(), quota.bucket_quota,
                             s->bucket->get_info().website_conf);
   }
 
@@ -714,7 +714,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
     policy.create_default(s->user->get_id(), s->user->get_display_name());
   }
 
-  location_constraint = store->get_zone()->get_zonegroup().api_name;
+  location_constraint = store->get_zone()->get_zonegroup().get_api_name();
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
   placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""), s->info.storage_class);
@@ -864,14 +864,13 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   std::unique_ptr<rgw::sal::Object> slo_seg = bucket->get_object(rgw_obj_key(obj_name));
 
   /* no prefetch */
-  RGWObjectCtx obj_ctx(store);
-  slo_seg->set_atomic(&obj_ctx);
+  slo_seg->set_atomic();
 
   bool compressed;
   RGWCompressionInfo cs_info;
   uint64_t size_bytes{0};
 
-  r = slo_seg->get_obj_attrs(&obj_ctx, s->yield, s);
+  r = slo_seg->get_obj_attrs(s->yield, s);
   if (r < 0) {
     return r;
   }
@@ -1900,14 +1899,17 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   }
 
   formatter.open_array_section("policies");
-  const RGWZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
+  const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
 
-  for (const auto& placement_targets : zonegroup.placement_targets) {
-    formatter.open_object_section("policy");
-    if (placement_targets.second.name.compare(zonegroup.default_placement.name) == 0)
-      formatter.dump_bool("default", true);
-    formatter.dump_string("name", placement_targets.second.name.c_str());
-    formatter.close_section();
+  std::set<std::string> targets;
+  if (zonegroup.get_placement_target_names(targets)) {
+    for (const auto& placement_targets : targets) {
+      formatter.open_object_section("policy");
+      if (placement_targets.compare(zonegroup.get_default_placement_name()) == 0)
+	formatter.dump_bool("default", true);
+      formatter.dump_string("name", placement_targets.c_str());
+      formatter.close_section();
+    }
   }
   formatter.close_section();
 
@@ -2378,7 +2380,7 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
 
   RGWOp* newop = &get_errpage_op;
   RGWRequest req(0);
-  return rgw_process_authenticated(handler, newop, &req, s, y, true);
+  return rgw_process_authenticated(handler, newop, &req, s, y, store, true);
 }
 
 int RGWSwiftWebsiteHandler::error_handler(const int err_no,
@@ -2497,7 +2499,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
       /* Generate the header now. */
       set_req_state_err(s, op_ret);
       dump_errno(s);
-      dump_container_metadata(s, s->bucket.get(), bucket_quota,
+      dump_container_metadata(s, s->bucket.get(), quota.bucket_quota,
                               s->bucket->get_info().website_conf);
       end_header(s, this, "text/html");
       if (op_ret < 0) {
@@ -2557,17 +2559,19 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
     return false;
   } else if (subdir_name.back() == '/') {
     subdir_name.pop_back();
+    if (subdir_name.empty()) {
+      return false;
+    }
   }
 
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(std::move(subdir_name)));
 
   /* First, get attrset of the object we'll try to retrieve. */
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj->set_atomic(&obj_ctx);
-  obj->set_prefetch_data(&obj_ctx);
+  obj->set_atomic();
+  obj->set_prefetch_data();
 
   RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &obj_ctx, &state, s->yield, false)) {
+  if (obj->get_obj_state(s, &state, s->yield, false)) {
     return false;
   }
 
@@ -2592,12 +2596,11 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
 {
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(index));
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj->set_atomic(&obj_ctx);
-  obj->set_prefetch_data(&obj_ctx);
+  obj->set_atomic();
+  obj->set_prefetch_data();
 
   RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &obj_ctx, &state, s->yield, false)) {
+  if (obj->get_obj_state(s, &state, s->yield, false)) {
     return false;
   }
 

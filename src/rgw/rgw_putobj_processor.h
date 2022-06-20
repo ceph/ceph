@@ -132,13 +132,13 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
  public:
   ManifestObjectProcessor(Aio *aio, rgw::sal::RadosStore* store,
                           const rgw_placement_rule *ptail_placement_rule,
-                          const rgw_user& owner, RGWObjectCtx& obj_ctx,
+                          const rgw_user& owner, RGWObjectCtx& _obj_ctx,
                           std::unique_ptr<rgw::sal::Object> _head_obj,
                           const DoutPrefixProvider* dpp, optional_yield y)
     : HeadObjectProcessor(0),
       store(store),
       owner(owner),
-      obj_ctx(obj_ctx), head_obj(std::move(_head_obj)),
+      obj_ctx(_obj_ctx), head_obj(std::move(_head_obj)),
       writer(aio, store, obj_ctx, head_obj->clone(), dpp, y),
       chunk(&writer, 0), stripe(&chunk, this, 0), dpp(dpp) {
         if (ptail_placement_rule) {

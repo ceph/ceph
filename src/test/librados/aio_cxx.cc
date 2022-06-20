@@ -1560,9 +1560,9 @@ TEST(LibRadosAioEC, RoundTripAppendPP) {
   ASSERT_EQ("", test_data.init());
   auto my_completion = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
   ASSERT_TRUE(my_completion);
-  bool requires;
-  ASSERT_EQ(0, test_data.m_ioctx.pool_requires_alignment2(&requires));
-  ASSERT_TRUE(requires);
+  bool req;
+  ASSERT_EQ(0, test_data.m_ioctx.pool_requires_alignment2(&req));
+  ASSERT_TRUE(req);
   uint64_t alignment;
   ASSERT_EQ(0, test_data.m_ioctx.pool_required_alignment2(&alignment));
   ASSERT_NE((unsigned)0, alignment);
@@ -2242,9 +2242,8 @@ struct io_info {
   AioCompletion *c;
 };
 
-void pool_io_callback(completion_t cb, void *arg)
+void pool_io_callback(completion_t cb, void *arg /* Actually AioCompletion* */)
 {
-  AioCompletion *c = (AioCompletion*)cb;
   io_info *info = (io_info *)arg;
   unsigned long i = info->i;
   int r = info->c->get_return_value();

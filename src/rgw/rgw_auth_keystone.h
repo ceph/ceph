@@ -138,7 +138,8 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
   /* Helper methods. */
   acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
   auth_info_t get_creds_info(const token_envelope_t& token,
-                             const std::vector<std::string>& admin_roles
+                             const std::vector<std::string>& admin_roles,
+                             const std::string& access_key_id
                             ) const noexcept;
   std::pair<boost::optional<token_envelope_t>, int>
   get_from_keystone(const DoutPrefixProvider* dpp,

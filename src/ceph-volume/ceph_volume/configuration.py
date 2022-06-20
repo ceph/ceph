@@ -86,13 +86,14 @@ class Conf(conf_parentclass):
         s = '_'.join(s.split())
         return s
 
-    def get_safe(self, section, key, default=None):
+    def get_safe(self, section, key, default=None, check_valid=True):
         """
         Attempt to get a configuration value from a certain section
         in a ``cfg`` object but returning None if not found. Avoids the need
         to be doing try/except {ConfigParser Exceptions} every time.
         """
-        self.is_valid()
+        if check_valid:
+            self.is_valid()
         try:
             return self.get(section, key)
         except (configparser.NoSectionError, configparser.NoOptionError):

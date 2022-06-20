@@ -27,6 +27,7 @@
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
         <cd-grafana [grafanaPath]="'rgw-instance-detail?var-rgw_servers=rgw.' + this.serviceId"
+                    [type]="'metrics'"
                     uid="x5ARzZtmk"
                     grafanaStyle="one">
         </cd-grafana>

@@ -66,10 +66,25 @@ public:
     objaddr_t offset,
     const bufferlist &bl);
 
+  using zero_iertr = base_iertr;
+  using zero_ret = zero_iertr::future<>;
+  zero_ret zero(
+    context_t ctx,
+    objaddr_t offset,
+    extent_len_t len);
+
   /// Reads data in [offset, offset + len)
   using read_iertr = base_iertr;
   using read_ret = read_iertr::future<bufferlist>;
   read_ret read(
+    context_t ctx,
+    objaddr_t offset,
+    extent_len_t len);
+
+  /// sparse read data, get range interval in [offset, offset + len)
+  using fiemap_iertr = base_iertr;
+  using fiemap_ret = fiemap_iertr::future<std::map<uint64_t, uint64_t>>;
+  fiemap_ret fiemap(
     context_t ctx,
     objaddr_t offset,
     extent_len_t len);
@@ -91,7 +106,8 @@ private:
   write_ret overwrite(
     context_t ctx,        ///< [in] ctx
     laddr_t offset,       ///< [in] write offset
-    bufferlist &&bl,      ///< [in] buffer to write
+    extent_len_t len,     ///< [in] len to write, len == bl->length() if bl
+    std::optional<bufferlist> &&bl, ///< [in] buffer to write, empty for zeros
     lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
   );
 

@@ -74,22 +74,22 @@ particular daemons are set under the daemon section in your configuration file
 .. code-block:: ini
 
 	[global]
-		debug ms = 1/5
+		debug_ms = 1/5
 		
 	[mon]
-		debug mon = 20
-		debug paxos = 1/5
-		debug auth = 2
+		debug_mon = 20
+		debug_paxos = 1/5
+		debug_auth = 2
 		 
  	[osd]
- 		debug osd = 1/5
- 		debug filestore = 1/5
- 		debug journal = 1
- 		debug monc = 5/20
+ 		debug_osd = 1/5
+ 		debug_filestore = 1/5
+ 		debug_journal = 1
+ 		debug_monc = 5/20
  		
 	[mds]
-		debug mds = 1
-		debug mds balancer = 1
+		debug_mds = 1
+		debug_mds_balancer = 1
 
 
 See `Subsystem, Log and Debug Settings`_ for details.

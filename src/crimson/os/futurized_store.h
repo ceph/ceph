@@ -10,6 +10,7 @@
 
 #include <seastar/core/future.hh>
 
+#include "os/Transaction.h"
 #include "crimson/osd/exceptions.h"
 #include "include/buffer_fwd.h"
 #include "include/uuid.h"
@@ -124,7 +125,7 @@ public:
     const std::optional<std::string> &start ///< [in] start, empty for begin
     ) = 0; ///< @return <done, values> values.empty() only if done
 
-  virtual read_errorator::future<bufferlist> omap_get_header(
+  virtual get_attr_errorator::future<bufferlist> omap_get_header(
     CollectionRef c,
     const ghobject_t& oid) = 0;
 
@@ -134,6 +135,18 @@ public:
 
   virtual seastar::future<> do_transaction(CollectionRef ch,
 					   ceph::os::Transaction&& txn) = 0;
+  /**
+   * flush
+   *
+   * Flushes outstanding transactions on ch, returned future resolves
+   * after any previously submitted transactions on ch have committed.
+   *
+   * @param ch [in] collection on which to flush
+   */
+  virtual seastar::future<> flush(CollectionRef ch) {
+    return do_transaction(ch, ceph::os::Transaction{});
+  }
+
   // error injection
   virtual seastar::future<> inject_data_error(const ghobject_t& o) {
     return seastar::now();
@@ -145,7 +158,7 @@ public:
   virtual seastar::future<OmapIteratorRef> get_omap_iterator(
     CollectionRef ch,
     const ghobject_t& oid) = 0;
-  virtual seastar::future<std::map<uint64_t, uint64_t>> fiemap(
+  virtual read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef ch,
     const ghobject_t& oid,
     uint64_t off,

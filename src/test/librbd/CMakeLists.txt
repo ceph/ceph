@@ -11,7 +11,6 @@ set(librbd_test
   test_ImageWatcher.cc
   test_internal.cc
   test_mirroring.cc
-  test_BlockGuard.cc
   test_DeepCopy.cc
   test_Groups.cc
   test_Migration.cc
@@ -41,6 +40,7 @@ target_link_libraries(rbd_test_mock PUBLIC
 # unittest_librbd
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
+  test_BlockGuard.cc
   test_main.cc
   test_mock_fixture.cc
   test_mock_ConfigWatcher.cc

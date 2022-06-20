@@ -196,13 +196,14 @@ class KVPool {
 
   static KVPool create_range(
       const std::pair<index_t, index_t>& range_i,
-      const std::vector<size_t>& value_sizes) {
+      const std::vector<size_t>& value_sizes,
+      const uint64_t block_size) {
     kv_vector_t kvs;
     std::random_device rd;
     for (index_t i = range_i.first; i < range_i.second; ++i) {
       auto value_size = value_sizes[rd() % value_sizes.size()];
       kvs.emplace_back(
-          kv_t{make_oid(i), ValueItem::create(value_size, i)}
+          kv_t{make_oid(i), ValueItem::create(value_size, i, block_size)}
       );
     }
     return KVPool(std::move(kvs));
@@ -308,6 +309,7 @@ class TreeBuilder {
     return tree->insert(
         t, p_kv->key, {p_kv->value.get_payload_size()}
     ).si_then([&t, this, p_kv](auto ret) {
+      boost::ignore_unused(this);  // avoid clang warning;
       auto success = ret.second;
       auto cursor = std::move(ret.first);
       initialize_cursor_from_item(t, p_kv->key, p_kv->value, cursor, success);
@@ -400,6 +402,9 @@ class TreeBuilder {
                    p_kv->value);
     return tree->erase(t, p_kv->key
     ).si_then([&t, this, p_kv] (auto size) {
+      boost::ignore_unused(t);  // avoid clang warning;
+      boost::ignore_unused(this);
+      boost::ignore_unused(p_kv);
       ceph_assert(size == 1);
 #ifndef NDEBUG
       return tree->contains(t, p_kv->key

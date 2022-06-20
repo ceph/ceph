@@ -68,47 +68,79 @@ struct record_validator_t {
 struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   WritePipeline pipeline;
-  std::unique_ptr<Journal> journal;
+  JournalRef journal;
 
   std::vector<record_validator_t> records;
 
   std::default_random_engine generator;
 
-  segment_off_t block_size;
+  seastore_off_t block_size;
 
-  ExtentReaderRef scanner;
+  SegmentManagerGroupRef sms;
 
   segment_id_t next;
 
+  std::map<segment_id_t, segment_seq_t> segment_seqs;
+  std::map<segment_id_t, segment_type_t> segment_types;
+
+  mutable segment_info_t tmp_info;
+
   journal_test_t() = default;
 
-  void update_segment_avail_bytes(paddr_t offset) final {}
+  /*
+   * SegmentProvider interfaces
+   */
+  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
 
-  get_segment_ret get_segment(device_id_t id) final {
-    auto ret = next;
-    next = segment_id_t{
-      next.device_id(),
-      next.device_segment_id() + 1};
-    return get_segment_ret(
-      get_segment_ertr::ready_future_marker{},
-      ret);
+  const segment_info_t& get_seg_info(segment_id_t id) const final {
+    tmp_info = {};
+    tmp_info.seq = segment_seqs.at(id);
+    tmp_info.type = segment_types.at(id);
+    return tmp_info;
   }
 
-  journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
+  journal_seq_t get_dirty_extents_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  journal_seq_t get_alloc_info_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  segment_id_t allocate_segment(
+    segment_seq_t seq,
+    segment_type_t type
+  ) final {
+    auto ret = next;
+    next = segment_id_t{
+      segment_manager->get_device_id(),
+      next.device_segment_id() + 1};
+    segment_seqs[ret] = seq;
+    segment_types[ret] = type;
+    return ret;
+  }
+
+  void close_segment(segment_id_t) final {}
+
   void update_journal_tail_committed(journal_seq_t paddr) final {}
+
+  void update_segment_avail_bytes(segment_type_t, paddr_t) final {}
+
+  SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
 
   seastar::future<> set_up_fut() final {
     segment_manager = segment_manager::create_test_ephemeral();
-    block_size = segment_manager->get_block_size();
-    scanner.reset(new ExtentReader());
-    next = segment_id_t(segment_manager->get_device_id(), 0);
-    journal.reset(new Journal(*segment_manager, *scanner));
-
-    journal->set_segment_provider(this);
-    journal->set_write_pipeline(&pipeline);
-    scanner->add_segment_manager(segment_manager.get());
     return segment_manager->init(
     ).safe_then([this] {
+      return segment_manager->mkfs(
+        segment_manager::get_ephemeral_device_config(0, 1));
+    }).safe_then([this] {
+      block_size = segment_manager->get_block_size();
+      sms.reset(new SegmentManagerGroup());
+      next = segment_id_t(segment_manager->get_device_id(), 0);
+      journal = journal::make_segmented(*this);
+      journal->set_write_pipeline(&pipeline);
+      sms->add_segment_manager(segment_manager.get());
       return journal->open_for_write();
     }).safe_then(
       [](auto){},
@@ -121,7 +153,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     return journal->close(
     ).safe_then([this] {
       segment_manager.reset();
-      scanner.reset();
+      sms.reset();
       journal.reset();
     }).handle_error(
       crimson::ct_error::all_same_way([](auto e) {
@@ -134,48 +166,11 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
   auto replay(T &&f) {
     return journal->close(
     ).safe_then([this, f=std::move(f)]() mutable {
-      journal.reset(new Journal(*segment_manager, *scanner));
-      journal->set_segment_provider(this);
+      journal = journal::make_segmented(*this);
       journal->set_write_pipeline(&pipeline);
-      return seastar::do_with(
-	std::vector<std::pair<segment_id_t, segment_header_t>>(),
-	[this](auto& segments) {
-	return crimson::do_for_each(
-	  boost::make_counting_iterator(device_segment_id_t{0}),
-	  boost::make_counting_iterator(device_segment_id_t{
-	    segment_manager->get_num_segments()}),
-	  [this, &segments](auto segment_id) {
-	  return scanner->read_segment_header(segment_id_t{0, segment_id})
-	  .safe_then([&segments, segment_id](auto header) {
-	    if (!header.out_of_line) {
-	      segments.emplace_back(
-		std::make_pair(
-		  segment_id_t{0, segment_id},
-		  std::move(header)
-		));
-	    }
-	    return seastar::now();
-	  }).handle_error(
-	    crimson::ct_error::enoent::handle([](auto) {
-	      return SegmentCleaner::init_segments_ertr::now();
-	    }),
-	    crimson::ct_error::enodata::handle([](auto) {
-	      return SegmentCleaner::init_segments_ertr::now();
-	    }),
-	    crimson::ct_error::input_output_error::pass_further{}
-	  );
-	}).safe_then([&segments] {
-	  return seastar::make_ready_future<
-	    std::vector<std::pair<segment_id_t, segment_header_t>>>(
-	      std::move(segments));
-	});
-      }).safe_then([this, f=std::move(f)](auto&& segments) mutable {
-	return journal->replay(
-	  std::move(segments),
-	  std::forward<T>(std::move(f)));
-      }).safe_then([this] {
-	return journal->open_for_write();
-      });
+      return journal->replay(std::forward<T>(std::move(f)));
+    }).safe_then([this] {
+      return journal->open_for_write();
     });
   }
 
@@ -197,7 +192,10 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     replay(
       [&advance,
        &delta_checker]
-      (const auto &offsets, const auto &di) mutable {
+      (const auto &offsets,
+       const auto &di,
+       const journal_seq_t,
+       auto t) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");
 	}
@@ -233,7 +231,10 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     char contents = distribution(generator);
     bufferlist bl;
     bl.append(buffer::ptr(buffer::create(blocks * block_size, contents)));
-    return extent_t{extent_types_t::TEST_BLOCK, L_ADDR_NULL, bl};
+    return extent_t{
+      extent_types_t::TEST_BLOCK,
+      L_ADDR_NULL,
+      bl};
   }
 
   delta_info_t generate_delta(size_t bytes) {
@@ -251,6 +252,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
       0, 0,
       block_size,
       1,
+      MAX_SEG_SEQ,
+      segment_type_t::NULL_SEG,
       bl
     };
   }

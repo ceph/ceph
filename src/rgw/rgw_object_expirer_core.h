@@ -29,10 +29,7 @@
 #include "include/utime.h"
 #include "include/str_list.h"
 
-#include "rgw_sal.h"
 #include "rgw_sal_rados.h"
-
-using namespace std;
 
 class RGWSI_RADOS;
 class RGWSI_Zone;
@@ -42,35 +39,35 @@ class cls_timeindex_entry;
 class RGWObjExpStore {
   CephContext *cct;
   RGWSI_RADOS *rados_svc;
-  rgw::sal::Zone* zone_svc;
+  rgw::sal::RadosStore* store;
 public:
-  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::Zone* _zone_svc) : cct(_cct),
+  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::RadosStore* _store) : cct(_cct),
                                                                                       rados_svc(_rados_svc),
-                                                                                      zone_svc(_zone_svc) {}
+                                                                                      store(_store) {}
 
   int objexp_hint_add(const DoutPrefixProvider *dpp, 
                       const ceph::real_time& delete_at,
-                      const string& tenant_name,
-                      const string& bucket_name,
-                      const string& bucket_id,
+                      const std::string& tenant_name,
+                      const std::string& bucket_name,
+                      const std::string& bucket_id,
                       const rgw_obj_index_key& obj_key);
 
   int objexp_hint_list(const DoutPrefixProvider *dpp, 
-                       const string& oid,
+                       const std::string& oid,
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
                        const int max_entries,
-                       const string& marker,
-                       list<cls_timeindex_entry>& entries, /* out */
-                       string *out_marker,                 /* out */
+                       const std::string& marker,
+                       std::list<cls_timeindex_entry>& entries, /* out */
+                       std::string *out_marker,                 /* out */
                        bool *truncated);                   /* out */
 
   int objexp_hint_trim(const DoutPrefixProvider *dpp, 
-                       const string& oid,
+                       const std::string& oid,
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
-                       const string& from_marker,
-                       const string& to_marker);
+                       const std::string& from_marker,
+                       const std::string& to_marker);
 };
 
 class RGWObjectExpirer {
@@ -95,8 +92,8 @@ protected:
     void stop();
 
     CephContext *get_cct() const override;
-    unsigned get_subsys() const;
-    std::ostream& gen_prefix(std::ostream& out) const;
+    unsigned get_subsys() const override;
+    std::ostream& gen_prefix(std::ostream& out) const override;
   };
 
   OEWorker *worker{nullptr};
@@ -105,7 +102,7 @@ protected:
 public:
   explicit RGWObjectExpirer(rgw::sal::Store* _store)
     : store(_store),
-      exp_store(_store->ctx(), static_cast<rgw::sal::RadosStore*>(store)->svc()->rados, store->get_zone()),
+      exp_store(_store->ctx(), static_cast<rgw::sal::RadosStore*>(store)->svc()->rados, static_cast<rgw::sal::RadosStore*>(store)),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {
@@ -114,9 +111,9 @@ public:
 
   int hint_add(const DoutPrefixProvider *dpp, 
                const ceph::real_time& delete_at,
-               const string& tenant_name,
-               const string& bucket_name,
-               const string& bucket_id,
+               const std::string& tenant_name,
+               const std::string& bucket_name,
+               const std::string& bucket_id,
                const rgw_obj_index_key& obj_key) {
     return exp_store.objexp_hint_add(dpp, delete_at, tenant_name, bucket_name,
                                      bucket_id, obj_key);
@@ -132,8 +129,8 @@ public:
                   const std::string& shard,
                   const utime_t& from,
                   const utime_t& to,
-                  const string& from_marker,
-                  const string& to_marker);
+                  const std::string& from_marker,
+                  const std::string& to_marker);
 
   bool process_single_shard(const DoutPrefixProvider *dpp, 
                             const std::string& shard,

@@ -25,11 +25,14 @@ private:
   Dentry *_old_dentry = NULL; //associated with path2
   int abort_rc = 0;
 public:
+  ceph::coarse_mono_time created = ceph::coarse_mono_clock::zero();
   uint64_t tid = 0;
   utime_t  op_stamp;
   ceph_mds_request_head head;
   filepath path, path2;
   std::string alternate_name;
+  std::vector<uint8_t>	fscrypt_auth;
+  std::vector<uint8_t>	fscrypt_file;
   bufferlist data;
   int inode_drop = 0;   //the inode caps this operation will drop
   int inode_unless = 0; //unless we have these caps already

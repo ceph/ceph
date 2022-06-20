@@ -212,28 +212,54 @@ creating images or the default features can be configured via
 :KRBD support: no
 
 
-QOS Settings
+QoS Settings
 ============
 
-librbd supports limiting per-image IO, controlled by the following
-settings.
+librbd supports limiting per-image IO in several ways. These all apply
+to a given image within a given process - the same image used in
+multiple places, e.g. two separate VMs, would have independent limits.
+
+* **IOPS:** number of I/Os per second (any type of I/O)
+* **read IOPS:** number of read I/Os per second
+* **write IOPS:** number of write I/Os per second
+* **bps:** bytes per second (any type of I/O)
+* **read bps:** bytes per second read
+* **write bps:** bytes per second written
+
+Each of these limits operates independently of each other. They are
+all off by default. Every type of limit throttles I/O using a token
+bucket algorithm, with the ability to configure the limit (average
+speed over time) and potential for a higher rate (a burst) for a short
+period of time (burst_seconds). When any of these limits is reached,
+and there is no burst capacity left, librbd reduces the rate of that
+type of I/O to the limit.
+
+For example, if a read bps limit of 100MB was configured, but writes
+were not limited, writes could proceed as quickly as possible, while
+reads would be throttled to 100MB/s on average. If a read bps burst of
+150MB was set, and read burst seconds was set to five seconds, reads
+could proceed at 150MB/s for up to five seconds before dropping back
+to the 100MB/s limit.
+
+The following options configure these throttles:
 
 .. confval:: rbd_qos_iops_limit
-.. confval:: rbd_qos_bps_limit
-.. confval:: rbd_qos_read_iops_limit
-.. confval:: rbd_qos_write_iops_limit
-.. confval:: rbd_qos_read_bps_limit
-.. confval:: rbd_qos_write_bps_limit
 .. confval:: rbd_qos_iops_burst
-.. confval:: rbd_qos_bps_burst
-.. confval:: rbd_qos_read_iops_burst
-.. confval:: rbd_qos_write_iops_burst
-.. confval:: rbd_qos_read_bps_burst
-.. confval:: rbd_qos_write_bps_burst
 .. confval:: rbd_qos_iops_burst_seconds
-.. confval:: rbd_qos_bps_burst_seconds
+.. confval:: rbd_qos_read_iops_limit
+.. confval:: rbd_qos_read_iops_burst
 .. confval:: rbd_qos_read_iops_burst_seconds
+.. confval:: rbd_qos_write_iops_limit
+.. confval:: rbd_qos_write_iops_burst
 .. confval:: rbd_qos_write_iops_burst_seconds
+.. confval:: rbd_qos_bps_limit
+.. confval:: rbd_qos_bps_burst
+.. confval:: rbd_qos_bps_burst_seconds
+.. confval:: rbd_qos_read_bps_limit
+.. confval:: rbd_qos_read_bps_burst
 .. confval:: rbd_qos_read_bps_burst_seconds
+.. confval:: rbd_qos_write_bps_limit
+.. confval:: rbd_qos_write_bps_burst
 .. confval:: rbd_qos_write_bps_burst_seconds
 .. confval:: rbd_qos_schedule_tick_min
+.. confval:: rbd_qos_exclude_ops

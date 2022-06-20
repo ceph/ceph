@@ -203,6 +203,10 @@ For example::
 
   radosgw-admin role-policy put --role-name=S3Access1 --policy-name=Policy1 --policy-doc=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Action\":\[\"s3:*\"\],\"Resource\":\"arn:aws:s3:::example_bucket\"\}\]\}
 
+For passing ``policy-doc`` as a file::
+
+  radosgw-admin role-policy put --role-name=S3Access1 --policy-name=Policy1 --infile policy-document.json
+
 In the above example, we are attaching a policy 'Policy1' to role 'S3Access1', which allows all s3 actions on 'example_bucket'.
 
 List Permission Policy Names attached to a Role

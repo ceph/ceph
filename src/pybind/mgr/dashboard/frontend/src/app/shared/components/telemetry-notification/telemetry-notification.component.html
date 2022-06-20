@@ -1,9 +1,12 @@
-<ngb-alert class="no-margin-bottom"
-           type="warning"
-           *ngIf="displayNotification"
-           (close)="close($event)">
+<cd-alert-panel *ngIf="displayNotification"
+                class="no-margin-bottom"
+                [showTitle]="false"
+                size="slim"
+                [type]="notificationSeverity"
+                [dismissible]="notificationSeverity !== 'danger'"
+                (dismissed)="onDismissed()">
   <div i18n>The Ceph community needs your help to continue improving: please
     <a routerLink="/telemetry"
        class="btn activate-button alert-link activate-text">Activate</a> the
   <a href="https://docs.ceph.com/en/latest/mgr/telemetry/">Telemetry</a> module.</div>
-</ngb-alert>
+</cd-alert-panel>

@@ -194,7 +194,7 @@ void CreatePrimaryRequest<I>::unlink_peer() {
     size_t count = 0;
     uint64_t unlink_snap_id = 0;
     for (auto &snap_it : m_image_ctx->snap_info) {
-      auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+      auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
         &snap_it.second.snap_namespace);
       if (info == nullptr) {
         continue;
@@ -218,7 +218,7 @@ void CreatePrimaryRequest<I>::unlink_peer() {
         continue;
       }
       count++;
-      if (count == 3) {
+      if (count == max_snapshots) {
         unlink_snap_id = snap_it.first;
       }
       if (count > max_snapshots) {

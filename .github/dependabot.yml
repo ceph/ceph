@@ -11,3 +11,12 @@ updates:
       - "dashboard"
     pull-request-branch-name:
       separator: "-"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: ".github/workflows:"
+    pull-request-branch-name:
+      separator: "-"

@@ -758,6 +758,13 @@ char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
   return pgid.calc_name(buf, "");
 }
 
+std::string spg_t::calc_name_sring() const
+{
+  char buf[spg_t::calc_name_buf_size];
+  buf[spg_t::calc_name_buf_size - 1] = '\0';
+  return string{calc_name(buf + spg_t::calc_name_buf_size - 1, "")};
+}
+
 ostream& operator<<(ostream& out, const spg_t &pg)
 {
   char buf[spg_t::calc_name_buf_size];
@@ -1316,6 +1323,9 @@ void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
 
 // -- pool_opts_t --
 
+// The order of items in the list is important, therefore,
+// you should always add to the end of the list when adding new options.
+
 typedef std::map<std::string, pool_opts_t::opt_desc_t> opt_mapping_t;
 static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	   ("scrub_min_interval", pool_opts_t::opt_desc_t(
@@ -1350,8 +1360,6 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	     pool_opts_t::FINGERPRINT_ALGORITHM, pool_opts_t::STR))
            ("pg_num_min", pool_opts_t::opt_desc_t(
 	     pool_opts_t::PG_NUM_MIN, pool_opts_t::INT))
-           ("pg_num_max", pool_opts_t::opt_desc_t(
-	     pool_opts_t::PG_NUM_MAX, pool_opts_t::INT))
            ("target_size_bytes", pool_opts_t::opt_desc_t(
 	     pool_opts_t::TARGET_SIZE_BYTES, pool_opts_t::INT))
            ("target_size_ratio", pool_opts_t::opt_desc_t(
@@ -1365,7 +1373,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("dedup_chunk_algorithm", pool_opts_t::opt_desc_t(
 	     pool_opts_t::DEDUP_CHUNK_ALGORITHM, pool_opts_t::STR))
            ("dedup_cdc_chunk_size", pool_opts_t::opt_desc_t(
-	     pool_opts_t::DEDUP_CDC_CHUNK_SIZE, pool_opts_t::INT));
+	     pool_opts_t::DEDUP_CDC_CHUNK_SIZE, pool_opts_t::INT))
+	   ("pg_num_max", pool_opts_t::opt_desc_t(
+             pool_opts_t::PG_NUM_MAX, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name)
 {
@@ -2850,6 +2860,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_deep_scrub") << last_deep_scrub;
   f->dump_stream("last_deep_scrub_stamp") << last_deep_scrub_stamp;
   f->dump_stream("last_clean_scrub_stamp") << last_clean_scrub_stamp;
+  f->dump_int("objects_scrubbed", objects_scrubbed);
   f->dump_int("log_size", log_size);
   f->dump_int("ondisk_log_size", ondisk_log_size);
   f->dump_bool("stats_invalid", stats_invalid);
@@ -2862,6 +2873,9 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_unsigned("snaptrimq_len", snaptrimq_len);
   f->dump_int("last_scrub_duration", last_scrub_duration);
   f->dump_string("scrub_schedule", dump_scrub_schedule());
+  f->dump_float("scrub_duration", scrub_duration);
+  f->dump_int("objects_trimmed", objects_trimmed);
+  f->dump_float("snaptrim_duration", snaptrim_duration);
   stats.dump(f);
   f->open_array_section("up");
   for (auto p = up.cbegin(); p != up.cend(); ++p)
@@ -2957,7 +2971,7 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(27, 22, bl);
+  ENCODE_START(28, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -3012,6 +3026,11 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_sched_status.m_is_active, bl);
   encode((scrub_sched_status.m_is_deep==scrub_level_t::deep), bl);
   encode(scrub_sched_status.m_is_periodic, bl);
+  encode(objects_scrubbed, bl);
+  encode(scrub_duration, bl);
+  encode(objects_trimmed, bl);
+  encode(snaptrim_duration, bl);
+
   ENCODE_FINISH(bl);
 }
 
@@ -3019,7 +3038,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(26, bl);
+  DECODE_START(28, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3099,6 +3118,12 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       scrub_sched_status.m_is_deep = tmp ? scrub_level_t::deep : scrub_level_t::shallow;
       decode(tmp, bl);
       scrub_sched_status.m_is_periodic = tmp;
+      decode(objects_scrubbed, bl);
+    }
+    if (struct_v >= 28) {
+      decode(scrub_duration, bl);
+      decode(objects_trimmed, bl);
+      decode(snaptrim_duration, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -3133,7 +3158,11 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.last_deep_scrub_stamp = utime_t(15, 16);
   a.last_clean_scrub_stamp = utime_t(17, 18);
   a.last_scrub_duration = 3617;
+  a.scrub_duration = 0.003;
   a.snaptrimq_len = 1048576;
+  a.objects_scrubbed = 0;
+  a.objects_trimmed = 0;
+  a.snaptrim_duration = 0.123;
   list<object_stat_collection_t*> l;
   object_stat_collection_t::generate_test_instances(l);
   a.stats = *l.back();
@@ -3208,7 +3237,11 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.purged_snaps == r.purged_snaps &&
     l.snaptrimq_len == r.snaptrimq_len &&
     l.last_scrub_duration == r.last_scrub_duration &&
-    l.scrub_sched_status == r.scrub_sched_status;
+    l.scrub_sched_status == r.scrub_sched_status &&
+    l.objects_scrubbed == r.objects_scrubbed &&
+    l.scrub_duration == r.scrub_duration &&
+    l.objects_trimmed == r.objects_trimmed &&
+    l.snaptrim_duration == r.snaptrim_duration;
 }
 
 // -- store_statfs_t --

@@ -33,6 +33,7 @@ protected:
   int notify_err = 0;
 
   friend class WatchNotifyTestCtx2;
+  friend class WatchNotifyTestCtx2TimeOut;
 };
 
 IoCtx *notify_ioctx;
@@ -43,6 +44,41 @@ class WatchNotifyTestCtx2 : public WatchCtx2
 
 public:
   WatchNotifyTestCtx2(LibRadosWatchNotifyPP *notify)
+    : notify(notify)
+  {}
+
+  void handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_gid,
+		     bufferlist& bl) override {
+    std::cout << __func__ << " cookie " << cookie << " notify_id " << notify_id
+	      << " notifier_gid " << notifier_gid << std::endl;
+    notify->notify_bl = bl;
+    notify->notify_cookies.insert(cookie);
+    bufferlist reply;
+    reply.append("reply", 5);
+    if (notify_sleep)
+      sleep(notify_sleep);
+    notify_ioctx->notify_ack(notify->notify_oid, notify_id, cookie, reply);
+  }
+
+  void handle_error(uint64_t cookie, int err) override {
+    std::cout << __func__ << " cookie " << cookie
+	      << " err " << err << std::endl;
+    ceph_assert(cookie > 1000);
+    notify_ioctx->unwatch2(cookie);
+    notify->notify_cookies.erase(cookie);
+    notify->notify_err = notify_ioctx->watch2(notify->notify_oid, &cookie, this);
+    if (notify->notify_err < err ) {
+      std::cout << "reconnect notify_err " << notify->notify_err << " err " << err << std::endl;
+    }
+  }
+};
+
+class WatchNotifyTestCtx2TimeOut : public WatchCtx2
+{
+  LibRadosWatchNotifyPP *notify;
+
+public:
+  WatchNotifyTestCtx2TimeOut(LibRadosWatchNotifyPP *notify)
     : notify(notify)
   {}
 
@@ -302,7 +338,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, ioctx.write(notify_oid, bl1, sizeof(buf), 0));
   uint64_t handle;
-  WatchNotifyTestCtx2 ctx(this);
+  WatchNotifyTestCtx2TimeOut ctx(this);
   ASSERT_EQ(0, ioctx.watch2(notify_oid, &handle, &ctx));
   ASSERT_GT(ioctx.watch_check(handle), 0);
   std::list<obj_watch_t> watches;
@@ -337,7 +373,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, ioctx.write(notify_oid, bl1, sizeof(buf), 0));
   uint64_t handle;
-  WatchNotifyTestCtx2 ctx(this);
+  WatchNotifyTestCtx2TimeOut ctx(this);
   ASSERT_EQ(0, ioctx.watch3(notify_oid, &handle, &ctx, timeout));
   ASSERT_GT(ioctx.watch_check(handle), 0);
   std::list<obj_watch_t> watches;
