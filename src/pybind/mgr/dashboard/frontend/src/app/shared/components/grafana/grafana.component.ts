@@ -23,6 +23,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   loading = true;
   styles: Record<string, string> = {};
   dashboardExist = true;
+  showMessage = false;
   time: string;
   grafanaTimes: any;
   icons = Icons;
