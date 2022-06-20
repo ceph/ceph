@@ -1621,6 +1621,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
   mds_rank_t mds = MDS_RANK_NONE;
   __u32 hash = 0;
   bool is_hash = false;
+  int issued = 0;
 
   Inode *in = NULL;
   Dentry *de = NULL;
@@ -1681,9 +1682,12 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
     ldout(cct, 20) << __func__ << " " << *in << " is_hash=" << is_hash
              << " hash=" << hash << dendl;
   
+    if (req->get_op() == CEPH_MDS_OP_GETATTR)
+      issued = req->inode()->caps_issued();
+
     if (is_hash && S_ISDIR(in->mode) && (!in->fragmap.empty() || !in->frag_repmap.empty())) {
       frag_t fg = in->dirfragtree[hash];
-      if (!req->auth_is_best()) {
+      if (!req->auth_is_best(issued)) {
         auto repmapit = in->frag_repmap.find(fg);
         if (repmapit != in->frag_repmap.end()) {
           auto& repmap = repmapit->second;
@@ -1704,7 +1708,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
       }
     }
   
-    if (in->auth_cap && req->auth_is_best()) {
+    if (in->auth_cap && req->auth_is_best(issued)) {
       mds = in->auth_cap->session->mds_num;
     } else if (!in->caps.empty()) {
       mds = in->caps.begin()->second.session->mds_num;
