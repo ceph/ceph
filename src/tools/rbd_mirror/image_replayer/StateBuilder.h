@@ -44,6 +44,7 @@ public:
   virtual bool is_disconnected() const = 0;
 
   bool is_local_primary() const;
+  bool is_remote_primary() const;
   bool is_linked() const;
 
   virtual cls::rbd::MirrorImageMode get_mirror_image_mode() const = 0;

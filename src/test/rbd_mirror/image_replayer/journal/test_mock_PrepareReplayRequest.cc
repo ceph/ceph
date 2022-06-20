@@ -293,35 +293,6 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, ResyncRequestedError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, UnlinkedRemoteNonPrimary) {
-  InSequence seq;
-
-  librbd::MockJournal mock_journal;
-  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
-  mock_local_image_ctx.journal = &mock_journal;
-
-  // check initial state
-  expect_is_resync_requested(mock_journal, false, 0);
-  expect_journal_get_tag_tid(mock_journal, 345);
-  expect_journal_get_tag_data(mock_journal, {"blah"});
-
-  C_SaferCond ctx;
-  ::journal::MockJournaler mock_remote_journaler;
-  librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta;
-  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
-  mirror_peer_client_meta.image_id = mock_local_image_ctx.id;
-  MockStateBuilder mock_state_builder(mock_local_image_ctx,
-                                      mock_remote_journaler,
-                                      mirror_peer_client_meta);
-  bool resync_requested;
-  bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
-  request->send();
-  ASSERT_EQ(-EREMOTEIO, ctx.wait());
-}
-
 TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, Syncing) {
   InSequence seq;
 
@@ -556,37 +527,6 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, UpdateClientError) {
   ASSERT_EQ(0, ctx.wait());
   ASSERT_FALSE(resync_requested);
   ASSERT_FALSE(syncing);
-}
-
-TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, NonPrimaryRemoteNotTagOwner) {
-  InSequence seq;
-
-  librbd::MockJournal mock_journal;
-  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
-  mock_local_image_ctx.journal = &mock_journal;
-
-  // check initial state
-  expect_is_resync_requested(mock_journal, false, 0);
-  expect_journal_get_tag_tid(mock_journal, 345);
-  expect_journal_get_tag_data(mock_journal, {librbd::Journal<>::LOCAL_MIRROR_UUID,
-                                             librbd::Journal<>::ORPHAN_MIRROR_UUID,
-                                             true, 344, 0});
-
-  C_SaferCond ctx;
-  ::journal::MockJournaler mock_remote_journaler;
-  librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta;
-  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
-  mirror_peer_client_meta.image_id = mock_local_image_ctx.id;
-  MockStateBuilder mock_state_builder(mock_local_image_ctx,
-                                      mock_remote_journaler,
-                                      mirror_peer_client_meta);
-  bool resync_requested;
-  bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
-  request->send();
-  ASSERT_EQ(-EREMOTEIO, ctx.wait());
 }
 
 TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, RemoteDemotePromote) {

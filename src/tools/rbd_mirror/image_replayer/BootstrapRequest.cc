@@ -177,10 +177,6 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
     dout(5) << "local image is primary" << dendl;
     finish(-ENOMSG);
     return;
-  } else if (r == -EREMOTEIO) {
-    dout(10) << "remote-image is non-primary" << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
   } else if (r == -ENOENT || state_builder == nullptr) {
     dout(10) << "remote image does not exist";
     if (state_builder != nullptr) {
@@ -207,6 +203,23 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
     derr << "error retrieving remote image id" << cpp_strerror(r) << dendl;
     finish(r);
     return;
+  }
+
+  if (!state_builder->is_remote_primary()) {
+    ceph_assert(!state_builder->remote_image_id.empty());
+    if (state_builder->local_image_id.empty()) {
+      dout(10) << "local image does not exist and remote image is not primary"
+               << dendl;
+      finish(-EREMOTEIO);
+      return;
+    } else if (!state_builder->is_linked()) {
+      dout(10) << "local image is unlinked and remote image is not primary"
+               << dendl;
+      finish(-EREMOTEIO);
+      return;
+    }
+    // if the local image is linked to the remote image, we ignore that
+    // the remote image is not primary so that we can replay demotion
   }
 
   open_remote_image();
@@ -314,9 +327,7 @@ void BootstrapRequest<I>::handle_prepare_replay(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
-    if (r != -EREMOTEIO) {
-      derr << "failed to prepare local replay: " << cpp_strerror(r) << dendl;
-    }
+    derr << "failed to prepare local replay: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_remote_image();
     return;
