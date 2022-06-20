@@ -232,6 +232,7 @@ struct StateBuilder<librbd::MockTestImageCtx> {
 
   MOCK_CONST_METHOD0(is_disconnected, bool());
   MOCK_CONST_METHOD0(is_local_primary, bool());
+  MOCK_CONST_METHOD0(is_remote_primary, bool());
   MOCK_CONST_METHOD0(is_linked, bool());
 
   MOCK_CONST_METHOD0(replay_requires_remote_image, bool());
@@ -353,6 +354,17 @@ public:
                                bool is_primary) {
     EXPECT_CALL(mock_state_builder, is_local_primary())
       .WillOnce(Return(is_primary));
+  }
+
+  void expect_is_remote_primary(MockStateBuilder& mock_state_builder,
+                                bool is_primary) {
+    EXPECT_CALL(mock_state_builder, is_remote_primary())
+      .WillOnce(Return(is_primary));
+  }
+
+  void expect_is_linked(MockStateBuilder& mock_state_builder, bool is_linked) {
+    EXPECT_CALL(mock_state_builder, is_linked())
+      .WillOnce(Return(is_linked));
   }
 
   void expect_is_disconnected(MockStateBuilder& mock_state_builder,
@@ -492,6 +504,107 @@ TEST_F(TestMockImageReplayerBootstrapRequest, Success) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
+
+  // open the remote image
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  MockOpenImageRequest mock_open_image_request;
+  expect_open_image(mock_open_image_request, m_remote_io_ctx,
+                    mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
+
+  // open the local image
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  MockOpenLocalImageRequest mock_open_local_image_request;
+  expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
+                          mock_local_image_ctx.id, &mock_local_image_ctx, 0);
+
+  // prepare replay
+  expect_prepare_replay(mock_state_builder, false, false, 0);
+  expect_is_disconnected(mock_state_builder, false);
+
+  // close remote image
+  expect_replay_requires_remote_image(mock_state_builder, false);
+  expect_close_remote_image(mock_state_builder, 0);
+
+  C_SaferCond ctx;
+  MockThreads mock_threads(m_threads);
+  MockInstanceWatcher mock_instance_watcher;
+  MockBootstrapRequest *request = create_request(
+    &mock_threads, &mock_instance_watcher, "global image id",
+    "local mirror uuid", &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerBootstrapRequest, PrepareRemoteImageNotPrimaryLocalDNE) {
+  InSequence seq;
+
+  // prepare local image
+  MockStateBuilder mock_state_builder;
+  MockPrepareLocalImageRequest mock_prepare_local_image_request;
+  expect_send(mock_prepare_local_image_request, mock_state_builder,
+              m_local_image_ctx->id, m_local_image_ctx->name, -ENOENT);
+
+  // prepare remote image
+  MockPrepareRemoteImageRequest mock_prepare_remote_image_request;
+  expect_send(mock_prepare_remote_image_request, mock_state_builder,
+              "remote mirror uuid", m_remote_image_ctx->id, 0);
+  expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, false);
+
+  C_SaferCond ctx;
+  MockThreads mock_threads(m_threads);
+  MockInstanceWatcher mock_instance_watcher;
+  MockBootstrapRequest *request = create_request(
+    &mock_threads, &mock_instance_watcher, "global image id",
+    "local mirror uuid", &ctx);
+  request->send();
+  ASSERT_EQ(-EREMOTEIO, ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerBootstrapRequest, PrepareRemoteImageNotPrimaryLocalUnlinked) {
+  InSequence seq;
+
+  // prepare local image
+  MockStateBuilder mock_state_builder;
+  MockPrepareLocalImageRequest mock_prepare_local_image_request;
+  expect_send(mock_prepare_local_image_request, mock_state_builder,
+              m_local_image_ctx->id, m_local_image_ctx->name, 0);
+
+  // prepare remote image
+  MockPrepareRemoteImageRequest mock_prepare_remote_image_request;
+  expect_send(mock_prepare_remote_image_request, mock_state_builder,
+              "remote mirror uuid", m_remote_image_ctx->id, 0);
+  expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, false);
+  expect_is_linked(mock_state_builder, false);
+
+  C_SaferCond ctx;
+  MockThreads mock_threads(m_threads);
+  MockInstanceWatcher mock_instance_watcher;
+  MockBootstrapRequest *request = create_request(
+    &mock_threads, &mock_instance_watcher, "global image id",
+    "local mirror uuid", &ctx);
+  request->send();
+  ASSERT_EQ(-EREMOTEIO, ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerBootstrapRequest, PrepareRemoteImageNotPrimaryLocalLinked) {
+  InSequence seq;
+
+  // prepare local image
+  MockStateBuilder mock_state_builder;
+  MockPrepareLocalImageRequest mock_prepare_local_image_request;
+  expect_send(mock_prepare_local_image_request, mock_state_builder,
+              m_local_image_ctx->id, m_local_image_ctx->name, 0);
+
+  // prepare remote image
+  MockPrepareRemoteImageRequest mock_prepare_remote_image_request;
+  expect_send(mock_prepare_remote_image_request, mock_state_builder,
+              "remote mirror uuid", m_remote_image_ctx->id, 0);
+  expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, false);
+  expect_is_linked(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -537,6 +650,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, OpenLocalImageError) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -579,6 +693,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, OpenLocalImageDNE) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -632,6 +747,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, OpenLocalImagePrimary) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -674,6 +790,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, CreateLocalImageError) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -712,6 +829,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplayError) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -756,6 +874,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplayResyncRequested) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -801,6 +920,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplaySyncing) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -850,6 +970,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareReplayDisconnected) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -895,6 +1016,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ImageSyncError) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -944,6 +1066,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ImageSyncCanceled) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -990,6 +1113,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, CloseRemoteImageError) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -1035,6 +1159,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ReplayRequiresRemoteImage) {
   expect_send(mock_prepare_remote_image_request, mock_state_builder,
               "remote mirror uuid", m_remote_image_ctx->id, 0);
   expect_is_local_primary(mock_state_builder, false);
+  expect_is_remote_primary(mock_state_builder, true);
 
   // open the remote image
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
