@@ -2359,6 +2359,7 @@ fi
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
 %{_includedir}/cephfs/ceph_ll_client.h
+%{_includedir}/cephfs/types.h
 %dir %{_includedir}/cephfs/metrics
 %{_includedir}/cephfs/metrics/Types.h
 %{_libdir}/libcephfs.so

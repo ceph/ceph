@@ -32,6 +32,7 @@
 #include "include/unordered_set.h"
 #include "include/cephfs/metrics/Types.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/types.h"
 #include "msg/Dispatcher.h"
 #include "msg/MessageRef.h"
 #include "msg/Messenger.h"
