@@ -62,6 +62,17 @@ ceph config rm client.foo.bar debug_asok
 ceph config get client.foo.bar.baz debug_asok | grep 33
 ceph config rm global debug_asok
 
+# whitespace keys
+ceph config set client.foo 'debug asok' 44
+ceph config get client.foo 'debug asok' | grep 44
+ceph config set client.foo debug_asok 55
+ceph config get client.foo 'debug asok' | grep 55
+ceph config set client.foo 'debug asok' 66
+ceph config get client.foo debug_asok | grep 66
+ceph config rm client.foo debug_asok
+ceph config set client.foo debug_asok 66
+ceph config rm client.foo 'debug asok'
+
 # help
 ceph config help debug_asok | grep debug_asok
 

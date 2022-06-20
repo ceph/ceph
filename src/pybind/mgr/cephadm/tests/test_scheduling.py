@@ -1441,3 +1441,79 @@ def test_unreachable_host(service_type, placement, hosts, unreachable_hosts, dae
     ).place()
     assert sorted([h.hostname for h in to_add]) in expected_add
     assert sorted([h.name() for h in to_remove]) in expected_remove
+
+
+class RescheduleFromOfflineTest(NamedTuple):
+    service_type: str
+    placement: PlacementSpec
+    hosts: List[str]
+    maintenance_hosts: List[str]
+    offline_hosts: List[str]
+    daemons: List[DaemonDescription]
+    expected_add: List[List[str]]
+    expected_remove: List[List[str]]
+
+
+@pytest.mark.parametrize("service_type,placement,hosts,maintenance_hosts,offline_hosts,daemons,expected_add,expected_remove",
+                         [
+                             RescheduleFromOfflineTest(
+                                 'nfs',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 [],
+                                 ['host2'],
+                                 [
+                                     DaemonDescription('nfs', 'a', 'host1'),
+                                     DaemonDescription('nfs', 'b', 'host2'),
+                                 ],
+                                 [['host3']],
+                                 [[]],
+                             ),
+                             RescheduleFromOfflineTest(
+                                 'nfs',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 ['host2'],
+                                 [],
+                                 [
+                                     DaemonDescription('nfs', 'a', 'host1'),
+                                     DaemonDescription('nfs', 'b', 'host2'),
+                                 ],
+                                 [[]],
+                                 [[]],
+                             ),
+                             RescheduleFromOfflineTest(
+                                 'mon',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 [],
+                                 ['host2'],
+                                 [
+                                     DaemonDescription('mon', 'a', 'host1'),
+                                     DaemonDescription('mon', 'b', 'host2'),
+                                 ],
+                                 [[]],
+                                 [[]],
+                             ),
+                         ])
+def test_remove_from_offline(service_type, placement, hosts, maintenance_hosts, offline_hosts, daemons, expected_add, expected_remove):
+
+    spec = ServiceSpec(service_type=service_type,
+                       service_id='test',
+                       placement=placement)
+
+    host_specs = [HostSpec(h) for h in hosts]
+    for h in host_specs:
+        if h.hostname in offline_hosts:
+            h.status = 'offline'
+        if h.hostname in maintenance_hosts:
+            h.status = 'maintenance'
+
+    hosts, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=host_specs,
+        unreachable_hosts=[h for h in host_specs if h.status],
+        daemons=daemons,
+    ).place()
+    assert sorted([h.hostname for h in to_add]) in expected_add
+    assert sorted([h.name() for h in to_remove]) in expected_remove

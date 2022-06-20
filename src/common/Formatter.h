@@ -171,6 +171,8 @@ namespace ceph {
       return false; /* is handling done? */
     }
 
+    int stack_size() { return m_stack.size(); }
+
   private:
 
     struct json_formatter_stack_entry_d {
@@ -309,3 +311,4 @@ namespace ceph {
   std::string fixed_u_to_string(uint64_t num, int scale);
 }
 #endif
+

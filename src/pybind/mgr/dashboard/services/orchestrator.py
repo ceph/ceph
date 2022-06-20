@@ -151,6 +151,12 @@ class OsdManager(ResourceManager):
         return self.api.remove_osds_status()
 
 
+class DaemonManager(ResourceManager):
+    @wait_api_result
+    def action(self, daemon_name='', action='', image=None):
+        return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image)
+
+
 class OrchClient(object):
 
     _instance = None
@@ -169,6 +175,7 @@ class OrchClient(object):
         self.inventory = InventoryManager(self.api)
         self.services = ServiceManager(self.api)
         self.osds = OsdManager(self.api)
+        self.daemons = DaemonManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']
@@ -218,3 +225,5 @@ class OrchFeature(object):
 
     DEVICE_LIST = 'get_inventory'
     DEVICE_BLINK_LIGHT = 'blink_device_light'
+
+    DAEMON_ACTION = 'daemon_action'

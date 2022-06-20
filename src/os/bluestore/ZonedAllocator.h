@@ -94,8 +94,8 @@ public:
   uint64_t get_free() override;
 
   void dump() override;
-  void dump(std::function<void(uint64_t offset,
-                               uint64_t length)> notify) override;
+  void foreach(
+    std::function<void(uint64_t offset, uint64_t length)> notify) override;
 
   int64_t pick_zone_to_clean(float min_score, uint64_t min_saved);
   void set_cleaning_zone(uint32_t zone) {

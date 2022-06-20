@@ -36,6 +36,7 @@
 
 class MMgrReport;
 class MMgrOpen;
+class MMgrUpdate;
 class MMgrClose;
 class MMonMgrReport;
 class MCommand;
@@ -275,6 +276,7 @@ public:
 
   void fetch_missing_metadata(const DaemonKey& key, const entity_addr_t& addr);
   bool handle_open(const ceph::ref_t<MMgrOpen>& m);
+  bool handle_update(const ceph::ref_t<MMgrUpdate>& m);
   bool handle_close(const ceph::ref_t<MMgrClose>& m);
   bool handle_report(const ceph::ref_t<MMgrReport>& m);
   bool handle_command(const ceph::ref_t<MCommand>& m);
@@ -296,6 +298,7 @@ public:
   MetricQueryID add_mds_perf_query(const MDSPerfMetricQuery &query,
                                    const std::optional<MDSPerfMetricLimit> &limit);
   int remove_mds_perf_query(MetricQueryID query_id);
+  void reregister_mds_perf_queries();
   int get_mds_perf_counters(MDSPerfCollector *collector);
 
   virtual const char** get_tracked_conf_keys() const override;

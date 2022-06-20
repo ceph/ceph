@@ -139,6 +139,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         if flush:
             self.metadata_mgr.flush()
 
+    def add_clone_failure(self, errno, error_msg):
+        self.metadata_mgr.add_section(MetadataManager.CLONE_FAILURE_SECTION)
+        self.metadata_mgr.update_section(MetadataManager.CLONE_FAILURE_SECTION,
+                                         MetadataManager.CLONE_FAILURE_META_KEY_ERRNO, errno)
+        self.metadata_mgr.update_section(MetadataManager.CLONE_FAILURE_SECTION,
+                                         MetadataManager.CLONE_FAILURE_META_KEY_ERROR_MSG, error_msg)
+        self.metadata_mgr.flush()
+
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
@@ -151,6 +159,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             # source snapshot attrs are used to create clone subvolume.
             # attributes of subvolume's content though, are synced during the cloning process.
             attrs = source_subvolume.get_attrs(source_subvolume.snapshot_data_path(snapname))
+
+            # The source of the clone may have exceeded its quota limit as
+            # CephFS quotas are imprecise. Cloning such a source may fail if
+            # the quota on the destination is set before starting the clone
+            # copy. So always set the quota on destination after cloning is
+            # successful.
+            attrs["quota"] = None
 
             # override snapshot pool setting, if one is provided for the clone
             if pool is not None:
@@ -653,6 +668,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
         return clone_source
 
+    def _get_clone_failure(self):
+        clone_failure = {
+            'errno'     : self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERRNO),
+            'error_msg' : self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERROR_MSG),
+        }
+        return clone_failure
+
     @property
     def status(self):
         state = SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
@@ -662,6 +684,12 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         }
         if not SubvolumeOpSm.is_complete_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
             subvolume_status["source"] = self._get_clone_source()
+        if SubvolumeOpSm.is_failed_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
+            try:
+                subvolume_status["failure"] = self._get_clone_failure()
+            except MetadataMgrException:
+                pass
+
         return subvolume_status
 
     @property
@@ -715,6 +743,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
         snappath = self.snapshot_path(snapname)
         rmsnap(self.fs, snappath)
+        self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
+        self.metadata_mgr.flush()
 
     def snapshot_info(self, snapname):
         if is_inherited_snap(snapname):
@@ -768,8 +798,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EINVAL, "error cloning subvolume")
 
     def detach_snapshot(self, snapname, track_id):
-        if not snapname.encode('utf-8') in self.list_snapshots():
-            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
         try:
             with open_clone_index(self.fs, self.vol_spec) as index:
                 index.untrack(track_id)

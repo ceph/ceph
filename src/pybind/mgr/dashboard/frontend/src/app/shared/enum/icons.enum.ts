@@ -68,6 +68,8 @@ export enum Icons {
   wrench = 'fa fa-wrench', // Configuration Error
   enter = 'fa fa-sign-in', // Enter
   exit = 'fa fa-sign-out', // Exit
+  restart = 'fa fa-history', // Restart
+  deploy = 'fa fa-cube', // Deploy, Redeploy
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

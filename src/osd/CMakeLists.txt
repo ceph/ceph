@@ -26,6 +26,7 @@ set(osd_srcs
   scrubber/PrimaryLogScrub.cc
   scrubber/scrub_machine.cc
   scrubber/ScrubStore.cc
+  scrubber/scrub_backend.cc
   Watch.cc
   Session.cc
   SnapMapper.cc

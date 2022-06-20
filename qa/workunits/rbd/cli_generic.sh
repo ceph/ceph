@@ -1129,6 +1129,9 @@ test_trash_purge_schedule() {
     rbd pool init rbd2
     rbd namespace create rbd2/ns1
 
+    test "$(ceph rbd trash purge schedule list)" = "{}"
+    ceph rbd trash purge schedule status | fgrep '"scheduled": []'
+
     expect_fail rbd trash purge schedule ls
     test "$(rbd trash purge schedule ls -R --format json)" = "[]"
 
@@ -1155,6 +1158,8 @@ test_trash_purge_schedule() {
     rbd trash purge schedule status
     test "$(rbd trash purge schedule status --format xml |
         $XMLSTARLET sel -t -v '//scheduled/item/pool')" = 'rbd'
+    test "$(rbd trash purge schedule status -p rbd --format xml |
+        $XMLSTARLET sel -t -v '//scheduled/item/pool')" = 'rbd'
 
     rbd trash purge schedule add 2d 00:17
     rbd trash purge schedule ls | grep 'every 2d starting at 00:17'
@@ -1177,6 +1182,12 @@ test_trash_purge_schedule() {
     rbd trash purge schedule status
     rbd trash purge schedule status --format xml |
         $XMLSTARLET sel -t -v '//scheduled/item/pool' | grep 'rbd2'
+    echo $(rbd trash purge schedule status --format xml |
+        $XMLSTARLET sel -t -v '//scheduled/item/pool') | grep 'rbd rbd2 rbd2'
+    test "$(rbd trash purge schedule status -p rbd --format xml |
+        $XMLSTARLET sel -t -v '//scheduled/item/pool')" = 'rbd'
+    test "$(echo $(rbd trash purge schedule status -p rbd2 --format xml |
+        $XMLSTARLET sel -t -v '//scheduled/item/pool'))" = 'rbd2 rbd2'
 
     test "$(echo $(rbd trash purge schedule ls -R --format xml |
         $XMLSTARLET sel -t -v '//schedules/schedule/items'))" = "2d00:17:00 1d01:30:00"
@@ -1199,6 +1210,7 @@ test_trash_purge_schedule() {
         rbd trash ls rbd2/ns1 | wc -l | grep '^1$'
 
         rbd trash purge schedule add -p $p 1m
+        rbd trash purge schedule list -p rbd2 -R | grep 'every 1m'
         rbd trash purge schedule list -p rbd2/ns1 -R | grep 'every 1m'
 
         for i in `seq 12`; do
@@ -1207,11 +1219,27 @@ test_trash_purge_schedule() {
         done
         rbd trash ls rbd2/ns1 | wc -l | grep '^0$'
 
+        # repeat with kicked in schedule, see https://tracker.ceph.com/issues/53915
+        rbd trash purge schedule list -p rbd2 -R | grep 'every 1m'
+        rbd trash purge schedule list -p rbd2/ns1 -R | grep 'every 1m'
+
         rbd trash purge schedule status | grep 'rbd2  *ns1'
+        rbd trash purge schedule status -p rbd2 | grep 'rbd2  *ns1'
+        rbd trash purge schedule status -p rbd2/ns1 | grep 'rbd2  *ns1'
+
         rbd trash purge schedule rm -p $p 1m
     done
 
+    # Negative tests
+    rbd trash purge schedule add 2m
+    expect_fail rbd trash purge schedule add -p rbd dummy
+    expect_fail rbd trash purge schedule add dummy
+    expect_fail rbd trash purge schedule remove -p rbd dummy
+    expect_fail rbd trash purge schedule remove dummy
+    rbd trash purge schedule ls -p rbd | grep 'every 1d starting at 01:30'
+    rbd trash purge schedule ls | grep 'every 2m'
     rbd trash purge schedule remove -p rbd 1d 01:30
+    rbd trash purge schedule remove 2m
     test "$(rbd trash purge schedule ls -R --format json)" = "[]"
 
     remove_images
@@ -1229,6 +1257,9 @@ test_mirror_snapshot_schedule() {
     rbd mirror pool enable rbd2/ns1 image
     rbd mirror pool peer add rbd2 cluster1
 
+    test "$(ceph rbd mirror snapshot schedule list)" = "{}"
+    ceph rbd mirror snapshot schedule status | fgrep '"scheduled_images": []'
+
     expect_fail rbd mirror snapshot schedule ls
     test "$(rbd mirror snapshot schedule ls -R --format json)" = "[]"
 
@@ -1242,8 +1273,14 @@ test_mirror_snapshot_schedule() {
     test "$(rbd mirror image status rbd2/ns1/test1 |
         grep -c mirror.primary)" = '1'
 
-    rbd mirror snapshot schedule add --image rbd2/ns1/test1 1m
-    test "$(rbd mirror snapshot schedule ls --image rbd2/ns1/test1)" = 'every 1m'
+    rbd mirror snapshot schedule add -p rbd2/ns1 --image test1 1m
+    expect_fail rbd mirror snapshot schedule ls
+    rbd mirror snapshot schedule ls -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    expect_fail rbd mirror snapshot schedule ls -p rbd2
+    rbd mirror snapshot schedule ls -p rbd2 -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    expect_fail rbd mirror snapshot schedule ls -p rbd2/ns1
+    rbd mirror snapshot schedule ls -p rbd2/ns1 -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
 
     for i in `seq 12`; do
         test "$(rbd mirror image status rbd2/ns1/test1 |
@@ -1254,15 +1291,44 @@ test_mirror_snapshot_schedule() {
     test "$(rbd mirror image status rbd2/ns1/test1 |
         grep -c mirror.primary)" -gt '1'
 
+    # repeat with kicked in schedule, see https://tracker.ceph.com/issues/53915
+    expect_fail rbd mirror snapshot schedule ls
     rbd mirror snapshot schedule ls -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    expect_fail rbd mirror snapshot schedule ls -p rbd2
+    rbd mirror snapshot schedule ls -p rbd2 -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    expect_fail rbd mirror snapshot schedule ls -p rbd2/ns1
+    rbd mirror snapshot schedule ls -p rbd2/ns1 -R | grep 'rbd2 *ns1 *test1 *every 1m'
     test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
 
     rbd mirror snapshot schedule status
     test "$(rbd mirror snapshot schedule status --format xml |
         $XMLSTARLET sel -t -v '//scheduled_images/image/image')" = 'rbd2/ns1/test1'
+    test "$(rbd mirror snapshot schedule status -p rbd2 --format xml |
+        $XMLSTARLET sel -t -v '//scheduled_images/image/image')" = 'rbd2/ns1/test1'
+    test "$(rbd mirror snapshot schedule status -p rbd2/ns1 --format xml |
+        $XMLSTARLET sel -t -v '//scheduled_images/image/image')" = 'rbd2/ns1/test1'
+    test "$(rbd mirror snapshot schedule status -p rbd2/ns1 --image test1 --format xml |
+        $XMLSTARLET sel -t -v '//scheduled_images/image/image')" = 'rbd2/ns1/test1'
 
     rbd mirror snapshot schedule add 1h 00:15
     test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+    rbd mirror snapshot schedule ls -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror snapshot schedule ls -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    expect_fail rbd mirror snapshot schedule ls -p rbd2
+    rbd mirror snapshot schedule ls -p rbd2 -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror snapshot schedule ls -p rbd2 -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    expect_fail rbd mirror snapshot schedule ls -p rbd2/ns1
+    rbd mirror snapshot schedule ls -p rbd2/ns1 -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror snapshot schedule ls -p rbd2/ns1 -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
+
+    # Negative tests
+    expect_fail rbd mirror snapshot schedule add dummy
+    expect_fail rbd mirror snapshot schedule add -p rbd2/ns1 --image test1 dummy
+    expect_fail rbd mirror snapshot schedule remove dummy
+    expect_fail rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 dummy
+    test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+    test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
 
     rbd rm rbd2/ns1/test1
 

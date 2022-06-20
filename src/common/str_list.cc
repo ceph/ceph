@@ -40,7 +40,7 @@ list<string> get_str_list(const string& str, const char *delims)
   return result;
 }
 
-void get_str_vec(const string& str, const char *delims, vector<string>& str_vec)
+void get_str_vec(std::string_view str, const char *delims, vector<string>& str_vec)
 {
   str_vec.clear();
   for_each_substr(str, delims, [&str_vec] (auto token) {
@@ -48,13 +48,13 @@ void get_str_vec(const string& str, const char *delims, vector<string>& str_vec)
     });
 }
 
-void get_str_vec(const string& str, vector<string>& str_vec)
+void get_str_vec(std::string_view str, vector<string>& str_vec)
 {
   const char *delims = ";,= \t";
   get_str_vec(str, delims, str_vec);
 }
 
-vector<string> get_str_vec(const string& str, const char *delims)
+vector<string> get_str_vec(std::string_view str, const char *delims)
 {
   vector<string> result;
   for_each_substr(str, delims, [&result] (auto token) {

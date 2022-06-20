@@ -155,6 +155,9 @@ int main(int argc, const char **argv)
   int upmap_deviation = 5;
   bool upmap_active = false;
   std::set<std::string> upmap_pools;
+  std::random_device::result_type upmap_seed;
+  std::random_device::result_type *upmap_p_seed = nullptr;
+
   int64_t pg_num = -1;
   bool test_map_pgs_dump_all = false;
   bool save = false;
@@ -185,6 +188,8 @@ int main(int argc, const char **argv)
       upmap = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_max, err, "--upmap-max", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &upmap_deviation, err, "--upmap-deviation", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, (int *)&upmap_seed, err, "--upmap-seed", (char*)NULL)) {
+      upmap_p_seed = &upmap_seed;
     } else if (ceph_argparse_witharg(args, i, &val, "--upmap-pool", (char*)NULL)) {
       upmap_pools.insert(val);
     } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple", (char*)NULL)) {
@@ -488,14 +493,18 @@ int main(int argc, const char **argv)
       for (auto& i: pools) {
         set<int64_t> one_pool;
         one_pool.insert(i);
+        //TODO: Josh: Add a function on the seed for multiple iterations. 
         int did = osdmap.calc_pg_upmaps(
           g_ceph_context, upmap_deviation,
           left, one_pool,
-          &pending_inc);
+          &pending_inc, upmap_p_seed);
         total_did += did;
         left -= did;
         if (left <= 0)
           break;
+        if (upmap_p_seed != nullptr) {
+          *upmap_p_seed += 13;
+        }
       }
       r = clock_gettime(CLOCK_MONOTONIC, &end);
       assert(r == 0);
@@ -661,12 +670,12 @@ skip_upmap:
 	  }
 	  primary = osds[0];
 	} else if (test_map_pgs_dump_all) {
-         osdmap.pg_to_raw_osds(pgid, &raw, &calced_primary);
-         osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
-                                &acting, &acting_primary);
-	 osds = acting;
-	 primary = acting_primary;
-       } else {
+          osdmap.pg_to_raw_osds(pgid, &raw, &calced_primary);
+          osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
+                                      &acting, &acting_primary);
+	  osds = acting;
+	  primary = acting_primary;
+        } else {
 	  osdmap.pg_to_acting_osds(pgid, &osds, &primary);
 	}
 	size[osds.size()]++;
@@ -675,18 +684,19 @@ skip_upmap:
 
 	if (test_map_pgs_dump) {
 	  cout << pgid << "\t" << osds << "\t" << primary << std::endl;
-       } else if (test_map_pgs_dump_all) {
-         cout << pgid << " raw (" << raw << ", p" << calced_primary
-              << ") up (" << up << ", p" << up_primary
-              << ") acting (" << acting << ", p" << acting_primary << ")"
-              << std::endl;
-       }
+        } else if (test_map_pgs_dump_all) {
+          cout << pgid << " raw (" << raw << ", p" << calced_primary
+               << ") up (" << up << ", p" << up_primary
+               << ") acting (" << acting << ", p" << acting_primary << ")"
+               << std::endl;
+        }
 
 	for (unsigned i=0; i<osds.size(); i++) {
 	  //cout << " rep " << i << " on " << osds[i] << std::endl;
-	  count[osds[i]]++;
+          if (osds[i] != CRUSH_ITEM_NONE)
+            count[osds[i]]++;
 	}
-	if (osds.size())
+	if (osds.size() && osds[0] != CRUSH_ITEM_NONE)
 	  first_count[osds[0]]++;
 	if (primary >= 0)
 	  primary_count[primary]++;

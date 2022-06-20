@@ -25,9 +25,9 @@ using rgw::IAM::Policy;
 
 void RGWRestUserPolicy::dump(Formatter *f) const
 {
-  encode_json("Policyname", policy_name , f);
-  encode_json("Username", user_name , f);
-  encode_json("Policydocument", policy, f);
+  encode_json("PolicyName", policy_name , f);
+  encode_json("UserName", user_name , f);
+  encode_json("PolicyDocument", policy, f);
 }
 
 void RGWRestUserPolicy::send_response()
@@ -156,6 +156,9 @@ void RGWPutUserPolicy::execute(optional_yield y)
     if (op_ret < 0) {
       op_ret = -ERR_INTERNAL_ERROR;
     }
+  } catch (buffer::error& err) {
+    ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+    op_ret = -EIO;
   } catch (rgw::IAM::PolicyParseException& e) {
     ldpp_dout(this, 20) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -ERR_MALFORMED_DOC;
@@ -213,7 +216,13 @@ void RGWGetUserPolicy::execute(optional_yield y)
     map<string, string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       bufferlist bl = it->second;
-      decode(policies, bl);
+      try {
+        decode(policies, bl);
+      } catch (buffer::error& err) {
+        ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+        op_ret = -EIO;
+        return;
+      }
       if (auto it = policies.find(policy_name); it != policies.end()) {
         policy = policies[policy_name];
         dump(s->formatter);
@@ -276,12 +285,18 @@ void RGWListUserPolicies::execute(optional_yield y)
       s->formatter->close_section();
       s->formatter->open_object_section("ListUserPoliciesResult");
       bufferlist bl = it->second;
-      decode(policies, bl);
-      for (const auto& p : policies) {
-        s->formatter->open_object_section("PolicyNames");
-        s->formatter->dump_string("member", p.first);
-        s->formatter->close_section();
+      try {
+        decode(policies, bl);
+      } catch (buffer::error& err) {
+        ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+        op_ret = -EIO;
+        return;
       }
+      s->formatter->open_object_section("PolicyNames");
+      for (const auto& p : policies) {
+        s->formatter->dump_string("member", p.first);
+      }
+      s->formatter->close_section();
       s->formatter->close_section();
       s->formatter->close_section();
     } else {
@@ -348,7 +363,13 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   map<string, string> policies;
   if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
     bufferlist out_bl = it->second;
-    decode(policies, out_bl);
+    try {
+      decode(policies, out_bl);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+      op_ret = -EIO;
+      return;
+    }
 
     if (auto p = policies.find(policy_name); p != policies.end()) {
       bufferlist in_bl;

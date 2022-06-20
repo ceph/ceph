@@ -77,7 +77,7 @@ following:
 .. confval:: mon_host_override
 
 - :confval:`mon_dns_srv_name`
-- ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
+- :confval:`mon_data`, :confval:`osd_data`, :confval:`mds_data`, :confval:`mgr_data`, and
   similar options that define which local directory the daemon
   stores its data in.
 - :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be used to
@@ -457,12 +457,17 @@ Commands
 
 The following CLI commands are used to configure the cluster:
 
-* ``ceph config dump`` will dump the entire configuration database for
-  the cluster.
+* ``ceph config dump`` will dump the entire monitors' configuration
+  database for the cluster.
 
-* ``ceph config get <who>`` will dump the configuration for a specific
-  daemon or client (e.g., ``mds.a``), as stored in the monitors'
-  configuration database.
+* ``ceph config get <who>`` will dump configuration options stored in
+  the monitors' configuration database for a specific daemon or client
+  (e.g., ``mds.a``).
+
+* ``ceph config get <who> <option>`` will show a configuration value
+  stored in the monitors' configuration database for a specific daemon
+  or client (e.g., ``mds.a``), or, if not present in the monitors'
+  configuration database, the compiled-in default value.
 
 * ``ceph config set <who> <option> <value>`` will set a configuration
   option in the monitors' configuration database.
@@ -481,6 +486,11 @@ The following CLI commands are used to configure the cluster:
   the monitor will be returned in an abbreviated config file stored in
   *output file*.  This command is useful for transitioning from legacy
   configuration files to centralized monitor-based configuration.
+
+Note that ``ceph config set <who> <option> <value>`` and ``ceph config get
+<who> <option>`` aren't symmetric because the latter also shows compiled-in
+default values.  In order to determine whether a configuration option is
+present in the monitors' configuration database, use ``ceph config dump``.
 
 
 Help
@@ -622,7 +632,7 @@ will report the value of a single option.
 Changes since Nautilus
 ======================
 
-With the Octopus release We changed the way the configuration file is parsed.
+The Octopus release changed the way the configuration file is parsed.
 These changes are as follows:
 
 - Repeated configuration options are allowed, and no warnings will be printed.

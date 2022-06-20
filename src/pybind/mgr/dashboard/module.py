@@ -13,13 +13,16 @@ import threading
 import time
 from typing import TYPE_CHECKING, Optional
 
+from .services.custom_banner import get_login_banner_mgr, \
+    set_login_banner_mgr, unset_login_banner_mgr
+
 if TYPE_CHECKING:
     if sys.version_info >= (3, 8):
         from typing import Literal
     else:
         from typing_extensions import Literal
 
-from mgr_module import CLICommand, CLIWriteCommand, HandleCommandResult, \
+from mgr_module import CLIReadCommand, CLIWriteCommand, HandleCommandResult, \
     MgrModule, MgrStandbyModule, NotifyType, Option, _get_localized_key
 from mgr_util import ServerConfigException, build_url, \
     create_self_signed_cert, get_default_addr, verify_tls_files
@@ -27,11 +30,8 @@ from mgr_util import ServerConfigException, build_url, \
 from . import mgr
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
-from .model.feedback import Feedback
-from .rest_client import RequestException
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
-from .services.feedback import CephTrackerClient
 from .services.rgw_client import configure_rgw_credentials
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
@@ -411,45 +411,6 @@ class Module(MgrModule, CherryPyConfig):
             return result
         return 0, 'Self-signed certificate created', ''
 
-    @CLICommand("dashboard get issue")
-    def get_issues_cli(self, issue_number: int):
-        try:
-            issue_number = int(issue_number)
-        except TypeError:
-            return -errno.EINVAL, '', f'Invalid issue number {issue_number}'
-        tracker_client = CephTrackerClient()
-        try:
-            response = tracker_client.get_issues(issue_number)
-        except RequestException as error:
-            if error.status_code == 404:
-                return -errno.EINVAL, '', f'Issue {issue_number} not found'
-            else:
-                return -errno.EREMOTEIO, '', f'Error: {str(error)}'
-        return 0, str(response), ''
-
-    @CLICommand("dashboard create issue")
-    def report_issues_cli(self, project: str, tracker: str, subject: str, description: str):
-        '''
-        Create an issue in the Ceph Issue tracker
-        Syntax: ceph dashboard create issue <project> <bug|feature> <subject> <description>
-        '''
-        try:
-            feedback = Feedback(Feedback.Project[project].value,
-                                Feedback.TrackerType[tracker].value, subject, description)
-        except KeyError:
-            return -errno.EINVAL, '', 'Invalid arguments'
-        tracker_client = CephTrackerClient()
-        try:
-            response = tracker_client.create_issue(feedback)
-        except RequestException as error:
-            if error.status_code == 401:
-                return -errno.EINVAL, '', 'Invalid API Key'
-            else:
-                return -errno.EINVAL, '', f'Error: {str(error)}'
-        except Exception:
-            return -errno.EINVAL, '', 'Ceph Tracker API key not set'
-        return 0, str(response), ''
-
     @CLIWriteCommand("dashboard set-rgw-credentials")
     def set_rgw_credentials(self):
         try:
@@ -458,6 +419,30 @@ class Module(MgrModule, CherryPyConfig):
             return -errno.EINVAL, '', str(error)
 
         return 0, 'RGW credentials configured', ''
+
+    @CLIWriteCommand("dashboard set-login-banner")
+    def set_login_banner(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+        item_label = 'login banner file'
+        if inbuf is None:
+            return HandleCommandResult(
+                -errno.EINVAL,
+                stderr=f'Please specify the {item_label} with "-i" option'
+            )
+        set_login_banner_mgr(inbuf, mgr_id)
+        return HandleCommandResult(stdout=f'{item_label} added')
+
+    @CLIReadCommand("dashboard get-login-banner")
+    def get_login_banner(self):
+        banner_text = get_login_banner_mgr()
+        if banner_text is None:
+            return HandleCommandResult(stdout='No login banner set')
+        else:
+            return HandleCommandResult(stdout=banner_text)
+
+    @CLIWriteCommand("dashboard unset-login-banner")
+    def unset_login_banner(self):
+        unset_login_banner_mgr()
+        return HandleCommandResult(stdout='Login banner removed')
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements

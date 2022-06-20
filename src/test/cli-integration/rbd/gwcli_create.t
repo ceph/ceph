@@ -34,7 +34,7 @@ Create the target IQN
 
 Create the first gateway
 ========================
-  $ HOST=$(python3 -c "import socket; print(socket.getfqdn())" | cut -d. -f1)
+  $ HOST=$(python3 -c "import socket; print(socket.getfqdn())")
   > IP=`hostname -i | awk '{print $1}'`
   > sudo podman exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST
   $ sudo podman exec $ISCSI_CONTAINER gwcli ls iscsi-targets/ | grep 'o- gateways' | awk -F'[' '{print $2}'
@@ -44,12 +44,12 @@ Create the second gateway
 ========================
   $ IP=`cat /etc/ceph/iscsi-gateway.cfg |grep 'trusted_ip_list' | awk -F'[, ]' '{print $3}'`
   > if [ "$IP" != `hostname -i | awk '{print $1}'` ]; then
-  >   HOST=$(python3 -c "import socket; print(socket.getfqdn('$IP'))" | cut -d. -f1)
+  >   HOST=$(python3 -c "import socket; print(socket.getfqdn('$IP'))")
   >   sudo podman exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST
   > fi
   $ IP=`cat /etc/ceph/iscsi-gateway.cfg |grep 'trusted_ip_list' | awk -F'[, ]' '{print $4}'`
   > if [ "$IP" != `hostname -i | awk '{print $1}'` ]; then
-  >   HOST=$(python3 -c "import socket; print(socket.getfqdn('$IP'))" | cut -d. -f1)
+  >   HOST=$(python3 -c "import socket; print(socket.getfqdn('$IP'))")
   >   sudo podman exec $ISCSI_CONTAINER gwcli iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:ceph-gw/gateways create ip_addresses=$IP gateway_name=$HOST
   > fi
   $ sudo podman exec $ISCSI_CONTAINER gwcli ls iscsi-targets/ | grep 'o- gateways' | awk -F'[' '{print $2}'

@@ -18,6 +18,8 @@
 
 #include <array>
 #include <string_view>
+#include <atomic>
+#include <unordered_map>
 
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
@@ -66,6 +68,7 @@ using ceph::crypto::MD5;
 #define RGW_SYS_PARAM_PREFIX "rgwx-"
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
+#define RGW_ATTR_RATELIMIT		RGW_ATTR_PREFIX "ratelimit"
 #define RGW_ATTR_LC            RGW_ATTR_PREFIX "lc"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
@@ -304,6 +307,7 @@ struct rgw_err {
   std::string message;
 };
 
+
 /* Helper class used for RGWHTTPArgs parsing */
 class NameVal
 {
@@ -344,6 +348,7 @@ class RGWHTTPArgs {
   /** parse the received arguments */
   int parse(const DoutPrefixProvider *dpp);
   void append(const std::string& name, const std::string& val);
+  void remove(const std::string& name);
   /** Get the value for a specific argument parameter */
   const std::string& get(const std::string& name, bool *exists = NULL) const;
   boost::optional<const std::string&>
@@ -691,6 +696,43 @@ void decode_json_obj(rgw_placement_rule& v, JSONObj *obj);
 inline std::ostream& operator<<(std::ostream& out, const rgw_placement_rule& rule) {
   return out << rule.to_str();
 }
+
+class RateLimiter;
+struct RGWRateLimitInfo {
+  int64_t max_write_ops;
+  int64_t max_read_ops;
+  int64_t max_write_bytes;
+  int64_t max_read_bytes;
+  bool enabled = false;
+  RGWRateLimitInfo()
+    : max_write_ops(0), max_read_ops(0), max_write_bytes(0), max_read_bytes(0)  {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(max_write_ops, bl);
+    encode(max_read_ops, bl);
+    encode(max_write_bytes, bl);
+    encode(max_read_bytes, bl);
+    encode(enabled, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(max_write_ops,bl);
+    decode(max_read_ops, bl);
+    decode(max_write_bytes,bl);
+    decode(max_read_bytes, bl);
+    decode(enabled, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+
+  void decode_json(JSONObj *obj);
+
+};
+WRITE_CLASS_ENCODER(RGWRateLimitInfo)
+
 struct RGWUserInfo
 {
   rgw_user user_id;
@@ -707,9 +749,8 @@ struct RGWUserInfo
   __u8 system;
   rgw_placement_rule default_placement;
   std::list<std::string> placement_tags;
-  RGWQuotaInfo bucket_quota;
   std::map<int, std::string> temp_url_keys;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
   uint32_t type;
   std::set<std::string> mfa_ids;
   std::string assumed_role_arn;
@@ -770,9 +811,9 @@ struct RGWUserInfo
      encode(system, bl);
      encode(default_placement, bl);
      encode(placement_tags, bl);
-     encode(bucket_quota, bl);
+     encode(quota.bucket_quota, bl);
      encode(temp_url_keys, bl);
-     encode(user_quota, bl);
+     encode(quota.user_quota, bl);
      encode(user_id.tenant, bl);
      encode(admin, bl);
      encode(type, bl);
@@ -838,13 +879,13 @@ struct RGWUserInfo
       decode(placement_tags, bl); /* tags of allowed placement rules */
     }
     if (struct_v >= 14) {
-      decode(bucket_quota, bl);
+      decode(quota.bucket_quota, bl);
     }
     if (struct_v >= 15) {
      decode(temp_url_keys, bl);
     }
     if (struct_v >= 16) {
-      decode(user_quota, bl);
+      decode(quota.user_quota, bl);
     }
     if (struct_v >= 17) {
       decode(user_id.tenant, bl);
@@ -1031,11 +1072,6 @@ struct RGWBucketInfo {
   // layout of bucket index objects
   rgw::BucketLayout layout;
 
-  // Represents the number of bucket index object shards:
-  //   - value of 0 indicates there is no sharding (this is by default
-  //     before this feature is implemented).
-  //   - value of UINT32_T::MAX indicates this is a blind bucket.
-
   // Represents the shard number for blind bucket.
   const static uint32_t NUM_SHARDS_BLIND_BUCKET;
 
@@ -1080,6 +1116,16 @@ struct RGWBucketInfo {
   void set_sync_policy(rgw_sync_policy_info&& policy);
 
   bool empty_sync_policy() const;
+
+  bool is_indexless() const {
+    return rgw::is_layout_indexless(layout.current_index);
+  }
+  const rgw::bucket_index_layout_generation& get_current_index() const {
+    return layout.current_index;
+  }
+  rgw::bucket_index_layout_generation& get_current_index() {
+    return layout.current_index;
+  }
 
   RGWBucketInfo();
   ~RGWBucketInfo();
@@ -1184,6 +1230,7 @@ struct req_info {
   const RGWEnv *env;
   RGWHTTPArgs args;
   meta_map_t x_meta_map;
+  meta_map_t crypt_attribute_map;
 
   std::string host;
   const char *method;
@@ -1510,6 +1557,11 @@ struct req_state : DoutPrefixProvider {
   rgw::io::BasicClient *cio{nullptr};
   http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
+  std::shared_ptr<RateLimiter> ratelimit_data;
+  RGWRateLimitInfo user_ratelimit;
+  RGWRateLimitInfo bucket_ratelimit;
+  std::string ratelimit_bucket_marker;
+  std::string ratelimit_user_name;
   bool content_started{false};
   int format{0};
   ceph::Formatter *formatter{nullptr};
@@ -1626,7 +1678,6 @@ struct req_state : DoutPrefixProvider {
 
   Clock::duration time_elapsed() const { return Clock::now() - time; }
 
-  RGWObjectCtx *obj_ctx{nullptr};
   std::string dialect;
   std::string req_id;
   std::string trans_id;
@@ -1645,6 +1696,7 @@ struct req_state : DoutPrefixProvider {
   std::vector<rgw::IAM::Policy> session_policies;
 
   jspan trace;
+  bool trace_enabled = false;
 
   //Principal tags that come in as part of AssumeRoleWithWebIdentity
   std::vector<std::pair<std::string, std::string>> principal_tags;
@@ -1765,6 +1817,10 @@ struct rgw_obj {
   rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) : bucket(b), key(k) {}
   rgw_obj(const rgw_bucket& b, const rgw_obj_index_key& k) : bucket(b), key(k) {}
 
+  void init(const rgw_bucket& b, const rgw_obj_key& k) {
+    bucket = b;
+    key = k;
+  }
   void init(const rgw_bucket& b, const std::string& name) {
     bucket = b;
     key.set(name);
@@ -2006,6 +2062,15 @@ void rgw_add_amz_meta_header(
   const std::string& k,
   const std::string& v);
 
+enum rgw_set_action_if_set {
+  DISCARD=0, OVERWRITE, APPEND
+};
+
+bool rgw_set_amz_meta_header(
+  meta_map_t& x_meta_map,
+  const std::string& k,
+  const std::string& v, rgw_set_action_if_set f);
+
 extern std::string rgw_string_unquote(const std::string& s);
 extern void parse_csv_string(const std::string& ival, std::vector<std::string>& ovals);
 extern int parse_key_value(std::string& in_str, std::string& key, std::string& val);
@@ -2017,6 +2082,10 @@ parse_key_value(const std::string_view& in_str,
 extern boost::optional<std::pair<std::string_view,std::string_view>>
 parse_key_value(const std::string_view& in_str);
 
+struct rgw_name_to_flag {
+  const char *type_name;
+  uint32_t flag;
+};
 
 /** time parsing */
 extern int parse_time(const char *time_str, real_time *time);
@@ -2357,3 +2426,11 @@ int decode_bl(bufferlist& bl, T& t)
   }
   return 0;
 }
+
+extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);
+
+boost::intrusive_ptr<CephContext>
+rgw_global_init(const std::map<std::string,std::string> *defaults,
+		    std::vector < const char* >& args,
+		    uint32_t module_type, code_environment_t code_env,
+		    int flags);

@@ -265,14 +265,15 @@ void handle_connection(boost::asio::io_context& context,
       string user = "-";
       const auto started = ceph::coarse_real_clock::now();
       ceph::coarse_real_clock::duration latency{};
-
       process_request(env.store, env.rest, &req, env.uri_prefix,
                       *env.auth_registry, &client, env.olog, y,
-                      scheduler, &user, &latency, &http_ret);
+                      scheduler, &user, &latency,
+                      env.ratelimiting->get_active(),
+                      &http_ret, env.lua_background);
 
       if (cct->_conf->subsys.should_gather(dout_subsys, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following
-        ldout(cct, 1) << "beast: " << std::hex << &req << std::dec << ": "
+        lsubdout(cct, rgw_access, 1) << "beast: " << std::hex << &req << std::dec << ": "
             << remote_endpoint.address() << " - " << user << " [" << log_apache_time{started} << "] \""
             << message.method_string() << ' ' << message.target() << ' '
             << http_version{message.version()} << "\" " << http_ret << ' '
@@ -670,8 +671,8 @@ class ExpandMetaVar {
 
 public:
   ExpandMetaVar(rgw::sal::Zone* zone_svc) {
-    meta_map["realm"] = zone_svc->get_realm().get_name();
-    meta_map["realm_id"] = zone_svc->get_realm().get_id();
+    meta_map["realm"] = zone_svc->get_realm_name();
+    meta_map["realm_id"] = zone_svc->get_realm_id();
     meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
     meta_map["zonegroup_id"] = zone_svc->get_zonegroup().get_id();
     meta_map["zone"] = zone_svc->get_name();

@@ -104,7 +104,7 @@ class ThreadPoolPurgeQueueMixin(AsyncJobs):
     """
     def __init__(self, volume_client, tp_size):
         self.vc = volume_client
-        super(ThreadPoolPurgeQueueMixin, self).__init__(volume_client, "puregejob", tp_size)
+        super(ThreadPoolPurgeQueueMixin, self).__init__(volume_client, "purgejob", tp_size)
 
     def get_next_job(self, volname, running_jobs):
         return get_trash_entry_for_volume(self.fs_client, self.vc.volspec, volname, running_jobs)

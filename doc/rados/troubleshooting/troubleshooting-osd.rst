@@ -243,9 +243,9 @@ No Free Drive Space
 
 Ceph prevents you from writing to a full OSD so that you don't lose data.
 In an operational cluster, you should receive a warning when your cluster's OSDs
-and pools approach the full ratio. The ``mon osd full ratio`` defaults to
+and pools approach the full ratio. The ``mon_osd_full_ratio`` defaults to
 ``0.95``, or 95% of capacity before it stops clients from writing data.
-The ``mon osd backfillfull ratio`` defaults to ``0.90``, or 90 % of
+The ``mon_osd_backfillfull_ratio`` defaults to ``0.90``, or 90 % of
 capacity above which backfills will not start. The
 OSD nearfull ratio defaults to ``0.85``, or 85% of capacity
 when it generates a health warning.
@@ -456,7 +456,7 @@ Blocked Requests or Slow Requests
 
 If a ``ceph-osd`` daemon is slow to respond to a request, messages will be logged
 noting ops that are taking too long.  The warning threshold
-defaults to 30 seconds and is configurable via the ``osd op complaint time``
+defaults to 30 seconds and is configurable via the ``osd_op_complaint_time``
 setting.  When this happens, the cluster log will receive messages.
 
 Legacy versions of Ceph complain about ``old requests``::
@@ -589,7 +589,7 @@ You can clear the flags with::
 Two other flags are supported, ``noin`` and ``noout``, which prevent
 booting OSDs from being marked ``in`` (allocated data) or protect OSDs
 from eventually being marked ``out`` (regardless of what the current value for
-``mon osd down out interval`` is).
+``mon_osd_down_out_interval`` is).
 
 .. note:: ``noup``, ``noout``, and ``nodown`` are temporary in the
    sense that once the flags are cleared, the action they were blocking

@@ -235,6 +235,9 @@
 #define MSG_MGR_COMMAND           0x709
 #define MSG_MGR_COMMAND_REPLY     0x70a
 
+// *** ceph-mgr <-> MON daemons ***
+#define MSG_MGR_UPDATE     0x70b
+
 // ======================================================
 
 // abstract Message class

@@ -56,7 +56,7 @@ class TrashPurgeScheduleHandler:
                 ioctx.set_namespace(namespace)
                 rbd.RBD().trash_purge(ioctx, datetime.now())
         except Exception as e:
-            self.log.error("exception when purgin {}/{}: {}".format(
+            self.log.error("exception when purging {}/{}: {}".format(
                 pool_id, namespace, e))
 
     def init_schedule_queue(self) -> None:

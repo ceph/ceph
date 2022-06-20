@@ -7,7 +7,7 @@ ECBackend::ECBackend(shard_id_t shard,
                      crimson::osd::ShardServices& shard_services,
                      const ec_profile_t&,
                      uint64_t)
-  : PGBackend{shard, coll, &shard_services.get_store()}
+  : PGBackend{shard, coll, shard_services}
 {
   // todo
 }

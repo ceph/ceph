@@ -227,3 +227,14 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
         cephfs_class.return_value.ls_dir.assert_called_once_with('/foo', 3)
         self.assertStatus(200)
         self.assertJsonBody({'paths': []})
+
+    def test_status_available(self):
+        self._get('/ui-api/nfs-ganesha/status')
+        self.assertStatus(200)
+        self.assertJsonBody({'available': True, 'message': None})
+
+    def test_status_not_available(self):
+        mgr.remote = Mock(side_effect=RuntimeError('Test'))
+        self._get('/ui-api/nfs-ganesha/status')
+        self.assertStatus(200)
+        self.assertJsonBody({'available': False, 'message': 'Test'})

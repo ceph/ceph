@@ -111,9 +111,9 @@ void RGWOp_Period_Post::execute(optional_yield y)
   }
 
   // require period.realm_id to match our realm
-  if (period.get_realm() != store->get_zone()->get_realm().get_id()) {
+  if (period.get_realm() != static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm().get_id()) {
     error_stream << "period with realm id " << period.get_realm()
-        << " doesn't match current realm " << store->get_zone()->get_realm().get_id() << std::endl;
+        << " doesn't match current realm " << static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm().get_id() << std::endl;
     op_ret = -EINVAL;
     return;
   }
@@ -147,7 +147,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   }
 
   // if it's not period commit, nobody is allowed to push to the master zone
-  if (period.get_master_zone() == store->get_zone()->get_params().get_id()) {
+  if (period.get_master_zone() == static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_zone_params().get_id()) {
     ldpp_dout(this, 10) << "master zone rejecting period id="
         << period.get_id() << " epoch=" << period.get_epoch() << dendl;
     op_ret = -EINVAL; // XXX: error code

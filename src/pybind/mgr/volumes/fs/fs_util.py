@@ -21,6 +21,11 @@ def remove_pool(mgr, pool_name):
                'yes_i_really_really_mean_it': True}
     return mgr.mon_command(command)
 
+def rename_pool(mgr, pool_name, new_pool_name):
+    command = {'prefix': 'osd pool rename', 'srcpool': pool_name,
+               'destpool': new_pool_name}
+    return mgr.mon_command(command)
+
 def create_filesystem(mgr, fs_name, metadata_pool, data_pool):
     command = {'prefix': 'fs new', 'fs_name': fs_name, 'metadata': metadata_pool,
                'data': data_pool}
@@ -33,6 +38,11 @@ def remove_filesystem(mgr, fs_name):
         return r, outb, outs
 
     command = {'prefix': 'fs rm', 'fs_name': fs_name, 'yes_i_really_mean_it': True}
+    return mgr.mon_command(command)
+
+def rename_filesystem(mgr, fs_name, new_fs_name):
+    command = {'prefix': 'fs rename', 'fs_name': fs_name, 'new_fs_name': new_fs_name,
+               'yes_i_really_mean_it': True}
     return mgr.mon_command(command)
 
 def create_mds(mgr, fs_name, placement):
@@ -58,16 +68,20 @@ def volume_exists(mgr, fs_name):
             return True
     return False
 
-def listdir(fs, dirpath):
+def listdir(fs, dirpath, filter_entries=None):
     """
     Get the directory names (only dirs) for a given path
     """
     dirs = []
+    if filter_entries is None:
+        filter_entries = [b".", b".."]
+    else:
+        filter_entries.extend([b".", b".."])
     try:
         with fs.opendir(dirpath) as dir_handle:
             d = fs.readdir(dir_handle)
             while d:
-                if (d.d_name not in (b".", b"..")) and d.is_dir():
+                if (d.d_name not in filter_entries) and d.is_dir():
                     dirs.append(d.d_name)
                 d = fs.readdir(dir_handle)
     except cephfs.Error as e:

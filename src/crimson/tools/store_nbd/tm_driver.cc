@@ -6,7 +6,6 @@
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
-using namespace crimson::os::seastore::segment_manager::block;
 
 namespace {
   seastar::logger& logger() {
@@ -19,8 +18,8 @@ seastar::future<> TMDriver::write(
   bufferptr ptr)
 {
   logger().debug("Writing offset {}", offset);
-  assert(offset % segment_manager->get_block_size() == 0);
-  assert((ptr.length() % (size_t)segment_manager->get_block_size()) == 0);
+  assert(offset % device->get_block_size() == 0);
+  assert((ptr.length() % (size_t)device->get_block_size()) == 0);
   return seastar::do_with(ptr, [this, offset](auto& ptr) {
     return repeat_eagain([this, offset, &ptr] {
       return tm->with_transaction_intr(
@@ -36,6 +35,7 @@ seastar::future<> TMDriver::write(
           logger().debug("dec_ref complete");
           return tm->alloc_extent<TestBlock>(t, offset, ptr.length());
         }).si_then([this, offset, &t, &ptr](auto ext) {
+          boost::ignore_unused(offset);  // avoid clang warning;
           assert(ext->get_laddr() == (size_t)offset);
           assert(ext->get_bptr().length() == ptr.length());
           ext->get_bptr().swap(ptr);
@@ -69,7 +69,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	  [this, &t, &ret](auto &&pin) {
 	    logger().debug(
 	      "read_extents: get_extent {}~{}",
-	      pin->get_paddr(),
+	      pin->get_val(),
 	      pin->get_length());
 	    return tm->pin_to_extent<TestBlock>(
 	      t,
@@ -93,8 +93,8 @@ seastar::future<bufferlist> TMDriver::read(
   size_t size)
 {
   logger().debug("Reading offset {}", offset);
-  assert(offset % segment_manager->get_block_size() == 0);
-  assert(size % (size_t)segment_manager->get_block_size() == 0);
+  assert(offset % device->get_block_size() == 0);
+  assert(size % (size_t)device->get_block_size() == 0);
   auto blptrret = std::make_unique<bufferlist>();
   auto &blret = *blptrret;
   return repeat_eagain([=, &blret] {
@@ -131,40 +131,13 @@ seastar::future<bufferlist> TMDriver::read(
 
 void TMDriver::init()
 {
-  auto scanner = std::make_unique<ExtentReader>();
-  scanner->add_segment_manager(segment_manager.get());
-  auto& scanner_ref = *scanner.get();
-  auto segment_cleaner = std::make_unique<SegmentCleaner>(
-    SegmentCleaner::config_t::get_default(),
-    std::move(scanner),
-    false /* detailed */);
-  std::vector<SegmentManager*> sms;
-  segment_cleaner->mount(segment_manager->get_device_id(), sms);
-  auto journal = std::make_unique<Journal>(*segment_manager, scanner_ref);
-  auto cache = std::make_unique<Cache>(scanner_ref);
-  auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
-
-  auto epm = std::make_unique<ExtentPlacementManager>(*cache, *lba_manager);
-
-  epm->add_allocator(
-    device_type_t::SEGMENTED,
-    std::make_unique<SegmentedAllocator>(
-      *segment_cleaner,
-      *segment_manager,
-      *lba_manager,
-      *journal,
-      *cache));
-
-  journal->set_segment_provider(&*segment_cleaner);
-
-  tm = std::make_unique<TransactionManager>(
-    *segment_manager,
-    std::move(segment_cleaner),
-    std::move(journal),
-    std::move(cache),
-    std::move(lba_manager),
-    std::move(epm),
-    scanner_ref);
+#ifndef NDEBUG
+  tm = make_transaction_manager(
+      tm_make_config_t::get_test_segmented_journal());
+#else
+  tm = make_transaction_manager(tm_make_config_t::get_default());
+#endif
+  tm->add_device(device.get(), true);
 }
 
 void TMDriver::clear()
@@ -174,29 +147,29 @@ void TMDriver::clear()
 
 size_t TMDriver::get_size() const
 {
-  return segment_manager->get_size() * .5;
+  return device->get_size() * .5;
 }
 
 seastar::future<> TMDriver::mkfs()
 {
   assert(config.path);
-  segment_manager = std::make_unique<
-    segment_manager::block::BlockSegmentManager
-    >(*config.path);
   logger().debug("mkfs");
-  seastore_meta_t meta;
-  meta.seastore_id.generate_random();
-  return segment_manager->mkfs(
-    segment_manager_config_t{
-      true,
-      (magic_t)std::rand(),
-      device_type_t::SEGMENTED,
-      0,
-      meta,
-      secondary_device_set_t()}
-  ).safe_then([this] {
-    logger().debug("");
-    return segment_manager->mount();
+  return Device::make_device(*config.path
+  ).then([this](DeviceRef dev) {
+    device = std::move(dev);
+    seastore_meta_t meta;
+    meta.seastore_id.generate_random();
+    return device->mkfs(
+      device_config_t{
+        true,
+        (magic_t)std::rand(),
+        device_type_t::SEGMENTED,
+        0,
+        meta,
+        secondary_device_set_t()});
+  }).safe_then([this] {
+    logger().debug("device mkfs done");
+    return device->mount();
   }).safe_then([this] {
     init();
     logger().debug("tm mkfs");
@@ -206,10 +179,10 @@ seastar::future<> TMDriver::mkfs()
     return tm->close();
   }).safe_then([this] {
     logger().debug("sm close");
-    return segment_manager->close();
+    return device->close();
   }).safe_then([this] {
     clear();
-    segment_manager.reset();
+    device.reset();
     logger().debug("mkfs complete");
     return TransactionManager::mkfs_ertr::now();
   }).handle_error(
@@ -223,10 +196,10 @@ seastar::future<> TMDriver::mount()
 {
   return (config.mkfs ? mkfs() : seastar::now()
   ).then([this] {
-    segment_manager = std::make_unique<
-      segment_manager::block::BlockSegmentManager
-      >(*config.path);
-    return segment_manager->mount();
+    return Device::make_device(*config.path);
+  }).then([this](DeviceRef dev) {
+    device = std::move(dev);
+    return device->mount();
   }).safe_then([this] {
     init();
     return tm->mount();
@@ -241,7 +214,7 @@ seastar::future<> TMDriver::close()
 {
   return tm->close().safe_then([this] {
     clear();
-    return segment_manager->close();
+    return device->close();
   }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid errror during TMDriver::close"

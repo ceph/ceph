@@ -196,7 +196,7 @@ class Batch(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidBatchDevice(),
+            type=arg_validators.ValidBatchDataDevice(),
             default=[],
             help='Devices to provision OSDs',
         )
@@ -346,7 +346,7 @@ class Batch(object):
             nargs='*',
             default=[],
             help='Reuse existing OSD ids',
-            type=common.valid_osd_id
+            type=arg_validators.valid_osd_id
         )
         self.args = parser.parse_args(argv)
         self.parser = parser

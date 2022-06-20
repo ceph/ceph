@@ -83,16 +83,7 @@ class TcmuService(object):
 
         # clear up races w/ tcmu-runner clients that haven't detected
         # loss of optimized path
-        for image in images.values():
-            optimized_daemon = image.get('optimized_daemon', None)
-            if optimized_daemon:
-                for daemon_name in image['optimized_paths']:
-                    if daemon_name != optimized_daemon:
-                        daemon = daemons[daemon_name]
-                        daemon['optimized_paths'] -= 1
-                        daemon['non_optimized_paths'] += 1
-                        image['non_optimized_paths'].append(daemon_name)
-                image['optimized_paths'] = [optimized_daemon]
+        TcmuService.remove_undetected_clients(images, daemons, daemon)
 
         return {
             'daemons': sorted(daemons.values(),
@@ -106,3 +97,16 @@ class TcmuService(object):
             if image['pool_name'] == pool_name and image['name'] == image_name:
                 return image
         return None
+
+    @staticmethod
+    def remove_undetected_clients(images, daemons, daemon):
+        for image in images.values():
+            optimized_daemon = image.get('optimized_daemon', None)
+            if optimized_daemon:
+                for daemon_name in image['optimized_paths']:
+                    if daemon_name != optimized_daemon:
+                        daemon = daemons[daemon_name]
+                        daemon['optimized_paths'] -= 1
+                        daemon['non_optimized_paths'] += 1
+                        image['non_optimized_paths'].append(daemon_name)
+                image['optimized_paths'] = [optimized_daemon]

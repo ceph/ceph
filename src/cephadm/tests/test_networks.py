@@ -24,6 +24,8 @@ class TestCommandListNetworks:
             139.1.0.0/16 via 10.4.0.1 dev tun0 proto static metric 50
             140.1.0.0/17 via 10.4.0.1 dev tun0 proto static metric 50
             141.1.0.0/16 via 10.4.0.1 dev tun0 proto static metric 50
+            172.16.100.34 via 172.16.100.34 dev eth1 proto kernel scope link src 172.16.100.34
+            192.168.122.1 dev ens3 proto dhcp scope link src 192.168.122.236 metric 100
             169.254.0.0/16 dev docker0 scope link metric 1000
             172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1
             192.168.39.0/24 dev virbr1 proto kernel scope link src 192.168.39.1 linkdown
@@ -33,7 +35,9 @@ class TestCommandListNetworks:
             195.135.221.12 via 192.168.178.1 dev enxd89ef3f34260 proto static metric 100
             """),
             {
-                '10.4.0.1': {'tun0': {'10.4.0.2'}},
+                '172.16.100.34/32': {'eth1': {'172.16.100.34'}},
+                '192.168.122.1/32': {'ens3': {'192.168.122.236'}},
+                '10.4.0.1/32': {'tun0': {'10.4.0.2'}},
                 '172.17.0.0/16': {'docker0': {'172.17.0.1'}},
                 '192.168.39.0/24': {'virbr1': {'192.168.39.1'}},
                 '192.168.122.0/24': {'virbr0': {'192.168.122.1'}},
@@ -61,7 +65,7 @@ class TestCommandListNetworks:
             {
                 '10.3.64.0/24': {'eno1': {'10.3.64.23', '10.3.64.27'}},
                 '10.88.0.0/16': {'cni-podman0': {'10.88.0.1'}},
-                '172.21.3.1': {'tun0': {'172.21.3.2'}},
+                '172.21.3.1/32': {'tun0': {'172.21.3.2'}},
                 '192.168.122.0/24': {'virbr0': {'192.168.122.1'}}
             }
         ),
@@ -175,10 +179,13 @@ class TestCommandListNetworks:
                    valid_lft forever preferred_lft forever
             """),
             {
-                '2001:1458:301:eb::/64': {
+                '2001:1458:301:eb::100:1a/128': {
                     'ens20f0': {
                         '2001:1458:301:eb::100:1a'
                     },
+                },
+                '2001:1458:301:eb::/64': {
+                    'ens20f0': set(),
                 },
                 'fe80::/64': {
                     'ens20f0': {'fe80::2e60:cff:fef8:da41'},
@@ -186,6 +193,33 @@ class TestCommandListNetworks:
                 'fd01:1458:304:5e::/64': {
                     'ens20f0': set()
                 },
+            }
+        ),
+        (
+            dedent("""
+            ::1 dev lo proto kernel metric 256 pref medium
+            fe80::/64 dev ceph-brx proto kernel metric 256 pref medium
+            fe80::/64 dev brx.0 proto kernel metric 256 pref medium
+            default via fe80::327c:5e00:6487:71e0 dev enp3s0f1 proto ra metric 1024 expires 1790sec hoplimit 64 pref medium            """),
+            dedent("""
+            1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 state UNKNOWN qlen 1000
+                inet6 ::1/128 scope host
+                   valid_lft forever preferred_lft forever
+            5: enp3s0f1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+                inet6 fe80::ec4:7aff:fe8f:cb83/64 scope link noprefixroute
+                   valid_lft forever preferred_lft forever
+            6: ceph-brx: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+                inet6 fe80::d8a1:69ff:fede:8f58/64 scope link
+                   valid_lft forever preferred_lft forever
+            7: brx.0@eno1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP qlen 1000
+                inet6 fe80::a4cb:54ff:fecc:f2a2/64 scope link
+                   valid_lft forever preferred_lft forever
+            """),
+            {
+                'fe80::/64': {
+                    'brx.0': {'fe80::a4cb:54ff:fecc:f2a2'},
+                    'ceph-brx': {'fe80::d8a1:69ff:fede:8f58'}
+                }
             }
         ),
     ])
@@ -197,5 +231,5 @@ class TestCommandListNetworks:
         with with_cephadm_ctx([]) as ctx:
             cd.command_list_networks(ctx)
             assert json.loads(capsys.readouterr().out) == {
-                '10.4.0.1': {'tun0': ['10.4.0.2']}
+                '10.4.0.1/32': {'tun0': ['10.4.0.2']}
             }

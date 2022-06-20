@@ -45,7 +45,7 @@ def task(ctx, config):
                     run.Raw('&&'),
                     'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}/namespaces/1',
                     run.Raw('&&'),
-                    'echo', dev, run.Raw('|'),
+                    'echo', '-n', dev, run.Raw('|'),
                     'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/device_path',
                     run.Raw('&&'),
                     'echo', '1', run.Raw('|'),

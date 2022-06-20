@@ -215,6 +215,10 @@ struct cls_rbd_snap {
     default:
       ceph_abort();
     }
+    f->open_object_section("namespace");
+    snapshot_namespace.dump(f);
+    f->close_section();
+    f->dump_stream("timestamp") << timestamp;
     f->dump_unsigned("child_count", child_count);
     if (parent_overlap) {
       f->dump_unsigned("parent_overlap", *parent_overlap);

@@ -6,19 +6,22 @@ Creating pools
 ==============
 
 A Ceph file system requires at least two RADOS pools, one for data and one for metadata.
-When configuring these pools, you might consider:
+There are important considerations when planning these pools:
 
-- Using a higher replication level for the metadata pool, as any data loss in
-  this pool can render the whole file system inaccessible.
-- Using lower-latency storage such as SSDs for the metadata pool, as this will
-  directly affect the observed latency of file system operations on clients.
+- We recommend configuring *at least* 3 replicas for the metadata pool,
+  as data loss in this pool can render the entire file system inaccessible.
+  Configuring 4 would not be extreme, especially since the metadata pool's
+  capacity requirements are quite modest.
+- We recommend the fastest feasible low-latency storage devices (NVMe, Optane,
+  or at the very least SAS/SATA SSD) for the metadata pool, as this will
+  directly affect the latency of client file system operations.
 - The data pool used to create the file system is the "default" data pool and
-  the location for storing all inode backtrace information, used for hard link
-  management and disaster recovery. For this reason, all inodes created in
-  CephFS have at least one object in the default data pool. If erasure-coded
-  pools are planned for the file system, it is usually better to use a
-  replicated pool for the default data pool to improve small-object write and
-  read performance for updating backtraces. Separately, another erasure-coded
+  the location for storing all inode backtrace information, which is used for hard link
+  management and disaster recovery. For this reason, all CephFS inodes
+  have at least one object in the default data pool. If erasure-coded
+  pools are planned for file system data, it is best to configure the default as
+  a replicated pool to improve small-object write and
+  read performance when updating backtraces. Separately, another erasure-coded
   data pool can be added (see also :ref:`ecpool`) that can be used on an entire
   hierarchy of directories and files (see also :ref:`file-layouts`).
 
@@ -31,7 +34,7 @@ might run the following commands:
     $ ceph osd pool create cephfs_data
     $ ceph osd pool create cephfs_metadata
 
-Generally, the metadata pool will have at most a few gigabytes of data. For
+The metadata pool will typically hold at most a few gigabytes of data. For
 this reason, a smaller PG count is usually recommended. 64 or 128 is commonly
 used in practice for large clusters.
 
@@ -94,7 +97,7 @@ You may use Erasure Coded pools as CephFS data pools as long as they have overwr
 
     ceph osd pool set my_ec_pool allow_ec_overwrites true
     
-Note that EC overwrites are only supported when using OSDS with the BlueStore backend.
+Note that EC overwrites are only supported when using OSDs with the BlueStore backend.
 
 You may not use Erasure Coded pools as CephFS metadata pools, because CephFS metadata is stored using RADOS *OMAP* data structures, which EC pools cannot store.
 

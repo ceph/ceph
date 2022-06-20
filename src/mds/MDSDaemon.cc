@@ -262,6 +262,10 @@ void MDSDaemon::set_up_admin_socket()
       asok_hook,
       "show the blocked ops currently in flight");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("dump_blocked_ops_count", 
+      asok_hook,
+      "show the count of blocked ops currently in flight");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops",
 				     asok_hook,
 				     "show recent ops");

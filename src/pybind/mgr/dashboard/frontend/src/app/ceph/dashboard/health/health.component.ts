@@ -2,11 +2,14 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { HealthService } from '~/app/shared/api/health.service';
+import { OsdService } from '~/app/shared/api/osd.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { OsdSettings } from '~/app/shared/models/osd-settings';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
@@ -24,10 +27,12 @@ import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.s
 })
 export class HealthComponent implements OnInit, OnDestroy {
   healthData: any;
+  osdSettings = new OsdSettings();
   interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
   icons = Icons;
+  color: string;
 
   clientStatsConfig = {
     colors: [
@@ -59,6 +64,7 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   constructor(
     private healthService: HealthService,
+    private osdService: OsdService,
     private authStorageService: AuthStorageService,
     private pgCategoryService: PgCategoryService,
     private featureToggles: FeatureTogglesService,
@@ -75,6 +81,13 @@ export class HealthComponent implements OnInit, OnDestroy {
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
     });
+
+    this.osdService
+      .getOsdSettings()
+      .pipe(take(1))
+      .subscribe((data: any) => {
+        this.osdSettings = data;
+      });
   }
 
   ngOnDestroy() {
@@ -147,6 +160,17 @@ export class HealthComponent implements OnInit, OnDestroy {
     const percentUsed = this.calcPercentage(
       data.df.stats.total_used_raw_bytes,
       data.df.stats.total_bytes
+    );
+
+    if (percentUsed / 100 >= this.osdSettings.nearfull_ratio) {
+      this.color = 'chart-color-red';
+    } else if (percentUsed / 100 >= this.osdSettings.full_ratio) {
+      this.color = 'chart-color-yellow';
+    } else {
+      this.color = 'chart-color-blue';
+    }
+    this.rawCapacityChartConfig.colors[0].backgroundColor[0] = this.cssHelper.propertyValue(
+      this.color
     );
 
     chart.dataset[0].data = [percentUsed, percentAvailable];

@@ -315,6 +315,13 @@ void ProtocolV1::write_event() {
     auto start = ceph::mono_clock::now();
     bool more;
     do {
+      if (connection->is_queued()) {
+	if (r = connection->_try_send(); r!= 0) {
+	  // either fails to send or not all queued buffer is sent
+	  break;
+	}
+      }
+
       ceph::buffer::list data;
       Message *m = _get_next_outgoing(&data);
       if (!m) {

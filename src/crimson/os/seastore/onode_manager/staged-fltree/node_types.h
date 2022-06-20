@@ -109,3 +109,37 @@ enum class nextent_state_t : uint8_t {
 };
 
 }
+
+template <> struct fmt::formatter<crimson::os::seastore::onode::node_delta_op_t>
+  : fmt::formatter<std::string_view> {
+  using node_delta_op_t =  crimson::os::seastore::onode::node_delta_op_t;
+  // parse is inherited from formatter<string_view>.
+  template <typename FormatContext>
+  auto format(node_delta_op_t op, FormatContext& ctx) {
+    std::string_view name = "unknown";
+    switch (op) {
+    case node_delta_op_t::INSERT:
+      name = "insert";
+      break;
+    case node_delta_op_t::SPLIT:
+      name = "split";
+      break;
+    case node_delta_op_t::SPLIT_INSERT:
+      name = "split_insert";
+      break;
+    case node_delta_op_t::UPDATE_CHILD_ADDR:
+      name = "update_child_addr";
+      break;
+    case node_delta_op_t::ERASE:
+      name = "erase";
+      break;
+    case node_delta_op_t::MAKE_TAIL:
+      name = "make_tail";
+      break;
+    case node_delta_op_t::SUBOP_UPDATE_VALUE:
+      name = "subop_update_value";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};

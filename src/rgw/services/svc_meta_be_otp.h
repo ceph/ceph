@@ -78,7 +78,8 @@ public:
                 RGWSI_MetaBackend::GetParams& _params,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y,
-                const DoutPrefixProvider *dpp);
+                const DoutPrefixProvider *dpp,
+                bool get_raw_attrs=false);
   int put_entry(const DoutPrefixProvider *dpp, 
                 RGWSI_MetaBackend::Context *ctx,
                 const std::string& key,

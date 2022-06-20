@@ -7,19 +7,19 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/recovery_backend.h"
 #include "crimson/common/type_helpers.h"
-
-#include "messages/MOSDOp.h"
 
 namespace crimson::osd {
 class PG;
 class ShardServices;
 
-class BackgroundRecovery : public OperationT<BackgroundRecovery> {
+template <class T>
+class BackgroundRecoveryT : public PhasedOperationT<T> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::background_recovery;
 
-  BackgroundRecovery(
+  BackgroundRecoveryT(
     Ref<PG> pg,
     ShardServices &ss,
     epoch_t epoch_started,
@@ -42,7 +42,8 @@ private:
       scheduler_class
     };
   }
-  virtual interruptible_future<bool> do_recovery() = 0;
+  using do_recovery_ret_t = typename PhasedOperationT<T>::template interruptible_future<bool>;
+  virtual do_recovery_ret_t do_recovery() = 0;
   ShardServices &ss;
   const crimson::osd::scheduler::scheduler_class_t scheduler_class;
 };
@@ -53,18 +54,20 @@ private:
 /// @c UrgentRecovery is not throttled by the scheduler. and it
 /// utilizes @c RecoveryBackend directly to recover the unreadable
 /// object.
-class UrgentRecovery final : public BackgroundRecovery {
+class UrgentRecovery final : public BackgroundRecoveryT<UrgentRecovery> {
 public:
   UrgentRecovery(
     const hobject_t& soid,
     const eversion_t& need,
     Ref<PG> pg,
     ShardServices& ss,
-    epoch_t epoch_started)
-  : BackgroundRecovery{pg, ss, epoch_started,
-                       crimson::osd::scheduler::scheduler_class_t::immediate},
-    soid{soid}, need(need) {}
+    epoch_t epoch_started);
   void print(std::ostream&) const final;
+
+  std::tuple<
+    OperationThrottler::BlockingEvent,
+    RecoveryBackend::RecoveryBlockingEvent
+  > tracking_events;
 
 private:
   void dump_detail(Formatter* f) const final;
@@ -73,7 +76,7 @@ private:
   const eversion_t need;
 };
 
-class PglogBasedRecovery final : public BackgroundRecovery {
+class PglogBasedRecovery final : public BackgroundRecoveryT<PglogBasedRecovery> {
 public:
   PglogBasedRecovery(
     Ref<PG> pg,
@@ -81,18 +84,26 @@ public:
     epoch_t epoch_started,
     float delay = 0);
 
+  std::tuple<
+    OperationThrottler::BlockingEvent,
+    RecoveryBackend::RecoveryBlockingEvent
+  > tracking_events;
+
 private:
   interruptible_future<bool> do_recovery() override;
 };
 
-class BackfillRecovery final : public BackgroundRecovery {
+class BackfillRecovery final : public BackgroundRecoveryT<BackfillRecovery> {
 public:
   class BackfillRecoveryPipeline {
-    OrderedExclusivePhase process = {
-      "BackfillRecovery::PGPipeline::process"
-    };
+    struct Process : OrderedExclusivePhaseT<Process> {
+      static constexpr auto type_name = "BackfillRecovery::PGPipeline::process";
+    } process;
     friend class BackfillRecovery;
+    template <class T>
     friend class PeeringEvent;
+    friend class LocalPeeringEvent;
+    friend class RemotePeeringEvent;
   };
 
   template <class EventT>
@@ -103,6 +114,11 @@ public:
     const EventT& evt);
 
   static BackfillRecoveryPipeline &bp(PG &pg);
+
+  std::tuple<
+    OperationThrottler::BlockingEvent,
+    BackfillRecoveryPipeline::Process::BlockingEvent
+  > tracking_events;
 
 private:
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
@@ -116,7 +132,7 @@ BackfillRecovery::BackfillRecovery(
   ShardServices &ss,
   const epoch_t epoch_started,
   const EventT& evt)
-  : BackgroundRecovery(
+  : BackgroundRecoveryT(
       std::move(pg),
       ss,
       epoch_started,

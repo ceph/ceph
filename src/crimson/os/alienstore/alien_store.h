@@ -106,10 +106,10 @@ public:
   seastar::future<struct stat> stat(
     CollectionRef,
     const ghobject_t&) final;
-  read_errorator::future<ceph::bufferlist> omap_get_header(
+  get_attr_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef,
     const ghobject_t&) final;
-  seastar::future<std::map<uint64_t, uint64_t>> fiemap(
+  read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
     CollectionRef,
     const ghobject_t&,
     uint64_t off,
@@ -134,7 +134,6 @@ private:
   // number of cores that are PREVENTED from being scheduled
   // to run alien store threads.
   static constexpr int N_CORES_FOR_SEASTAR = 3;
-  constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string type;
   const std::string path;

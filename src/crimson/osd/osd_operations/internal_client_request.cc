@@ -11,6 +11,16 @@ namespace {
   }
 }
 
+namespace crimson {
+  template <>
+  struct EventBackendRegistry<osd::InternalClientRequest> {
+    static std::tuple<> get_backends() {
+      return {};
+    }
+  };
+}
+
+
 namespace crimson::osd {
 
 InternalClientRequest::InternalClientRequest(Ref<PG> pg)
@@ -39,23 +49,26 @@ CommonPGPipeline& InternalClientRequest::pp()
 
 seastar::future<> InternalClientRequest::start()
 {
+  track_event<StartEvent>();
   return crimson::common::handle_system_shutdown([this] {
     return seastar::repeat([this] {
       logger().debug("{}: in repeat", *this);
       return interruptor::with_interruption([this]() mutable {
-        return with_blocking_future_interruptible<interruptor::condition>(
-          handle.enter(pp().wait_for_active)
+        return enter_stage<interruptor>(
+	  pp().wait_for_active
         ).then_interruptible([this] {
-          return with_blocking_future_interruptible<interruptor::condition>(
-            pg->wait_for_active_blocker.wait());
+          return with_blocking_event<PGActivationBlocker::BlockingEvent,
+	  			     interruptor>([this] (auto&& trigger) {
+            return pg->wait_for_active_blocker.wait(std::move(trigger));
+          });
         }).then_interruptible([this] {
-          return with_blocking_future_interruptible<interruptor::condition>(
-            handle.enter(pp().recover_missing)
+          return enter_stage<interruptor>(
+            pp().recover_missing
           ).then_interruptible([this] {
             return do_recover_missing(pg, get_target_oid());
           }).then_interruptible([this] {
-            return with_blocking_future_interruptible<interruptor::condition>(
-              handle.enter(pp().get_obc)
+            return enter_stage<interruptor>(
+              pp().get_obc
             ).then_interruptible([this] () -> PG::load_obc_iertr::future<> {
               logger().debug("{}: getting obc lock", *this);
               return seastar::do_with(create_osd_ops(),
@@ -67,9 +80,7 @@ seastar::future<> InternalClientRequest::start()
                 assert(ret == 0);
                 return pg->with_locked_obc(get_target_oid(), op_info,
                   [&osd_ops, this](auto obc) {
-                  return with_blocking_future_interruptible<interruptor::condition>(
-                    handle.enter(pp().process)
-                  ).then_interruptible(
+                  return enter_stage<interruptor>(pp().process).then_interruptible(
                     [obc=std::move(obc), &osd_ops, this] {
                     return pg->do_osd_ops(
                       std::move(obc),
@@ -109,6 +120,8 @@ seastar::future<> InternalClientRequest::start()
           return seastar::stop_iteration::no;
         }
       }, pg);
+    }).then([this] {
+      track_event<CompletionEvent>();
     });
   });
 }

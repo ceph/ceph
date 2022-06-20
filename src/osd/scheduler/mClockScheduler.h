@@ -42,6 +42,13 @@ using profile_id_t = uint64_t;
 struct client_profile_id_t {
   client_id_t client_id;
   profile_id_t profile_id;
+
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const client_profile_id_t& client_profile) {
+    out << " client_id: " << client_profile.client_id
+        << " profile_id: " << client_profile.profile_id;
+    return out;
+  }
 };
 
 WRITE_EQ_OPERATORS_2(client_profile_id_t, client_id, profile_id)
@@ -51,6 +58,13 @@ WRITE_CMP_OPERATORS_2(client_profile_id_t, client_id, profile_id)
 struct scheduler_id_t {
   op_scheduler_class class_id;
   client_profile_id_t client_profile_id;
+
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const scheduler_id_t& sched_id) {
+    out << "{ class_id: " << sched_id.class_id
+        << sched_id.client_profile_id;
+    return out << " }";
+  }
 };
 
 WRITE_EQ_OPERATORS_2(scheduler_id_t, class_id, client_profile_id)
@@ -171,6 +185,9 @@ public:
 
   // Calculate scale cost per item
   int calc_scaled_cost(int cost);
+
+  // Helper method to display mclock queues
+  std::string display_queues() const;
 
   // Enqueue op in the back of the regular queue
   void enqueue(OpSchedulerItem &&item) final;

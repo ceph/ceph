@@ -215,7 +215,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     curmap,
     this,
     this),
-  pool(recovery_state.get_pool()),
+  pool(recovery_state.get_pgpool()),
   info(recovery_state.get_info())
 {
 #ifdef PG_DEBUG_REFS
@@ -441,7 +441,6 @@ void PG::queue_scrub_after_repair()
   m_scrubber->set_op_parameters(m_planned_scrub);
   dout(15) << __func__ << ": queueing" << dendl;
 
-  m_scrubber->set_queued_or_active();
   osd->queue_scrub_after_repair(this, Scrub::scrub_prio_t::high_priority);
 }
 
@@ -1327,6 +1326,7 @@ unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsig
  */
 Scrub::schedule_result_t PG::sched_scrub()
 {
+  using Scrub::schedule_result_t;
   dout(15) << __func__ << " pg(" << info.pgid
 	  << (is_active() ? ") <active>" : ") <not-active>")
 	  << (is_clean() ? " <clean>" : " <not-clean>") << dendl;
@@ -1334,11 +1334,19 @@ Scrub::schedule_result_t PG::sched_scrub()
   ceph_assert(m_scrubber);
 
   if (is_scrub_queued_or_active()) {
-    return Scrub::schedule_result_t::already_started;
+    return schedule_result_t::already_started;
   }
 
   if (!is_primary() || !is_active() || !is_clean()) {
-    return Scrub::schedule_result_t::bad_pg_state;
+    return schedule_result_t::bad_pg_state;
+  }
+
+  if (state_test(PG_STATE_SNAPTRIM) || state_test(PG_STATE_SNAPTRIM_WAIT)) {
+    // note that the trimmer checks scrub status when setting 'snaptrim_wait'
+    // (on the transition from NotTrimming to Trimming/WaitReservation),
+    // i.e. some time before setting 'snaptrim'.
+    dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
+    return schedule_result_t::bad_pg_state;
   }
 
   // analyse the combination of the requested scrub flags, the osd/pool configuration
@@ -1350,14 +1358,14 @@ Scrub::schedule_result_t PG::sched_scrub()
     // (due to configuration or priority issues)
     // The reason was already reported by the callee.
     dout(10) << __func__ << ": failed to initiate a scrub" << dendl;
-    return Scrub::schedule_result_t::preconditions;
+    return schedule_result_t::preconditions;
   }
 
   // try to reserve the local OSD resources. If failing: no harm. We will
   // be retried by the OSD later on.
   if (!m_scrubber->reserve_local()) {
     dout(10) << __func__ << ": failed to reserve locally" << dendl;
-    return Scrub::schedule_result_t::no_local_resources;
+    return schedule_result_t::no_local_resources;
   }
 
   // can commit to the updated flags now, as nothing will stop the scrub
@@ -1371,9 +1379,8 @@ Scrub::schedule_result_t PG::sched_scrub()
   m_scrubber->set_op_parameters(m_planned_scrub);
 
   dout(10) << __func__ << ": queueing" << dendl;
-  m_scrubber->set_queued_or_active();
   osd->queue_for_scrub(this, Scrub::scrub_prio_t::low_priority);
-  return Scrub::schedule_result_t::scrub_initiated;
+  return schedule_result_t::scrub_initiated;
 }
 
 double PG::next_deepscrub_interval() const
@@ -2010,91 +2017,6 @@ void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
   }
 }
 
-
-void PG::_repair_oinfo_oid(ScrubMap &smap)
-{
-  for (map<hobject_t, ScrubMap::object>::reverse_iterator i = smap.objects.rbegin();
-       i != smap.objects.rend();
-       ++i) {
-    const hobject_t &hoid = i->first;
-    ScrubMap::object &o = i->second;
-
-    bufferlist bl;
-    if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
-      continue;
-    }
-    bl.push_back(o.attrs[OI_ATTR]);
-    object_info_t oi;
-    try {
-      oi.decode(bl);
-    } catch(...) {
-      continue;
-    }
-    if (oi.soid != hoid) {
-      ObjectStore::Transaction t;
-      OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
-      osd->clog->error() << "osd." << osd->whoami
-			    << " found object info error on pg "
-			    << info.pgid
-			    << " oid " << hoid << " oid in object info: "
-			    << oi.soid
-			    << "...repaired";
-      // Fix object info
-      oi.soid = hoid;
-      bl.clear();
-      encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-
-      bufferptr bp(bl.c_str(), bl.length());
-      o.attrs[OI_ATTR] = bp;
-
-      t.setattr(coll, ghobject_t(hoid), OI_ATTR, bl);
-      int r = osd->store->queue_transaction(ch, std::move(t));
-      if (r != 0) {
-	derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
-	     << dendl;
-      }
-    }
-  }
-}
-
-void PG::repair_object(
-  const hobject_t &soid,
-  const list<pair<ScrubMap::object, pg_shard_t> > &ok_peers,
-  const set<pg_shard_t> &bad_peers)
-{
-  set<pg_shard_t> ok_shards;
-  for (auto &&peer: ok_peers) ok_shards.insert(peer.second);
-
-  dout(10) << "repair_object " << soid
-	   << " bad_peers osd.{" << bad_peers << "},"
-	   << " ok_peers osd.{" << ok_shards << "}" << dendl;
-
-  const ScrubMap::object &po = ok_peers.back().first;
-  eversion_t v;
-  object_info_t oi;
-  try {
-    bufferlist bv;
-    if (po.attrs.count(OI_ATTR)) {
-      bv.push_back(po.attrs.find(OI_ATTR)->second);
-    }
-    auto bliter = bv.cbegin();
-    decode(oi, bliter);
-  } catch (...) {
-    dout(0) << __func__ << ": Need version of replica, bad object_info_t: "
-	    << soid << dendl;
-    ceph_abort();
-  }
-
-  if (bad_peers.count(get_primary())) {
-    // We should only be scrubbing if the PG is clean.
-    ceph_assert(waiting_for_unreadable_object.empty());
-    dout(10) << __func__ << ": primary = " << get_primary() << dendl;
-  }
-
-  /* No need to pass ok_peers, they must not be missing the object, so
-   * force_object_missing will add them to missing_loc anyway */
-  recovery_state.force_object_missing(bad_peers, soid, oi.version);
-}
 
 void PG::forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc)
 {

@@ -10,7 +10,7 @@ from ..tests import ControllerTestCase
 
 
 class OrchestratorControllerTest(ControllerTestCase):
-    URL_STATUS = '/api/orchestrator/status'
+    URL_STATUS = '/ui-api/orchestrator/status'
     URL_INVENTORY = '/api/orchestrator/inventory'
 
     @classmethod

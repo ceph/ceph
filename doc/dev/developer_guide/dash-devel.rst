@@ -215,8 +215,8 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 10.0.0 or higher
- * NPM 5.7.0 or higher
+ * Node 12.18.2 or higher
+ * NPM 6.13.4 or higher
 
 nodeenv:
   During Ceph's build we create a virtualenv with ``node`` and ``npm``
@@ -445,6 +445,14 @@ Start E2E tests by running::
   $ cd <your/ceph/repo/dir>
   $ sudo chown -R $(id -un) src/pybind/mgr/dashboard/frontend/{dist,node_modules,src/environments}
   $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh
+
+Note:
+  In fedora 35, there can occur a permission error when trying to mount the shared_folders. This can be
+  fixed by running::
+
+    $ sudo setfacl -R -m u:qemu:rwx <abs-path-to-your-user-home>
+
+  or also by setting the appropriate permission to your $HOME directory
 
 You can also start a cluster in development mode (so the frontend build starts in watch mode and you
 only have to reload the page for the changes to be reflected) by running::

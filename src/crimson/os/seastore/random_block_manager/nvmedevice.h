@@ -16,6 +16,9 @@
 
 #include "crimson/osd/exceptions.h"
 #include "crimson/common/layout.h"
+#include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/random_block_manager.h"
+#include "crimson/os/seastore/device.h"
 
 namespace ceph {
   namespace buffer {
@@ -229,7 +232,16 @@ struct io_context_t {
  * Various implementations with different interfaces such as POSIX APIs, Seastar,
  * and SPDK, are available.
  */
-class NVMeBlockDevice {
+class NVMeBlockDevice : public Device {
+public:
+  using Device::read;
+  read_ertr::future<> read (
+    paddr_t addr,
+    size_t len,
+    ceph::bufferptr &out) final {
+    uint64_t rbm_addr = convert_paddr_to_abs_addr(addr);
+    return read(rbm_addr, out);
+  }
 protected:
   uint64_t size = 0;
 
@@ -241,7 +253,9 @@ protected:
   uint32_t atomic_write_unit = 4096;
 
   bool data_protection_enabled = false;
-
+  device_id_t device_id;
+  seastore_meta_t meta;
+  secondary_device_set_t devices;
 public:
   NVMeBlockDevice() {}
   virtual ~NVMeBlockDevice() = default;
@@ -249,6 +263,29 @@ public:
   template <typename T>
   static std::unique_ptr<T> create() {
     return std::make_unique<T>();
+  }
+
+  device_id_t get_device_id() const {
+    return device_id;
+  }
+  void set_device_id(device_id_t id) {
+    device_id = id;
+  }
+
+  magic_t get_magic() const final {
+    return magic_t();
+  }
+
+  device_type_t get_device_type() const final {
+    return device_type_t::RANDOM_BLOCK;
+  }
+
+  const seastore_meta_t &get_meta() const final {
+    return meta;
+  }
+
+  secondary_device_set_t& get_secondary_devices() final {
+    return devices;
   }
 
   /*
@@ -267,8 +304,9 @@ public:
    * by SSD even on power failure. The write equal to or smaller than 
    * atomic_write_unit does not require fsync().
    */
-  uint64_t get_size() const { return size; }
-  uint64_t get_block_size() const { return block_size; }
+
+  std::size_t get_size() const { return size; }
+  seastore_off_t get_block_size() const { return block_size; }
 
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
   uint64_t get_preffered_write_alignment() const { return write_alignment; }
@@ -298,7 +336,11 @@ public:
   virtual open_ertr::future<> open(
       const std::string& path,
       seastar::open_flags mode) = 0;
-  virtual seastar::future<> close() = 0;
+
+  virtual write_ertr::future<> writev(
+    uint64_t offset,
+    ceph::bufferlist bl,
+    uint16_t stream = 0) = 0;
 
   /*
    * For passsing through nvme IO or Admin command to SSD
@@ -371,15 +413,29 @@ public:
     bufferptr &bptr,
     uint16_t stream = 0) override;
 
+  using NVMeBlockDevice::read;
   read_ertr::future<> read(
     uint64_t offset,
-    bufferptr &bptr) override;
+    bufferptr &bptr) final;
 
-  seastar::future<> close() override;
+  close_ertr::future<> close() override;
 
   discard_ertr::future<> discard(
     uint64_t offset,
     uint64_t len) override;
+
+  mkfs_ret mkfs(device_config_t) final {
+    return mkfs_ertr::now();
+  }
+
+  mount_ret mount() final {
+    return mount_ertr::now();
+  }
+
+  write_ertr::future<> writev(
+    uint64_t offset,
+    ceph::bufferlist bl,
+    uint16_t stream = 0) final;
 
   nvme_command_ertr::future<int> pass_admin(
     nvme_admin_command_t& admin_cmd) override;
@@ -418,6 +474,14 @@ public:
     }
   }
 
+  mkfs_ret mkfs(device_config_t) final {
+    return mkfs_ertr::now();
+  }
+
+  mount_ret mount() final {
+    return mount_ertr::now();
+  }
+
   open_ertr::future<> open(
     const std::string &in_path,
     seastar::open_flags mode) override;
@@ -427,11 +491,17 @@ public:
     bufferptr &bptr,
     uint16_t stream = 0) override;
 
+  using NVMeBlockDevice::read;
   read_ertr::future<> read(
     uint64_t offset,
     bufferptr &bptr) override;
 
-  seastar::future<> close() override;
+  close_ertr::future<> close() override;
+
+  write_ertr::future<> writev(
+    uint64_t offset,
+    ceph::bufferlist bl,
+    uint16_t stream = 0) final;
 
   char *buf;
   size_t size;

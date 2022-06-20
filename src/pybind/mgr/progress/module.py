@@ -450,6 +450,13 @@ class Module(MgrModule):
             'enabled',
             default=True,
             type='bool',
+        ),
+        Option(
+            'allow_pg_recovery_event',
+            default=False,
+            type='bool',
+            desc='allow the module to show pg recovery progress',
+            runtime=True
         )
     ]
 
@@ -476,6 +483,7 @@ class Module(MgrModule):
             self.max_completed_events = 0
             self.sleep_interval = 0
             self.enabled = True
+            self.allow_pg_recovery_event = False
 
     def config_notify(self):
         for opt in self.MODULE_OPTIONS:
@@ -539,12 +547,15 @@ class Module(MgrModule):
         # previous recovery event for that osd
         if marked == "in":
             for ev_id in list(self._events):
-                ev = self._events[ev_id]
-                if isinstance(ev, PgRecoveryEvent) and osd_id in ev.which_osds:
-                    self.log.info("osd.{0} came back in, cancelling event".format(
-                        osd_id
-                    ))
-                    self._complete(ev)
+                try:
+                    ev = self._events[ev_id]
+                    if isinstance(ev, PgRecoveryEvent) and osd_id in ev.which_osds:
+                        self.log.info("osd.{0} came back in, cancelling event".format(
+                            osd_id
+                        ))
+                        self._complete(ev)
+                except KeyError:
+                    self.log.warning("_osd_in_out: ev {0} does not exist".format(ev_id))
 
         if len(affected_pgs) > 0:
             r_ev = PgRecoveryEvent(
@@ -625,16 +636,20 @@ class Module(MgrModule):
         global_event = False
         data = self.get("pg_progress")
         for ev_id in list(self._events):
-            ev = self._events[ev_id]
-            # Check for types of events
-            # we have to update
-            if isinstance(ev, PgRecoveryEvent):
-                ev.pg_update(data, self.log)
-                self.maybe_complete(ev)
-            elif isinstance(ev, GlobalRecoveryEvent):
-                global_event = True
-                ev.global_event_update_progress(self.log)
-                self.maybe_complete(ev)
+            try:
+                ev = self._events[ev_id]
+                # Check for types of events
+                # we have to update
+                if isinstance(ev, PgRecoveryEvent):
+                    ev.pg_update(data, self.log)
+                    self.maybe_complete(ev)
+                elif isinstance(ev, GlobalRecoveryEvent):
+                    global_event = True
+                    ev.global_event_update_progress(self.log)
+                    self.maybe_complete(ev)
+            except KeyError:
+                self.log.warning("_process_pg_summary: ev {0} does not exist".format(ev_id))
+                continue
 
         if not global_event:
             # If there is no global event
@@ -711,7 +726,8 @@ class Module(MgrModule):
                 self._dirty = False
 
             if self.enabled:
-                self._process_osdmap()
+                if self.allow_pg_recovery_event:
+                    self._process_osdmap()
                 self._process_pg_summary()
 
             self._shutdown.wait(timeout=self.sleep_interval)
@@ -736,6 +752,7 @@ class Module(MgrModule):
             ev = self._events[ev_id]
             assert isinstance(ev, RemoteEvent)
         except KeyError:
+            # if key doesn't exist we create an event
             ev = RemoteEvent(ev_id, ev_msg, refs, add_to_ceph_s)
             self._events[ev_id] = ev
             self.log.info("update: starting ev {0} ({1})".format(

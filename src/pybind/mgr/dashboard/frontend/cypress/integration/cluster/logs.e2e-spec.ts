@@ -27,8 +27,8 @@ describe('Logs page', () => {
       logs.expectBreadcrumbText('Logs');
     });
 
-    it('should show two tabs', () => {
-      logs.getTabsCount().should('eq', 2);
+    it('should show three tabs', () => {
+      logs.getTabsCount().should('eq', 3);
     });
 
     it('should show cluster logs tab at first', () => {
@@ -37,6 +37,10 @@ describe('Logs page', () => {
 
     it('should show audit logs as a second tab', () => {
       logs.getTabText(1).should('eq', 'Audit Logs');
+    });
+
+    it('should show daemon logs as a third tab', () => {
+      logs.getTabText(2).should('eq', 'Daemon Logs');
     });
   });
 

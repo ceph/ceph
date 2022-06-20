@@ -1,5 +1,7 @@
 # https://tracker.ceph.com/issues/45802
+# https://tracker.ceph.com/issues/51282
 overrides:
   ceph:
     log-ignorelist:
     - \(PG_AVAILABILITY\)
+    - \(PG_DEGRADED\)

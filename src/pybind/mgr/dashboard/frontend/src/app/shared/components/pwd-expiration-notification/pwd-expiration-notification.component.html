@@ -1,7 +1,10 @@
-<ngb-alert class="no-margin-bottom"
-           type="{{ alertType }}"
-           *ngIf="displayNotification"
-           (close)="close($event)">
+<cd-alert-panel class="no-margin-bottom"
+                [type]="alertType"
+                *ngIf="displayNotification"
+                [showTitle]="false"
+                size="slim"
+                [dismissible]="alertType !== 'danger'"
+                (dismissed)="onDismissed()">
   <div *ngIf="expirationDays === 0"
        i18n>Your password will expire in <strong>less than 1</strong> day. Click
     <a routerLink="/user-profile/edit"
@@ -10,4 +13,4 @@
        i18n>Your password will expire in <strong>{{ expirationDays }}</strong> day(s). Click
   <a routerLink="/user-profile/edit"
      class="alert-link">here</a> to change it now.</div>
-</ngb-alert>
+</cd-alert-panel>

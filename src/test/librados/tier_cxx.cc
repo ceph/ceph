@@ -5659,6 +5659,9 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
     ASSERT_EQ(0, ioctx.operate("bar", &op));
   }
 
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
   // set-chunk to set manifest object
   {
     ObjectReadOperation op;
@@ -9143,3 +9146,68 @@ TEST_F(LibRadosTwoPoolsPP, HelloWriteReturn) {
     ASSERT_EQ("", std::string(out.c_str(), out.length()));
   }
 }
+
+TEST_F(LibRadosTwoPoolsPP, TierFlushDuringUnsetDedupTier) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+
+  // set dedup parameters without dedup_tier
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
+    inbl, NULL, NULL));
+
+  // create object
+  bufferlist gbl;
+  {
+    generate_buffer(1024*8, &gbl);
+    ObjectWriteOperation op;
+    op.write_full(gbl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-chunk to set manifest object
+  {
+    ObjectReadOperation op;
+    op.set_chunk(0, 2, ioctx, "bar", 0, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // flush to check if proper error is returned
+  {
+    ObjectReadOperation op;
+    op.tier_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op, librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(-EINVAL, completion->get_return_value());
+    completion->release();
+  }
+}
+
