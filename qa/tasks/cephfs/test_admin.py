@@ -112,6 +112,66 @@ class TestAddDataPool(TestAdminCommands):
         self.setup_ec_pools(n, metadata=False)
         self.fs.add_data_pool(n+"-data", create=False)
 
+    def test_add_already_in_use_data_pool(self):
+        """
+        That command try to add data pool which is already in use with another fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        # create second data pool, metadata pool and add with filesystem
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+
+        # try to add 'first_data_pool' with 'second_fs'
+        # Expecting EINVAL exit status because 'first_data_pool' is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', second_fs, first_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because data pool is already in use as data pool for first_fs")
+
+    def test_add_already_in_use_metadata_pool(self):
+        """
+        That command try to add metadata pool which is already in use with another fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        # create second data pool, metadata pool and add with filesystem
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+
+        # try to add 'second_metadata_pool' with 'first_fs' as a data pool
+        # Expecting EINVAL exit status because 'second_metadata_pool'
+        # is already in use with 'second_fs' as a metadata pool
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', first_fs, second_metadata_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because data pool is already in use as metadata pool for 'second_fs'")
 
 class TestFsNew(TestAdminCommands):
     """
@@ -285,6 +345,239 @@ class TestFsNew(TestAdminCommands):
         else:
             self.fail("expected creating file system with ID already in use to fail")
 
+    def test_fs_new_metadata_pool_already_in_use(self):
+        """
+        That creating file system with metadata pool already in use.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        second_fs = "second_fs"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+
+        # try to create new fs 'second_fs' with following configuration
+        # metadata pool -> 'first_metadata_pool'
+        # data pool -> 'second_data_pool'
+        # Expecting EINVAL exit status because 'first_metadata_pool'
+        # is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_metadata_pool, second_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata  pool is already in use for 'first_fs'")
+
+    def test_fs_new_data_pool_already_in_use(self):
+        """
+        That creating file system with data pool already in use.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+
+        # try to create new fs 'second_fs' with following configuration
+        # metadata pool -> 'second_metadata_pool'
+        # data pool -> 'first_data_pool'
+        # Expecting EINVAL exit status because 'first_data_pool'
+        # is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, first_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because data pool is already in use for 'first_fs'")
+
+    def test_fs_new_metadata_and_data_pool_in_use_by_another_same_fs(self):
+        """
+        That creating file system with metadata and data pool which is already in use by another same fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        second_fs = "second_fs"
+
+        # try to create new fs 'second_fs' with following configuration
+        # metadata pool -> 'first_metadata_pool'
+        # data pool -> 'first_data_pool'
+        # Expecting EINVAL exit status because 'first_metadata_pool' and 'first_data_pool'
+        # is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_metadata_pool, first_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata and data pool is already in use for 'first_fs'")
+
+    def test_fs_new_metadata_and_data_pool_in_use_by_different_fs(self):
+        """
+        That creating file system with metadata and data pool which is already in use by different fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        # create second data pool, metadata pool and add with filesystem
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+
+        third_fs = "third_fs"
+
+        # try to create new fs 'third_fs' with following configuration
+        # metadata pool -> 'first_metadata_pool'
+        # data pool -> 'second_data_pool'
+        # Expecting EINVAL exit status because 'first_metadata_pool' and 'second_data_pool'
+        # is already in use with 'first_fs' and 'second_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', third_fs, first_metadata_pool, second_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata and data pool is already in use for 'first_fs' and 'second_fs'")
+
+    def test_fs_new_interchange_already_in_use_metadata_and_data_pool_of_same_fs(self):
+        """
+        That creating file system with interchanging metadata and data pool which is already in use by same fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        second_fs = "second_fs"
+
+        # try to create new fs 'second_fs' with following configuration
+        # metadata pool -> 'first_data_pool' (already used as data pool for 'first_fs')
+        # data pool -> 'first_metadata_pool' (already used as metadata pool for 'first_fs')
+        # Expecting EINVAL exit status because 'first_data_pool' and 'first_metadata_pool'
+        # is already in use with 'first_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_data_pool, first_metadata_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata and data pool is already in use for 'first_fs'")
+
+    def test_fs_new_interchange_already_in_use_metadata_and_data_pool_of_different_fs(self):
+        """
+        That creating file system with interchanging metadata and data pool which is already in use by defferent fs.
+        """
+
+        # create first data pool, metadata pool and add with filesystem
+        first_fs = "first_fs"
+        first_metadata_pool = "first_metadata_pool"
+        first_data_pool = "first_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+
+        # create second data pool, metadata pool and add with filesystem
+        second_fs = "second_fs"
+        second_metadata_pool = "second_metadata_pool"
+        second_data_pool = "second_data_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+
+        third_fs = "third_fs"
+
+        # try to create new fs 'third_fs' with following configuration
+        # metadata pool -> 'first_data_pool' (already used as data pool for 'first_fs')
+        # data pool -> 'second_metadata_pool' (already used as metadata pool for 'second_fs')
+        # Expecting EINVAL exit status because 'first_data_pool' and 'second_metadata_pool'
+        # is already in use with 'first_fs' and 'second_fs'
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', third_fs, first_data_pool, second_metadata_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata and data pool is already in use for 'first_fs' and 'second_fs'")
+
+    def test_fs_new_metadata_pool_already_in_use_with_rbd(self):
+        """
+        That creating new file system with metadata pool already used by rbd.
+        """
+
+        # create pool and initialise with rbd
+        new_pool = "new_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool)
+        self.ctx.cluster.run(args=['rbd', 'pool', 'init', new_pool])
+
+        new_fs = "new_fs"
+        new_data_pool = "new_data_pool"
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_data_pool)
+
+        # try to create new fs 'new_fs' with following configuration
+        # metadata pool -> 'new_pool' (already used by rbd app)
+        # data pool -> 'new_data_pool'
+        # Expecting EINVAL exit status because 'new_pool' is already in use with 'rbd' app
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', new_fs, new_pool, new_data_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because metadata pool is already in use for rbd")
+
+    def test_fs_new_data_pool_already_in_use_with_rbd(self):
+        """
+        That creating new file system with data pool already used by rbd.
+        """
+
+        # create pool and initialise with rbd
+        new_pool = "new_pool"
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool)
+        self.ctx.cluster.run(args=['rbd', 'pool', 'init', new_pool])
+
+        new_fs = "new_fs"
+        new_metadata_pool = "new_metadata_pool"
+
+        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_metadata_pool)
+
+        # try to create new fs 'new_fs' with following configuration
+        # metadata pool -> 'new_metadata_pool'
+        # data pool -> 'new_pool' (already used by rbd app)
+        # Expecting EINVAL exit status because 'new_pool' is already in use with 'rbd' app
+        try:
+            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', new_fs, new_metadata_pool, new_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL because data pool is already in use for rbd")
 
 class TestRenameCommand(TestAdminCommands):
     """
@@ -376,7 +669,7 @@ class TestRenameCommand(TestAdminCommands):
         try:
             self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} --force")
         except CommandFailedError as ce:
-            self.assertEqual(ce.exitstatus, errno.EEXIST,
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
                 "invalid error code on creating a new file system with old "
                 "name, existing pools and --force flag.")
         else:
