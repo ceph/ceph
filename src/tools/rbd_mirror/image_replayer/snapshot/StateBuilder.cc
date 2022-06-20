@@ -96,8 +96,8 @@ BaseRequest* StateBuilder<I>::create_prepare_replay_request(
     bool* syncing,
     Context* on_finish) {
   return PrepareReplayRequest<I>::create(
-    local_mirror_uuid, this->remote_promotion_state, progress_ctx, this,
-    resync_requested, syncing, on_finish);
+    local_mirror_uuid, progress_ctx, this, resync_requested, syncing,
+    on_finish);
 }
 
 template <typename I>

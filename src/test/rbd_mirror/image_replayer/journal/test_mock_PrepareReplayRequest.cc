@@ -154,12 +154,11 @@ public:
 
   MockPrepareReplayRequest* create_request(
       MockStateBuilder& mock_state_builder,
-      librbd::mirror::PromotionState remote_promotion_state,
       const std::string& local_mirror_uuid,
       bool* resync_requested, bool* syncing, Context* on_finish) {
     return new MockPrepareReplayRequest(
-      local_mirror_uuid, remote_promotion_state, nullptr, &mock_state_builder,
-      resync_requested, syncing, on_finish);
+      local_mirror_uuid, nullptr, &mock_state_builder, resync_requested,
+      syncing, on_finish);
   }
 
   librbd::ImageCtx *m_local_image_ctx = nullptr;
@@ -204,9 +203,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, Success) {
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_FALSE(resync_requested);
@@ -228,9 +226,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, NoLocalJournal) {
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -257,9 +254,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, ResyncRequested) {
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_TRUE(resync_requested);
@@ -286,9 +282,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, ResyncRequestedError) {
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -315,9 +310,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, Syncing) {
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_FALSE(resync_requested);
@@ -355,9 +349,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, GetRemoteTagClassError)
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -401,9 +394,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, GetRemoteTagsError) {
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -472,9 +464,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, LocalDemotedRemoteSynci
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_FALSE(resync_requested);
@@ -520,9 +511,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, UpdateClientError) {
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_FALSE(resync_requested);
@@ -577,9 +567,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, RemoteDemotePromote) {
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_FALSE(resync_requested);
@@ -644,9 +633,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, MultipleRemoteDemotePro
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_FALSE(resync_requested);
@@ -699,9 +687,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, LocalDemoteRemotePromot
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
   ASSERT_FALSE(resync_requested);
@@ -752,9 +739,8 @@ TEST_F(TestMockImageReplayerJournalPrepareReplayRequest, SplitBrainForcePromote)
                                       mirror_peer_client_meta);
   bool resync_requested;
   bool syncing;
-  auto request = create_request(
-    mock_state_builder, librbd::mirror::PROMOTION_STATE_PRIMARY,
-    "local mirror uuid", &resync_requested, &syncing, &ctx);
+  auto request = create_request(mock_state_builder, "local mirror uuid",
+                                &resync_requested, &syncing, &ctx);
   request->send();
   ASSERT_EQ(-EEXIST, ctx.wait());
 }
