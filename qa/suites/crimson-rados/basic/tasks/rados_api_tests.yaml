@@ -19,6 +19,7 @@ overrides:
       osd:
         osd class load list: "*"
         osd class default list: "*"
+        osd blocked scrub grace period: 3600
 tasks:
 - workunit:
     clients:

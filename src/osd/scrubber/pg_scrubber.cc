@@ -775,7 +775,17 @@ bool PgScrubber::range_intersects_scrub(const hobject_t& start,
 
 Scrub::BlockedRangeWarning PgScrubber::acquire_blocked_alarm()
 {
-  ceph::timespan grace_period{m_debug_blockrange?4s:120s};
+  int grace = get_pg_cct()->_conf->osd_blocked_scrub_grace_period;
+  if (grace == 0) {
+    // we will not be sending any alarms re the blocked object
+    dout(20)
+      << __func__
+      << ": blocked-alarm disabled ('osd_blocked_scrub_grace_period' set to 0)"
+      << dendl;
+    return nullptr;
+  }
+  ceph::timespan grace_period{m_debug_blockrange ? 4s : seconds{grace}};
+  dout(30) << __func__ << ": timeout:" << grace_period.count() << dendl;
   return std::make_unique<blocked_range_t>(m_osds,
 					   grace_period,
 					   *this,
