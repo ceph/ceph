@@ -344,7 +344,6 @@ The output format is json and contains fields as follows.
 * created_at: time of creation of snapshot in the format "YYYY-MM-DD HH:MM:SS:ffffff"
 * data_pool: data pool the snapshot belongs to
 * has_pending_clones: "yes" if snapshot clone is in progress otherwise "no"
-* size: snapshot size in bytes
 
 Set custom metadata on the snapshot as a key-value pair using::
 

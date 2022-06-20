@@ -753,12 +753,11 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         snappath = self.snapshot_data_path(snapname)
         snap_info = {}
         try:
-            snap_attrs = {'created_at':'ceph.snap.btime', 'size':'ceph.dir.rbytes',
+            snap_attrs = {'created_at':'ceph.snap.btime',
                           'data_pool':'ceph.dir.layout.pool'}
             for key, val in snap_attrs.items():
                 snap_info[key] = self.fs.getxattr(snappath, val)
-            return {'size': int(snap_info['size']),
-                    'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
+            return {'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
                     'data_pool': snap_info['data_pool'].decode('utf-8'),
                     'has_pending_clones': "yes" if self.has_pending_clones(snapname) else "no"}
         except cephfs.Error as e:
