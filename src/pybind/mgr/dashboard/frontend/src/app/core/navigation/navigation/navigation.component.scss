@@ -18,7 +18,7 @@
 ::ng-deep cd-navigation .cd-navbar-top {
   .cd-navbar-brand {
     background: vv.$secondary;
-    border-top: 4px solid vv.$primary;
+    border-top: 4px solid vv.$primary-wcag-aa-large-text;
 
     .navbar-brand,
     .navbar-brand:hover {
@@ -49,7 +49,7 @@
     }
 
     .cd-navbar-utility > .active > a {
-      background-color: vv.$primary;
+      background-color: vv.$primary-wcag-aa-large-text;
       color: vv.$gray-200;
     }
 
@@ -83,7 +83,7 @@
   .navbar-nav > li > .cd-navbar > a:hover,
   .navbar-nav > li > a:hover,
   .navbar-nav > li:hover {
-    background-color: vv.$primary;
+    background-color: vv.$primary-wcag-aa-large-text;
   }
 
   .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
@@ -119,7 +119,7 @@
       }
 
       .open .dropdown-menu {
-        background-color: vv.$primary;
+        background-color: vv.$primary-wcag-aa-large-text;
         border: 0;
         padding-bottom: 0;
         padding-top: 0;
@@ -131,12 +131,12 @@
       }
 
       .open .dropdown-menu > .active > a {
-        background-color: vv.$primary;
+        background-color: vv.$primary-wcag-aa-large-text;
       }
     }
 
     .navbar-nav > li > a:hover {
-      background-color: vv.$primary;
+      background-color: vv.$primary-wcag-aa-large-text;
     }
   }
 }
@@ -150,9 +150,9 @@ $sidebar-width: 200px;
 .cd-navbar-primary .active > a,
 .cd-navbar-primary > .active > a:focus,
 .cd-navbar-primary > .active > a:hover {
-  background-color: vv.$primary !important;
+  background-color: vv.$primary-wcag-aa-large-text !important;
   border: 0 !important;
-  color: vv.$gray-200 !important;
+  color: vv.$white !important;
 }
 
 .wrapper {
@@ -190,14 +190,14 @@ $sidebar-width: 200px;
       li a {
         color: vv.$white;
         display: block;
-        font-size: 1.1em;
+        font-size: 1.3em;
         padding: 10px;
         padding-left: 27px;
 
         text-decoration: none;
 
         &:hover {
-          background: vv.$primary;
+          background: vv.$primary-wcag-aa-large-text;
           color: vv.$white;
         }
 
@@ -233,7 +233,7 @@ $sidebar-width: 200px;
 
   ul ul a {
     background: lighten(vv.$secondary, 10);
-    font-size: 0.9em !important;
+    font-size: 1.1em !important;
     padding-left: 40px !important;
   }
 
