@@ -366,9 +366,6 @@ MESSAGE(MOSDOpReply)
 #include "messages/MOSDPGBackfill.h"
 MESSAGE(MOSDPGBackfill)
 
-#include "messages/MOSDPGCreate.h"
-MESSAGE(MOSDPGCreate)
-
 #include "messages/MOSDPGCreate2.h"
 MESSAGE(MOSDPGCreate2)
 
