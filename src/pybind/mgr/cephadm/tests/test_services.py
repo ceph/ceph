@@ -275,7 +275,7 @@ class TestMonitoring:
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, AlertManagerSpec()):
-                y = dedent(self._get_config('http://localhost:8080')).lstrip()
+                y = dedent(self._get_config('http://localhost.localdomain:8080')).lstrip()
                 _run_cephadm.assert_called_with(
                     'test',
                     'alertmanager.test',

@@ -23,6 +23,8 @@ from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
     Task, UIRouter, UpdatePermission, allow_empty_body
 
+from typing import Dict, Union, Optional
+
 logger = logging.getLogger(__name__)
 
 RBD_SCHEMA = ([{
@@ -309,7 +311,7 @@ class RbdStatus(BaseController):
     @Endpoint()
     @ReadPermission
     def status(self):
-        status = {'available': True, 'message': None}
+        status: Dict[str, Optional[Union[bool, str]]] = {'available': True, 'message': None}
         if not CephService.get_pool_list('rbd'):
             status['available'] = False
             status['message'] = 'No RBD pools in the cluster. Please create a pool '\
