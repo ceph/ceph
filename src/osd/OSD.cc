@@ -97,7 +97,6 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGInfo2.h"
-#include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
@@ -5226,81 +5225,6 @@ void OSD::resume_creating_pg()
   service.send_pg_temp();
 }
 
-void OSD::build_initial_pg_history(
-  spg_t pgid,
-  epoch_t created,
-  utime_t created_stamp,
-  pg_history_t *h,
-  PastIntervals *pi)
-{
-  dout(10) << __func__ << " " << pgid << " created " << created << dendl;
-  *h = pg_history_t(created, created_stamp);
-
-  OSDMapRef lastmap = service.get_map(created);
-  int up_primary, acting_primary;
-  vector<int> up, acting;
-  lastmap->pg_to_up_acting_osds(
-    pgid.pgid, &up, &up_primary, &acting, &acting_primary);
-
-  ostringstream debug;
-  for (epoch_t e = created + 1; e <= get_osdmap_epoch(); ++e) {
-    OSDMapRef osdmap = service.get_map(e);
-    int new_up_primary, new_acting_primary;
-    vector<int> new_up, new_acting;
-    osdmap->pg_to_up_acting_osds(
-      pgid.pgid, &new_up, &new_up_primary, &new_acting, &new_acting_primary);
-
-    // this is a bit imprecise, but sufficient?
-    struct min_size_predicate_t : public IsPGRecoverablePredicate {
-      const pg_pool_t *pi;
-      bool operator()(const set<pg_shard_t> &have) const {
-	return have.size() >= pi->min_size;
-      }
-      explicit min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
-    } min_size_predicate(osdmap->get_pg_pool(pgid.pgid.pool()));
-
-    bool new_interval = PastIntervals::check_new_interval(
-      acting_primary,
-      new_acting_primary,
-      acting, new_acting,
-      up_primary,
-      new_up_primary,
-      up, new_up,
-      h->same_interval_since,
-      h->last_epoch_clean,
-      osdmap.get(),
-      lastmap.get(),
-      pgid.pgid,
-      min_size_predicate,
-      pi,
-      &debug);
-    if (new_interval) {
-      h->same_interval_since = e;
-      if (up != new_up) {
-        h->same_up_since = e;
-      }
-      if (acting_primary != new_acting_primary) {
-        h->same_primary_since = e;
-      }
-      if (pgid.pgid.is_split(lastmap->get_pg_num(pgid.pgid.pool()),
-                             osdmap->get_pg_num(pgid.pgid.pool()),
-                             nullptr)) {
-        h->last_epoch_split = e;
-      }
-      up = new_up;
-      acting = new_acting;
-      up_primary = new_up_primary;
-      acting_primary = new_acting_primary;
-    }
-    lastmap = osdmap;
-  }
-  dout(20) << __func__ << " " << debug.str() << dendl;
-  dout(10) << __func__ << " " << *h << " " << *pi
-	   << " [" << (pi->empty() ? pair<epoch_t,epoch_t>(0,0) :
-		       pi->get_bounds()) << ")"
-	   << dendl;
-}
-
 void OSD::_add_heartbeat_peer(int p)
 {
   if (p == whoami)
@@ -6086,8 +6010,6 @@ void OSD::tick()
       osdmap_subscribe(get_osdmap_epoch() + 1, false);
     }
   }
-
-  do_waiters();
 
   // scrub purged_snaps every deep scrub interval
   {
@@ -7187,7 +7109,6 @@ bool OSD::ms_dispatch(Message *m)
     return true;
   }
 
-  do_waiters();
   _dispatch(m);
 
   osd_lock.unlock();
@@ -7414,29 +7335,6 @@ int OSD::ms_handle_authentication(Connection *con)
   return ret;
 }
 
-void OSD::do_waiters()
-{
-  ceph_assert(ceph_mutex_is_locked(osd_lock));
-
-  dout(10) << "do_waiters -- start" << dendl;
-  while (!finished.empty()) {
-    OpRequestRef next = finished.front();
-    finished.pop_front();
-    dispatch_op(next);
-  }
-  dout(10) << "do_waiters -- finish" << dendl;
-}
-
-void OSD::dispatch_op(OpRequestRef op)
-{
-  switch (op->get_req()->get_type()) {
-
-  case MSG_OSD_PG_CREATE:
-    handle_pg_create(op);
-    break;
-  }
-}
-
 void OSD::_dispatch(Message *m)
 {
   ceph_assert(ceph_mutex_is_locked(osd_lock));
@@ -7461,26 +7359,6 @@ void OSD::_dispatch(Message *m)
   case MSG_COMMAND:
     handle_command(static_cast<MCommand*>(m));
     return;
-
-    // -- need OSDMap --
-
-  case MSG_OSD_PG_CREATE:
-    {
-      OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
-      if (m->trace)
-        op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
-      // no map?  starting up?
-      if (!get_osdmap()) {
-        dout(7) << "no OSDMap, not booted" << dendl;
-	logger->inc(l_osd_waiting_for_map);
-        waiting_for_osdmap.push_back(op);
-	op->mark_delayed("no osdmap");
-        break;
-      }
-
-      // need OSDMap
-      dispatch_op(op);
-    }
   }
 }
 
@@ -9153,106 +9031,6 @@ void OSD::split_pgs(
   ceph_assert(stat_iter != updated_stats.end());
   parent->finish_split_stats(*stat_iter, rctx.transaction);
 }
-
-/*
- * holding osd_lock
- */
-void OSD::handle_pg_create(OpRequestRef op)
-{
-  // NOTE: this can be removed in P release (mimic is the last version to
-  // send MOSDPGCreate messages).
-
-  auto m = op->get_req<MOSDPGCreate>();
-  ceph_assert(m->get_type() == MSG_OSD_PG_CREATE);
-
-  dout(10) << "handle_pg_create " << *m << dendl;
-
-  if (!require_mon_peer(op->get_req())) {
-    return;
-  }
-
-  if (!require_same_or_newer_map(op, m->epoch, false))
-    return;
-
-  op->mark_started();
-
-  const auto osdmap = get_osdmap();
-  map<pg_t,utime_t>::const_iterator ci = m->ctimes.begin();
-  for (map<pg_t,pg_create_t>::const_iterator p = m->mkpg.begin();
-       p != m->mkpg.end();
-       ++p, ++ci) {
-    ceph_assert(ci != m->ctimes.end() && ci->first == p->first);
-    epoch_t created = p->second.created;
-    if (p->second.split_bits) // Skip split pgs
-      continue;
-    pg_t on = p->first;
-
-    if (!osdmap->have_pg_pool(on.pool())) {
-      dout(20) << "ignoring pg on deleted pool " << on << dendl;
-      continue;
-    }
-
-    dout(20) << "mkpg " << on << " e" << created << "@" << ci->second << dendl;
-
-    spg_t pgid;
-    bool mapped = osdmap->get_primary_shard(on, &pgid);
-    ceph_assert(mapped);
-
-    // is it still ours?
-    vector<int> up, acting;
-    int up_primary = -1;
-    int acting_primary = -1;
-    osdmap->pg_to_up_acting_osds(on, &up, &up_primary, &acting, &acting_primary);
-    int role = osdmap->calc_pg_role(pg_shard_t(whoami, pgid.shard), acting);
-
-    if (acting_primary != whoami) {
-      dout(10) << "mkpg " << on << "  not acting_primary (" << acting_primary
-	       << "), my role=" << role << ", skipping" << dendl;
-      continue;
-    }
-
-
-    PastIntervals pi;
-    pg_history_t history;
-    build_initial_pg_history(pgid, created, ci->second, &history, &pi);
-
-    // The mon won't resend unless the primary changed, so we ignore
-    // same_interval_since.  We'll pass this history with the current
-    // epoch as the event.
-    if (history.same_primary_since > m->epoch) {
-      dout(10) << __func__ << ": got obsolete pg create on pgid "
-	       << pgid << " from epoch " << m->epoch
-	       << ", primary changed in " << history.same_primary_since
-	       << dendl;
-      continue;
-    }
-    enqueue_peering_evt(
-      pgid,
-      PGPeeringEventRef(
-	std::make_shared<PGPeeringEvent>(
-	  osdmap->get_epoch(),
-	  osdmap->get_epoch(),
-	  NullEvt(),
-	  true,
-	  new PGCreateInfo(
-	    pgid,
-	    osdmap->get_epoch(),
-	    history,
-	    pi,
-	    true)
-	  )));
-  }
-
-  {
-    std::lock_guard l(pending_creates_lock);
-    if (pending_creates_from_mon == 0) {
-      last_pg_create_epoch = m->epoch;
-    }
-  }
-
-  maybe_update_heartbeat_peers();
-}
-
 
 // ----------------------------------------
 // peering and recovery

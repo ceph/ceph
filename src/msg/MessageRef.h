@@ -143,7 +143,6 @@ class MOSDPGBackfill;
 class MOSDPGBackfillRemove;
 class MOSDPGCreate2;
 class MOSDPGCreated;
-class MOSDPGCreate;
 class MOSDPGInfo;
 class MOSDPGLog;
 class MOSDPGNotify;

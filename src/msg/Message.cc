@@ -85,7 +85,6 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGInfo2.h"
-#include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGLease.h"
@@ -567,9 +566,6 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_PG_INFO2:
     m = make_message<MOSDPGInfo2>();
-    break;
-  case MSG_OSD_PG_CREATE:
-    m = make_message<MOSDPGCreate>();
     break;
   case MSG_OSD_PG_CREATE2:
     m = make_message<MOSDPGCreate2>();

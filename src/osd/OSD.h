@@ -1130,7 +1130,6 @@ protected:
   void tick();
   void tick_without_osd_lock();
   void _dispatch(Message *m);
-  void dispatch_op(OpRequestRef op);
 
   void check_osdmap_features();
 
@@ -1552,7 +1551,6 @@ private:
     ceph_assert(ceph_mutex_is_locked(osd_lock));
     finished.splice(finished.end(), ls);
   }
-  void do_waiters();
 
   // -- op tracking --
   OpTracker op_tracker;
@@ -1807,17 +1805,7 @@ protected:
 
   void load_pgs();
 
-  /// build initial pg history and intervals on create
-  void build_initial_pg_history(
-    spg_t pgid,
-    epoch_t created,
-    utime_t created_stamp,
-    pg_history_t *h,
-    PastIntervals *pi);
-
   epoch_t last_pg_create_epoch;
-
-  void handle_pg_create(OpRequestRef op);
 
   void split_pgs(
     PG *parent,
