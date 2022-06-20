@@ -434,7 +434,7 @@ class MDSCluster(CephCluster):
                 ip_str, port_str = re.match("(.+):(.+)", addr).groups()
                 remote.run(
                     args=["sudo", "iptables", da_flag, "INPUT", "-p", "tcp", "--dport", port_str, "-j", "REJECT", "-m",
-                          "comment", "--comment", "teuthology"])
+                          "comment", "--comment", "teuthology"], omit_sudo=False)
 
 
             mds = mds_ids[1]
@@ -444,10 +444,10 @@ class MDSCluster(CephCluster):
                 ip_str, port_str = re.match("(.+):(.+)", addr).groups()
                 remote.run(
                     args=["sudo", "iptables", da_flag, "OUTPUT", "-p", "tcp", "--sport", port_str, "-j", "REJECT", "-m",
-                          "comment", "--comment", "teuthology"])
+                          "comment", "--comment", "teuthology"], omit_sudo=False)
                 remote.run(
                     args=["sudo", "iptables", da_flag, "INPUT", "-p", "tcp", "--dport", port_str, "-j", "REJECT", "-m",
-                          "comment", "--comment", "teuthology"])
+                          "comment", "--comment", "teuthology"], omit_sudo=False)
 
         self._one_or_all((mds_rank_1, mds_rank_2), set_block, in_parallel=False)
 
