@@ -36,7 +36,28 @@
                 (click)="reset()">
           <i [ngClass]="[icons.undo]"></i>
         </button>
+        <button class="btn btn-light my-1 ml-3"
+                i18n-title
+                title="Show hidden information"
+                (click)="showMessage = !showMessage">
+          <i [ngClass]="[icons.infoCircle, icons.large]"></i>
+        </button>
       </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col my-3"
+         *ngIf="showMessage">
+      <cd-alert-panel type="info"
+                      class="mb-3"
+                      *ngIf="showMessage"
+                      dismissible="true"
+                      (dismissed)="showMessage = false"
+                      i18n>If no embedded Grafana Dashboard appeared below, please follow <a [href]="grafanaSrc"
+                      target="_blank"
+                      noopener
+                      noreferrer>this link </a> to check if Grafana is reachable and there are no HTTPS certificate issues. You may need to reload this page after accepting any Browser certificate exceptions</cd-alert-panel>
     </div>
   </div>
 
