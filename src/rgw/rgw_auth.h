@@ -19,6 +19,7 @@
 
 class RGWCtl;
 struct rgw_log_entry;
+struct req_state;
 
 namespace rgw {
 namespace auth {

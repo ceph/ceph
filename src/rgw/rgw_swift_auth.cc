@@ -751,7 +751,7 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(rgw::sal::Store* store, struct req_state *state,
+int RGWHandler_SWIFT_Auth::init(rgw::sal::Store* store, req_state *state,
 				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";
