@@ -8,6 +8,7 @@ from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
+from ceph_volume.util.disk import allow_loop_devices
 
 
 logger = logging.getLogger(__name__)
@@ -214,7 +215,7 @@ class Device(object):
             device_type = dev.get('TYPE', '')
             # always check is this is an lvm member
             valid_types = ['part', 'disk']
-            if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False):
+            if allow_loop_devices():
                 valid_types.append('loop')
             if device_type in valid_types:
                 self._set_lvm_membership()
@@ -466,7 +467,7 @@ class Device(object):
             api = self.blkid_api
         if api:
             valid_types = ['disk', 'device', 'mpath']
-            if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False):
+            if allow_loop_devices():
                 valid_types.append('loop')
             return self.device_type in valid_types
         return False
