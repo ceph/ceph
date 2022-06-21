@@ -14,12 +14,7 @@ describe('ErrorComponent', () => {
 
   configureTestBed({
     declarations: [ErrorComponent],
-    imports: [
-      HttpClientTestingModule,
-      RouterTestingModule,
-      SharedModule,
-      ToastrModule.forRoot()
-    ]
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, ToastrModule.forRoot()]
   });
 
   beforeEach(() => {

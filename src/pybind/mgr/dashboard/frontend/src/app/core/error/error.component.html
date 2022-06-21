@@ -7,15 +7,16 @@
     <div class="blank-page">
       <div *ngIf="header && message; else elseBlock">
         <i [ngClass]="icon"
-          class="mx-auto d-block"></i>
+           class="mx-auto d-block"></i>
 
         <div class="mt-4 text-center">
           <h3><b>{{ header }}</b></h3>
           <h4 class="mt-3"
               *ngIf="header !== message">{{ message }}</h4>
-            <h4 *ngIf="section"
-                i18n>Please consult the <a href="{{ docUrl }}">documentation</a> on how to configure and enable
-                     the {{ sectionInfo }} management functionality.</h4>
+          <h4 *ngIf="section"
+              i18n>Please consult the <a href="{{ docUrl }}">documentation</a> on how to configure and enable
+                   the {{ sectionInfo }} management functionality.
+          </h4>
         </div>
       </div>
 
