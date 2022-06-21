@@ -13,6 +13,7 @@
 #include "crimson/os/alienstore/thread_pool.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
+#include "crimson/admin/admin_socket.h"
 
 namespace ceph::os {
 class Transaction;
@@ -118,6 +119,7 @@ public:
     CollectionRef ch,
     const ghobject_t& oid) final;
 
+  void set_admin_socket(seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok) final;
 private:
   template <class... Args>
   auto do_with_op_gate(Args&&... args) const {
@@ -138,6 +140,7 @@ private:
   const std::string type;
   const std::string path;
   const ConfigValues values;
+  seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok;
   uint64_t used_bytes = 0;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;

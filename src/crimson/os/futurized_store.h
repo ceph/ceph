@@ -9,9 +9,11 @@
 #include <vector>
 
 #include <seastar/core/future.hh>
+#include <seastar/core/shared_ptr.hh>
 
 #include "os/Transaction.h"
 #include "crimson/osd/exceptions.h"
+#include "crimson/admin/admin_socket.h"
 #include "include/buffer_fwd.h"
 #include "include/uuid.h"
 #include "osd/osd_types.h"
@@ -20,6 +22,9 @@ namespace ceph::os {
 class Transaction;
 }
 
+namespace crimson::admin {
+class AdminSocket;
+}
 namespace crimson::os {
 class FuturizedCollection;
 
@@ -170,6 +175,8 @@ public:
     const std::string& key) = 0;
   virtual uuid_d get_fsid() const  = 0;
   virtual unsigned get_max_attr_name_length() const = 0;
+  virtual void set_admin_socket(seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok) {};
+
 };
 
 inline void intrusive_ptr_add_ref(FuturizedStore::OmapIterator* iter) {

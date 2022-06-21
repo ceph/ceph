@@ -702,6 +702,10 @@ int AlienStore::AlienOmapIterator::status() const
   return iter->status();
 }
 
+void AlienStore::set_admin_socket(seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok)
+{
+  this->asok = asok;
+}
 std::vector<uint64_t> AlienStore::_parse_cpu_cores()
 {
   std::vector<uint64_t> cpu_cores;
