@@ -4321,6 +4321,22 @@ bool PastIntervals::check_new_interval(
   }
 }
 
+void PastIntervals::adjust_start_backwards(
+  epoch_t last_epoch_clean,
+  const DoutPrefixProvider *dpp)
+{
+  ceph_assert(past_intervals);
+  auto pib = past_intervals->get_bounds();
+  if (last_epoch_clean < pib.first) {
+    ldpp_dout(dpp, 10)
+      << __func__
+      << "past_interval start interval adjusted"
+      << " backwards to last_epoch_clean("
+      << last_epoch_clean << ")" << dendl;
+    past_intervals->adjust_start_backwards(last_epoch_clean);
+  }
+}
+
 // true if the given map affects the prior set
 bool PastIntervals::PriorSet::affected_by_map(
   const OSDMap &osdmap,

@@ -3475,10 +3475,16 @@ public:
     return past_intervals->get_bounds();
   }
 
-  void adjust_start_backwards(epoch_t last_epoch_clean) {
-    ceph_assert(past_intervals);
-    past_intervals->adjust_start_backwards(last_epoch_clean);
-  }
+  /* if the past_intervals start is later than last_epoch_clean, it
+   * implies the source repeered again but the target didn't, or
+   * that the source became clean in a later epoch than the target.
+   * avoid the discrepancy but adjusting the interval start
+   * backwards to match so that check_past_interval_bounds() will
+   * not complain.
+   */
+  void adjust_start_backwards(
+    epoch_t last_epoch_clean,
+    const DoutPrefixProvider *dpp);
 
   enum osd_state_t {
     UP,

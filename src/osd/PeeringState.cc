@@ -3410,19 +3410,7 @@ void PeeringState::merge_from(
       info.history.same_interval_since = info.history.last_epoch_clean;
     }
 
-    // if the past_intervals start is later than last_epoch_clean, it
-    // implies the source repeered again but the target didn't, or
-    // that the source became clean in a later epoch than the target.
-    // avoid the discrepancy but adjusting the interval start
-    // backwards to match so that check_past_interval_bounds() will
-    // not complain.
-    auto pib = past_intervals.get_bounds();
-    if (info.history.last_epoch_clean < pib.first) {
-      psdout(10) << __func__ << " last_epoch_clean "
-		 << info.history.last_epoch_clean << " < past_interval start "
-		 << pib.first << ", adjusting start backwards" << dendl;
-      past_intervals.adjust_start_backwards(info.history.last_epoch_clean);
-    }
+    past_intervals.adjust_start_backwards(info.history.last_epoch_clean, dpp);
 
     // Similarly, if the same_interval_since value is later than
     // last_epoch_clean, the next interval change will result in a
