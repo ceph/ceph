@@ -743,25 +743,6 @@ def is_locked_raw_device(disk_path):
     return 0
 
 
-def get_block_devs_lsblk(device=''):
-    '''
-    This returns a list of lists with 3 items per inner list.
-    KNAME - reflects the kernel device name , for example /dev/sda or /dev/dm-0
-    NAME - the device name, for example /dev/sda or
-           /dev/mapper/<vg_name>-<lv_name>
-    TYPE - the block device type: disk, partition, lvm and such
-
-    '''
-    cmd = ['lsblk', '-plno', 'KNAME,NAME,TYPE']
-    if device:
-        cmd.extend(['--nodeps', device])
-    stdout, stderr, rc = process.call(cmd)
-    # lsblk returns 1 on failure
-    if rc == 1:
-        raise OSError('lsblk returned failure, stderr: {}'.format(stderr))
-    return [re.split(r'\s+', line) for line in stdout]
-
-
 class AllowLoopDevices(object):
     allow = False
     warned = False

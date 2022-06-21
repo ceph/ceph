@@ -268,8 +268,8 @@ def device_info_not_ceph_disk_member(monkeypatch, request):
                                       'PARTLABEL': request.param[1]})
 
 @pytest.fixture
-def patched_get_block_devs_lsblk():
-    with patch('ceph_volume.util.disk.get_block_devs_lsblk') as p:
+def patched_get_block_devs_sysfs():
+    with patch('ceph_volume.util.disk.get_block_devs_sysfs') as p:
         yield p
 
 @pytest.fixture
