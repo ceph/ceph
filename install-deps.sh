@@ -220,20 +220,6 @@ function install_libzbd_on_ubuntu {
         libzbd-dev
 }
 
-function install_libpmem_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running install_libpmem_on_ubuntu() in install-deps.sh"
-    local codename=$1
-    local project=pmem
-    local sha1=7c18b4b1413ae965ea8bcbfc69eb9784f9212319
-    install_pkg_on_ubuntu \
-        $project \
-        $sha1 \
-        $codename \
-        check \
-        libpmem-dev \
-        libpmemobj-dev
-}
-
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -308,7 +294,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
-    [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
     motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
     source /etc/os-release
@@ -327,7 +312,6 @@ else
             *Focal*)
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
-                $with_pmem && install_libpmem_on_ubuntu focal
                 ;;
             *)
                 $SUDO apt-get install -y gcc
