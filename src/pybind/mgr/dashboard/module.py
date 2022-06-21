@@ -13,9 +13,6 @@ import threading
 import time
 from typing import TYPE_CHECKING, Optional
 
-from .services.custom_banner import get_login_banner_mgr, \
-    set_login_banner_mgr, unset_login_banner_mgr
-
 if TYPE_CHECKING:
     if sys.version_info >= (3, 8):
         from typing import Literal
@@ -421,19 +418,25 @@ class Module(MgrModule, CherryPyConfig):
         return 0, 'RGW credentials configured', ''
 
     @CLIWriteCommand("dashboard set-login-banner")
-    def set_login_banner(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+    def set_login_banner(self, inbuf: str):
+        '''
+        Set the custom login banner read from -i <file>
+        '''
         item_label = 'login banner file'
         if inbuf is None:
             return HandleCommandResult(
                 -errno.EINVAL,
                 stderr=f'Please specify the {item_label} with "-i" option'
             )
-        set_login_banner_mgr(inbuf, mgr_id)
+        mgr.set_store('custom_login_banner', inbuf)
         return HandleCommandResult(stdout=f'{item_label} added')
 
     @CLIReadCommand("dashboard get-login-banner")
     def get_login_banner(self):
-        banner_text = get_login_banner_mgr()
+        '''
+        Get the custom login banner text
+        '''
+        banner_text = mgr.get_store('custom_login_banner')
         if banner_text is None:
             return HandleCommandResult(stdout='No login banner set')
         else:
@@ -441,7 +444,10 @@ class Module(MgrModule, CherryPyConfig):
 
     @CLIWriteCommand("dashboard unset-login-banner")
     def unset_login_banner(self):
-        unset_login_banner_mgr()
+        '''
+        Unset the custom login banner
+        '''
+        mgr.set_store('custom_login_banner', None)
         return HandleCommandResult(stdout='Login banner removed')
 
     def handle_command(self, inbuf, cmd):
