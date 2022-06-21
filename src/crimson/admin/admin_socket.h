@@ -117,6 +117,10 @@ class AdminSocket : public seastar::enable_lw_shared_from_this<AdminSocket> {
    */
   void register_admin_commands();
   /**
+   * Unregister command by string prefix.
+   */
+  void unregister_command(const std::string_view);
+  /**
    * handle a command message by replying an MCommandReply with the same tid
    *
    * \param conn connection over which the incoming command message is received

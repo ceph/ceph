@@ -58,6 +58,10 @@ void AdminSocket::register_command(std::unique_ptr<AdminSocketHook>&& hook)
   logger().info("register_command(): {})", it->first);
 }
 
+void AdminSocket::unregister_command(const std::string_view prefix)
+{
+  hooks.erase(prefix);
+}
 auto AdminSocket::parse_cmd(const std::vector<std::string>& cmd)
   -> std::variant<parsed_command_t, tell_result_t>
 {
