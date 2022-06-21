@@ -343,12 +343,8 @@ def is_device(dev):
     if not dev.startswith('/dev/'):
         return False
     if dev[len('/dev/'):].startswith('loop'):
-        if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False) is False:
+        if not allow_loop_devices():
             return False
-        logger.info(
-            "Allowing the use of loop devices since "
-            "CEPH_VOLUME_USE_LOOP_DEVICES is set."
-        )
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
@@ -766,6 +762,31 @@ def get_block_devs_lsblk(device=''):
     return [re.split(r'\s+', line) for line in stdout]
 
 
+class AllowLoopDevices(object):
+    allow = False
+    warned = False
+
+    @classmethod
+    def __call__(cls):
+        val = os.environ.get("CEPH_VOLUME_ALLOW_LOOP_DEVICES", "false").lower()
+        if val not in ("false", 'no', '0'):
+            cls.allow = True
+            if not cls.warned:
+                logger.warning(
+                    "CEPH_VOLUME_ALLOW_LOOP_DEVICES is set in your "
+                    "environment, so we will allow the use of unattached loop"
+                    " devices as disks. This feature is intended for "
+                    "development purposes only and will never be supported in"
+                    " production. Issues filed based on this behavior will "
+                    "likely be ignored."
+                )
+                cls.warned = True
+        return cls.allow
+
+
+allow_loop_devices = AllowLoopDevices()
+
+
 def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys/dev/block'):
     # First, get devices that are _not_ partitions
     result = list()
@@ -781,7 +802,7 @@ def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys
             basename = get_file_contents(os.path.join(dm_dir_path, 'name'))
             name = os.path.join("/dev/mapper", basename)
         if dev.startswith('loop'):
-            if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False) is False:
+            if not allow_loop_devices():
                 continue
             # Skip loop devices that are not attached
             if not os.path.exists(os.path.join(_sys_block_path, dev, 'loop')):
@@ -815,7 +836,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     block_devs = get_block_devs_sysfs(_sys_block_path)
 
     block_types = ['disk', 'mpath']
-    if os.environ.get("CEPH_VOLUME_USE_LOOP_DEVICES", False) is not False:
+    if allow_loop_devices():
         block_types.append('loop')
 
     for block in block_devs:
