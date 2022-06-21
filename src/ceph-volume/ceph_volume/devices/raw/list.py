@@ -68,23 +68,17 @@ class List(object):
 
     def generate(self, devs=None):
         logger.debug('Listing block devices via lsblk...')
-
+        info_devices = disk.lsblk_all(abspath=True)
         if devs is None or devs == []:
-            devs = []
             # If no devs are given initially, we want to list ALL devices including children and
             # parents. Parent disks with child partitions may be the appropriate device to return if
             # the parent disk has a bluestore header, but children may be the most appropriate
             # devices to return if the parent disk does not have a bluestore header.
-            out, err, ret = process.call([
-                'lsblk', '--paths', '--output=NAME', '--noheadings', '--list'
-            ])
-            assert not ret
-            devs = out
+            devs = [device['NAME'] for device in info_devices if device.get('NAME',)]
 
         result = {}
         logger.debug('inspecting devices: {}'.format(devs))
         for dev in devs:
-            info = disk.lsblk(dev, abspath=True)
             # Linux kernels built with CONFIG_ATARI_PARTITION enabled can falsely interpret
             # bluestore's on-disk format as an Atari partition table. These false Atari partitions
             # can be interpreted as real OSDs if a bluestore OSD was previously created on the false
@@ -94,28 +88,29 @@ class List(object):
             # parent isn't bluestore, then the child could be a valid bluestore OSD. If we fail to
             # determine whether a parent is bluestore, we should err on the side of not reporting
             # the child so as not to give a false negative.
-            if 'PKNAME' in info and info['PKNAME'] != "":
-                parent = info['PKNAME']
-                try:
-                    if disk.has_bluestore_label(parent):
-                        logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(dev, parent),
-                                        'device is likely a phantom Atari partition. device info: {}'.format(info)))
+            for info_device in info_devices:
+                if 'PKNAME' in info_device and info_device['PKNAME'] != "":
+                    parent = info_device['PKNAME']
+                    try:
+                        if disk.has_bluestore_label(parent):
+                            logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(dev, parent),
+                                            'device is likely a phantom Atari partition. device info: {}'.format(info_device)))
+                            continue
+                    except OSError as e:
+                        logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(dev),
+                                    'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
                         continue
-                except OSError as e:
-                    logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(dev),
-                                  'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
-                    continue
 
-            bs_info = _get_bluestore_info(dev)
-            if bs_info is None:
-                # None is also returned in the rare event that there is an issue reading info from
-                # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
-                logger.info('device {} does not have BlueStore information'.format(dev))
-                continue
-            uuid = bs_info['osd_uuid']
-            if uuid not in result:
-                result[uuid] = {}
-            result[uuid].update(bs_info)
+                bs_info = _get_bluestore_info(dev)
+                if bs_info is None:
+                    # None is also returned in the rare event that there is an issue reading info from
+                    # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
+                    logger.info('device {} does not have BlueStore information'.format(dev))
+                    continue
+                uuid = bs_info['osd_uuid']
+                if uuid not in result:
+                    result[uuid] = {}
+                result[uuid].update(bs_info)
 
         return result
 
