@@ -38,7 +38,7 @@ snappyTag="1.1.9"
 winLibDir="${depsToolsetDir}/windows/lib"
 
 wnbdUrl="https://github.com/cloudbase/wnbd"
-wnbdTag="master"
+wnbdTag="main"
 wnbdSrcDir="${depsSrcDir}/wnbd"
 wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 
