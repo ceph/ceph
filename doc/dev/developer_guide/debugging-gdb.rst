@@ -6,7 +6,7 @@ a powerful tool that allows you to analyze the execution flow
 of a process.
 GDB can help to find bugs, uncover crash errors or track the
 source code during execution of a development cluster.
-It can also be used to debug Teuthology tests runs.
+It can also be used to debug Teuthology test runs.
 
 GET STARTED WITH GDB
 --------------------
