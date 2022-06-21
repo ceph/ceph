@@ -1,6 +1,5 @@
 import os
 import pytest
-from mock.mock import patch
 from ceph_volume.util import disk
 
 
@@ -218,33 +217,6 @@ class TestSizeParse(object):
         assert result == disk.Size(tb=1.8)
 
 
-class TestGetBlockDevsLsblk(object):
-
-    @patch('ceph_volume.process.call')
-    def test_return_structure(self, patched_call):
-        lsblk_stdout = [
-			'/dev/dm-0 /dev/mapper/ceph--8b2684eb--56ff--49e4--8f28--522e04cbd6ab-osd--data--9fc29fbf--3b5b--4066--be10--61042569b5a7 lvm',
-			'/dev/vda  /dev/vda                                                                                                       disk',
-			'/dev/vda1 /dev/vda1                                                                                                      part',
-			'/dev/vdb  /dev/vdb                                                                                                       disk',]
-        patched_call.return_value = (lsblk_stdout, '', 0)
-        disks = disk.get_block_devs_lsblk()
-        assert len(disks) == len(lsblk_stdout)
-        assert len(disks[0]) == 3
-
-    @patch('ceph_volume.process.call')
-    def test_empty_lsblk(self, patched_call):
-        patched_call.return_value = ([], '', 0)
-        disks = disk.get_block_devs_lsblk()
-        assert len(disks) == 0
-
-    @patch('ceph_volume.process.call')
-    def test_raise_on_failure(self, patched_call):
-        patched_call.return_value = ([], 'error', 1)
-        with pytest.raises(OSError):
-            disk.get_block_devs_lsblk()
-
-
 class TestGetDevices(object):
 
     def setup_path(self, tmpdir):
@@ -252,14 +224,14 @@ class TestGetDevices(object):
         os.makedirs(path)
         return path
 
-    def test_no_devices_are_found(self, tmpdir, patched_get_block_devs_lsblk):
-        patched_get_block_devs_lsblk.return_value = []
+    def test_no_devices_are_found(self, tmpdir, patched_get_block_devs_sysfs):
+        patched_get_block_devs_sysfs.return_value = []
         result = disk.get_devices(_sys_block_path=str(tmpdir))
         assert result == {}
 
-    def test_sda_block_is_found(self, tmpdir, patched_get_block_devs_lsblk):
+    def test_sda_block_is_found(self, tmpdir, patched_get_block_devs_sysfs):
         sda_path = '/dev/sda'
-        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
         block_path = self.setup_path(tmpdir)
         os.makedirs(os.path.join(block_path, 'sda'))
         result = disk.get_devices(_sys_block_path=block_path)
@@ -269,9 +241,9 @@ class TestGetDevices(object):
         assert result[sda_path]['partitions'] == {}
 
 
-    def test_sda_size(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+    def test_sda_size(self, tmpfile, tmpdir, patched_get_block_devs_sysfs):
         sda_path = '/dev/sda'
-        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
         block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         os.makedirs(block_sda_path)
@@ -280,10 +252,10 @@ class TestGetDevices(object):
         assert list(result.keys()) == [sda_path]
         assert result[sda_path]['human_readable_size'] == '512.00 KB'
 
-    def test_sda_sectorsize_fallsback(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+    def test_sda_sectorsize_fallsback(self, tmpfile, tmpdir, patched_get_block_devs_sysfs):
         # if no sectorsize, it will use queue/hw_sector_size
         sda_path = '/dev/sda'
-        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
         block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         sda_queue_path = os.path.join(block_sda_path, 'queue')
@@ -294,9 +266,9 @@ class TestGetDevices(object):
         assert list(result.keys()) == [sda_path]
         assert result[sda_path]['sectorsize'] == '1024'
 
-    def test_sda_sectorsize_from_logical_block(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+    def test_sda_sectorsize_from_logical_block(self, tmpfile, tmpdir, patched_get_block_devs_sysfs):
         sda_path = '/dev/sda'
-        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
         block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         sda_queue_path = os.path.join(block_sda_path, 'queue')
@@ -306,9 +278,9 @@ class TestGetDevices(object):
         result = disk.get_devices(_sys_block_path=block_path)
         assert result[sda_path]['sectorsize'] == '99'
 
-    def test_sda_sectorsize_does_not_fallback(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+    def test_sda_sectorsize_does_not_fallback(self, tmpfile, tmpdir, patched_get_block_devs_sysfs):
         sda_path = '/dev/sda'
-        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
         block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         sda_queue_path = os.path.join(block_sda_path, 'queue')
@@ -319,9 +291,9 @@ class TestGetDevices(object):
         result = disk.get_devices(_sys_block_path=block_path)
         assert result[sda_path]['sectorsize'] == '99'
 
-    def test_is_rotational(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+    def test_is_rotational(self, tmpfile, tmpdir, patched_get_block_devs_sysfs):
         sda_path = '/dev/sda'
-        patched_get_block_devs_lsblk.return_value = [[sda_path, sda_path, 'disk']]
+        patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
         block_path = self.setup_path(tmpdir)
         block_sda_path = os.path.join(block_path, 'sda')
         sda_queue_path = os.path.join(block_sda_path, 'queue')
@@ -331,9 +303,9 @@ class TestGetDevices(object):
         result = disk.get_devices(_sys_block_path=block_path)
         assert result[sda_path]['rotational'] == '1'
 
-    def test_is_ceph_rbd(self, tmpfile, tmpdir, patched_get_block_devs_lsblk):
+    def test_is_ceph_rbd(self, tmpfile, tmpdir, patched_get_block_devs_sysfs):
         rbd_path = '/dev/rbd0'
-        patched_get_block_devs_lsblk.return_value = [[rbd_path, rbd_path, 'disk']]
+        patched_get_block_devs_sysfs.return_value = [[rbd_path, rbd_path, 'disk']]
         block_path = self.setup_path(tmpdir)
         block_rbd_path = os.path.join(block_path, 'rbd0')
         os.makedirs(block_rbd_path)
