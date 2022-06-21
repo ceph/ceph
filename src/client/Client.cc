@@ -7971,10 +7971,10 @@ int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
   stat_to_statx(attr, &stx);
   mask &= ~CEPH_SETATTR_BTIME;
 
-  if ((mask & CEPH_SETATTR_UID) && attr->st_uid == (short)static_cast<uid_t>(-1)) {
+  if ((mask & CEPH_SETATTR_UID) && attr.st_uid == static_cast<uid_t>(-1)) {
     mask &= ~CEPH_SETATTR_UID;
   }
-  if ((mask & CEPH_SETATTR_GID) && attr->st_gid == (short)static_cast<uid_t>(-1)) {
+  if ((mask & CEPH_SETATTR_GID) && attr.st_gid == static_cast<gid_t>(-1)) {
     mask &= ~CEPH_SETATTR_GID;
   }
 
