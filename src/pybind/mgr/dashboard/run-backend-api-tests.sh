@@ -82,20 +82,7 @@ display_log() {
     printf "\n\nTEST FAILED.\n\n"
 }
 
-on_tests_error() {
-    local ret=$?
-    if [[ -n "$JENKINS_HOME" && -z "$ON_TESTS_ERROR_RUN" ]]; then
-        CEPH_OUT_DIR=${CEPH_OUT_DIR:-"$LOCAL_BUILD_DIR"/out}
-        display_log "mgr" 1500
-        display_log "osd" 1000
-        ON_TESTS_ERROR_RUN=1
-    fi
-    return $ret
-}
-
 run_teuthology_tests() {
-    trap on_tests_error ERR
-
     cd "$LOCAL_BUILD_DIR"
     find ../src/pybind/mgr/dashboard/ -name '*.pyc' -exec rm -f {} \;
 
@@ -125,6 +112,7 @@ run_teuthology_tests() {
         pybind_dir+=":$LOCAL_BUILD_DIR/src/pybind"
     fi
     export PYTHONPATH=$source_dir/qa:$LOCAL_BUILD_DIR/lib/cython_modules/lib.3/:$pybind_dir:$python_common_dir:${COVERAGE_PATH}
+    echo "${PYTHONPATH@A}"
     export DASHBOARD_SSL=1
     export NFS=0
     export RGW=1
@@ -133,8 +121,7 @@ run_teuthology_tests() {
     export COVERAGE_FILE=.coverage.mgr.dashboard
     find . -iname "*${COVERAGE_FILE}*" -type f -delete
 
-    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries --no-verbose $OPTIONS $(echo $TEST_CASES) ||
-      on_tests_error
+    python ../qa/tasks/vstart_runner.py --ignore-missing-binaries $OPTIONS $(echo $TEST_CASES)
 
     deactivate
     cd $CURR_DIR
@@ -161,7 +148,6 @@ cleanup_teuthology() {
     unset COVERAGE_PATH
     unset setup_teuthology
     unset setup_coverage
-    unset on_tests_error
     unset run_teuthology_tests
     unset cleanup_teuthology
 }
