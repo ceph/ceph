@@ -47,6 +47,7 @@ set(alien_store_srcs
   alien_store.cc
   thread_pool.cc
   alien_log.cc
+  alien_admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/os/ObjectStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Allocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/AvlAllocator.cc
@@ -81,6 +82,7 @@ target_link_libraries(crimson-alienstore
     kv
     heap_profiler
     crimson-alien-common
+    crimson-admin
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
     crimson

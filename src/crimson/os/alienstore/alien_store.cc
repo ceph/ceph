@@ -4,6 +4,7 @@
 #include "alien_collection.h"
 #include "alien_store.h"
 #include "alien_log.h"
+#include "alien_admin_socket.h"
 
 #include <map>
 #include <string_view>
@@ -86,22 +87,6 @@ AlienStore::~AlienStore()
 
 seastar::future<> AlienStore::start()
 {
-  cct = std::make_unique<CephContext>(
-    CEPH_ENTITY_TYPE_OSD,
-    CephContext::create_options { CODE_ENVIRONMENT_UTILITY, 0,
-      [](const ceph::logging::SubsystemMap* subsys_map) {
-	return new ceph::logging::CnLog(subsys_map, seastar::engine().alien(), seastar::this_shard_id());
-      }
-    }
-  );
-  g_ceph_context = cct.get();
-  cct->_conf.set_config_values(values);
-  cct->_log->start();
-
-  store = ObjectStore::create(cct.get(), type, path);
-  if (!store) {
-    ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
-  }
   std::vector<uint64_t> cpu_cores = _parse_cpu_cores();
   // cores except the first "N_CORES_FOR_SEASTAR" ones will
   // be used for alien threads scheduling:
@@ -120,7 +105,32 @@ seastar::future<> AlienStore::start()
   const auto num_threads =
     get_conf<uint64_t>("crimson_alien_op_num_threads");
   tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, cpu_cores);
-  return tp->start();
+  auto& alien = seastar::engine().alien();
+  auto shard = seastar::this_shard_id();
+  // must create cn_admin_socket in reactor environment, otherwise shared_ptr is unhappy
+  auto cn_admin_socket = new CnAdminSocket(nullptr, this->asok, tp, alien, shard);
+  return tp->start().then([this, &alien, shard, cn_admin_socket] {
+    return tp->submit([this, &alien, shard, cn_admin_socket] {
+      cct = std::make_unique<CephContext>(
+	CEPH_ENTITY_TYPE_OSD,
+	CephContext::create_options { CODE_ENVIRONMENT_UTILITY, 0,
+	  [&alien, shard](const ceph::logging::SubsystemMap* subsys_map) {
+	    return new ceph::logging::CnLog(subsys_map, alien, shard);
+	  },
+	  [cn_admin_socket](ceph::common::CephContext* cct) {
+	    return cn_admin_socket;
+	  }
+	}
+      );
+      g_ceph_context = cct.get();
+      cct->_conf.set_config_values(values);
+      cct->_log->start();
+      store = ObjectStore::create(cct.get(), type, path);
+      if (!store) {
+	ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
+      }
+    });
+  });
 }
 
 seastar::future<> AlienStore::stop()

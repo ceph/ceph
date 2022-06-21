@@ -55,7 +55,7 @@ void AdminSocket::register_command(std::unique_ptr<AdminSocketHook>&& hook)
   auto prefix = hook->prefix;
   auto [it, added] = hooks.emplace(prefix, std::move(hook));
   assert(added);
-  logger().info("register_command(): {})", it->first);
+  logger().info("register_command(): {}", it->first);
 }
 
 void AdminSocket::unregister_command(const std::string_view prefix)
