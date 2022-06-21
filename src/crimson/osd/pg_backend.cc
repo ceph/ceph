@@ -510,6 +510,25 @@ static bool is_offset_and_length_valid(
   }
 }
 
+PGBackend::interruptible_future<> PGBackend::set_allochint(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn,
+  object_stat_sum_t& delta_stats)
+{
+  maybe_create_new_object(os, txn, delta_stats);
+
+  os.oi.expected_object_size = osd_op.op.alloc_hint.expected_object_size;
+  os.oi.expected_write_size = osd_op.op.alloc_hint.expected_write_size;
+  os.oi.alloc_hint_flags = osd_op.op.alloc_hint.flags;
+  txn.set_alloc_hint(coll->get_cid(),
+                     ghobject_t{os.oi.soid},
+                     os.oi.expected_object_size,
+                     os.oi.expected_write_size,
+                     os.oi.alloc_hint_flags);
+  return seastar::now();
+}
+
 PGBackend::write_iertr::future<> PGBackend::write(
     ObjectState& os,
     const OSDOp& osd_op,

@@ -566,7 +566,9 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.zero(os, osd_op, txn, *osd_op_params, delta_stats);
     }, true);
   case CEPH_OSD_OP_SETALLOCHINT:
-    return osd_op_errorator::now();
+    return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
+      return backend.set_allochint(os, osd_op, txn, delta_stats);
+    }, true);
   case CEPH_OSD_OP_SETXATTR:
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.setxattr(os, osd_op, txn, delta_stats);
