@@ -3064,7 +3064,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
 
   ObjectWriteOperation op;
 #ifdef WITH_LTTNG
-  const struct req_state* s =  get_req_state();
+  const req_state* s =  get_req_state();
   string req_id;
   if (!s) {
     // fake req_id

@@ -24,7 +24,7 @@
 
 using namespace std;
 
-static void set_param_str(struct req_state *s, const char *name, string& str)
+static void set_param_str(req_state *s, const char *name, string& str)
 {
   const char *p = s->info.env->get(name);
   if (p)
@@ -192,7 +192,7 @@ void rgw_log_usage_finalize()
   usage_logger = NULL;
 }
 
-static void log_usage(struct req_state *s, const string& op_name)
+static void log_usage(req_state *s, const string& op_name)
 {
   if (s->system_request) /* don't log system user operations */
     return;
@@ -338,7 +338,7 @@ void OpsLogManifold::add_sink(OpsLogSink* sink)
     sinks.push_back(sink);
 }
 
-int OpsLogManifold::log(struct req_state* s, struct rgw_log_entry& entry)
+int OpsLogManifold::log(req_state* s, struct rgw_log_entry& entry)
 {
   int ret = 0;
   for (const auto &sink : sinks) {
@@ -431,7 +431,7 @@ OpsLogFile::~OpsLogFile()
   file.close();
 }
 
-int OpsLogFile::log_json(struct req_state* s, bufferlist& bl)
+int OpsLogFile::log_json(req_state* s, bufferlist& bl)
 {
   std::unique_lock lock(mutex);
   if (data_size + bl.length() >= max_data_size) {
@@ -464,7 +464,7 @@ void JsonOpsLogSink::formatter_to_bl(bufferlist& bl)
   bl.append(s);
 }
 
-int JsonOpsLogSink::log(struct req_state* s, struct rgw_log_entry& entry)
+int JsonOpsLogSink::log(req_state* s, struct rgw_log_entry& entry)
 {
   bufferlist bl;
 
@@ -486,7 +486,7 @@ OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSock
   delim.append(",\n");
 }
 
-int OpsLogSocket::log_json(struct req_state* s, bufferlist& bl)
+int OpsLogSocket::log_json(req_state* s, bufferlist& bl)
 {
   append_output(bl);
   return 0;
@@ -496,7 +496,7 @@ OpsLogRados::OpsLogRados(rgw::sal::Store* const& store): store(store)
 {
 }
 
-int OpsLogRados::log(struct req_state* s, struct rgw_log_entry& entry)
+int OpsLogRados::log(req_state* s, struct rgw_log_entry& entry)
 {
   if (!s->cct->_conf->rgw_ops_log_rados) {
     return 0;
@@ -519,7 +519,7 @@ int OpsLogRados::log(struct req_state* s, struct rgw_log_entry& entry)
   return 0;
 }
 
-int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, OpsLogSink *olog)
+int rgw_log_op(RGWREST* const rest, req_state *s, const string& op_name, OpsLogSink *olog)
 {
   struct rgw_log_entry entry;
   string bucket_id;
