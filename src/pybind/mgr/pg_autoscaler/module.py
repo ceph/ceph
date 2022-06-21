@@ -605,7 +605,8 @@ class PgAutoscaler(MgrModule):
             if (final_pg_target > p['pg_num_target'] * threshold or
                     final_pg_target < p['pg_num_target'] / threshold) and \
                     final_ratio >= 0.0 and \
-                    final_ratio <= 1.0:
+                    final_ratio <= 1.0 and \
+                    p['pg_autoscale_mode'] == 'on':
                 adjust = True
 
             assert pool_pg_target is not None
