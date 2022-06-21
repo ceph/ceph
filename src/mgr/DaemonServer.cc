@@ -2826,7 +2826,7 @@ void DaemonServer::adjust_pgs()
 	      dout(10) << "pool " << i.first
 		       << " pg_num " << p.get_pg_num()
 		       << " - pgp_num " << p.get_pgp_num()
-		       << " gap > max_pg_num_change " << max_jump
+		       << " gap >= max_pg_num_change " << max_jump
 		       << " - must scale pgp_num first"
 		       << dendl;
 	    } else {
