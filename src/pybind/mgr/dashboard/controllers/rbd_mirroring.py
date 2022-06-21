@@ -10,13 +10,17 @@ import cherrypy
 import rbd
 
 from .. import mgr
+from ..controllers.pool import RBDPool
+from ..controllers.service import Service
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
+from ..services.orchestrator import OrchClient
 from ..services.rbd import rbd_call
 from ..tools import ViewCache
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, Task, UpdatePermission, allow_empty_body
+from . import APIDoc, APIRouter, BaseController, CreatePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UIRouter, \
+    UpdatePermission, allow_empty_body
 
 logger = logging.getLogger('controllers.rbd_mirror')
 
@@ -602,3 +606,41 @@ class RbdMirroringPoolPeer(RESTController):
             rbd.RBD().mirror_peer_set_attributes(ioctx, peer_uuid, attributes)
 
         _reset_view_cache()
+
+
+@UIRouter('/block/mirroring', Scope.RBD_MIRRORING)
+class RbdMirroringStatus(BaseController):
+    @EndpointDoc('Display RBD Mirroring Status')
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': True, 'message': None}
+        orch_status = OrchClient.instance().status()
+
+        # if the orch is not available we can't create the service
+        # using dashboard.
+        if not orch_status['available']:
+            return status
+        if not CephService.get_service_list('rbd-mirror') or not CephService.get_pool_list('rbd'):
+            status['available'] = False
+            status['message'] = 'RBD mirroring is not configured'  # type: ignore
+        return status
+
+    @Endpoint('POST')
+    @EndpointDoc('Configure RBD Mirroring')
+    @CreatePermission
+    def configure(self):
+        rbd_pool = RBDPool()
+        service = Service()
+
+        service_spec = {
+            'service_type': 'rbd-mirror',
+            'placement': {},
+            'unmanaged': False
+        }
+
+        if not CephService.get_service_list('rbd-mirror'):
+            service.create(service_spec, 'rbd-mirror')
+
+        if not CephService.get_pool_list('rbd'):
+            rbd_pool.create()

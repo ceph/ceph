@@ -7228,26 +7228,9 @@ paths:
           application/json:
             schema:
               properties:
-                application_metadata:
-                  type: string
-                configuration:
-                  type: string
-                erasure_code_profile:
-                  type: string
-                flags:
-                  type: string
-                pg_num:
-                  type: integer
                 pool:
+                  default: rbd-mirror
                   type: string
-                pool_type:
-                  type: string
-                rule_name:
-                  type: string
-              required:
-              - pool
-              - pg_num
-              - pool_type
               type: object
       responses:
         '201':
