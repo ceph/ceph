@@ -119,6 +119,7 @@ public:
     enum code_environment_t code_env=CODE_ENVIRONMENT_UTILITY;
     int init_flags = 0;
     std::function<ceph::logging::Log* (const ceph::logging::SubsystemMap *)> create_log;
+    std::function<AdminSocket* (ceph::common::CephContext*)> create_admin_socket;
   };
   CephContext(uint32_t module_type_,
 	      const create_options& options);

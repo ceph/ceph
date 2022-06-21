@@ -725,7 +725,11 @@ CephContext::CephContext(uint32_t module_type_,
 #endif
   _perf_counters_collection = new PerfCountersCollection(this);
  
-  _admin_socket = new AdminSocket(this);
+  if (options.create_admin_socket) {
+    _admin_socket = options.create_admin_socket(this);
+  } else {
+    _admin_socket = new AdminSocket(this);
+  }
   _heartbeat_map = new HeartbeatMap(this);
 
   _plugin_registry = new PluginRegistry(this);
