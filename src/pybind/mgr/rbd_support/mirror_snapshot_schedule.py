@@ -700,12 +700,13 @@ class MirrorSnapshotScheduleHandler:
             "remove_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
 
+        response = ""
         with self.lock:
-            self.schedules.remove(level_spec, interval, start_time)
+            response = self.schedules.remove(level_spec, interval, start_time)
 
         # TODO: optimize to rebuild only affected part of the queue
         self.rebuild_queue()
-        return 0, "", ""
+        return 0, response, ""
 
     def list(self, level_spec: LevelSpec) -> Tuple[int, str, str]:
         self.log.debug("list: level_spec={}".format(level_spec.name))
