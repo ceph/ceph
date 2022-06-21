@@ -279,7 +279,7 @@ class Device(object):
             # VGs, should we consider it as part of LVM? We choose not to
             # here, because most likely, we need to use VGs from this PV.
             self._is_lvm_member = False
-            for path in self._get_pv_paths():
+            for path in self._get_device_with_partitions_list():
                 vgs = lvm.get_device_vgs(path)
                 if vgs:
                     self.vgs.extend(vgs)
@@ -292,7 +292,7 @@ class Device(object):
                     self.lvs.extend(lvm.get_device_lvs(path))
         return self._is_lvm_member
 
-    def _get_pv_paths(self):
+    def _get_device_with_partitions_list(self):
         """
         For block devices LVM can reside on the raw block device or on a
         partition. Return a list of paths to be checked for a pv.
