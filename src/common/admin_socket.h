@@ -106,7 +106,7 @@ class AdminSocket
 {
 public:
   AdminSocket(CephContext *cct);
-  ~AdminSocket();
+  virtual ~AdminSocket();
 
   AdminSocket(const AdminSocket&) = delete;
   AdminSocket& operator =(const AdminSocket&) = delete;
@@ -132,14 +132,14 @@ public:
    *
    * @return 0 for success, -EEXIST if command already registered.
    */
-  int register_command(std::string_view cmddesc,
+  virtual int register_command(std::string_view cmddesc,
 		       AdminSocketHook *hook,
 		       std::string_view help);
 
   /*
    * unregister all commands belong to hook.
    */
-  void unregister_commands(const AdminSocketHook *hook);
+  virtual void unregister_commands(const AdminSocketHook *hook);
 
   bool init(const std::string& path);
 
