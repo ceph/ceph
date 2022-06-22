@@ -11,6 +11,7 @@
 #include <vector>
 #include <list>
 #include <cstdint>
+#define dout_subsys ceph_subsys_rgw
 
 struct cache_obj {
   std::string bucket_name; // s3 bucket name
