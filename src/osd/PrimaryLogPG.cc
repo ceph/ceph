@@ -12969,7 +12969,7 @@ void PrimaryLogPG::on_shutdown()
 
   apply_and_flush_repops(false);
   cancel_log_updates();
-  // we must remove PGRefs, so do this this prior to release_backoffs() callers
+  // we must remove PGRefs, so do this prior to release_backoffs() callers
   clear_backoffs();
   // clean up snap trim references
   snap_trimmer_machine.process_event(Reset());
