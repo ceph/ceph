@@ -297,14 +297,29 @@ class TestMDSMetrics(CephFSTestCase):
         log.debug("metrics={0}".format(metrics))
         self.assertTrue(valid)
 
+        filtered_mds = 1
+        def verify_filtered_mds_rank_metrics(metrics):
+        # checks if the metrics has only client_metadata and
+        # global_metrics filtered using --mds_rank=1
+            global_metrics = metrics['global_metrics'].get(self.fs.name, {})
+            client_metadata = metrics['client_metadata'].get(self.fs.name, {})
+            mds_metrics = metrics['metrics']
+            if len(mds_metrics) != 2 or f"mds.{filtered_mds}" not in mds_metrics:
+                return False
+            if len(global_metrics) != TestMDSMetrics.CLIENTS_REQUIRED or\
+                    len(client_metadata) != TestMDSMetrics.CLIENTS_REQUIRED:
+                return False
+            if len(set(global_metrics) - set(mds_metrics[f"mds.{filtered_mds}"])) or\
+                    len(set(client_metadata) - set(mds_metrics[f"mds.{filtered_mds}"])):
+                return False
+            return True
         # initiate a new query with `--mds_rank` filter and validate if
         # we get metrics *only* from that mds.
-        filtered_mds = 1
-        valid, metrics = self._get_metrics(
-            self.verify_mds_metrics(client_count=TestMDSMetrics.CLIENTS_REQUIRED,
-                                    ranks=[filtered_mds]), 30, '--mds_rank={}'.format(filtered_mds))
-        log.debug("metrics={0}".format(metrics))
-        self.assertTrue(valid)
+        valid, metrics = self._get_metrics(verify_filtered_mds_rank_metrics, 30,
+                                           f'--mds_rank={filtered_mds}')
+        log.debug(f"metrics={metrics}")
+        self.assertTrue(valid, "Incorrect 'ceph fs perf stats' output"
+                        f" with filter '--mds_rank={filtered_mds}'")
 
     def test_query_client_filter(self):
         # validate
@@ -530,4 +545,23 @@ class TestMDSMetrics(CephFSTestCase):
                 raise RuntimeError("hostname of fs2 not found!")
             if not (client_metadata_b[i]['valid_metrics']):
                 raise RuntimeError("valid_metrics of fs2 not found!")
+
+    def test_non_existing_mds_rank(self):
+        def verify_filtered_metrics(metrics):
+        # checks if the metrics has non empty client_metadata and global_metrics
+            if metrics['client_metadata'].get(self.fs.name, {})\
+              or metrics['global_metrics'].get(self.fs.name, {}):
+                return True
+            return False
+
+        try:
+            # validate
+            filter_rank = random.randint(1, 10)
+            valid, metrics = self._get_metrics(verify_filtered_metrics, 30,
+                                               '--mds_rank={}'.format(filter_rank))
+            log.info(f'metrics={metrics}')
+            self.assertFalse(valid, "Fetched 'ceph fs perf stats' metrics using nonexistent MDS rank")
+        except MaxWhileTries:
+            # success
+            pass
 
