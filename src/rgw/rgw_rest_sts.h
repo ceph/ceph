@@ -194,7 +194,7 @@ public:
   static int authorize(const DoutPrefixProvider *dpp,
                        rgw::sal::Store* store,
                        const rgw::auth::StrategyRegistry& auth_registry,
-                       struct req_state *s, optional_yield y);
+                       req_state *s, optional_yield y);
 };
 
 class RGWHandler_REST_STS : public RGWHandler_REST {
@@ -204,7 +204,7 @@ class RGWHandler_REST_STS : public RGWHandler_REST {
   void rgw_sts_parse_input();
 public:
 
-  static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(req_state *s, int default_formatter, bool configurable_format);
 
   RGWHandler_REST_STS(const rgw::auth::StrategyRegistry& auth_registry, const std::string& post_body="")
     : RGWHandler_REST(),
@@ -213,7 +213,7 @@ public:
   ~RGWHandler_REST_STS() override = default;
 
   int init(rgw::sal::Store* store,
-           struct req_state *s,
+           req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
   int postauth_init(optional_yield y) override { return 0; }
@@ -224,14 +224,14 @@ public:
   RGWRESTMgr_STS() = default;
   ~RGWRESTMgr_STS() override = default;
   
-  RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+  RGWRESTMgr *get_resource_mgr(req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {
     return this;
   }
 
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state*,
+			       req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;
 };

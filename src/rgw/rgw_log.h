@@ -147,7 +147,7 @@ WRITE_CLASS_ENCODER(rgw_log_entry)
 
 class OpsLogSink {
 public:
-  virtual int log(struct req_state* s, struct rgw_log_entry& entry) = 0;
+  virtual int log(req_state* s, struct rgw_log_entry& entry) = 0;
   virtual ~OpsLogSink() = default;
 };
 
@@ -156,7 +156,7 @@ class OpsLogManifold: public OpsLogSink {
 public:
   ~OpsLogManifold() override;
   void add_sink(OpsLogSink* sink);
-  int log(struct req_state* s, struct rgw_log_entry& entry) override;
+  int log(req_state* s, struct rgw_log_entry& entry) override;
 };
 
 class JsonOpsLogSink : public OpsLogSink {
@@ -165,11 +165,11 @@ class JsonOpsLogSink : public OpsLogSink {
 
   void formatter_to_bl(bufferlist& bl);
 protected:
-  virtual int log_json(struct req_state* s, bufferlist& bl) = 0;
+  virtual int log_json(req_state* s, bufferlist& bl) = 0;
 public:
   JsonOpsLogSink();
   ~JsonOpsLogSink() override;
-  int log(struct req_state* s, struct rgw_log_entry& entry) override;
+  int log(req_state* s, struct rgw_log_entry& entry) override;
 };
 
 class OpsLogFile : public JsonOpsLogSink, public Thread, public DoutPrefixProvider {
@@ -187,7 +187,7 @@ class OpsLogFile : public JsonOpsLogSink, public Thread, public DoutPrefixProvid
 
   void flush();
 protected:
-  int log_json(struct req_state* s, bufferlist& bl) override;
+  int log_json(req_state* s, bufferlist& bl) override;
   void *entry() override;
 public:
   OpsLogFile(CephContext* cct, std::string& path, uint64_t max_data_size);
@@ -202,7 +202,7 @@ public:
 
 class OpsLogSocket : public OutputDataSocket, public JsonOpsLogSink {
 protected:
-  int log_json(struct req_state* s, bufferlist& bl) override;
+  int log_json(req_state* s, bufferlist& bl) override;
   void init_connection(bufferlist& bl) override;
 
 public:
@@ -215,12 +215,12 @@ class OpsLogRados : public OpsLogSink {
 
 public:
   OpsLogRados(rgw::sal::Store* const& store);
-  int log(struct req_state* s, struct rgw_log_entry& entry) override;
+  int log(req_state* s, struct rgw_log_entry& entry) override;
 };
 
 class RGWREST;
 
-int rgw_log_op(RGWREST* const rest, struct req_state* s,
+int rgw_log_op(RGWREST* const rest, req_state* s,
 	       const std::string& op_name, OpsLogSink* olog);
 void rgw_log_usage_init(CephContext* cct, rgw::sal::Store* store);
 void rgw_log_usage_finalize();

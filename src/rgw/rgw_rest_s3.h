@@ -355,7 +355,7 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(rgw::sal::Store* store, struct req_state *s, std::stringstream& ss) override;
+  int get_policy_from_state(rgw::sal::Store* store, req_state *s, std::stringstream& ss) override;
   void send_response() override;
   int get_params(optional_yield y) override;
 };
@@ -617,7 +617,7 @@ public:
   static int authorize(const DoutPrefixProvider *dpp,
                        rgw::sal::Store* store,
                        const rgw::auth::StrategyRegistry& auth_registry,
-                       struct req_state *s, optional_yield y);
+                       req_state *s, optional_yield y);
 };
 
 class RGWHandler_Auth_S3 : public RGWHandler_REST {
@@ -636,7 +636,7 @@ public:
   static int validate_object_name(const std::string& bucket);
 
   int init(rgw::sal::Store* store,
-           struct req_state *s,
+           req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override {
     return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
@@ -649,7 +649,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
-  static int init_from_header(rgw::sal::Store* store, struct req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(rgw::sal::Store* store, req_state *s, int default_formatter, bool configurable_format);
 
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
@@ -658,7 +658,7 @@ public:
   ~RGWHandler_REST_S3() override = default;
 
   int init(rgw::sal::Store* store,
-           struct req_state *s,
+           req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield y) override;
@@ -793,7 +793,7 @@ public:
   ~RGWRESTMgr_S3() override = default;
 
   RGWHandler_REST *get_handler(rgw::sal::Store* store,
-			       struct req_state* s,
+			       req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
