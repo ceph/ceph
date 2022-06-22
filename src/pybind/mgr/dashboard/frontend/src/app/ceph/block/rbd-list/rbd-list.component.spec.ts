@@ -322,12 +322,23 @@ describe('RbdListComponent', () => {
           'Resync',
           'Delete',
           'Move to Trash',
-          'Remove Scheduling'
+          'Remove Scheduling',
+          'Promote',
+          'Demote'
         ],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,update': {
-        actions: ['Create', 'Edit', 'Copy', 'Flatten', 'Resync', 'Remove Scheduling'],
+        actions: [
+          'Create',
+          'Edit',
+          'Copy',
+          'Flatten',
+          'Resync',
+          'Remove Scheduling',
+          'Promote',
+          'Demote'
+        ],
         primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,delete': {
@@ -339,11 +350,20 @@ describe('RbdListComponent', () => {
         primary: { multiple: 'Create', executing: 'Copy', single: 'Copy', no: 'Create' }
       },
       'update,delete': {
-        actions: ['Edit', 'Flatten', 'Resync', 'Delete', 'Move to Trash', 'Remove Scheduling'],
+        actions: [
+          'Edit',
+          'Flatten',
+          'Resync',
+          'Delete',
+          'Move to Trash',
+          'Remove Scheduling',
+          'Promote',
+          'Demote'
+        ],
         primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       update: {
-        actions: ['Edit', 'Flatten', 'Resync', 'Remove Scheduling'],
+        actions: ['Edit', 'Flatten', 'Resync', 'Remove Scheduling', 'Promote', 'Demote'],
         primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       delete: {

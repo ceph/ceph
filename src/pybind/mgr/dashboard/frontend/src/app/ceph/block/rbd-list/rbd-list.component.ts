@@ -202,6 +202,20 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         this.getInvalidNameDisable(selection) ||
         selection.first().schedule_info === undefined
     };
+    const promoteAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      click: () => this.actionPrimary(true),
+      name: this.actionLabels.PROMOTE,
+      visible: () => this.selection.first() != null && !this.selection.first().primary
+    };
+    const demoteAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      click: () => this.actionPrimary(false),
+      name: this.actionLabels.DEMOTE,
+      visible: () => this.selection.first() != null && this.selection.first().primary
+    };
     this.tableActions = [
       addAction,
       editAction,
@@ -210,7 +224,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       resyncAction,
       deleteAction,
       moveAction,
-      removeSchedulingAction
+      removeSchedulingAction,
+      promoteAction,
+      demoteAction
     ];
   }
 
@@ -528,6 +544,24 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
             });
         })
     });
+  }
+
+  actionPrimary(primary: boolean) {
+    const request = new RbdFormEditRequestModel();
+    request.primary = primary;
+    const imageSpec = new ImageSpec(
+      this.selection.first().pool_name,
+      this.selection.first().namespace,
+      this.selection.first().name
+    );
+    this.taskWrapper
+      .wrapTaskAroundCall({
+        task: new FinishedTask('rbd/edit', {
+          image_spec: imageSpec.toString()
+        }),
+        call: this.rbdService.update(imageSpec, request)
+      })
+      .subscribe();
   }
 
   hasSnapshots() {
