@@ -160,8 +160,10 @@
               *ngIf="permissions.prometheus.read">
             <a routerLink="/monitoring">
               <ng-container i18n>Monitoring</ng-container>
-              <small *ngIf="prometheusAlertService.activeAlerts > 0"
-                     class="badge badge-danger">{{ prometheusAlertService.activeAlerts }}</small>
+              <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
+                     class="badge badge-danger ml-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
+              <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
+                     class="badge badge-warning ml-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
             </a>
           </li>
         </ul>

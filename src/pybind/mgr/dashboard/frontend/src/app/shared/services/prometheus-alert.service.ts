@@ -18,6 +18,8 @@ export class PrometheusAlertService {
   alerts: AlertmanagerAlert[] = [];
   rules: PrometheusRule[] = [];
   activeAlerts: number;
+  activeCriticalAlerts: number;
+  activeWarningAlerts: number;
 
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
@@ -64,6 +66,18 @@ export class PrometheusAlertService {
     this.activeAlerts = _.reduce<AlertmanagerAlert, number>(
       this.alerts,
       (result, alert) => (alert.status.state === 'active' ? ++result : result),
+      0
+    );
+    this.activeCriticalAlerts = _.reduce<AlertmanagerAlert, number>(
+      this.alerts,
+      (result, alert) =>
+        alert.status.state === 'active' && alert.labels.severity === 'critical' ? ++result : result,
+      0
+    );
+    this.activeWarningAlerts = _.reduce<AlertmanagerAlert, number>(
+      this.alerts,
+      (result, alert) =>
+        alert.status.state === 'active' && alert.labels.severity === 'warning' ? ++result : result,
       0
     );
     this.alerts = alerts;
