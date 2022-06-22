@@ -166,7 +166,7 @@ def task(ctx, config):
     for info in mounted_by_me.values():
         config = info["config"]
         mount_x = info['mount']
-        mount_x.mount()
+        mount_x.mount(mntopts=config.get('mntopts', []))
 
     for info in mounted_by_me.values():
         info["mount"].wait_until_mounted()
