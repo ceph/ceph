@@ -128,7 +128,12 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		       *segment_cleaner->get_empty_space_tracker()));
 	      return backref_manager->scan_mapped_space(
 		t,
-		[this, FNAME, &t](paddr_t addr, extent_len_t len, depth_t depth) {
+		[this, FNAME, &t](
+		  paddr_t addr,
+		  extent_len_t len,
+		  depth_t depth,
+		  extent_types_t type)
+		{
 		  TRACET(
 		    "marking {}~{} used",
 		    t,
@@ -143,14 +148,15 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		      seastar::lowres_system_clock::time_point(),
 		      /* init_scan = */ true);
 		  }
-		  if (depth) {
-		    if (depth > 1) {
-		      backref_manager->cache_new_backref_extent(
-			addr, extent_types_t::BACKREF_INTERNAL);
-		    } else {
-		      backref_manager->cache_new_backref_extent(
-			addr, extent_types_t::BACKREF_LEAF);
-		    }
+		  if (is_backref_node(type)) {
+		    ceph_assert(depth);
+		    backref_manager->cache_new_backref_extent(addr, type);
+		    cache->update_tree_extents_num(type, 1);
+		    return seastar::now();
+		  } else {
+		    ceph_assert(!depth);
+		    cache->update_tree_extents_num(type, 1);
+		    return seastar::now();
 		  }
 		}).si_then([this] {
 		  LOG_PREFIX(TransactionManager::mount);
@@ -163,6 +169,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		      seastar::lowres_system_clock::time_point(),
 		      seastar::lowres_system_clock::time_point(),
 		      true);
+		    cache->update_tree_extents_num(backref.type, 1);
 		  }
 		  return seastar::now();
 		});

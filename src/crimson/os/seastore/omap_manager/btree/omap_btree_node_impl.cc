@@ -72,6 +72,7 @@ OMapInnerNode::make_split_insert(
       right->journal_inner_insert(riter, laddr, key,
                                   right->maybe_get_delta_buffer());
     }
+    ++(oc.t.get_omap_tree_stats().extents_num_delta);
     return make_split_insert_ret(
            interruptible::ready_future_marker{},
            mutation_result_t(mutation_status_t::WAS_SPLIT, tuple, std::nullopt));
@@ -342,7 +343,8 @@ OMapInnerNode::merge_entry(
         journal_inner_remove(riter, maybe_get_delta_buffer());
         //retire extent
         std::vector<laddr_t> dec_laddrs {l->get_laddr(), r->get_laddr()};
-        return dec_ref(oc, dec_laddrs).si_then([this] {
+        return dec_ref(oc, dec_laddrs).si_then([this, oc] {
+	  --(oc.t.get_omap_tree_stats().extents_num_delta);
           if (extent_is_below_min()) {
             return merge_entry_ret(
                    interruptible::ready_future_marker{},
@@ -483,6 +485,7 @@ OMapLeafNode::insert(
           right->journal_leaf_insert(mut_iter, key, value, right->maybe_get_delta_buffer());
         }
       }
+      ++(oc.t.get_omap_tree_stats().extents_num_delta);
       return dec_ref(oc, get_laddr())
         .si_then([tuple = std::move(tuple)] {
         return insert_ret(

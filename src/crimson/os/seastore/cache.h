@@ -975,6 +975,34 @@ public:
     };
   };
 
+  void update_tree_extents_num(extent_types_t type, int64_t delta) {
+    switch (type) {
+    case extent_types_t::LADDR_INTERNAL:
+      [[fallthrough]];
+    case extent_types_t::LADDR_LEAF:
+      stats.lba_tree_extents_num += delta;
+      ceph_assert(stats.lba_tree_extents_num >= 0);
+      return;
+    case extent_types_t::OMAP_INNER:
+      [[fallthrough]];
+    case extent_types_t::OMAP_LEAF:
+      stats.omap_tree_extents_num += delta;
+      ceph_assert(stats.lba_tree_extents_num >= 0);
+      return;
+    case extent_types_t::ONODE_BLOCK_STAGED:
+      stats.onode_tree_extents_num += delta;
+      ceph_assert(stats.onode_tree_extents_num >= 0);
+      return;
+    case extent_types_t::BACKREF_INTERNAL:
+      [[fallthrough]];
+    case extent_types_t::BACKREF_LEAF:
+      stats.backref_tree_extents_num += delta;
+      ceph_assert(stats.backref_tree_extents_num >= 0);
+      return;
+    default:
+      return;
+    }
+  }
 private:
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
@@ -1170,18 +1198,22 @@ private:
     uint64_t dirty_bytes = 0;
 
     uint64_t onode_tree_depth = 0;
+    int64_t onode_tree_extents_num = 0;
     counter_by_src_t<tree_efforts_t> committed_onode_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_onode_tree_efforts;
 
     uint64_t omap_tree_depth = 0;
+    int64_t omap_tree_extents_num = 0;
     counter_by_src_t<tree_efforts_t> committed_omap_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_omap_tree_efforts;
 
     uint64_t lba_tree_depth = 0;
+    int64_t lba_tree_extents_num = 0;
     counter_by_src_t<tree_efforts_t> committed_lba_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_lba_tree_efforts;
 
     uint64_t backref_tree_depth = 0;
+    int64_t backref_tree_extents_num = 0;
     counter_by_src_t<tree_efforts_t> committed_backref_tree_efforts;
     counter_by_src_t<tree_efforts_t> invalidated_backref_tree_efforts;
 
