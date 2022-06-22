@@ -102,6 +102,8 @@ OSD_METADATA = ('back_iface', 'ceph_daemon', 'cluster_addr', 'device_class',
 
 OSD_STATUS = ['weight', 'up', 'in']
 
+OSDMAP_STATS = ['first_committed', 'last_committed']
+
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode')
@@ -748,6 +750,27 @@ class Module(MgrModule):
             HEALTHCHECK_DETAIL
         )
 
+        metrics['min_last_epoch_clean'] = Metric(
+            'gauge',
+            'min_last_epoch_clean',
+            'Min last epoch clean',
+        )
+
+        metrics['last_epoch_clean_floor'] = Metric(
+            'gauge',
+            'last_epoch_clean_floor',
+            'last epoch clean floor',
+            ('pool_id',)
+        )
+
+        for stat in OSDMAP_STATS:
+            path = 'osdmap_{}'.format(stat)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'osdmap trimming metrics',
+            )
+
         for flag in OSD_FLAGS:
             path = 'osd_flag_{}'.format(flag)
             metrics[path] = Metric(
@@ -844,6 +867,26 @@ class Module(MgrModule):
         cherrypy.config.update({'server.socket_port': server_port})
         cherrypy.engine.start()
         self.log.info('Engine started.')
+
+    @profile_method()
+    def get_osdmap_stats(self) -> None:
+        # retrieve osdmap and epoch clean metrics
+        _, report_raw, _ = self.mon_command({
+            'prefix': 'report',
+            'format': 'json'
+        })
+        try:
+            report = json.loads(report_raw)
+            for stat in OSDMAP_STATS:
+                path = 'osdmap_{}'.format(stat)
+                self.metrics[path].set(report[path])
+            self.metrics['min_last_epoch_clean'].set(
+                report['osdmap_clean_epoch']['min_last_epoch_clean']
+            )
+            for pool in report['osdmap_clean_epochs']['last_epoch_clean']['per_pool']:
+                self.metrics['last_epoch_clean_floor'].set(pool['floor'], (pool['poolid'],))
+        except (json.decoder.JSONDecodeError, KeyError):
+            return
 
     @profile_method()
     def get_health(self) -> None:
@@ -1559,6 +1602,7 @@ class Module(MgrModule):
         for k in self.metrics.keys():
             self.metrics[k].clear()
 
+        self.get_osdmap_stats()
         self.get_health()
         self.get_df()
         self.get_pool_stats()
