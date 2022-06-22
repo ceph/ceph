@@ -6207,6 +6207,18 @@ def command_rm_daemon(ctx):
             CephadmDaemon.uninstall(ctx, ctx.fsid, daemon_type, daemon_id)
         call_throws(ctx, ['rm', '-rf', data_dir])
 
+    if 'tcp_ports' in ctx and ctx.tcp_ports is not None:
+        ports: List[int] = [int(p) for p in ctx.tcp_ports.split()]
+        try:
+            fw = Firewalld(ctx)
+            fw.close_ports(ports)
+            fw.apply_rules()
+        except RuntimeError as e:
+            # in case we cannot close the ports we will remove
+            # the daemon but keep them open.
+            logger.warning(f' Error when trying to close ports: {e}')
+
+
 ##################################
 
 
@@ -8533,6 +8545,9 @@ def _get_parser():
         required=True,
         action=CustomValidation,
         help='daemon name (type.id)')
+    parser_rm_daemon.add_argument(
+        '--tcp-ports',
+        help='List of tcp ports to close in the host firewall')
     parser_rm_daemon.add_argument(
         '--fsid',
         required=True,
