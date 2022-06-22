@@ -98,7 +98,7 @@ public:
     for (auto &item : scheduled) {
       f->open_object_section("item");
       f->dump_string("pool", item.pool_name);
-      f->dump_string("namespce", item.namespace_name);
+      f->dump_string("namespace", item.namespace_name);
       f->dump_string("schedule_time", item.schedule_time);
       f->close_section(); // item
     }

@@ -19,6 +19,7 @@
 #include "rgw_arn.h"
 #include "rgw_data_sync.h"
 
+#include "global/global_init.h"
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
 #include "common/errno.h"
@@ -127,7 +128,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
     { ERR_RATE_LIMITED, {503, "SlowDown"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
-    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSetError"}},
+    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSet"}},
     { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
 });
 
@@ -393,6 +394,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
 void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta)
 {
   x_meta_map.clear();
+  crypt_attribute_map.clear();
 
   for (const auto& kv: env->get_map()) {
     const char *prefix;
@@ -432,6 +434,9 @@ void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_met
         } else {
           x_meta_map[name_low] = val;
         }
+        if (strncmp(name_low, "x-amz-server-side-encryption", 20) == 0) {
+          crypt_attribute_map[name_low] = val;
+        }
       }
     }
   }
@@ -461,6 +466,35 @@ void rgw_add_amz_meta_header(
   } else {
     x_meta_map[k] = v;
   }
+}
+
+bool rgw_set_amz_meta_header(
+  meta_map_t& x_meta_map,
+  const std::string& k,
+  const std::string& v,
+  rgw_set_action_if_set a)
+{
+  auto it { x_meta_map.find(k) };
+  bool r { it != x_meta_map.end() };
+  switch(a) {
+  default:
+    ceph_assert(a == 0);
+  case DISCARD:
+    break;
+  case APPEND:
+    if (r) {
+	std::string old { it->second };
+	boost::algorithm::trim_right(old);
+	old.append(",");
+	old.append(v);
+	x_meta_map[k] = old;
+	break;
+    }
+    /* fall through */
+  case OVERWRITE:
+    x_meta_map[k] = v;
+  }
+  return r;
 }
 
 string rgw_string_unquote(const string& s)
@@ -833,6 +867,24 @@ int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
   }
 
   return 0;
+}
+
+void RGWHTTPArgs::remove(const string& name)
+{
+  auto val_iter = val_map.find(name);
+  if (val_iter != std::end(val_map)) {
+    val_map.erase(val_iter);
+  }
+
+  auto sys_val_iter = sys_val_map.find(name);
+  if (sys_val_iter != std::end(sys_val_map)) {
+    sys_val_map.erase(sys_val_iter);
+  }
+
+  auto subres_iter = sub_resources.find(name);
+  if (subres_iter != std::end(sub_resources)) {
+    sub_resources.erase(subres_iter);
+  }
 }
 
 void RGWHTTPArgs::append(const string& name, const string& val)
@@ -1828,6 +1880,25 @@ static struct rgw_name_to_flag cap_names[] = { {"*",     RGW_CAP_ALL},
 		  {"write", RGW_CAP_WRITE},
 		  {NULL, 0} };
 
+static int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
+			    const string& str, uint32_t *perm)
+{
+  list<string> strs;
+  get_str_list(str, strs);
+  list<string>::iterator iter;
+  uint32_t v = 0;
+  for (iter = strs.begin(); iter != strs.end(); ++iter) {
+    string& s = *iter;
+    for (int i = 0; mapping[i].type_name; i++) {
+      if (s.compare(mapping[i].type_name) == 0)
+        v |= mapping[i].flag;
+    }
+  }
+
+  *perm = v;
+  return 0;
+}
+
 int RGWUserCaps::parse_cap_perm(const string& str, uint32_t *perm)
 {
   return rgw_parse_list_of_flags(cap_names, str, perm);
@@ -2256,7 +2327,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     decode(swift_versioning, bl);
     if (swift_versioning) {
       decode(swift_ver_location, bl);
-    }
+   }
   }
   if (struct_v >= 17) {
     decode(creation_time, bl);
@@ -2283,7 +2354,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
 
   if (layout.logs.empty() &&
       layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
-    layout.logs.push_back(rgw::log_layout_from_index(0, layout.current_index.layout.normal));
+    layout.logs.push_back(rgw::log_layout_from_index(0, layout.current_index));
   }
   DECODE_FINISH(bl);
 }
@@ -2377,7 +2448,7 @@ void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
     l.current_index.layout.normal.num_shards = 11;
     l.logs.push_back(log_layout_from_index(
                        l.current_index.gen,
-                       l.current_index.layout.normal));
+                       l.current_index));
   };
 
 
@@ -2675,8 +2746,8 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("default_placement", default_placement.name, f);
   encode_json("default_storage_class", default_placement.storage_class, f);
   encode_json("placement_tags", placement_tags, f);
-  encode_json("bucket_quota", bucket_quota, f);
-  encode_json("user_quota", user_quota, f);
+  encode_json("bucket_quota", quota.bucket_quota, f);
+  encode_json("user_quota", quota.user_quota, f);
   encode_json("temp_url_keys", temp_url_keys, f);
 
   string user_source_type;
@@ -2734,8 +2805,8 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("default_placement", default_placement.name, obj);
   JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
   JSONDecoder::decode_json("placement_tags", placement_tags, obj);
-  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
-  JSONDecoder::decode_json("user_quota", user_quota, obj);
+  JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", quota.user_quota, obj);
   JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
 
   string user_source_type;
@@ -2920,4 +2991,55 @@ void rgw_obj::dump(Formatter *f) const
   encode_json("key", key, f);
 }
 
+int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id)
+{
+  auto pos = bucket_instance.rfind(':');
+  if (pos == string::npos) {
+    return -EINVAL;
+  }
 
+  string first = bucket_instance.substr(0, pos);
+  string second = bucket_instance.substr(pos + 1);
+
+  pos = first.find(':');
+
+  if (pos == string::npos) {
+    *shard_id = -1;
+    *bucket_name = first;
+    *bucket_id = second;
+    return 0;
+  }
+
+  *bucket_name = first.substr(0, pos);
+  *bucket_id = first.substr(pos + 1);
+
+  string err;
+  *shard_id = strict_strtol(second.c_str(), 10, &err);
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+boost::intrusive_ptr<CephContext>
+rgw_global_init(const std::map<std::string,std::string> *defaults,
+		    std::vector < const char* >& args,
+		    uint32_t module_type, code_environment_t code_env,
+		    int flags)
+{
+  // Load the config from the files, but not the mon
+  global_pre_init(defaults, args, module_type, code_env, flags);
+
+  // Get the store backend
+  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+
+  if ((config_store == "dbstore") ||
+      (config_store == "motr")) {
+    // These stores don't use the mon
+    flags |= CINIT_FLAG_NO_MON_CONFIG;
+  }
+
+  // Finish global init, indicating we already ran pre-init
+  return global_init(defaults, args, module_type, code_env, flags, false);
+}

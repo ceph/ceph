@@ -6,8 +6,8 @@
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
-#include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/journal.h"
+#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 
 /*
  * TransactionManager logs
@@ -23,20 +23,21 @@ SET_SUBSYS(seastore_tm);
 namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(
-  SegmentManager &_segment_manager,
   SegmentCleanerRef _segment_cleaner,
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
-  ExtentPlacementManagerRef&& epm,
-  ExtentReader& scanner)
-  : segment_manager(_segment_manager),
-    segment_cleaner(std::move(_segment_cleaner)),
+  ExtentPlacementManagerRef &&epm,
+  BackrefManagerRef&& backref_manager,
+  tm_make_config_t config)
+  : segment_cleaner(std::move(_segment_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
-    scanner(scanner)
+    backref_manager(std::move(backref_manager)),
+    sm_group(*segment_cleaner->get_segment_manager_group()),
+    config(config)
 {
   segment_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -47,12 +48,12 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
   return segment_cleaner->mount(
-    segment_manager.get_device_id(),
-    scanner.get_segment_managers()
   ).safe_then([this] {
     return journal->open_for_write();
-  }).safe_then([this, FNAME](auto addr) {
-    segment_cleaner->init_mkfs(addr);
+  }).safe_then([this](auto) {
+    segment_cleaner->init_mkfs();
+    return epm->open();
+  }).safe_then([this, FNAME]() {
     return with_transaction_intr(
       Transaction::src_t::MUTATE,
       "mkfs_tm",
@@ -62,6 +63,8 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
       return cache->mkfs(t
       ).si_then([this, &t] {
         return lba_manager->mkfs(t);
+      }).si_then([this, &t] {
+        return backref_manager->mkfs(t);
       }).si_then([this, FNAME, &t] {
         INFOT("submitting mkfs transaction", t);
         return submit_transaction_direct(t);
@@ -86,23 +89,28 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   INFO("enter");
   cache->init();
   return segment_cleaner->mount(
-    segment_manager.get_device_id(),
-    scanner.get_segment_managers()
   ).safe_then([this] {
     return journal->replay(
-      [this](const auto &offsets, const auto &e) {
+      [this](
+	const auto &offsets,
+	const auto &e,
+	const journal_seq_t alloc_replay_from,
+	auto last_modified)
+      {
 	auto start_seq = offsets.write_result.start_seq;
 	segment_cleaner->update_journal_tail_target(
-	  cache->get_oldest_dirty_from().value_or(start_seq));
+	  cache->get_oldest_dirty_from().value_or(start_seq),
+	  cache->get_oldest_backref_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
 	  start_seq,
 	  offsets.record_block_base,
-	  e);
+	  e,
+	  alloc_replay_from,
+	  last_modified);
       });
   }).safe_then([this] {
     return journal->open_for_write();
-  }).safe_then([this, FNAME](auto addr) {
-    segment_cleaner->set_journal_head(addr);
+  }).safe_then([this, FNAME](auto) {
     return seastar::do_with(
       create_weak_transaction(
         Transaction::src_t::READ, "mount"),
@@ -111,29 +119,59 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  *tref,
 	  [this, FNAME](auto &t) {
 	    return cache->init_cached_extents(t, [this](auto &t, auto &e) {
-	      return lba_manager->init_cached_extent(t, e);
+	      if (is_backref_node(e->get_type()))
+		return backref_manager->init_cached_extent(t, e);
+	      else
+		return lba_manager->init_cached_extent(t, e);
 	    }).si_then([this, FNAME, &t] {
 	      assert(segment_cleaner->debug_check_space(
 		       *segment_cleaner->get_empty_space_tracker()));
-	      return lba_manager->scan_mapped_space(
+	      return backref_manager->scan_mapped_space(
 		t,
-		[this, FNAME, &t](paddr_t addr, extent_len_t len) {
+		[this, FNAME, &t](paddr_t addr, extent_len_t len, depth_t depth) {
 		  TRACET(
 		    "marking {}~{} used",
 		    t,
 		    addr,
 		    len);
-		  if (addr.is_real()) {
+		  if (addr.is_real() &&
+		      !backref_manager->backref_should_be_removed(addr)) {
 		    segment_cleaner->mark_space_used(
 		      addr,
 		      len ,
+		      seastar::lowres_system_clock::time_point(),
+		      seastar::lowres_system_clock::time_point(),
 		      /* init_scan = */ true);
 		  }
+		  if (depth) {
+		    if (depth > 1) {
+		      backref_manager->cache_new_backref_extent(
+			addr, extent_types_t::BACKREF_INTERNAL);
+		    } else {
+		      backref_manager->cache_new_backref_extent(
+			addr, extent_types_t::BACKREF_LEAF);
+		    }
+		  }
+		}).si_then([this] {
+		  LOG_PREFIX(TransactionManager::mount);
+		  auto &backrefs = backref_manager->get_cached_backrefs();
+		  DEBUG("marking {} backrefs used", backrefs.size());
+		  for (auto &backref : backrefs) {
+		    segment_cleaner->mark_space_used(
+		      backref.paddr,
+		      backref.len,
+		      seastar::lowres_system_clock::time_point(),
+		      seastar::lowres_system_clock::time_point(),
+		      true);
+		  }
+		  return seastar::now();
 		});
 	    });
 	  });
       });
-  }).safe_then([this, FNAME] {
+  }).safe_then([this] {
+    return epm->open();
+  }).safe_then([FNAME, this] {
     segment_cleaner->complete_init();
     INFO("completed");
   }).handle_error(
@@ -153,8 +191,11 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
   }).safe_then([this] {
     cache->dump_contents();
     return journal->close();
-  }).safe_then([FNAME] {
+  }).safe_then([this] {
+    return epm->close();
+  }).safe_then([FNAME, this] {
     INFO("completed");
+    sm_group.reset();
     return seastar::now();
   });
 }
@@ -278,7 +319,8 @@ TransactionManager::submit_transaction(
 
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::submit_transaction_direct(
-  Transaction &tref)
+  Transaction &tref,
+  std::optional<journal_seq_t> seq_to_trim)
 {
   LOG_PREFIX(TransactionManager::submit_transaction_direct);
   SUBTRACET(seastore_t, "start", tref);
@@ -311,37 +353,59 @@ TransactionManager::submit_transaction_direct(
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
-  }).si_then([this, FNAME, &tref]() mutable
+  }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]() mutable
 	      -> submit_transaction_iertr::future<> {
-    auto record = cache->prepare_record(tref);
+    auto record = cache->prepare_record(tref, segment_cleaner.get());
 
     tref.get_handle().maybe_release_collection_lock();
 
     SUBTRACET(seastore_t, "about to submit to journal", tref);
     return journal->submit_record(std::move(record), tref.get_handle()
-    ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
+    ).safe_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]
+      (auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
-      auto end_seq = submit_result.write_result.get_end_seq();
-      segment_cleaner->set_journal_head(end_seq);
+      if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
+	cache->trim_backref_bufs(*seq_to_trim);
+      }
       cache->complete_commit(
           tref,
           submit_result.record_block_base,
           start_seq,
           segment_cleaner.get());
-      lba_manager->complete_transaction(tref);
-      segment_cleaner->update_journal_tail_target(
-	cache->get_oldest_dirty_from().value_or(start_seq));
-      auto to_release = tref.get_segment_to_release();
-      if (to_release != NULL_SEG_ID) {
-        SUBDEBUGT(seastore_t, "releasing segment {}", tref, to_release);
-	return segment_manager.release(to_release
-	).safe_then([this, to_release] {
-	  segment_cleaner->mark_segment_released(to_release);
-	});
-      } else {
-	return SegmentManager::release_ertr::now();
+
+      std::vector<CachedExtentRef> lba_to_clear;
+      std::vector<CachedExtentRef> backref_to_clear;
+      lba_to_clear.reserve(tref.get_retired_set().size());
+      backref_to_clear.reserve(tref.get_retired_set().size());
+      for (auto &e: tref.get_retired_set()) {
+	if (e->is_logical() || is_lba_node(e->get_type()))
+	  lba_to_clear.push_back(e);
+	else if (is_backref_node(e->get_type()))
+	  backref_to_clear.push_back(e);
       }
+
+      // ...but add_pin from parent->leaf
+      std::vector<CachedExtentRef> lba_to_link;
+      std::vector<CachedExtentRef> backref_to_link;
+      lba_to_link.reserve(tref.get_fresh_block_stats().num);
+      backref_to_link.reserve(tref.get_fresh_block_stats().num);
+      tref.for_each_fresh_block([&](auto &e) {
+	if (e->is_valid()) {
+	  if (is_lba_node(e->get_type()) || e->is_logical())
+	    lba_to_link.push_back(e);
+	  else if (is_backref_node(e->get_type()))
+	    backref_to_link.push_back(e);
+	}
+      });
+
+      lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
+      backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
+
+      segment_cleaner->update_journal_tail_target(
+	cache->get_oldest_dirty_from().value_or(start_seq),
+	cache->get_oldest_backref_dirty_from().value_or(start_seq));
+      return segment_cleaner->maybe_release_segment(tref);
     }).safe_then([FNAME, &tref] {
       SUBTRACET(seastore_t, "completed", tref);
       return tref.get_handle().complete();
@@ -409,8 +473,9 @@ TransactionManager::rewrite_logical_extent(
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
   nlextent->set_pin(lextent->get_pin().duplicate());
+  nlextent->last_modified = lextent->last_modified;
 
-  DEBUGT("rewriting extent -- {} to {}", t, *lextent, *nlextent);
+  DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
   /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
    * extents since we're going to do it again once we either do the ool write
@@ -428,6 +493,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   CachedExtentRef extent)
 {
   LOG_PREFIX(TransactionManager::rewrite_extent);
+
   {
     auto updated = cache->update_extent_from_transaction(t, extent);
     if (!updated) {
@@ -435,20 +501,40 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
       return rewrite_extent_iertr::now();
     }
     extent = updated;
+    ceph_assert(!extent->is_pending_io());
+  }
+
+  t.get_rewrite_version_stats().increment(extent->get_version());
+
+  if (is_backref_node(extent->get_type())) {
+    DEBUGT("rewriting backref extent -- {}", t, *extent);
+    return backref_manager->rewrite_extent(t, extent);
   }
 
   if (extent->get_type() == extent_types_t::ROOT) {
-    DEBUGT("marking root for rewrite -- {}", t, *extent);
+    DEBUGT("rewriting root extent -- {}", t, *extent);
     cache->duplicate_for_write(t, extent);
     return rewrite_extent_iertr::now();
   }
 
+  auto fut = rewrite_extent_iertr::now();
   if (extent->is_logical()) {
-    return rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
+    fut = rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
   } else {
     DEBUGT("rewriting physical extent -- {}", t, *extent);
-    return lba_manager->rewrite_extent(t, extent);
+    fut = lba_manager->rewrite_extent(t, extent);
   }
+
+  return fut.si_then([this, extent, &t] {
+    t.dont_record_release(extent);
+    return backref_manager->remove_mapping(
+      t, extent->get_paddr()).si_then([](auto) {
+      return seastar::now();
+    }).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further(),
+      crimson::ct_error::assert_all()
+    );
+  });
 }
 
 TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_live(
@@ -477,16 +563,16 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
       return lba_manager->get_mapping(
 	t,
 	laddr).si_then([=, &t] (LBAPinRef pin) -> inner_ret {
-	  ceph_assert(pin->get_laddr() == laddr);
-	  if (pin->get_paddr() == addr) {
+	  ceph_assert(pin->get_key() == laddr);
+	  if (pin->get_val() == addr) {
 	    if (pin->get_length() != (extent_len_t)len) {
 	      ERRORT(
 		"Invalid pin {}~{} {} found for "
 		"extent {} {}~{} {}",
 		t,
-		pin->get_laddr(),
+		pin->get_key(),
 		pin->get_length(),
-		pin->get_paddr(),
+		pin->get_val(),
 		type,
 		laddr,
 		len,
@@ -543,5 +629,53 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 }
 
 TransactionManager::~TransactionManager() {}
+
+TransactionManagerRef make_transaction_manager(tm_make_config_t config)
+{
+  LOG_PREFIX(make_transaction_manager);
+  auto epm = std::make_unique<ExtentPlacementManager>();
+  auto cache = std::make_unique<Cache>(*epm);
+  auto lba_manager = lba_manager::create_lba_manager(*cache);
+  auto sms = std::make_unique<SegmentManagerGroup>();
+  auto backref_manager = create_backref_manager(*sms, *cache);
+
+  bool cleaner_is_detailed;
+  SegmentCleaner::config_t cleaner_config;
+  if (config.is_test) {
+    cleaner_is_detailed = true;
+    cleaner_config = SegmentCleaner::config_t::get_test();
+  } else {
+    cleaner_is_detailed = false;
+    cleaner_config = SegmentCleaner::config_t::get_default();
+  }
+  auto segment_cleaner = std::make_unique<SegmentCleaner>(
+    cleaner_config,
+    std::move(sms),
+    *backref_manager,
+    cleaner_is_detailed);
+
+  JournalRef journal;
+  if (config.j_type == journal_type_t::SEGMENT_JOURNAL) {
+    journal = journal::make_segmented(*segment_cleaner);
+  } else {
+    journal = journal::make_circularbounded(
+      nullptr, "");
+    segment_cleaner->set_disable_trim(true);
+    ERROR("disabling journal trimming since support for CircularBoundedJournal\
+	  hasn't been added yet");
+  }
+  epm->init_ool_writers(
+      *segment_cleaner,
+      segment_cleaner->get_ool_segment_seq_allocator());
+
+  return std::make_unique<TransactionManager>(
+    std::move(segment_cleaner),
+    std::move(journal),
+    std::move(cache),
+    std::move(lba_manager),
+    std::move(epm),
+    std::move(backref_manager),
+    config);
+}
 
 }

@@ -368,6 +368,11 @@ add_executable(unittest_option test_option.cc)
 target_link_libraries(unittest_option ceph-common GTest::Main)
 add_ceph_unittest(unittest_option)
 
+add_executable(unittest_fault_injector test_fault_injector.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_fault_injector global)
+add_ceph_unittest(unittest_fault_injector)
+
 add_executable(unittest_blocked_completion test_blocked_completion.cc)
 add_ceph_unittest(unittest_blocked_completion)
 target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)

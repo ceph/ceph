@@ -1,8 +1,10 @@
-from io import BytesIO
-import logging
+from io import StringIO
+from logging import getLogger
+
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
-logger = logging.getLogger(__name__)
+
+logger = getLogger(__name__)
 
 
 # TODO: add code to run non-ACL tests too.
@@ -27,11 +29,11 @@ class XFSTestsDev(CephFSTestCase):
         # NOTE: On teuthology machines it's necessary to run "make" as
         # superuser since the repo is cloned somewhere in /tmp.
         self.mount_a.client_remote.run(args=['sudo', 'make'],
-                                       cwd=self.repo_path, stdout=BytesIO(),
-                                       stderr=BytesIO())
+                                       cwd=self.repo_path, stdout=StringIO(),
+                                       stderr=StringIO())
         self.mount_a.client_remote.run(args=['sudo', 'make', 'install'],
                                        cwd=self.repo_path, omit_sudo=False,
-                                       stdout=BytesIO(), stderr=BytesIO())
+                                       stdout=StringIO(), stderr=StringIO())
 
     def get_repo(self):
         """

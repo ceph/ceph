@@ -6,8 +6,35 @@
 #include <seastar/core/shared_mutex.hh>
 
 #include "crimson/common/operation.h"
+#include "crimson/osd/osd_operation.h"
 
 namespace crimson::os::seastore {
+
+struct WritePipeline {
+  struct ReserveProjectedUsage : OrderedExclusivePhaseT<ReserveProjectedUsage> {
+    constexpr static auto type_name = "WritePipeline::reserve_projected_usage";
+  } reserve_projected_usage;
+  struct OolWrites : UnorderedStageT<OolWrites> {
+    constexpr static auto type_name = "UnorderedStage::ool_writes_stage";
+  } ool_writes;
+  struct Prepare : OrderedExclusivePhaseT<Prepare> {
+    constexpr static auto type_name = "WritePipeline::prepare_phase";
+  } prepare;
+  struct DeviceSubmission : OrderedConcurrentPhaseT<DeviceSubmission> {
+    constexpr static auto type_name = "WritePipeline::device_submission_phase";
+  } device_submission;
+  struct Finalize : OrderedExclusivePhaseT<Finalize> {
+    constexpr static auto type_name = "WritePipeline::finalize_phase";
+  } finalize;
+
+  using  BlockingEvents = std::tuple<
+    ReserveProjectedUsage::BlockingEvent,
+    OolWrites::BlockingEvent,
+    Prepare::BlockingEvent,
+    DeviceSubmission::BlockingEvent,
+    Finalize::BlockingEvent
+  >;
+};
 
 /**
  * PlaceholderOperation
@@ -17,31 +44,85 @@ namespace crimson::os::seastore {
  * Until then (and for tests likely permanently) we'll use this unregistered
  * placeholder for the pipeline phases necessary for journal correctness.
  */
-class PlaceholderOperation : public Operation {
+class PlaceholderOperation : public crimson::osd::PhasedOperationT<PlaceholderOperation> {
 public:
-  using IRef = boost::intrusive_ptr<PlaceholderOperation>;
+  constexpr static auto type = 0U;
+  constexpr static auto type_name =
+    "crimson::os::seastore::PlaceholderOperation";
 
-  unsigned get_type() const final {
-    return 0;
+  static PlaceholderOperation::IRef create() {
+    return IRef{new PlaceholderOperation()};
   }
 
-  const char *get_type_name() const final {
-    return "crimson::os::seastore::PlaceholderOperation";
-  }
+  WritePipeline::BlockingEvents tracking_events;
 
 private:
   void dump_detail(ceph::Formatter *f) const final {}
   void print(std::ostream &) const final {}
 };
 
-struct OrderingHandle {
+struct OperationProxy {
   OperationRef op;
-  PipelineHandle phase_handle;
+  OperationProxy(OperationRef op) : op(std::move(op)) {}
+
+  virtual seastar::future<> enter(WritePipeline::ReserveProjectedUsage&) = 0;
+  virtual seastar::future<> enter(WritePipeline::OolWrites&) = 0;
+  virtual seastar::future<> enter(WritePipeline::Prepare&) = 0;
+  virtual seastar::future<> enter(WritePipeline::DeviceSubmission&) = 0;
+  virtual seastar::future<> enter(WritePipeline::Finalize&) = 0;
+
+  virtual void exit() = 0;
+  virtual seastar::future<> complete() = 0;
+
+  virtual ~OperationProxy() = default;
+};
+
+template <typename OpT>
+struct OperationProxyT : OperationProxy {
+  OperationProxyT(typename OpT::IRef op) : OperationProxy(op) {}
+
+  OpT* that() {
+    return static_cast<OpT*>(op.get());
+  }
+  const OpT* that() const {
+    return static_cast<const OpT*>(op.get());
+  }
+
+  seastar::future<> enter(WritePipeline::ReserveProjectedUsage& s) final {
+    return that()->enter_stage(s);
+  }
+  seastar::future<> enter(WritePipeline::OolWrites& s) final {
+    return that()->enter_stage(s);
+  }
+  seastar::future<> enter(WritePipeline::Prepare& s) final {
+    return that()->enter_stage(s);
+  }
+  seastar::future<> enter(WritePipeline::DeviceSubmission& s) final {
+    return that()->enter_stage(s);
+  }
+  seastar::future<> enter(WritePipeline::Finalize& s) final {
+    return that()->enter_stage(s);
+  }
+
+  void exit() final {
+    return that()->handle.exit();
+  }
+  seastar::future<> complete() final {
+    return that()->handle.complete();
+  }
+};
+
+struct OrderingHandle {
+  // we can easily optimize this dynalloc out as all concretes are
+  // supposed to have exactly the same size.
+  std::unique_ptr<OperationProxy> op;
   seastar::shared_mutex *collection_ordering_lock = nullptr;
 
-  OrderingHandle(OperationRef &&op) : op(std::move(op)) {}
+  // in the future we might add further constructors / template to type
+  // erasure while extracting the location of tracking events.
+  OrderingHandle(std::unique_ptr<OperationProxy> op) : op(std::move(op)) {}
   OrderingHandle(OrderingHandle &&other)
-    : op(std::move(other.op)), phase_handle(std::move(other.phase_handle)),
+    : op(std::move(other.op)),
       collection_ordering_lock(other.collection_ordering_lock) {
     other.collection_ordering_lock = nullptr;
   }
@@ -61,15 +142,15 @@ struct OrderingHandle {
 
   template <typename T>
   seastar::future<> enter(T &t) {
-    return op->with_blocking_future(phase_handle.enter(t));
+    return op->enter(t);
   }
 
   void exit() {
-    return phase_handle.exit();
+    op->exit();
   }
 
   seastar::future<> complete() {
-    return phase_handle.complete();
+    return op->complete();
   }
 
   ~OrderingHandle() {
@@ -78,25 +159,19 @@ struct OrderingHandle {
 };
 
 inline OrderingHandle get_dummy_ordering_handle() {
-  return OrderingHandle{new PlaceholderOperation};
+  using PlaceholderOpProxy = OperationProxyT<PlaceholderOperation>;
+  return OrderingHandle{
+    std::make_unique<PlaceholderOpProxy>(PlaceholderOperation::create())};
 }
 
-struct WritePipeline {
-  OrderedExclusivePhase reserve_projected_usage{
-    "WritePipeline::reserve_projected_usage"
-  };
-  UnorderedStage ool_writes{
-    "UnorderedStage::ool_writes_stage"
-  };
-  OrderedExclusivePhase prepare{
-    "WritePipeline::prepare_phase"
-  };
-  OrderedConcurrentPhase device_submission{
-    "WritePipeline::device_submission_phase"
-  };
-  OrderedExclusivePhase finalize{
-    "WritePipeline::finalize_phase"
-  };
-};
+} // namespace crimson::os::seastore
 
-}
+namespace crimson {
+  template <>
+  struct EventBackendRegistry<os::seastore::PlaceholderOperation> {
+    static std::tuple<> get_backends() {
+      return {};
+    }
+  };
+} // namespace crimson
+

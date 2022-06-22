@@ -1475,6 +1475,20 @@ void CDir::mark_new(LogSegment *ls)
   mdcache->mds->queue_waiters(waiters);
 }
 
+void CDir::set_fresh_fnode(fnode_const_ptr&& ptr) {
+  ceph_assert(inode->is_auth());
+  ceph_assert(!is_projected());
+  ceph_assert(!state_test(STATE_COMMITTING));
+  reset_fnode(std::move(ptr));
+  projected_version = committing_version = committed_version = get_version();
+
+  if (state_test(STATE_REJOINUNDEF)) {
+    ceph_assert(mdcache->mds->is_rejoin());
+    state_clear(STATE_REJOINUNDEF);
+    mdcache->opened_undef_dirfrag(this);
+  }
+}
+
 void CDir::mark_clean()
 {
   dout(10) << __func__ << " " << *this << " version " << get_version() << dendl;
@@ -1547,16 +1561,9 @@ void CDir::fetch(std::string_view dname, snapid_t last,
       pdir && pdir->inode->is_stray() && !inode->snaprealm) {
     dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
     if (get_version() == 0) {
-      ceph_assert(inode->is_auth());
       auto _fnode = allocate_fnode();
       _fnode->version = 1;
-      reset_fnode(std::move(_fnode));
-
-      if (state_test(STATE_REJOINUNDEF)) {
-	ceph_assert(mdcache->mds->is_rejoin());
-	state_clear(STATE_REJOINUNDEF);
-	mdcache->opened_undef_dirfrag(this);
-      }
+      set_fresh_fnode(std::move(_fnode));
     }
     mark_complete();
 
@@ -2043,17 +2050,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   // take the loaded fnode?
   // only if we are a fresh CDir* with no prior state.
   if (get_version() == 0) {
-    ceph_assert(!is_projected());
-    ceph_assert(!state_test(STATE_COMMITTING));
-    auto _fnode = allocate_fnode(got_fnode);
-    reset_fnode(std::move(_fnode));
-    projected_version = committing_version = committed_version = get_version();
-
-    if (state_test(STATE_REJOINUNDEF)) {
-      ceph_assert(mdcache->mds->is_rejoin());
-      state_clear(STATE_REJOINUNDEF);
-      mdcache->opened_undef_dirfrag(this);
-    }
+    set_fresh_fnode(allocate_fnode(got_fnode));
   }
 
   list<CInode*> undef_inodes;
@@ -2106,6 +2103,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   };
   auto proc_nulls_and_waiters = [&](const string& str_key, const string_snap_t& key) {
     bool touch = false;
+    int count = 0;
+
     while (k_it != keys.rend()) {
       int cmp = k_it->compare(str_key);
       if (cmp < 0)
@@ -2123,10 +2122,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       last_name = std::string_view(k_it->c_str(), n_key.name.length());
       null_keys.emplace_back(std::move(n_key));
       ++k_it;
+
+      if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+        mdcache->mds->heartbeat_reset();
     }
     return touch;
   };
 
+  int count = 0;
   unsigned pos = omap.size() - 1;
   double rand_threshold = get_inode()->get_ephemeral_rand();
   for (auto p = omap.rbegin(); p != omap.rend(); ++p, --pos) {
@@ -2142,6 +2145,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       }
       last_name = std::string_view(p->first.c_str(), key.name.length());
     }
+
+    if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+      mdcache->mds->heartbeat_reset();
 
     CDentry *dn = nullptr;
     try {
@@ -2204,6 +2210,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	dout(12) << "_fetched got null for key " << key << ", added " << *dn << dendl;
       }
       mdcache->touch_dentry(dn);
+
+      if (!(++count % mdcache->mds->heartbeat_reset_grace(2)))
+        mdcache->mds->heartbeat_reset();
     }
   }
 
@@ -2219,9 +2228,13 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   // open & force frags
   while (!undef_inodes.empty()) {
     CInode *in = undef_inodes.front();
+
     undef_inodes.pop_front();
     in->state_clear(CInode::STATE_REJOINUNDEF);
     mdcache->opened_undef_inode(in);
+
+    if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+      mdcache->mds->heartbeat_reset();
   }
 
   // dirty myself to remove stale snap dentries
@@ -2451,6 +2464,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     _rm.clear();
   };
 
+  int count = 0;
   for (auto &key : stales) {
     unsigned size = key.length() + sizeof(__u32);
     if (write_size + size > max_write_size)
@@ -2458,6 +2472,9 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
 
     write_size += size;
     _rm.emplace(key);
+
+    if (!(++count % mdcache->mds->heartbeat_reset_grace(2)))
+      mdcache->mds->heartbeat_reset();
   }
 
   for (auto &key : to_remove) {
@@ -2467,6 +2484,9 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
 
     write_size += size;
     _rm.emplace(std::move(key));
+
+    if (!(++count % mdcache->mds->heartbeat_reset_grace(2)))
+      mdcache->mds->heartbeat_reset();
   }
 
   bufferlist bl;
@@ -2492,6 +2512,9 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
 
     write_size += size;
     _set[std::move(item.key)].swap(bl);
+
+    if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+      mdcache->mds->heartbeat_reset();
   }
 
   commit_one(true);
@@ -2520,21 +2543,21 @@ void CDir::_omap_commit(int op_prio)
     // fnode.snap_purged_thru = realm->get_last_destroyed();
   }
 
-  size_t count = 0;
+  size_t items_count = 0;
   if (state_test(CDir::STATE_FRAGMENTING) && is_new()) {
-    count = get_num_head_items() + get_num_snap_items();
+    items_count = get_num_head_items() + get_num_snap_items();
   } else {
     for (elist<CDentry*>::iterator it = dirty_dentries.begin(); !it.end(); ++it)
-      ++count;
+      ++items_count;
   }
 
   vector<string> to_remove;
   // reverve enough memories, which maybe larger than the actually needed
-  to_remove.reserve(count);
+  to_remove.reserve(items_count);
 
   vector<dentry_commit_item> to_set;
   // reverve enough memories, which maybe larger than the actually needed
-  to_set.reserve(count);
+  to_set.reserve(items_count);
 
   // for dir fragtrees
   bufferlist dfts(CEPH_PAGE_SIZE);
@@ -2570,6 +2593,7 @@ void CDir::_omap_commit(int op_prio)
     }
   };
 
+  int count = 0;
   if (state_test(CDir::STATE_FRAGMENTING) && is_new()) {
     ceph_assert(committed_version == 0);
     for (auto p = items.begin(); p != items.end(); ) {
@@ -2578,12 +2602,18 @@ void CDir::_omap_commit(int op_prio)
       if (dn->get_linkage()->is_null())
 	continue;
       write_one(dn);
+
+      if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+        mdcache->mds->heartbeat_reset();
     }
   } else {
     for (auto p = dirty_dentries.begin(); !p.end(); ) {
       CDentry *dn = *p;
       ++p;
       write_one(dn);
+
+      if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+        mdcache->mds->heartbeat_reset();
     }
   }
 
@@ -2735,6 +2765,8 @@ void CDir::_committed(int r, version_t v)
   if (committed_version == get_version()) 
     mark_clean();
 
+  int count = 0;
+
   // dentries clean?
   for (auto p = dirty_dentries.begin(); !p.end(); ) {
     CDentry *dn = *p;
@@ -2772,11 +2804,14 @@ void CDir::_committed(int r, version_t v)
       dout(15) << " dir " << committed_version << " < dn " << dn->get_version() << " still dirty " << *dn << dendl;
       ceph_assert(dn->is_dirty());
     }
+
+    if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+      mdcache->mds->heartbeat_reset();
   }
 
   // finishers?
   bool were_waiters = !waiting_for_commit.empty();
-  
+
   auto it = waiting_for_commit.begin();
   while (it != waiting_for_commit.end()) {
     auto _it = it;
@@ -2792,7 +2827,10 @@ void CDir::_committed(int r, version_t v)
     mdcache->mds->queue_waiters(t);
     waiting_for_commit.erase(it);
     it = _it;
-  } 
+
+    if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+      mdcache->mds->heartbeat_reset();
+  }
 
   // try drop dentries in this dirfrag if it's about to be purged
   if (!inode->is_base() && get_parent_dir()->inode->is_stray() &&

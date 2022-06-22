@@ -174,7 +174,7 @@ auto call_with_interruption_impl(
     typename futurator_t::type>();
   INTR_FUT_DEBUG(
     "call_with_interruption_impl: may_interrupt: {}, "
-    "local interrupt_condintion: {}, "
+    "local interrupt_condition: {}, "
     "global interrupt_cond: {},{}",
     interrupt,
     (void*)interrupt_condition.get(),
@@ -341,7 +341,8 @@ private:
       _incomplete.pop_back();
     }
     if (!_incomplete.empty()) {
-      seastar::internal::set_callback(_incomplete.back(), static_cast<continuation_base<>*>(this));
+      seastar::internal::set_callback(std::move(_incomplete.back()),
+		                      static_cast<continuation_base<>*>(this));
       _incomplete.pop_back();
       return;
     }
@@ -1239,7 +1240,7 @@ public:
       return make_interruptible(
 	  ::crimson::repeat(
 	    [action=std::move(action),
-	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond] {
+	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
 		      std::move(action)).to_future();
@@ -1556,4 +1557,10 @@ struct continuation_base_from_future<
   using type = typename seastar::continuation_base_from_future<FutureType>::type;
 };
 
+template <typename InterruptCond, typename FutureType>
+struct is_future<
+  ::crimson::interruptible::interruptible_future_detail<
+    InterruptCond,
+    FutureType>>
+ : std::true_type {};
 } // namespace seastar

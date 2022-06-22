@@ -3,9 +3,11 @@
 
 #include <cstdarg>
 #include <cstring>
+#include <boost/container/small_vector.hpp>
 #include "common/ceph_context.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
+#include "crimson/common/config_proxy.h"
 #include "common/debug.h"
 
 #include "crimson/osd/exceptions.h"
@@ -20,6 +22,10 @@
 
 using std::map;
 using std::string;
+
+#define dout_context ClassHandler::get_instance().cct
+
+static constexpr int dout_subsys = ceph_subsys_objclass;
 
 static inline int execute_osd_op(cls_method_context_t hctx, OSDOp& op)
 {
@@ -491,6 +497,16 @@ ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
   return ceph_release_t::nautilus;
 }
 
+const ConfigProxy& cls_get_config(cls_method_context_t hctx)
+{
+  return crimson::common::local_conf();
+}
+
+const object_info_t& cls_get_object_info(cls_method_context_t hctx)
+{
+  return reinterpret_cast<crimson::osd::OpsExecuter*>(hctx)->get_object_info();
+}
+
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq)
 {
   return 0;
@@ -526,4 +542,24 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
 int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
 {
   return 0;
+}
+
+// although at first glance the implementation looks the same as in
+// the classical OSD, it's different b/c of how the dout macro expands.
+int cls_log(int level, const char *format, ...)
+{
+   size_t size = 256;
+   va_list ap;
+   while (1) {
+     boost::container::small_vector<char, 256> buf(size);
+     va_start(ap, format);
+     int n = vsnprintf(buf.data(), size, format, ap);
+     va_end(ap);
+#define MAX_SIZE 8196UL
+     if ((n > -1 && static_cast<size_t>(n) < size) || size > MAX_SIZE) {
+       dout(ceph::dout::need_dynamic(level)) << buf.data() << dendl;
+       return n;
+     }
+     size *= 2;
+   }
 }

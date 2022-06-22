@@ -268,7 +268,7 @@ TEST_F(DBStoreTest, StoreUser) {
   uinfo.access_keys["id2"] = k2;
 
   /* non exclusive create..should create new one */
-  ret = db->store_user(dpp, uinfo, true, &attrs, &objv_tracker, &old_uinfo);
+  ret = db->store_user(dpp, uinfo, false, &attrs, &objv_tracker, &old_uinfo);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(old_uinfo.user_email, "");
   ASSERT_EQ(objv_tracker.read_version.ver, 1);
@@ -305,7 +305,7 @@ TEST_F(DBStoreTest, GetUserQueryByUserID) {
   uinfo.user_id.tenant = "tenant";
   uinfo.user_id.id = "user_id2";
 
-  ret = db->get_user(dpp, "user_id", "", uinfo, &attrs, &objv);
+  ret = db->get_user(dpp, "user_id", "user_id2", uinfo, &attrs, &objv);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(uinfo.user_id.tenant, "tenant");
   ASSERT_EQ(uinfo.user_email, "user2_new@dbstore.com");
@@ -629,7 +629,6 @@ TEST_F(DBStoreTest, RemoveUserAPI) {
   ret = db->remove_user(dpp, uinfo, &objv);
   ASSERT_EQ(ret, -125);
 
-  /* invalid version number...should fail */
   objv.read_version.ver = 2;
   ret = db->remove_user(dpp, uinfo, &objv);
   ASSERT_EQ(ret, 0);
@@ -687,8 +686,7 @@ TEST_F(DBStoreTest, GetObject) {
 TEST_F(DBStoreTest, GetObjectState) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
-  RGWObjState state;
-  RGWObjState *s = &state;
+  RGWObjState* s;
 
   params.op.obj.state.obj.key.name = "object2";
   params.op.obj.state.obj.key.instance = "inst2";
@@ -698,14 +696,14 @@ TEST_F(DBStoreTest, GetObjectState) {
   ret = op_target.get_obj_state(dpp, params.op.bucket.info, params.op.obj.state.obj,
       false, &s);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(state.size, 12);
-  ASSERT_EQ(state.is_olh, false);
+  ASSERT_EQ(s->size, 12);
+  ASSERT_EQ(s->is_olh, false);
 
   /* Recheck with get_state API */
   ret = op_target.get_state(dpp, &s, false);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(state.size, 12);
-  ASSERT_EQ(state.is_olh, false);
+  ASSERT_EQ(s->size, 12);
+  ASSERT_EQ(s->is_olh, false);
 }
 
 TEST_F(DBStoreTest, ObjAttrs) {
@@ -880,8 +878,7 @@ TEST_F(DBStoreTest, ListBucketObjects) {
 TEST_F(DBStoreTest, DeleteObj) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
-  RGWObjState state;
-  RGWObjState *s = &state;
+  RGWObjState *s;
 
   /* delete object2 */
   params.op.obj.state.obj.key.name = "object2";

@@ -410,3 +410,16 @@ std::string entity_addr_t::ip_only_to_str() const
   }
   return host_ip ? host_ip : "";
 }
+
+std::string entity_addr_t::ip_n_port_to_str() const
+{
+  std::string addr;
+  addr += ip_only_to_str();
+  if (is_ipv6()) {
+    addr = '[' + addr + ']';
+  }
+  addr += ':';
+  addr += std::to_string(get_port());
+  return addr;
+}
+

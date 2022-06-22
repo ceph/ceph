@@ -17,9 +17,8 @@ export class ServicesPageHelper extends PageHelper {
   };
 
   serviceDetailColumnIndex = {
-    hostname: 1,
-    daemonType: 2,
-    status: 8
+    daemonName: 2,
+    status: 4
   };
 
   check_for_service() {
@@ -114,14 +113,28 @@ export class ServicesPageHelper extends PageHelper {
   }
 
   checkServiceStatus(daemon: string, expectedStatus = 'running') {
-    cy.get('cd-service-daemon-list').within(() => {
-      this.getTableCell(this.serviceDetailColumnIndex.daemonType, daemon)
-        .parent()
-        .find(`datatable-body-cell:nth-child(${this.serviceDetailColumnIndex.status}) .badge`)
-        .should(($ele) => {
-          const status = $ele.toArray().map((v) => v.innerText);
-          expect(status).to.include(expectedStatus);
-        });
+    let daemonNameIndex = this.serviceDetailColumnIndex.daemonName;
+    let statusIndex = this.serviceDetailColumnIndex.status;
+
+    // since hostname row is hidden from the hosts details table,
+    // we'll need to manually override the indexes when this check is being
+    // done for the daemons in host details page. So we'll get the url and
+    // verify if the current page is not the services index page
+    cy.url().then((url) => {
+      if (!url.includes(pages.index.url)) {
+        daemonNameIndex = 1;
+        statusIndex = 3;
+      }
+
+      cy.get('cd-service-daemon-list').within(() => {
+        this.getTableCell(daemonNameIndex, daemon, true)
+          .parent()
+          .find(`datatable-body-cell:nth-child(${statusIndex}) .badge`)
+          .should(($ele) => {
+            const status = $ele.toArray().map((v) => v.innerText);
+            expect(status).to.include(expectedStatus);
+          });
+      });
     });
   }
 
@@ -166,6 +179,10 @@ export class ServicesPageHelper extends PageHelper {
     cy.get('cd-service-daemon-list').within(() => {
       this.getTableRow(daemon).click();
       this.clickActionButton(action);
+
+      // unselect it to avoid colliding with any other selection
+      // in different steps
+      this.getTableRow(daemon).click();
     });
   }
 }

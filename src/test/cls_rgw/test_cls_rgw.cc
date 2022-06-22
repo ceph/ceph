@@ -263,7 +263,7 @@ TEST_F(cls_rgw, index_remove_object)
 
 TEST_F(cls_rgw, index_suggest)
 {
-  string bucket_oid = str_int("bucket", 3);
+  string bucket_oid = str_int("suggest", 1);
   {
     ObjectWriteOperation op;
     cls_rgw_bucket_init_index(op);
@@ -367,6 +367,71 @@ TEST_F(cls_rgw, index_suggest)
   test_stats(ioctx, bucket_oid, RGWObjCategory::None, num_objs / 2, total_size);
 }
 
+static void list_entries(librados::IoCtx& ioctx,
+                         const std::string& oid,
+                         uint32_t num_entries,
+                         std::map<int, rgw_cls_list_ret>& results)
+{
+  std::map<int, std::string> oids = { {0, oid} };
+  cls_rgw_obj_key start_key;
+  string empty_prefix;
+  string empty_delimiter;
+  ASSERT_EQ(0, CLSRGWIssueBucketList(ioctx, start_key, empty_prefix,
+                                     empty_delimiter, num_entries,
+                                     true, oids, results, 1)());
+}
+
+TEST_F(cls_rgw, index_suggest_complete)
+{
+  string bucket_oid = str_int("suggest", 2);
+  {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_init_index(op);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
+
+  cls_rgw_obj_key obj = str_int("obj", 0);
+  string tag = str_int("tag-prepare", 0);
+  string loc = str_int("loc", 0);
+
+  // prepare entry
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+
+  // list entry before completion
+  rgw_bucket_dir_entry dirent;
+  {
+    std::map<int, rgw_cls_list_ret> listing;
+    list_entries(ioctx, bucket_oid, 1, listing);
+    ASSERT_EQ(1, listing.size());
+    const auto& entries = listing.begin()->second.dir.m;
+    ASSERT_EQ(1, entries.size());
+    dirent = entries.begin()->second;
+    ASSERT_EQ(obj, dirent.key);
+  }
+  // complete entry
+  {
+    rgw_bucket_dir_entry_meta meta;
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, obj, meta);
+  }
+  // suggest removal of listed entry
+  {
+    bufferlist updates;
+    cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, dirent, updates);
+
+    ObjectWriteOperation op;
+    cls_rgw_suggest_changes(op, updates);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
+  // list entry again, verify that suggested removal was not applied
+  {
+    std::map<int, rgw_cls_list_ret> listing;
+    list_entries(ioctx, bucket_oid, 1, listing);
+    ASSERT_EQ(1, listing.size());
+    const auto& entries = listing.begin()->second.dir.m;
+    ASSERT_EQ(1, entries.size());
+    EXPECT_TRUE(entries.begin()->second.exists);
+  }
+}
 
 /*
  * This case is used to test whether get_obj_vals will

@@ -259,7 +259,7 @@ void GetInfoRequest<I>::calc_promotion_state(
   *m_primary_mirror_uuid = "";
 
   for (auto it = snap_info.rbegin(); it != snap_info.rend(); it++) {
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
       &it->second.snap_namespace);
 
     if (mirror_ns != nullptr) {

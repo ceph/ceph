@@ -18,5 +18,9 @@
       "mochaFile": "cypress/reports/results-[hash].xml"
     }
   },
-  "retries": 1
+  "retries": 1,
+  "env": {
+    "LOGIN_USER": "admin",
+    "LOGIN_PWD": "admin"
+  }
 }

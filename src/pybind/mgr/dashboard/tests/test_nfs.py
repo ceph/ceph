@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 from .. import mgr
 from ..controllers._version import APIVersion
-from ..controllers.nfs import NFSGanesha, NFSGaneshaExports, NFSGaneshaUi
+from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
@@ -228,19 +228,13 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody({'paths': []})
 
-
-class NFSGaneshaControllerTest(ControllerTestCase):
-    @classmethod
-    def setup_server(cls):
-        cls.setup_controllers([NFSGanesha])
-
     def test_status_available(self):
-        self._get('/api/nfs-ganesha/status')
+        self._get('/ui-api/nfs-ganesha/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': True, 'message': None})
 
     def test_status_not_available(self):
         mgr.remote = Mock(side_effect=RuntimeError('Test'))
-        self._get('/api/nfs-ganesha/status')
+        self._get('/ui-api/nfs-ganesha/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False, 'message': 'Test'})

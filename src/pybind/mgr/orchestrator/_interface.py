@@ -15,7 +15,7 @@ import re
 
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
-from functools import wraps, reduce
+from functools import wraps, reduce, update_wrapper
 
 from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
     Sequence, Dict, cast, Mapping
@@ -355,7 +355,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def drain_host(self, hostname: str) -> OrchResult[str]:
+    def drain_host(self, hostname: str, force: bool = False) -> OrchResult[str]:
         """
         drain all daemons from a host
 
@@ -392,7 +392,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_host_label(self, host: str, label: str) -> OrchResult[str]:
+    def remove_host_label(self, host: str, label: str, force: bool = False) -> OrchResult[str]:
         """
         Remove a host label
         """
@@ -466,6 +466,8 @@ class Orchestrator(object):
             'node-exporter': self.apply_node_exporter,
             'osd': lambda dg: self.apply_drivegroups([dg]),  # type: ignore
             'prometheus': self.apply_prometheus,
+            'loki': self.apply_loki,
+            'promtail': self.apply_promtail,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
@@ -565,8 +567,10 @@ class Orchestrator(object):
         :param replace: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
         :param force: Forces the OSD removal process without waiting for the data to be drained first.
         :param zap: Zap/Erase all devices associated with the OSDs (DESTROYS DATA)
-        Note that this can only remove OSDs that were successfully
-        created (i.e. got an OSD ID).
+
+
+        .. note:: this can only remove OSDs that were successfully
+            created (i.e. got an OSD ID).
         """
         raise NotImplementedError()
 
@@ -640,6 +644,14 @@ class Orchestrator(object):
         """Update existing a Node-Exporter daemon(s)"""
         raise NotImplementedError()
 
+    def apply_loki(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a Loki daemon(s)"""
+        raise NotImplementedError()
+
+    def apply_promtail(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a Promtail daemon(s)"""
+        raise NotImplementedError()
+
     def apply_crash(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a crash daemon(s)"""
         raise NotImplementedError()
@@ -659,10 +671,11 @@ class Orchestrator(object):
     def upgrade_check(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
         raise NotImplementedError()
 
-    def upgrade_ls(self, image: Optional[str], tags: bool) -> OrchResult[Dict[Any, Any]]:
+    def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool] = False) -> OrchResult[Dict[Any, Any]]:
         raise NotImplementedError()
 
-    def upgrade_start(self, image: Optional[str], version: Optional[str]) -> OrchResult[str]:
+    def upgrade_start(self, image: Optional[str], version: Optional[str], daemon_types: Optional[List[str]],
+                      hosts: Optional[str], services: Optional[List[str]], limit: Optional[int]) -> OrchResult[str]:
         raise NotImplementedError()
 
     def upgrade_pause(self) -> OrchResult[str]:
@@ -720,6 +733,8 @@ def daemon_type_to_service(dtype: str) -> str:
         'alertmanager': 'alertmanager',
         'prometheus': 'prometheus',
         'node-exporter': 'node-exporter',
+        'loki': 'loki',
+        'promtail': 'promtail',
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
@@ -744,6 +759,8 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'grafana': ['grafana'],
         'alertmanager': ['alertmanager'],
         'prometheus': ['prometheus'],
+        'loki': ['loki'],
+        'promtail': ['promtail'],
         'node-exporter': ['node-exporter'],
         'crash': ['crash'],
         'container': ['container'],
@@ -763,8 +780,10 @@ class UpgradeStatusSpec(object):
         self.in_progress = False  # Is an upgrade underway?
         self.target_image: Optional[str] = None
         self.services_complete: List[str] = []  # Which daemon types are fully updated?
+        self.which: str = '<unknown>'  # for if user specified daemon types, services or hosts
         self.progress: Optional[str] = None  # How many of the daemons have we upgraded
         self.message = ""  # Freeform description
+        self.is_paused: bool = False  # Is the upgrade paused?
 
 
 def handle_type_error(method: FuncT) -> FuncT:
@@ -833,6 +852,7 @@ class DaemonDescription(object):
                  memory_usage: Optional[int] = None,
                  memory_request: Optional[int] = None,
                  memory_limit: Optional[int] = None,
+                 cpu_percentage: Optional[str] = None,
                  service_name: Optional[str] = None,
                  ports: Optional[List[int]] = None,
                  ip: Optional[str] = None,
@@ -894,6 +914,8 @@ class DaemonDescription(object):
         self.memory_usage: Optional[int] = memory_usage
         self.memory_request: Optional[int] = memory_request
         self.memory_limit: Optional[int] = memory_limit
+
+        self.cpu_percentage: Optional[str] = cpu_percentage
 
         self.ports: Optional[List[int]] = ports
         self.ip: Optional[str] = ip
@@ -1018,6 +1040,7 @@ class DaemonDescription(object):
         out['memory_usage'] = self.memory_usage
         out['memory_request'] = self.memory_request
         out['memory_limit'] = self.memory_limit
+        out['cpu_percentage'] = self.cpu_percentage
         out['version'] = self.version
         out['status'] = self.status.value if self.status is not None else None
         out['status_desc'] = self.status_desc
@@ -1055,6 +1078,7 @@ class DaemonDescription(object):
         out['memory_usage'] = self.memory_usage
         out['memory_request'] = self.memory_request
         out['memory_limit'] = self.memory_limit
+        out['cpu_percentage'] = self.cpu_percentage
         out['version'] = self.version
         out['status'] = self.status.value if self.status is not None else None
         out['status_desc'] = self.status_desc
@@ -1251,13 +1275,14 @@ class InventoryFilter(object):
     When fetching inventory, use this filter to avoid unnecessarily
     scanning the whole estate.
 
-    Typical use: filter by host when presenting UI workflow for configuring
-                 a particular server.
-                 filter by label when not all of estate is Ceph servers,
-                 and we want to only learn about the Ceph servers.
-                 filter by label when we are interested particularly
-                 in e.g. OSD servers.
+    Typical use:
 
+      filter by host when presentig UI workflow for configuring
+      a particular server.
+      filter by label when not all of estate is Ceph servers,
+      and we want to only learn about the Ceph servers.
+      filter by label when we are interested particularly
+      in e.g. OSD servers.
     """
 
     def __init__(self, labels: Optional[List[str]] = None, hosts: Optional[List[str]] = None) -> None:
@@ -1424,9 +1449,10 @@ def _mk_orch_methods(cls: Any) -> Any:
             return completion
         return inner
 
-    for meth in Orchestrator.__dict__:
-        if not meth.startswith('_') and meth not in ['is_orchestrator_module']:
-            setattr(cls, meth, shim(meth))
+    for name, method in Orchestrator.__dict__.items():
+        if not name.startswith('_') and name not in ['is_orchestrator_module']:
+            remote_call = update_wrapper(shim(name), method)
+            setattr(cls, name, remote_call)
     return cls
 
 

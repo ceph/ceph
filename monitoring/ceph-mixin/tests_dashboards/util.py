@@ -30,6 +30,7 @@ def get_dashboards_data() -> Dict[str, Any]:
             data['stats'][str(file)] = {'total': 0, 'tested': 0}
             add_dashboard_queries(data, dashboard_data, str(file))
             add_dashboard_variables(data, dashboard_data)
+            add_default_dashboards_variables(data)
     return data
 
 
@@ -76,6 +77,10 @@ def add_dashboard_variables(data: Dict[str, Any], dashboard_data: Dict[str, Any]
         if 'name' in variable:
             data['variables'][variable['name']] = 'UNSET VARIABLE'
 
+def add_default_dashboards_variables(data: Dict[str, Any]) -> None:
+    data['variables']['job'] = 'ceph'
+    data['variables']['job_haproxy'] = 'haproxy'
+    data['variables']['__rate_interval'] = '1m'
 
 def replace_grafana_expr_variables(expr: str, variable: str, value: Any) -> str:
     """ Replace grafana variables in expression with a value

@@ -77,7 +77,7 @@ following:
 .. confval:: mon_host_override
 
 - :confval:`mon_dns_srv_name`
-- ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
+- :confval:`mon_data`, :confval:`osd_data`, :confval:`mds_data`, :confval:`mgr_data`, and
   similar options that define which local directory the daemon
   stores its data in.
 - :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be used to
@@ -632,7 +632,7 @@ will report the value of a single option.
 Changes since Nautilus
 ======================
 
-With the Octopus release We changed the way the configuration file is parsed.
+The Octopus release changed the way the configuration file is parsed.
 These changes are as follows:
 
 - Repeated configuration options are allowed, and no warnings will be printed.

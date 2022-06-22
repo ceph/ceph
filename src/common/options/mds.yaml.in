@@ -206,6 +206,14 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_heartbeat_reset_grace
+  type: uint
+  level: advanced
+  desc: the basic unit of tolerance in how many circles in a loop, which will
+    keep running by holding the mds_lock, it must trigger to reset heartbeat
+  default: 1000
+  services:
+  - mds
 - name: mds_heartbeat_grace
   type: float
   level: advanced

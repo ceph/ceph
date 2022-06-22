@@ -1,3 +1,4 @@
+import errno
 import json
 import logging
 import os
@@ -10,12 +11,11 @@ from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
 
-from tasks.cephfs.mount import CephFSMount
+from tasks.cephfs.mount import CephFSMount, UMOUNT_TIMEOUT
 
 log = logging.getLogger(__name__)
 
 
-UMOUNT_TIMEOUT = 300
 # internal metadata directory
 DEBUGFS_META_DIR = 'meta'
 
@@ -44,8 +44,6 @@ class KernelMount(CephFSMount):
 
         self.setup_netns()
 
-        if not self.cephfs_mntpt:
-            self.cephfs_mntpt = '/'
         if not self.cephfs_name:
             self.cephfs_name = 'cephfs'
 
@@ -70,7 +68,7 @@ class KernelMount(CephFSMount):
         mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
 
         try:
-            self.client_remote.run(args=mount_cmd, timeout=(30*60),
+            self.client_remote.run(args=mount_cmd, timeout=300,
                                    stdout=mountcmd_stdout,
                                    stderr=mountcmd_stderr, omit_sudo=False)
         except CommandFailedError as e:
@@ -85,6 +83,10 @@ class KernelMount(CephFSMount):
     def _make_mount_cmd_old_or_new_style(self):
         optd = {}
         mnt_stx = ''
+
+        self.validate_subvol_options()
+
+        assert(self.cephfs_mntpt)
         if self.syntax_style == 'v1':
             mnt_stx = f':{self.cephfs_mntpt}'
             if self.client_id:
@@ -136,13 +138,13 @@ class KernelMount(CephFSMount):
             cmd=['sudo', 'umount', self.hostfs_mntpt]
             if force:
                 cmd.append('-f')
-            self.client_remote.run(args=cmd, timeout=(15*60), omit_sudo=False)
+            self.client_remote.run(args=cmd, timeout=UMOUNT_TIMEOUT, omit_sudo=False)
         except Exception as e:
             log.debug('Killing processes on client.{id}...'.format(id=self.client_id))
             self.client_remote.run(
                 args=['sudo', run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
                       run.Raw(';'), 'ps', 'auxf'],
-                timeout=(15*60), omit_sudo=False)
+                timeout=UMOUNT_TIMEOUT, omit_sudo=False)
             raise e
 
         if self.dynamic_debug:
@@ -155,7 +157,8 @@ class KernelMount(CephFSMount):
         self.mounted = False
         self.cleanup()
 
-    def umount_wait(self, force=False, require_clean=False, timeout=900):
+    def umount_wait(self, force=False, require_clean=False,
+                    timeout=UMOUNT_TIMEOUT):
         """
         Unlike the fuse client, the kernel client's umount is immediate
         """
@@ -172,8 +175,8 @@ class KernelMount(CephFSMount):
             # force delete the netns and umount
             log.debug('Force/lazy unmounting on client.{id}...'.format(id=self.client_id))
             self.client_remote.run(args=['sudo', 'umount', '-f', '-l',
-                                         self.mountpoint],
-                                   timeout=(15*60), omit_sudo=False)
+                                         self.mountpoint], timeout=timeout,
+                                   omit_sudo=False)
 
             self.mounted = False
             self.cleanup()
@@ -212,12 +215,16 @@ class KernelMount(CephFSMount):
         stdout = StringIO()
         stderr = StringIO()
         try:
-            self.run_shell_payload(f"sudo dd if={path}", timeout=(5*60),
-                stdout=stdout, stderr=stderr)
+            self.run_shell_payload(f"sudo dd if={path}", timeout=(5 * 60),
+                                   stdout=stdout, stderr=stderr)
             return stdout.getvalue()
         except CommandFailedError:
             if 'no such file or directory' in stderr.getvalue().lower():
-                return None
+                return errno.ENOENT
+            elif 'not a directory' in stderr.getvalue().lower():
+                return errno.ENOTDIR
+            elif 'permission denied' in stderr.getvalue().lower():
+                return errno.EACCES
             raise
 
     def _get_global_id(self):
@@ -349,8 +356,23 @@ echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
         return epoch, barrier
 
     def get_op_read_count(self):
-        buf = self.read_debug_file("metrics/size")
-        if buf is None:
-            return 0
-        else:
-            return int(re.findall(r'read.*', buf)[0].split()[1])
+        stdout = StringIO()
+        stderr = StringIO()
+        try:
+            path = os.path.join(self._get_debug_dir(), "metrics/size")
+            self.run_shell(f"sudo stat {path}", stdout=stdout,
+                           stderr=stderr, cwd=None)
+            buf = self.read_debug_file("metrics/size")
+        except CommandFailedError:
+            if 'no such file or directory' in stderr.getvalue().lower() \
+                    or 'not a directory' in stderr.getvalue().lower():
+                try:
+                    path = os.path.join(self._get_debug_dir(), "metrics")
+                    self.run_shell(f"sudo stat {path}", stdout=stdout,
+                                   stderr=stderr, cwd=None)
+                    buf = self.read_debug_file("metrics")
+                except CommandFailedError:
+                    return errno.ENOENT
+            else:
+                return 0
+        return int(re.findall(r'read.*', buf)[0].split()[1])

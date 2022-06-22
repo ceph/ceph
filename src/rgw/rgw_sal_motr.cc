@@ -22,6 +22,7 @@
 extern "C" {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wextern-c-compat"
+#pragma clang diagnostic ignored "-Wdeprecated-anon-enum-enum-conversion"
 #include "motr/config.h"
 #include "lib/types.h"
 #include "lib/trace.h"   // m0_trace_set_mmapped_buffer
@@ -769,7 +770,8 @@ int MotrBucket::unlink_user(const DoutPrefixProvider* dpp, User* new_user, optio
 }
 
 /* stats - Not for first pass */
-int MotrBucket::read_stats(const DoutPrefixProvider *dpp, int shard_id,
+int MotrBucket::read_stats(const DoutPrefixProvider *dpp,
+    const bucket_index_layout_generation& idx_layout, int shard_id,
     std::string *bucket_ver, std::string *master_ver,
     std::map<RGWObjCategory, RGWStorageStats>& stats,
     std::string *max_marker, bool *syncstopped)
@@ -805,7 +807,9 @@ int MotrBucket::create_multipart_indices()
 }
 
 
-int MotrBucket::read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB *ctx)
+int MotrBucket::read_stats_async(const DoutPrefixProvider *dpp,
+                                 const bucket_index_layout_generation& idx_layout,
+                                 int shard_id, RGWGetBucketStats_CB *ctx)
 {
   return 0;
 }
@@ -845,7 +849,7 @@ int MotrBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int MotrBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
+int MotrBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
     optional_yield y, bool check_size_only)
 {
   /* Not Handled in the first pass as stats are also needed */
@@ -1054,31 +1058,78 @@ void MotrStore::finalize(void)
   m0_client_fini(this->instance, true);
 }
 
-const RGWZoneGroup& MotrZone::get_zonegroup()
+const std::string& MotrZoneGroup::get_endpoint() const
 {
-  return *zonegroup;
+  if (!group.endpoints.empty()) {
+      return group.endpoints.front();
+  } else {
+    // use zonegroup's master zone endpoints
+    auto z = group.zones.find(group.master_zone);
+    if (z != group.zones.end() && !z->second.endpoints.empty()) {
+      return z->second.endpoints.front();
+    }
+  }
+  return empty;
 }
 
-int MotrZone::get_zonegroup(const std::string& id, RGWZoneGroup& zg)
+bool MotrZoneGroup::placement_target_exists(std::string& target) const
 {
-  /* XXX: for now only one zonegroup supported */
-  zg = *zonegroup;
+  return !!group.placement_targets.count(target);
+}
+
+int MotrZoneGroup::get_placement_target_names(std::set<std::string>& names) const
+{
+  for (const auto& target : group.placement_targets) {
+    names.emplace(target.second.name);
+  }
+
   return 0;
 }
 
-const RGWZoneParams& MotrZone::get_params()
+int MotrZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
+				       std::unique_ptr<PlacementTier>* tier)
 {
-  return *zone_params;
+  std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
+  titer = group.placement_targets.find(rule.name);
+  if (titer == group.placement_targets.end()) {
+    return -ENOENT;
+  }
+
+  const auto& target_rule = titer->second;
+  std::map<std::string, RGWZoneGroupPlacementTier>::const_iterator ttier;
+  ttier = target_rule.tier_targets.find(rule.storage_class);
+  if (ttier == target_rule.tier_targets.end()) {
+    // not found
+    return -ENOENT;
+  }
+
+  PlacementTier* t;
+  t = new MotrPlacementTier(store, ttier->second);
+  if (!t)
+    return -ENOMEM;
+
+  tier->reset(t);
+  return 0;
+}
+
+ZoneGroup& MotrZone::get_zonegroup()
+{
+  return zonegroup;
+}
+
+int MotrZone::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* group)
+{
+  /* XXX: for now only one zonegroup supported */
+  ZoneGroup* zg;
+  zg = new MotrZoneGroup(store, zonegroup.get_group());
+
+  group->reset(zg);
+  return 0;
 }
 
 const rgw_zone_id& MotrZone::get_id()
 {
   return cur_zone_id;
-}
-
-const RGWRealm& MotrZone::get_realm()
-{
-  return *realm;
 }
 
 const std::string& MotrZone::get_name() const
@@ -1111,12 +1162,8 @@ std::unique_ptr<LuaScriptManager> MotrStore::get_lua_script_manager()
   return std::make_unique<MotrLuaScriptManager>(this);
 }
 
-int MotrObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, RGWObjState **_state, optional_yield y, bool follow_olh)
+int MotrObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **_state, optional_yield y, bool follow_olh)
 {
-  if (state == nullptr)
-    state = new RGWObjState();
-  *_state = state;
-
   // Get object's metadata (those stored in rgw_bucket_dir_entry).
   bufferlist bl;
   if (this->store->get_obj_meta_cache()->get(dpp, this->get_key().to_str(), bl)) {
@@ -1142,24 +1189,22 @@ int MotrObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx,
   this->category = ent.meta.category;
 
   // Set object state.
-  state->obj = get_obj();
-  state->exists = true;
-  state->size = ent.meta.size;
-  state->accounted_size = ent.meta.size;
-  state->mtime = ent.meta.mtime;
+  state.exists = true;
+  state.size = ent.meta.size;
+  state.accounted_size = ent.meta.size;
+  state.mtime = ent.meta.mtime;
 
-  state->has_attrs = true;
+  state.has_attrs = true;
   bufferlist etag_bl;
   string& etag = ent.meta.etag;
   ldpp_dout(dpp, 20) <<__func__<< ": object's etag:  " << ent.meta.etag << dendl;
   etag_bl.append(etag);
-  state->attrset[RGW_ATTR_ETAG] = etag_bl;
+  state.attrset[RGW_ATTR_ETAG] = etag_bl;
 
   return 0;
 }
 
 MotrObject::~MotrObject() {
-  delete state;
   this->close_mobj();
 }
 
@@ -1173,14 +1218,14 @@ MotrObject::~MotrObject() {
 //    return read_op.prepare(dpp);
 //  }
 
-int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, Attrs* setattrs, Attrs* delattrs, optional_yield y, rgw_obj* target_obj)
+int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y)
 {
   // TODO: implement
   ldpp_dout(dpp, 20) <<__func__<< ": MotrObject::set_obj_attrs()" << dendl;
   return 0;
 }
 
-int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
+int MotrObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
 {
   if (this->category == RGWObjCategory::MultiMeta)
     return 0;
@@ -1220,48 +1265,27 @@ int MotrObject::get_obj_attrs(RGWObjectCtx* rctx, optional_yield y, const DoutPr
   return 0;
 }
 
-int MotrObject::modify_obj_attrs(RGWObjectCtx* rctx, const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
+int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
 {
   rgw_obj target = get_obj();
-  int r = get_obj_attrs(rctx, y, dpp, &target);
+  int r = get_obj_attrs(y, dpp, &target);
   if (r < 0) {
     return r;
   }
-  set_atomic(rctx);
+  set_atomic();
   attrs[attr_name] = attr_val;
-  return set_obj_attrs(dpp, rctx, &attrs, nullptr, y, &target);
+  return set_obj_attrs(dpp, &attrs, nullptr, y);
 }
 
-int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, const char* attr_name, optional_yield y)
+int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
 {
   rgw_obj target = get_obj();
   Attrs rmattr;
   bufferlist bl;
 
-  set_atomic(rctx);
+  set_atomic();
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, rctx, nullptr, &rmattr, y, &target);
-}
-
-/* RGWObjectCtx will be moved out of sal */
-/* XXX: Placeholder. Should not be needed later after Dan's patch */
-void MotrObject::set_atomic(RGWObjectCtx* rctx) const
-{
-  return;
-}
-
-/* RGWObjectCtx will be moved out of sal */
-/* XXX: Placeholder. Should not be needed later after Dan's patch */
-void MotrObject::set_prefetch_data(RGWObjectCtx* rctx)
-{
-  return;
-}
-
-/* RGWObjectCtx will be moved out of sal */
-/* XXX: Placeholder. Should not be needed later after Dan's patch */
-void MotrObject::set_compressed(RGWObjectCtx* rctx)
-{
-  return;
+  return set_obj_attrs(dpp, nullptr, &rmattr, y);
 }
 
 bool MotrObject::is_expired() {
@@ -1275,7 +1299,7 @@ void MotrObject::gen_rand_obj_instance_name()
   char buf[OBJ_INSTANCE_LEN + 1];
 
   gen_rand_alphanumeric_no_underscore(store->ctx(), buf, OBJ_INSTANCE_LEN);
-  key.set_instance(buf);
+  state.obj.key.set_instance(buf);
 }
 
 int MotrObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
@@ -1309,13 +1333,24 @@ MPSerializer* MotrObject::get_serializer(const DoutPrefixProvider *dpp, const st
   return new MPMotrSerializer(dpp, store, this, lock_name);
 }
 
-int MotrObject::transition(RGWObjectCtx& rctx,
-    Bucket* bucket,
+int MotrObject::transition(Bucket* bucket,
     const rgw_placement_rule& placement_rule,
     const real_time& mtime,
     uint64_t olh_epoch,
     const DoutPrefixProvider* dpp,
     optional_yield y)
+{
+  return 0;
+}
+
+int MotrObject::transition_to_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_bucket_dir_entry& o,
+			   std::set<std::string>& cloud_targets,
+			   CephContext* cct,
+			   bool update_object,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y)
 {
   return 0;
 }
@@ -1326,19 +1361,18 @@ bool MotrObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rul
   return true;
 }
 
-int MotrObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f, RGWObjectCtx* obj_ctx)
+int MotrObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f)
 {
   return 0;
 }
 
-std::unique_ptr<Object::ReadOp> MotrObject::get_read_op(RGWObjectCtx* ctx)
+std::unique_ptr<Object::ReadOp> MotrObject::get_read_op()
 {
-  return std::make_unique<MotrObject::MotrReadOp>(this, ctx);
+  return std::make_unique<MotrObject::MotrReadOp>(this);
 }
 
-MotrObject::MotrReadOp::MotrReadOp(MotrObject *_source, RGWObjectCtx *_rctx) :
-  source(_source),
-  rctx(_rctx)
+MotrObject::MotrReadOp::MotrReadOp(MotrObject *_source) :
+  source(_source)
 { }
 
 int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
@@ -1460,14 +1494,13 @@ int MotrObject::MotrReadOp::get_attr(const DoutPrefixProvider* dpp, const char* 
   return -ENODATA;
 }
 
-std::unique_ptr<Object::DeleteOp> MotrObject::get_delete_op(RGWObjectCtx* ctx)
+std::unique_ptr<Object::DeleteOp> MotrObject::get_delete_op()
 {
-  return std::make_unique<MotrObject::MotrDeleteOp>(this, ctx);
+  return std::make_unique<MotrObject::MotrDeleteOp>(this);
 }
 
-MotrObject::MotrDeleteOp::MotrDeleteOp(MotrObject *_source, RGWObjectCtx *_rctx) :
-  source(_source),
-  rctx(_rctx)
+MotrObject::MotrDeleteOp::MotrDeleteOp(MotrObject *_source) :
+  source(_source)
 { }
 
 // Implementation of DELETE OBJ also requires MotrObject::get_obj_state()
@@ -1523,9 +1556,9 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   return 0;
 }
 
-int MotrObject::delete_object(const DoutPrefixProvider* dpp, RGWObjectCtx* obj_ctx, optional_yield y, bool prevent_versioning)
+int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, bool prevent_versioning)
 {
-  MotrObject::MotrDeleteOp del_op(this, obj_ctx);
+  MotrObject::MotrDeleteOp del_op(this);
   del_op.params.bucket_owner = bucket->get_info().owner;
   del_op.params.versioning_status = bucket->get_info().versioning_status();
 
@@ -1540,8 +1573,7 @@ int MotrObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astat
   return 0;
 }
 
-int MotrObject::copy_object(RGWObjectCtx& obj_ctx,
-    User* user,
+int MotrObject::copy_object(User* user,
     req_info* info,
     const rgw_zone_id& source_zone,
     rgw::sal::Object* dest_object,
@@ -1572,15 +1604,13 @@ int MotrObject::copy_object(RGWObjectCtx& obj_ctx,
       return 0;
 }
 
-int MotrObject::swift_versioning_restore(RGWObjectCtx* obj_ctx,
-    bool& restored,
+int MotrObject::swift_versioning_restore(bool& restored,
     const DoutPrefixProvider* dpp)
 {
   return 0;
 }
 
-int MotrObject::swift_versioning_copy(RGWObjectCtx* obj_ctx,
-    const DoutPrefixProvider* dpp,
+int MotrObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
     optional_yield y)
 {
   return 0;
@@ -1590,7 +1620,7 @@ MotrAtomicWriter::MotrAtomicWriter(const DoutPrefixProvider *dpp,
           optional_yield y,
           std::unique_ptr<rgw::sal::Object> _head_obj,
           MotrStore* _store,
-          const rgw_user& _owner, RGWObjectCtx& obj_ctx,
+          const rgw_user& _owner,
           const rgw_placement_rule *_ptail_placement_rule,
           uint64_t _olh_epoch,
           const std::string& _unique_tag) :
@@ -2497,8 +2527,7 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp)
   return store->delete_motr_idx_by_name(obj_part_iname);
 }
 
-int MotrMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
-                                RGWObjectCtx *obj_ctx)
+int MotrMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
 {
   int rc;
   // Check if multipart upload exists
@@ -2553,7 +2582,7 @@ struct motr_multipart_upload_info
 WRITE_CLASS_ENCODER(motr_multipart_upload_info)
 
 int MotrMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
-                              RGWObjectCtx* obj_ctx, ACLOwner& _owner,
+                              ACLOwner& _owner,
 			      rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs)
 {
   int rc;
@@ -2699,8 +2728,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   RGWCompressionInfo& cs_info, off_t& off,
 				   std::string& tag, ACLOwner& owner,
 				   uint64_t olh_epoch,
-				   rgw::sal::Object* target_obj,
-				   RGWObjectCtx* obj_ctx)
+				   rgw::sal::Object* target_obj)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -2903,7 +2931,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
                                   M0_IC_DEL, meta_obj->get_key().to_str(), bl);
 }
 
-int MotrMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield y, RGWObjectCtx* obj_ctx, rgw_placement_rule** rule, rgw::sal::Attrs* attrs)
+int MotrMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs)
 {
   if (!rule && !attrs) {
     return 0;
@@ -2969,14 +2997,14 @@ std::unique_ptr<Writer> MotrMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  std::unique_ptr<rgw::sal::Object> _head_obj,
-				  const rgw_user& owner, RGWObjectCtx& obj_ctx,
+				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
 {
   return std::make_unique<MotrMultipartWriter>(dpp, y, this,
 				 std::move(_head_obj), store, owner,
-				 obj_ctx, ptail_placement_rule, part_num, part_num_str);
+				 ptail_placement_rule, part_num, part_num_str);
 }
 
 int MotrMultipartWriter::prepare(optional_yield y)
@@ -3069,6 +3097,12 @@ std::unique_ptr<RGWRole> MotrStore::get_role(std::string name,
   return std::unique_ptr<RGWRole>(p);
 }
 
+std::unique_ptr<RGWRole> MotrStore::get_role(const RGWRoleInfo& info)
+{
+  RGWRole* p = nullptr;
+  return std::unique_ptr<RGWRole>(p);
+}
+
 std::unique_ptr<RGWRole> MotrStore::get_role(std::string id)
 {
   RGWRole* p = nullptr;
@@ -3107,7 +3141,7 @@ std::unique_ptr<MultipartUpload> MotrBucket::get_multipart_upload(const std::str
 std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
         std::unique_ptr<rgw::sal::Object> _head_obj,
-        const rgw_user& owner, RGWObjectCtx& obj_ctx,
+        const rgw_user& owner,
         const rgw_placement_rule *ptail_placement_rule,
         const std::string& unique_tag,
         uint64_t position,
@@ -3118,13 +3152,23 @@ std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *d
 std::unique_ptr<Writer> MotrStore::get_atomic_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
         std::unique_ptr<rgw::sal::Object> _head_obj,
-        const rgw_user& owner, RGWObjectCtx& obj_ctx,
+        const rgw_user& owner,
         const rgw_placement_rule *ptail_placement_rule,
         uint64_t olh_epoch,
         const std::string& unique_tag) {
   return std::make_unique<MotrAtomicWriter>(dpp, y,
-                  std::move(_head_obj), this, owner, obj_ctx,
+                  std::move(_head_obj), this, owner,
                   ptail_placement_rule, olh_epoch, unique_tag);
+}
+
+const std::string& MotrStore::get_compression_type(const rgw_placement_rule& rule)
+{
+      return zone.zone_params->get_compression_type(rule);
+}
+
+bool MotrStore::valid_placement(const rgw_placement_rule& rule)
+{
+  return zone.zone_params->valid_placement(rule);
 }
 
 std::unique_ptr<User> MotrStore::get_user(const rgw_user &u)
@@ -3298,6 +3342,14 @@ int MotrStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* us
   return 0;
 }
 
+int MotrStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y)
+{
+    return 0;
+}
+
 std::string MotrStore::zone_unique_id(uint64_t unique_num)
 {
   return "";
@@ -3330,7 +3382,7 @@ std::unique_ptr<Notification> MotrStore::get_notification(Object* obj, Object* s
 }
 
 std::unique_ptr<Notification>  MotrStore::get_notification(const DoutPrefixProvider* dpp, Object* obj,
-        Object* src_obj, RGWObjectCtx* rctx, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
+        Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
         std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y)
 {
   return std::make_unique<MotrNotification>(obj, src_obj, event_type);
@@ -3359,7 +3411,7 @@ void MotrStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
   return;
 }
 
-void MotrStore::get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota)
+void MotrStore::get_quota(RGWQuota& quota)
 {
   // XXX: Not handled for the first pass
   return;

@@ -37,7 +37,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.lvm_size.gb == 4
 
-    def test_lvm_size_rounds_down(self, device_info):
+    def test_lvm_size_rounds_down(self, fake_call, device_info):
         # 5.5GB in size
         data = {"/dev/sda": {"size": "5905580032"}}
         lsblk = {"TYPE": "disk"}
@@ -45,14 +45,14 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.lvm_size.gb == 4
 
-    def test_is_lv(self, device_info):
+    def test_is_lv(self, fake_call, device_info):
         data = {"lv_path": "vg/lv", "vg_name": "vg", "name": "lv"}
         lsblk = {"TYPE": "lvm"}
         device_info(lv=data,lsblk=lsblk)
         disk = device.Device("vg/lv")
         assert disk.is_lv
 
-    def test_vgs_is_empty(self, device_info, monkeypatch):
+    def test_vgs_is_empty(self, fake_call, device_info, monkeypatch):
         BarPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000",
                                  pv_tags={})
         pvolumes = []
@@ -64,7 +64,7 @@ class TestDevice(object):
         disk = device.Device("/dev/nvme0n1")
         assert disk.vgs == []
 
-    def test_vgs_is_not_empty(self, device_info, monkeypatch):
+    def test_vgs_is_not_empty(self, fake_call, device_info, monkeypatch):
         vg = api.VolumeGroup(vg_name='foo/bar', vg_free_count=6,
                              vg_extent_size=1073741824)
         monkeypatch.setattr(api, 'get_device_vgs', lambda x: [vg])
@@ -73,42 +73,42 @@ class TestDevice(object):
         disk = device.Device("/dev/nvme0n1")
         assert len(disk.vgs) == 1
 
-    def test_device_is_device(self, device_info):
+    def test_device_is_device(self, fake_call, device_info):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "device"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_device is True
 
-    def test_device_is_rotational(self, device_info):
+    def test_device_is_rotational(self, fake_call, device_info):
         data = {"/dev/sda": {"rotational": "1"}}
         lsblk = {"TYPE": "device"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.rotational
 
-    def test_device_is_not_rotational(self, device_info):
+    def test_device_is_not_rotational(self, fake_call, device_info):
         data = {"/dev/sda": {"rotational": "0"}}
         lsblk = {"TYPE": "device"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert not disk.rotational
 
-    def test_device_is_rotational_lsblk(self, device_info):
+    def test_device_is_rotational_lsblk(self, fake_call, device_info):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "device", "ROTA": "1"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.rotational
 
-    def test_device_is_not_rotational_lsblk(self, device_info):
+    def test_device_is_not_rotational_lsblk(self, fake_call, device_info):
         data = {"/dev/sda": {"rotational": "0"}}
         lsblk = {"TYPE": "device", "ROTA": "0"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert not disk.rotational
 
-    def test_device_is_rotational_defaults_true(self, device_info):
+    def test_device_is_rotational_defaults_true(self, fake_call, device_info):
         # rotational will default true if no info from sys_api or lsblk is found
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "device", "foo": "bar"}
@@ -116,54 +116,54 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.rotational
 
-    def test_disk_is_device(self, device_info):
+    def test_disk_is_device(self, fake_call, device_info):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_device is True
 
-    def test_is_partition(self, device_info):
+    def test_is_partition(self, fake_call, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert disk.is_partition
 
-    def test_mpath_device_is_device(self, device_info):
+    def test_mpath_device_is_device(self, fake_call, device_info):
         data = {"/dev/foo": {"foo": "bar"}}
         lsblk = {"TYPE": "mpath"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/foo")
         assert disk.is_device is True
 
-    def test_is_not_lvm_member(self, device_info):
+    def test_is_not_lvm_member(self, fake_call, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
 
-    def test_is_lvm_member(self, device_info):
+    def test_is_lvm_member(self, fake_call, device_info):
         data = {"/dev/sda1": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "PKNAME": "sda"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/sda1")
         assert not disk.is_lvm_member
 
-    def test_is_mapper_device(self, device_info):
+    def test_is_mapper_device(self, fake_call, device_info):
         lsblk = {"TYPE": "lvm"}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/mapper/foo")
         assert disk.is_mapper
 
-    def test_dm_is_mapper_device(self, device_info):
+    def test_dm_is_mapper_device(self, fake_call, device_info):
         lsblk = {"TYPE": "lvm"}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/dm-4")
         assert disk.is_mapper
 
-    def test_is_not_mapper_device(self, device_info):
+    def test_is_not_mapper_device(self, fake_call, device_info):
         lsblk = {"TYPE": "disk"}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
@@ -171,19 +171,19 @@ class TestDevice(object):
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_is_ceph_disk_lsblk(self, monkeypatch, patch_bluestore_label):
+    def test_is_ceph_disk_lsblk(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_is_ceph_disk_blkid(self, monkeypatch, patch_bluestore_label):
+    def test_is_ceph_disk_blkid(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_is_ceph_disk_member_not_available_lsblk(self, monkeypatch, patch_bluestore_label):
+    def test_is_ceph_disk_member_not_available_lsblk(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
         assert not disk.available
@@ -191,20 +191,20 @@ class TestDevice(object):
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_is_ceph_disk_member_not_available_blkid(self, monkeypatch, patch_bluestore_label):
+    def test_is_ceph_disk_member_not_available_blkid(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
         assert not disk.available
         assert "Used by ceph-disk" in disk.rejected_reasons
 
-    def test_reject_removable_device(self, device_info):
+    def test_reject_removable_device(self, fake_call, device_info):
         data = {"/dev/sdb": {"removable": 1}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/sdb")
         assert not disk.available
 
-    def test_reject_device_with_gpt_headers(self, device_info):
+    def test_reject_device_with_gpt_headers(self, fake_call, device_info):
         data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
         lsblk = {"TYPE": "disk"}
         blkid= {"PTTYPE": "gpt"}
@@ -216,42 +216,42 @@ class TestDevice(object):
         disk = device.Device("/dev/sdb")
         assert not disk.available
 
-    def test_accept_non_removable_device(self, device_info):
+    def test_accept_non_removable_device(self, fake_call, device_info):
         data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/sdb")
         assert disk.available
 
-    def test_reject_not_acceptable_device(self, device_info):
+    def test_reject_not_acceptable_device(self, fake_call, device_info):
         data = {"/dev/dm-0": {"foo": "bar"}}
         lsblk = {"TYPE": "mpath"}
         device_info(devices=data, lsblk=lsblk)
         disk = device.Device("/dev/dm-0")
         assert not disk.available
 
-    def test_reject_readonly_device(self, device_info):
+    def test_reject_readonly_device(self, fake_call, device_info):
         data = {"/dev/cdrom": {"ro": 1}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/cdrom")
         assert not disk.available
 
-    def test_reject_smaller_than_5gb(self, device_info):
+    def test_reject_smaller_than_5gb(self, fake_call, device_info):
         data = {"/dev/sda": {"size": 5368709119}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert not disk.available, 'too small device is available'
 
-    def test_accept_non_readonly_device(self, device_info):
+    def test_accept_non_readonly_device(self, fake_call, device_info):
         data = {"/dev/sda": {"ro": 0, "size": 5368709120}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.available
 
-    def test_reject_bluestore_device(self, monkeypatch, patch_bluestore_label, device_info):
+    def test_reject_bluestore_device(self, fake_call, monkeypatch, patch_bluestore_label, device_info):
         patch_bluestore_label.return_value = True
         lsblk = {"TYPE": "disk"}
         device_info(lsblk=lsblk)
@@ -259,7 +259,7 @@ class TestDevice(object):
         assert not disk.available
         assert "Has BlueStore device label" in disk.rejected_reasons
 
-    def test_reject_device_with_oserror(self, monkeypatch, patch_bluestore_label, device_info):
+    def test_reject_device_with_oserror(self, fake_call, monkeypatch, patch_bluestore_label, device_info):
         patch_bluestore_label.side_effect = OSError('test failure')
         lsblk = {"TYPE": "disk"}
         device_info(lsblk=lsblk)
@@ -269,11 +269,11 @@ class TestDevice(object):
 
     @pytest.mark.usefixtures("device_info_not_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_is_not_ceph_disk_member_lsblk(self, patch_bluestore_label):
+    def test_is_not_ceph_disk_member_lsblk(self, fake_call, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member is False
 
-    def test_existing_vg_available(self, monkeypatch, device_info):
+    def test_existing_vg_available(self, fake_call, monkeypatch, device_info):
         vg = api.VolumeGroup(vg_name='foo/bar', vg_free_count=1536,
                              vg_extent_size=4194304)
         monkeypatch.setattr(api, 'get_device_vgs', lambda x: [vg])
@@ -285,7 +285,7 @@ class TestDevice(object):
         assert not disk.available
         assert not disk.available_raw
 
-    def test_existing_vg_too_small(self, monkeypatch, device_info):
+    def test_existing_vg_too_small(self, fake_call, monkeypatch, device_info):
         vg = api.VolumeGroup(vg_name='foo/bar', vg_free_count=4,
                              vg_extent_size=1073741824)
         monkeypatch.setattr(api, 'get_device_vgs', lambda x: [vg])
@@ -297,7 +297,7 @@ class TestDevice(object):
         assert not disk.available
         assert not disk.available_raw
 
-    def test_multiple_existing_vgs(self, monkeypatch, device_info):
+    def test_multiple_existing_vgs(self, fake_call, monkeypatch, device_info):
         vg1 = api.VolumeGroup(vg_name='foo/bar', vg_free_count=1000,
                              vg_extent_size=4194304)
         vg2 = api.VolumeGroup(vg_name='foo/bar', vg_free_count=536,
@@ -312,7 +312,7 @@ class TestDevice(object):
         assert not disk.available_raw
 
     @pytest.mark.parametrize("ceph_type", ["data", "block"])
-    def test_used_by_ceph(self, device_info,
+    def test_used_by_ceph(self, fake_call, device_info,
                           monkeypatch, ceph_type):
         data = {"/dev/sda": {"foo": "bar"}}
         lsblk = {"TYPE": "part", "PKNAME": "sda"}
@@ -337,7 +337,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.used_by_ceph
 
-    def test_not_used_by_ceph(self, device_info, monkeypatch):
+    def test_not_used_by_ceph(self, fake_call, device_info, monkeypatch):
         FooPVolume = api.PVolume(pv_name='/dev/sda', pv_uuid="0000", lv_uuid="0000", pv_tags={}, vg_name="vg")
         pvolumes = []
         pvolumes.append(FooPVolume)
@@ -350,7 +350,7 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert not disk.used_by_ceph
 
-    def test_get_device_id(self, device_info):
+    def test_get_device_id(self, fake_call, device_info):
         udev = {k:k for k in ['ID_VENDOR', 'ID_MODEL', 'ID_SCSI_SERIAL']}
         lsblk = {"TYPE": "disk"}
         device_info(udevadm=udev,lsblk=lsblk)
@@ -371,33 +371,33 @@ class TestDevice(object):
 
 class TestDeviceEncryption(object):
 
-    def test_partition_is_not_encrypted_lsblk(self, device_info):
+    def test_partition_is_not_encrypted_lsblk(self, fake_call, device_info):
         lsblk = {'TYPE': 'part', 'FSTYPE': 'xfs', 'PKNAME': 'sda'}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is False
 
-    def test_partition_is_encrypted_lsblk(self, device_info):
+    def test_partition_is_encrypted_lsblk(self, fake_call, device_info):
         lsblk = {'TYPE': 'part', 'FSTYPE': 'crypto_LUKS', 'PKNAME': 'sda'}
         device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is True
 
-    def test_partition_is_not_encrypted_blkid(self, device_info):
+    def test_partition_is_not_encrypted_blkid(self, fake_call, device_info):
         lsblk = {'TYPE': 'part', 'PKNAME': 'sda'}
         blkid = {'TYPE': 'ceph data'}
         device_info(lsblk=lsblk, blkid=blkid)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is False
 
-    def test_partition_is_encrypted_blkid(self, device_info):
+    def test_partition_is_encrypted_blkid(self, fake_call, device_info):
         lsblk = {'TYPE': 'part', 'PKNAME': 'sda'}
         blkid = {'TYPE': 'crypto_LUKS'}
         device_info(lsblk=lsblk, blkid=blkid)
         disk = device.Device("/dev/sda")
         assert disk.is_encrypted is True
 
-    def test_mapper_is_encrypted_luks1(self, device_info, monkeypatch):
+    def test_mapper_is_encrypted_luks1(self, fake_call, device_info, monkeypatch):
         status = {'type': 'LUKS1'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
@@ -406,7 +406,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
-    def test_mapper_is_encrypted_luks2(self, device_info, monkeypatch):
+    def test_mapper_is_encrypted_luks2(self, fake_call, device_info, monkeypatch):
         status = {'type': 'LUKS2'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
@@ -415,7 +415,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
-    def test_mapper_is_encrypted_plain(self, device_info, monkeypatch):
+    def test_mapper_is_encrypted_plain(self, fake_call, device_info, monkeypatch):
         status = {'type': 'PLAIN'}
         monkeypatch.setattr(device, 'encryption_status', lambda x: status)
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
@@ -424,7 +424,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is True
 
-    def test_mapper_is_not_encrypted_plain(self, device_info, monkeypatch):
+    def test_mapper_is_not_encrypted_plain(self, fake_call, device_info, monkeypatch):
         monkeypatch.setattr(device, 'encryption_status', lambda x: {})
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
@@ -432,7 +432,7 @@ class TestDeviceEncryption(object):
         disk = device.Device("/dev/mapper/uuid")
         assert disk.is_encrypted is False
 
-    def test_lv_is_encrypted_blkid(self, device_info):
+    def test_lv_is_encrypted_blkid(self, fake_call, device_info):
         lsblk = {'TYPE': 'lvm'}
         blkid = {'TYPE': 'crypto_LUKS'}
         device_info(lsblk=lsblk, blkid=blkid)
@@ -440,7 +440,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = {}
         assert disk.is_encrypted is True
 
-    def test_lv_is_not_encrypted_blkid(self, factory, device_info):
+    def test_lv_is_not_encrypted_blkid(self, fake_call, factory, device_info):
         lsblk = {'TYPE': 'lvm'}
         blkid = {'TYPE': 'xfs'}
         device_info(lsblk=lsblk, blkid=blkid)
@@ -448,7 +448,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = factory(encrypted=None)
         assert disk.is_encrypted is False
 
-    def test_lv_is_encrypted_lsblk(self, device_info):
+    def test_lv_is_encrypted_lsblk(self, fake_call, device_info):
         lsblk = {'FSTYPE': 'crypto_LUKS', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
         device_info(lsblk=lsblk, blkid=blkid)
@@ -456,7 +456,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = {}
         assert disk.is_encrypted is True
 
-    def test_lv_is_not_encrypted_lsblk(self, factory, device_info):
+    def test_lv_is_not_encrypted_lsblk(self, fake_call, factory, device_info):
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
         device_info(lsblk=lsblk, blkid=blkid)
@@ -464,7 +464,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = factory(encrypted=None)
         assert disk.is_encrypted is False
 
-    def test_lv_is_encrypted_lvm_api(self, factory, device_info):
+    def test_lv_is_encrypted_lvm_api(self, fake_call, factory, device_info):
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
         device_info(lsblk=lsblk, blkid=blkid)
@@ -472,7 +472,7 @@ class TestDeviceEncryption(object):
         disk.lv_api = factory(encrypted=True)
         assert disk.is_encrypted is True
 
-    def test_lv_is_not_encrypted_lvm_api(self, factory, device_info):
+    def test_lv_is_not_encrypted_lvm_api(self, fake_call, factory, device_info):
         lsblk = {'FSTYPE': 'xfs', 'TYPE': 'lvm'}
         blkid = {'TYPE': 'mapper'}
         device_info(lsblk=lsblk, blkid=blkid)
@@ -491,7 +491,7 @@ class TestDeviceOrdering(object):
                 "/dev/sdd": {"removable": 1}, # invalid
         }
 
-    def test_valid_before_invalid(self, device_info):
+    def test_valid_before_invalid(self, fake_call, device_info):
         lsblk = {"TYPE": "disk"}
         device_info(devices=self.data,lsblk=lsblk)
         sda = device.Device("/dev/sda")
@@ -500,7 +500,7 @@ class TestDeviceOrdering(object):
         assert sda < sdb
         assert sdb > sda
 
-    def test_valid_alphabetical_ordering(self, device_info):
+    def test_valid_alphabetical_ordering(self, fake_call, device_info):
         lsblk = {"TYPE": "disk"}
         device_info(devices=self.data,lsblk=lsblk)
         sda = device.Device("/dev/sda")
@@ -509,7 +509,7 @@ class TestDeviceOrdering(object):
         assert sda < sdc
         assert sdc > sda
 
-    def test_invalid_alphabetical_ordering(self, device_info):
+    def test_invalid_alphabetical_ordering(self, fake_call, device_info):
         lsblk = {"TYPE": "disk"}
         device_info(devices=self.data,lsblk=lsblk)
         sdb = device.Device("/dev/sdb")
@@ -521,14 +521,14 @@ class TestDeviceOrdering(object):
 
 class TestCephDiskDevice(object):
 
-    def test_partlabel_lsblk(self, device_info):
+    def test_partlabel_lsblk(self, fake_call, device_info):
         lsblk = {"TYPE": "disk", "PARTLABEL": ""}
         device_info(lsblk=lsblk)
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.partlabel == ''
 
-    def test_partlabel_blkid(self, device_info):
+    def test_partlabel_blkid(self, fake_call, device_info):
         blkid = {"TYPE": "disk", "PARTLABEL": "ceph data"}
         device_info(blkid=blkid)
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
@@ -537,21 +537,21 @@ class TestCephDiskDevice(object):
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_is_member_blkid(self, monkeypatch, patch_bluestore_label):
+    def test_is_member_blkid(self, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.is_member is True
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_is_member_lsblk(self, patch_bluestore_label, device_info):
+    def test_is_member_lsblk(self, fake_call, patch_bluestore_label, device_info):
         lsblk = {"TYPE": "disk", "PARTLABEL": "ceph"}
         device_info(lsblk=lsblk)
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.is_member is True
 
-    def test_unknown_type(self, device_info):
+    def test_unknown_type(self, fake_call, device_info):
         lsblk = {"TYPE": "disk", "PARTLABEL": "gluster"}
         device_info(lsblk=lsblk)
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
@@ -562,7 +562,7 @@ class TestCephDiskDevice(object):
 
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_type_blkid(self, monkeypatch, device_info, ceph_partlabel):
+    def test_type_blkid(self, monkeypatch, fake_call, device_info, ceph_partlabel):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.type in self.ceph_types
@@ -570,7 +570,7 @@ class TestCephDiskDevice(object):
     @pytest.mark.usefixtures("blkid_ceph_disk_member",
                              "lsblk_ceph_disk_member",
                              "disable_kernel_queries")
-    def test_type_lsblk(self, device_info, ceph_partlabel):
+    def test_type_lsblk(self, fake_call, device_info, ceph_partlabel):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.type in self.ceph_types

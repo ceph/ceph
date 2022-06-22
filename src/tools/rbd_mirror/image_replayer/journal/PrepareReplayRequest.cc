@@ -68,17 +68,6 @@ void PrepareReplayRequest<I>::send() {
            << "local tag data=" << m_local_tag_data << dendl;
   image_locker.unlock();
 
-  if (m_local_tag_data.mirror_uuid != m_state_builder->remote_mirror_uuid &&
-      m_remote_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY) {
-    // if the local mirror is not linked to the (now) non-primary image,
-    // stop the replay. Otherwise, we ignore that the remote is non-primary
-    // so that we can replay the demotion
-    dout(5) << "remote image is not primary -- skipping image replay"
-            << dendl;
-    finish(-EREMOTEIO);
-    return;
-  }
-
   if (*m_resync_requested) {
     finish(0);
     return;

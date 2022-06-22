@@ -42,7 +42,7 @@ if [ -n "$VSTART_DEST" ]; then
     CEPH_CONF_PATH=$VSTART_DEST
     CEPH_DEV_DIR=$VSTART_DEST/dev
     CEPH_OUT_DIR=$VSTART_DEST/out
-    CEPH_ASOK_DIR=$VSTART_DEST/out
+    CEPH_ASOK_DIR=$VSTART_DEST/asok
 fi
 
 get_cmake_variable() {
@@ -128,6 +128,7 @@ fi
 [ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
 [ -z "$CEPH_DEV_DIR" ] && CEPH_DEV_DIR="$CEPH_DIR/dev"
 [ -z "$CEPH_OUT_DIR" ] && CEPH_OUT_DIR="$CEPH_DIR/out"
+[ -z "$CEPH_ASOK_DIR" ] && CEPH_ASOK_DIR="$CEPH_DIR/asok"
 [ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
 [ -z "$CEPH_CONF_PATH" ] && CEPH_CONF_PATH=$CEPH_DIR
 
@@ -165,7 +166,8 @@ ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
-spdk_enabled=0 #disable SPDK by default
+spdk_enabled=0 # disable SPDK by default
+pmem_enabled=0
 zoned_enabled=0
 io_uring_enabled=0
 with_jaeger=0
@@ -233,6 +235,7 @@ options:
 	--multimds <count> allow multimds with maximum active count
 	--without-dashboard: do not run using mgr dashboard
 	--bluestore-spdk: enable SPDK and with a comma-delimited list of PCI-IDs of NVME device (e.g, 0000:81:00.0)
+	--bluestore-pmem: enable PMEM and with path to a file mapped to PMEM
 	--msgr1: use msgr1 only
 	--msgr2: use msgr2 only
 	--msgr21: use msgr2 and msgr1
@@ -508,6 +511,12 @@ case $1 in
         spdk_enabled=1
         shift
         ;;
+    --bluestore-pmem)
+        [ -z "$2" ] && usage_exit
+        bluestore_pmem_file="$2"
+        pmem_enabled=1
+        shift
+        ;;
     --bluestore-devs)
         parse_block_devs --bluestore-devs "$2"
         shift
@@ -693,6 +702,7 @@ prepare_conf() {
         debug asok assert abort = true
         $(format_conf "${msgr_conf}")
         $(format_conf "${extra_conf}")
+        $AUTOSCALER_OPTS
 EOF
     if [ "$lockdep" -eq 1 ] ; then
         wconf <<EOF
@@ -725,7 +735,7 @@ EOF
         osd max object namespace len = 64"
     fi
     if [ "$objectstore" == "bluestore" ]; then
-        if [ "$spdk_enabled" -eq 1 ]; then
+        if [ "$spdk_enabled" -eq 1 ] || [ "$pmem_enabled" -eq 1 ]; then
             BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
         bluestore_block_db_size = 0
         bluestore_block_db_create = false
@@ -968,8 +978,11 @@ EOF
                 wconf <<EOF
         bluestore_block_path = spdk:${bluestore_spdk_dev[$osd]}
 EOF
+            elif [ "$pmem_enabled" -eq 1 ]; then
+                wconf <<EOF
+        bluestore_block_path = ${bluestore_pmem_file}
+EOF
             fi
-
             rm -rf $CEPH_DEV_DIR/osd$osd || true
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
@@ -1312,6 +1325,12 @@ else
         debug auth = 20
         debug mgrc = 20
         debug ms = 1'
+fi
+
+# Crimson doesn't support PG merge/split yet.
+if [ "$ceph_osd" == "crimson-osd" ]; then
+    AUTOSCALER_OPTS='
+        osd_pool_default_pg_autoscale_mode = off'
 fi
 
 if [ -n "$MON_ADDR" ]; then
@@ -1758,8 +1777,11 @@ echo ""
     echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
     echo "export PATH=$CEPH_DIR/bin:\$PATH"
-    echo "export CEPH_CONF=$conf_fn"
-    echo "export CEPH_KEYRING=$keyring_fn"
+
+    if [ "$CEPH_DIR" != "$PWD" ]; then
+        echo "export CEPH_CONF=$conf_fn"
+        echo "export CEPH_KEYRING=$keyring_fn"
+    fi
 
     if [ -n "$CEPHFS_SHELL" ]; then
         echo "alias cephfs-shell=$CEPHFS_SHELL"

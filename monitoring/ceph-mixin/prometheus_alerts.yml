@@ -397,7 +397,7 @@ groups:
           documentation: https://docs.ceph.com/en/latest/cephfs/health-messages/#fs-degraded
           summary: Ceph filesystem is degraded
           description: >
-            One or more metdata daemons (MDS ranks) are failed or in a
+            One or more metadata daemons (MDS ranks) are failed or in a
             damaged state. At best the filesystem is partially available,
             worst case is the filesystem is completely unusable.
       - alert: CephFilesystemMDSRanksLow
@@ -533,7 +533,7 @@ groups:
             During data consistency checks (scrub), at least one PG has been flagged as being
             damaged or inconsistent.
 
-            Check to see which PG is affected, and attempt a manual repair if neccessary. To list
+            Check to see which PG is affected, and attempt a manual repair if necessary. To list
             problematic placement groups, use 'rados list-inconsistent-pg <pool>'. To repair PGs use
             the 'ceph pg repair <pg_num>' command.
       - alert: CephPGRecoveryAtRisk
@@ -561,7 +561,7 @@ groups:
           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-availability
           summary: Placement group is unavailable, blocking some I/O
           description: >
-            Data availability is reduced impacting the clusters abilty to service I/O to some data. One or
+            Data availability is reduced impacting the clusters ability to service I/O to some data. One or
             more placement groups (PGs) are in a state that blocks IO.
       - alert: CephPGBackfillAtRisk
         expr: ceph_health_detail{name="PG_BACKFILL_FULL"} == 1
@@ -704,7 +704,18 @@ groups:
             rate of the past 48 hours.
 
       - alert: CephNodeInconsistentMTU
-        expr: node_network_mtu_bytes{device!="lo"} * (node_network_up{device!="lo"} > 0) != on() group_left() (quantile(0.5, node_network_mtu_bytes{device!="lo"}))
+        expr: |
+          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
+            scalar(
+              max by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
+                quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
+            )
+          or
+          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
+            scalar(
+              min by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
+                quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
+            )
         labels:
           severity: warning
           type: ceph_default
@@ -712,7 +723,7 @@ groups:
           summary: MTU settings across Ceph hosts are inconsistent
           description: >
             Node {{ $labels.instance }} has a different MTU size ({{ $value }})
-            than the median value on device {{ $labels.device }}.
+            than the median of devices named {{ $labels.device }}.
 
   - name: pools
     rules:

@@ -459,9 +459,38 @@ auto OpsExecuter::do_write_op(Func&& f, bool um) {
   user_modify = um;
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
 }
+OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
+  OSDOp& osd_op,
+  const ObjectState& os)
+{
+  if (!osd_op.op.assert_ver.ver) {
+    return crimson::ct_error::invarg::make();
+  } else if (osd_op.op.assert_ver.ver < os.oi.user_version) {
+    return crimson::ct_error::erange::make();
+  } else if (osd_op.op.assert_ver.ver > os.oi.user_version) {
+    return crimson::ct_error::value_too_large::make();
+  }
+  return seastar::now();
+}
 
 OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
+{
+  return do_execute_op(osd_op).handle_error_interruptible(
+    osd_op_errorator::all_same_way([&osd_op](auto e, auto&& e_raw)
+      -> OpsExecuter::osd_op_errorator::future<> {
+        osd_op.rval = -e.value();
+        if ((osd_op.op.flags & CEPH_OSD_OP_FLAG_FAILOK) &&
+	  e.value() != EAGAIN && e.value() != EINPROGRESS) {
+          return osd_op_errorator::now();
+        } else {
+          return std::move(e_raw);
+	}
+      }));
+}
+
+OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
+OpsExecuter::do_execute_op(OSDOp& osd_op)
 {
   // TODO: dispatch via call table?
   // TODO: we might want to find a way to unify both input and output
@@ -568,6 +597,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_read_op([this, &osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_vals(os, osd_op, delta_stats);
     });
+  case CEPH_OSD_OP_OMAP_CMP:
+    return  do_read_op([this, &osd_op] (auto& backend, const auto& os) {
+      return backend.omap_cmp(os, osd_op, delta_stats);
+    });
   case CEPH_OSD_OP_OMAPGETHEADER:
     return do_read_op([this, &osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_header(os, osd_op, delta_stats);
@@ -578,7 +611,7 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     });
   case CEPH_OSD_OP_OMAPSETVALS:
 #if 0
-    if (!pg.get_pool().info.supports_omap()) {
+    if (!pg.get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
 #endif
@@ -587,7 +620,7 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     }, true);
   case CEPH_OSD_OP_OMAPSETHEADER:
 #if 0
-    if (!pg.get_pool().info.supports_omap()) {
+    if (!pg.get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
 #endif
@@ -597,7 +630,7 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     }, true);
   case CEPH_OSD_OP_OMAPRMKEYRANGE:
 #if 0
-    if (!pg.get_pool().info.supports_omap()) {
+    if (!pg.get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
 #endif
@@ -606,7 +639,7 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     }, true);
   case CEPH_OSD_OP_OMAPRMKEYS:
     /** TODO: Implement supports_omap()
-    if (!pg.get_pool().info.supports_omap()) {
+    if (!pg.get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }*/
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
@@ -634,6 +667,10 @@ OpsExecuter::execute_op(OSDOp& osd_op)
     return do_read_op([this, &osd_op] (auto&, const auto& os) {
       return do_op_notify_ack(osd_op, os);
     });
+  case CEPH_OSD_OP_ASSERT_VER:
+    return do_read_op([this, &osd_op] (auto&, const auto& os) {
+      return do_assert_ver(osd_op, os);
+    });
 
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
@@ -642,9 +679,42 @@ OpsExecuter::execute_op(OSDOp& osd_op)
   }
 }
 
+void OpsExecuter::fill_op_params_bump_pg_version()
+{
+  osd_op_params->req_id = msg->get_reqid();
+  osd_op_params->mtime = msg->get_mtime();
+  osd_op_params->at_version = pg->next_version();
+  osd_op_params->pg_trim_to = pg->get_pg_trim_to();
+  osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
+  osd_op_params->last_complete = pg->get_info().last_complete;
+  if (user_modify) {
+    osd_op_params->user_at_version = osd_op_params->at_version.version;
+  }
+}
+
+std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
+  const std::vector<OSDOp>& ops)
+{
+  std::vector<pg_log_entry_t> log_entries;
+  log_entries.emplace_back(obc->obs.exists ?
+      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
+    obc->obs.oi.soid, osd_op_params->at_version, obc->obs.oi.version,
+    osd_op_params->user_modify ? osd_op_params->at_version.version : 0,
+    osd_op_params->req_id, osd_op_params->mtime,
+    op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
+  if (op_info.allows_returnvec()) {
+    // also the per-op values are recorded in the pg log
+    log_entries.back().set_op_returns(ops);
+    logger().debug("{} op_returns: {}",
+                   __func__, log_entries.back().op_returns);
+  }
+  log_entries.back().clean_regions = std::move(osd_op_params->clean_regions);
+  return log_entries;
+}
+
 // Defined here because there is a circular dependency between OpsExecuter and PG
 uint32_t OpsExecuter::get_pool_stripe_width() const {
-  return pg->get_pool().info.get_stripe_width();
+  return pg->get_pgpool().info.get_stripe_width();
 }
 
 // Defined here because there is a circular dependency between OpsExecuter and PG
@@ -718,7 +788,7 @@ static PG::interruptible_future<hobject_t> pgls_filter(
   if (const auto xattr = filter.get_xattr(); !xattr.empty()) {
     logger().debug("pgls_filter: filter is interested in xattr={} for obj={}",
                    xattr, sobj);
-    return backend.getxattr(sobj, xattr).safe_then_interruptible(
+    return backend.getxattr(sobj, std::move(xattr)).safe_then_interruptible(
       [&filter, sobj] (ceph::bufferlist val) {
         logger().debug("pgls_filter: got xvalue for obj={}", sobj);
 
@@ -819,8 +889,8 @@ static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
       response.handle = next.is_max() ? pg_end : next;
       ceph::bufferlist out;
       encode(response, out);
-      logger().debug("{}: response.entries.size()=",
-                     __func__, response.entries.size());
+      logger().debug("do_pgnls_common: response.entries.size()= {}",
+                     response.entries.size());
       return seastar::make_ready_future<ceph::bufferlist>(std::move(out));
   });
 }
@@ -838,7 +908,7 @@ static PG::interruptible_future<> do_pgnls(
   }
   const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
   const auto pg_end = \
-    pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
+    pg.get_pgid().pgid.get_hobj_end(pg.get_pgpool().info.get_pg_num());
   return do_pgnls_common(pg_start,
                          pg_end,
                          pg.get_backend(),
@@ -882,7 +952,7 @@ static PG::interruptible_future<> do_pgnls_filtered(
   return seastar::do_with(std::move(filter),
     [&, lower_bound=std::move(lower_bound)](auto&& filter) {
       const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
-      const auto pg_end = pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
+      const auto pg_end = pg.get_pgid().pgid.get_hobj_end(pg.get_pgpool().info.get_pg_num());
       return do_pgnls_common(pg_start,
                              pg_end,
                              pg.get_backend(),
@@ -967,7 +1037,7 @@ static PG::interruptible_future<> do_pgls(
   }
   const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
   const auto pg_end =
-    pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
+    pg.get_pgid().pgid.get_hobj_end(pg.get_pgpool().info.get_pg_num());
   return do_pgls_common(pg_start,
 			pg_end,
 			pg.get_backend(),
@@ -1011,7 +1081,7 @@ static PG::interruptible_future<> do_pgls_filtered(
   return seastar::do_with(std::move(filter),
     [&, lower_bound=std::move(lower_bound)](auto&& filter) {
       const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
-      const auto pg_end = pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
+      const auto pg_end = pg.get_pgid().pgid.get_hobj_end(pg.get_pgpool().info.get_pg_num());
       return do_pgls_common(pg_start,
                             pg_end,
                             pg.get_backend(),

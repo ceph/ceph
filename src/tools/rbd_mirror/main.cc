@@ -117,5 +117,5 @@ int main(int argc, const char **argv)
   delete g_journal_perf_counters;
   delete g_snapshot_perf_counters;
 
-  return r < 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+  return r < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }

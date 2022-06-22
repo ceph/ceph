@@ -103,9 +103,10 @@ vstart_runner.py can take the following options -
           to ``/etc/fuse.conf``.
 
 .. note:: If using the kernel client, the user must have the ability to run
-          commands with passwordless sudo access. A failure on the kernel
-          client may crash the host, so it's recommended to use this
-          functionality within a virtual machine.
+          commands with passwordless sudo access.
+
+.. note:: A failure on the kernel client may crash the host, so it's
+          recommended to use this functionality within a virtual machine.
 
 Internal working of vstart_runner.py -
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -131,6 +132,17 @@ vstart_runner.py primarily does three things -
     ``LocalCephManager`` provides methods to run Ceph cluster commands with
     and without admin socket and ``LocalCephCluster`` provides methods to set
     or clear ``ceph.conf``.
+
+.. note:: vstart_runner.py deletes "adjust-ulimits" and "ceph-coverage" from
+          the command arguments unconditionally since they are not applicable
+          when tests are run on a developer's machine.
+
+.. note:: "omit_sudo" is re-set to False unconditionally in cases of commands
+          "passwd" and "chown".
+
+.. note:: The presence of binary file named after the first argument is
+          checked in ``<ceph-repo-root>/build/bin/``. If present, the first
+          argument is replaced with the path to binary file.
 
 Running Workunits Using vstart_enviroment.sh
 --------------------------------------------

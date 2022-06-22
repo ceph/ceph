@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/file.h>
+#include <sys/mman.h>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/lockfree/queue.hpp>
@@ -1078,7 +1079,17 @@ struct ExplicitHugePagePool {
         nullptr,
         buffer_size,
         PROT_READ | PROT_WRITE,
+#if defined(__FreeBSD__)
+        // FreeBSD doesn't have MAP_HUGETLB nor MAP_POPULATE but it has
+        // a different, more automated / implicit mechanisms. However,
+        // we want to mimic the Linux behavior as closely as possible
+        // also in the matter of error handling which is the reason
+        // behind MAP_ALIGNED_SUPER.
+        // See: https://lists.freebsd.org/pipermail/freebsd-questions/2014-August/260578.html
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_PREFAULT_READ | MAP_ALIGNED_SUPER,
+#else
         MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_HUGETLB,
+#endif // __FreeBSD__
         -1,
         0);
       if (mmaped_region == MAP_FAILED) {

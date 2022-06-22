@@ -47,7 +47,8 @@ protected:
       const int64_t pool_id,
       int type,
       bool force,
-      std::ostream *ss) const;
+      std::ostream *ss,
+      bool allow_overlay = false) const;
 
   virtual std::string const &get_prefix() const {return prefix;}
 

@@ -100,7 +100,36 @@ class CachedExtent : public boost::intrusive_ref_counter<
   // Points at current version while in state MUTATION_PENDING
   CachedExtentRef prior_instance;
 
+  // time of the last modification
+  seastar::lowres_system_clock::time_point last_modified;
+
+  // time of the last rewrite
+  seastar::lowres_system_clock::time_point last_rewritten;
 public:
+
+  void set_last_modified(seastar::lowres_system_clock::duration d) {
+    last_modified = seastar::lowres_system_clock::time_point(d);
+  }
+
+  void set_last_modified(seastar::lowres_system_clock::time_point t) {
+    last_modified = t;
+  }
+
+  seastar::lowres_system_clock::time_point get_last_modified() const {
+    return last_modified;
+  }
+
+  void set_last_rewritten(seastar::lowres_system_clock::duration d) {
+    last_rewritten = seastar::lowres_system_clock::time_point(d);
+  }
+
+  void set_last_rewritten(seastar::lowres_system_clock::time_point t) {
+    last_rewritten = t;
+  }
+
+  seastar::lowres_system_clock::time_point get_last_rewritten() const {
+    return last_rewritten;
+  }
   /**
    *  duplicate_for_write
    *
@@ -163,6 +192,10 @@ public:
     return false;
   }
 
+  virtual bool may_conflict() const {
+    return true;
+  }
+
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
@@ -170,6 +203,8 @@ public:
 	<< ", type=" << get_type()
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
+	<< ", last_modified=" << last_modified.time_since_epoch()
+	<< ", last_rewritten=" << last_rewritten.time_since_epoch()
 	<< ", paddr=" << get_paddr()
 	<< ", length=" << get_length()
 	<< ", state=" << state
@@ -280,6 +315,10 @@ public:
   /// Returns true if extent is a plcaeholder
   bool is_placeholder() const {
     return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
+  }
+
+  bool is_pending_io() const {
+    return !!io_wait_promise;
   }
 
   /// Return journal location of oldest relevant delta, only valid while DIRTY
@@ -490,6 +529,8 @@ protected:
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
 
+bool is_backref_mapped_extent_node(const CachedExtentRef &extent);
+
 /// Compare extents by paddr
 struct paddr_cmp {
   bool operator()(paddr_t lhs, const CachedExtent &rhs) const {
@@ -635,25 +676,41 @@ private:
 };
 
 class LogicalCachedExtent;
-class LBAPin;
-using LBAPinRef = std::unique_ptr<LBAPin>;
-class LBAPin {
+
+template <typename key_t, typename>
+class PhysicalNodePin;
+
+template <typename key_t, typename val_t>
+using PhysicalNodePinRef = std::unique_ptr<PhysicalNodePin<key_t, val_t>>;
+
+template <typename key_t, typename val_t>
+class PhysicalNodePin {
 public:
   virtual void link_extent(LogicalCachedExtent *ref) = 0;
-  virtual void take_pin(LBAPin &pin) = 0;
+  virtual void take_pin(PhysicalNodePin<key_t, val_t> &pin) = 0;
   virtual extent_len_t get_length() const = 0;
-  virtual paddr_t get_paddr() const = 0;
-  virtual laddr_t get_laddr() const = 0;
-  virtual LBAPinRef duplicate() const = 0;
+  virtual extent_types_t get_type() const = 0;
+  virtual val_t get_val() const = 0;
+  virtual key_t get_key() const = 0;
+  virtual PhysicalNodePinRef<key_t, val_t> duplicate() const = 0;
   virtual bool has_been_invalidated() const = 0;
 
-  virtual ~LBAPin() {}
+  virtual ~PhysicalNodePin() {}
 };
+
+using LBAPin = PhysicalNodePin<laddr_t, paddr_t>;
+using LBAPinRef = PhysicalNodePinRef<laddr_t, paddr_t>;
+
 std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
 
 using lba_pin_list_t = std::list<LBAPinRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
+
+using BackrefPin = PhysicalNodePin<paddr_t, laddr_t>;
+using BackrefPinRef = PhysicalNodePinRef<paddr_t, laddr_t>;
+
+using backref_pin_list_t = std::list<BackrefPinRef>;
 
 /**
  * RetiredExtentPlaceholder
@@ -725,7 +782,7 @@ public:
   void set_pin(LBAPinRef &&npin) {
     assert(!pin);
     pin = std::move(npin);
-    laddr = pin->get_laddr();
+    laddr = pin->get_key();
     pin->link_extent(this);
   }
 

@@ -21,7 +21,6 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -31,6 +30,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Daemon } from '~/app/shared/models/daemon.interface';
 import { Permissions } from '~/app/shared/models/permissions';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -47,6 +47,9 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   @ViewChild('listTpl', { static: true })
   listTpl: TemplateRef<any>;
 
+  @ViewChild('cpuTpl', { static: true })
+  cpuTpl: TemplateRef<any>;
+
   @ViewChildren('daemonsTable')
   daemonsTableTpls: QueryList<TemplateRef<TableComponent>>;
 
@@ -57,7 +60,16 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   hostname?: string;
 
   @Input()
+  hiddenColumns: string[] = [];
+
+  @Input()
   flag?: string;
+
+  total = 100;
+
+  warningThreshold = 0.8;
+
+  errorThreshold = 0.9;
 
   icons = Icons;
 
@@ -81,6 +93,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     private cephServiceService: CephServiceService,
     private orchService: OrchestratorService,
     private relativeDatePipe: RelativeDatePipe,
+    private dimlessBinary: DimlessBinaryPipe,
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private daemonService: DaemonService,
@@ -127,42 +140,10 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         filterable: true
       },
       {
-        name: $localize`Daemon type`,
-        prop: 'daemon_type',
+        name: $localize`Daemon name`,
+        prop: 'daemon_name',
         flexGrow: 1,
         filterable: true
-      },
-      {
-        name: $localize`Daemon ID`,
-        prop: 'daemon_id',
-        flexGrow: 1,
-        filterable: true
-      },
-      {
-        name: $localize`Container ID`,
-        prop: 'container_id',
-        flexGrow: 2,
-        filterable: true,
-        cellTransformation: CellTemplate.truncate,
-        customTemplateConfig: {
-          length: 12
-        }
-      },
-      {
-        name: $localize`Container Image name`,
-        prop: 'container_image_name',
-        flexGrow: 3,
-        filterable: true
-      },
-      {
-        name: $localize`Container Image ID`,
-        prop: 'container_image_id',
-        flexGrow: 2,
-        filterable: true,
-        cellTransformation: CellTemplate.truncate,
-        customTemplateConfig: {
-          length: 12
-        }
       },
       {
         name: $localize`Version`,
@@ -184,9 +165,22 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         flexGrow: 1
       },
       {
+        name: $localize`CPU Usage`,
+        prop: 'cpu_percentage',
+        flexGrow: 1,
+        cellTemplate: this.cpuTpl
+      },
+      {
+        name: $localize`Memory Usage`,
+        prop: 'memory_usage',
+        flexGrow: 1,
+        pipe: this.dimlessBinary,
+        cellClass: 'text-right'
+      },
+      {
         name: $localize`Daemon Events`,
         prop: 'events',
-        flexGrow: 5,
+        flexGrow: 2,
         cellTemplate: this.listTpl
       }
     ];
@@ -215,6 +209,10 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     this.orchService.status().subscribe((data: { available: boolean }) => {
       this.hasOrchestrator = data.available;
       this.showDocPanel = !data.available;
+    });
+
+    this.columns = this.columns.filter((col: any) => {
+      return !this.hiddenColumns.includes(col.prop);
     });
   }
 

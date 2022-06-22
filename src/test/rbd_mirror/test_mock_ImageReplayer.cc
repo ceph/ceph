@@ -880,6 +880,7 @@ TEST_F(TestMockImageReplayer, StopJoinInterruptedReplayer) {
   const double DELAY = 10;
   EXPECT_CALL(mock_replayer, shut_down(_))
     .WillOnce(Invoke([this, DELAY](Context* ctx) {
+		std::lock_guard l(m_threads->timer_lock);
 		m_threads->timer->add_event_after(DELAY, ctx);
               }));
   EXPECT_CALL(mock_replayer, destroy());
@@ -927,6 +928,7 @@ TEST_F(TestMockImageReplayer, StopJoinRequestedStop) {
   const double DELAY = 10;
   EXPECT_CALL(mock_replayer, shut_down(_))
     .WillOnce(Invoke([this, DELAY](Context* ctx) {
+		std::lock_guard l(m_threads->timer_lock);
 		m_threads->timer->add_event_after(DELAY, ctx);
               }));
   EXPECT_CALL(mock_replayer, destroy());

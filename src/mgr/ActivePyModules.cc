@@ -97,6 +97,7 @@ void ActivePyModules::dump_server(const std::string &hostname,
     f->open_object_section("service");
     f->dump_string("type", key.type);
     f->dump_string("id", key.name);
+    f->dump_string("ceph_version", ceph_version);
     if (!id.empty()) {
       f->dump_string("name", id);
     }
@@ -1426,6 +1427,11 @@ void ActivePyModules::remove_mds_perf_query(MetricQueryID query_id)
   }
 }
 
+void ActivePyModules::reregister_mds_perf_queries()
+{
+  server.reregister_mds_perf_queries();
+}
+
 PyObject *ActivePyModules::get_mds_perf_counters(MetricQueryID query_id)
 {
   MDSPerfCollector collector(query_id);
@@ -1468,6 +1474,11 @@ PyObject *ActivePyModules::get_mds_perf_counters(MetricQueryID query_id)
     f.close_section(); // i
   }
   f.close_section(); // counters
+
+  f.open_array_section("last_updated");
+  f.dump_float("last_updated_mono", collector.last_updated_mono);
+  f.close_section(); // last_updated
+
   f.close_section(); // metrics
 
   return f.get();

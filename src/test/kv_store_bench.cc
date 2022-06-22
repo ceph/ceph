@@ -19,6 +19,14 @@
 #include <sstream>
 #include <cmath>
 
+using std::stringstream;
+using std::cout;
+using std::string;
+using std::pair;
+using std::make_pair;
+using std::map;
+using std::cerr;
+
 KvStoreBench::KvStoreBench()
 : entries(30),
   ops(100),

@@ -7,7 +7,7 @@
                i18n>Refresh</label>
         <select id="refreshInterval"
                 name="refreshInterval"
-                class="form-control custom-select"
+                class="form-control"
                 (change)="changeRefreshInterval($event.target.value)"
                 [(ngModel)]="selectedInterval">
           <option *ngFor="let key of intervalKeys"

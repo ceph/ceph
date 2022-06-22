@@ -13,6 +13,7 @@ add_executable(crimson-osd
   object_context.cc
   ops_executer.cc
   osd_operation.cc
+  osd_operation_external_tracking.cc
   osd_operations/client_request.cc
   osd_operations/client_request_common.cc
   osd_operations/compound_peering_request.cc
@@ -28,6 +29,7 @@ add_executable(crimson-osd
   scheduler/scheduler.cc
   scheduler/mclock_scheduler.cc
   osdmap_gate.cc
+  pg_activation_blocker.cc
   pg_map.cc
   pg_interval_interrupt_condition.cc
   objclass.cc

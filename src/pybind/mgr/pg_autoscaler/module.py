@@ -688,6 +688,8 @@ class PgAutoscaler(MgrModule):
         if osdmap.get_require_osd_release() < 'nautilus':
             return
         pools = osdmap.get_pools_by_name()
+        self.log.debug("pool: {0}".format(json.dumps(pools, indent=4,
+                                sort_keys=True)))
         ps, root_map = self._get_pool_status(osdmap, pools)
 
         # Anyone in 'warn', set the health message for them and then

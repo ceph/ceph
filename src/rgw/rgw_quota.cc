@@ -273,7 +273,12 @@ int BucketAsyncRefreshHandler::init_fetch()
 
   ldpp_dout(&dp, 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
-  r = rbucket->read_stats_async(&dp, RGW_NO_SHARD, this);
+  const auto& index = rbucket->get_info().get_current_index();
+  if (is_layout_indexless(index)) {
+    return 0;
+  }
+
+  r = rbucket->read_stats_async(&dp, index, RGW_NO_SHARD, this);
   if (r < 0) {
     ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
@@ -341,18 +346,24 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
     return r;
   }
 
+  stats = RGWStorageStats();
+
+  const auto& index = bucket->get_info().get_current_index();
+  if (is_layout_indexless(index)) {
+    return 0;
+  }
+
   string bucket_ver;
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  r = bucket->read_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, bucket_stats);
+  r = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver,
+			 &master_ver, bucket_stats, nullptr);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not get bucket stats for bucket="
                            << _b.name << dendl;
     return r;
   }
-
-  stats = RGWStorageStats();
 
   for (const auto& pair : bucket_stats) {
     const RGWStorageStats& s = pair.second;
@@ -903,13 +914,12 @@ public:
 
   int check_quota(const DoutPrefixProvider *dpp,
                   const rgw_user& user,
-		  rgw_bucket& bucket,
-		  RGWQuotaInfo& user_quota,
-		  RGWQuotaInfo& bucket_quota,
-		  uint64_t num_objs,
-		  uint64_t size, optional_yield y) override {
+                  rgw_bucket& bucket,
+                  RGWQuota& quota,
+                  uint64_t num_objs,
+                  uint64_t size, optional_yield y) override {
 
-    if (!bucket_quota.enabled && !user_quota.enabled) {
+    if (!quota.bucket_quota.enabled && !quota.user_quota.enabled) {
       return 0;
     }
 
@@ -921,25 +931,25 @@ public:
      */
 
     const DoutPrefix dp(store->ctx(), dout_subsys, "rgw quota handler: ");
-    if (bucket_quota.enabled) {
+    if (quota.bucket_quota.enabled) {
       RGWStorageStats bucket_stats;
       int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, y, &dp);
       if (ret < 0) {
         return ret;
       }
-      ret = check_quota(dpp, "bucket", bucket_quota, bucket_stats, num_objs, size);
+      ret = check_quota(dpp, "bucket", quota.bucket_quota, bucket_stats, num_objs, size);
       if (ret < 0) {
         return ret;
       }
     }
 
-    if (user_quota.enabled) {
+    if (quota.user_quota.enabled) {
       RGWStorageStats user_stats;
       int ret = user_stats_cache.get_stats(user, bucket, user_stats, y, &dp);
       if (ret < 0) {
         return ret;
       }
-      ret = check_quota(dpp, "user", user_quota, user_stats, num_objs, size);
+      ret = check_quota(dpp, "user", quota.user_quota, user_stats, num_objs, size);
       if (ret < 0) {
         return ret;
       }
@@ -952,15 +962,23 @@ public:
     user_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
   }
 
-  void check_bucket_shards(const DoutPrefixProvider *dpp, uint64_t max_objs_per_shard, uint64_t num_shards,
-			   uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) override
+  void check_bucket_shards(const DoutPrefixProvider *dpp, uint64_t max_objs_per_shard,
+                           uint64_t num_shards, uint64_t num_objs, bool is_multisite,
+                           bool& need_resharding, uint32_t *suggested_num_shards) override
   {
     if (num_objs > num_shards * max_objs_per_shard) {
       ldpp_dout(dpp, 0) << __func__ << ": resharding needed: stats.num_objects=" << num_objs
              << " shard max_objects=" <<  max_objs_per_shard * num_shards << dendl;
       need_resharding = true;
       if (suggested_num_shards) {
-        *suggested_num_shards = num_objs * 2 / max_objs_per_shard;
+        uint32_t obj_multiplier = 2;
+        if (is_multisite) {
+          // if we're maintaining bilogs for multisite, reshards are significantly
+          // more expensive. scale up the shard count much faster to minimize the
+          // number of reshard events during a write workload
+          obj_multiplier = 8;
+        }
+        *suggested_num_shards = num_objs * obj_multiplier / max_objs_per_shard;
       }
     } else {
       need_resharding = false;

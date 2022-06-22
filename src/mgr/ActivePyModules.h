@@ -124,6 +124,7 @@ public:
       const MDSPerfMetricQuery &query,
       const std::optional<MDSPerfMetricLimit> &limit);
   void remove_mds_perf_query(MetricQueryID query_id);
+  void reregister_mds_perf_queries();
   PyObject *get_mds_perf_counters(MetricQueryID query_id);
 
   bool get_store(const std::string &module_name,

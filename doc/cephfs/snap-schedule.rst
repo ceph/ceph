@@ -49,10 +49,9 @@ The following time periods are recognized: `h(our), d(ay), w(eek), m(onth),
 y(ear)` and `n`. The latter is a special modifier where e.g. `10n` means keep
 the last 10 snapshots regardless of timing,
 
-All subcommands take optional `fs` and `subvol` arguments to specify paths in
+All subcommands take optional `fs` argument to specify paths in
 multi-fs setups and :doc:`/cephfs/fs-volumes` managed setups. If not
-passed `fs` defaults to the first file system listed in the fs_map, `subvolume`
-defaults to nothing.
+passed `fs` defaults to the first file system listed in the fs_map.
 When using :doc:`/cephfs/fs-volumes` the argument `fs` is equivalent to a
 `volume`.
 
@@ -66,15 +65,20 @@ When no subcommand is supplied a synopsis is printed::
 
   #> ceph fs snap-schedule
   no valid command found; 8 closest matches:
-  fs snap-schedule status [<path>] [<subvol>] [<fs>] [<format>]
-  fs snap-schedule list <path> [<subvol>] [--recursive] [<fs>] [<format>]
-  fs snap-schedule add <path> <snap_schedule> [<start>] [<fs>] [<subvol>]
-  fs snap-schedule remove <path> [<repeat>] [<start>] [<subvol>] [<fs>]
-  fs snap-schedule retention add <path> <retention_spec_or_period> [<retention_count>] [<fs>] [<subvol>]
-  fs snap-schedule retention remove <path> <retention_spec_or_period> [<retention_count>] [<fs>] [<subvol>]
-  fs snap-schedule activate <path> [<repeat>] [<start>] [<subvol>] [<fs>]
-  fs snap-schedule deactivate <path> [<repeat>] [<start>] [<subvol>] [<fs>]
+  fs snap-schedule status [<path>] [<fs>] [<format>]
+  fs snap-schedule list <path> [--recursive] [<fs>] [<format>]
+  fs snap-schedule add <path> <snap_schedule> [<start>] [<fs>]
+  fs snap-schedule remove <path> [<repeat>] [<start>] [<fs>]
+  fs snap-schedule retention add <path> <retention_spec_or_period> [<retention_count>] [<fs>]
+  fs snap-schedule retention remove <path> <retention_spec_or_period> [<retention_count>] [<fs>]
+  fs snap-schedule activate <path> [<repeat>] [<start>] [<fs>]
+  fs snap-schedule deactivate <path> [<repeat>] [<start>] [<fs>]
   Error EINVAL: invalid command
+
+Note:
+^^^^^
+A `subvolume` argument is no longer accepted by the commands.
+
 
 Inspect snapshot schedules
 --------------------------

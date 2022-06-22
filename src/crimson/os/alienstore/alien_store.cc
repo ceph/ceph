@@ -336,7 +336,7 @@ AlienStore::get_attr(CollectionRef ch,
       // after-free issue.
       auto c = static_cast<AlienCollection*>(ch.get());
       return store->getattr(c->collection, oid, name.c_str(), value);
-    }).then([oid, &value] (int r) -> get_attr_errorator::future<ceph::bufferlist> {
+    }).then([oid, &value](int r) -> get_attr_errorator::future<ceph::bufferlist> {
       if (r == -ENOENT) {
         return crimson::ct_error::enoent::make();
       } else if (r == -ENODATA) {
@@ -554,21 +554,21 @@ seastar::future<struct stat> AlienStore::stat(
 
 auto AlienStore::omap_get_header(CollectionRef ch,
                                  const ghobject_t& oid)
-  -> read_errorator::future<ceph::bufferlist>
+  -> get_attr_errorator::future<ceph::bufferlist>
 {
   assert(tp);
   return do_with_op_gate(ceph::bufferlist(), [=](auto& bl) {
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, &bl] {
       auto c = static_cast<AlienCollection*>(ch.get());
       return store->omap_get_header(c->collection, oid, &bl);
-    }).then([&bl] (int r) -> read_errorator::future<ceph::bufferlist> {
+    }).then([&bl](int r) -> get_attr_errorator::future<ceph::bufferlist> {
       if (r == -ENOENT) {
         return crimson::ct_error::enoent::make();
       } else if (r < 0) {
         logger().error("omap_get_header: {}", r);
-        return crimson::ct_error::input_output_error::make();
+        ceph_assert(0 == "impossible");
       } else {
-        return read_errorator::make_ready_future<ceph::bufferlist>(
+        return get_attr_errorator::make_ready_future<ceph::bufferlist>(
 	  std::move(bl));
       }
     });

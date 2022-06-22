@@ -421,7 +421,7 @@ struct StatCompletionData : BasicStatCompletionData {
 private:
   FRIEND_MAKE_REF(StatCompletionData);
   /// constructor
-  StatCompletionData<TimeType>(libradosstriper::RadosStriperImpl* striper,
+  StatCompletionData(libradosstriper::RadosStriperImpl* striper,
 		     const std::string& soid,
 		     librados::AioCompletionImpl *userCompletion,
 		     libradosstriper::MultiAioCompletionImpl *multiCompletion,

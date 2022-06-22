@@ -557,8 +557,8 @@ related to your issue. This may not be an easy task for someone unfamiliar
 with troubleshooting Ceph. For most situations, setting the following options
 on your monitors will be enough to pinpoint a potential source of the issue::
 
-      debug mon = 10
-      debug ms = 1
+      debug_mon = 10
+      debug_ms = 1
 
 If we find that these debug levels are not enough, there's a chance we may
 ask you to raise them or even define other debug subsystems to obtain infos

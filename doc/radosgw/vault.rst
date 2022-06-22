@@ -111,7 +111,7 @@ Token policies for the object gateway
 
 All Vault tokens have powers as specified by the polices attached
 to that token.  Multiple policies may be associated with one
-token.  You should only use the policy necessary for your
+token.  You should only use the policies necessary for your
 configuration.
 
 When using the kv secret engine with the object gateway::
@@ -156,6 +156,18 @@ transit secret engine, you might need the following policy::
     }
   EOF
 
+If you are using both sse-kms and sse-s3, then you should point
+each to separate containers.  You could either use separate
+vault instances, or you could use either separately mounted
+transit instances, or different branches under a common transit
+pointpoint.  If you are not using separate vault instances, you can
+Use these to point kms and sse-s3 to separate containers:
+``rgw_crypt_vault_prefix``
+and/or
+``rgw_crypt_sse_s3_vault_prefix``.
+When granting vault permissions to sse-kms bucket owners, you should
+not give them permission to muck around with sse-s3 keys;
+only ceph itself should be doing that.
 
 Token authentication
 --------------------

@@ -84,7 +84,7 @@ class RgwApiCredentialsTest(RgwTestCase):
         # Set the default credentials.
         self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
         self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
-        data = self._get('/api/rgw/status')
+        data = self._get('/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertIn('available', data)
         self.assertIn('message', data)
@@ -480,7 +480,7 @@ class RgwDaemonTest(RgwTestCase):
         self.assertTrue(data['rgw_metadata'])
 
     def test_status(self):
-        data = self._get('/api/rgw/status')
+        data = self._get('/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertIn('available', data)
         self.assertIn('message', data)
