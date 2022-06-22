@@ -11,13 +11,14 @@
 #include <vector>
 #include <list>
 #include <cstdint>
+#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
 class RGWDirectory {
   public:
     RGWDirectory() {}
-    virtual ~RGWDirectory() { cout << "RGW Directory is destroyed!"; }
+    virtual ~RGWDirectory() { ldout(cct, 5) << "RGW Directory is destroyed!" << dendl; }
     CephContext *cct;
 };
 
@@ -30,7 +31,7 @@ class RGWBlockDirectory: RGWDirectory {
     }
 	
     virtual ~RGWBlockDirectory() { 
-      cout << "RGWObject Directory is destroyed!";
+      ldout(cct, 5) << "RGWBlock Directory is destroyed!" << dendl;
       client.disconnect(true);
     }
     
