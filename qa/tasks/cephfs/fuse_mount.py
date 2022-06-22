@@ -23,9 +23,9 @@ class FuseMount(CephFSMount):
         super(FuseMount, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
-            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet,
+            client_config=client_config)
 
-        self.client_config = client_config
         self.fuse_daemon = None
         self._fuse_conn = None
         self.id = None
