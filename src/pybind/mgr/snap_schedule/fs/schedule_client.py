@@ -264,9 +264,9 @@ class SnapSchedClient(CephfsClient):
 
     def create_scheduled_snapshot(self, fs_name, path, retention, start, repeat):
         log.debug(f'Scheduled snapshot of {path} triggered')
-        try:
-            with self.get_schedule_db(fs_name) as conn_mgr:
-                db = conn_mgr.dbinfo.db
+        with self.get_schedule_db(fs_name) as conn_mgr:
+            db = conn_mgr.dbinfo.db
+            try:
                 try:
                     sched = Schedule.get_db_schedules(path,
                                                       db,
@@ -282,19 +282,22 @@ class SnapSchedClient(CephfsClient):
                     log.debug(f'created scheduled snapshot {snap_name}')
                     sched.update_last(time, db)
                 except cephfs.Error:
-                    self._log_exception('create_scheduled_snapshot')
+                    self._log_exception('create_scheduled_snapshot: '
+                                        'unexpected exception; '
+                                        f'deactivating schedule fs:"{fs_name}" '
+                                        f'path:"{path}" repeat:"{repeat}" '
+                                        f'retention:"{retention}"')
                     sched.set_inactive(db)
                 except Exception:
                     # catch all exceptions cause otherwise we'll never know since this
                     # is running in a thread
                     self._log_exception('create_scheduled_snapshot')
-        finally:
-            with self.get_schedule_db(fs_name) as conn_mgr:
-                db = conn_mgr.dbinfo.db
+            finally:
                 self.refresh_snap_timers(fs_name, path, db)
-            self.prune_snapshots(sched)
+                self.prune_snapshots(sched, db)
+                self.store_schedule_db(fs_name, db)
 
-    def prune_snapshots(self, sched):
+    def prune_snapshots(self, sched, db):
         try:
             log.debug('Pruning snapshots')
             ret = sched.retention
@@ -319,9 +322,7 @@ class SnapSchedClient(CephfsClient):
                     log.debug(f'rmdir on {dirname}')
                     fs_handle.rmdir(f'{path}/.snap/{dirname}')
                 if to_prune:
-                    with self.get_schedule_db(sched.fs) as conn_mgr:
-                        db = conn_mgr.dbinfo.db
-                        sched.update_pruned(time, db, len(to_prune))
+                    sched.update_pruned(time, db, len(to_prune))
         except Exception:
             self._log_exception('prune_snapshots')
 
@@ -360,6 +361,7 @@ class SnapSchedClient(CephfsClient):
         with self.get_schedule_db(fs) as conn_mgr:
             db = conn_mgr.dbinfo.db
             Schedule.rm_schedule(db, path, schedule, start)
+            self.store_schedule_db(fs, db)
 
     @updates_schedule_db
     def add_retention_spec(self,
@@ -373,6 +375,7 @@ class SnapSchedClient(CephfsClient):
         with self.get_schedule_db(fs) as conn_mgr:
             db = conn_mgr.dbinfo.db
             Schedule.add_retention(db, path, retention_spec)
+            self.store_schedule_db(fs, db)
 
     @updates_schedule_db
     def rm_retention_spec(self,
@@ -386,6 +389,7 @@ class SnapSchedClient(CephfsClient):
         with self.get_schedule_db(fs) as conn_mgr:
             db = conn_mgr.dbinfo.db
             Schedule.rm_retention(db, path, retention_spec)
+            self.store_schedule_db(fs, db)
 
     @updates_schedule_db
     def activate_snap_schedule(self,
@@ -400,6 +404,7 @@ class SnapSchedClient(CephfsClient):
                                                   start=start)
             for s in schedules:
                 s.set_active(db)
+            self.store_schedule_db(fs, db)
 
     @updates_schedule_db
     def deactivate_snap_schedule(self,
@@ -413,3 +418,4 @@ class SnapSchedClient(CephfsClient):
                                                   start=start)
             for s in schedules:
                 s.set_inactive(db)
+            self.store_schedule_db(fs, db)
