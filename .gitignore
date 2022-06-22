@@ -19,7 +19,6 @@
 *.rej
 *.rpm
 *.pyc
-vstart.sh
 ceph.spec
 cscope.*
 gmon.out
