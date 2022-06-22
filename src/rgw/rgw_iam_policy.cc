@@ -164,6 +164,7 @@ static const actpair actpairs[] =
 
 struct PolicyParser;
 
+static std::unordered_set<std::string> sid_set;
 const Keyword top[1]{"<Top>", TokenKind::pseudo, TokenID::Top, 0, false,
     false};
 const Keyword cond_key[1]{"<Condition Key>", TokenKind::cond_key,
@@ -311,7 +312,7 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
   }
 
   PolicyParser(CephContext* cct, const string& tenant, Policy& policy)
-    : cct(cct), tenant(tenant), policy(policy) {}
+    : cct(cct), tenant(tenant), policy(policy) {sid_set.clear();}
   PolicyParser(const PolicyParser& policy) = delete;
 
   bool StartObject() {
@@ -512,6 +513,11 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
     // Statement
 
   } else if (w->id == TokenID::Sid) {
+    std::string sid(s, l);
+    if (sid_set.find(sid) != sid_set.end()) {
+      return false;
+    }
+    sid_set.insert(sid);
     t->sid.emplace(s, l);
   } else if ((w->id == TokenID::Effect) && k &&
 	     k->kind == TokenKind::effect_key) {
