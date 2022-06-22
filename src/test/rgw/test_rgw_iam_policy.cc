@@ -919,34 +919,34 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.1");
 
-  // ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
-  // EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
-  // rgw_req_state.env.clear();
-  // rgw_build_iam_environment(&store, &rgw_req_state);
-  // ip = rgw_req_state.env.find("aws:SourceIp");
-  // EXPECT_EQ(ip, rgw_req_state.env.end());
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
+  EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
+  rgw_req_state.env.clear();
+  rgw_build_iam_environment(&store, &rgw_req_state);
+  ip = rgw_req_state.env.find("aws:SourceIp");
+  EXPECT_EQ(ip, rgw_req_state.env.end());
 
-  // rgw_env.set("SOME_VAR", "192.168.1.2");
-  // rgw_req_state.env.clear();
-  // rgw_build_iam_environment(&store, &rgw_req_state);
-  // ip = rgw_req_state.env.find("aws:SourceIp");
-  // ASSERT_NE(ip, rgw_req_state.env.end());
-  // EXPECT_EQ(ip->second, "192.168.1.2");
+  rgw_env.set("SOME_VAR", "192.168.1.2");
+  rgw_req_state.env.clear();
+  rgw_build_iam_environment(&store, &rgw_req_state);
+  ip = rgw_req_state.env.find("aws:SourceIp");
+  ASSERT_NE(ip, rgw_req_state.env.end());
+  EXPECT_EQ(ip->second, "192.168.1.2");
 
-  // ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
-  // rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
-  // rgw_req_state.env.clear();
-  // rgw_build_iam_environment(&store, &rgw_req_state);
-  // ip = rgw_req_state.env.find("aws:SourceIp");
-  // ASSERT_NE(ip, rgw_req_state.env.end());
-  // EXPECT_EQ(ip->second, "192.168.1.3");
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
+  rgw_req_state.env.clear();
+  rgw_build_iam_environment(&store, &rgw_req_state);
+  ip = rgw_req_state.env.find("aws:SourceIp");
+  ASSERT_NE(ip, rgw_req_state.env.end());
+  EXPECT_EQ(ip->second, "192.168.1.3");
 
-  // rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.4, 4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348");
-  // rgw_req_state.env.clear();
-  // rgw_build_iam_environment(&store, &rgw_req_state);
-  // ip = rgw_req_state.env.find("aws:SourceIp");
-  // ASSERT_NE(ip, rgw_req_state.env.end());
-  // EXPECT_EQ(ip->second, "192.168.1.4");
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.4, 4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348");
+  rgw_req_state.env.clear();
+  rgw_build_iam_environment(&store, &rgw_req_state);
+  ip = rgw_req_state.env.find("aws:SourceIp");
+  ASSERT_NE(ip, rgw_req_state.env.end());
+  EXPECT_EQ(ip->second, "192.168.1.4");
 }
 
 TEST_F(IPPolicyTest, ParseIPAddress) {
