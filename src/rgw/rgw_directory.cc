@@ -76,7 +76,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
     
     //creating a list of key's properties
     list.push_back(make_pair("key", key));
-    list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
+    //list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
     list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
     list.push_back(make_pair("obj_name", ptr->c_obj.obj_name));
     list.push_back(make_pair("hosts", ptr->hosts_list[0]));
@@ -136,19 +136,20 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
   
   if (existKey(key, &client)) {
     std::string hosts;
-    std::string size;
+    //std::string size;
     std::string bucket_name;
     std::string obj_name;
     std::vector<std::string> fields;
     
     fields.push_back("key");
     fields.push_back("hosts");
-    fields.push_back("size");
+    //fields.push_back("size");
     fields.push_back("bucket_name");
     fields.push_back("obj_name");
 
     try {
-      client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply &reply) {
+      //client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply &reply) {
+      client.hmget(key, fields, [&key, &hosts, &bucket_name, &obj_name, &key_exist](cpp_redis::reply &reply) {
         if (reply.is_array()) {
 	  auto arr = reply.as_array();
 	      
@@ -156,7 +157,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
 	    key_exist = 0;
 	    key = arr[0].as_string();
 	    hosts = arr[1].as_string();
-	    size = arr[2].as_string();
+	    //size = arr[2].as_string();
 	    bucket_name = arr[3].as_string();
 	    obj_name = arr[4].as_string();
 	  }
@@ -176,7 +177,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
         return -1;
       }
 
-      ptr->size_in_bytes = stoull(size);
+      //ptr->size_in_bytes = stoull(size);
       ptr->c_obj.bucket_name = bucket_name; 
       ptr->c_obj.obj_name = obj_name;
     }
