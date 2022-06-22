@@ -507,6 +507,86 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def set_subvolume_snapshot_metadata(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        snapname   = kwargs['snap_name']
+        groupname  = kwargs['group_name']
+        keyname    = kwargs['key_name']
+        value      = kwargs['value']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_METADATA_SET) as subvolume:
+                        if not snapname.encode('utf-8') in subvolume.list_snapshots():
+                            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+                        subvolume.set_snapshot_metadata(snapname, keyname, value)
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def get_subvolume_snapshot_metadata(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        snapname   = kwargs['snap_name']
+        groupname  = kwargs['group_name']
+        keyname    = kwargs['key_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_METADATA_GET) as subvolume:
+                        if not snapname.encode('utf-8') in subvolume.list_snapshots():
+                            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+                        value = subvolume.get_snapshot_metadata(snapname, keyname)
+                        ret = 0, value, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def list_subvolume_snapshot_metadata(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        snapname   = kwargs['snap_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_METADATA_LIST) as subvolume:
+                        if not snapname.encode('utf-8') in subvolume.list_snapshots():
+                            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+                        snap_metadata_dict = subvolume.list_snapshot_metadata(snapname)
+                        ret = 0, json.dumps(snap_metadata_dict, indent=4, sort_keys=True), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def remove_subvolume_snapshot_metadata(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        snapname   = kwargs['snap_name']
+        groupname  = kwargs['group_name']
+        keyname    = kwargs['key_name']
+        force      = kwargs['force']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_METADATA_REMOVE) as subvolume:
+                        if not snapname.encode('utf-8') in subvolume.list_snapshots():
+                            raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+                        subvolume.remove_snapshot_metadata(snapname, keyname)
+        except VolumeException as ve:
+            if not (ve.errno == -errno.ENOENT and force):
+                ret = self.volume_exception_to_retval(ve)
+        return ret
+
     def list_subvolume_snapshots(self, **kwargs):
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
