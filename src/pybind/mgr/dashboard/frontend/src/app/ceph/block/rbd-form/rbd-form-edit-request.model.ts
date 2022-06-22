@@ -8,6 +8,7 @@ export class RbdFormEditRequestModel {
 
   enable_mirror?: boolean;
   mirror_mode?: string;
+  primary?: boolean;
   schedule_interval: string;
   remove_scheduling? = false;
 }
