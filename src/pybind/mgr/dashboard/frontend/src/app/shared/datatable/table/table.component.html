@@ -311,3 +311,9 @@
      (click)="toggleExpandRow(row, isExpanded, $event)">
   </a>
 </ng-template>
+
+<ng-template #timeAgoTpl
+             let-value="value">
+  <span data-toggle="tooltip"
+        [title]="value | cdDate">{{ value | relativeDate }}</span>
+</ng-template>
