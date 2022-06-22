@@ -42,7 +42,7 @@ class FuseMount(CephFSMount):
         self._mount_cmd_logger = log.getChild('ceph-fuse.{id}'.format(id=self.client_id))
         self._mount_cmd_stdin = run.PIPE
 
-    def mount(self, mntopts=[], check_status=True, **kwargs):
+    def mount(self, mntopts=None, check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
@@ -120,7 +120,7 @@ class FuseMount(CephFSMount):
         if self.cephfs_name:
             mount_cmd += ["--client_fs=" + self.cephfs_name]
         if mntopts:
-            mount_cmd += mntopts
+            mount_cmd.extend(('-o', ','.join(mntopts)))
 
         return mount_cmd
 

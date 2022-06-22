@@ -43,7 +43,7 @@ class KernelMount(CephFSMount):
         self._mount_bin = ['adjust-ulimits', 'ceph-coverage', self.test_dir +\
                            '/archive/coverage', '/bin/mount', '-t', 'ceph']
 
-    def mount(self, mntopts=[], check_status=True, **kwargs):
+    def mount(self, mntopts=None, check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
