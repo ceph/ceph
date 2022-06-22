@@ -161,7 +161,9 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   bootstrap was originally run), and the ``client.admin`` key is set to be distributed
   to that host via the ``ceph orch client-keyring ...`` function.  Adding this label
   to additional hosts will normally cause cephadm to deploy config and keyring files
-  in ``/etc/ceph``.
+  in ``/etc/ceph``. Starting from versions 16.2.10 (Pacific) and 17.2.1 (Quincy) in
+  addition to the default location ``/etc/ceph/`` cephadm also stores config and keyring
+  files in the ``/var/lib/ceph/<fsid>/config`` directory.
 
 Maintenance Mode
 ================
