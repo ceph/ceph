@@ -65,6 +65,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolumegroup create '
                    'name=vol_name,type=CephString '
                    f'name=group_name,type=CephString,goodchars={goodchars} '
+                   'name=size,type=CephInt,req=false '
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
@@ -79,6 +80,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=group_name,type=CephString '
                    'name=force,type=CephBool,req=false ',
             'desc': "Delete a CephFS subvolume group in a volume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup info '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString ',
+            'desc': "Get the metadata of a CephFS subvolume group in a volume, ",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolumegroup resize '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=new_size,type=CephString,req=true '
+                   'name=no_shrink,type=CephBool,req=false ',
+            'desc': "Resize a CephFS subvolume group",
             'perm': 'rw'
         },
         {
@@ -503,7 +520,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
         return self.vc.create_subvolume_group(
-            vol_name=cmd['vol_name'], group_name=cmd['group_name'],
+            vol_name=cmd['vol_name'], group_name=cmd['group_name'], size=cmd.get('size', None),
             pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'),
             uid=cmd.get('uid', None), gid=cmd.get('gid', None))
 
@@ -516,6 +533,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                               group_name=cmd['group_name'],
                                               force=cmd.get('force', False))
 
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_info(self, inbuf, cmd):
+        return self.vc.subvolumegroup_info(vol_name=cmd['vol_name'],
+                                           group_name=cmd['group_name'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_resize(self, inbuf, cmd):
+        return self.vc.resize_subvolume_group(vol_name=cmd['vol_name'],
+                                              group_name=cmd['group_name'],
+                                              new_size=cmd['new_size'],
+                                              no_shrink=cmd.get('no_shrink', False))
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])

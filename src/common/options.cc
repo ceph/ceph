@@ -9205,6 +9205,12 @@ std::vector<Option> get_mds_client_options() {
     .set_description("Size of thread pool for ASIO completions")
     .add_tag("client"),
 
+    Option("client_quota", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_default(true)
+    .set_description("Enable quota enforcement")
+    .set_long_description("Enable quota_bytes and quota_files enforcement for the client."),
+
     Option("client_shutdown_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_RUNTIME)
     .set_default(30)
