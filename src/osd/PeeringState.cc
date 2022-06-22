@@ -4680,6 +4680,7 @@ boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
       context< PeeringMachine >().get_cur_transaction());
   }
   ps->remove_down_peer_info(advmap.osdmap);
+  ps->past_intervals.adjust_start_backwards(ps->info.history.last_epoch_clean, ps->dpp);
   ps->check_past_interval_bounds();
   return discard_event();
 }
@@ -6688,6 +6689,7 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
 
 
   DECLARE_LOCALS;
+  ps->past_intervals.adjust_start_backwards(ps->info.history.last_epoch_clean, ps->dpp);
   ps->check_past_interval_bounds();
   ps->log_weirdness();
   PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
