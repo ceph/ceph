@@ -283,8 +283,8 @@ int process_request(rgw::sal::Store* const store,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  struct req_state rstate(g_ceph_context, &rgw_env, req->id);
-  struct req_state *s = &rstate;
+  req_state rstate(g_ceph_context, &rgw_env, req->id);
+  req_state *s = &rstate;
 
   s->ratelimit_data = ratelimit;
   std::unique_ptr<rgw::sal::User> u = store->get_user(rgw_user());
