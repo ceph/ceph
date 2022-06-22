@@ -13,12 +13,27 @@ This is the second stable release of Ceph Quincy.
 Notable Changes
 ---------------
 * The "BlueStore zero block detection" feature (first introduced to Quincy in
-https://github.com/ceph/ceph/pull/43337) has been turned off by default with a
-new global configuration called `bluestore_zero_block_detection`. This feature,
-intended for large-scale synthetic testing, does not interact well with some RBD
-and CephFS features. Any side effects experienced in previous Quincy versions
-would no longer occur, provided that the configuration remains set to false.
-Relevant tracker: https://tracker.ceph.com/issues/55521
+  https://github.com/ceph/ceph/pull/43337) has been turned off by default with a
+  new global configuration called `bluestore_zero_block_detection`. This feature,
+  intended for large-scale synthetic testing, does not interact well with some RBD
+  and CephFS features. Any side effects experienced in previous Quincy versions
+  would no longer occur, provided that the configuration remains set to false.
+  Relevant tracker: https://tracker.ceph.com/issues/55521
+
+* telemetry: Added new Rook metrics to the 'basic' channel to report Rook's
+  version, Kubernetes version, node metrics, etc.
+  See a sample report with `ceph telemetry preview`.
+  Opt-in with `ceph telemetry on`.
+
+  For more details, see:
+
+  https://docs.ceph.com/en/latest/mgr/telemetry/
+
+* Add offline dup op trimming ability in the ceph-objectstore-tool.
+  Relevant tracker: https://tracker.ceph.com/issues/53729
+
+* Fixes a bug with cluster logs not being populated after log rotation.
+  Relevant tracker: https://tracker.ceph.com/issues/55383
 
 Changelog
 ---------
