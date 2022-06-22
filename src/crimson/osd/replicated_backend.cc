@@ -53,7 +53,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
     throw crimson::common::actingset_changed(peering->is_primary);
   }
 
-  const ceph_tid_t tid = next_txn_id++;
+  const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
     pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
   bufferlist encoded_txn;
