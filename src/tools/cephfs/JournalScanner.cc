@@ -342,7 +342,7 @@ int JournalScanner::scan_events()
   dout(4) << "Scanned objects, " << objects_missing.size() << " missing, " << objects_valid.size() << " valid" << dendl;
   dout(4) << "Events scanned, " << ranges_invalid.size() << " gaps" << dendl;
   dout(4) << "Found " << events_valid.size() << " valid events" << dendl;
-  dout(4) << "Selected " << events.size() << " events events for processing" << dendl;
+  dout(4) << "Selected " << events.size() << " events for processing" << dendl;
 
   return 0;
 }
