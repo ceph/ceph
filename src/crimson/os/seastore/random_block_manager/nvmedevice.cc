@@ -7,6 +7,7 @@
 #include <fcntl.h>
 
 #include "crimson/common/log.h"
+#include "crimson/common/errorator-loop.h"
 
 #include "include/buffer.h"
 #include "nvmedevice.h"
@@ -132,7 +133,53 @@ read_ertr::future<> PosixNVMeDevice::read(
     });
 }
 
-seastar::future<> PosixNVMeDevice::close() {
+write_ertr::future<> PosixNVMeDevice::writev(
+  uint64_t offset,
+  ceph::bufferlist bl,
+  uint16_t stream) {
+  logger().debug(
+    "block: write offset {} len {}",
+    offset,
+    bl.length());
+
+  uint16_t supported_stream = stream;
+  if (stream >= stream_id_count) {
+    supported_stream = WRITE_LIFE_NOT_SET;
+  }
+  bl.rebuild_aligned(block_size);
+
+  return seastar::do_with(
+    bl.prepare_iovs(),
+    std::move(bl),
+    [this, supported_stream, offset](auto& iovs, auto& bl)
+  {
+    return write_ertr::parallel_for_each(
+      iovs,
+      [this, supported_stream, offset](auto& p) mutable
+    {
+      auto off = offset + p.offset;
+      auto len = p.length;
+      auto& iov = p.iov;
+      return io_device[supported_stream].dma_write(off, std::move(iov)
+      ).handle_exception(
+        [this, off, len](auto e) -> write_ertr::future<size_t>
+      {
+        logger().error("D{} poffset={}~{} dma_write got error -- {}",
+              get_device_id(), off, len, e);
+        return crimson::ct_error::input_output_error::make();
+      }).then([this, off, len](size_t written) -> write_ertr::future<> {
+        if (written != len) {
+          logger().error("D{} poffset={}~{} dma_write len={} inconsistent",
+                get_device_id(), off, len, written);
+          return crimson::ct_error::input_output_error::make();
+        }
+        return write_ertr::now();
+      });
+    });
+  });
+}
+
+Device::close_ertr::future<> PosixNVMeDevice::close() {
   logger().debug(" close ");
   return device.close().then([this]() {
     return seastar::do_for_each(io_device, [](auto target_device) {
@@ -254,8 +301,23 @@ read_ertr::future<> TestMemory::read(
   return read_ertr::now();
 }
 
-seastar::future<> TestMemory::close() {
+Device::close_ertr::future<> TestMemory::close() {
   logger().debug(" close ");
-  return seastar::now();
+  return close_ertr::now();
 }
+
+write_ertr::future<> TestMemory::writev(
+  uint64_t offset,
+  ceph::bufferlist bl,
+  uint16_t stream) {
+  ceph_assert(buf);
+  logger().debug(
+    "TestMemory: write offset {} len {}",
+    offset,
+    bl.length());
+
+  bl.begin().copy(bl.length(), buf + offset);
+  return write_ertr::now();
+}
+
 }

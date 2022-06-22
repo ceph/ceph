@@ -27,24 +27,6 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
              << ")";
 }
 
-std::ostream &LBAInternalNode::print_detail(std::ostream &out) const
-{
-  return out << ", size=" << get_size()
-	     << ", meta=" << get_meta();
-}
-
-void LBAInternalNode::resolve_relative_addrs(paddr_t base)
-{
-  LOG_PREFIX(LBAInternalNode::resolve_relative_addrs);
-  for (auto i: *this) {
-    if (i->get_val().is_relative()) {
-      auto updated = base.add_relative(i->get_val());
-      TRACE("{} -> {}", i->get_val(), updated);
-      i->set_val(updated);
-    }
-  }
-}
-
 std::ostream &LBALeafNode::print_detail(std::ostream &out) const
 {
   return out << ", size=" << get_size()

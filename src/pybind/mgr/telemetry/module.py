@@ -28,6 +28,7 @@ ALL_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
 LICENSE = 'sharing-1-0'
 LICENSE_NAME = 'Community Data License Agreement - Sharing - Version 1.0'
 LICENSE_URL = 'https://cdla.io/sharing-1-0/'
+NO_SALT_CNT = 0
 
 # Latest revision of the telemetry report.  Bump this each time we make
 # *any* change.
@@ -67,6 +68,7 @@ class Collection(str, enum.Enum):
     basic_mds_metadata = 'basic_mds_metadata'
     basic_pool_usage = 'basic_pool_usage'
     basic_usage_by_class = 'basic_usage_by_class'
+    basic_rook_v01 = 'basic_rook_v01'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -116,7 +118,42 @@ MODULE_COLLECTION : List[Dict] = [
         "description": "Default device class usage statistics",
         "channel": "basic",
         "nag": False
-    }
+    },
+    {
+        "name": Collection.basic_rook_v01,
+        "description": "Basic Rook deployment data",
+        "channel": "basic",
+        "nag": True
+    },
+]
+
+ROOK_KEYS_BY_COLLECTION : List[Tuple[str, Collection]] = [
+        # Note: a key cannot be both a node and a leaf, e.g.
+        # "rook/a/b"
+        # "rook/a/b/c"
+        ("rook/version", Collection.basic_rook_v01),
+        ("rook/kubernetes/version", Collection.basic_rook_v01),
+        ("rook/csi/version", Collection.basic_rook_v01),
+        ("rook/node/count/kubernetes-total", Collection.basic_rook_v01),
+        ("rook/node/count/with-ceph-daemons", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-rbd-plugin", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-cephfs-plugin", Collection.basic_rook_v01),
+        ("rook/node/count/with-csi-nfs-plugin", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/total", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/rbd", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/cephfs", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/nfs", Collection.basic_rook_v01),
+        ("rook/usage/storage-class/count/bucket", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/total", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/portable", Collection.basic_rook_v01),
+        ("rook/cluster/storage/device-set/count/non-portable", Collection.basic_rook_v01),
+        ("rook/cluster/mon/count", Collection.basic_rook_v01),
+        ("rook/cluster/mon/allow-multiple-per-node", Collection.basic_rook_v01),
+        ("rook/cluster/mon/max-id", Collection.basic_rook_v01),
+        ("rook/cluster/mon/pvc/enabled", Collection.basic_rook_v01),
+        ("rook/cluster/mon/stretch/enabled", Collection.basic_rook_v01),
+        ("rook/cluster/network/provider", Collection.basic_rook_v01),
+        ("rook/cluster/external-mode", Collection.basic_rook_v01),
 ]
 
 class Module(MgrModule):
@@ -407,6 +444,28 @@ class Module(MgrModule):
             'active_changed': sorted(list(active)),
         }
 
+    def anonymize_entity_name(self, entity_name:str) -> str:
+        if '.' not in entity_name:
+            self.log.debug(f"Cannot split entity name ({entity_name}), no '.' is found")
+            return entity_name
+
+        (etype, eid) = entity_name.split('.', 1)
+        m = hashlib.sha1()
+        salt = ''
+        if self.salt is not None:
+            salt = self.salt
+        # avoid asserting that salt exists
+        if not self.salt:
+            # do not set self.salt to a temp value
+            salt = f"no_salt_found_{NO_SALT_CNT}"
+            NO_SALT_CNT += 1
+            self.log.debug(f"No salt found, created a temp one: {salt}")
+        m.update(salt.encode('utf-8'))
+        m.update(eid.encode('utf-8'))
+        m.update(salt.encode('utf-8'))
+
+        return  etype + '.' + m.hexdigest()
+
     def get_heap_stats(self) -> Dict[str, dict]:
         # Initialize result dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(int))
@@ -691,17 +750,27 @@ class Module(MgrModule):
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
             lambda: defaultdict(lambda: defaultdict(int))))
 
-        for daemon in all_perf_counters:
+        # 'separated' mode
+        anonymized_daemon_dict = {}
+
+        for daemon, all_perf_counters_by_daemon in all_perf_counters.items():
+            daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
+
+            if mode == 'separated':
+                # anonymize individual daemon names except osds
+                if (daemon_type != 'osd'):
+                    anonymized_daemon = self.anonymize_entity_name(daemon)
+                    anonymized_daemon_dict[anonymized_daemon] = daemon
+                    daemon = anonymized_daemon
 
             # Calculate num combined daemon types if in aggregated mode
             if mode == 'aggregated':
-                daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
                 if 'num_combined_daemons' not in result[daemon_type]:
                     result[daemon_type]['num_combined_daemons'] = 1
                 else:
                     result[daemon_type]['num_combined_daemons'] += 1
 
-            for collection in all_perf_counters[daemon]:
+            for collection in all_perf_counters_by_daemon:
                 # Split the collection to avoid redundancy in final report; i.e.:
                 #   bluestore.kv_flush_lat, bluestore.kv_final_lat -->
                 #   bluestore: kv_flush_lat, kv_final_lat
@@ -721,12 +790,12 @@ class Module(MgrModule):
                 if mode == 'separated':
                     # Add value to result
                     result[daemon][col_0][col_1]['value'] = \
-                            all_perf_counters[daemon][collection]['value']
+                            all_perf_counters_by_daemon[collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in all_perf_counters[daemon][collection]:
+                    if 'count' in all_perf_counters_by_daemon[collection]:
                         result[daemon][col_0][col_1]['count'] = \
-                                all_perf_counters[daemon][collection]['count']
+                                all_perf_counters_by_daemon[collection]['count']
                 elif mode == 'aggregated':
                     # Not every rgw daemon has the same schema. Specifically, each rgw daemon
                     # has a uniquely-named collection that starts off identically (i.e.
@@ -740,17 +809,21 @@ class Module(MgrModule):
                     # the files are of type 'pair' (real-integer-pair, integer-integer pair).
                     # In those cases, the value is a dictionary, and not a number.
                     #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
-                    if isinstance(all_perf_counters[daemon][collection]['value'], numbers.Number):
+                    if isinstance(all_perf_counters_by_daemon[collection]['value'], numbers.Number):
                         result[daemon_type][col_0][col_1]['value'] += \
-                                all_perf_counters[daemon][collection]['value']
+                                all_perf_counters_by_daemon[collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in all_perf_counters[daemon][collection]:
+                    if 'count' in all_perf_counters_by_daemon[collection]:
                         result[daemon_type][col_0][col_1]['count'] += \
-                                all_perf_counters[daemon][collection]['count']
+                                all_perf_counters_by_daemon[collection]['count']
                 else:
                     self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
                     return {}
+
+        if mode == 'separated':
+            # for debugging purposes only, this data is never reported
+            self.log.debug('Anonymized daemon mapping for telemetry perf_counters (anonymized: real): {}'.format(anonymized_daemon_dict))
 
         return result
 
@@ -1128,6 +1201,9 @@ class Module(MgrModule):
                     'active': False
                 }
 
+            # Rook
+            self.get_rook_data(report)
+
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
 
@@ -1146,6 +1222,42 @@ class Module(MgrModule):
         # sent to a different endpoint.
 
         return report
+
+    def get_rook_data(self, report: Dict[str, object]) -> None:
+        r, outb, outs = self.mon_command({
+            'prefix': 'config-key dump',
+            'format': 'json'
+        })
+        if r != 0:
+            return
+        try:
+            config_kv_dump = json.loads(outb)
+        except json.decoder.JSONDecodeError:
+            return
+
+        for elem in ROOK_KEYS_BY_COLLECTION:
+            # elem[0] is the full key path (e.g. "rook/node/count/with-csi-nfs-plugin")
+            # elem[1] is the Collection this key belongs to
+            if self.is_enabled_collection(elem[1]):
+                self.add_kv_to_report(report, elem[0], config_kv_dump.get(elem[0]))
+
+    def add_kv_to_report(self, report: Dict[str, object], key_path: str, value: Any) -> None:
+        last_node = key_path.split('/')[-1]
+        for node in key_path.split('/')[0:-1]:
+            if node not in report:
+                report[node] = {}
+            report = report[node]  # type: ignore
+
+            # sanity check of keys correctness
+            if not isinstance(report, dict):
+                self.log.error(f"'{key_path}' is an invalid key, expected type 'dict' but got {type(report)}")
+                return
+
+        if last_node in report:
+            self.log.error(f"'{key_path}' is an invalid key, last part must not exist at this point")
+            return
+
+        report[last_node] = value
 
     def _try_post(self, what: str, url: str, report: Dict[str, Dict[str, str]]) -> Optional[str]:
         self.log.info('Sending %s to: %s' % (what, url))

@@ -1,5 +1,16 @@
 include(CMakeParseArguments)
 
+# ensure that we are using the exact python version specified by
+# 'WITH_PYTHON3', in case some included 3rd party libraries call
+# 'find_package(Python3 ...) without specifying the exact version number. if
+# the building host happens to have a higher version of python3, that version
+# would be picked up instead by find_package(Python3). and that is not want we
+# expect.
+find_package(Python3 ${WITH_PYTHON3} EXACT
+  QUIET
+  REQUIRED
+  COMPONENTS Interpreter)
+
 function(distutils_install_module name)
   set(py_srcs setup.py README.rst requirements.txt test-requirements.txt bin ${name})
   foreach(src ${py_srcs})
@@ -63,9 +74,8 @@ function(distutils_add_cython_module target name src)
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
 
-  set(suffix_var "EXT_SUFFIX")
   execute_process(COMMAND "${Python3_EXECUTABLE}" -c
-    "from distutils import sysconfig; print(sysconfig.get_config_var('${suffix_var}'))"
+    "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
     RESULT_VARIABLE result
     OUTPUT_VARIABLE ext_suffix
     ERROR_VARIABLE error

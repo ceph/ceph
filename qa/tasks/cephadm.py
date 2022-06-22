@@ -105,7 +105,8 @@ def normalize_hostnames(ctx):
     remote.shortname and socket.gethostname() in cephadm.
     """
     log.info('Normalizing hostnames...')
-    ctx.cluster.run(args=[
+    cluster = ctx.cluster.filter(lambda r: '.' in r.hostname)
+    cluster.run(args=[
         'sudo',
         'hostname',
         run.Raw('$(hostname -s)'),
@@ -889,6 +890,9 @@ def cephfs_setup(ctx, config):
             name = fs_config.pop('name')
             temp = deepcopy(cephfs_config)
             teuthology.deep_merge(temp, fs_config)
+            subvols = config.get('subvols', None)
+            if subvols:
+                teuthology.deep_merge(temp, {'subvols': subvols})
             fs = Filesystem(ctx, fs_config=temp, name=name, create=True)
             if set_allow_multifs:
                 fs.set_allow_multifs()

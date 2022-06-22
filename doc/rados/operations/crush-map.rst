@@ -896,7 +896,7 @@ To make this warning go away, you have two options:
 2. You can make the warning go away without making any changes to CRUSH by
    adding the following option to your ceph.conf ``[mon]`` section::
 
-      mon warn on legacy crush tunables = false
+      mon_warn_on_legacy_crush_tunables = false
 
    For the change to take effect, you will need to restart the monitors, or
    apply the option to running monitors with::
@@ -1015,8 +1015,6 @@ For example, the CRUSH rule below::
 	rule mixed_replicated_rule {
 	        id 11
 	        type replicated
-	        min_size 1
-	        max_size 10
 	        step take default class ssd
 	        step chooseleaf firstn 1 type host
 	        step emit
@@ -1040,8 +1038,6 @@ must not contain the same servers::
         rule mixed_replicated_rule_two {
                id 1
                type replicated
-               min_size 1
-               max_size 10
                step take ssd_hosts class ssd
                step chooseleaf firstn 1 type host
                step emit

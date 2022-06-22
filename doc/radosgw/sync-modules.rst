@@ -18,7 +18,7 @@ tape drives, indexing metadata in ElasticSearch etc.
 A sync module configuration is local to a zone. The sync module determines
 whether the zone exports data or can only consume data that was modified in
 another zone. As of luminous the supported sync plugins are `elasticsearch`_,
-``rgw``, which is the default sync plugin that synchronises data between the
+``rgw``, which is the default sync plugin that synchronizes data between the
 zones and ``log`` which is a trivial sync plugin that logs the metadata
 operation that happens in the remote zones. The following docs are written with
 the example of a zone using `elasticsearch sync module`_, the process would be similar

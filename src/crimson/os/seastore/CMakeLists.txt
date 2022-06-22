@@ -7,12 +7,12 @@ set(crimson_seastore_srcs
   transaction_manager.cc
   transaction.cc
   cache.cc
-  extent_reader.cc
   lba_manager.cc
   segment_cleaner.cc
+  backref_manager.cc
+  backref/backref_tree_node.cc
+  backref/btree_backref_manager.cc
   lba_manager/btree/btree_lba_manager.cc
-  lba_manager/btree/btree_range_pin.cc
-  lba_manager/btree/lba_btree.cc
   lba_manager/btree/lba_btree_node.cc
   omap_manager.cc
   omap_manager/btree/btree_omap_manager.cc
@@ -41,6 +41,9 @@ set(crimson_seastore_srcs
   journal/segmented_journal.cc
   journal/segment_allocator.cc
   journal.cc
+  device.cc
+  segment_manager_group.cc
+  journal/circular_bounded_journal.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)

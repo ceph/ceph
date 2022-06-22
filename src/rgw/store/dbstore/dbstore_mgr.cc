@@ -4,6 +4,8 @@
 #include "dbstore_mgr.h"
 #include "common/dbstore_log.h"
 
+#include <filesystem>
+
 using namespace std;
 
 /* Given a tenant, find and return the DBStore handle.
@@ -29,7 +31,7 @@ DB *DBStoreManager::getDB (string tenant, bool create)
 
 not_found:
   if (!create)
-    return NULL;
+    return nullptr;
 
   dbs = createDB(tenant);
 
@@ -37,15 +39,20 @@ not_found:
 }
 
 /* Create DBStore instance */
-DB *DBStoreManager::createDB(string tenant) {
+DB *DBStoreManager::createDB(std::string tenant) {
   DB *dbs = nullptr;
   pair<map<string, DB*>::iterator,bool> ret;
+  const auto& db_path = g_conf().get_val<std::string>("dbstore_db_dir");
+  const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
+
+  auto db_full_path = std::filesystem::path(db_path) / db_name;
+  ldout(cct, 0) << "DB initialization full db_path("<<db_full_path<<")" << dendl;
 
   /* Create the handle */
 #ifdef SQLITE_ENABLED
-  dbs = new SQLiteDB(tenant, cct);
+  dbs = new SQLiteDB(db_full_path.string(), cct);
 #else
-  dbs = new DB(tenant, cct);
+  dbs = new DB(db_full_path.string(), cct);
 #endif
 
   /* API is DB::Initialize(string logfile, int loglevel);
@@ -57,7 +64,7 @@ DB *DBStoreManager::createDB(string tenant) {
     ldout(cct, 0) << "DB initialization failed for tenant("<<tenant<<")" << dendl;
 
     delete dbs;
-    return NULL;
+    return nullptr;
   }
 
   /* XXX: Do we need lock to protect this map?

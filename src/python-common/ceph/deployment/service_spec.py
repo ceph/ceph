@@ -314,28 +314,34 @@ class PlacementSpec(object):
         # type: (Optional[str]) -> PlacementSpec
         """
         A single integer is parsed as a count:
+
         >>> PlacementSpec.from_string('3')
         PlacementSpec(count=3)
 
         A list of names is parsed as host specifications:
+
         >>> PlacementSpec.from_string('host1 host2')
         PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacemen\
 tSpec(hostname='host2', network='', name='')])
 
         You can also prefix the hosts with a count as follows:
+
         >>> PlacementSpec.from_string('2 host1 host2')
         PlacementSpec(count=2, hosts=[HostPlacementSpec(hostname='host1', network='', name=''), Hos\
 tPlacementSpec(hostname='host2', network='', name='')])
 
-        You can spefify labels using `label:<label>`
+        You can specify labels using `label:<label>`
+
         >>> PlacementSpec.from_string('label:mon')
         PlacementSpec(label='mon')
 
-        Labels als support a count:
+        Labels also support a count:
+
         >>> PlacementSpec.from_string('3 label:mon')
         PlacementSpec(count=3, label='mon')
 
         fnmatch is also supported:
+
         >>> PlacementSpec.from_string('data[1-3]')
         PlacementSpec(host_pattern='data[1-3]')
 
@@ -437,7 +443,7 @@ class ServiceSpec(object):
     This structure is supposed to be enough information to
     start the services.
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
+    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi loki promtail mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ' \
                           'container ingress cephfs-mirror snmp-gateway'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs rgw container ingress '.split()
@@ -461,6 +467,8 @@ class ServiceSpec(object):
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
             'prometheus': MonitoringSpec,
+            'loki': MonitoringSpec,
+            'promtail': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
@@ -1063,7 +1071,8 @@ class MonitoringSpec(ServiceSpec):
                  port: Optional[int] = None,
                  extra_container_args: Optional[List[str]] = None,
                  ):
-        assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager']
+        assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager',
+                                'loki', 'promtail']
 
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
@@ -1084,7 +1093,9 @@ class MonitoringSpec(ServiceSpec):
             return {'prometheus': 9095,
                     'node-exporter': 9100,
                     'alertmanager': 9093,
-                    'grafana': 3000}[self.service_type]
+                    'grafana': 3000,
+                    'loki': 3100,
+                    'promtail': 9080}[self.service_type]
 
 
 yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)
@@ -1101,6 +1112,7 @@ class AlertManagerSpec(MonitoringSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
+                 secure: bool = False,
                  extra_container_args: Optional[List[str]] = None,
                  ):
         assert service_type == 'alertmanager'
@@ -1125,6 +1137,7 @@ class AlertManagerSpec(MonitoringSpec):
         #                        added to the default receivers'
         #                        <webhook_configs> configuration.
         self.user_data = user_data or {}
+        self.secure = secure
 
     def get_port_start(self) -> List[int]:
         return [self.get_port(), 9094]
@@ -1321,6 +1334,7 @@ class MDSSpec(ServiceSpec):
                  service_type: str = 'mds',
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
+                 config: Optional[Dict[str, str]] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  extra_container_args: Optional[List[str]] = None,
@@ -1328,6 +1342,7 @@ class MDSSpec(ServiceSpec):
         assert service_type == 'mds'
         super(MDSSpec, self).__init__('mds', service_id=service_id,
                                       placement=placement,
+                                      config=config,
                                       unmanaged=unmanaged,
                                       preview_only=preview_only,
                                       extra_container_args=extra_container_args)

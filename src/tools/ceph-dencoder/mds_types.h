@@ -11,6 +11,7 @@ TYPE(snaplink_t)
 TYPE(sr_t)
 
 #include "mds/mdstypes.h"
+#include "include/cephfs/types.h"
 TYPE(frag_info_t)
 TYPE(nest_info_t)
 TYPE(quota_info_t)

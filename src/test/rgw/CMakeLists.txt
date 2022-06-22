@@ -16,6 +16,10 @@ if(WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND rgw_libs Boost::filesystem)
 endif()
 
+if(WITH_JAEGER)
+  list(APPEND rgw_libs ${jaeger_base})
+endif()
+
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
@@ -227,5 +231,5 @@ target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
 
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
-target_link_libraries(unittest_rgw_lua ${rgw_libs} ${LUA_LIBRARIES})
+target_link_libraries(unittest_rgw_lua ${rgw_libs})
 

@@ -17,7 +17,7 @@
 
 namespace {
   seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
+    return crimson::get_logger(ceph_subsys_cyanstore);
   }
 }
 
@@ -311,7 +311,7 @@ CyanStore::omap_get_values(CollectionRef ch,
   }
   omap_values_t values;
   for (auto i = start ? o->omap.upper_bound(*start) : o->omap.begin();
-       values.size() < MAX_KEYS_PER_OMAP_GET_CALL && i != o->omap.end();
+       i != o->omap.end();
        ++i) {
     values.insert(*i);
   }
@@ -322,7 +322,7 @@ CyanStore::omap_get_values(CollectionRef ch,
 auto
 CyanStore::omap_get_header(CollectionRef ch,
 			   const ghobject_t& oid)
-  -> read_errorator::future<ceph::bufferlist>
+  -> get_attr_errorator::future<ceph::bufferlist>
 {
   auto c = static_cast<Collection*>(ch.get());
   auto o = c->get_object(oid);
@@ -330,7 +330,7 @@ CyanStore::omap_get_header(CollectionRef ch,
     return crimson::ct_error::enoent::make();
   }
 
-  return read_errorator::make_ready_future<ceph::bufferlist>(
+  return get_attr_errorator::make_ready_future<ceph::bufferlist>(
     o->omap_header);
 }
 
@@ -390,6 +390,14 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         ghobject_t oid = i.get_oid(op->oid);
         uint64_t off = op->off;
         r = _truncate(cid, oid, off);
+      }
+      break;
+      case Transaction::OP_CLONE:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        ghobject_t noid = i.get_oid(op->dest_oid);
+        r = _clone(cid, oid, noid);
       }
       break;
       case Transaction::OP_SETATTR:
@@ -701,6 +709,30 @@ int CyanStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size
   int r = o->truncate(size);
   used_bytes += (o->get_size() - old_size);
   return r;
+}
+
+int CyanStore::_clone(const coll_t& cid, const ghobject_t& oid,
+                      const ghobject_t& noid)
+{
+  logger().debug("{} cid={} oid={} noid={}",
+                __func__, cid, oid, noid);
+  auto c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+
+  ObjectRef oo = c->get_object(oid);
+  if (!oo)
+    return -ENOENT;
+  if (local_conf()->memstore_debug_omit_block_device_write)
+    return 0;
+  ObjectRef no = c->get_or_create_object(noid);
+  used_bytes += ((ssize_t)oo->get_size() - (ssize_t)no->get_size());
+  no->clone(oo.get(), 0, oo->get_size(), 0);
+
+  no->omap_header = oo->omap_header;
+  no->omap = oo->omap;
+  no->xattr = oo->xattr;
+  return 0;
 }
 
 int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,

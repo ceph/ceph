@@ -46,6 +46,41 @@ extern rgw::sal::Store* newMotrStore(CephContext *cct);
 #endif
 }
 
+RGWObjState::RGWObjState() {
+}
+
+RGWObjState::~RGWObjState() {
+}
+
+RGWObjState::RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
+  is_atomic = rhs.is_atomic;
+  has_attrs = rhs.has_attrs;
+  exists = rhs.exists;
+  size = rhs.size;
+  accounted_size = rhs.accounted_size;
+  mtime = rhs.mtime;
+  epoch = rhs.epoch;
+  if (rhs.obj_tag.length()) {
+    obj_tag = rhs.obj_tag;
+  }
+  if (rhs.tail_tag.length()) {
+    tail_tag = rhs.tail_tag;
+  }
+  write_tag = rhs.write_tag;
+  fake_tag = rhs.fake_tag;
+  shadow_obj = rhs.shadow_obj;
+  has_data = rhs.has_data;
+  if (rhs.data.length()) {
+    data = rhs.data;
+  }
+  prefetch_data = rhs.prefetch_data;
+  keep_tail = rhs.keep_tail;
+  is_olh = rhs.is_olh;
+  objv_tracker = rhs.objv_tracker;
+  pg_ver = rhs.pg_ver;
+  compressed = rhs.compressed;
+}
+
 rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const std::string svc, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache, bool use_gc)
 {
   if (svc.compare("rados") == 0) {
@@ -60,8 +95,17 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
                 .set_run_quota_threads(quota_threads)
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
-                .initialize(cct, dpp) < 0) {
-      delete store; store = nullptr;
+                .init_begin(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
+    if (rados->init_complete(dpp) < 0) {
+      delete store;
+      return nullptr;
     }
     return store;
   }
@@ -78,8 +122,17 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
                 .set_run_quota_threads(quota_threads)
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
-                .initialize(cct, dpp) < 0) {
-      delete store; store = nullptr;
+                .init_begin(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
+    if (rados->init_complete(dpp) < 0) {
+      delete store;
+      return nullptr;
     }
     return store;
   }
@@ -90,22 +143,10 @@ rgw::sal::Store* StoreManager::init_storage_provider(const DoutPrefixProvider* d
 
     if ((*(rgw::sal::DBStore*)store).set_run_lc_thread(use_lc_thread)
                                     .initialize(cct, dpp) < 0) {
-      delete store; store = nullptr;
+      delete store;
+      return nullptr;
     }
 
-    /* XXX: temporary - create testid user */
-    rgw_user testid_user("", "testid", "");
-    std::unique_ptr<rgw::sal::User> user = store->get_user(testid_user);
-    user->get_info().display_name = "M. Tester";
-    user->get_info().user_email = "tester@ceph.com";
-    RGWAccessKey k1("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
-    user->get_info().access_keys["0555b35654ad1656d804"] = k1;
-    user->get_info().max_buckets = RGW_DEFAULT_MAX_BUCKETS;
-
-    int r = user->store_user(dpp, null_yield, true);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed inserting testid user in dbstore error r=" << r << dendl;
-    }
     return store;
   }
 #endif
@@ -138,18 +179,29 @@ rgw::sal::Store* StoreManager::init_raw_storage_provider(const DoutPrefixProvide
     int ret = rados->init_svc(true, dpp);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
-      delete store; store = nullptr;
-      return store;
+      delete store;
+      return nullptr;
     }
 
     if (rados->init_rados() < 0) {
-      delete store; store = nullptr;
+      delete store;
+      return nullptr;
+    }
+    if (store->initialize(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
     }
   }
 
   if (svc.compare("dbstore") == 0) {
 #ifdef WITH_RADOSGW_DBSTORE
     store = newDBStore(cct);
+
+    if ((*(rgw::sal::DBStore*)store).initialize(cct, dpp) < 0) {
+      delete store;
+      return nullptr;
+    }
+
 #else
     store = nullptr;
 #endif

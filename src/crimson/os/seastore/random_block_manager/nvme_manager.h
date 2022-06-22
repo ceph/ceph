@@ -355,9 +355,9 @@ public:
 
   write_ertr::future<> write(rbm_abs_addr addr, bufferlist &bl);
   write_ertr::future<> sync_allocation(
-      std::vector<rbm_alloc_delta_t>& alloc_blocks);
+      std::vector<alloc_delta_t>& alloc_blocks);
   void add_free_extent(
-      std::vector<rbm_alloc_delta_t>& v, rbm_abs_addr from, size_t len);
+      std::vector<alloc_delta_t>& v, rbm_abs_addr from, size_t len);
 
   device_id_t get_device_id() const final {
     return super.device_id;

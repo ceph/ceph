@@ -48,7 +48,35 @@ Once the pools are created, you may enable the file system using the ``fs new`` 
 
 .. code:: bash
 
-    $ ceph fs new <fs_name> <metadata> <data>
+    $ ceph fs new <fs_name> <metadata> <data> [--force] [--allow-dangerous-metadata-overlay] [<fscid:int>] [--recover]
+
+This command creates a new file system with specified metadata and data pool.
+The specified data pool is the default data pool and cannot be changed once set.
+Each file system has its own set of MDS daemons assigned to ranks so ensure that
+you have sufficient standby daemons available to accommodate the new file system.
+
+The ``--force`` option is used to achieve any of the following:
+
+- To set an erasure-coded pool for the default data pool. Use of an EC pool for the
+  default data pool is discouraged. Refer to `Creating pools`_ for details.
+- To set non-empty pool (pool already contains some objects) for the metadata pool.
+- To create a file system with a specific file system's ID (fscid).
+  The --force option is required with --fscid option.
+
+The ``--allow-dangerous-metadata-overlay`` option permits the reuse metadata and
+data pools if it is already in-use. This should only be done in emergencies and
+after careful reading of the documentation.
+
+If the ``--fscid`` option is provided then this creates a file system with a
+specific fscid. This can be used when an application expects the file system's ID
+to be stable after it has been recovered, e.g., after monitor databases are
+lost and rebuilt. Consequently, file system IDs don't always keep increasing
+with newer file systems.
+
+The ``--recover`` option sets the state of file system's rank 0 to existing but
+failed. So when a MDS daemon eventually picks up rank 0, the daemon reads the
+existing in-RADOS metadata and doesn't overwrite it. The flag also prevents the
+standby MDS daemons to join the file system.
 
 For example:
 

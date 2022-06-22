@@ -20,7 +20,7 @@ class ACLPermission_S3 : public ACLPermission, public XMLObj
 {
 public:
   ACLPermission_S3() {}
-  ~ACLPermission_S3() override {}
+  virtual ~ACLPermission_S3() override {}
 
   bool xml_end(const char *el) override;
   void to_xml(std::ostream& out);
@@ -30,7 +30,7 @@ class ACLGrantee_S3 : public ACLGrantee, public XMLObj
 {
 public:
   ACLGrantee_S3() {}
-  ~ACLGrantee_S3() override {}
+  virtual ~ACLGrantee_S3() override {}
 
   bool xml_start(const char *el, const char **attr);
 };
@@ -40,7 +40,7 @@ class ACLGrant_S3 : public ACLGrant, public XMLObj
 {
 public:
   ACLGrant_S3() {}
-  ~ACLGrant_S3() override {}
+  virtual ~ACLGrant_S3() override {}
 
   void to_xml(CephContext *cct, std::ostream& out);
   bool xml_end(const char *el) override;
@@ -54,7 +54,7 @@ class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
 {
 public:
   explicit RGWAccessControlList_S3(CephContext *_cct) : RGWAccessControlList(_cct) {}
-  ~RGWAccessControlList_S3() override {}
+  virtual ~RGWAccessControlList_S3() override {}
 
   bool xml_end(const char *el) override;
   void to_xml(std::ostream& out);
@@ -67,7 +67,7 @@ class ACLOwner_S3 : public ACLOwner, public XMLObj
 {
 public:
   ACLOwner_S3() {}
-  ~ACLOwner_S3() override {}
+  virtual ~ACLOwner_S3() override {}
 
   bool xml_end(const char *el) override;
   void to_xml(std::ostream& out);
@@ -79,7 +79,7 @@ class RGWAccessControlPolicy_S3 : public RGWAccessControlPolicy, public XMLObj
 {
 public:
   explicit RGWAccessControlPolicy_S3(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
-  ~RGWAccessControlPolicy_S3() override {}
+  virtual ~RGWAccessControlPolicy_S3() override {}
 
   bool xml_end(const char *el) override;
 

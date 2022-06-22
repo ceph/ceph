@@ -201,6 +201,8 @@ void Server::create_logger()
                    "Request type set file layout latency");
   plb.add_time_avg(l_mdss_req_setdirlayout_latency, "req_setdirlayout_latency",
                    "Request type set directory layout latency");
+  plb.add_time_avg(l_mdss_req_getvxattr_latency, "req_getvxattr_latency",
+                   "Request type get virtual extended attribute latency");
   plb.add_time_avg(l_mdss_req_setxattr_latency, "req_setxattr_latency",
                    "Request type set extended attribute latency");
   plb.add_time_avg(l_mdss_req_rmxattr_latency, "req_rmxattr_latency",
@@ -266,6 +268,7 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   dir_max_entries = g_conf().get_val<uint64_t>("mds_dir_max_entries");
   bal_fragment_size_max = g_conf().get_val<int64_t>("mds_bal_fragment_size_max");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
+  supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
 }
 
 void Server::dispatch(const cref_t<Message> &m)
@@ -583,7 +586,23 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	session->is_stale() ||
 	session->is_killing() ||
 	terminating_sessions) {
-      dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
+      if (m->supported_features.test(CEPHFS_FEATURE_NOTIFY_SESSION_STATE)) {
+	if (session->is_open() && !mds->is_stopping()) {
+          dout(10) << "currently already opened" << dendl;
+
+          auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN,
+                                                    session->get_push_seq());
+          if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+            reply->supported_features = supported_features;
+          mds->send_message_client(reply, session);
+          if (mdcache->is_readonly()) {
+            auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
+            mds->send_message_client(m, session);
+          }
+	}
+      }
+      dout(10) << "currently " << session->get_state_name()
+               << ", dropping this req" << dendl;
       return;
     }
     ceph_assert(session->is_closed() || session->is_closing());
@@ -857,8 +876,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     metrics_handler->add_session(session);
     ceph_assert(session->get_connection());
     auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
-    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
       reply->supported_features = supported_features;
+      reply->metric_spec = supported_metric_spec;
+    }
     mds->send_message_client(reply, session);
     if (mdcache->is_readonly()) {
       auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
@@ -1011,8 +1032,10 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
         metrics_handler->add_session(session);
 
 	auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
-	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
 	  reply->supported_features = supported_features;
+          reply->metric_spec = supported_metric_spec;
+	}
 	mds->send_message_client(reply, session);
 
 	if (mdcache->is_readonly())
@@ -1154,7 +1177,7 @@ void Server::find_idle_sessions()
       if (mds->locker->revoke_stale_caps(session)) {
 	mds->locker->remove_stale_leases(session);
 	finish_flush_session(session, session->get_push_seq());
-	auto m = make_message<MClientSession>(CEPH_SESSION_STALE, session->get_push_seq());
+	auto m = make_message<MClientSession>(CEPH_SESSION_STALE);
 	mds->send_message_client(m, session);
       } else {
 	to_evict.push_back(session);
@@ -1304,38 +1327,23 @@ void Server::kill_session(Session *session, Context *on_safe)
   }
 }
 
-size_t Server::apply_blocklist(const std::set<entity_addr_t> &blocklist)
+size_t Server::apply_blocklist()
 {
-  bool prenautilus = mds->objecter->with_osdmap(
-      [&](const OSDMap& o) {
-	return o.require_osd_release < ceph_release_t::nautilus;
-      });
-
   std::vector<Session*> victims;
   const auto& sessions = mds->sessionmap.get_sessions();
-  for (const auto& p : sessions) {
-    if (!p.first.is_client()) {
-      // Do not apply OSDMap blocklist to MDS daemons, we find out
-      // about their death via MDSMap.
-      continue;
-    }
-
-    Session *s = p.second;
-    auto inst_addr = s->info.inst.addr;
-    // blocklist entries are always TYPE_ANY for nautilus+
-    inst_addr.set_type(entity_addr_t::TYPE_ANY);
-    if (blocklist.count(inst_addr)) {
-      victims.push_back(s);
-      continue;
-    }
-    if (prenautilus) {
-      // ...except pre-nautilus, they were TYPE_LEGACY
-      inst_addr.set_type(entity_addr_t::TYPE_LEGACY);
-      if (blocklist.count(inst_addr)) {
-	victims.push_back(s);
+  mds->objecter->with_osdmap(
+    [&](const OSDMap& o) {
+      for (const auto& p : sessions) {
+	if (!p.first.is_client()) {
+	  // Do not apply OSDMap blocklist to MDS daemons, we find out
+	  // about their death via MDSMap.
+	  continue;
+	}
+	if (o.is_blocklisted(p.second->info.inst.addr)) {
+	  victims.push_back(p.second);
+	}
       }
-    }
-  }
+    });
 
   for (const auto& s : victims) {
     kill_session(s, nullptr);
@@ -1497,8 +1505,10 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
     metrics_handler->add_session(session);
     // notify client of success with an OPEN
     auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
-    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC)) {
       reply->supported_features = supported_features;
+      reply->metric_spec = supported_metric_spec;
+    }
     mds->send_message_client(reply, session);
     mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   }
@@ -2013,6 +2023,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_SETDIRLAYOUT:
     code = l_mdss_req_setdirlayout_latency;
     break;
+  case CEPH_MDS_OP_GETVXATTR:
+    code = l_mdss_req_getvxattr_latency;
+    break;
   case CEPH_MDS_OP_SETXATTR:
     code = l_mdss_req_setxattr_latency;
     break;
@@ -2136,6 +2149,9 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   mds->logger->inc(l_mds_reply);
   utime_t lat = ceph_clock_now() - req->get_recv_stamp();
   mds->logger->tinc(l_mds_reply_latency, lat);
+  if (lat >= g_conf()->mds_op_complaint_time) {
+    mds->logger->inc(l_mds_slow_reply);
+  }
   if (client_inst.name.is_client()) {
     mds->sessionmap.hit_session(mdr->session);
   }
@@ -2194,6 +2210,9 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
+    if (lat >= g_conf()->mds_op_complaint_time) {
+      mds->logger->inc(l_mds_slow_reply);
+    }
     if (session && client_inst.name.is_client()) {
       mds->sessionmap.hit_session(session);
     }
@@ -2313,20 +2332,7 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
     dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
     encode(dn->get_name(), bl);
-
-    int lease_mask = 0;
-    CDentry::linkage_t *dnl = dn->get_linkage(mdr->get_client(), mdr);
-    if (dnl->is_primary()) {
-      ceph_assert(dnl->get_inode() == in);
-      lease_mask = CEPH_LEASE_PRIMARY_LINK;
-    } else {
-      if (dnl->is_remote())
-	ceph_assert(dnl->get_remote_ino() == in->ino());
-      else
-	ceph_assert(!in);
-    }
-    mds->locker->issue_client_lease(dn, mdr, lease_mask, now, bl);
-    dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
+    mds->locker->issue_client_lease(dn, in, mdr, now, bl);
   } else
     reply->head.is_dentry = 0;
 
@@ -2585,6 +2591,9 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   case CEPH_MDS_OP_GETATTR:
     handle_client_getattr(mdr, false);
     break;
+  case CEPH_MDS_OP_GETVXATTR:
+    handle_client_getvxattr(mdr);
+    break;
 
   case CEPH_MDS_OP_SETATTR:
     handle_client_setattr(mdr);
@@ -2694,7 +2703,7 @@ void Server::handle_peer_request(const cref_t<MMDSPeerRequest> &m)
 
   CDentry *straydn = NULL;
   if (m->straybl.length() > 0) {
-    mdcache->decode_replica_stray(straydn, m->straybl, from);
+    mdcache->decode_replica_stray(straydn, nullptr, m->straybl, from);
     ceph_assert(straydn);
     m->straybl.clear();
   }
@@ -3432,15 +3441,68 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
   }
 }
 
+struct C_MDS_TryOpenInode : public ServerContext {
+  MDRequestRef mdr;
+  inodeno_t ino;
+  C_MDS_TryOpenInode(Server *s, MDRequestRef& r, inodeno_t i) :
+    ServerContext(s), mdr(r), ino(i) {}
+  void finish(int r) override {
+    server->_try_open_ino(mdr, r, ino);
+  }
+};
+
+void Server::_try_open_ino(MDRequestRef& mdr, int r, inodeno_t ino)
+{
+  dout(10) << "_try_open_ino " << mdr.get() << " ino " << ino << " r=" << r << dendl;
+
+  // `r` is a rank if >=0, else an error code
+  if (r >= 0) {
+    mds_rank_t dest_rank(r);
+    if (dest_rank == mds->get_nodeid())
+      dispatch_client_request(mdr);
+    else
+      mdcache->request_forward(mdr, dest_rank);
+    return;
+  }
+
+  // give up
+  if (r == -CEPHFS_ENOENT || r == -CEPHFS_ENODATA)
+    r = -CEPHFS_ESTALE;
+  respond_to_request(mdr, r);
+}
+
 class C_MDS_TryFindInode : public ServerContext {
   MDRequestRef mdr;
+  MDCache *mdcache;
+  inodeno_t ino;
 public:
-  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
+  C_MDS_TryFindInode(Server *s, MDRequestRef& r, MDCache *m, inodeno_t i) :
+    ServerContext(s), mdr(r), mdcache(m), ino(i) {}
   void finish(int r) override {
-    if (r == -CEPHFS_ESTALE) // :( find_ino_peers failed
-      server->respond_to_request(mdr, r);
-    else
+    if (r == -CEPHFS_ESTALE) { // :( find_ino_peers failed
+      /*
+       * There has one case that when the MDS crashes and the
+       * openfiletable journal couldn't be flushed and then
+       * the replacing MDS is possibly won't load some already
+       * opened CInodes into the MDCache. And if the clients
+       * will retry some requests after reconnected, the MDS
+       * will return -ESTALE after failing to find the ino in
+       * all active peers.
+       *
+       * As a workaround users can run `ls -R ${mountpoint}`
+       * to list all the sub-files or sub-direcotries from the
+       * mountpoint.
+       *
+       * We need try to open the ino and try it again.
+       */
+      CInode *in = mdcache->get_inode(ino);
+      if (in && in->state_test(CInode::STATE_PURGING))
+        server->respond_to_request(mdr, r);
+      else
+        mdcache->open_ino(ino, (int64_t)-1, new C_MDS_TryOpenInode(server, mdr, ino));
+    } else {
       server->dispatch_client_request(mdr);
+    }
   }
 };
 
@@ -3480,8 +3542,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
       respond_to_request(mdr, r);
     } else if (r == -CEPHFS_ESTALE) {
       dout(10) << "FAIL on CEPHFS_ESTALE but attempting recovery" << dendl;
-      MDSContext *c = new C_MDS_TryFindInode(this, mdr);
-      mdcache->find_ino_peers(refpath.get_ino(), c);
+      inodeno_t ino = refpath.get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
     } else {
       dout(10) << "FAIL on error " << r << dendl;
       respond_to_request(mdr, r);
@@ -3566,7 +3628,8 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr,
   if (r < 0) {
     if (r == -CEPHFS_ESTALE) {
       dout(10) << "FAIL on CEPHFS_ESTALE but attempting recovery" << dendl;
-      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      inodeno_t ino = refpath.get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
       return nullptr;
     }
     respond_to_request(mdr, r);
@@ -3651,7 +3714,8 @@ Server::rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn)
   if (r != 0) {
     if (r == -CEPHFS_ESTALE) {
       dout(10) << "CEPHFS_ESTALE on path, attempting recovery" << dendl;
-      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      inodeno_t ino = refpath.get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
     } else if (r < 0) {
       respond_to_request(mdr, r);
     }
@@ -3663,7 +3727,8 @@ Server::rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn)
   if (r != 0) {
     if (r == -CEPHFS_ESTALE) {
       dout(10) << "CEPHFS_ESTALE on path2, attempting recovery" << dendl;
-      mdcache->find_ino_peers(refpath2.get_ino(), new C_MDS_TryFindInode(this, mdr));
+      inodeno_t ino = refpath2.get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
     } else if (r < 0) {
       respond_to_request(mdr, r);
     }
@@ -3870,8 +3935,6 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   CInode *ref = rdlock_path_pin_ref(mdr, want_auth, false);
   if (!ref)
     return;
-
-  mdr->getattr_caps = mask;
 
   /*
    * if client currently holds the EXCL cap on a field, do not rdlock
@@ -4761,8 +4824,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
     encode(dn->get_name(), dnbl);
-    int lease_mask = dnl->is_primary() ? CEPH_LEASE_PRIMARY_LINK : 0;
-    mds->locker->issue_client_lease(dn, mdr, lease_mask, now, dnbl);
+    mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);
 
     // inode
     dout(12) << "including inode " << *in << dendl;
@@ -5483,11 +5545,85 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
 }
 
 // XATTRS
-
-int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
-				file_layout_t *layout, bool validate)
+int Server::parse_layout_vxattr_json(
+  string name, string value, const OSDMap& osdmap, file_layout_t *layout)
 {
-  dout(20) << "parse_layout_vxattr name " << name << " value '" << value << "'" << dendl;
+  auto parse_pool = [&](std::string pool_name, int64_t pool_id) -> int64_t {
+    if (pool_name != "") {
+      int64_t _pool_id = osdmap.lookup_pg_pool_name(pool_name);
+      if (_pool_id < 0) {
+	dout(10) << __func__ << ": unknown pool name:" << pool_name << dendl;
+	return -CEPHFS_EINVAL;
+      }
+      return _pool_id;
+    } else if (pool_id >= 0) {
+      const auto pools = osdmap.get_pools();
+      if (pools.find(pool_id) == pools.end()) {
+	dout(10) << __func__ << ": unknown pool id:" << pool_id << dendl;
+	return -CEPHFS_EINVAL;
+      }
+      return pool_id;
+    } else {
+      return -CEPHFS_EINVAL;
+    }
+  };
+
+  try {
+    if (name == "layout.json") {
+      JSONParser json_parser;
+      if (json_parser.parse(value.c_str(), value.length()) and json_parser.is_object()) {
+	std::string field;
+	try {
+	  field = "object_size";
+	  JSONDecoder::decode_json("object_size", layout->object_size, &json_parser, true);
+
+	  field = "stripe_unit";
+	  JSONDecoder::decode_json("stripe_unit", layout->stripe_unit, &json_parser, true);
+
+	  field = "stripe_count";
+	  JSONDecoder::decode_json("stripe_count", layout->stripe_count, &json_parser, true);
+
+	  field = "pool_namespace";
+	  JSONDecoder::decode_json("pool_namespace", layout->pool_ns, &json_parser, false);
+
+	  field = "pool_id";
+	  int64_t pool_id = 0;
+	  JSONDecoder::decode_json("pool_id", pool_id, &json_parser, false);
+
+	  field = "pool_name";
+	  std::string pool_name;
+	  JSONDecoder::decode_json("pool_name", pool_name, &json_parser, false);
+
+	  pool_id = parse_pool(pool_name, pool_id);
+	  if (pool_id < 0) {
+	    return (int)pool_id;
+	  }
+	  layout->pool_id = pool_id;
+	} catch (JSONDecoder::err&) {
+	  dout(10) << __func__ << ": json is missing a mandatory field named "
+		   << field << dendl;
+	  return -CEPHFS_EINVAL;
+	}
+      } else {
+	dout(10) << __func__ << ": bad json" << dendl;
+	return -CEPHFS_EINVAL;
+      }
+    } else {
+      dout(10) << __func__ << ": unknown layout vxattr " << name << dendl;
+      return -CEPHFS_ENODATA; // no such attribute
+    }
+  } catch (boost::bad_lexical_cast const&) {
+    dout(10) << __func__ << ": bad vxattr value:" << value
+	     << ", unable to parse for xattr:" << name << dendl;
+    return -CEPHFS_EINVAL;
+  }
+  return 0;
+}
+
+// parse old style layout string
+int Server::parse_layout_vxattr_string(
+  string name, string value, const OSDMap& osdmap, file_layout_t *layout)
+{
   try {
     if (name == "layout") {
       string::iterator begin = value.begin();
@@ -5498,14 +5634,14 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 	return -CEPHFS_EINVAL;
       }
       string left(begin, end);
-      dout(10) << " parsed " << m << " left '" << left << "'" << dendl;
+      dout(10) << __func__ << ": parsed " << m << " left '" << left << "'" << dendl;
       if (begin != end)
 	return -CEPHFS_EINVAL;
       for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
         // Skip validation on each attr, we do it once at the end (avoid
         // rejecting intermediate states if the overall result is ok)
-	int r = parse_layout_vxattr(string("layout.") + q->first, q->second,
-                                    osdmap, layout, false);
+	int r = parse_layout_vxattr_string(string("layout.") + q->first, q->second,
+					   osdmap, layout);
 	if (r < 0)
 	  return r;
       }
@@ -5521,28 +5657,54 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
       } catch (boost::bad_lexical_cast const&) {
 	int64_t pool = osdmap.lookup_pg_pool_name(value);
 	if (pool < 0) {
-	  dout(10) << " unknown pool " << value << dendl;
+	  dout(10) << __func__ << ": unknown pool " << value << dendl;
 	  return -CEPHFS_ENOENT;
 	}
 	layout->pool_id = pool;
       }
+    } else if (name == "layout.pool_id") {
+      layout->pool_id = boost::lexical_cast<int64_t>(value);
+    } else if (name == "layout.pool_name") {
+      layout->pool_id = osdmap.lookup_pg_pool_name(value);
+      if (layout->pool_id < 0) {
+	dout(10) << __func__ << ": unknown pool " << value << dendl;
+	return -CEPHFS_EINVAL;
+      }
     } else if (name == "layout.pool_namespace") {
       layout->pool_ns = value;
     } else {
-      dout(10) << " unknown layout vxattr " << name << dendl;
-      return -CEPHFS_EINVAL;
+      dout(10) << __func__ << ": unknown layout vxattr " << name << dendl;
+      return -CEPHFS_ENODATA; // no such attribute
     }
   } catch (boost::bad_lexical_cast const&) {
-    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    dout(10) << __func__ << ": bad vxattr value, unable to parse int for "
+	     << name << dendl;
     return -CEPHFS_EINVAL;
+  }
+  return 0;
+}
+
+int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
+				file_layout_t *layout, bool validate)
+{
+  dout(20) << __func__ << ": name:" << name << " value:'" << value << "'" << dendl;
+
+  int r;
+  if (name == "layout.json") {
+    r = parse_layout_vxattr_json(name, value, osdmap, layout);
+  } else {
+    r = parse_layout_vxattr_string(name, value, osdmap, layout);
+  }
+  if (r < 0) {
+    return r;
   }
 
   if (validate && !layout->is_valid()) {
-    dout(10) << "bad layout" << dendl;
+    dout(10) << __func__ << ": bad layout" << dendl;
     return -CEPHFS_EINVAL;
   }
   if (!mds->mdsmap->is_data_pool(layout->pool_id)) {
-    dout(10) << " invalid data pool " << layout->pool_id << dendl;
+    dout(10) << __func__ << ": invalid data pool " << layout->pool_id << dendl;
     return -CEPHFS_EINVAL;
   }
   return 0;
@@ -6369,6 +6531,159 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
+void Server::handle_client_getvxattr(MDRequestRef& mdr)
+{
+  const auto& req = mdr->client_request;
+  string xattr_name{req->get_path2()};
+
+  // is a ceph virtual xattr?
+  if (!is_ceph_vxattr(xattr_name)) {
+    respond_to_request(mdr, -CEPHFS_ENODATA);
+    return;
+  }
+
+  CInode *cur = rdlock_path_pin_ref(mdr, true, false);
+  if (!cur) {
+    return;
+  }
+
+  if (is_ceph_dir_vxattr(xattr_name)) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -CEPHFS_ENODATA);
+      return;
+    }
+  } else if (is_ceph_file_vxattr(xattr_name)) {
+    if (cur->is_dir()) {
+      respond_to_request(mdr, -CEPHFS_ENODATA);
+      return;
+    }
+  }
+
+  CachedStackStringStream css;
+  int r = 0;
+  ceph::bufferlist bl;
+  // handle these vxattrs
+  if ((xattr_name.substr(0, 15) == "ceph.dir.layout"sv) ||
+      (xattr_name.substr(0, 16) == "ceph.file.layout"sv)) {
+    std::string layout_field;
+
+    struct layout_xattr_info_t {
+      enum class InheritanceStatus : uint32_t {
+	DEFAULT = 0,
+	SET = 1,
+	INHERITED = 2
+      };
+
+      const file_layout_t     layout;
+      const InheritanceStatus status;
+
+      layout_xattr_info_t(const file_layout_t& l, InheritanceStatus inh)
+        : layout(l), status(inh) { }
+
+      static std::string status_to_string(InheritanceStatus status) {
+	switch (status) {
+	  case InheritanceStatus::DEFAULT: return "default"s;
+	  case InheritanceStatus::SET: return "set"s;
+	  case InheritanceStatus::INHERITED: return "inherited"s;
+	  default: return "unknown"s;
+	}
+      }
+    };
+
+    auto is_default_layout = [&](const file_layout_t& layout) -> bool {
+      return (layout == mdcache->default_file_layout);
+    };
+    auto get_inherited_layout = [&](CInode *cur) -> layout_xattr_info_t {
+      auto orig_in = cur;
+
+      while (cur) {
+        if (cur->get_projected_inode()->has_layout()) {
+	  auto& curr_layout = cur->get_projected_inode()->layout;
+	  if (is_default_layout(curr_layout)) {
+	    return {curr_layout, layout_xattr_info_t::InheritanceStatus::DEFAULT};
+	  }
+          if (cur == orig_in) {
+	      // we've found a new layout at this inode
+	      return {curr_layout, layout_xattr_info_t::InheritanceStatus::SET};
+          } else {
+	      return {curr_layout, layout_xattr_info_t::InheritanceStatus::INHERITED};
+          }
+        }
+
+        if (cur->is_root()) {
+          break;
+	}
+
+        cur = cur->get_projected_parent_dir()->get_inode();
+      }
+      mds->clog->error() << "no layout found at root dir!";
+      ceph_abort("no layout found at root dir! something is really messed up with layouts!");
+    };
+
+    if (xattr_name == "ceph.dir.layout.json"sv ||
+	xattr_name == "ceph.file.layout.json"sv) {
+      // fetch layout only for valid xattr_name
+      const auto lxi = get_inherited_layout(cur);
+
+      *css << "{\"stripe_unit\": " << lxi.layout.stripe_unit
+	   << ", \"stripe_count\": " << lxi.layout.stripe_count
+	   << ", \"object_size\": " << lxi.layout.object_size
+	   << ", \"pool_name\": ";
+      mds->objecter->with_osdmap([lxi, &css](const OSDMap& o) {
+	  *css << "\"";
+          if (o.have_pg_pool(lxi.layout.pool_id)) {
+	    *css << o.get_pool_name(lxi.layout.pool_id);
+	  }
+	  *css << "\"";
+	});
+      *css << ", \"pool_id\": " << (uint64_t)lxi.layout.pool_id;
+      *css << ", \"pool_namespace\": \"" << lxi.layout.pool_ns << "\"";
+      *css << ", \"inheritance\": \"@"
+	   << layout_xattr_info_t::status_to_string(lxi.status) << "\"}";
+    } else if ((xattr_name == "ceph.dir.layout.pool_name"sv) ||
+	       (xattr_name == "ceph.file.layout.pool_name"sv)) {
+      // fetch layout only for valid xattr_name
+      const auto lxi = get_inherited_layout(cur);
+      mds->objecter->with_osdmap([lxi, &css](const OSDMap& o) {
+	  if (o.have_pg_pool(lxi.layout.pool_id)) {
+	  *css << o.get_pool_name(lxi.layout.pool_id);
+	  }
+	  });
+    } else if ((xattr_name == "ceph.dir.layout.pool_id"sv) ||
+               (xattr_name == "ceph.file.layout.pool_id"sv)) {
+      // fetch layout only for valid xattr_name
+      const auto lxi = get_inherited_layout(cur);
+      *css << (uint64_t)lxi.layout.pool_id;
+    } else {
+      r = -CEPHFS_ENODATA; // no such attribute
+    }
+  } else if (xattr_name.substr(0, 12) == "ceph.dir.pin"sv) {
+    if (xattr_name == "ceph.dir.pin"sv) {
+      *css << cur->get_projected_inode()->export_pin;
+    } else if (xattr_name == "ceph.dir.pin.random"sv) {
+      *css << cur->get_projected_inode()->export_ephemeral_random_pin;
+    } else if (xattr_name == "ceph.dir.pin.distributed"sv) {
+      *css << cur->get_projected_inode()->export_ephemeral_distributed_pin;
+    } else {
+      // otherwise respond as invalid request
+      // since we only handle ceph vxattrs here
+      r = -CEPHFS_ENODATA; // no such attribute
+    }
+  } else {
+    // otherwise respond as invalid request
+    // since we only handle ceph vxattrs here
+    r = -CEPHFS_ENODATA; // no such attribute
+  }
+
+  if (r == 0) {
+    ENCODE_START(1, 1, bl);
+    encode(css->strv(), bl);
+    ENCODE_FINISH(bl);
+    mdr->reply_extra_bl = bl;
+  }
+
+  respond_to_request(mdr, r);
+}
 
 // =================================================================
 // DIRECTORY and NAMESPACE OPS
@@ -6703,7 +7018,8 @@ void Server::handle_client_link(MDRequestRef& mdr)
     targeti = mdcache->get_inode(req->get_filepath2().get_ino());
     if (!targeti) {
       dout(10) << "CEPHFS_ESTALE on path2, attempting recovery" << dendl;
-      mdcache->find_ino_peers(req->get_filepath2().get_ino(), new C_MDS_TryFindInode(this, mdr));
+      inodeno_t ino = req->get_filepath2().get_ino();
+      mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
       return;
     }
     mdr->pin(targeti);

@@ -34,8 +34,10 @@ void PGRecovery::start_pglogbased_recovery()
     float(0.001));
 }
 
-PGRecovery::blocking_interruptible_future<bool>
-PGRecovery::start_recovery_ops(size_t max_to_start)
+PGRecovery::interruptible_future<bool>
+PGRecovery::start_recovery_ops(
+  RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
+  size_t max_to_start)
 {
   assert(pg->is_primary());
   assert(pg->is_peered());
@@ -49,16 +51,18 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
   assert(!pg->is_backfilling());
   assert(!pg->get_peering_state().is_deleting());
 
-  std::vector<blocking_interruptible_future<>> started;
+  std::vector<interruptible_future<>> started;
   started.reserve(max_to_start);
-  max_to_start -= start_primary_recovery_ops(max_to_start, &started);
+  max_to_start -= start_primary_recovery_ops(trigger, max_to_start, &started);
   if (max_to_start > 0) {
-    max_to_start -= start_replica_recovery_ops(max_to_start, &started);
+    max_to_start -= start_replica_recovery_ops(trigger, max_to_start, &started);
   }
-  return crimson::join_blocking_interruptible_futures<
-    ::crimson::osd::IOInterruptCondition>(std::move(started)).then_interruptible<
-    ::crimson::osd::IOInterruptCondition>(
-    [this] {
+  using interruptor =
+    crimson::interruptible::interruptor<crimson::osd::IOInterruptCondition>;
+  return interruptor::parallel_for_each(std::move(started),
+					[] (auto&& ifut) {
+    return std::move(ifut);
+  }).then_interruptible([this] {
     bool done = !pg->get_peering_state().needs_recovery();
     if (done) {
       logger().debug("start_recovery_ops: AllReplicasRecovered for pg: {}",
@@ -93,8 +97,9 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
 }
 
 size_t PGRecovery::start_primary_recovery_ops(
+  RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
   size_t max_to_start,
-  std::vector<PGRecovery::blocking_interruptible_future<>> *out)
+  std::vector<PGRecovery::interruptible_future<>> *out)
 {
   if (!pg->is_recovering()) {
     return 0;
@@ -149,13 +154,12 @@ size_t PGRecovery::start_primary_recovery_ops(
     // TODO: handle lost/unfound
     if (pg->get_recovery_backend()->is_recovering(soid)) {
       auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
-      out->push_back(recovery_waiter.wait_for_recovered_blocking<
-	    ::crimson::osd::IOInterruptCondition>());
+      out->emplace_back(recovery_waiter.wait_for_recovered(trigger));
       ++started;
     } else if (pg->get_recovery_backend()->is_recovering(head)) {
       ++skipped;
     } else {
-      out->push_back(recover_missing(soid, item.need));
+      out->emplace_back(recover_missing(trigger, soid, item.need));
       ++started;
     }
 
@@ -169,8 +173,9 @@ size_t PGRecovery::start_primary_recovery_ops(
 }
 
 size_t PGRecovery::start_replica_recovery_ops(
+  RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
   size_t max_to_start,
-  std::vector<PGRecovery::blocking_interruptible_future<>> *out)
+  std::vector<PGRecovery::interruptible_future<>> *out)
 {
   if (!pg->is_recovering()) {
     return 0;
@@ -217,8 +222,7 @@ size_t PGRecovery::start_replica_recovery_ops(
       if (pg->get_recovery_backend()->is_recovering(soid)) {
 	logger().debug("{}: already recovering object {}", __func__, soid);
 	auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
-	out->push_back(recovery_waiter.wait_for_recovered_blocking<
-	    ::crimson::osd::IOInterruptCondition>());
+	out->emplace_back(recovery_waiter.wait_for_recovered(trigger));
 	started++;
 	continue;
       }
@@ -227,8 +231,9 @@ size_t PGRecovery::start_replica_recovery_ops(
 	logger().debug("{}: soid {} is a delete, removing", __func__, soid);
 	map<hobject_t,pg_missing_item>::const_iterator r =
 	  pm.get_items().find(soid);
-	started += prep_object_replica_deletes(
-	  soid, r->second.need, out);
+	started++;
+	out->emplace_back(
+	  prep_object_replica_deletes(trigger, soid, r->second.need));
 	continue;
       }
 
@@ -248,23 +253,27 @@ size_t PGRecovery::start_replica_recovery_ops(
       logger().debug("{}: recover_object_replicas({})", __func__,soid);
       map<hobject_t,pg_missing_item>::const_iterator r = pm.get_items().find(
 	soid);
-      started += prep_object_replica_pushes(
-	soid, r->second.need, out);
+      started++;
+      out->emplace_back(
+	prep_object_replica_pushes(trigger, soid, r->second.need));
     }
   }
 
   return started;
 }
 
-PGRecovery::blocking_interruptible_future<>
+PGRecovery::interruptible_future<>
 PGRecovery::recover_missing(
+  RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
   const hobject_t &soid, eversion_t need)
 {
   if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
-    return pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
-	pg->get_recovery_backend()->recover_delete(soid, need));
+    return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
+      trigger,
+      pg->get_recovery_backend()->recover_delete(soid, need));
   } else {
-    return pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
+    return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
+      trigger,
       pg->get_recovery_backend()->recover_object(soid, need)
       .handle_exception_interruptible(
 	[=, soid = std::move(soid)] (auto e) {
@@ -275,41 +284,37 @@ PGRecovery::recover_missing(
   }
 }
 
-size_t PGRecovery::prep_object_replica_deletes(
+RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_deletes(
+  RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
   const hobject_t& soid,
-  eversion_t need,
-  std::vector<PGRecovery::blocking_interruptible_future<>> *in_progress)
+  eversion_t need)
 {
-  in_progress->push_back(
-    pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
-      pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
-	[=] {
-	object_stat_sum_t stat_diff;
-	stat_diff.num_objects_recovered = 1;
-	on_global_recover(soid, stat_diff, true);
-	return seastar::make_ready_future<>();
-      })
-    )
+  return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
+    trigger,
+    pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
+      [=] {
+      object_stat_sum_t stat_diff;
+      stat_diff.num_objects_recovered = 1;
+      on_global_recover(soid, stat_diff, true);
+      return seastar::make_ready_future<>();
+    })
   );
-  return 1;
 }
 
-size_t PGRecovery::prep_object_replica_pushes(
+RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_pushes(
+  RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
   const hobject_t& soid,
-  eversion_t need,
-  std::vector<PGRecovery::blocking_interruptible_future<>> *in_progress)
+  eversion_t need)
 {
-  in_progress->push_back(
-    pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
-      pg->get_recovery_backend()->recover_object(soid, need)
-      .handle_exception_interruptible(
-	[=, soid = std::move(soid)] (auto e) {
-	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
-	return seastar::make_ready_future<>();
-      })
-    )
+  return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
+    trigger,
+    pg->get_recovery_backend()->recover_object(soid, need)
+    .handle_exception_interruptible(
+      [=, soid = std::move(soid)] (auto e) {
+      on_failed_recover({ pg->get_pg_whoami() }, soid, need);
+      return seastar::make_ready_future<>();
+    })
   );
-  return 1;
 }
 
 void PGRecovery::on_local_recover(

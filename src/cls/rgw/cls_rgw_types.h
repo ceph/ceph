@@ -15,11 +15,12 @@
 
 #include "rgw/rgw_basic_types.h"
 
-#define CEPH_RGW_REMOVE 'r'
-#define CEPH_RGW_UPDATE 'u'
-#define CEPH_RGW_TAG_TIMEOUT 120
+#define CEPH_RGW_REMOVE 'r' // value 114
+#define CEPH_RGW_UPDATE 'u' // value 117
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
 #define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
+
+constexpr uint64_t CEPH_RGW_DEFAULT_TAG_TIMEOUT = 120; // in seconds
 
 class JSONObj;
 
@@ -567,7 +568,7 @@ struct rgw_cls_bi_entry {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
-
+  static void generate_test_instances(std::list<rgw_cls_bi_entry*>& o);
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
 		rgw_bucket_category_stats *accounted_stats);
 };
@@ -651,6 +652,7 @@ struct rgw_bucket_olh_entry {
   }
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<rgw_bucket_olh_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
 
@@ -794,24 +796,24 @@ struct cls_rgw_bucket_instance_entry {
   using RESHARD_STATUS = cls_rgw_reshard_status;
   
   cls_rgw_reshard_status reshard_status{RESHARD_STATUS::NOT_RESHARDING};
-  std::string new_bucket_instance_id;
-  int32_t num_shards{-1};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode((uint8_t)reshard_status, bl);
-    encode(new_bucket_instance_id, bl);
-    encode(num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     uint8_t s;
     decode(s, bl);
     reshard_status = (cls_rgw_reshard_status)s;
-    decode(new_bucket_instance_id, bl);
-    decode(num_shards, bl);
+    if (struct_v < 2) { // fields removed from v2
+      std::string bucket_instance_id;
+      decode(bucket_instance_id, bl);
+      int32_t num_shards{-1};
+      decode(num_shards, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -820,15 +822,10 @@ struct cls_rgw_bucket_instance_entry {
 
   void clear() {
     reshard_status = RESHARD_STATUS::NOT_RESHARDING;
-    new_bucket_instance_id.clear();
   }
 
-  void set_status(const std::string& new_instance_id,
-		  int32_t new_num_shards,
-		  cls_rgw_reshard_status s) {
+  void set_status(cls_rgw_reshard_status s) {
     reshard_status = s;
-    new_bucket_instance_id = new_instance_id;
-    num_shards = new_num_shards;
   }
 
   bool resharding() const {
@@ -957,6 +954,8 @@ struct rgw_usage_data {
     ops += usage.ops;
     successful_ops += usage.successful_ops;
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_usage_data*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_usage_data)
 
@@ -1063,6 +1062,8 @@ struct rgw_usage_log_info {
     decode(entries, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<rgw_usage_log_info*>& o);
 
   rgw_usage_log_info() {}
 };
@@ -1098,6 +1099,8 @@ struct rgw_user_bucket {
 
     return false;
   }
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<rgw_user_bucket*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_user_bucket)
 
@@ -1239,23 +1242,31 @@ struct cls_rgw_lc_obj_head
 {
   time_t start_date = 0;
   std::string marker;
+  time_t shard_rollover_date = 0;
 
   cls_rgw_lc_obj_head() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     uint64_t t = start_date;
     encode(t, bl);
     encode(marker, bl);
+    encode(shard_rollover_date, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     uint64_t t;
     decode(t, bl);
     start_date = static_cast<time_t>(t);
     decode(marker, bl);
+    if (struct_v < 2) {
+      shard_rollover_date = 0;
+    } else {
+      decode(t, bl);
+      shard_rollover_date = static_cast<time_t>(t);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -1293,7 +1304,7 @@ struct cls_rgw_lc_entry {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
+  static void generate_test_instances(std::list<cls_rgw_lc_entry*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_entry);
 
@@ -1303,31 +1314,32 @@ struct cls_rgw_reshard_entry
   std::string tenant;
   std::string bucket_name;
   std::string bucket_id;
-  std::string new_instance_id;
   uint32_t old_num_shards{0};
   uint32_t new_num_shards{0};
 
   cls_rgw_reshard_entry() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(time, bl);
     encode(tenant, bl);
     encode(bucket_name, bl);
     encode(bucket_id, bl);
-    encode(new_instance_id, bl);
     encode(old_num_shards, bl);
     encode(new_num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(time, bl);
     decode(tenant, bl);
     decode(bucket_name, bl);
     decode(bucket_id, bl);
-    decode(new_instance_id, bl);
+    if (struct_v < 2) {
+      std::string new_instance_id; // removed in v2
+      decode(new_instance_id, bl);
+    }
     decode(old_num_shards, bl);
     decode(new_num_shards, bl);
     DECODE_FINISH(bl);

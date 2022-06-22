@@ -163,13 +163,13 @@ int RGWShardCollectCR::operate(const DoutPrefixProvider *dpp) {
     while (spawn_next()) {
       current_running++;
 
-      while (current_running >= max_concurrent) {
+      if (current_running >= max_concurrent) {
         int child_ret;
         yield wait_for_child();
         if (collect_next(&child_ret)) {
           current_running--;
-          if (child_ret < 0 && child_ret != -ENOENT) {
-            ldout(cct, 10) << __func__ << ": failed to fetch log status, ret=" << child_ret << dendl;
+          child_ret = handle_result(child_ret);
+          if (child_ret < 0) {
             status = child_ret;
           }
         }
@@ -180,8 +180,8 @@ int RGWShardCollectCR::operate(const DoutPrefixProvider *dpp) {
       yield wait_for_child();
       if (collect_next(&child_ret)) {
         current_running--;
-        if (child_ret < 0 && child_ret != -ENOENT) {
-          ldout(cct, 10) << __func__ << ": failed to fetch log status, ret=" << child_ret << dendl;
+        child_ret = handle_result(child_ret);
+        if (child_ret < 0) {
           status = child_ret;
         }
       }
@@ -204,6 +204,15 @@ class RGWReadRemoteMDLogInfoCR : public RGWShardCollectCR {
   int shard_id;
 #define READ_MDLOG_MAX_CONCURRENT 10
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to fetch mdlog status: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
 public:
   RGWReadRemoteMDLogInfoCR(RGWMetaSyncEnv *_sync_env,
                      const std::string& period, int _num_shards,
@@ -225,6 +234,15 @@ class RGWListRemoteMDLogCR : public RGWShardCollectCR {
   map<int, string>::iterator iter;
 #define READ_MDLOG_MAX_CONCURRENT 10
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to list remote mdlog shard: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
 public:
   RGWListRemoteMDLogCR(RGWMetaSyncEnv *_sync_env,
                      const std::string& period, map<int, string>& _shards,
@@ -739,6 +757,16 @@ class RGWReadSyncStatusMarkersCR : public RGWShardCollectCR {
   int shard_id{0};
   map<uint32_t, rgw_meta_sync_marker>& markers;
 
+  int handle_result(int r) override {
+    if (r == -ENOENT) { // ENOENT is not a fatal error
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 4) << "failed to read metadata sync markers: "
+          << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
  public:
   RGWReadSyncStatusMarkersCR(RGWMetaSyncEnv *env, int num_shards,
                              map<uint32_t, rgw_meta_sync_marker>& markers)
@@ -876,6 +904,7 @@ public:
     append_section_from_set(all_sections, "user");
     append_section_from_set(all_sections, "bucket.instance");
     append_section_from_set(all_sections, "bucket");
+    append_section_from_set(all_sections, "roles");
 
     std::move(all_sections.begin(), all_sections.end(),
               std::back_inserter(sections));
@@ -1394,8 +1423,6 @@ public:
   int state_store_mdlog_entries_complete();
 };
 
-#define META_SYNC_SPAWN_WINDOW 20
-
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
 
@@ -1626,7 +1653,7 @@ public:
               pos_to_prev[marker] = marker;
             }
             // limit spawn window
-            while (num_spawned() > META_SYNC_SPAWN_WINDOW) {
+            while (num_spawned() > static_cast<size_t>(cct->_conf->rgw_meta_sync_spawn_window)) {
               yield wait_for_child();
               collect_children();
             }
@@ -1761,13 +1788,13 @@ public:
           break;
         }
 #define INCREMENTAL_MAX_ENTRIES 100
-        ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << " truncated=" << truncated << dendl;
         if (!period_marker.empty() && period_marker <= mdlog_marker) {
           tn->log(10, SSTR("finished syncing current period: mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker << " period_marker=" << period_marker));
           done_with_period = true;
           break;
         }
-	if (mdlog_marker <= max_marker) {
+	if (mdlog_marker <= max_marker || !truncated) {
 	  /* we're at the tip, try to bring more entries */
           ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " syncing mdlog for shard_id=" << shard_id << dendl;
           yield call(new RGWCloneMetaLogCoroutine(sync_env, mdlog,
@@ -1781,6 +1808,7 @@ public:
           *reset_backoff = false; // back off and try again later
           return retcode;
         }
+        truncated = true;
         *reset_backoff = true; /* if we got to this point, all systems function */
 	if (mdlog_marker > max_marker) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
@@ -1824,7 +1852,7 @@ public:
                 pos_to_prev[log_iter->id] = marker;
               }
               // limit spawn window
-              while (num_spawned() > META_SYNC_SPAWN_WINDOW) {
+              while (num_spawned() > static_cast<size_t>(cct->_conf->rgw_meta_sync_spawn_window)) {
                 yield wait_for_child();
                 collect_children();
               }
@@ -1841,8 +1869,7 @@ public:
         }
 	if (mdlog_marker == max_marker && can_adjust_marker) {
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
-#define INCREMENTAL_INTERVAL 20
-	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
+	  yield wait(utime_t(cct->_conf->rgw_meta_sync_poll_interval, 0));
 	}
       } while (can_adjust_marker);
 

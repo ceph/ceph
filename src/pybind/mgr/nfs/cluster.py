@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import json
 import re
@@ -105,7 +106,13 @@ class NFSCluster:
             ingress: Optional[bool] = None,
             port: Optional[int] = None,
     ) -> Tuple[int, str, str]:
+
         try:
+            if virtual_ip:
+                # validate virtual_ip value: ip_address throws a ValueError
+                # exception in case it's not a valid ipv4 or ipv6 address
+                ip = virtual_ip.split('/')[0]
+                ipaddress.ip_address(ip)
             if virtual_ip and not ingress:
                 raise NFSInvalidOperation('virtual_ip can only be provided with ingress enabled')
             if not virtual_ip and ingress:
@@ -121,7 +128,7 @@ class NFSCluster:
 
             if cluster_id not in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, port)
-                return 0, "NFS Cluster Created Successfully", ""
+                return 0, "", ""
             return 0, "", f"{cluster_id} cluster already exists"
         except Exception as e:
             return exception_handler(e, f"NFS Cluster {cluster_id} could not be created")
@@ -136,7 +143,7 @@ class NFSCluster:
                 completion = self.mgr.remove_service('nfs.' + cluster_id)
                 orchestrator.raise_if_exception(completion)
                 self.delete_config_obj(cluster_id)
-                return 0, "NFS Cluster Deleted Successfully", ""
+                return 0, "", ""
             return 0, "", "Cluster does not exist"
         except Exception as e:
             return exception_handler(e, f"Failed to delete NFS Cluster {cluster_id}")

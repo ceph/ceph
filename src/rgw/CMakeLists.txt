@@ -4,8 +4,7 @@ if(NOT GPERF)
 endif()
 
 if(WITH_RADOSGW_SELECT_PARQUET)
-  find_package(Arrow QUIET REQUIRED)
-  set(ARROW_LIBRARIES "-larrow -lparquet")
+  set(ARROW_LIBRARIES Arrow::Arrow Arrow::Parquet)
   add_definitions(-D_ARROW_EXIST)
   message("-- arrow is installed, radosgw/s3select-op is able to process parquet objects")
 endif(WITH_RADOSGW_SELECT_PARQUET)
@@ -40,6 +39,7 @@ set(librgw_common_srcs
   services/svc_quota.cc
   services/svc_sync_modules.cc
   services/svc_rados.cc
+  services/svc_role_rados.cc
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc
   services/svc_sys_obj_core.cc
@@ -159,12 +159,13 @@ set(librgw_common_srcs
   rgw_url.cc
   rgw_oidc_provider.cc
   rgw_datalog.cc
+  rgw_datalog_notify.cc
   cls_fifo_legacy.cc
   rgw_lua_utils.cc
   rgw_lua.cc
-  rgw_lua_request.cc
   rgw_bucket_encryption.cc
-  rgw_tracer.cc)
+  rgw_tracer.cc
+  rgw_lua_background.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -215,14 +216,14 @@ target_link_libraries(rgw_common
     dmclock::dmclock
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
-    ${LUA_LIBRARIES}
     ${ARROW_LIBRARIES}
   PUBLIC
+    ${LUA_LIBRARIES}
     spawn)
 target_include_directories(rgw_common
   PUBLIC "services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-  PRIVATE "${LUA_INCLUDE_DIR}")
+  PUBLIC "${LUA_INCLUDE_DIR}")
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
   target_link_libraries(rgw_common
@@ -253,8 +254,8 @@ if(WITH_LTTNG)
 endif()
 
 if(WITH_JAEGER)
-  add_dependencies(rgw_common ${jaeger_base})
-  target_link_libraries(rgw_common PUBLIC ${jaeger_base})
+  add_dependencies(rgw_common jaeger_base)
+  target_link_libraries(rgw_common PUBLIC jaeger_base)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)
@@ -276,6 +277,7 @@ set(rgw_a_srcs
   rgw_http_client_curl.cc
   rgw_loadgen.cc
   rgw_log.cc
+  rgw_lua_request.cc
   rgw_period_pusher.cc
   rgw_realm_reloader.cc
   rgw_realm_watcher.cc
@@ -323,7 +325,6 @@ target_link_libraries(rgw_a
   PRIVATE
     common_utf8 global
     ${CRYPTO_LIBS}
-    ${LUA_LIBRARIES}
     ${ARROW_LIBRARIES}
     OATH::OATH
   PUBLIC
@@ -336,8 +337,6 @@ if(WITH_CURL_OPENSSL)
 endif()
 
 set(rgw_libs rgw_a)
-
-list(APPEND rgw_libs ${LUA_LIBRARIES})
 
 set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
@@ -361,7 +360,10 @@ add_library(radosgw SHARED
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
-  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PRIVATE "${LUA_INCLUDE_DIR}")
+
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
 target_link_libraries(radosgw
@@ -463,8 +465,6 @@ endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw PRIVATE RDKafka::RDKafka)
 endif()
-
-target_link_libraries(rgw PRIVATE ${LUA_LIBRARIES})
 
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)

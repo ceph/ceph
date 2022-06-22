@@ -530,7 +530,9 @@ void BlueFS::dump_block_extents(ostream& out)
   }
 }
 
-int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
+void BlueFS::foreach_block_extents(
+  unsigned id,
+  std::function<void(uint64_t, uint32_t)> fn)
 {
   std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " bdev " << id << dendl;
@@ -538,11 +540,10 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
   for (auto& p : nodes.file_map) {
     for (auto& q : p.second->fnode.extents) {
       if (q.bdev == id) {
-        extents->insert(q.offset, q.length);
+        fn(q.offset, q.length);
       }
     }
   }
-  return 0;
 }
 
 int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
@@ -2507,6 +2508,9 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
   }
 #endif
   _flush_bdev();
+  ++log.seq_live;
+  dirty.seq_live = log.seq_live;
+  log.t.seq = log.seq_live;
 
   super.memorized_layout = layout;
   super.log_fnode = log_file->fnode;
@@ -4080,6 +4084,14 @@ bool BlueFS::wal_is_rotational()
   return bdev[BDEV_SLOW]->is_rotational();
 }
 
+bool BlueFS::db_is_rotational()
+{
+  if (bdev[BDEV_DB]) {
+    return bdev[BDEV_DB]->is_rotational();
+  }
+  return bdev[BDEV_SLOW]->is_rotational();
+}
+
 /*
   Algorithm.
   do_replay_recovery_read is used when bluefs log abruptly ends, but it seems that more data should be there.
@@ -4313,7 +4325,7 @@ size_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
     total += p2align(len, alloc_size);
   };
   if (alloc[dev]) {
-    alloc[dev]->dump(iterated_allocation);
+    alloc[dev]->foreach(iterated_allocation);
   }
   return total;
 }

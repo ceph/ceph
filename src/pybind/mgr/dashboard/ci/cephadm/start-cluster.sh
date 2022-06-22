@@ -5,31 +5,36 @@ set -eEx
 cleanup() {
     set +x
     if [[ -n "$JENKINS_HOME" ]]; then
-        printf "\n\nStarting cleanup...\n\n"
+        echo "Starting cleanup..."
         kcli delete plan -y ceph || true
         kcli delete network ceph-dashboard -y
         docker container prune -f
-        printf "\n\nCleanup completed.\n\n"
+        echo "Cleanup completed."
     fi
 }
 
 on_error() {
     set +x
     if [ "$1" != "0" ]; then
-        printf "\n\nERROR $1 thrown on line $2\n\n"
-        printf "\n\nCollecting info...\n\n"
-        printf "\n\nDisplaying MGR logs:\n\n"
-        kcli ssh -u root -- ceph-node-00 'cephadm logs -n \$(cephadm ls | grep -Eo "mgr\.ceph[0-9a-z.-]+" | head -n 1) -- --no-tail --no-pager'
-        for vm_id in 0 1 2
+        echo "ERROR $1 thrown on line $2"
+        echo
+        echo "Collecting info..."
+        echo
+        echo "Saving MGR logs:"
+        echo
+        mkdir -p ${CEPH_DEV_FOLDER}/logs
+        kcli ssh -u root -- ceph-node-00 'cephadm logs -n \$(cephadm ls | grep -Eo "mgr\.ceph[0-9a-z.-]+" | head -n 1) -- --no-tail --no-pager' > ${CEPH_DEV_FOLDER}/logs/mgr.cephadm.log
+        for vm_id in {0..3}
         do
             local vm="ceph-node-0${vm_id}"
-            printf "\n\nDisplaying journalctl from VM ${vm}:\n\n"
-            kcli ssh -u root -- ${vm} 'journalctl --no-tail --no-pager -t cloud-init' || true
-            printf "\n\nEnd of journalctl from VM ${vm}\n\n"
-            printf "\n\nDisplaying container logs:\n\n"
-            kcli ssh -u root -- ${vm} 'podman logs --names --since 30s \$(podman ps -aq)' || true
+            echo "Saving journalctl from VM ${vm}:"
+            echo
+            kcli ssh -u root -- ${vm} 'journalctl --no-tail --no-pager -t cloud-init' > ${CEPH_DEV_FOLDER}/logs/journal.ceph-node-0${vm_id}.log || true
+            echo "Saving container logs:"
+            echo
+            kcli ssh -u root -- ${vm} 'podman logs --names --since 30s \$(podman ps -aq)' > ${CEPH_DEV_FOLDER}/logs/container.ceph-node-0${vm_id}.log || true
         done
-        printf "\n\nTEST FAILED.\n\n"
+        echo "TEST FAILED."
     fi
 }
 
@@ -59,7 +64,7 @@ if [[ -n "$JENKINS_HOME" ]]; then
     npm cache clean --force
 fi
 npm ci
-FRONTEND_BUILD_OPTS='-- --prod'
+FRONTEND_BUILD_OPTS='--configuration=production'
 if [[ -n "${DEV_MODE}" ]]; then
     FRONTEND_BUILD_OPTS+=' --deleteOutputPath=false --watch'
 fi

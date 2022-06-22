@@ -19,7 +19,6 @@
 
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/segment_manager.h"
 
 namespace crimson::os::seastore {
 
@@ -111,7 +110,12 @@ public:
     laddr_t addr) = 0;
 
   virtual void complete_transaction(
-    Transaction &t) = 0;
+    Transaction &t,
+    std::vector<CachedExtentRef> &to_clear,	///< extents whose pins are to be cleared,
+						//   as the results of their retirements
+    std::vector<CachedExtentRef> &to_link	///< fresh extents whose pins are to be inserted
+						//   into backref manager's pin set
+  ) = 0;
 
   /**
    * Should be called after replay on each cached extent.
@@ -143,11 +147,10 @@ public:
   /**
    * Calls f for each mapped space usage
    */
-  using scan_mapped_space_iertr = base_iertr::extend_ertr<
-    SegmentManager::read_ertr>;
+  using scan_mapped_space_iertr = base_iertr;
   using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
   using scan_mapped_space_func_t = std::function<
-    void(paddr_t, extent_len_t)>;
+    void(paddr_t, extent_len_t, depth_t)>;
   virtual scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) = 0;
@@ -215,9 +218,7 @@ using LBAManagerRef = std::unique_ptr<LBAManager>;
 
 class Cache;
 namespace lba_manager {
-LBAManagerRef create_lba_manager(
-  SegmentManager &segment_manager,
-  Cache &cache);
+LBAManagerRef create_lba_manager(Cache &cache);
 }
 
 }

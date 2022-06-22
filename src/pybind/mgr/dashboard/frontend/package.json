@@ -25,6 +25,7 @@
     "pree2e:ci": "npm run pree2e",
     "e2e:ci": "start-test 4200 'cypress run -b chrome --headless'",
     "lint:tslint": "ng lint",
+    "lint:gherkin": "gherkin-lint -c .gherkin-lintrc cypress/integration",
     "lint:prettier": "prettier --list-different \"{src,cypress}/**/*.{ts,scss}\"",
     "lint:html": "htmllint src/app/**/*.html && html-linter --config html-linter.config.json",
     "prelint:tsc": "npm run postinstall",
@@ -94,7 +95,7 @@
     "file-saver": "2.0.2",
     "fork-awesome": "1.1.7",
     "lodash": "4.17.21",
-    "moment": "2.29.1",
+    "moment": "2.29.3",
     "ng-block-ui": "3.0.2",
     "ng-click-outside": "7.0.0",
     "ng2-charts": "2.4.2",
@@ -112,7 +113,10 @@
     "@angular/language-service": "12.2.16",
     "@applitools/eyes-cypress": "3.22.5",
     "@compodoc/compodoc": "1.1.18",
+    "@cypress/browserify-preprocessor": "3.0.2",
+    "@grafana/e2e": "8.4.5",
     "@types/brace-expansion": "1.1.0",
+    "@types/cypress-cucumber-preprocessor": "4.0.1",
     "@types/jest": "26.0.14",
     "@types/lodash": "4.14.161",
     "@types/node": "12.12.62",
@@ -120,7 +124,10 @@
     "@types/swagger-ui": "3.52.0",
     "codelyzer": "6.0.2",
     "cypress": "9.0.0",
+    "cypress-cucumber-preprocessor": "4.3.1",
+    "cypress-iframe": "1.0.1",
     "cypress-multi-reporters": "1.5.0",
+    "gherkin-lint": "4.2.2",
     "html-linter": "1.1.1",
     "htmllint-cli": "0.0.7",
     "identity-obj-proxy": "3.0.0",
@@ -143,5 +150,8 @@
     "ts-node": "9.0.0",
     "tslint": "6.1.3",
     "typescript": "4.3.5"
+  },
+  "cypress-cucumber-preprocessor": {
+    "nonGlobalStepDefinitions": true
   }
 }

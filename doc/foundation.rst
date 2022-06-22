@@ -28,7 +28,6 @@ Premier
 -------
 
 * `Bloomberg <https://bloomberg.com>`_
-* `China Mobile <https://www.chinamobileltd.com/>`_
 * `DigitalOcean <https://www.digitalocean.com/>`_
 * `Intel <http://www.intel.com/>`_
 * `OVH <https://www.ovh.com/>`_
@@ -37,7 +36,6 @@ Premier
 * `SoftIron <https://www.softiron.com/>`_
 * `SUSE <https://www.suse.com/>`_
 * `Western Digital <https://www.wdc.com/>`_
-* `XSKY <https://www.xsky.com/en/>`_
 * `ZTE <https://www.zte.com.cn/global/>`_
 
 General

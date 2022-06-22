@@ -138,9 +138,12 @@ def start_rgw(ctx, config, clients):
             ctx.cluster.only(client).run(args=['sudo', 'chmod', '600', token_path])
             ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', token_path])
 
+            vault_addr = "{}:{}".format(*ctx.vault.endpoints[vault_role])
             rgw_cmd.extend([
-                '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
-                '--rgw_crypt_vault_token_file', token_path
+                '--rgw_crypt_vault_addr', vault_addr,
+                '--rgw_crypt_vault_token_file', token_path,
+                '--rgw_crypt_sse_s3_vault_addr', vault_addr,
+                '--rgw_crypt_sse_s3_vault_token_file', token_path,
             ])
         elif pykmip_role is not None:
             if not hasattr(ctx, 'pykmip'):
@@ -404,6 +407,7 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('rgw', {}))
 
     ctx.rgw = argparse.Namespace()
+    ctx.rgw_cloudtier = None
 
     ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})

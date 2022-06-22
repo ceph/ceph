@@ -7,6 +7,7 @@
 
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/segment_seq_allocator.h"
 
 namespace crimson::os::seastore {
 
@@ -14,9 +15,13 @@ namespace nvme_device {
 class NVMeBlockDevice;
 }
 
-class SegmentManager;
-class ExtentReader;
+class SegmentManagerGroup;
 class SegmentProvider;
+
+enum class journal_type_t {
+  SEGMENT_JOURNAL = 0,
+  CIRCULARBOUNDED_JOURNAL
+};
 
 class Journal {
 public:
@@ -79,20 +84,26 @@ public:
   using replay_ret = replay_ertr::future<>;
   using delta_handler_t = std::function<
     replay_ret(const record_locator_t&,
-	       const delta_info_t&)>;
+	       const delta_info_t&,
+	       const journal_seq_t, // journal seq from which
+				    // alloc delta should replayed
+	       seastar::lowres_system_clock::time_point last_modified)>;
   virtual replay_ret replay(
     delta_handler_t &&delta_handler) = 0;
 
   virtual ~Journal() {}
+
+  virtual journal_type_t get_type() = 0;
 };
 using JournalRef = std::unique_ptr<Journal>;
 
 namespace journal {
 
-JournalRef make_segmented(
-  SegmentManager &sm,
-  ExtentReader &reader,
-  SegmentProvider &provider);
+JournalRef make_segmented(SegmentProvider &provider);
+
+JournalRef make_circularbounded(
+  crimson::os::seastore::nvme_device::NVMeBlockDevice* device,
+  std::string path);
 
 }
 

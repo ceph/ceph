@@ -229,7 +229,7 @@ protected:
 public:
 
   LCRule(){};
-  ~LCRule(){};
+  virtual ~LCRule() {}
 
   const std::string& get_id() const {
       return id;
@@ -498,7 +498,7 @@ public:
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);
     std::set<std::string>& get_cloud_targets() { return cloud_targets; }
-    ~LCWorker();
+    virtual ~LCWorker() override;
 
     friend class RGWRados;
     friend class RGWLC;
@@ -510,7 +510,7 @@ public:
   std::vector<std::unique_ptr<RGWLC::LCWorker>> workers;
 
   RGWLC() : cct(nullptr), store(nullptr) {}
-  ~RGWLC();
+  virtual ~RGWLC() override;
 
   void initialize(CephContext *_cct, rgw::sal::Store* _store);
   void finalize();
@@ -518,15 +518,17 @@ public:
   int process(LCWorker* worker,
 	      const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
 	      bool once);
+  int advance_head(const std::string& lc_shard,
+		   rgw::sal::Lifecycle::LCHead& head,
+		   rgw::sal::Lifecycle::LCEntry& entry,
+		   time_t start_date);
   int process(int index, int max_lock_secs, LCWorker* worker, bool once);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     const std::string& bucket_entry_marker, bool once);
-  bool if_already_run_today(time_t start_date);
   bool expired_session(time_t started);
   time_t thread_stop_at();
   int list_lc_progress(std::string& marker, uint32_t max_entries,
 		       std::vector<rgw::sal::Lifecycle::LCEntry>&, int& index);
-  int bucket_lc_prepare(int index, LCWorker* worker);
   int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once);
   int bucket_lc_post(int index, int max_lock_sec,

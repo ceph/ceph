@@ -117,6 +117,56 @@ describe('HostsComponent', () => {
     expect(spans[0].textContent).toBe(hostname);
   });
 
+  it('should show the exact count of the repeating daemons', () => {
+    const hostname = 'ceph.dev';
+    const payload = [
+      {
+        services: [
+          {
+            type: 'mgr',
+            id: 'x'
+          },
+          {
+            type: 'mgr',
+            id: 'y'
+          },
+          {
+            type: 'osd',
+            id: '0'
+          },
+          {
+            type: 'osd',
+            id: '1'
+          },
+          {
+            type: 'osd',
+            id: '2'
+          },
+          {
+            type: 'rgw',
+            id: 'rgw'
+          }
+        ],
+        hostname: hostname,
+        labels: ['foo', 'bar']
+      }
+    ];
+
+    OrchestratorHelper.mockStatus(false);
+    hostListSpy.and.callFake(() => of(payload));
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    fixture.detectChanges();
+
+    const spans = fixture.debugElement.nativeElement.querySelectorAll(
+      '.datatable-body-cell-label span span.badge.badge-background-primary'
+    );
+    expect(spans[0].textContent).toContain('mgr: 2');
+    expect(spans[1].textContent).toContain('osd: 3');
+    expect(spans[2].textContent).toContain('rgw: 1');
+  });
+
   it('should test if host facts are tranformed correctly if orch available', () => {
     const features = [OrchestratorFeature.HOST_FACTS];
     const payload = [
@@ -201,6 +251,37 @@ describe('HostsComponent', () => {
       '.datatable-body-cell-label span'
     );
     expect(spans[7].textContent).toBe('N/A');
+  });
+
+  it('should test if memory/raw capacity columns shows N/A if facts are available but in fetching state', () => {
+    const features = [OrchestratorFeature.HOST_FACTS];
+    let hostPayload: any[];
+    hostPayload = [
+      {
+        hostname: 'host_test',
+        services: [
+          {
+            type: 'osd',
+            id: '0'
+          }
+        ],
+        cpu_count: 2,
+        cpu_cores: 1,
+        memory_total_kb: undefined,
+        hdd_count: 4,
+        hdd_capacity_bytes: undefined,
+        flash_count: 4,
+        flash_capacity_bytes: undefined,
+        nic_count: 1
+      }
+    ];
+    OrchestratorHelper.mockStatus(true, features);
+    hostListSpy.and.callFake(() => of(hostPayload));
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    expect(component.hosts[0]['memory_total_bytes']).toEqual('N/A');
+    expect(component.hosts[0]['raw_capacity']).toEqual('N/A');
   });
 
   it('should show force maintenance modal when it is safe to stop host', () => {

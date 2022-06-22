@@ -2,6 +2,8 @@ import errno
 import json
 import logging
 import re
+import socket
+import time
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, TypeVar, \
     Optional, Dict, Any, Tuple, NewType, cast
@@ -239,9 +241,14 @@ class CephadmService(metaclass=ABCMeta):
                 self.mgr.log.warning(f"Unable to update caps for {entity}")
         return keyring
 
-    def _inventory_get_addr(self, hostname: str) -> str:
-        """Get a host's address with its hostname."""
-        return self.mgr.inventory.get_addr(hostname)
+    def _inventory_get_fqdn(self, hostname: str) -> str:
+        """Get a host's FQDN with its hostname.
+
+           If the FQDN can't be resolved, the address from the inventory will
+           be returned instead.
+        """
+        addr = self.mgr.inventory.get_addr(hostname)
+        return socket.getfqdn(addr)
 
     def _set_service_url_on_dashboard(self,
                                       service_name: str,
@@ -666,19 +673,31 @@ class MgrService(CephService):
         return DaemonDescription()
 
     def fail_over(self) -> None:
-        if not self.mgr_map_has_standby():
-            raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
-                'daemon', 'mgr' + self.mgr.get_mgr_id()))
+        # this has been seen to sometimes transiently fail even when there are multiple
+        # mgr daemons. As long as there are multiple known mgr daemons, we should retry.
+        class NoStandbyError(OrchestratorError):
+            pass
+        no_standby_exc = NoStandbyError('Need standby mgr daemon', event_kind_subject=(
+            'daemon', 'mgr' + self.mgr.get_mgr_id()))
+        for sleep_secs in [2, 8, 15]:
+            try:
+                if not self.mgr_map_has_standby():
+                    raise no_standby_exc
+                self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
+                                           'INFO', 'Failing over to other MGR')
+                logger.info('Failing over to other MGR')
 
-        self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
-                                   'INFO', 'Failing over to other MGR')
-        logger.info('Failing over to other MGR')
-
-        # fail over
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'mgr fail',
-            'who': self.mgr.get_mgr_id(),
-        })
+                # fail over
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'mgr fail',
+                    'who': self.mgr.get_mgr_id(),
+                })
+                return
+            except NoStandbyError:
+                logger.info(
+                    f'Failed to find standby mgr for failover. Retrying in {sleep_secs} seconds')
+                time.sleep(sleep_secs)
+        raise no_standby_exc
 
     def mgr_map_has_standby(self) -> bool:
         """

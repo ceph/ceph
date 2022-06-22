@@ -29,7 +29,6 @@
 #include "include/utime.h"
 #include "include/str_list.h"
 
-#include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 
 class RGWSI_RADOS;
@@ -40,11 +39,11 @@ class cls_timeindex_entry;
 class RGWObjExpStore {
   CephContext *cct;
   RGWSI_RADOS *rados_svc;
-  rgw::sal::Zone* zone_svc;
+  rgw::sal::RadosStore* store;
 public:
-  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::Zone* _zone_svc) : cct(_cct),
+  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::RadosStore* _store) : cct(_cct),
                                                                                       rados_svc(_rados_svc),
-                                                                                      zone_svc(_zone_svc) {}
+                                                                                      store(_store) {}
 
   int objexp_hint_add(const DoutPrefixProvider *dpp, 
                       const ceph::real_time& delete_at,
@@ -103,7 +102,7 @@ protected:
 public:
   explicit RGWObjectExpirer(rgw::sal::Store* _store)
     : store(_store),
-      exp_store(_store->ctx(), static_cast<rgw::sal::RadosStore*>(store)->svc()->rados, store->get_zone()),
+      exp_store(_store->ctx(), static_cast<rgw::sal::RadosStore*>(store)->svc()->rados, static_cast<rgw::sal::RadosStore*>(store)),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {

@@ -154,6 +154,7 @@ class CephfsConnectionPool(object):
             self.fs.conf_set("client_mount_uid", "0")
             self.fs.conf_set("client_mount_gid", "0")
             self.fs.conf_set("client_check_pool_perm", "false")
+            self.fs.conf_set("client_quota", "false")
             logger.debug("CephFS initializing...")
             self.fs.init()
             logger.debug("CephFS mounting...")
@@ -320,6 +321,15 @@ class CephfsClient(Generic[Module_T]):
         if fs:
             return fs['mdsmap']['metadata_pool']
         return None
+
+    def get_all_filesystems(self) -> List[str]:
+        fs_list: List[str] = []
+        fs_map = self.mgr.get('fs_map')
+        if fs_map['filesystems']:
+            for fs in fs_map['filesystems']:
+                fs_list.append(fs['mdsmap']['fs_name'])
+        return fs_list
+
 
 
 @contextlib.contextmanager

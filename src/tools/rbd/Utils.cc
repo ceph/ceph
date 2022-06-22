@@ -44,7 +44,7 @@ static std::string mgr_command_args_to_str(
 
 int ProgressContext::update_progress(uint64_t offset, uint64_t total) {
   if (progress) {
-    int pc = total ? (offset * 100ull / total) : 0;
+    int pc = get_percentage(offset, total);
     if (pc > last_pc) {
       std::cerr << "\r" << operation << ": "
 		<< pc << "% complete..." << std::flush;
@@ -65,6 +65,10 @@ void ProgressContext::fail() {
     std::cerr << "\r" << operation << ": " << last_pc << "% complete...failed."
 	      << std::endl;
   }
+}
+
+int get_percentage(uint64_t part, uint64_t whole) {
+  return whole ? (100 * part / whole) : 0;
 }
 
 void aio_context_callback(librbd::completion_t completion, void *arg)

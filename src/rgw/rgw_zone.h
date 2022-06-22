@@ -6,6 +6,7 @@
 
 #include "rgw_common.h"
 #include "rgw_sync_policy.h"
+#include "rgw_zone_features.h"
 
 namespace rgw_zone_defaults {
 
@@ -596,13 +597,15 @@ struct RGWZone {
   bool sync_from_all;
   std::set<std::string> sync_from; /* list of zones to sync from */
 
+  rgw::zone_features::set supported_features;
+
   RGWZone()
     : log_meta(false), log_data(false), read_only(false),
       bucket_index_max_shards(default_bucket_index_max_shards),
       sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(name, bl);
     encode(endpoints, bl);
     encode(log_meta, bl);
@@ -614,11 +617,12 @@ struct RGWZone {
     encode(sync_from_all, bl);
     encode(sync_from, bl);
     encode(redirect_zone, bl);
+    encode(supported_features, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -645,6 +649,9 @@ struct RGWZone {
     if (struct_v >= 7) {
       decode(redirect_zone, bl);
     }
+    if (struct_v >= 8) {
+      decode(supported_features, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -655,6 +662,10 @@ struct RGWZone {
 
   bool syncs_from(const std::string& zone_name) const {
     return (sync_from_all || sync_from.find(zone_name) != sync_from.end());
+  }
+
+  bool supports(std::string_view feature) const {
+    return supported_features.contains(feature);
   }
 };
 WRITE_CLASS_ENCODER(RGWZone)
@@ -902,6 +913,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string realm_id;
 
   rgw_sync_policy_info sync_policy;
+  rgw::zone_features::set enabled_features;
 
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
@@ -919,7 +931,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void post_process_params(const DoutPrefixProvider *dpp, optional_yield y);
 
   void encode(bufferlist& bl) const override {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -933,11 +945,12 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     RGWSystemMetaObj::encode(bl);
     encode(realm_id, bl);
     encode(sync_policy, bl);
+    encode(enabled_features, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -961,6 +974,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     if (struct_v >= 5) {
       decode(sync_policy, bl);
     }
+    if (struct_v >= 6) {
+      decode(enabled_features, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -974,6 +990,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
                bool *psync_from_all, std::list<std::string>& sync_from,
                std::list<std::string>& sync_from_rm, std::string *predirect_zone,
                std::optional<int> bucket_index_max_shards, RGWSyncModulesManager *sync_mgr,
+               const rgw::zone_features::set& enable_features,
+               const rgw::zone_features::set& disable_features,
 	       optional_yield y);
   int remove_zone(const DoutPrefixProvider *dpp, const std::string& zone_id, optional_yield y);
   int rename_zone(const DoutPrefixProvider *dpp, const RGWZoneParams& zone_params, optional_yield y);
@@ -987,6 +1005,10 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<RGWZoneGroup*>& o);
+
+  bool supports(std::string_view feature) const {
+    return enabled_features.contains(feature);
+  }
 };
 WRITE_CLASS_ENCODER(RGWZoneGroup)
 
@@ -1026,8 +1048,7 @@ WRITE_CLASS_ENCODER(RGWPeriodMap)
 
 struct RGWPeriodConfig
 {
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
   RGWRateLimitInfo user_ratelimit;
   RGWRateLimitInfo bucket_ratelimit;
   // rate limit unauthenticated user
@@ -1035,8 +1056,8 @@ struct RGWPeriodConfig
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    encode(bucket_quota, bl);
-    encode(user_quota, bl);
+    encode(quota.bucket_quota, bl);
+    encode(quota.user_quota, bl);
     encode(bucket_ratelimit, bl);
     encode(user_ratelimit, bl);
     encode(anon_ratelimit, bl);
@@ -1045,8 +1066,8 @@ struct RGWPeriodConfig
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    decode(bucket_quota, bl);
-    decode(user_quota, bl);
+    decode(quota.bucket_quota, bl);
+    decode(quota.user_quota, bl);
     if (struct_v >= 2) {
       decode(bucket_ratelimit, bl);
       decode(user_ratelimit, bl);
@@ -1076,8 +1097,7 @@ struct RGWRegionMap {
 
   std::string master_region;
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -1094,8 +1114,7 @@ struct RGWZoneGroupMap {
 
   std::string master_zonegroup;
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
+  RGWQuota quota;
 
   /* construct the map */
   int read(const DoutPrefixProvider *dpp, CephContext *cct, RGWSI_SysObj *sysobj_svc, optional_yield y);
@@ -1281,11 +1300,11 @@ public:
   const std::string& get_info_oid_prefix() const;
 
   void set_user_quota(RGWQuotaInfo& user_quota) {
-    period_config.user_quota = user_quota;
+    period_config.quota.user_quota = user_quota;
   }
 
   void set_bucket_quota(RGWQuotaInfo& bucket_quota) {
-    period_config.bucket_quota = bucket_quota;
+    period_config.quota.bucket_quota = bucket_quota;
   }
 
   void set_id(const std::string& _id) {

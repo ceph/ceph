@@ -281,8 +281,8 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("default_placement", info.default_placement.name, f);
   encode_json("default_storage_class", info.default_placement.storage_class, f);
   encode_json("placement_tags", info.placement_tags, f);
-  encode_json("bucket_quota", info.bucket_quota, f);
-  encode_json("user_quota", info.user_quota, f);
+  encode_json("bucket_quota", info.quota.bucket_quota, f);
+  encode_json("user_quota", info.quota.user_quota, f);
   encode_json("temp_url_keys", info.temp_url_keys, f);
 
   string user_source_type;
@@ -419,6 +419,11 @@ void RGWUserAdminOpState::set_subuser(std::string& _subuser)
 void RGWUserAdminOpState::set_user_info(RGWUserInfo& user_info)
 {
   user->get_info() = user_info;
+}
+
+void RGWUserAdminOpState::set_user_version_tracker(RGWObjVersionTracker& objv_tracker)
+{
+  user->get_version_tracker() = objv_tracker;
 }
 
 const rgw_user& RGWUserAdminOpState::get_user_id()
@@ -1515,6 +1520,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     op_state.set_user_info(user->get_info());
     op_state.set_populated();
     op_state.objv = user->get_version_tracker();
+    op_state.set_user_version_tracker(user->get_version_tracker());
 
     old_info = user->get_info();
     set_populated();
@@ -1568,6 +1574,8 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
 
   ret = user->store_user(dpp, y, false, pold_info);
   op_state.objv = user->get_version_tracker();
+  op_state.set_user_version_tracker(user->get_version_tracker());
+
   if (ret < 0) {
     set_err_msg(err_msg, "unable to store user info");
     return ret;
@@ -1717,6 +1725,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   RGWUserInfo& user_info = op_state.get_user_info();
   user_info.user_id = new_user->get_id();
   op_state.objv = user->get_version_tracker();
+  op_state.set_user_version_tracker(user->get_version_tracker());
 
   rename_swift_keys(new_user->get_id(), user_info.swift_keys);
 
@@ -1756,9 +1765,9 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
     user_info.op_mask = op_state.get_op_mask();
 
   if (op_state.has_bucket_quota()) {
-    user_info.bucket_quota = op_state.get_bucket_quota();
+    user_info.quota.bucket_quota = op_state.get_bucket_quota();
   } else {
-    rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
+    rgw_apply_default_bucket_quota(user_info.quota.bucket_quota, cct->_conf);
   }
 
   if (op_state.temp_url_key_specified) {
@@ -1770,9 +1779,9 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
   }
 
   if (op_state.has_user_quota()) {
-    user_info.user_quota = op_state.get_user_quota();
+    user_info.quota.user_quota = op_state.get_user_quota();
   } else {
-    rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
+    rgw_apply_default_user_quota(user_info.quota.user_quota, cct->_conf);
   }
 
   if (op_state.default_placement_specified) {
@@ -2014,10 +2023,10 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     user_info.op_mask = op_state.get_op_mask();
 
   if (op_state.has_bucket_quota())
-    user_info.bucket_quota = op_state.get_bucket_quota();
+    user_info.quota.bucket_quota = op_state.get_bucket_quota();
 
   if (op_state.has_user_quota())
-    user_info.user_quota = op_state.get_user_quota();
+    user_info.quota.user_quota = op_state.get_user_quota();
 
   if (op_state.has_suspension_op()) {
     __u8 suspended = op_state.get_suspension_status();

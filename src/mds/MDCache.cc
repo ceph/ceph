@@ -3765,13 +3765,13 @@ void MDCache::trim_unlinked_inodes()
       q.push_back(in);
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
   for (auto& in : q) {
     remove_inode_recursive(in);
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 }
@@ -5417,7 +5417,7 @@ bool MDCache::process_imported_caps()
     } else {
       open_ino(p.first, (int64_t)-1, fin, false);
     }
-    if (!(cap_imports_num_opening % 1000))
+    if (!(cap_imports_num_opening % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -5603,7 +5603,7 @@ void MDCache::choose_lock_states_and_reconnect_caps()
       rejoin_pending_snaprealms.insert(in);
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 }
@@ -5772,7 +5772,7 @@ void MDCache::export_remaining_imported_caps()
       }
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 
@@ -5975,7 +5975,7 @@ bool MDCache::open_undef_inodes_dirfrags()
       } else if (!p.first) {
         p.second.push_back(dn->key());
       }
-         }
+    }
   }
 
   if (fetch_queue.empty())
@@ -5997,10 +5997,11 @@ bool MDCache::open_undef_inodes_dirfrags()
       continue;
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
       ceph_assert(diri->dirfragtree.is_leaf(dir->get_frag()));
-    if (p.second.first)
+    if (p.second.first || p.second.second.empty()) {
       dir->fetch(gather.new_sub());
-    else
+    } else {
       dir->fetch_keys(p.second.second, gather.new_sub());
+    }
   }
   ceph_assert(gather.has_subs());
   gather.activate();
@@ -6246,7 +6247,7 @@ void MDCache::reissue_all_caps()
 	n += mds->locker->issue_caps(in);
     }
 
-    if ((count % 1000) + n >= 1000)
+    if ((count % mds->heartbeat_reset_grace()) + n >= mds->heartbeat_reset_grace())
       mds->heartbeat_reset();
     count += n;
   }
@@ -6326,6 +6327,11 @@ void MDCache::identify_files_to_recover()
 {
   dout(10) << "identify_files_to_recover" << dendl;
   int count = 0;
+
+  // Clear the recover and check queues in case the monitor sends rejoin mdsmap twice.
+  rejoin_recover_q.clear();
+  rejoin_check_q.clear();
+
   for (auto &p : inode_map) {
     CInode *in = p.second;
     if (!in->is_auth())
@@ -6367,7 +6373,7 @@ void MDCache::identify_files_to_recover()
       rejoin_check_q.push_back(in);
     }
 
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 }
@@ -6379,13 +6385,13 @@ void MDCache::start_files_to_recover()
     if (in->filelock.get_state() == LOCK_XLOCKSNAP)
       mds->locker->issue_caps(in);
     mds->locker->check_inode_max_size(in);
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
   rejoin_check_q.clear();
   for (CInode *in : rejoin_recover_q) {
     mds->locker->file_recover(&in->filelock);
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
   if (!rejoin_recover_q.empty()) {
@@ -9484,6 +9490,19 @@ void MDCache::handle_find_ino(const cref_t<MMDSFindIno> &m)
   if (in) {
     in->make_path(r->path);
     dout(10) << " have " << r->path << " " << *in << dendl;
+
+    /*
+     * If the the CInode was just created by using openc in current
+     * auth MDS, but the client just sends a getattr request to another
+     * replica MDS. Then here it will make a path of '#INODE-NUMBER'
+     * only because the CInode hasn't been linked yet, and the replica
+     * MDS will keep retrying until the auth MDS flushes the mdlog and
+     * the C_MDS_openc_finish and link_primary_inode are called at most
+     * 5 seconds later.
+     */
+    if (!in->get_parent_dn() && in->is_auth()) {
+      mds->mdlog->flush();
+    }
   }
   mds->send_message_mds(r, mds_rank_t(m->get_source().num()));
 }
@@ -10940,7 +10959,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
 void MDCache::encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl)
 {
   ceph_assert(straydn->get_num_auth_pins());
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   uint64_t features = mds->mdsmap->get_up_features();
   encode_replica_inode(get_myin(), who, bl, features);
   encode_replica_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), who, bl);
@@ -10948,15 +10967,18 @@ void MDCache::encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist&
   encode_replica_inode(straydn->get_dir()->inode, who, bl, features);
   encode_replica_dir(straydn->get_dir(), who, bl);
   encode_replica_dentry(straydn, who, bl);
+  if (!straydn->get_projected_linkage()->is_null()) {
+    encode_replica_inode(straydn->get_projected_linkage()->get_inode(), who, bl, features);
+  }
   ENCODE_FINISH(bl);
 }
    
-void MDCache::decode_replica_stray(CDentry *&straydn, const bufferlist &bl, mds_rank_t from)
+void MDCache::decode_replica_stray(CDentry *&straydn, CInode **in, const bufferlist &bl, mds_rank_t from)
 {
   MDSContext::vec finished;
   auto p = bl.cbegin();
 
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   CInode *mdsin = nullptr;
   decode_replica_inode(mdsin, p, NULL, finished);
   CDir *mdsdir = nullptr;
@@ -10969,6 +10991,9 @@ void MDCache::decode_replica_stray(CDentry *&straydn, const bufferlist &bl, mds_
   decode_replica_dir(straydir, p, strayin, from, finished);
 
   decode_replica_dentry(straydn, p, straydir, finished);
+  if (struct_v >= 2 && in) {
+    decode_replica_inode(*in, p, straydn, finished);
+  }
   if (!finished.empty())
     mds->queue_waiters(finished);
   DECODE_FINISH(p);
@@ -11200,8 +11225,9 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 {
   // straydn
   CDentry *straydn = nullptr;
+  CInode *strayin = nullptr;
   if (m->straybl.length())
-    decode_replica_stray(straydn, m->straybl, mds_rank_t(m->get_source().num()));
+    decode_replica_stray(straydn, &strayin, m->straybl, mds_rank_t(m->get_source().num()));
 
   CDir *dir = get_dirfrag(m->get_dirfrag());
   if (!dir) {
@@ -12457,7 +12483,7 @@ void MDCache::force_readonly()
     CInode *in = p.second;
     if (in->is_head())
       mds->locker->eval(in, CEPH_CAP_LOCKS);
-    if (!(++count % 1000))
+    if (!(++count % mds->heartbeat_reset_grace()))
       mds->heartbeat_reset();
   }
 

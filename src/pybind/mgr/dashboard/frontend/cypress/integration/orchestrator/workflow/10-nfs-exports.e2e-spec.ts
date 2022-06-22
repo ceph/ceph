@@ -1,6 +1,8 @@
-import { ServicesPageHelper } from 'cypress/integration/cluster/services.po';
-import { NFSPageHelper } from 'cypress/integration/orchestrator/workflow/nfs/nfs-export.po';
-import { BucketsPageHelper } from 'cypress/integration/rgw/buckets.po';
+/* tslint:disable*/
+import { ServicesPageHelper } from '../../cluster/services.po';
+import { NFSPageHelper } from '../../orchestrator/workflow/nfs/nfs-export.po';
+import { BucketsPageHelper } from '../../rgw/buckets.po';
+/* tslint:enable*/
 
 describe('nfsExport page', () => {
   const nfsExport = new NFSPageHelper();

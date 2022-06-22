@@ -188,6 +188,13 @@ enum {
   l_bluestore_gc_merged,
   //****************************************
 
+  // misc
+  //****************************************
+  l_bluestore_omap_iterator_count,
+  l_bluestore_omap_rmkeys_count,
+  l_bluestore_omap_rmkey_ranges_count,
+  //****************************************
+
   // other client ops latencies
   //****************************************
   l_bluestore_omap_seek_to_first_lat,
@@ -1506,15 +1513,17 @@ public:
   };
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+
+    PerfCounters* logger = nullptr;
     CollectionRef c;
     OnodeRef o;
     KeyValueDB::Iterator it;
     std::string head, tail;
 
     std::string _stringify() const;
-
   public:
-    OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    OmapIteratorImpl(PerfCounters* l, CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+    virtual ~OmapIteratorImpl();
     int seek_to_first() override;
     int upper_bound(const std::string &after) override;
     int lower_bound(const std::string &to) override;
@@ -2622,7 +2631,7 @@ private:
   CollectionRef _get_collection_by_oid(const ghobject_t& oid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
-  void _update_cache_logger();
+  void _update_logger();
 
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
@@ -2743,7 +2752,7 @@ private:
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
     //NB: opt_name reserved for future use
-    boost::optional<T> val2 = f();
+    std::optional<T> val2 = f();
     if (val2) {
       return *val2;
     }
@@ -2764,7 +2773,7 @@ public:
 
 private:
   int32_t ondisk_format = 0;  ///< value detected on mount
-
+  bool    m_fast_shutdown = false;
   int _upgrade_super();  ///< upgrade (called during open_super)
   uint64_t _get_ondisk_reserved() const;
   void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
@@ -2783,6 +2792,9 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  void prepare_for_fast_shutdown() override;
+  virtual bool has_null_manager();
+
   uint64_t get_min_alloc_size() const override {
     return min_alloc_size;
   }
@@ -2791,6 +2803,7 @@ public:
 
   bool is_rotational() override;
   bool is_journal_rotational() override;
+  bool is_db_rotational() ;
 
   std::string get_default_device_class() override {
     std::string device_class;

@@ -316,7 +316,13 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
       formatter->close_section();
     }
   }
-
+  if (!entry.access_key_id.empty()) {
+    formatter->dump_string("access_key_id", entry.access_key_id);
+  }
+  if (!entry.subuser.empty()) {
+    formatter->dump_string("subuser", entry.subuser);
+  }
+  formatter->dump_bool("temp_url", entry.temp_url);
   formatter->close_section();
 }
 
@@ -344,15 +350,18 @@ int OpsLogManifold::log(struct req_state* s, struct rgw_log_entry& entry)
 }
 
 OpsLogFile::OpsLogFile(CephContext* cct, std::string& path, uint64_t max_data_size) :
-  cct(cct), file(path, std::ofstream::app), data_size(0), max_data_size(max_data_size)
+  cct(cct), data_size(0), max_data_size(max_data_size), path(path), need_reopen(false)
 {
+}
+
+void OpsLogFile::reopen() {
+  need_reopen = true;
 }
 
 void OpsLogFile::flush()
 {
-  std::scoped_lock flush_lock(flush_mutex);
   {
-    std::scoped_lock log_lock(log_mutex);
+    std::scoped_lock log_lock(mutex);
     assert(flush_buffer.empty());
     flush_buffer.swap(log_buffer);
     data_size = 0;
@@ -360,6 +369,11 @@ void OpsLogFile::flush()
   for (auto bl : flush_buffer) {
     int try_num = 0;
     while (true) {
+      if (!file.is_open() || need_reopen) {
+        need_reopen = false;
+        file.close();
+        file.open(path, std::ofstream::app);
+      }
       bl.write_stream(file);
       if (!file) {
         ldpp_dout(this, 0) << "ERROR: failed to log RGW ops log file entry" << dendl;
@@ -380,7 +394,7 @@ void OpsLogFile::flush()
 }
 
 void* OpsLogFile::entry() {
-  std::unique_lock lock(log_mutex);
+  std::unique_lock lock(mutex);
   while (!stopped) {
     if (!log_buffer.empty()) {
       lock.unlock();
@@ -388,8 +402,9 @@ void* OpsLogFile::entry() {
       lock.lock();
       continue;
     }
-    cond_flush.wait(lock);
+    cond.wait(lock);
   }
+  lock.unlock();
   flush();
   return NULL;
 }
@@ -401,7 +416,8 @@ void OpsLogFile::start() {
 
 void OpsLogFile::stop() {
   {
-    cond_flush.notify_one();
+    std::unique_lock lock(mutex);
+    cond.notify_one();
     stopped = true;
   }
   join();
@@ -417,15 +433,19 @@ OpsLogFile::~OpsLogFile()
 
 int OpsLogFile::log_json(struct req_state* s, bufferlist& bl)
 {
-  std::unique_lock lock(log_mutex);
+  std::unique_lock lock(mutex);
   if (data_size + bl.length() >= max_data_size) {
     ldout(s->cct, 0) << "ERROR: RGW ops log file buffer too full, dropping log for txn: " << s->trans_id << dendl;
     return -1;
   }
   log_buffer.push_back(bl);
   data_size += bl.length();
-  cond_flush.notify_all();
+  cond.notify_all();
   return 0;
+}
+
+unsigned OpsLogFile::get_subsys() const {
+  return dout_subsys;
 }
 
 JsonOpsLogSink::JsonOpsLogSink() {
@@ -581,6 +601,7 @@ int rgw_log_op(RGWREST* const rest, struct req_state *s, const string& op_name, 
 
   if (s->auth.identity) {
     entry.identity_type = s->auth.identity->get_identity_type();
+    s->auth.identity->write_ops_log_entry(entry);
   } else {
     entry.identity_type = TYPE_NONE;
   }
@@ -676,4 +697,3 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("trans_id", trans_id);
   f->dump_unsigned("identity_type", identity_type);
 }
-

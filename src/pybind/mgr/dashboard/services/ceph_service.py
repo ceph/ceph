@@ -249,7 +249,7 @@ class CephService(object):
             # thus it is not relevant for us which daemon we are using.
             # NOTE: the list may contain daemons that are 'down' or 'destroyed'.
             for daemon in device['daemons']:
-                svc_type, svc_id = daemon.split('.')
+                svc_type, svc_id = daemon.split('.', 1)
                 if 'osd' in svc_type:
                     if daemon not in osd_daemons_up:
                         continue
@@ -270,17 +270,23 @@ class CephService(object):
                         continue
                 else:
                     dev_smart_data = {}
-                for dev_id, dev_data in dev_smart_data.items():
-                    if 'error' in dev_data:
-                        logger.warning(
-                            '[SMART] Error retrieving smartctl data for device ID "%s": %s',
-                            dev_id, dev_data)
+
+                CephService.log_dev_data_error(dev_smart_data)
+
                 break
 
             return dev_smart_data
         logger.warning('[SMART] No daemons associated with device ID "%s"',
                        device['devid'])
         return {}
+
+    @staticmethod
+    def log_dev_data_error(dev_smart_data):
+        for dev_id, dev_data in dev_smart_data.items():
+            if 'error' in dev_data:
+                logger.warning(
+                    '[SMART] Error retrieving smartctl data for device ID "%s": %s',
+                    dev_id, dev_data)
 
     @staticmethod
     def get_devices_by_host(hostname):

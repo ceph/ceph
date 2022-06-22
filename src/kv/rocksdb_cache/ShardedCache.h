@@ -83,11 +83,11 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   virtual size_t GetUsage(rocksdb::Cache::Handle* handle) const override;
   virtual size_t GetPinnedUsage() const override;
   virtual size_t GetCharge(Handle* handle) const = 0;
-#if (ROCKSDB_MAJOR >= 6 && ROCKSDB_MINOR >= 22)
+#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
   virtual DeleterFn GetDeleter(Handle* handle) const override;
 #endif
   virtual void DisownData() override = 0;
-#if (ROCKSDB_MAJOR >= 6 && ROCKSDB_MINOR >= 22)
+#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
   virtual void ApplyToAllEntries(
       const std::function<void(const rocksdb::Slice& key, void* value, size_t charge,
                                DeleterFn deleter)>& callback,
