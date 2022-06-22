@@ -1714,6 +1714,7 @@ int get_zones_pool_set(const DoutPrefixProvider *dpp,
       pool_names.insert(zone.reshard_pool);
       pool_names.insert(zone.notif_pool);
       pool_names.insert(zone.account_pool);
+      pool_names.insert(zone.account_name_pool);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
         for (auto& pi : iter.second.storage_classes.get_all()) {
@@ -1792,6 +1793,7 @@ int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield 
   oidc_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:oidc", oidc_pool);
   notif_pool = fix_zone_pool_dup(pools, name ,".rgw.log:notif", notif_pool);
   account_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:account", account_pool);
+  account_name_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:account.names", account_name_pool);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
