@@ -979,4 +979,10 @@ add_ceph_unittest(unittest_weighted_shuffle)
 
 add_executable(unittest_intarith test_intarith.cc)
 add_ceph_unittest(unittest_intarith)
+
+if(WITH_CPP_REDIS)
+  target_link_libraries(ceph_test_rgw_directory PRIVATE cpp_redis)
+  target_include_directories(ceph_test_rgw_directory PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/includes")
+  target_include_directories(ceph_test_rgw_directory PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/tacopie/includes")
+endif()
 #make check ends here
