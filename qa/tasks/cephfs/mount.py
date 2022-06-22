@@ -28,7 +28,8 @@ UMOUNT_TIMEOUT = 300
 class CephFSMount(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
+                 client_config=None):
         """
         :param test_dir: Global teuthology test dir
         :param client_id: Client ID, the 'foo' in client.foo
@@ -49,20 +50,33 @@ class CephFSMount(object):
                            hostfs_mntpt=hostfs_mntpt, cephfs_name=cephfs_name,
                            cephfs_mntpt=cephfs_mntpt)
 
+        if client_config is None:
+            client_config = {}
+        self.client_config = client_config
+
+        self.cephfs_name = cephfs_name
         self.client_id = client_id
         self.client_keyring_path = client_keyring_path
         self.client_remote = client_remote
-        if hostfs_mntpt:
+        self.cluster_name = 'ceph' # TODO: use config['cluster']
+        self.fs = None
+
+        if cephfs_mntpt is None and client_config.get("mount_path"):
+            self.cephfs_mntpt = client_config.get("mount_path")
+            log.info(f"using client_config[\"cephfs_mntpt\"] = {self.cephfs_mntpt}")
+        else:
+            self.cephfs_mntpt = cephfs_mntpt
+        log.info(f"cephfs_mntpt = {self.cephfs_mntpt}")
+
+        if hostfs_mntpt is None and client_config.get("mountpoint"):
+            self.hostfs_mntpt = client_config.get("mountpoint")
+            log.info(f"using client_config[\"hostfs_mntpt\"] = {self.hostfs_mntpt}")
+        elif hostfs_mntpt is not None:
             self.hostfs_mntpt = hostfs_mntpt
-            self.hostfs_mntpt_dirname = os.path.basename(self.hostfs_mntpt)
         else:
             self.hostfs_mntpt = os.path.join(self.test_dir, f'mnt.{self.client_id}')
-        self.cephfs_name = cephfs_name
-        self.cephfs_mntpt = cephfs_mntpt
-
-        self.cluster_name = 'ceph' # TODO: use config['cluster']
-
-        self.fs = None
+        self.hostfs_mntpt_dirname = os.path.basename(self.hostfs_mntpt)
+        log.info(f"hostfs_mntpt = {self.hostfs_mntpt}")
 
         self._netns_name = None
         self.nsid = -1
@@ -108,7 +122,7 @@ class CephFSMount(object):
 
     @property
     def mountpoint(self):
-        if self.hostfs_mntpt == None:
+        if self.hostfs_mntpt is None:
             self.hostfs_mntpt = os.path.join(self.test_dir,
                                              self.hostfs_mntpt_dirname)
         return self.hostfs_mntpt
@@ -147,6 +161,9 @@ class CephFSMount(object):
         """
         if not self.client_id or not self.client_remote or \
            not self.hostfs_mntpt:
+            log.error(f"self.client_id = {self.client_id}")
+            log.error(f"self.client_remote = {self.client_remote}")
+            log.error(f"self.hostfs_mntpt = {self.hostfs_mntpt}")
             errmsg = ('Mounting CephFS requires that at least following '
                       'details to be provided -\n'
                       '1. the client ID,\n2. the mountpoint and\n'
