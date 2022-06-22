@@ -239,11 +239,28 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
   }
 
   const auto& op = osd_op.op;
+  /* clients (particularly cephfs) may send truncate operations out of order
+   * w.r.t. reads.  op.extent.truncate_seq and op.extent.truncate_size allow
+   * the OSD to determine whether the client submitted read needs to be
+   * adjusted to compensate for a truncate the OSD hasn't seen yet.
+   */
+  uint64_t adjusted_size = os.oi.size;
+  const uint64_t offset = op.extent.offset;
+  uint64_t adjusted_length = op.extent.length;
+  if ((os.oi.truncate_seq < op.extent.truncate_seq) &&
+       (op.extent.offset + op.extent.length > op.extent.truncate_size) &&
+       (adjusted_size > op.extent.truncate_size)) {
+    adjusted_size = op.extent.truncate_size;
+  }
+  if (offset > adjusted_size) {
+    adjusted_length = 0;
+  } else if (offset + adjusted_length > adjusted_size) {
+    adjusted_length = adjusted_size - offset;
+  }
   logger().trace("sparse_read: {} {}~{}",
                  os.oi.soid, op.extent.offset, op.extent.length);
   return interruptor::make_interruptible(store->fiemap(coll, ghobject_t{os.oi.soid},
-		       op.extent.offset,
-		       op.extent.length)).safe_then_interruptible(
+    offset, adjusted_length)).safe_then_interruptible(
     [&delta_stats, &os, &osd_op, this](auto&& m) {
     return seastar::do_with(interval_set<uint64_t>{std::move(m)},
 			    [&delta_stats, &os, &osd_op, this](auto&& extents) {
