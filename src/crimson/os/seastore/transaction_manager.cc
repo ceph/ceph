@@ -362,6 +362,9 @@ TransactionManager::submit_transaction_direct(
     return tref.get_handle().enter(write_pipeline.prepare);
   }).si_then([this, FNAME, &tref, seq_to_trim=std::move(seq_to_trim)]() mutable
 	      -> submit_transaction_iertr::future<> {
+    if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
+      cache->trim_backref_bufs(*seq_to_trim);
+    }
     auto record = cache->prepare_record(tref, segment_cleaner.get());
 
     tref.get_handle().maybe_release_collection_lock();
@@ -372,9 +375,6 @@ TransactionManager::submit_transaction_direct(
       (auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);
       auto start_seq = submit_result.write_result.start_seq;
-      if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
-	cache->trim_backref_bufs(*seq_to_trim);
-      }
       cache->complete_commit(
           tref,
           submit_result.record_block_base,
