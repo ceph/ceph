@@ -22,16 +22,15 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
     update_sockets();
     dump_asok_metrics();
     auto stats_period = g_conf().get_val<int64_t>("exporter_stats_period");
+    // time to wait before sending requests again
     timer.expires_from_now(std::chrono::seconds(stats_period));
     request_loop(timer);
   });
 }
 
 void DaemonMetricCollector::main() {
-  // time to wait before sending requests again
-  auto stats_period = g_conf().get_val<int64_t>("exporter_stats_period");
   boost::asio::io_service io;
-  boost::asio::steady_timer timer{io, std::chrono::seconds(stats_period)};
+  boost::asio::steady_timer timer{io, std::chrono::seconds(0)};
   request_loop(timer);
   io.run();
 }
