@@ -783,6 +783,7 @@ class UpgradeStatusSpec(object):
         self.which: str = '<unknown>'  # for if user specified daemon types, services or hosts
         self.progress: Optional[str] = None  # How many of the daemons have we upgraded
         self.message = ""  # Freeform description
+        self.is_paused: bool = False  # Is the upgrade paused?
 
 
 def handle_type_error(method: FuncT) -> FuncT:

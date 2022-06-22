@@ -1421,6 +1421,7 @@ Usage:
             'services_complete': status.services_complete,
             'progress': status.progress,
             'message': status.message,
+            'is_paused': status.is_paused,
         }
         out = json.dumps(r, indent=4)
         return HandleCommandResult(stdout=out)
