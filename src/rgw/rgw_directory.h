@@ -13,8 +13,6 @@
 #include <cstdint>
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
-
 class RGWDirectory {
   public:
     RGWDirectory() {}
@@ -35,15 +33,15 @@ class RGWBlockDirectory: RGWDirectory {
       client.disconnect(true);
     }
     
-    void findClient(string key, cpp_redis::client *client, int port);
-    int existKey(string key, cpp_redis::client *client);
+    void findClient(std::string key, cpp_redis::client *client, int port);
+    int existKey(std::string key, cpp_redis::client *client);
     int setValue(cache_block *ptr, int port);
     int setValue(cache_block *ptr);
     int getValue(cache_block *ptr, int port);
     int getValue(cache_block *ptr);
   
   private:
-    string buildIndex(cache_block *ptr);
+    std::string buildIndex(cache_block *ptr);
     cpp_redis::client client;
 };
 
