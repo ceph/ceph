@@ -390,7 +390,6 @@ target_link_libraries(radosgwd radosgw librados
   ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
-
 set_target_properties(radosgwd PROPERTIES OUTPUT_NAME radosgw)
 install(TARGETS radosgwd DESTINATION bin)
 
