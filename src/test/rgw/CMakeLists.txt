@@ -229,6 +229,11 @@ add_executable(unittest_log_backing test_log_backing.cc)
 target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
   ${rgw_libs})
 
+# unittest_store_bench
+add_executable(unittest_rgw_store_bench test_store_bench.cc)
+target_link_libraries(unittest_rgw_store_bench ${UNITTEST_LIBS}
+  ${rgw_libs})
+
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
 target_link_libraries(unittest_rgw_lua ${rgw_libs})
