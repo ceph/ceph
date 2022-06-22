@@ -481,7 +481,7 @@ public:
         if (ret < 0) {
           ldout(store->ctx(), 0) << "ERROR: list_op returned ret=" << ret
 				 << dendl;
-          return ret;
+          return false;
         }
       }
       delay();
