@@ -3269,7 +3269,7 @@ bool CDir::freeze_tree()
 
   auth_pin(this);
 
-  // Travese the subtree to mark dirfrags as 'freezing' (set freeze_tree_state)
+  // Traverse the subtree to mark dirfrags as 'freezing' (set freeze_tree_state)
   // and to accumulate auth pins and record total count in freeze_tree_state.
   // when auth unpin an 'freezing' object, the counter in freeze_tree_state also
   // gets decreased. Subtree become 'frozen' when the counter reaches zero.
