@@ -3338,7 +3338,7 @@ Changelog
 * common: Revert Merge pull request #33673 from cbodley/wip-denc-enum (`pr#33832 <https://github.com/ceph/ceph/pull/33832>`_, Sage Weil)
 * common: selinux: Allow ceph to setsched (`pr#33404 <https://github.com/ceph/ceph/pull/33404>`_, Brad Hubbard)
 * common: skip interfaces starting with lo in find_ipv{4,6}_in_subnet() (`pr#32420 <https://github.com/ceph/ceph/pull/32420>`_, Jiawei Li)
-* common: sort best-matched commond by req argument count (`issue#40292 <http://tracker.ceph.com/issues/40292>`_, `pr#28510 <https://github.com/ceph/ceph/pull/28510>`_, Chang Liu)
+* common: sort best-matched command by req argument count (`issue#40292 <http://tracker.ceph.com/issues/40292>`_, `pr#28510 <https://github.com/ceph/ceph/pull/28510>`_, Chang Liu)
 * common: src/: remove execute permissions on nine source files (`pr#28781 <https://github.com/ceph/ceph/pull/28781>`_, J. Eric Ivancich)
 * common: start logging for non-global_init users (`pr#27352 <https://github.com/ceph/ceph/pull/27352>`_, Sage Weil)
 * common: systemd: Wait 5 seconds before attempting a restart of an OSD (`pr#31550 <https://github.com/ceph/ceph/pull/31550>`_, Wido den Hollander)

@@ -426,7 +426,7 @@ void AdminSocket::do_tell_queue()
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
 #ifdef WITH_SEASTAR
-        // TODO: crimson: handle asok commmand from alien thread
+        // TODO: crimson: handle asok command from alien thread
 #else
 	m->get_connection()->send_message(reply);
 #endif
@@ -442,7 +442,7 @@ void AdminSocket::do_tell_queue()
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
 #ifdef WITH_SEASTAR
-        // TODO: crimson: handle asok commmand from alien thread
+        // TODO: crimson: handle asok command from alien thread
 #else
 	m->get_connection()->send_message(reply);
 #endif
