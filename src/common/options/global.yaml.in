@@ -4155,7 +4155,7 @@ options:
   type: bool
   level: dev
   desc: Attempt to read bluefs log so large that it became unreadable.
-  long_desc: If BlueFS log grows to extreme sizes (200GB+) it is likely that it becames
+  long_desc: If BlueFS log grows to extreme sizes (200GB+) it is likely that it becomes
     unreadable. This options enables heuristics that scans devices for missing data.
     DO NOT ENABLE BY DEFAULT
   default: false
