@@ -170,7 +170,7 @@ int RDMAConnectedSocketImpl::handle_connection_established(bool need_set_fault) 
   // delete read event
   worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
   if (1 == connected) {
-    ldout(cct, 1) << __func__ << " warnning: logic failed " << dendl;
+    ldout(cct, 1) << __func__ << " warning: logic failed " << dendl;
     if (need_set_fault) {
       fault();
     }
@@ -204,7 +204,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
   }
 
   if (1 == connected) {
-    ldout(cct, 1) << __func__ << " warnning: logic failed: read len: " << r << dendl;
+    ldout(cct, 1) << __func__ << " warning: logic failed: read len: " << r << dendl;
     fault();
     return;
   }
