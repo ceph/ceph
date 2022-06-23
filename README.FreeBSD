@@ -75,7 +75,7 @@ Build Prerequisites
 
 The following setup will get things running for FreeBSD:
 	
-	This all require root privilidges.
+	This all require root privileges.
 
  -	Install bash and link it in /bin
 	sudo pkg install bash
