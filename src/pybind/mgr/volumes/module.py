@@ -658,7 +658,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_evict(self, inbuf, cmd):
         """
-        :return: a 3-tuple of return code(int), empyt string(str), error message (str)
+        :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
         return self.vc.evict(vol_name=cmd['vol_name'],
                              sub_name=cmd['sub_name'],
