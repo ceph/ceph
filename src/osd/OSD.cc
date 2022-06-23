@@ -4001,7 +4001,7 @@ int OSD::init()
   osd_op_tp.start();
 
   // start the heartbeat
-  heartbeat_thread.create("osd_srv_heartbt");
+  heartbeat_thread.create("osd_srv_heartbeat");
 
   // tick
   tick_timer.add_event_after(get_tick_interval(),
