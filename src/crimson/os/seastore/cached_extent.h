@@ -337,7 +337,7 @@ public:
     return !is_valid() || (prior_instance && !prior_instance->is_valid());
   }
 
-  /// Returns true if extent is a plcaeholder
+  /// Returns true if extent is a placeholder
   bool is_placeholder() const {
     return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
   }
