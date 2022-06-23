@@ -4504,7 +4504,7 @@ bool BlueFS::db_is_rotational()
 /*
   Algorithm.
   do_replay_recovery_read is used when bluefs log abruptly ends, but it seems that more data should be there.
-  Idea is to search disk for definiton of extents that will be accompanied with bluefs log in future,
+  Idea is to search disk for definition of extents that will be accompanied with bluefs log in future,
   and try if using it will produce healthy bluefs transaction.
   We encode already known bluefs log extents and search disk for these bytes.
   When we find it, we decode following bytes as extent.
