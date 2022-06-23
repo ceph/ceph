@@ -109,7 +109,7 @@ class TestLoad(object):
         assert 'File contains no section headers' in stderr
 
     @pytest.mark.parametrize('commented', ['colon','hash'])
-    def test_coment_as_a_value(self, tmpdir, commented):
+    def test_comment_as_a_value(self, tmpdir, commented):
         conf_path = os.path.join(str(tmpdir), 'ceph.conf')
         with open(conf_path, 'w') as conf:
             conf.write(tabbed_conf)
