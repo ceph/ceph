@@ -1336,7 +1336,7 @@ options:
 - name: mds_hack_allow_loading_invalid_metadata
   type: bool
   level: advanced
-  desc: INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk.
+  desc: INTENTIONALLY CAUSE DATA LOSS by bypassing checks for invalid metadata on disk.
     Allows testing repair tools.
   default: false
   services:
