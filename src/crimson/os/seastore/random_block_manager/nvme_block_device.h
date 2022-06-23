@@ -179,7 +179,7 @@ public:
    * size for write in byte. Caller should request every write IO sized multiple
    * times of PWG and aligned starting address by PWA. Available only if NVMe
    * Device supports NVMe protocol 1.4 or later versions.
-   * atomic_write_unit : The maximum size of write whose atomicity is guranteed
+   * atomic_write_unit : The maximum size of write whose atomicity is guaranteed
    * by SSD even on power failure. The write equal to or smaller than 
    * atomic_write_unit does not require fsync().
    */
