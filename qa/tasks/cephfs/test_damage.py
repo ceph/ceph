@@ -372,7 +372,7 @@ class TestDamage(CephFSTestCase):
             log.info("All {0} mutations had expected outcomes".format(len(mutations)))
 
     def test_damaged_dentry(self):
-        # Damage to dentrys is interesting because it leaves the
+        # Damage to dentries is interesting because it leaves the
         # directory's `complete` flag in a subtle state where
         # we have marked the dir complete in order that folks
         # can access it, but in actual fact there is a dentry

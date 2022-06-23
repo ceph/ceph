@@ -678,7 +678,7 @@ Changelog
 * rbd: librbd: global and pool-level config overrides require image refresh to apply (`pr#36725 <https://github.com/ceph/ceph/pull/36725>`_, Jason Dillaman)
 * rbd: librbd: using migration abort can result in the loss of data (`pr#37165 <https://github.com/ceph/ceph/pull/37165>`_, Jason Dillaman)
 * rbd: make common options override krbd-specific options (`pr#37407 <https://github.com/ceph/ceph/pull/37407>`_, Ilya Dryomov)
-* rgw/cls: preserve olh entrys name on last unlink (`pr#37462 <https://github.com/ceph/ceph/pull/37462>`_, Casey Bodley')
+* rgw/cls: preserve olh entries name on last unlink (`pr#37462 <https://github.com/ceph/ceph/pull/37462>`_, Casey Bodley')
 * rgw: Add bucket name to bucket stats error logging (`pr#37378 <https://github.com/ceph/ceph/pull/37378>`_, Seena Fallah)
 * rgw: Empty reqs_change_state queue before unregistered_reqs (`pr#37461 <https://github.com/ceph/ceph/pull/37461>`_, Soumya Koduri)
 * rgw: Expiration days cant be zero and  transition days can be zero (`pr#37465 <https://github.com/ceph/ceph/pull/37465>`_, zhang Shaowen')

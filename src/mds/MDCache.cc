@@ -7327,7 +7327,7 @@ void MDCache::trim_non_auth()
 
 /**
  * Recursively trim the subtree rooted at directory to remove all
- * CInodes/CDentrys/CDirs that aren't links to remote MDSes, or ancestors
+ * CInodes/CDentries/CDirs that aren't links to remote MDSes, or ancestors
  * of those links. This is used to clear invalid data out of the cache.
  * Note that it doesn't clear the passed-in directory, since that's not
  * always safe.

@@ -2793,7 +2793,7 @@ Other Notable Changes
 * bluestore: os/bluestore/BitmapFreelistManager: readability improvements (`pr#12719 <https://github.com/ceph/ceph/pull/12719>`_, xie xingguo)
 * bluestore: os/bluestore/BlockDevice: support pmem device as bluestore backend (`pr#15102 <https://github.com/ceph/ceph/pull/15102>`_, Jianpeng Ma)
 * bluestore: os/bluestore/BlueFS: clean up log_writer aios from compaction (`issue#20454 <http://tracker.ceph.com/issues/20454>`_, `pr#16017 <https://github.com/ceph/ceph/pull/16017>`_, Sage Weil)
-* bluestore: os/bluestore/BlueFS: clear current log entrys before dump all fnode (`pr#15973 <https://github.com/ceph/ceph/pull/15973>`_, Jianpeng Ma)
+* bluestore: os/bluestore/BlueFS: clear current log entries before dump all fnode (`pr#15973 <https://github.com/ceph/ceph/pull/15973>`_, Jianpeng Ma)
 * bluestore: os/bluestore/BlueFS: fix reclaim_blocks (`issue#18368 <http://tracker.ceph.com/issues/18368>`_, `pr#12725 <https://github.com/ceph/ceph/pull/12725>`_, Sage Weil)
 * bluestore: os/bluestore/BlueFS: Rebuild memcopy for bufferlist::page_aligned_app… (`pr#15728 <https://github.com/ceph/ceph/pull/15728>`_, Jianpeng Ma, Sage Weil)
 * bluestore: os/bluestore/BlueFS: .slow should be compared with dirname (`pr#15595 <https://github.com/ceph/ceph/pull/15595>`_, zhanglei)

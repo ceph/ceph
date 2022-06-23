@@ -3143,7 +3143,7 @@ Changelog
 * cephfs: test_volume_client: declare only one default for python version (`issue#40460 <http://tracker.ceph.com/issues/40460>`_, `pr#28194 <https://github.com/ceph/ceph/pull/28194>`_, Rishabh Dave)
 * cephfs: test_volume_client: fix test_put_object_versioned() (`issue#39405 <http://tracker.ceph.com/issues/39405>`_, `issue#39510 <http://tracker.ceph.com/issues/39510>`_, `pr#28692 <https://github.com/ceph/ceph/pull/28692>`_, Rishabh Dave)
 * cephfs: test_volume_client: simplify test_get_authorized_ids() (`pr#28171 <https://github.com/ceph/ceph/pull/28171>`_, Rishabh Dave)
-* cephfs: tools/cephfs: make cephfs-data-scan scan_links fix dentrys first (`pr#31680 <https://github.com/ceph/ceph/pull/31680>`_, Yan, Zheng)
+* cephfs: tools/cephfs: make cephfs-data-scan scan_links fix dentries first (`pr#31680 <https://github.com/ceph/ceph/pull/31680>`_, Yan, Zheng)
 * cephfs: Trivial comment and cleanup fixes for cephfs (`pr#27199 <https://github.com/ceph/ceph/pull/27199>`_, Jeff Layton)
 * cephfs: vstart: add an alias for cephfs-shell to vstart_environment.sh (`pr#27437 <https://github.com/ceph/ceph/pull/27437>`_, Jeff Layton)
 * cephfs: vstart: generate environment script suitable for sourcing (`pr#27198 <https://github.com/ceph/ceph/pull/27198>`_, Jeff Layton)
