@@ -1920,7 +1920,7 @@ public:
     int priority = 0;
     using OpSig = void(boost::system::error_code);
     using OpComp = ceph::async::Completion<OpSig>;
-    // Due to an irregularity of cmpxattr, we actualy need the 'int'
+    // Due to an irregularity of cmpxattr, we actually need the 'int'
     // value for onfinish for legacy librados users. As such just
     // preserve the Context* in this one case. That way we can have
     // our callers just pass in a unique_ptr<OpComp> and not deal with

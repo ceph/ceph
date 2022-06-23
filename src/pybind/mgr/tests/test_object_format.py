@@ -187,7 +187,7 @@ def test_responder_decorator_default(
 
 class PhonyMultiYAMLFormatAdapter(object_format.ObjectFormatAdapter):
     """This adapter puts a yaml document/directive separator line
-    before all output. It doesn't actully support multiple documents.
+    before all output. It doesn't actually support multiple documents.
     """
     def format_yaml(self):
         yml = super().format_yaml()
