@@ -1831,7 +1831,7 @@ bool DaemonServer::_handle_command(
       for (auto& i : pgids) {
         pg_t pgid;
         if (!pgid.parse(i.c_str())) {
-          ss << "invlaid pgid '" << i << "'; ";
+          ss << "invalid pgid '" << i << "'; ";
           r = -EINVAL;
           continue;
         }
