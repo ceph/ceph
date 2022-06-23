@@ -100,7 +100,7 @@ private:
   seastar::future<> send_heartbeats();
   void heartbeat_check();
 
-  // osds we've reported to monior as failed ones, but they are not marked down
+  // osds we've reported to monitor as failed ones, but they are not marked down
   // yet
   crimson::common::Gated gate;
 

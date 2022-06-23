@@ -13,7 +13,7 @@
 class Checksummer {
 public:
   enum CSumType {
-    CSUM_NONE = 1,	//intentionally set to 1 to be aligned with OSDMnitor's pool_opts_t handling - it treats 0 as unset while we need to distinguish none and unset cases
+    CSUM_NONE = 1,	//intentionally set to 1 to be aligned with OSDMonitor's pool_opts_t handling - it treats 0 as unset while we need to distinguish none and unset cases
     CSUM_XXHASH32 = 2,
     CSUM_XXHASH64 = 3,
     CSUM_CRC32C = 4,
