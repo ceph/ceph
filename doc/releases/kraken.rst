@@ -1754,7 +1754,7 @@ Notable Changes
 * cmake: rework NSS and SSL (`pr#9831 <http://github.com/ceph/ceph/pull/9831>`_, Matt Benjamin)
 * cmake: set ARM_CRC_FLAGS from the CRC test rather than ARM_NEON_FLAGS (`issue#17250 <http://tracker.ceph.com/issues/17250>`_, `pr#11028 <http://github.com/ceph/ceph/pull/11028>`_, Dan Mick)
 * cmake: specify distutils build path explicitly (`pr#10568 <http://github.com/ceph/ceph/pull/10568>`_, Kefu Chai)
-* cmake: supress more warnings (`pr#10469 <http://github.com/ceph/ceph/pull/10469>`_, Willem Jan Withagen)
+* cmake: suppress more warnings (`pr#10469 <http://github.com/ceph/ceph/pull/10469>`_, Willem Jan Withagen)
 * cmake: use PERF_LOCAL_FLAGS only if defined (`issue#17104 <http://tracker.ceph.com/issues/17104>`_, `pr#10828 <http://github.com/ceph/ceph/pull/10828>`_, Michel Normand)
 * cmake: use stock Find* modules. (`pr#10178 <http://github.com/ceph/ceph/pull/10178>`_, Kefu Chai)
 * cmake: work to get inital FreeBSD stuff (`pr#10352 <http://github.com/ceph/ceph/pull/10352>`_, Willem Jan Withagen)
