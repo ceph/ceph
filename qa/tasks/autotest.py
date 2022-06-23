@@ -74,7 +74,7 @@ def task(ctx, config):
 
 def _download(testdir, remote):
     """
-    Download.  Does not explicitly support muliple tasks in a single run.
+    Download.  Does not explicitly support multiple tasks in a single run.
     """
     remote.run(
         args=[

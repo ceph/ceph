@@ -3473,7 +3473,7 @@ options:
 - name: rocksdb_delete_range_threshold
   type: uint
   level: advanced
-  desc: The number of keys required to invoke DeleteRange when deleting muliple keys.
+  desc: The number of keys required to invoke DeleteRange when deleting multiple keys.
   default: 1_M
 - name: rocksdb_bloom_bits_per_key
   type: uint

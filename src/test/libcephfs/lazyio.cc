@@ -28,7 +28,7 @@
 
 rados_t cluster;
 
-TEST(LibCephFS, LazyIOOneWriterMulipleReaders) {
+TEST(LibCephFS, LazyIOOneWriterMultipleReaders) {
   struct ceph_mount_info *ca, *cb;
   ASSERT_EQ(ceph_create(&ca, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(ca, NULL), 0);
@@ -79,7 +79,7 @@ TEST(LibCephFS, LazyIOOneWriterMulipleReaders) {
   ceph_shutdown(cb);
 }
 
-TEST(LibCephFS, LazyIOMultipleWritersMulipleReaders) {
+TEST(LibCephFS, LazyIOMultipleWritersMultipleReaders) {
   struct ceph_mount_info *ca, *cb;
   ASSERT_EQ(ceph_create(&ca, NULL), 0); 
   ASSERT_EQ(ceph_conf_read_file(ca, NULL), 0); 
