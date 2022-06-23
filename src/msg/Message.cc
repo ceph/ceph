@@ -1055,7 +1055,7 @@ void Message::decode_otel_trace(ceph::bufferlist::const_iterator &p, bool create
 
 // This routine is not used for ordinary messages, but only when encapsulating a message
 // for forwarding and routing.  It's also used in a backward compatibility test, which only
-// effectively tests backward compability for those functions.  To avoid backward compatibility
+// effectively tests backward compatibility for those functions.  To avoid backward compatibility
 // problems, we currently always encode and decode using the old footer format that doesn't
 // allow for message authentication.  Eventually we should fix that.  PLR
 
