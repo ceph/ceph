@@ -674,7 +674,7 @@ Other Notable Changes
 * osd: FileStore: fiemap cannot be totally retrieved in xfs when the number of extents > 1364  (`issue#17610 <http://tracker.ceph.com/issues/17610>`_, `pr#11998 <http://github.com/ceph/ceph/pull/11998>`_, Kefu Chai, Ning Yao)
 * osd: leveldb corruption leads to Operation not permitted not handled and assert (`issue#18037 <http://tracker.ceph.com/issues/18037>`_, `pr#12789 <http://github.com/ceph/ceph/pull/12789>`_, Nathan Cutler)
 * osd: limit omap data in push op (`issue#16128 <http://tracker.ceph.com/issues/16128>`_, `pr#11991 <http://github.com/ceph/ceph/pull/11991>`_, Wanlong Gao)
-* osd: osd crashes when radosgw-admin bi list --max-entries=1 command runing (`issue#17745 <http://tracker.ceph.com/issues/17745>`_, `pr#11758 <http://github.com/ceph/ceph/pull/11758>`_, weiqiaomiao)
+* osd: osd crashes when radosgw-admin bi list --max-entries=1 command running (`issue#17745 <http://tracker.ceph.com/issues/17745>`_, `pr#11758 <http://github.com/ceph/ceph/pull/11758>`_, weiqiaomiao)
 * osd: osd_max_backfills default has changed, documentation should reflect that. (`issue#17701 <http://tracker.ceph.com/issues/17701>`_, `pr#11735 <http://github.com/ceph/ceph/pull/11735>`_, huangjun)
 * osd: OSDMonitor: only reject MOSDBoot based on up_from if inst matches (`issue#17899 <http://tracker.ceph.com/issues/17899>`_, `pr#12868 <http://github.com/ceph/ceph/pull/12868>`_, Samuel Just)
 * osd: osd/PG: publish PG stats when backfill-related states change (`issue#18369 <http://tracker.ceph.com/issues/18369>`_, `pr#12875 <http://github.com/ceph/ceph/pull/12875>`_, Alexey Sheplyakov, Sage Weil)

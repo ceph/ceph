@@ -112,7 +112,7 @@ protected:
 /**
  * Test case without creating a temporary pool in advance.
  * This is necessary for scenarios such that we need to
- * manually create a pool, start some long-runing tasks and
+ * manually create a pool, start some long-running tasks and
  * then the related pool is suddenly gone.
  */
 class RadosTestNP: public ::testing::Test {
