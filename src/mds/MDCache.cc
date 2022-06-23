@@ -3278,7 +3278,7 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
   }    
 
   // update my dir_auth values
-  //   need to do this on recoverying nodes _and_ bystanders (to resolve ambiguous
+  //   need to do this on recovering nodes _and_ bystanders (to resolve ambiguous
   //   migrations between other nodes)
   for (const auto& p : m->subtrees) {
     dout(10) << "peer claims " << p.first << " bounds " << p.second << dendl;

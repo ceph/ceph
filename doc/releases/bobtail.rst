@@ -104,7 +104,7 @@ Notable changes
 * rgw: fix multipat upload listing
 * rgw: don't copy object when copied onto self
 * osd: fix caps parsing for pools with - or _
-* osd: allow pg log trimming when degraded, scrubbing, recoverying (reducing memory consumption)
+* osd: allow pg log trimming when degraded, scrubbing, recovering (reducing memory consumption)
 * osd: fix potential deadlock when 'journal aio = true'
 * osd: various fixes for collection creation/removal, rename, temp collections
 * osd: various fixes for PG split

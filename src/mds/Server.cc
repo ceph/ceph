@@ -9066,7 +9066,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     le->had_peers = true;
     
     mdcache->add_uncommitted_leader(mdr->reqid, mdr->ls, mdr->more()->witnessed);
-    // no need to send frozen auth pin to recovring auth MDS of srci
+    // no need to send frozen auth pin to recovering auth MDS of srci
     mdr->more()->is_remote_frozen_authpin = false;
   }
   
