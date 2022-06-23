@@ -1954,7 +1954,7 @@ Notable Changes
 * doc: update CephFS "early adopters" info (`pr#10068 <http://github.com/ceph/ceph/pull/10068>`_, John Spray)
 * doc: update canonical tarballs URL (`pr#9695 <http://github.com/ceph/ceph/pull/9695>`_, Ken Dreyer)
 * doc: update rbd glance configuration notes (`pr#10629 <http://github.com/ceph/ceph/pull/10629>`_, Jason Dillaman)
-* doc: update s3 static webiste feature support status (`pr#10223 <http://github.com/ceph/ceph/pull/10223>`_, Jiaying Ren)
+* doc: update s3 static website feature support status (`pr#10223 <http://github.com/ceph/ceph/pull/10223>`_, Jiaying Ren)
 * doc: changelog: add v10.2.3 (`pr#11238 <http://github.com/ceph/ceph/pull/11238>`_, Abhishek Lekshmanan)
 * doc: install: Use https:// for download.ceph.com (`pr#10709 <http://github.com/ceph/ceph/pull/10709>`_, Colin Walters)
 * doc: release-notes: v0.94.9 (`pr#10927 <http://github.com/ceph/ceph/pull/10927>`_, Sage Weil)
