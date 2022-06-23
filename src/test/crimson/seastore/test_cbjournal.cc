@@ -389,7 +389,7 @@ TEST_F(cbjournal_test_t, submit_full_records)
   });
 }
 
-TEST_F(cbjournal_test_t, boudary_check_verify)
+TEST_F(cbjournal_test_t, boundary_check_verify)
 {
   run_async([this] {
     record_t rec {
