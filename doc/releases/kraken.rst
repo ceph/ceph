@@ -589,7 +589,7 @@ Notable Changes
 * bluestore: fix latency calculation (`pr#12040 <http://github.com/ceph/ceph/pull/12040>`_, Pan Liu)
 * bluestore: fix onode vs extent key suffix (`pr#11452 <http://github.com/ceph/ceph/pull/11452>`_, Sage Weil)
 * bluestore: fix potential memory leak (`pr#11893 <http://github.com/ceph/ceph/pull/11893>`_, xie xingguo)
-* bluestore: fix race condtion during blob spliting (`pr#11422 <http://github.com/ceph/ceph/pull/11422>`_, xiexingguo, xie xingguo)
+* bluestore: fix race condition during blob spliting (`pr#11422 <http://github.com/ceph/ceph/pull/11422>`_, xiexingguo, xie xingguo)
 * bluestore: fix remove_collection to properly detect collection e… (`pr#11398 <http://github.com/ceph/ceph/pull/11398>`_, Igor Fedotov)
 * bluestore: fix _split_collections race with osr_reap (`pr#11748 <http://github.com/ceph/ceph/pull/11748>`_, Sage Weil)
 * bluestore: fix up compression tests and debug output (`pr#11350 <http://github.com/ceph/ceph/pull/11350>`_, Sage Weil)
