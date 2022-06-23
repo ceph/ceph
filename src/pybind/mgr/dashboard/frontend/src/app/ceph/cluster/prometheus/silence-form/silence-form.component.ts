@@ -50,18 +50,15 @@ export class SilenceFormComponent {
   matcherConfig = [
     {
       tooltip: $localize`Attribute name`,
-      icon: this.icons.paragraph,
-      attribute: 'name'
-    },
-    {
-      tooltip: $localize`Value`,
-      icon: this.icons.terminal,
-      attribute: 'value'
+      attribute: 'name',
     },
     {
       tooltip: $localize`Regular expression`,
-      icon: this.icons.magic,
       attribute: 'isRegex'
+    },
+    {
+      tooltip: $localize`Value`,
+      attribute: 'value',
     }
   ];
 
