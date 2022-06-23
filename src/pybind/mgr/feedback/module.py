@@ -49,7 +49,7 @@ class FeedbackModule(MgrModule):
             if key is None:
                 return HandleCommandResult(stderr='Issue tracker key is not set. Set key with `ceph feedback api-key set <your_key>`')
         except Exception as error:
-            return HandleCommandResult(stderr=f'Error in retreiving issue tracker API key: {error}')
+            return HandleCommandResult(stderr=f'Error in retrieving issue tracker API key: {error}')
         return HandleCommandResult(stdout=f'Your key: {key}')
 
     @CLIReadCommand('feedback issue list')
@@ -79,7 +79,7 @@ class FeedbackModule(MgrModule):
             if current_api_key is None:
                 return HandleCommandResult(stderr='Issue tracker key is not set. Set key with `ceph set issue_key <your_key>`')
         except Exception as error:
-            return HandleCommandResult(stderr=f'Error in retreiving issue tracker API key: {error}')
+            return HandleCommandResult(stderr=f'Error in retrieving issue tracker API key: {error}')
         tracker_client = CephTrackerClient()
         try:
             response = tracker_client.create_issue(feedback, current_api_key)
@@ -98,14 +98,14 @@ class FeedbackModule(MgrModule):
         try:
             key = self.get_store('api_key')
         except Exception as error:
-            raise RequestException(f'Error in retreiving issue tracker API key : {error}')
+            raise RequestException(f'Error in retrieving issue tracker API key : {error}')
         return key
     
     def is_api_key_set(self):
         try:
             key = self.get_store('api_key')
         except Exception as error:
-            raise RequestException(f'Error in retreiving issue tracker API key : {error}')
+            raise RequestException(f'Error in retrieving issue tracker API key : {error}')
         if key is None:
             return False
         return key != ''
