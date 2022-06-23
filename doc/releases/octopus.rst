@@ -5254,7 +5254,7 @@ Changelog
 * qa: vstart_runner fails because of string index out of range (`pr#28990 <https://github.com/ceph/ceph/pull/28990>`_, Volker Theile)
 * rbd,tests: cls/rbd: add snapshot limit UINT64_MAX test case (`pr#31350 <https://github.com/ceph/ceph/pull/31350>`_, Chen Pan)
 * rbd,tests: cls/rbd: add snapshot_add raise -ESTALE test case (`pr#31149 <https://github.com/ceph/ceph/pull/31149>`_, wonderpow)
-* rbd,tests: journal: always shutdown JournalRecoreder before destructing it (`pr#29501 <https://github.com/ceph/ceph/pull/29501>`_, Kefu Chai)
+* rbd,tests: journal: always shutdown JournalRecorder before destructing it (`pr#29501 <https://github.com/ceph/ceph/pull/29501>`_, Kefu Chai)
 * rbd,tests: journal: fix flush by age and in-flight byte tracking (`pr#31392 <https://github.com/ceph/ceph/pull/31392>`_, Jason Dillaman)
 * rbd,tests: mgr/dashboard: s/fsid/mirror_uuid/ (`pr#33348 <https://github.com/ceph/ceph/pull/33348>`_, Kefu Chai)
 * rbd,tests: qa/rbd: add cram-based snap diff test (`issue#39447 <http://tracker.ceph.com/issues/39447>`_, `pr#28346 <https://github.com/ceph/ceph/pull/28346>`_, Shyukri Shyukriev, Nathan Cutler)

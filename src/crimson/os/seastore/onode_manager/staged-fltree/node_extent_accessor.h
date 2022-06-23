@@ -220,7 +220,7 @@ class DeltaRecorderT final: public DeltaRecorder {
  private:
   ValueDeltaRecorder* get_value_replayer(value_magic_t magic) {
     // Replay procedure is independent of Btree and happens at lower level in
-    // seastore. There is no ValueBuilder so the recoder needs to build the
+    // seastore. There is no ValueBuilder so the recorder needs to build the
     // ValueDeltaRecorder by itself.
     if (value_replayer) {
       if (value_replayer->get_header_magic() != magic) {
