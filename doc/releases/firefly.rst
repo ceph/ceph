@@ -357,7 +357,7 @@ Notable Changes
 * rgw: separate civetweb log from rgw log (Yehuda Sadeh)
 * rgw: set length for keystone token validations (#7796 Mark Kirkwood, Yehuda Sadeh)
 * rgw: subuser creation fixes (#8587 Yehuda Sadeh)
-* rpm: misc packaging improvements (Sandon Van Ness, Dan Mick, Erik Logthenberg, Boris Ranto)
+* rpm: misc packaging improvements (Sandon Van Ness, Dan Mick, Erik Logtenberg, Boris Ranto)
 * rpm: use standard udev rules for CentOS7/RHEL7 (#9747 Loic Dachary)
 
 
