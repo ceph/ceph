@@ -485,7 +485,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
             // Signal the waiter of this event
             signal_all_data_acked();
           } else {
-            // Restart the timer becasue new data is acked.
+            // Restart the timer because new data is acked.
             start_retransmit_timer();
           }
         };
@@ -526,7 +526,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
           // any intervening ACKs which move SND.UNA) as an
           // indication that a segment has been lost.
           //
-          // So, here we reset dupacks to zero becasue this ACK moves
+          // So, here we reset dupacks to zero because this ACK moves
           // SND.UNA.
           exit_fast_recovery();
           set_retransmit_timer();
