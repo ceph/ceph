@@ -49,7 +49,7 @@ OSDOperationRegistry::OSDOperationRegistry()
 static auto get_duration(const ClientRequest& client_request)
 {
   // TODO: consider enhancing `CompletionEvent` with computing duration
-  // once -- when it's enetered.
+  // once -- when it's entered.
   return client_request.get_completed() - client_request.get_started();
 }
 
