@@ -9897,7 +9897,7 @@ void BlueStore::_fsck_check_objects(
       thread_pool.start();
     }
 
-    // fill global if not overriden below
+    // fill global if not overridden below
     CollectionRef c;
     int64_t pool_id = -1;
     spg_t pgid;
@@ -10425,7 +10425,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   it = db->get_iterator(PREFIX_SHARED_BLOB, KeyValueDB::ITERATOR_NOCACHE);
   if (it) {
     // FIXME minor: perhaps simplify for shallow mode?
-    // fill global if not overriden below
+    // fill global if not overridden below
     auto expected_statfs = &expected_store_statfs;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       string key = it->key();
@@ -10505,7 +10505,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     interval_set<uint64_t> to_release;
     it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
-      // fill global if not overriden below
+      // fill global if not overridden below
       auto expected_statfs = &expected_store_statfs;
 
       CollectionRef c;
