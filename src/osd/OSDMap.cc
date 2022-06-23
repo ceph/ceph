@@ -5791,7 +5791,7 @@ bool OSDMap::try_drop_remap_overfull(
 {
   //
   // This function tries to drop existing upmap items which map data to overfull 
-  // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and rerturns true 
+  // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and returns true 
   // if it found an item that can be dropped, false if not. 
   //
   for (auto pg : pgs) {
@@ -5848,7 +5848,7 @@ bool OSDMap::try_drop_remap_underfull(
 {
   // 
   // This function tries to drop existing upmap items which map data from underfull
-  // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and rerturns true 
+  // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and returns true 
   // if it found an item that can be dropped, false if not. 
   //
   for (auto& [pg, um_pairs] : candidates) {
