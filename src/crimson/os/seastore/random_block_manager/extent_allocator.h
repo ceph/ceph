@@ -17,7 +17,7 @@ public:
   /**
    * alloc_extent
    *
-   * Allocate continous region as much as given size.
+   * Allocate continuous region as much as given size.
    * Note that the inital state of extent is RESERVED after alloc_extent().
    * see rbm_extent_state_t in random_block_manager.h
    *
