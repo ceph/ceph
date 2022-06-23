@@ -2088,7 +2088,7 @@ update:
  * the rstat (nestlock) _may_ get updated without a wrlock when nested
  * data is pushed up the tree.  this could be changed with some
  * restructuring here, but in its current form we ensure that the
- * fragstat+rstat _always_ reflect an accurrate summation over the dir
+ * fragstat+rstat _always_ reflect an accurate summation over the dir
  * frag, which is nice.  and, we only need to track frags that need to
  * be nudged (and not inodes with pending rstat changes that need to
  * be pushed into the frag).  a consequence of this is that the
