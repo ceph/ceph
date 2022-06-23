@@ -1287,7 +1287,7 @@ Changelog
 * mgr/dashboard: The max. buckets field in RGW user form should be pre-filled (`pr#35795 <https://github.com/ceph/ceph/pull/35795>`_, Volker Theile)
 * mgr/dashboard: Unable to edit iSCSI logged-in client (`pr#36611 <https://github.com/ceph/ceph/pull/36611>`_, Ricardo Marques)
 * mgr/dashboard: Use right size in pool form (`pr#35925 <https://github.com/ceph/ceph/pull/35925>`_, Stephan Müller)
-* mgr/dashboard: Use same required field message accross the UI (`pr#36277 <https://github.com/ceph/ceph/pull/36277>`_, Volker Theile)
+* mgr/dashboard: Use same required field message across the UI (`pr#36277 <https://github.com/ceph/ceph/pull/36277>`_, Volker Theile)
 * mgr/dashboard: add API team to CODEOWNERS (`pr#36143 <https://github.com/ceph/ceph/pull/36143>`_, Ernesto Puerta)
 * mgr/dashboard: allow preserving OSD IDs when deleting OSDs (`pr#35766 <https://github.com/ceph/ceph/pull/35766>`_, Kiefer Chang)
 * mgr/dashboard: cpu stats incorrectly displayed (`pr#36322 <https://github.com/ceph/ceph/pull/36322>`_, Avan Thakkar)
