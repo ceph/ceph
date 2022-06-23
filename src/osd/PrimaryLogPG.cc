@@ -4475,7 +4475,7 @@ void PrimaryLogPG::do_scan(
 
       BackfillInterval bi;
       bi.begin = m->begin;
-      // No need to flush, there won't be any in progress writes occuring
+      // No need to flush, there won't be any in progress writes occurring
       // past m->begin
       scan_range(
 	cct->_conf->osd_backfill_scan_min,
