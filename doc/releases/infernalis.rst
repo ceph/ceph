@@ -1263,7 +1263,7 @@ Notable Changes
 * rados: bench: add --no-verify option to improve performance (Piotr Dalek)
 * rados: misc bench fixes (Dmitry Yatsushkevich)
 * rbd: add disk usage tool (#7746 Jason Dillaman)
-* rgw: alwasy check if token is expired (#11367 Anton Aksola, Riku Lehto)
+* rgw: always check if token is expired (#11367 Anton Aksola, Riku Lehto)
 * rgw: conversion tool to repair broken multipart objects (#12079 Yehuda Sadeh)
 * rgw: do not enclose bucket header in quotes (#11860 Wido den Hollander)
 * rgw: error out if frontend did not send all data (#11851 Yehuda Sadeh)
