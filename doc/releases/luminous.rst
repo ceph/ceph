@@ -3101,7 +3101,7 @@ Other Notable Changes
 * build/ops,tests: qa: make run-standalone work on FreeBSD (`pr#16595 <https://github.com/ceph/ceph/pull/16595>`_, Willem Jan Withagen)
 * build/ops,tests: test/osd/CMakeLists.txt: osd-dup.sh require BlueStore/AIO (`pr#14387 <https://github.com/ceph/ceph/pull/14387>`_, Willem Jan Withagen)
 * build/ops,tests: test/osd/osd-dup.sh: warn on low open file limit (`pr#14637 <https://github.com/ceph/ceph/pull/14637>`_, Piotr Dałek)
-* build/ops,tests,tools: vstart.sh: Work around mgr restfull not available (`pr#15877 <https://github.com/ceph/ceph/pull/15877>`_, Willem Jan Withagen)
+* build/ops,tests,tools: vstart.sh: Work around mgr restful not available (`pr#15877 <https://github.com/ceph/ceph/pull/15877>`_, Willem Jan Withagen)
 * build/ops: The Clangtastic Mr. Clocks (`pr#15186 <https://github.com/ceph/ceph/pull/15186>`_, Adam C. Emerson)
 * build/ops: tool: add some ceph relate processes to ps-ceph.pl (`pr#12406 <https://github.com/ceph/ceph/pull/12406>`_, songbaisen)
 * build/ops: tools/scripts:"FreeBSD getopt is not compatible, use the one from packages" (`pr#13260 <https://github.com/ceph/ceph/pull/13260>`_, Willem Jan Withagen)
