@@ -3382,7 +3382,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     int new_wanted = m->get_wanted();
     if (new_wanted != cap->wanted()) {
       if (!need_flush && in->is_auth() && (new_wanted & ~cap->pending())) {
-	// exapnding caps.  make sure we aren't waiting for a log flush
+	// expanding caps.  make sure we aren't waiting for a log flush
 	need_flush = _need_flush_mdlog(head_in, new_wanted & ~cap->pending());
       }
 
