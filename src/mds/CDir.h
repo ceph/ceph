@@ -492,7 +492,7 @@ public:
   void commit(version_t want, MDSContext *c,
 	      bool ignore_authpinnability=false, int op_prio=-1);
 
-  // -- dirtyness --
+  // -- dirtiness --
   version_t get_committing_version() const { return committing_version; }
   version_t get_committed_version() const { return committed_version; }
   void set_committed_version(version_t v) { committed_version = v; }

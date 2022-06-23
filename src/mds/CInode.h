@@ -719,7 +719,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void make_path(filepath& s, bool projected=false) const;
   void name_stray_dentry(std::string& dname);
   
-  // -- dirtyness --
+  // -- dirtiness --
   version_t get_version() const { return get_inode()->version; }
 
   version_t pre_dirty();
