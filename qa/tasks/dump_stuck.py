@@ -17,7 +17,7 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     values passed in.  This passes if all asserts pass.
  
     :param num_manager: Ceph manager
-    :param num_inactive: number of inaactive pages that are stuck
+    :param num_inactive: number of inactive pages that are stuck
     :param num_unclean: number of unclean pages that are stuck
     :param num_stale: number of stale pages that are stuck
     :param timeout: timeout value for get_stuck_pgs calls
