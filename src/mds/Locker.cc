@@ -3101,7 +3101,7 @@ bool Locker::should_defer_client_cap_frozen(CInode *in)
    * because when the caps can't get revoked.
    *
    * No auth_pin implies that there is no unstable lock and @in is not auth
-   * pinnned by client request. If parent dirfrag is auth pinned by a lock
+   * pinned by client request. If parent dirfrag is auth pinned by a lock
    * cache, later request from lock cache owner may forcibly auth pin the @in.
    */
   if (in->is_freezing() && in->get_num_auth_pins() == 0) {
