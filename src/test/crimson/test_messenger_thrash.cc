@@ -599,7 +599,7 @@ seastar::future<> test_injection(thrash_params_t tp)
       }).then([&test_msg] {
 	  return test_msg.wait_for_done();
       }).then([] {
-        logger().info("test_inejction() DONE");
+        logger().info("test_injection() DONE");
 	return seastar::now();
       }).then([] {
         return reset_conf();
