@@ -787,7 +787,7 @@ Changelog
 * octopus: cephadm: make "ceph orch {restart|...}" asynchronous (`pr#39018 <https://github.com/ceph/ceph/pull/39018>`_, Sebastian Wagner)
 * octopus: cephadm: silence "Failed to evict container" log msg (`pr#39166 <https://github.com/ceph/ceph/pull/39166>`_, Sebastian Wagner, Sage Weil)
 * octopus: cephadm: use `apt-get` for package install/update (`pr#39297 <https://github.com/ceph/ceph/pull/39297>`_, Michael Fritch)
-* octopus: cephfs: client: add ceph.{cluster_fsid/client_id} vxattrs suppport (`pr#39000 <https://github.com/ceph/ceph/pull/39000>`_, Xiubo Li)
+* octopus: cephfs: client: add ceph.{cluster_fsid/client_id} vxattrs support (`pr#39000 <https://github.com/ceph/ceph/pull/39000>`_, Xiubo Li)
 * octopus: cephfs: client: check rdonly file handle on truncate (`pr#38424 <https://github.com/ceph/ceph/pull/38424>`_, Patrick Donnelly)
 * octopus: cephfs: client: do not use g_conf().get_val<>() in libcephfs (`pr#38466 <https://github.com/ceph/ceph/pull/38466>`_, Xiubo Li)
 * octopus: cephfs: client: ensure we take Fs caps when fetching directory link count from cached inode (`pr#38949 <https://github.com/ceph/ceph/pull/38949>`_, Jeff Layton)

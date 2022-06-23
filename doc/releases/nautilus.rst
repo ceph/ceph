@@ -309,7 +309,7 @@ Changelog
 * nautilus: cephfs: mount.ceph: collect v2 addresses for non-legacy ms_mode options (`pr#39133 <https://github.com/ceph/ceph/pull/39133>`_, Jeff Layton)
 * nautilus: cephfs: osdc: restart read on truncate/discard (`pr#37988 <https://github.com/ceph/ceph/pull/37988>`_, Patrick Donnelly)
 * nautilus: cephfs: release client dentry_lease before send caps release to mds (`pr#39127 <https://github.com/ceph/ceph/pull/39127>`_, Wei Qiaomiao)
-* nautilus: client: add ceph.{cluster_fsid/client_id} vxattrs suppport (`pr#39001 <https://github.com/ceph/ceph/pull/39001>`_, Xiubo Li)
+* nautilus: client: add ceph.{cluster_fsid/client_id} vxattrs support (`pr#39001 <https://github.com/ceph/ceph/pull/39001>`_, Xiubo Li)
 * nautilus: client: do not use g_conf().get_val<>() in libcephfs (`pr#38467 <https://github.com/ceph/ceph/pull/38467>`_, Xiubo Li)
 * nautilus: cmake: define BOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT for Boost.Asio users (`pr#38760 <https://github.com/ceph/ceph/pull/38760>`_, Kefu Chai)
 * nautilus: cmake: detect and use sigdescr_np() if available (`pr#38952 <https://github.com/ceph/ceph/pull/38952>`_, David Disseldorp)
