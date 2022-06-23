@@ -94,7 +94,7 @@ class TestAddDataPool(TestAdminCommands):
         self.mount_a.run_shell("mkdir subdir")
         self.fs.set_dir_layout(self.mount_a, "subdir", FileLayout(pool=p))
 
-    def test_add_data_pool_non_alphamueric_name_as_subdir(self):
+    def test_add_data_pool_non_alphanumeric_name_as_subdir(self):
         """
         That a new data pool with non-alphanumeric name can be added and used for a sub-directory.
         """
