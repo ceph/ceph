@@ -115,7 +115,7 @@ struct property {
   static constexpr auto const is_strong_exception_guaranteed = Throws;
 };
 
-/// Provides utilities for invocing callable objects
+/// Provides utilities for invoking callable objects
 namespace invocation {
 /// Invokes the given callable object with the given arguments
 template <typename Callable, typename... Args>
