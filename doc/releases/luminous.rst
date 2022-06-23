@@ -4497,7 +4497,7 @@ Other Notable Changes
 * msg: always set header.version in encode_payload() (`issue#19939 <http://tracker.ceph.com/issues/19939>`_, `pr#16421 <https://github.com/ceph/ceph/pull/16421>`_, Kefu Chai)
 * msg: client bind (`pr#12901 <https://github.com/ceph/ceph/pull/12901>`_, Zengran Zhang, Haomai Wang)
 * msg: do not enable client-side binding by default (`issue#20049 <http://tracker.ceph.com/issues/20049>`_, `pr#15392 <https://github.com/ceph/ceph/pull/15392>`_, Jason Dillaman)
-* msg: don't set msgr addr when disabing client bind (`pr#15243 <https://github.com/ceph/ceph/pull/15243>`_, Haomai Wang)
+* msg: don't set msgr addr when disabling client bind (`pr#15243 <https://github.com/ceph/ceph/pull/15243>`_, Haomai Wang)
 * msg: end parameter in entity_addr_t::parse is optional (`pr#13650 <https://github.com/ceph/ceph/pull/13650>`_, Mykola Golub)
 * msg: Fix calls to Messenger::create with new parameter (`pr#13329 <https://github.com/ceph/ceph/pull/13329>`_, Sarit Zubakov)
 * msg: Increase loglevels on some messages (`pr#14707 <https://github.com/ceph/ceph/pull/14707>`_, Willem Jan Withagen)
