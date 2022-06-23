@@ -318,7 +318,7 @@ class Scan(object):
 
             ceph-volume simple scan /dev/sda1
 
-        Scanning a device or directory that belongs to an OSD not created by ceph-disk will be ingored.
+        Scanning a device or directory that belongs to an OSD not created by ceph-disk will be ignored.
         """)
         parser = argparse.ArgumentParser(
             prog='ceph-volume simple scan',
