@@ -6251,7 +6251,7 @@ int OSDMap::find_best_remap (
 {
   //
   // Find the best remap from the suggestions in orig and out - the best remap 
-  // is the one which maps from the OSD with the largest deviatoion (from the 
+  // is the one which maps from the OSD with the largest deviation (from the 
   // OSDs which are part of orig)
   //
   int best_pos = -1;
