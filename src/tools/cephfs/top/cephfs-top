@@ -62,7 +62,7 @@ MAIN_WINDOW_TOP_LINE_METRICS_LEGACY = ["READ_LATENCY",
                                        ]
 
 # adjust this map according to stats version and maintain order
-# as emitted by mgr/stast
+# as emitted by mgr/stats
 MAIN_WINDOW_TOP_LINE_METRICS = OrderedDict([
     ("CAP_HIT", MetricType.METRIC_TYPE_PERCENTAGE),
     ("READ_LATENCY", MetricType.METRIC_TYPE_LATENCY),
