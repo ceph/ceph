@@ -392,7 +392,7 @@ private:
   C_OnFinisher *wrap_finisher(Context *c);
 
   uint32_t write_iohint; // the fadvise flags for write op, see
-			 // CEPH_OSD_OP_FADIVSE_*
+			 // CEPH_OSD_OP_FADVISE_*
 
 public:
   Journaler(const std::string &name_, inodeno_t ino_, int64_t pool,
