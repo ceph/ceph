@@ -5295,7 +5295,7 @@ Changelog
 * rbd,tests: test/librbd: fix mock warnings in TestMockIoImageRequest (`pr#31497 <https://github.com/ceph/ceph/pull/31497>`_, Mykola Golub)
 * rbd,tests: test/librbd: set nbd timeout due to newer kernels defaulting it on (`pr#29858 <https://github.com/ceph/ceph/pull/29858>`_, Jason Dillaman)
 * rbd,tests: test/pybind/rbd.pyx: add test_remove_snap_by_id case in test_rbd.py (`pr#30927 <https://github.com/ceph/ceph/pull/30927>`_, Zhang Jiao)
-* rbd,tests: test/pybind: add create_snap rasie ImageExists test case (`pr#31140 <https://github.com/ceph/ceph/pull/31140>`_, Gangbiao Liu)
+* rbd,tests: test/pybind: add create_snap raise ImageExists test case (`pr#31140 <https://github.com/ceph/ceph/pull/31140>`_, Gangbiao Liu)
 * rbd,tests: test/pybind: inconsistent use of tabs and spaces in indentation (`pr#31606 <https://github.com/ceph/ceph/pull/31606>`_, Mykola Golub)
 * rbd,tests: test/rbd_mirror: fix mock warnings (`pr#31608 <https://github.com/ceph/ceph/pull/31608>`_, Mykola Golub)
 * rbd,tests: test/run-rbd-tests: properly initialize newly created rbd pool (`pr#33642 <https://github.com/ceph/ceph/pull/33642>`_, Mykola Golub)
