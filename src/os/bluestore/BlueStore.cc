@@ -18969,7 +18969,7 @@ WRITE_CLASS_DENC(allocator_image_trailer)
 // we can safely ignore non-existing file
 int BlueStore::invalidate_allocation_file_on_bluefs()
 {
-  // mark that allocation-file was invalidated and we should destage a new copy whne closing db
+  // mark that allocation-file was invalidated and we should destage a new copy when closing db
   need_to_destage_allocation_file = true;
   dout(10) << __func__ << " need_to_destage_allocation_file was set" << dendl;
 
