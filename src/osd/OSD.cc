@@ -11197,7 +11197,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
 void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
   if (unlikely(m_fast_shutdown) ) {
-    // stop enqueing when we are in the middle of a fast shutdown
+    // stop enqueuing when we are in the middle of a fast shutdown
     return;
   }
 
@@ -11229,7 +11229,7 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
 void OSD::ShardedOpWQ::_enqueue_front(OpSchedulerItem&& item)
 {
   if (unlikely(m_fast_shutdown) ) {
-    // stop enqueing when we are in the middle of a fast shutdown
+    // stop enqueuing when we are in the middle of a fast shutdown
     return;
   }
 
