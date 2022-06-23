@@ -1976,7 +1976,7 @@ Notable Changes since Infernalis
 * doc/dev: integrate testing into the narrative (`pr#7946 <http://github.com/ceph/ceph/pull/7946>`_, Nathan Cutler)
 * doc: dev: introduction to tests (`pr#6910 <http://github.com/ceph/ceph/pull/6910>`_, Loic Dachary)
 * doc/dev: various refinements (`pr#7954 <http://github.com/ceph/ceph/pull/7954>`_, Nathan Cutler)
-* doc: docuemnt object corpus generation (#11099 Alexis Normand)
+* doc: document object corpus generation (#11099 Alexis Normand)
 * doc: document "readforward" and "readproxy" cache mode (`pr#7023 <http://github.com/ceph/ceph/pull/7023>`_, Kefu Chai)
 * doc: document region hostnames (Robin H. Johnson)
 * doc: download GPG key from download.ceph.com (`issue#13603 <http://tracker.ceph.com/issues/13603>`_, `pr#6384 <http://github.com/ceph/ceph/pull/6384>`_, Ken Dreyer)
