@@ -1930,7 +1930,7 @@ Detailed Changelog
 * bluestore: os/bluestore: drop unused param "what" in apply() (`pr#17251 <https://github.com/ceph/ceph/pull/17251>`_, songweibin)
 * bluestore: os/bluestore: _dump_onode() don't prolongate Onode anymore (`pr#19841 <https://github.com/ceph/ceph/pull/19841>`_, Radoslaw Zarzynski)
 * bluestore: os/bluestore: dynamic CF configuration; put pglog omap in separate CF (`pr#18224 <https://github.com/ceph/ceph/pull/18224>`_, Sage Weil)
-* bluestore: os/bluestore: enlarege aligned_size avoid too many vector(> IOV_MAX) (`issue#21932 <http://tracker.ceph.com/issues/21932>`_, `pr#18828 <https://github.com/ceph/ceph/pull/18828>`_, Jianpeng Ma)
+* bluestore: os/bluestore: enlarge aligned_size avoid too many vector(> IOV_MAX) (`issue#21932 <http://tracker.ceph.com/issues/21932>`_, `pr#18828 <https://github.com/ceph/ceph/pull/18828>`_, Jianpeng Ma)
 * bluestore: os/bluestore: ExtentMap::reshard - fix wrong shard length (`pr#17334 <https://github.com/ceph/ceph/pull/17334>`_, chenliuzhong)
 * bluestore: os/bluestore: fail early on very large objects (`issue#20923 <http://tracker.ceph.com/issues/20923>`_, `pr#16924 <https://github.com/ceph/ceph/pull/16924>`_, Sage Weil)
 * bluestore: os/bluestore: fix another aio stall/deadlock (`issue#21470 <http://tracker.ceph.com/issues/21470>`_, `pr#18118 <https://github.com/ceph/ceph/pull/18118>`_, Sage Weil)
