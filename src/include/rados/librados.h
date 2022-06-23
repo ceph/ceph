@@ -746,7 +746,7 @@ CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
  * @param cluster cluster handle
  * @param require_osd_release [out] minimum compatible OSD version
  *  based upon the current features
- * @returns 0 on sucess, negative error code on failure
+ * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_get_min_compatible_osd(rados_t cluster,
                                                 int8_t* require_osd_release);
