@@ -290,7 +290,7 @@ function TEST_backfill_test_multi() {
 # Set size back to 2
 # The 2 pools should race to backfill.
 # One pool goes active+clean
-# The other goes acitve+...+backfill_toofull
+# The other goes active+...+backfill_toofull
 function TEST_backfill_test_sametarget() {
     local dir=$1
     local pools=10
@@ -744,7 +744,7 @@ function osdlist() {
 # Remap the last OSD to partially full OSD on both pools
 # The 2 pools should race to backfill.
 # One pool goes active+clean
-# The other goes acitve+...+backfill_toofull
+# The other goes active+...+backfill_toofull
 function TEST_ec_backfill_multi() {
     local dir=$1
     local EC=$2
@@ -861,7 +861,7 @@ function TEST_ec_backfill_multi() {
 # Remap the last OSD to partially full OSD on both pools
 # The 2 pools should race to backfill.
 # One pool goes active+clean
-# The other goes acitve+...+backfill_toofull
+# The other goes active+...+backfill_toofull
 function SKIP_TEST_ec_backfill_multi_partial() {
     local dir=$1
     local EC=$2
