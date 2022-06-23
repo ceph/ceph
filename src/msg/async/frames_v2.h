@@ -441,7 +441,7 @@ protected:
   // this tuple is only used when decoding values from a payload segment
   std::tuple<Args...> _values;
 
-  // FIXME: for now, we assume specific features for the purpoess of encoding
+  // FIXME: for now, we assume specific features for the purposes of encoding
   // the frames themselves (*not* messages in message frames!).
   uint64_t features = msgr2_frame_assumed;
 
