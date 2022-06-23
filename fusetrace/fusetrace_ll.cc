@@ -176,7 +176,7 @@ void unlink_inode(Inode *in)
 	int fd = *in->fds.begin();
 	::close(fd);
 	in->fds.erase(in->fds.begin());
-	dout << "remove_inode closeing stray fd " << fd << endl;
+	dout << "remove_inode closing stray fd " << fd << endl;
     }
 }
 
