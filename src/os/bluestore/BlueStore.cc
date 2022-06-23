@@ -9404,7 +9404,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
 	  uint64_t offset = e.offset % zone_size;
 	  auto p = zone_first_offsets.find(zone);
 	  if (p == zone_first_offsets.end() || p->second > offset) {
-	    // FIXME: use interator for guided insert?
+	    // FIXME: use iterator for guided insert?
 	    zone_first_offsets[zone] = offset;
 	  }
 	}
