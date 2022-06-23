@@ -1405,7 +1405,7 @@ Other Notable Changes
 * rgw_file: avoid evaluating nullptr for readdir offset (`issue#22889 <http://tracker.ceph.com/issues/22889>`_, `pr#20345 <https://github.com/ceph/ceph/pull/20345>`_, Matt Benjamin)
 * rgw: fix crash with rgw_run_sync_thread false (`issue#23318 <http://tracker.ceph.com/issues/23318>`_, `issue#20448 <http://tracker.ceph.com/issues/20448>`_, `pr#20932 <https://github.com/ceph/ceph/pull/20932>`_, Orit Wasserman)
 * rgw: fix memory fragmentation problem reading data from client (`issue#23347 <http://tracker.ceph.com/issues/23347>`_, `pr#20953 <https://github.com/ceph/ceph/pull/20953>`_, Marcus Watts)
-* rgw: fix mutlisite read-write issues (`issue#23690 <http://tracker.ceph.com/issues/23690>`_, `issue#22804 <http://tracker.ceph.com/issues/22804>`_, `pr#21390 <https://github.com/ceph/ceph/pull/21390>`_, Niu Pengju)
+* rgw: fix multisite read-write issues (`issue#23690 <http://tracker.ceph.com/issues/23690>`_, `issue#22804 <http://tracker.ceph.com/issues/22804>`_, `pr#21390 <https://github.com/ceph/ceph/pull/21390>`_, Niu Pengju)
 * rgw: fix the max-uploads parameter not work (`issue#23020 <http://tracker.ceph.com/issues/23020>`_, `issue#22825 <http://tracker.ceph.com/issues/22825>`_, `pr#20476 <https://github.com/ceph/ceph/pull/20476>`_, Xin Liao)
 * rgw_log, rgw_file: account for new required envvars (`issue#23192 <http://tracker.ceph.com/issues/23192>`_, `issue#21942 <http://tracker.ceph.com/issues/21942>`_, `pr#20672 <https://github.com/ceph/ceph/pull/20672>`_, Matt Benjamin)
 * rgw: log the right http status code in civetweb frontend's access log (`issue#22812 <http://tracker.ceph.com/issues/22812>`_, `issue#22538 <http://tracker.ceph.com/issues/22538>`_, `pr#20157 <https://github.com/ceph/ceph/pull/20157>`_, Yao Zongyou)
