@@ -556,7 +556,7 @@ class NodeExtentAccessorT {
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
           SUBERRORT(seastore_onode,
-              "EIO during retire -- to_disgard={:x}, fresh={:x}",
+              "EIO during retire -- to_discard={:x}, fresh={:x}",
               c.t, l_to_discard, l_fresh);
           ceph_abort("fatal error");
         }),
@@ -564,7 +564,7 @@ class NodeExtentAccessorT {
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
           SUBERRORT(seastore_onode,
-              "ENOENT during retire -- to_disgard={:x}, fresh={:x}",
+              "ENOENT during retire -- to_discard={:x}, fresh={:x}",
               c.t, l_to_discard, l_fresh);
           ceph_abort("fatal error");
         })
