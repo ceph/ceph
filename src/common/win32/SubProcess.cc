@@ -221,7 +221,7 @@ int SubProcess::spawn() {
     goto fail;
   }
 
-  // We've transfered ownership from those handles.
+  // We've transferred ownership from those handles.
   stdin_w = stdout_r = stderr_r = INVALID_HANDLE_VALUE;
 
   if (!CreateProcess(
