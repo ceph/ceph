@@ -23,7 +23,7 @@ namespace ceph {
 // on the shared mutex, and whether it's shared or exclusive doesn't
 // matter. In some circumstances they may drop the shared lock and
 // reacquire an exclusive one. This could be handled by passing both a
-// shared and unique lock down the call stack. This is vexacious and
+// shared and unique lock down the call stack. This is vexatious and
 // shameful.
 
 // Wanting to avoid heaping shame and vexation upon myself, I threw
