@@ -1429,7 +1429,7 @@ private:
   double daily_loadavg;
   ceph::mono_time startup_time;
 
-  // Track ping repsonse times using vector as a circular buffer
+  // Track ping response times using vector as a circular buffer
   // MUST BE A POWER OF 2
   const uint32_t hb_vector_size = 16;
 
