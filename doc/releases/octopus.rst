@@ -5631,7 +5631,7 @@ Changelog
 * rgw: init-radosgw: use ceph-conf to get cluster configuration value (`pr#27538 <https://github.com/ceph/ceph/pull/27538>`_, Daniel Badea)
 * rgw: Initialize member variables in rgw_sync.h, rgw_rados.h (`pr#16929 <https://github.com/ceph/ceph/pull/16929>`_, amitkuma)
 * rgw: initialize member variables of rgw_log_entry (`pr#32430 <https://github.com/ceph/ceph/pull/32430>`_, Kefu Chai)
-* rgw: kill compile warnning in rgw_object_lock.h (`pr#30489 <https://github.com/ceph/ceph/pull/30489>`_, Chang Liu)
+* rgw: kill compile warning in rgw_object_lock.h (`pr#30489 <https://github.com/ceph/ceph/pull/30489>`_, Chang Liu)
 * rgw: LC expiration header should present midnight expiration date (`pr#31887 <https://github.com/ceph/ceph/pull/31887>`_, Or Friedmann)
 * rgw: lc: check for valid placement target before processing transitions (`pr#28256 <https://github.com/ceph/ceph/pull/28256>`_, Abhishek Lekshmanan)
 * rgw: LC: handle resharded buckets (`pr#26564 <https://github.com/ceph/ceph/pull/26564>`_, Abhishek Lekshmanan)
