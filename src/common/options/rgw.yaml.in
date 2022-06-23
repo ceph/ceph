@@ -2023,7 +2023,7 @@ options:
   type: int
   level: advanced
   desc: Data log time window
-  long_desc: The data log keeps information about buckets that have objectst that
+  long_desc: The data log keeps information about buckets that have objects that
     were modified within a specific timeframe. The sync process then knows which buckets
     are needed to be scanned for data sync.
   fmt_desc: The data log entries window in seconds.
