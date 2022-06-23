@@ -392,7 +392,7 @@ inline const ghobject_t _MIN_OID() {
 }
 
 /*
- * Unfortunally the ghobject_t representative as tree key doesn't have max
+ * Unfortunately the ghobject_t representative as tree key doesn't have max
  * field, so we define our own _MAX_OID and translate it from/to
  * ghobject_t::get_max() if necessary.
  */
