@@ -96,7 +96,7 @@ function get_mountpoint() {
                 continue
 	        fi
             if [ "0$mountpoint" != "0" ]; then
-                echo "Oops: too many mountpiont options!"
+                echo "Oops: too many mountpoint options!"
                 exit 1
             fi
             mountpoint=$param
