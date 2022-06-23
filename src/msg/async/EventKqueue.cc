@@ -114,7 +114,7 @@ int KqueueDriver::init(EventCenter *c, int nevent)
   size = nevent;
 
   // Reserve the space to keep all of the events set, so it can be redone
-  // when we change trhread ID. 
+  // when we change thread ID. 
   sav_events = (struct SaveEvent*)malloc(sizeof(struct SaveEvent)*nevent);
   if (!sav_events) {
     lderr(cct) << __func__ << " unable to malloc memory: "
