@@ -98,7 +98,7 @@ void CacheServer::handle_accept(CacheSessionPtr new_session,
   // TODO(dehao) : session setting
   new_session->start();
 
-  // lanuch next accept
+  // launch next accept
   accept();
 }
 
