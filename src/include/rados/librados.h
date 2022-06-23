@@ -2347,7 +2347,7 @@ CEPH_RADOS_API int rados_aio_getxattrs(rados_ioctx_t io, const char *oid,
  * @name Watch/Notify
  *
  * Watch/notify is a protocol to help communicate among clients. It
- * can be used to sychronize client state. All that's needed is a
+ * can be used to synchronize client state. All that's needed is a
  * well-known object name (for example, rbd uses the header object of
  * an image).
  *
