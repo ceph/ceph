@@ -55,7 +55,7 @@ void* as_cookie(struct rte_pktmbuf_pool_private& p) {
   return &p;
 };
 
-/******************* Net device related constatns *****************************/
+/******************* Net device related constants *****************************/
 static constexpr uint16_t default_ring_size      = 512;
 
 //
