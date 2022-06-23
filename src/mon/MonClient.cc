@@ -1757,7 +1757,7 @@ int MonConnection::get_auth_request(
   int r = _init_auth(*method, entity_name, want_keys, keyring, true);
   ceph_assert(r == 0);
 
-  // initial requset includes some boilerplate...
+  // initial request includes some boilerplate...
   encode((char)AUTH_MODE_MON, *bl);
   encode(entity_name, *bl);
   encode(global_id, *bl);
