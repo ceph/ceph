@@ -958,7 +958,7 @@ int DataScan::scan_inodes()
       }
     }
 
-    // Santity checking backtrace ino against object name
+    // Sanity checking backtrace ino against object name
     if (have_backtrace && backtrace.ino != obj_name_ino) {
       dout(4) << "Backtrace ino 0x" << std::hex << backtrace.ino
         << " doesn't match object name ino 0x" << obj_name_ino
@@ -1533,7 +1533,7 @@ int DataScan::scan_frags()
 
     bool have_backtrace = !(backtrace.ancestors.empty());
 
-    // Santity checking backtrace ino against object name
+    // Sanity checking backtrace ino against object name
     if (have_backtrace && backtrace.ino != obj_name_ino) {
       dout(4) << "Backtrace ino 0x" << std::hex << backtrace.ino
         << " doesn't match object name ino 0x" << obj_name_ino
