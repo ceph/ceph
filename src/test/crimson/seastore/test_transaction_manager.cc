@@ -728,7 +728,7 @@ struct transaction_manager_test_t :
       logger().info("random_writes_concurrent: checking");
       check();
       logger().info(
-        "random_writes_concurrent: {} suceeded, {} failed",
+        "random_writes_concurrent: {} succeeded, {} failed",
         writes,
         failures
       );
