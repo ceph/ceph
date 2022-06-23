@@ -1288,7 +1288,7 @@ Notable Changes
 * rgw: policy acl format should be xml (`pr#946 <http://github.com/ceph/ceph/pull/946>`_, Orit Wasserman)
 * rgw: radosgw-admin: more on placement configuration (`issue#18078 <http://tracker.ceph.com/issues/18078>`_, `pr#12242 <http://github.com/ceph/ceph/pull/12242>`_, Casey Bodley)
 * rgw: region conversion respects pre-existing rgw_region_root_pool (`issue#17963 <http://tracker.ceph.com/issues/17963>`_, `pr#12076 <http://github.com/ceph/ceph/pull/12076>`_, Casey Bodley)
-* rgw: remove a redundant judgement when listng objects. (`pr#10849 <http://github.com/ceph/ceph/pull/10849>`_, zhangshaowen)
+* rgw: remove a redundant judgement when listing objects. (`pr#10849 <http://github.com/ceph/ceph/pull/10849>`_, zhangshaowen)
 * rgw: remove circular reference in RGWAsyncRadosRequest (`issue#17793 <http://tracker.ceph.com/issues/17793>`_, `issue#17792 <http://tracker.ceph.com/issues/17792>`_, `pr#11815 <http://github.com/ceph/ceph/pull/11815>`_, Casey Bodley)
 * rgw: remove suggestion to upgrade libcurl (`pr#11630 <http://github.com/ceph/ceph/pull/11630>`_, Casey Bodley)
 * rgw: remove unused variable "ostr" in rgw_b64.h and fix the comment (`pr#11329 <http://github.com/ceph/ceph/pull/11329>`_, Weibing Zhang)
