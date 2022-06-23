@@ -274,7 +274,7 @@ public:
 private:
   // context which completes itself (with -CEPHFS_ETIMEDOUT) after a specified
   // timeout or when explicitly completed, whichever comes first. Note
-  // that the context does not detroy itself after completion -- it
+  // that the context does not destroy itself after completion -- it
   // needs to be explicitly freed.
   class C_ContextTimeout : public MDSInternalContext {
   public:
