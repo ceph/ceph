@@ -3733,7 +3733,7 @@ Other Notable Changes
 * core: ReplicatedBackend: don't queue Context outside of ObjectStore with obc (`issue#18927 <http://tracker.ceph.com/issues/18927>`_, `pr#13569 <https://github.com/ceph/ceph/pull/13569>`_, Samuel Just)
 * core: Revert "PrimaryLogPG::failed_push: update missing as well" (`issue#18624 <http://tracker.ceph.com/issues/18624>`_, `pr#13090 <https://github.com/ceph/ceph/pull/13090>`_, David Zafman)
 * core,rgw: misc: SCA and Coverity Fixes (`pr#13208 <https://github.com/ceph/ceph/pull/13208>`_, Danny Al-Gaaf)
-* core,rgw: qa: Removed all 'default_idle_timeout' due to chnage in rwg task (`pr#15420 <https://github.com/ceph/ceph/pull/15420>`_, Yuri Weinstein)
+* core,rgw: qa: Removed all 'default_idle_timeout' due to change in rwg task (`pr#15420 <https://github.com/ceph/ceph/pull/15420>`_, Yuri Weinstein)
 * core,rgw,tests: qa/rgw_snaps: move default_idle_timeout config under the client (`issue#20128 <http://tracker.ceph.com/issues/20128>`_, `pr#15400 <https://github.com/ceph/ceph/pull/15400>`_, Yehuda Sadeh)
 * core,rgw,tests: qa/suits/rados/basic/tasks/rgw_snaps: wait for pools to be created (`pr#16509 <https://github.com/ceph/ceph/pull/16509>`_, Sage Weil)
 * core: rocksdb: sync with upstream (`issue#18464 <http://tracker.ceph.com/issues/18464>`_, `pr#13306 <https://github.com/ceph/ceph/pull/13306>`_, Kefu Chai)
