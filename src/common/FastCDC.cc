@@ -72,7 +72,7 @@ void FastCDC::_setup(int target, int size_window_bits)
 }
 
 static inline bool _scan(
-  // these are our cursor/postion...
+  // these are our cursor/position...
   bufferlist::buffers_t::const_iterator *p,
   const char **pp, const char **pe,
   size_t& pos,
