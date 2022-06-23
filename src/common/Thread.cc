@@ -127,7 +127,7 @@ int Thread::try_create(size_t stacksize)
   // The child thread will inherit our signal mask.  Set our signal mask to
   // the set of signals we want to block.  (It's ok to block signals more
   // signals than usual for a little while-- they will just be delivered to
-  // another thread or delieverd to this thread later.)
+  // another thread or delivered to this thread later.)
 
   #ifndef _WIN32
   sigset_t old_sigset;
