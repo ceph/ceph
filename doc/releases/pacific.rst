@@ -982,7 +982,7 @@ Changelog
 * rgw: bucket chown bad memory usage (`pr#45491 <https://github.com/ceph/ceph/pull/45491>`_, Mohammad Fatemipour)
 * rgw: change order of xml elements in ListRoles response (`pr#45448 <https://github.com/ceph/ceph/pull/45448>`_, Casey Bodley)
 * rgw: clean-up logging of function entering to make thorough and consistent (`pr#45450 <https://github.com/ceph/ceph/pull/45450>`_, J. Eric Ivancich)
-* rgw: cls_bucket_list_unordered() might return one redundent entry every time is_truncated is true (`pr#45457 <https://github.com/ceph/ceph/pull/45457>`_, Peng Zhang)
+* rgw: cls_bucket_list_unordered() might return one redundant entry every time is_truncated is true (`pr#45457 <https://github.com/ceph/ceph/pull/45457>`_, Peng Zhang)
 * rgw: default ms_mon_client_mode = secure (`pr#45439 <https://github.com/ceph/ceph/pull/45439>`_, Sage Weil)
 * rgw: document rgw_lc_debug_interval configuration option (`pr#45453 <https://github.com/ceph/ceph/pull/45453>`_, J. Eric Ivancich)
 * rgw: document S3 bucket replication support (`pr#45484 <https://github.com/ceph/ceph/pull/45484>`_, Matt Benjamin)

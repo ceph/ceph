@@ -4470,7 +4470,7 @@ Other Notable Changes
 * mon: prime pg_temp and a few health warning fixes (`pr#16530 <https://github.com/ceph/ceph/pull/16530>`_, xie xingguo)
 * mon: refactor MDSMonitor command handling (`pr#13581 <https://github.com/ceph/ceph/pull/13581>`_, John Spray)
 * mon: Removed unnecessary function declaration in MDSMonitor.h (`pr#15374 <https://github.com/ceph/ceph/pull/15374>`_, yonghengdexin735)
-* mon: remove the redudant jugement in paxosservice is_writeable function (`pr#10240 <https://github.com/ceph/ceph/pull/10240>`_, song baisen)
+* mon: remove the redundant jugement in paxosservice is_writeable function (`pr#10240 <https://github.com/ceph/ceph/pull/10240>`_, song baisen)
 * mon: remove unnecessary function declaration (`pr#13762 <https://github.com/ceph/ceph/pull/13762>`_, liuchang0812)
 * mon: replace osds with `osd destroy` and `osd new` (`pr#14074 <https://github.com/ceph/ceph/pull/14074>`_, Joao Eduardo Luis, Sage Weil)
 * mon: restructure prime_pg_temp around a full pg mapping calculated on multiple CPUs (`pr#13207 <https://github.com/ceph/ceph/pull/13207>`_, Sage Weil)
