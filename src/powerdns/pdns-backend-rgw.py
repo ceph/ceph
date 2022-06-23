@@ -66,7 +66,7 @@ import sys
 
 config_locations = ['rgw-pdns.conf', '~/rgw-pdns.conf', '/etc/ceph/rgw-pdns.conf']
 
-# PowerDNS expects a 200 what ever happends and always wants
+# PowerDNS expects a 200 what ever happens and always wants
 # 'result' to 'true' if the query fails
 def abort_early():
     return json.dumps({'result': 'true'}) + "\n"
