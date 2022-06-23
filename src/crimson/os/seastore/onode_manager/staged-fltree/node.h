@@ -378,7 +378,7 @@ class Node
   static eagain_ifuture<Ref<Node>> load_root(context_t, RootNodeTracker&);
 
   // Only for unit test purposes.
-  void test_make_destructable(context_t, NodeExtentMutable&, Super::URef&&);
+  void test_make_destructible(context_t, NodeExtentMutable&, Super::URef&&);
   virtual eagain_ifuture<> test_clone_root(context_t, RootNodeTracker&) const = 0;
 
  protected:

@@ -405,7 +405,7 @@ const std::string& Node::get_name() const
   return impl->get_name();
 }
 
-void Node::test_make_destructable(
+void Node::test_make_destructible(
     context_t c, NodeExtentMutable& mut, Super::URef&& _super)
 {
   impl->test_set_tail(mut);
