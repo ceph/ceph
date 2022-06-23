@@ -2679,7 +2679,7 @@ Detailed Changelog
 * core: qa/suites/rados/singleton/divergent_priors\*: broaden whitelist (`pr#17379 <https://github.com/ceph/ceph/pull/17379>`_, Sage Weil)
 * core: qa/suites/rados/thrash: extend mgr beacon grace when many msgr failures injected (`issue#21147 <http://tracker.ceph.com/issues/21147>`_, `pr#19242 <https://github.com/ceph/ceph/pull/19242>`_, Sage Weil)
 * core: qa/suites/rados/verify/tasks/rados_api_tests: whitelist OBJECT_MISPLACED (`pr#21646 <https://github.com/ceph/ceph/pull/21646>`_, Sage Weil)
-* core: qa/workunits/rest/test.py: stop trying to test obsolte cluster_up/down (`pr#18552 <https://github.com/ceph/ceph/pull/18552>`_, Sage Weil)
+* core: qa/workunits/rest/test.py: stop trying to test obsolete cluster_up/down (`pr#18552 <https://github.com/ceph/ceph/pull/18552>`_, Sage Weil)
 * core: rados/objclass.h: fix build define CEPH_CLS_API in all cases (`pr#21606 <https://github.com/ceph/ceph/pull/21606>`_, Danny Al-Gaaf)
 * core: rados: use WaitInterval()'s return value instead of manual timing (`pr#20028 <https://github.com/ceph/ceph/pull/20028>`_, Mohamad Gebai)
 * core,rbd: common,rbd-nbd: fix up prefork behavior vs AsyncMessenger singletons (`issue#23143 <http://tracker.ceph.com/issues/23143>`_, `pr#20681 <https://github.com/ceph/ceph/pull/20681>`_, Sage Weil)
