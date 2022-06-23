@@ -1120,7 +1120,7 @@ function TEST_corrupt_scrub_replicated() {
 	    ;;
 
 	17)
-	    # Deep-scrub only (all replicas are diffent than the object info
+	    # Deep-scrub only (all replicas are different than the object info
            local payload=ROBJ17
            echo $payload > $dir/new.ROBJ17
 	   objectstore_tool $dir 0 $objname set-bytes $dir/new.ROBJ17 || return 1
@@ -1128,7 +1128,7 @@ function TEST_corrupt_scrub_replicated() {
 	   ;;
 
 	18)
-	    # Deep-scrub only (all replicas are diffent than the object info
+	    # Deep-scrub only (all replicas are different than the object info
            local payload=ROBJ18
            echo $payload > $dir/new.ROBJ18
 	   objectstore_tool $dir 0 $objname set-bytes $dir/new.ROBJ18 || return 1
