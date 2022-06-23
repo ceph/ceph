@@ -1823,7 +1823,7 @@ void MDSMonitor::check_sub(Subscription *sub)
       if (!fsmap.filesystem_exists(fscid)) {
         // Client asked for a non-existent namespace, send them nothing
         // TODO: something more graceful for when a client has a filesystem
-        // mounted, and the fileysstem is deleted.  Add a "shut down you fool"
+        // mounted, and the filesystem is deleted.  Add a "shut down you fool"
         // flag to MMDSMap?
         dout(1) << "Client subscribed to non-existent namespace '" <<
                 fscid << "'" << dendl;
