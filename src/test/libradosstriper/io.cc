@@ -52,6 +52,17 @@ TEST_F(StriperTest, Stat) {
   ASSERT_EQ(-ENOENT, rados_striper_stat(striper, "nonexistent", &psize, &pmtime));
 }
 
+TEST_F(StriperTest, Stat2) {
+  uint64_t psize;
+  struct timespec pmtime;
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_striper_write(striper, "Stat2", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_striper_stat2(striper, "Stat2", &psize, &pmtime));
+  ASSERT_EQ(psize, sizeof(buf));
+  ASSERT_EQ(-ENOENT, rados_striper_stat2(striper, "nonexistent", &psize, &pmtime));
+}
+
 TEST_F(StriperTestPP, StatPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -63,6 +74,19 @@ TEST_F(StriperTestPP, StatPP) {
   ASSERT_EQ(0, striper.stat("Statpp", &psize, &pmtime));
   ASSERT_EQ(psize, sizeof(buf));
   ASSERT_EQ(-ENOENT, striper.stat("nonexistent", &psize, &pmtime));
+}
+
+TEST_F(StriperTestPP, Stat2PP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, striper.write("Stat2pp", bl, sizeof(buf), 0));
+  uint64_t psize;
+  struct timespec pmtime;
+  ASSERT_EQ(0, striper.stat2("Stat2pp", &psize, &pmtime));
+  ASSERT_EQ(psize, sizeof(buf));
+  ASSERT_EQ(-ENOENT, striper.stat2("nonexistent", &psize, &pmtime));
 }
 
 TEST_F(StriperTest, RoundTrip) {

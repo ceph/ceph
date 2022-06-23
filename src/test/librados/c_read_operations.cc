@@ -607,6 +607,38 @@ TEST_F(CReadOpsTest, Stat) {
   rados_release_read_op(op);
 }
 
+TEST_F(CReadOpsTest, Stat2) {
+  rados_read_op_t op = rados_create_read_op();
+  uint64_t size = 1;
+  int rval;
+  rados_read_op_stat2(op, &size, NULL, &rval);
+  EXPECT_EQ(-ENOENT, rados_read_op_operate(op, ioctx, obj, 0));
+  EXPECT_EQ(-EIO, rval);
+  EXPECT_EQ(1u, size);
+  rados_release_read_op(op);
+
+  write_object();
+
+  op = rados_create_read_op();
+  rados_read_op_stat2(op, &size, NULL, &rval);
+  EXPECT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  EXPECT_EQ(0, rval);
+  EXPECT_EQ(len, size);
+  rados_release_read_op(op);
+
+  op = rados_create_read_op();
+  rados_read_op_stat2(op, NULL, NULL, NULL);
+  EXPECT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+
+  remove_object();
+
+  op = rados_create_read_op();
+  rados_read_op_stat2(op, NULL, NULL, NULL);
+  EXPECT_EQ(-ENOENT, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+}
+
 TEST_F(CReadOpsTest, Omap) {
   char *keys[] = {(char*)"bar",
 		  (char*)"foo",
