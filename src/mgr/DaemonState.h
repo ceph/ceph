@@ -180,7 +180,7 @@ struct DeviceState : public RefCountedObject
   std::map<std::string,std::string> metadata;  ///< persistent metadata
 
   std::pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
-  utime_t life_expectancy_stamp;          ///< when life expectency was recorded
+  utime_t life_expectancy_stamp;          ///< when life expectancy was recorded
   float wear_level = -1;                  ///< SSD wear level (negative if unknown)
 
   void set_metadata(std::map<std::string,std::string>&& m);
