@@ -2581,7 +2581,7 @@ bool PeeringState::discover_all_missing(
 
     // If we've requested any of this stuff, the pg_missing_t information
     // should be on its way.
-    // TODO: coalsce requested_* into a single data structure
+    // TODO: coalesce requested_* into a single data structure
     if (peer_missing.find(peer) != peer_missing.end()) {
       psdout(20) << ": osd." << peer
 		 << ": we already have pg_missing_t" << dendl;
