@@ -82,7 +82,7 @@ Changelog
 * common/config: set rocksdb_cache_size to OPT_U64 (`issue#22104 <http://tracker.ceph.com/issues/22104>`_, `pr#18850 <https://github.com/ceph/ceph/pull/18850>`_, Vikhyat Umrao, liuhongtong)
 * common: fix typo in rados bench write JSON output (`issue#24199 <http://tracker.ceph.com/issues/24199>`_, `pr#22407 <https://github.com/ceph/ceph/pull/22407>`_, Sandor Zeestraten)
 * config: lower default omap entries recovered at once (`issue#21897 <http://tracker.ceph.com/issues/21897>`_, `pr#19927 <https://github.com/ceph/ceph/pull/19927>`_, Josh Durgin)
-* core: Addition of online osd 'omap'compaction command (`issue#19592 <http://tracker.ceph.com/issues/19592>`_, `pr#17101 <https://github.com/ceph/ceph/pull/17101>`_, liuchang0812, Sage Weil)
+* core: Addition of online osd 'omap' compaction command (`issue#19592 <http://tracker.ceph.com/issues/19592>`_, `pr#17101 <https://github.com/ceph/ceph/pull/17101>`_, liuchang0812, Sage Weil)
 * core: global/signal_handler.cc: fix typo (`issue#21432 <http://tracker.ceph.com/issues/21432>`_, `pr#17883 <https://github.com/ceph/ceph/pull/17883>`_, Kefu Chai)
 * core: librados: Double free in rados_getxattrs_next (`issue#22042 <http://tracker.ceph.com/issues/22042>`_, `pr#20381 <https://github.com/ceph/ceph/pull/20381>`_, Gu Zhongyan)
 * core: Objecter::C_ObjectOperation_sparse_read throws/catches exceptions on -ENOENT (`issue#21844 <http://tracker.ceph.com/issues/21844>`_, `pr#18743 <https://github.com/ceph/ceph/pull/18743>`_, Jason Dillaman)
