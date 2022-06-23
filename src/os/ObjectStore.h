@@ -781,7 +781,7 @@ public:
 
   /**
   * Estimates additional disk space used by the specified amount of objects and caused by file allocation granularity and metadata store
-  * - num objects - total (including witeouts) object count to measure used space for.
+  * - num objects - total (including whiteouts) object count to measure used space for.
   */
   virtual uint64_t estimate_objects_overhead(uint64_t num_objects) = 0;
 
