@@ -443,7 +443,7 @@ seastar::future<> OSD::start()
     if (auto [addrs, changed] =
         replace_unknown_addrs(cluster_msgr->get_myaddrs(),
                               public_msgr->get_myaddrs()); changed) {
-      logger().debug("replacing unkwnown addrs of cluster messenger");
+      logger().debug("replacing unknown addrs of cluster messenger");
       cluster_msgr->set_myaddrs(addrs);
     }
     return heartbeat->start(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
