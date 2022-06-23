@@ -207,7 +207,7 @@ Cycles::from_nanoseconds(uint64_t ns, double cycles_per_sec)
  * usleep for accurate measurements. Calling usleep may put the the processor
  * in a low power mode/sleep state which reduces the clock frequency.
  * So, each time the process/thread wakes up from usleep, it takes some time
- * to ramp up to maximum frequency. Thus meausrements often incur higher
+ * to ramp up to maximum frequency. Thus measurements often incur higher
  * latencies.
  * \param us
  *      Number of microseconds.
