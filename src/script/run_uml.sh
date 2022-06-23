@@ -32,7 +32,7 @@
 CEPH_TOP="${CEPH_TOP:-/home/elder/ceph}"
 
 # You may want to change this too, if you want guest UML instances
-# to have a diffeerent IP address range.  The guest IP will be based
+# to have a different IP address range.  The guest IP will be based
 # on this plus GUEST_ID (defined below).
 GUEST_IP_OFFSET="${GUEST_IP_OFFSET:-100}"
 

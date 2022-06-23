@@ -493,7 +493,7 @@ class TestFsNew(TestAdminCommands):
 
     def test_fs_new_interchange_already_in_use_metadata_and_data_pool_of_different_fs(self):
         """
-        That creating file system with interchanging metadata and data pool which is already in use by defferent fs.
+        That creating file system with interchanging metadata and data pool which is already in use by different fs.
         """
 
         # create first data pool, metadata pool and add with filesystem

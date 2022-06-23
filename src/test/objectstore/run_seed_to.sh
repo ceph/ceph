@@ -178,7 +178,7 @@ to=1000000000
 #  1) if we are running the tests on a btrfs volume, then we need to use
 #     a seq number for each run. Being on btrfs means we will fail when
 #     removing the store's directories and it's far more simple to just
-#     specify differente store names such as 'a.$seq' or 'b.$seq'.
+#     specify different store names such as 'a.$seq' or 'b.$seq'.
 #  
 #  2) unless the '--no-journal-test' option is specified, we will run
 #     three additional tests for each store, and we will reuse the same
