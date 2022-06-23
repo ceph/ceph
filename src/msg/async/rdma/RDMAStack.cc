@@ -293,7 +293,7 @@ void RDMADispatcher::polling()
       //
       // Clean up dead QPs when rx/tx CQs are in idle. The thing is that
       // we can destroy QPs even earlier, just when beacon has been received,
-      // but we have two CQs (rx & tx), thus beacon WC can be poped from tx
+      // but we have two CQs (rx & tx), thus beacon WC can be popped from tx
       // CQ before other WCs are fully consumed from rx CQ. For safety, we
       // wait for beacon and then "no-events" from CQs.
       //
