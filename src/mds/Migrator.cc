@@ -426,7 +426,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
     // abort exports:
     //  - that are going to the failed node
     //  - that aren't frozen yet (to avoid auth_pin deadlock)
-    //  - they havne't prepped yet (they may need to discover bounds to do that)
+    //  - they haven't prepped yet (they may need to discover bounds to do that)
     if ((p->second.peer == who &&
 	 p->second.state != EXPORT_CANCELLING) ||
 	p->second.state == EXPORT_LOCKING ||
