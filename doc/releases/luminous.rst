@@ -1131,7 +1131,7 @@ Other Notable Changes
 * client: flush the mdlog in _fsync before waiting on unstable reqs (`issue#23714 <http://tracker.ceph.com/issues/23714>`_, `pr#21542 <https://github.com/ceph/ceph/pull/21542>`_, Jeff Layton)
 * client: hangs on umount if it had an MDS session evicted (`issue#10915 <http://tracker.ceph.com/issues/10915>`_, `pr#22018 <https://github.com/ceph/ceph/pull/22018>`_, Rishabh Dave)
 * client: void sending mds request while holding cap reference (`issue#24369 <http://tracker.ceph.com/issues/24369>`_, `pr#22354 <https://github.com/ceph/ceph/pull/22354>`_, "Yan, Zheng")
-* cmake: fix the cepfs java binding build on Bionic (`issue#23458 <http://tracker.ceph.com/issues/23458>`_, `issue#24012 <http://tracker.ceph.com/issues/24012>`_, `pr#21872 <https://github.com/ceph/ceph/pull/21872>`_, Kefu Chai, Shengjing Zhu)
+* cmake: fix the cephfs java binding build on Bionic (`issue#23458 <http://tracker.ceph.com/issues/23458>`_, `issue#24012 <http://tracker.ceph.com/issues/24012>`_, `pr#21872 <https://github.com/ceph/ceph/pull/21872>`_, Kefu Chai, Shengjing Zhu)
 * cmake/modules/BuildRocksDB.cmake: enable compressions for rocksdb (`issue#24025 <http://tracker.ceph.com/issues/24025>`_, `pr#22215 <https://github.com/ceph/ceph/pull/22215>`_, Kefu Chai)
 * common: ARMv8 feature detection broken, leading to illegal instruction crashes (`issue#23464 <http://tracker.ceph.com/issues/23464>`_, `pr#22567 <https://github.com/ceph/ceph/pull/22567>`_, Adam Kupczyk)
 * common: fix BoundedKeyCounter const_pointer_iterator (`issue#22139 <http://tracker.ceph.com/issues/22139>`_, `pr#21083 <https://github.com/ceph/ceph/pull/21083>`_, Casey Bodley)
