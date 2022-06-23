@@ -350,7 +350,7 @@ options:
 - name: fuse_default_permissions
   type: bool
   level: advanced
-  desc: pass default_permisions to FUSE on mount
+  desc: pass default_permissions to FUSE on mount
   fmt_desc: When set to ``false``, ``ceph-fuse`` utility checks does its own
     permissions checking, instead of relying on the permissions enforcement in
     FUSE. Set to ``false`` together with the ``client acl type=posix_acl``
