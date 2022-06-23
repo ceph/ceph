@@ -37,7 +37,7 @@ class TestJournalMigration(CephFSTestCase):
             self.mount_a.check_files()  # sanity, this should always pass
 
             # Run a more substantial workunit so that the length of the log to be
-            # coverted is going span at least a few segments
+            # converted is going span at least a few segments
             workunit(self.ctx, {
                 'clients': {
                     "client.{0}".format(self.mount_a.client_id): ["suites/fsstress.sh"],
