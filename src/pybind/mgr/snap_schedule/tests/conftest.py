@@ -4,7 +4,7 @@ from ..fs.schedule import Schedule
 
 
 # simple_schedule fixture returns schedules without any timing arguments
-# the tuple values correspong to ctor args for Schedule
+# the tuple values correspond to ctor args for Schedule
 _simple_schedules = [
     ('/foo', '6h', 'fs_name', '/foo'),
     ('/foo', '24h', 'fs_name', '/foo'),
