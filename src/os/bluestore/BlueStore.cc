@@ -20066,7 +20066,7 @@ int BlueStore::push_allocation_to_rocksdb()
   // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
   clear_allocation_objects_from_rocksdb(db, cct, path);
 
-  // then open fm in new mode with the full devie marked as allocated
+  // then open fm in new mode with the full device marked as allocated
   if (reset_fm_for_restore() != 0) {
     return db_cleanup(-1);
   }
