@@ -5933,7 +5933,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	      i->second.hb_total_front = i->second.hb_max_front = 0;
 	      i->second.hb_min_front = UINT_MAX;
 
-	      // Record per osd interace ping times
+	      // Record per osd interface ping times
 	      // Based on osd_heartbeat_interval ignoring that it is randomly short than this interval
 	      if (i->second.hb_back_pingtime.size() == 0) {
 		ceph_assert(i->second.hb_front_pingtime.size() == 0);
