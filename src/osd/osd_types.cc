@@ -746,10 +746,10 @@ bool spg_t::parse(const char *s)
   return true;
 }
 
-char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
+char *spg_t::calc_name(char *buf, const char *suffix_backwards) const
 {
-  while (*suffix_backwords)
-    *--buf = *suffix_backwords++;
+  while (*suffix_backwards)
+    *--buf = *suffix_backwards++;
 
   if (!is_no_shard()) {
     buf = ritoa<uint8_t, 10>((uint8_t)shard.id, buf);
@@ -908,10 +908,10 @@ void pg_t::generate_test_instances(list<pg_t*>& o)
   o.push_back(new pg_t(131223, 4));
 }
 
-char *pg_t::calc_name(char *buf, const char *suffix_backwords) const
+char *pg_t::calc_name(char *buf, const char *suffix_backwards) const
 {
-  while (*suffix_backwords)
-    *--buf = *suffix_backwords++;
+  while (*suffix_backwards)
+    *--buf = *suffix_backwards++;
 
   buf = ritoa<uint32_t, 16>(m_seed, buf);
 

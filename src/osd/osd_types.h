@@ -431,7 +431,7 @@ struct pg_t {
   }
 
   static const uint8_t calc_name_buf_size = 36;  // max length for max values len("18446744073709551615.ffffffff") + future suffix len("_head") + '\0'
-  char *calc_name(char *buf, const char *suffix_backwords) const;
+  char *calc_name(char *buf, const char *suffix_backwards) const;
 
   void set_ps(ps_t p) {
     m_seed = p;
@@ -541,7 +541,7 @@ struct spg_t {
   }
 
   static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
-  char *calc_name(char *buf, const char *suffix_backwords) const;
+  char *calc_name(char *buf, const char *suffix_backwards) const;
   // and a (limited) version that uses an internal buffer:
   std::string calc_name_sring() const;
  
