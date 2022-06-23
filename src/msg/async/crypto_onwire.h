@@ -58,7 +58,7 @@ struct TxHandler {
   // called and another round of update-...-update-final will take place.
   //
   // The input parameter informs implementation how the -update sequence
-  // is fragmented and allows to make concious decision about allocation
+  // is fragmented and allows to make conscious decision about allocation
   // or reusage of provided memory. One implementation could do in-place
   // encryption while other might prefer one huge output buffer.
   //
