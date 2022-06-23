@@ -10127,7 +10127,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = r;
 	goto reply_no_propose;
       }
-      dout(10) << __func__ << " crush somke test duration: "
+      dout(10) << __func__ << " crush smoke test duration: "
                << duration << ", result: " << ess.str() << dendl;
     }
 
