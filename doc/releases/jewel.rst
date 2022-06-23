@@ -3105,7 +3105,7 @@ Notable Changes since Infernalis
 * rgw: fix objects can not be displayed which object name does not cont… (`issue#12963 <http://tracker.ceph.com/issues/12963>`_, `pr#5738 <http://github.com/ceph/ceph/pull/5738>`_, Weijun Duan)
 * rgw: fix openssl linkage (`pr#6513 <http://github.com/ceph/ceph/pull/6513>`_, Yehuda Sadeh)
 * rgw: fix partial read issue in rgw_admin and rgw_tools (`pr#6761 <http://github.com/ceph/ceph/pull/6761>`_, Jiaying Ren)
-* rgw: fix problem deleting objects begining with double underscores (`issue#15318 <http://tracker.ceph.com/issues/15318>`_, `pr#8488 <http://github.com/ceph/ceph/pull/8488>`_, Orit Wasserman)
+* rgw: fix problem deleting objects beginning with double underscores (`issue#15318 <http://tracker.ceph.com/issues/15318>`_, `pr#8488 <http://github.com/ceph/ceph/pull/8488>`_, Orit Wasserman)
 * rgw: fix quota enforcement on POST (#11323 Sergey Arkhipov)
 * rgw: fix reload on non Debian systems. (`pr#6482 <http://github.com/ceph/ceph/pull/6482>`_, Hervé Rousseau)
 * rgw: fix reset_loc (#11974 Yehuda Sadeh)
