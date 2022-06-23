@@ -803,7 +803,7 @@ Changelog
 * rgw: rgw/iam: correcting the result of get role policy (`pr#36193 <https://github.com/ceph/ceph/pull/36193>`_, Pritha Srivastava)
 * rgw: rgw/url: fix amqp urls with vhosts (`pr#35384 <https://github.com/ceph/ceph/pull/35384>`_, Yuval Lifshitz)
 * rgw: stop realm reloader before store shutdown (`pr#36192 <https://github.com/ceph/ceph/pull/36192>`_, Casey Bodley)
-* tools: Add statfs operation to ceph-objecstore-tool (`pr#35713 <https://github.com/ceph/ceph/pull/35713>`_, David Zafman)
+* tools: Add statfs operation to ceph-objectstore-tool (`pr#35713 <https://github.com/ceph/ceph/pull/35713>`_, David Zafman)
 
 
 v14.2.10 Nautilus

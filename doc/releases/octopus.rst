@@ -1360,7 +1360,7 @@ Changelog
 * rgw: rgw/iam: correcting the result of get role policy (`pr#36645 <https://github.com/ceph/ceph/pull/36645>`_, Pritha Srivastava)
 * rgw: selinux: allow ceph_t amqp_port_t:tcp_socket (`pr#36026 <https://github.com/ceph/ceph/pull/36026>`_, Kaleb S. KEITHLEY, Thomas Serlin)
 * rgw: stop realm reloader before store shutdown (`pr#36644 <https://github.com/ceph/ceph/pull/36644>`_, Kefu Chai, Casey Bodley)
-* tools: tools: Add statfs operation to ceph-objecstore-tool (`pr#35715 <https://github.com/ceph/ceph/pull/35715>`_, David Zafman)
+* tools: tools: Add statfs operation to ceph-objectstore-tool (`pr#35715 <https://github.com/ceph/ceph/pull/35715>`_, David Zafman)
 
 v15.2.4 Octopus
 ===============

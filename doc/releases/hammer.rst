@@ -551,7 +551,7 @@ Notable Changes
 * build/ops: max files open limit for OSD daemon is too low (`issue#12087 <http://tracker.ceph.com/issues/12087>`_, `pr#5026 <http://github.com/ceph/ceph/pull/5026>`_, Owen Synge)
 * mon: add an "osd crush tree" command (`issue#11833 <http://tracker.ceph.com/issues/11833>`_, `pr#5248 <http://github.com/ceph/ceph/pull/5248>`_, Kefu Chai)
 * mon: mon crashes when "ceph osd tree 85 --format json" (`issue#11975 <http://tracker.ceph.com/issues/11975>`_, `pr#4936 <http://github.com/ceph/ceph/pull/4936>`_, Kefu Chai)
-* build/ops: ceph / ceph-dbg steal ceph-objecstore-tool from ceph-test / ceph-test-dbg (`issue#11806 <http://tracker.ceph.com/issues/11806>`_, `pr#5069 <http://github.com/ceph/ceph/pull/5069>`_, Loic Dachary)
+* build/ops: ceph / ceph-dbg steal ceph-objectstore-tool from ceph-test / ceph-test-dbg (`issue#11806 <http://tracker.ceph.com/issues/11806>`_, `pr#5069 <http://github.com/ceph/ceph/pull/5069>`_, Loic Dachary)
 * rgw: DragonDisk fails to create directories via S3: MissingContentLength (`issue#12042 <http://tracker.ceph.com/issues/12042>`_, `pr#5118 <http://github.com/ceph/ceph/pull/5118>`_, Yehuda Sadeh)
 * build/ops: /usr/bin/ceph from ceph-common is broken without installing ceph (`issue#11998 <http://tracker.ceph.com/issues/11998>`_, `pr#5206 <http://github.com/ceph/ceph/pull/5206>`_, Ken Dreyer)
 * build/ops: systemd: Increase max files open limit for OSD daemon (`issue#11964 <http://tracker.ceph.com/issues/11964>`_, `pr#5040 <http://github.com/ceph/ceph/pull/5040>`_, Owen Synge)

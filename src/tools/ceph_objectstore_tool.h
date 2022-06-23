@@ -41,4 +41,4 @@ class ObjectStoreTool : public RadosDump
     int export_files(ObjectStore *store, coll_t coll);
 };
 
-#endif // CEPH_OBJECSTORE_TOOL_H_
+#endif // CEPH_OBJECTSTORE_TOOL_H_
