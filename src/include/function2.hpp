@@ -1145,21 +1145,21 @@ class erasure<false, Config,
   data_accessor view_;
 
 public:
-  // NOLINTNEXTLINE(cppcoreguidlines-pro-type-member-init)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   constexpr erasure() noexcept
       : invoke_table_(
             invoke_table_t::template get_empty_invocation_table<IsThrowing>()),
         view_(nullptr) {
   }
 
-  // NOLINTNEXTLINE(cppcoreguidlines-pro-type-member-init)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   constexpr erasure(std::nullptr_t) noexcept
       : invoke_table_(
             invoke_table_t::template get_empty_invocation_table<IsThrowing>()),
         view_(nullptr) {
   }
 
-  // NOLINTNEXTLINE(cppcoreguidlines-pro-type-member-init)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   constexpr erasure(erasure&& right) noexcept
       : invoke_table_(right.invoke_table_), view_(right.view_) {
   }
@@ -1167,13 +1167,13 @@ public:
   constexpr erasure(erasure const& /*right*/) = default;
 
   template <typename OtherConfig>
-  // NOLINTNEXTLINE(cppcoreguidlines-pro-type-member-init)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   constexpr erasure(erasure<false, OtherConfig, property_t> right) noexcept
       : invoke_table_(right.invoke_table_), view_(right.view_) {
   }
 
   template <typename T>
-  // NOLINTNEXTLINE(cppcoreguidlines-pro-type-member-init)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
   constexpr erasure(T&& object)
       : invoke_table_(invoke_table_t::template get_invocation_view_table_of<
                       std::decay_t<T>>()),
