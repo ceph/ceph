@@ -1172,7 +1172,7 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
   lock.unlock();
 
   // immediately schedule a report to be sent to the monitors with the new
-  // health checks that have changed. This is done asynchronusly to avoid
+  // health checks that have changed. This is done asynchronously to avoid
   // blocking python land. ActivePyModules::lock needs to be dropped to make
   // lockdep happy:
   //
