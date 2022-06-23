@@ -730,7 +730,7 @@ void Client::shutdown()
    * We are shuting down the client.
    *
    * Just declare the state to CLIENT_NEW to block and fail any
-   * new comming "reader" and then try to wait all the in-flight
+   * new coming "reader" and then try to wait all the in-flight
    * "readers" to finish.
    */
   RWRef_t iref_writer(initialize_state, CLIENT_NEW, false);
@@ -6619,7 +6619,7 @@ void Client::_unmount(bool abort)
    * We are unmounting the client.
    *
    * Just declare the state to STATE_UNMOUNTING to block and fail
-   * any new comming "reader" and then try to wait all the in-flight
+   * any new coming "reader" and then try to wait all the in-flight
    * "readers" to finish.
    */
   RWRef_t mref_writer(mount_state, CLIENT_UNMOUNTING, false);

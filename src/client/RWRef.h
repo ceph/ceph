@@ -38,7 +38,7 @@
  *   And for the _unmount() function , as a "writer", in the beginning
  *   it will also just need to define a RWRef object and in RWRef
  *   constructor it will update the state to next stage first, which then
- *   will fail all the new comming "readers", and then wait for all the
+ *   will fail all the new coming "readers", and then wait for all the
  *   "readers" to finish.
  *
  * With this we can get rid of the locks for all the "readers" and they
