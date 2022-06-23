@@ -589,7 +589,7 @@ class TestClientRecovery(CephFSTestCase):
             self.skipTest("Require FUSE client to handle signal STOP/CONT")
 
         # XXX: To conduct this test we need at least two clients since a
-        # single client is never evcited by MDS.
+        # single client is never evicted by MDS.
         SESSION_TIMEOUT = 30
         SESSION_AUTOCLOSE = 50
         time_at_beg = time.time()
