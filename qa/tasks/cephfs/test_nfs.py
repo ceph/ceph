@@ -195,7 +195,7 @@ class TestNFS(MgrTestCase):
         '''
         Test creation of a single export.
         :param export_id: Denotes export number
-        :param create_fs: If false filesytem exists. Otherwise create it.
+        :param create_fs: If false filesystem exists. Otherwise create it.
         :param extra_cmd: List of extra arguments for creating export.
         '''
         if create_fs:

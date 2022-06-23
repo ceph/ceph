@@ -176,7 +176,7 @@ def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
             create_mds(mgr, newvolname, placement)
             remove_mds_service = True
 
-    # rename_filesytem is idempotent
+    # rename_filesystem is idempotent
     r, outb, outs = rename_filesystem(mgr, volname, newvolname)
     if r != 0:
         errmsg = f"Failed to rename file system '{volname}' to '{newvolname}'"

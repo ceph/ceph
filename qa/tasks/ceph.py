@@ -1787,7 +1787,7 @@ def task(ctx, config):
                 - name: b
 
     In the above example, filesystem 'a' will have 'max_mds' 3,
-    and filesystme 'b' will have 'max_mds' 2.
+    and filesystem 'b' will have 'max_mds' 2.
 
     To change the mdsmap's default session_timeout (60 seconds), use::
 
