@@ -669,7 +669,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
       _rcv.next = fin_seq + 1;
 
       // If this <FIN> packet contains data as well, we can ACK both data
-      // and <FIN> in a single packet, so canncel the previous ACK.
+      // and <FIN> in a single packet, so cancel the previous ACK.
       clear_delayed_ack();
       do_output = false;
       // Send ACK for the FIN!
@@ -698,7 +698,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
     }
   }
   if (do_output || (do_output_data && can_send())) {
-    // Since we will do output, we can canncel scheduled delayed ACK.
+    // Since we will do output, we can cancel scheduled delayed ACK.
     clear_delayed_ack();
     output();
   }
