@@ -52,7 +52,7 @@ TEST(FairMutex, fair)
           // just consider it fair
           continue;
         }
-        // check if any team is donimating the game.
+        // check if any team is dominating the game.
         unsigned avg = total / scoreboard.size();
         // leave at least half of the average to other teams
         ASSERT_LE(score, total - avg / 2);
