@@ -46,7 +46,7 @@ int RGWBlockDirectory::existKey(std::string key, cpp_redis::client *client) {
 }
 
 int RGWBlockDirectory::setValue(cache_block *ptr) {
-  //creating the index based on bucket_name, obj_name, and chunk_id
+  //creating the index based on obj_name
   std::string key = buildIndex(ptr);
 
   if (!client.is_connected()) { 
@@ -127,7 +127,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
 }
 
 int RGWBlockDirectory::setValue(cache_block *ptr, int port) {
-  //creating the index based on bucket_name, obj_name, and chunk_id
+  //creating the index based on obj_name
   std::string key = buildIndex(ptr);
 
   if (!client.is_connected()) { 
