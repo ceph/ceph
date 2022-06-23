@@ -3991,7 +3991,7 @@ options:
     from a KernelDevice. Applied to minimize size of scatter-gather lists
     sent to NICs. Targets really  big buffers (>= 2 or 4 MBs).
     Keep in mind the system must be configured accordingly (see /proc/sys/vm/nr_hugepages).
-    Otherwise the OSD wil fail early.
+    Otherwise the OSD will fail early.
     Beware BlueStore, by default, stores large chunks across many smaller blobs.
     Increasing bluestore_max_blob_size changes that, and thus allows the data to
     be read back into small number of huge page-backed buffers.
