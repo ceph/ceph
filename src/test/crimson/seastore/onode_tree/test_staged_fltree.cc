@@ -952,9 +952,9 @@ class DummyChildPool {
     key_view_t get_pivot_key() const { return *impl->get_pivot_index(); }
 
     eagain_ifuture<> populate_split(
-        context_t c, std::set<Ref<DummyChild>>& splitable_nodes) {
+        context_t c, std::set<Ref<DummyChild>>& splittable_nodes) {
       ceph_assert(can_split());
-      ceph_assert(splitable_nodes.find(this) != splitable_nodes.end());
+      ceph_assert(splittable_nodes.find(this) != splittable_nodes.end());
 
       size_t index;
       const auto& keys = impl->get_keys();
@@ -972,10 +972,10 @@ class DummyChildPool {
       impl->reset(left_keys, false);
       auto right_child = DummyChild::create_new(right_keys, right_is_tail, pool);
       if (!can_split()) {
-        splitable_nodes.erase(this);
+        splittable_nodes.erase(this);
       }
       if (right_child->can_split()) {
-        splitable_nodes.insert(right_child);
+        splittable_nodes.insert(right_child);
       }
       Ref<Node> this_ref = this;
       return apply_split_to_parent(
@@ -984,7 +984,7 @@ class DummyChildPool {
 
     eagain_ifuture<> insert_and_split(
         context_t c, const ghobject_t& insert_key,
-        std::set<Ref<DummyChild>>& splitable_nodes) {
+        std::set<Ref<DummyChild>>& splittable_nodes) {
       const auto& keys = impl->get_keys();
       ceph_assert(keys.size() == 1);
       auto& key = *keys.begin();
@@ -995,10 +995,10 @@ class DummyChildPool {
       new_keys.insert(key);
       impl->reset(new_keys, impl->is_level_tail());
 
-      splitable_nodes.clear();
-      splitable_nodes.insert(this);
-      auto fut = populate_split(c, splitable_nodes);
-      ceph_assert(splitable_nodes.size() == 0);
+      splittable_nodes.clear();
+      splittable_nodes.insert(this);
+      auto fut = populate_split(c, splittable_nodes);
+      ceph_assert(splittable_nodes.size() == 0);
       return fut;
     }
 
@@ -1140,18 +1140,18 @@ class DummyChildPool {
       return DummyChild::create_initial(get_context(), keys, *this, *p_btree->root_tracker
       ).si_then([this](auto initial_child) {
         // split
-        splitable_nodes.insert(initial_child);
+        splittable_nodes.insert(initial_child);
         return trans_intr::repeat([this] ()
           -> eagain_ifuture<seastar::stop_iteration> {
-          if (splitable_nodes.empty()) {
+          if (splittable_nodes.empty()) {
             return seastar::make_ready_future<seastar::stop_iteration>(
               seastar::stop_iteration::yes);
           }
-          auto index = rd() % splitable_nodes.size();
-          auto iter = splitable_nodes.begin();
+          auto index = rd() % splittable_nodes.size();
+          auto iter = splittable_nodes.begin();
           std::advance(iter, index);
           Ref<DummyChild> child = *iter;
-          return child->populate_split(get_context(), splitable_nodes
+          return child->populate_split(get_context(), splittable_nodes
           ).si_then([] {
             return seastar::stop_iteration::no;
           });
@@ -1178,7 +1178,7 @@ class DummyChildPool {
       auto node_to_split = pool_clone.get_node_by_pos(pos);
       with_trans_intr(pool_clone.get_context().t, [&] (auto &t) {
         return node_to_split->insert_and_split(
-          pool_clone.get_context(), key, pool_clone.splitable_nodes);
+          pool_clone.get_context(), key, pool_clone.splittable_nodes);
       }).unsafe_get0();
       {
         std::ostringstream oss;
@@ -1267,7 +1267,7 @@ class DummyChildPool {
     } else {
       ceph_assert(!p_btree.has_value());
     }
-    splitable_nodes.clear();
+    splittable_nodes.clear();
   }
 
   void track_node(Ref<DummyChild> node) {
@@ -1303,7 +1303,7 @@ class DummyChildPool {
   TransactionRef ref_t = make_test_transaction();
 
   std::random_device rd;
-  std::set<Ref<DummyChild>> splitable_nodes;
+  std::set<Ref<DummyChild>> splittable_nodes;
 
   DummyChildPool* pool_clone_in_progress = nullptr;
 };
