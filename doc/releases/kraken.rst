@@ -638,7 +638,7 @@ Notable Changes
 * bluestore: readability improvements and doxygen fix (`pr#11895 <http://github.com/ceph/ceph/pull/11895>`_, xie xingguo)
 * bluestore: reap collection after all pending ios done (`pr#11797 <http://github.com/ceph/ceph/pull/11797>`_, Haomai Wang)
 * bluestore: reap ioc when stopping aio_thread. (`pr#11811 <http://github.com/ceph/ceph/pull/11811>`_, Haodong Tang)
-* bluestore: refactor _do_write(); move initializaiton of csum out of loop (`pr#11823 <http://github.com/ceph/ceph/pull/11823>`_, xie xingguo)
+* bluestore: refactor _do_write(); move initialization of csum out of loop (`pr#11823 <http://github.com/ceph/ceph/pull/11823>`_, xie xingguo)
 * bluestore: remove duplicated namespace of tx state (`pr#11845 <http://github.com/ceph/ceph/pull/11845>`_, xie xingguo)
 * bluestore: remove garbage collector staff (`pr#12042 <http://github.com/ceph/ceph/pull/12042>`_, Igor Fedotov)
 * bluestore: set next object as ghobject_t::get_max() when start.hobj.i… (`pr#11495 <http://github.com/ceph/ceph/pull/11495>`_, Xinze Chi, Haomai Wang)
