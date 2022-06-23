@@ -3204,7 +3204,7 @@ Detailed Changelog
 * build/ops: dpdk: drop dpdk submodule (`issue#24032 <http://tracker.ceph.com/issues/24032>`_, `pr#21856 <https://github.com/ceph/ceph/pull/21856>`_, Kefu Chai)
 * build/ops: examples/Makefile: add -Wno-unused-parameter to avoid compile error (`pr#23581 <https://github.com/ceph/ceph/pull/23581>`_, You Ji)
 * build/ops: Improving make check reliability (`pr#22441 <https://github.com/ceph/ceph/pull/22441>`_, Erwan Velu)
-* build/ops: include: define errnos if not defined for better portablity (`pr#25302 <https://github.com/ceph/ceph/pull/25302>`_, Willem Jan Withagen)
+* build/ops: include: define errnos if not defined for better portability (`pr#25302 <https://github.com/ceph/ceph/pull/25302>`_, Willem Jan Withagen)
 * build/ops: install-deps: check the exit status for the $builddepcmd (`pr#22682 <https://github.com/ceph/ceph/pull/22682>`_, Yunchuan Wen)
 * build/ops: install-deps: do not specify unknown options (`pr#24315 <https://github.com/ceph/ceph/pull/24315>`_, Kefu Chai)
 * build/ops: install-deps: install setuptools before upgrading virtualenv (`pr#25039 <https://github.com/ceph/ceph/pull/25039>`_, Kefu Chai)
