@@ -273,7 +273,7 @@ public:
   // For msgr2.1, the epilogue is generated only if the frame has
   // more than one segment (i.e. at least one of second to fourth
   // segments is not empty).  In crc mode, it stores crcs for
-  // second to fourh segments; the preamble and the first segment
+  // second to fourth segments; the preamble and the first segment
   // are covered by their own crcs.  In secure mode, the epilogue
   // auth tag covers second to fourth segments; the preamble and the
   // first segment (if not fully inlined into the preamble inline
