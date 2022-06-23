@@ -152,7 +152,7 @@ static int clslua_log(lua_State *L)
     }
   }
 
-  /* check space for args and seperators (" ") */
+  /* check space for args and separators (" ") */
   int nelems = ((nargs - (custom_ll ? 1 : 0)) * 2) - 1;
   luaL_checkstack(L, nelems, "rados.log(..)");
 
