@@ -420,7 +420,7 @@ int Infiniband::QueuePair::recv_cm_meta(CephContext *cct, int socket_fd)
   } else { // valid message
     sscanf(msg, "%hx:%x:%x:%x:%s", &(peer_cm_meta.lid), &(peer_cm_meta.local_qpn), &(peer_cm_meta.psn), &(peer_cm_meta.peer_qpn), gid);
     wire_gid_to_gid(gid, &peer_cm_meta);
-    ldout(cct, 5) << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn
+    ldout(cct, 5) << __func__ << " received: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn
                   << ", " << peer_cm_meta.psn << ", " << peer_cm_meta.peer_qpn << ", " << gid << dendl;
   }
   return r;
