@@ -330,7 +330,7 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
   RGWObjVersionTracker ot;
 
   // if we deleted children above we will force delete, as any that
-  // remain is detrius from a prior bug
+  // remain is detritus from a prior bug
   ret = store->getRados()->delete_bucket(info, ot, y, dpp, !delete_children);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " <<
@@ -3141,7 +3141,7 @@ int RadosLuaManager::remove_package(const DoutPrefixProvider *dpp, optional_yiel
   librados::ObjectWriteOperation op;
   size_t pos = package_name.find(" ");
   if (pos != package_name.npos) {
-    // remove specfic version of the the package
+    // remove specific version of the the package
     op.omap_rm_keys(std::set<std::string>({package_name}));
     auto ret = rgw_rados_operate(dpp, ioctx,
         PACKAGE_LIST_OBJECT_NAME, &op, y);

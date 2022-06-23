@@ -513,7 +513,7 @@ tcp::endpoint parse_endpoint(boost::asio::string_view input,
       return endpoint;
     }
     if (addr_end + 1 < input.size()) {
-      // :port must must follow [ipv6]
+      // :port must follow [ipv6]
       if (input[addr_end + 1] != ':') {
         ec = boost::asio::error::invalid_argument;
         return endpoint;

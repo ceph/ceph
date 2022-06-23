@@ -215,7 +215,7 @@ ldpp_dout(s, 20) << "get_encryption_defaults: found kms_attr " << kms_attr << " 
     }
     kms_attr_seen = true;
   } else if (!rest_only && kms_master_key_id != "") {
-ldpp_dout(s, 20) << "get_encryption_defaults: no kms_attr, but kms_master_key_id = " << kms_master_key_id << ", settig kms_attr_seen" << dendl;
+ldpp_dout(s, 20) << "get_encryption_defaults: no kms_attr, but kms_master_key_id = " << kms_master_key_id << ", setting kms_attr_seen" << dendl;
     kms_attr_seen = true;
     rgw_set_amz_meta_header(s->info.crypt_attribute_map, kms_attr, kms_master_key_id, OVERWRITE);
   }
@@ -469,7 +469,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   if (! op_ret) {
     if (! lo_etag.empty()) {
-      /* Handle etag of Swift API's large objects (DLO/SLO). It's entirerly
+      /* Handle etag of Swift API's large objects (DLO/SLO). It's entirely
        * legit to perform GET on them through S3 API. In such situation,
        * a client should receive the composited content with corresponding
        * etag value. */
@@ -3303,7 +3303,7 @@ void RGWPostObj_ObjStore_S3::send_response()
        * What we really would like is to quaily the bucket name, so
        * that the client could simply copy it and paste into next request.
        * Unfortunately, in S3 we cannot know if the client will decide
-       * to come through DNS, with "bucket.tenant" sytanx, or through
+       * to come through DNS, with "bucket.tenant" syntax, or through
        * URL with "tenant\bucket" syntax. Therefore, we provide the
        * tenant separately.
        */

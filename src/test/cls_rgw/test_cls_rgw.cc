@@ -456,7 +456,7 @@ TEST_F(cls_rgw, index_list)
     { static_cast<char>(0xCF), static_cast<char>(0x8F) },
     /* treble byte utf8 character */
     { static_cast<char>(0xDF), static_cast<char>(0x8F), static_cast<char>(0x8F) },
-    /* quadruble byte utf8 character */
+    /* quadruple byte utf8 character */
     { static_cast<char>(0xF7), static_cast<char>(0x8F), static_cast<char>(0x8F), static_cast<char>(0x8F) },
   };
 
@@ -738,7 +738,7 @@ TEST_F(cls_rgw, bi_list)
       "bi list test with filters should return correct truncation indicator";
   }
 
-  // test whether combined segment count is correcgt
+  // test whether combined segment count is correct
   is_truncated = false;
   entries.clear();
   marker.clear();

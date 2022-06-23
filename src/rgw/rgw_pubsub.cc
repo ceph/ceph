@@ -675,7 +675,7 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
     return ret ;
   }
 
-  // remove all auto-genrated topics
+  // remove all auto-generated topics
   for (const auto& topic : bucket_topics.topics) {
     const auto& topic_name = topic.first;
     ret = ps.remove_topic(dpp, topic_name, y);

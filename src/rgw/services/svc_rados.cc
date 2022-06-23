@@ -424,7 +424,7 @@ bool RGWSI_RADOS::check_secure_mon_conn(const DoutPrefixProvider *dpp) const
   std::vector<uint32_t> modes;
 
   reg.get_supported_methods(CEPH_ENTITY_TYPE_MON, &methods, &modes);
-  ldpp_dout(dpp, 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
+  ldpp_dout(dpp, 20) << __func__ << "(): auth registry supported: methods=" << methods << " modes=" << modes << dendl;
 
   for (auto method : methods) {
     if (!reg.is_secure_method(method)) {

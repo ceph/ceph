@@ -202,7 +202,7 @@ def main():
     # remove datacache dir
     #cmd = exec_cmd('rm -rf %s' % (cache_dir))
     #log.debug("RGW Datacache dir deleted")
-    #^ commenting for future refrence - the work unit will continue running tests and if the cache_dir is removed
+    #^ commenting for future reference - the work unit will continue running tests and if the cache_dir is removed
     #  all the writes to cache will fail with errno 2 ENOENT No such file or directory.
 
 main()

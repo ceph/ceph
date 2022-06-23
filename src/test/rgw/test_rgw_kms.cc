@@ -242,7 +242,7 @@ TEST_F(TestSSEKMS, concat_url)
   // Each test has 3 strings:
   // * the base URL
   // * the path we want to concatenate
-  // * the exepected final URL
+  // * the expected final URL
   std::string tests[9][3] ={
     {"", "", ""},
     {"", "bar", "/bar"},

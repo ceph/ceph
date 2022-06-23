@@ -409,7 +409,7 @@ TEST_F(TestCls2PCQueue, CommitError)
   }
   cls_2pc_reservations reservations;
   ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
-  // 2 reservations were not comitted
+  // 2 reservations were not committed
   ASSERT_EQ(reservations.size(), 2);
 }
 
@@ -675,7 +675,7 @@ TEST_F(TestCls2PCQueue, ManualCleanup)
   cls_2pc_queue_init(op, queue_name, max_size);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
-  // anything older than 100ms is cosidered stale
+  // anything older than 100ms is considered stale
   ceph::coarse_real_time stale_time = ceph::coarse_real_clock::now() + std::chrono::milliseconds(100);
 
   std::vector<std::thread> reservers(max_workers);
@@ -749,7 +749,7 @@ TEST_F(TestCls2PCQueue, Cleanup)
   cls_2pc_queue_init(op, queue_name, max_size);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
-  // anything older than 100ms is cosidered stale
+  // anything older than 100ms is considered stale
   ceph::coarse_real_time stale_time = ceph::coarse_real_clock::now() + std::chrono::milliseconds(100);
 
   std::vector<std::thread> reservers(max_workers);
@@ -989,7 +989,7 @@ TEST_F(TestCls2PCQueue, MultiProducerConsumer)
   std::for_each(producers.begin(), producers.end(), [](auto& p) { p.join(); });
   std::for_each(consumers.begin(), consumers.end(), [](auto& c) { c.join(); });
   if (!retry_happened) {
-      std::cerr << "Queue was never full - all reservations were sucessfull." <<
+      std::cerr << "Queue was never full - all reservations were successful." <<
           "Please decrease the amount of consumer threads" << std::endl;
   }
   // make sure that queue is empty and no reservations remain

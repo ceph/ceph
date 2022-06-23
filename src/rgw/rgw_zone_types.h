@@ -332,7 +332,7 @@ struct RGWZone {
  */
   uint32_t bucket_index_max_shards;
 
-  // pre-shard buckets on creation to enable some write-parallism by default,
+  // pre-shard buckets on creation to enable some write-parallelism by default,
   // delay the need to reshard as the bucket grows, and (in multisite) get some
   // bucket index sharding where dynamic resharding is not supported
   static constexpr uint32_t default_bucket_index_max_shards = 11;
