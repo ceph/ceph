@@ -200,7 +200,7 @@ Notable changes
 * osd: scrub snapshot metadata
 * osd: fix osdmap trimming
 * osd: misc peering fixes
-* osd: stop heartbeating with peers if internal threads are stuck/hung
+* osd: stop heart beating with peers if internal threads are stuck/hung
 * osd: PG removal is friendlier to other workloads
 * osd: fix recovery start delay (was causing very slow recovery)
 * osd: fix scheduling of explicitly requested scrubs
