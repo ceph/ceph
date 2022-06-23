@@ -549,7 +549,7 @@ class TestDataScan(CephFSTestCase):
         self.assertEqual(out_json["return_code"], 0)
         self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
-        # Remove the whole 'sudbdir' directory
+        # Remove the whole 'subdir' directory
         self.mount_a.run_shell(["rm", "-rf", "subdir/"])
 
     @for_teuthology
