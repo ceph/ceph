@@ -3012,7 +3012,7 @@ Other Notable Changes
 * build/ops: debian: ceph-mgr: fix package description (`pr#15513 <https://github.com/ceph/ceph/pull/15513>`_, Fabian Grünbichler)
 * build/ops: debian/control: add ceph-base-dbg (`pr#13796 <https://github.com/ceph/ceph/pull/13796>`_, Sage Weil)
 * build/ops: debian: drop boost build dependencies (`pr#13524 <https://github.com/ceph/ceph/pull/13524>`_, Kefu Chai)
-* build/ops: debian: package ceph.logroate properly (`issue#19390 <http://tracker.ceph.com/issues/19390>`_, `pr#14600 <https://github.com/ceph/ceph/pull/14600>`_, Kefu Chai)
+* build/ops: debian: package ceph.logrotate properly (`issue#19390 <http://tracker.ceph.com/issues/19390>`_, `pr#14600 <https://github.com/ceph/ceph/pull/14600>`_, Kefu Chai)
 * build/ops: debian: package crypto plugin only on amd64 (`pr#14820 <https://github.com/ceph/ceph/pull/14820>`_, Kefu Chai)
 * build/ops: debian/rpm: move radosgw-admin to ceph-common (`issue#19577 <http://tracker.ceph.com/issues/19577>`_, `pr#14940 <https://github.com/ceph/ceph/pull/14940>`_, Ali Maredia)
 * build/ops: debian/rules, ceph.spec.in: invoke cmake with -DBOOST_J (`pr#14114 <https://github.com/ceph/ceph/pull/14114>`_, Dan Mick)
