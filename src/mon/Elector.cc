@@ -201,7 +201,7 @@ void Elector::reset_timer(double plus)
    *
    * When the election expires, we will check if we were the ones who won, and
    * if so we will declare victory. If that is not the case, then we assume
-   * that the one we defered to didn't declare victory quickly enough (in fact,
+   * that the one we deferred to didn't declare victory quickly enough (in fact,
    * as far as we know, we may even be dead); so, just propose ourselves as the
    * Leader.
    */
