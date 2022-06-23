@@ -10,7 +10,7 @@ target_link_libraries(radosstriper
     librados_impl cls_lock_client osdc ceph-common
     pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 set_target_properties(radosstriper PROPERTIES
-  OUPUT_NAME radosstriper
+  OUTPUT_NAME radosstriper
   VERSION 1.0.0
   SOVERSION 1)
 
