@@ -584,7 +584,7 @@ Notable Changes
 
 Changelog
 ---------
-* bluestore/bluefs: make accounting resiliant to unlock() (`pr#36909 <https://github.com/ceph/ceph/pull/36909>`_, Adam Kupczyk)
+* bluestore/bluefs: make accounting resilient to unlock() (`pr#36909 <https://github.com/ceph/ceph/pull/36909>`_, Adam Kupczyk)
 * bluestore: Rescue procedure for extremely large bluefs log (`pr#36930 <https://github.com/ceph/ceph/pull/36930>`_, Adam Kupczyk)
 * bluestore: dump onode that has too many spanning blobs (`pr#36756 <https://github.com/ceph/ceph/pull/36756>`_, Igor Fedotov)
 * bluestore: enable more flexible bluefs space management by default (`pr#37091 <https://github.com/ceph/ceph/pull/37091>`_, Igor Fedotov)
