@@ -2791,7 +2791,7 @@ Changelog
 * ceph-volume: use the Device.rotational property instead of sys_api (`pr#28060 <https://github.com/ceph/ceph/pull/28060>`_, Andrew Schoen)
 * ceph-volume: use the OSD identifier when reporting success (`pr#29762 <https://github.com/ceph/ceph/pull/29762>`_, Alfredo Deza)
 * ceph-volume: util: look for executable in $PATH (`pr#31787 <https://github.com/ceph/ceph/pull/31787>`_, Shyukri Shyukriev)
-* ceph-volume: util: Use proper param substition (`pr#28448 <https://github.com/ceph/ceph/pull/28448>`_, Shyukri Shyukriev)
+* ceph-volume: util: Use proper param substitution (`pr#28448 <https://github.com/ceph/ceph/pull/28448>`_, Shyukri Shyukriev)
 * ceph-volume: VolumeGroups.filter shouldnt purge itself (`pr#30707 <https://github.com/ceph/ceph/pull/30707>`_, Rishabh Dave)
 * ceph-volume: when testing disable the dashboard (`pr#29387 <https://github.com/ceph/ceph/pull/29387>`_, Andrew Schoen)
 * ceph.in: disable ASAN if libasan is not found (`pr#28247 <https://github.com/ceph/ceph/pull/28247>`_, Kefu Chai)
