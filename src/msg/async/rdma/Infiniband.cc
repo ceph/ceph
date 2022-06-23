@@ -1194,7 +1194,7 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp)
         ::free(isge);
         return 0;
       }
-      break; //get some buffers, so we need post them to recevie queue
+      break; //get some buffers, so we need post them to receive queue
     }
 
     isge[i].addr = reinterpret_cast<uint64_t>(chunk->data);
