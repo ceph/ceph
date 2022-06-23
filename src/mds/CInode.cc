@@ -3741,13 +3741,13 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 	  pi = oi = &it->second.inode;
 	  pxattrs = &it->second.xattrs;
 	} else {
-	  // snapshoted remote dentry can result this
+	  // snapshotted remote dentry can result this
 	  dout(0) << __func__ << " old_inode for snapid " << snapid
 		  << " not found" << dendl;
 	}
       }
     } else if (snapid < first || snapid > last) {
-      // snapshoted remote dentry can result this
+      // snapshotted remote dentry can result this
       dout(0) << __func__ << " [" << first << "," << last << "]"
 	      << " not match snapid " << snapid << dendl;
     }
