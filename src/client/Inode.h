@@ -151,7 +151,7 @@ struct Inode : RefCountedObject {
 
   uint64_t max_size = 0;  // max size we can write to
 
-  // dirfrag, recursive accountin
+  // dirfrag, recursive accounting
   frag_info_t dirstat;
   nest_info_t rstat;
 
