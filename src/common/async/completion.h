@@ -130,7 +130,7 @@ class Completion<void(Args...), T> : public detail::UserData<T> {
   }
 
   /// completion factory function that uses the handler's associated allocator.
-  /// any additional arguments are forwared to T's constructor
+  /// any additional arguments are forwarded to T's constructor
   template <typename Executor1, typename Handler, typename ...TArgs>
   static std::unique_ptr<Completion>
   create(const Executor1& ex1, Handler&& handler, TArgs&& ...args);
@@ -281,7 +281,7 @@ void Completion<void(Args...), T>::post(std::unique_ptr<Completion>&& ptr,
 
 
 /// completion factory function that uses the handler's associated allocator.
-/// any additional arguments are forwared to T's constructor
+/// any additional arguments are forwarded to T's constructor
 template <typename Signature, typename T, typename Executor1,
           typename Handler, typename ...TArgs>
 std::unique_ptr<Completion<Signature, T>>
