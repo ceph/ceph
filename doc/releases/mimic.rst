@@ -2676,7 +2676,7 @@ Detailed Changelog
 * core: qa/suites/rados/singleton/all/mon-seesaw: whitelist MON_DOWN (`pr#18246 <https://github.com/ceph/ceph/pull/18246>`_, Sage Weil)
 * core: qa/suites/rados/singleton/all/recover-preemption: handle slow starting osd (`pr#18078 <https://github.com/ceph/ceph/pull/18078>`_, Sage Weil)
 * core: qa/suites/rados/singleton/all/recovery_preemption: whitelist SLOW_OPS (`pr#21250 <https://github.com/ceph/ceph/pull/21250>`_, Sage Weil)
-* core: qa/suites/rados/singleton/diverget_priors\*: broaden whitelist (`pr#17379 <https://github.com/ceph/ceph/pull/17379>`_, Sage Weil)
+* core: qa/suites/rados/singleton/divergent_priors\*: broaden whitelist (`pr#17379 <https://github.com/ceph/ceph/pull/17379>`_, Sage Weil)
 * core: qa/suites/rados/thrash: extend mgr beacon grace when many msgr failures injected (`issue#21147 <http://tracker.ceph.com/issues/21147>`_, `pr#19242 <https://github.com/ceph/ceph/pull/19242>`_, Sage Weil)
 * core: qa/suites/rados/verify/tasks/rados_api_tests: whitelist OBJECT_MISPLACED (`pr#21646 <https://github.com/ceph/ceph/pull/21646>`_, Sage Weil)
 * core: qa/workunits/rest/test.py: stop trying to test obsolte cluster_up/down (`pr#18552 <https://github.com/ceph/ceph/pull/18552>`_, Sage Weil)
