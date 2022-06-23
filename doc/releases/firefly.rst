@@ -346,7 +346,7 @@ Notable Changes
 * osd: other misc bugs (#9821 #9875 Samuel Just)
 * rgw: add .log to default log path (#9353 Alexandre Marangone)
 * rgw: clean up fcgi request context (#10194 Yehuda Sadeh)
-* rgw: convet header underscores to dashes (#9206 Yehuda Sadeh)
+* rgw: convert header underscores to dashes (#9206 Yehuda Sadeh)
 * rgw: copy object data if copy target is in different pool (#9039 Yehuda Sadeh)
 * rgw: don't try to authenticate CORS peflight request (#8718 Robert Hubbard, Yehuda Sadeh)
 * rgw: fix civetweb URL decoding (#8621 Yehuda Sadeh)
