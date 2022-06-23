@@ -161,7 +161,7 @@ public:
     //
     // For example:
     // The recovering mds is auth mds of a dirfrag, this mds is auth mds
-    // of corresponding inode. when 'rm -rf' the direcotry, this mds should
+    // of corresponding inode. when 'rm -rf' the directory, this mds should
     // delay the rmdir request until the recovering mds has replayed unlink
     // requests.
     if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)

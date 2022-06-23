@@ -17,7 +17,7 @@ expect_failure mv d1/d2/.snap/bar d1/d2/.snap/_bar
 # can't rename parent snapshot
 expect_failure mv d1/d2/.snap/_foo_* d1/d2/.snap/foo
 expect_failure mv d1/d2/.snap/_foo_* d1/d2/.snap/_foo_1
-# can't rename snapshot to different directroy
+# can't rename snapshot to different directory
 expect_failure mv d1/d2/.snap/bar d1/.snap/
 # can't overwrite existing snapshot
 expect_failure python3 -c "import os; os.rename('d1/d3/.snap/foo', 'd1/d3/.snap/bar')"
