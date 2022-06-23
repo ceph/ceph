@@ -1759,7 +1759,7 @@ TEST(BufferList, page_aligned_appender) {
       }
 
       // moreover, the next C string-taking `append()` had to
-      // create anoter `ptr_node` instance but...
+      // create another `ptr_node` instance but...
       a.append("xyz", 3);
       ASSERT_EQ(4u, bl.get_num_buffers());
 
