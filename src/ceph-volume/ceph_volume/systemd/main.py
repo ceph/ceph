@@ -74,7 +74,7 @@ def main(args=None):
         ceph-volume lvm trigger 0-8715BEB4-15C5-49DE-BA6F-401086EC7B41
 
     That means that ``lvm`` is used as the subcommand and it is **expected**
-    that a ``trigger`` sub-commmand will be present to make sense of the extra
+    that a ``trigger`` sub-command will be present to make sense of the extra
     piece of the string.
 
     """
