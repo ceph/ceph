@@ -33,7 +33,7 @@ for you.
 
   If components ``Interpreter`` and ``Development`` are both specified, this
   module search only for interpreter with same platform architecture as the one
-  defined by ``CMake`` configuration. This contraint does not apply if only
+  defined by ``CMake`` configuration. This constraint does not apply if only
   ``Interpreter`` component is specified.
 
 Imported Targets
