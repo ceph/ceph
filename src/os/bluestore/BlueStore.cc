@@ -10130,7 +10130,7 @@ Detection stage (in processing order):
     Prepare list of extents that are improperly referenced
     Enumerate Onode records that might use 'misreferenced' pextents
     (Bloom-like filter applied to reduce computation)
-      Per each questinable Onode enumerate all blobs and identify broken ones 
+      Per each questionable Onode enumerate all blobs and identify broken ones 
       (i.e. blobs having 'misreferences')
       Rewrite each broken blob data by allocating another extents and 
       copying data there
