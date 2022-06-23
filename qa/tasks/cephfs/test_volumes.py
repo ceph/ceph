@@ -6704,7 +6704,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
     def test_subvolume_snapshot_in_complete_clone_rm(self):
         """
         Validates the removal of clone when it is not in 'complete|cancelled|failed' state.
-        The forceful removl of subvolume clone succeeds only if it's in any of the
+        The forceful removal of subvolume clone succeeds only if it's in any of the
         'complete|cancelled|failed' states. It fails with EAGAIN in any other states.
         """
 
