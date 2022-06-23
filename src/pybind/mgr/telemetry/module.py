@@ -751,7 +751,7 @@ class Module(MgrModule):
         return self.get('pg_dump')['pg_stats']
 
     def get_rocksdb_stats(self) -> Dict[str, str]:
-        # Initalizers
+        # Initializers
         result: Dict[str, str] = defaultdict()
         version = self.get_rocksdb_version()
 
