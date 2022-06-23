@@ -4193,7 +4193,7 @@ Detailed Changelog
 * rgw: S3 Bucket Policy Conditions IpAddress and NotIpAddress do not work (`issue#20991 <http://tracker.ceph.com/issues/20991>`_, `pr#17010 <https://github.com/ceph/ceph/pull/17010>`_, John Gibson)
 * rgw: s3website error handler uses original object name (`issue#23201 <http://tracker.ceph.com/issues/23201>`_, `pr#20693 <https://github.com/ceph/ceph/pull/20693>`_, Casey Bodley)
 * rgw:send x-amz-version-id header when upload files (`pr#18935 <https://github.com/ceph/ceph/pull/18935>`_, Xinying Song)
-* rgw: set bucket versioninig donot change versioning status if missing status in xml (`issue#21364 <http://tracker.ceph.com/issues/21364>`_, `pr#17662 <https://github.com/ceph/ceph/pull/17662>`_, Shasha Lu)
+* rgw: set bucket versioning donot change versioning status if missing status in xml (`issue#21364 <http://tracker.ceph.com/issues/21364>`_, `pr#17662 <https://github.com/ceph/ceph/pull/17662>`_, Shasha Lu)
 * rgw: set num_shards on 'radosgw-admin data sync init' (`issue#22083 <http://tracker.ceph.com/issues/22083>`_, `pr#18883 <https://github.com/ceph/ceph/pull/18883>`_, Casey Bodley)
 * rgw: set priority on perf counters (`pr#20006 <https://github.com/ceph/ceph/pull/20006>`_, John Spray)
 * rgw: set sync_from_all as true when no value is seen (`issue#22062 <http://tracker.ceph.com/issues/22062>`_, `pr#18926 <https://github.com/ceph/ceph/pull/18926>`_, Abhishek Lekshmanan)
