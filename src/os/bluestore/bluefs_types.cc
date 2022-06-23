@@ -162,11 +162,11 @@ bluefs_fnode_delta_t* bluefs_fnode_t::make_delta(bluefs_fnode_delta_t* delta) {
   delta->ino = ino;
   delta->size = size;
   delta->mtime = mtime;
-  delta->offset = allocated_commited;
+  delta->offset = allocated_committed;
   delta->extents.clear();
-  if (allocated_commited < allocated) {
+  if (allocated_committed < allocated) {
     uint64_t x_off = 0;
-    auto p = seek(allocated_commited, &x_off);
+    auto p = seek(allocated_committed, &x_off);
     ceph_assert(p != extents.end());
     if (x_off > 0) {
       ceph_assert(x_off < p->length);
@@ -209,7 +209,7 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " allocated " << std::hex << file.allocated << std::dec
-	     << " alloc_commit " << std::hex << file.allocated_commited << std::dec
+	     << " alloc_commit " << std::hex << file.allocated_committed << std::dec
 	     << " extents " << file.extents
 	     << ")";
 }
