@@ -3456,7 +3456,7 @@ Changelog
 * core: common/config: less noise about configs from mon we cant apply (`pr#31988 <https://github.com/ceph/ceph/pull/31988>`_, Sage Weil)
 * core: common/config: parse --default-$option as a default value (`pr#27169 <https://github.com/ceph/ceph/pull/27169>`_, Sage Weil)
 * core: common/config: update values when they are removed via mon (`pr#32091 <https://github.com/ceph/ceph/pull/32091>`_, Sage Weil)
-* core: common/kv/rocksdb: Fixed async compations (`pr#26786 <https://github.com/ceph/ceph/pull/26786>`_, Adam Kupczyk)
+* core: common/kv/rocksdb: Fixed async compactions (`pr#26786 <https://github.com/ceph/ceph/pull/26786>`_, Adam Kupczyk)
 * core: common/options.cc: Lower the default value of osd_deep_scrub_large_omap_object_key_threshold (`pr#28782 <https://github.com/ceph/ceph/pull/28782>`_, Neha Ojha)
 * core: common/options.cc: make rocksdb_delete_range_threshold very high (`pr#33439 <https://github.com/ceph/ceph/pull/33439>`_, Neha Ojha)
 * core: common/options: allow osd_pool_default_pg_autoscale_mode to update a runtime (`pr#27821 <https://github.com/ceph/ceph/pull/27821>`_, Sage Weil)
