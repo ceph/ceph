@@ -26,7 +26,6 @@ struct cache_block {
 class RGWDirectory {
   public:
     RGWDirectory() {}
-    virtual ~RGWDirectory() { std::cout << "RGW Directory is destroyed!"; }
     CephContext *cct;
 };
 
@@ -39,11 +38,6 @@ class RGWBlockDirectory: RGWDirectory {
       cct = _cct;
     }
 	
-    virtual ~RGWBlockDirectory() { 
-      std::cout << "RGWObject Directory is destroyed!";
-    //  client.disconnect(true);
-    }
-   
     void findClient(cpp_redis::client *client);
     int existKey(std::string key, cpp_redis::client *client);
     int setValue(cache_block *ptr);
