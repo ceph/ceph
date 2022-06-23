@@ -1101,7 +1101,7 @@ PyObject *ActivePyModules::get_foreign_config(
     return get_python_typed_option_value(opt->type, cmd.outbl.to_str());
   }
 
-  // mimic the behavor of mon/ConfigMonitor's 'config get' command
+  // mimic the behavior of mon/ConfigMonitor's 'config get' command
   EntityName entity;
   if (!entity.from_str(who) &&
       !entity.from_str(who + ".")) {
