@@ -110,7 +110,7 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
   create = vm.count("create") > 0;
 
   if (!check && !create) {
-    cerr << "must specifify either --check, or --create" << endl;
+    cerr << "must specify either --check, or --create" << endl;
     return 1;
   }
 
