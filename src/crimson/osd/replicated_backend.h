@@ -47,7 +47,7 @@ private:
     // The order of pending_txns' at_version must be the same as their
     // corresponding ceph_tid_t, as we rely on this condition for checking
     // whether a client request is already completed. To put it another
-    // way, client requests at_version must be updated synchorously/simultaneously
+    // way, client requests at_version must be updated synchronously/simultaneously
     // with ceph_tid_t.
     const eversion_t at_version;
     crimson::osd::acked_peers_t acked_peers;
