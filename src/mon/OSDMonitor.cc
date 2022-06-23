@@ -2451,7 +2451,7 @@ void OSDMonitor::prune_init(osdmap_manifest_t& manifest)
 
   version_t pin_first;
 
-  // verify constrainsts on stable in-memory state
+  // verify constraints on stable in-memory state
   if (!has_osdmap_manifest) {
     // we must have never pruned, OR if we pruned the state must no longer
     // be relevant (i.e., the state must have been removed alongside with
