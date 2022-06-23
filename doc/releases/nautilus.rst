@@ -4714,7 +4714,7 @@ Detailed Changelog
 * rbd: rbd_mirror: don't report error if image replay canceled (`pr#25789 <https://github.com/ceph/ceph/pull/25789>`_, Mykola Golub)
 * rbd:  rbd-mirror: use pool level config overrides (`pr#24348 <https://github.com/ceph/ceph/pull/24348>`_, Mykola Golub)
 * rbd:  rbd: show info about mirror daemon instance in image mirror status output (`pr#24717 <https://github.com/ceph/ceph/pull/24717>`_, Mykola Golub)
-* rbd: return error code when the source and distination namespace are different (`pr#24893 <https://github.com/ceph/ceph/pull/24893>`_, Shiyang Ruan)
+* rbd: return error code when the source and destination namespace are different (`pr#24893 <https://github.com/ceph/ceph/pull/24893>`_, Shiyang Ruan)
 * rbd: simplified code to remove do_clear_limit function (`pr#23954 <https://github.com/ceph/ceph/pull/23954>`_, Zheng Yin)
 * rbd: support namespaces for image migration (`issue#26951 <http://tracker.ceph.com/issues/26951>`_, `pr#24836 <https://github.com/ceph/ceph/pull/24836>`_, Jason Dillaman)
 * rbd:  systemd/rbdmap.service: order us before remote-fs-pre.target (`issue#24713 <http://tracker.ceph.com/issues/24713>`_, `pr#22769 <https://github.com/ceph/ceph/pull/22769>`_, Ilya Dryomov)
