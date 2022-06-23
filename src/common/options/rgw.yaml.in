@@ -338,7 +338,7 @@ options:
   type: bool
   level: advanced
   desc: Multiple content length headers compatibility
-  long_desc: Try to handle requests with abiguous multiple content length headers
+  long_desc: Try to handle requests with ambiguous multiple content length headers
     (Content-Length, Http-Content-Length).
   fmt_desc: Enable compatibility handling of FCGI requests with both ``CONTENT_LENGTH``
     and ``HTTP_CONTENT_LENGTH`` set.
