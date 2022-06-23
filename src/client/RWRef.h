@@ -27,7 +27,7 @@
  *   For the ll_read()/ll_write(), etc functions, they will work as
  *   "readers", in the beginning they just need to define a RWRef
  *   object and in RWRef constructor it will check if the state is
- *   MOUNTED or MOUTING, if not it will fail and return directly with
+ *   MOUNTED or MOUNTING, if not it will fail and return directly with
  *   doing nothing, or it will increase the reference and continue.
  *   And when destructing the RWRef object, in the RWRef destructor
  *   it will decrease the reference and notify the "writers" who maybe
@@ -104,7 +104,7 @@ struct RWRefState {
      * client state is in mounting or mounted states, then it
      * will set the "require = mounting" in class RWRef's constructor.
      * Then the check_reader_state() should return truth if the
-     * state is already in mouting or mounted state.
+     * state is already in mounting or mounted state.
      */
     virtual int check_reader_state(T require) const = 0;
 

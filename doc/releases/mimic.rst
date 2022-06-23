@@ -4091,7 +4091,7 @@ Detailed Changelog
 * rgw: move all pool creation into rgw_init_ioctx (`issue#23480 <http://tracker.ceph.com/issues/23480>`_, `pr#21534 <https://github.com/ceph/ceph/pull/21534>`_, Casey Bodley)
 * rgw: mrgw.sh uses instance name 'client.rgw' (`pr#18404 <https://github.com/ceph/ceph/pull/18404>`_, Casey Bodley)
 * rgw: multisite log tracing (`pr#16492 <https://github.com/ceph/ceph/pull/16492>`_, Yehuda Sadeh, Casey Bodley)
-* rgw,nfs: Add hint to use -o sync when mouting (`pr#16210 <https://github.com/ceph/ceph/pull/16210>`_, Adam Kupczyk)
+* rgw,nfs: Add hint to use -o sync when mounting (`pr#16210 <https://github.com/ceph/ceph/pull/16210>`_, Adam Kupczyk)
 * rgw: no need to deal with md5 header in get_data (`pr#19144 <https://github.com/ceph/ceph/pull/19144>`_, Zhang Shaowen)
 * rgw: optimize function abort_bucket_multiparts (`pr#19710 <https://github.com/ceph/ceph/pull/19710>`_, Bingyin Zhang)
 * rgw: optimize function bucket_lc_prepare (`pr#19613 <https://github.com/ceph/ceph/pull/19613>`_, Bingyin Zhang)
