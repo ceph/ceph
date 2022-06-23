@@ -858,7 +858,7 @@ PG::do_osd_ops_execute(
           std::move(success_func),
           crimson::ct_error::object_corrupted::handle(
             [rollbacker, this] (const std::error_code& e) mutable {
-            // this is a path for EIO. it's special because we want to fix the obejct
+            // this is a path for EIO. it's special because we want to fix the object
             // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
             // restart the execution.
             return rollbacker.rollback_obc_if_modified(e).then_interruptible(

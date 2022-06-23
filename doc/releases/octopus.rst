@@ -3652,7 +3652,7 @@ Changelog
 * core: osd/PGLog.h: print olog_can_rollback_to before deciding to rollback (`issue#38894 <http://tracker.ceph.com/issues/38894>`_, `issue#21174 <http://tracker.ceph.com/issues/21174>`_, `pr#27105 <https://github.com/ceph/ceph/pull/27105>`_, Neha Ojha)
 * core: osd/PGLog: persist num_objects_missing for replicas when peering is done (`pr#30466 <https://github.com/ceph/ceph/pull/30466>`_, xie xingguo)
 * core: osd/PGLog: preserve original_crt to check rollbackability (`issue#36739 <http://tracker.ceph.com/issues/36739>`_, `pr#27200 <https://github.com/ceph/ceph/pull/27200>`_, Neha Ojha)
-* core: osd/PGLog: reset log.complete_to when recover obect failed (`pr#30533 <https://github.com/ceph/ceph/pull/30533>`_, Tao Ning)
+* core: osd/PGLog: reset log.complete_to when recover object failed (`pr#30533 <https://github.com/ceph/ceph/pull/30533>`_, Tao Ning)
 * core: osd/PGStateUtils: initialize NamedState::enter_time (`pr#33813 <https://github.com/ceph/ceph/pull/33813>`_, Jianpeng Ma)
 * core: osd/PrimaryLogPG: always use strict priority ordering for kicked recovery ops (`pr#30632 <https://github.com/ceph/ceph/pull/30632>`_, xie xingguo)
 * core: osd/PrimaryLogPG: Avoid accessing destroyed references in finish_degr\xe2\x80\xa6 (`pr#29663 <https://github.com/ceph/ceph/pull/29663>`_, Tao Ning)
