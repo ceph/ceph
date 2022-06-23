@@ -888,7 +888,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_siz
   minfo->mr = ibv_reg_mr(manager->pd->pd, minfo->chunks, block_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
   if (minfo->mr == NULL) {
     lderr(cct) << __func__ << " failed to do rdma memory registration " << block_size << " bytes. "
-      " relase allocated memory now." << dendl;
+      " release allocated memory now." << dendl;
     manager->free(minfo);
     return NULL;
   }
