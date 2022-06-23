@@ -133,7 +133,7 @@ Changelog
 * os/bluestore: be more verbose in _open_super_meta by default (`pr#41060 <https://github.com/ceph/ceph/pull/41060>`_, Igor Fedotov)
 * os/bluestore: do not count pinned entries as trimmed ones (`pr#41173 <https://github.com/ceph/ceph/pull/41173>`_, Igor Fedotov)
 * os/bluestore: fix unexpected ENOSPC in Avl/Hybrid allocators (`pr#41673 <https://github.com/ceph/ceph/pull/41673>`_, Igor Fedotov)
-* os/bluestore: introduce multithireading sync for bluestore's repairer (`pr#41749 <https://github.com/ceph/ceph/pull/41749>`_, Igor Fedotov)
+* os/bluestore: introduce multithreading sync for bluestore's repairer (`pr#41749 <https://github.com/ceph/ceph/pull/41749>`_, Igor Fedotov)
 * os/bluestore: tolerate zero length for allocators' init\_[add/rm]_free() (`pr#41750 <https://github.com/ceph/ceph/pull/41750>`_, Igor Fedotov)
 * osd/PG.cc: handle removal of pgmeta object (`pr#41682 <https://github.com/ceph/ceph/pull/41682>`_, Neha Ojha)
 * osd/PeeringState: fix acting_set_writeable min_size check (`pr#41611 <https://github.com/ceph/ceph/pull/41611>`_, Dan van der Ster)

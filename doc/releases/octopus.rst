@@ -439,7 +439,7 @@ Changelog
 * os/bluestore: compact db after bulk omap naming upgrade (`pr#42375 <https://github.com/ceph/ceph/pull/42375>`_, Igor Fedotov)
 * os/bluestore: fix erroneous SharedBlob record removal during repair (`pr#42373 <https://github.com/ceph/ceph/pull/42373>`_, Igor Fedotov)
 * os/bluestore: fix unexpected ENOSPC in Avl/Hybrid allocators (`pr#41658 <https://github.com/ceph/ceph/pull/41658>`_, Igor Fedotov)
-* os/bluestore: introduce multithireading sync for bluestore's repairer (`pr#41613 <https://github.com/ceph/ceph/pull/41613>`_, Igor Fedotov)
+* os/bluestore: introduce multithreading sync for bluestore's repairer (`pr#41613 <https://github.com/ceph/ceph/pull/41613>`_, Igor Fedotov)
 * os/bluestore: tolerate zero length for allocators' init\_[add/rm]_free() (`pr#41612 <https://github.com/ceph/ceph/pull/41612>`_, Igor Fedotov)
 * osd/PG.cc: handle removal of pgmeta object (`pr#41623 <https://github.com/ceph/ceph/pull/41623>`_, Neha Ojha)
 * osd/PeeringState: fix acting_set_writeable min_size check (`pr#41609 <https://github.com/ceph/ceph/pull/41609>`_, Samuel Just)
