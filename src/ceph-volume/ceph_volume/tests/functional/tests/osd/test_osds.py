@@ -7,24 +7,24 @@ class TestOSDs(object):
         assert host.package("ceph-osd").is_installed
 
     def test_osds_listen_on_public_network(self, node, host):
-        # TODO: figure out way to paramaterize this test
+        # TODO: figure out way to parameterize this test
         nb_port = (node["num_osds"] * node["num_osd_ports"])
         assert host.check_output(
             "netstat -lntp | grep ceph-osd | grep %s | wc -l" % (node["address"])) == str(nb_port)  # noqa E501
 
     def test_osds_listen_on_cluster_network(self, node, host):
-        # TODO: figure out way to paramaterize this test
+        # TODO: figure out way to parameterize this test
         nb_port = (node["num_osds"] * node["num_osd_ports"])
         assert host.check_output("netstat -lntp | grep ceph-osd | grep %s | wc -l" %  # noqa E501
                                  (node["cluster_address"])) == str(nb_port)
 
     def test_osd_services_are_running(self, node, host):
-        # TODO: figure out way to paramaterize node['osds'] for this test
+        # TODO: figure out way to parameterize node['osds'] for this test
         for osd in node["osds"]:
             assert host.service("ceph-osd@%s" % osd).is_running
 
     def test_osd_are_mounted(self, node, host):
-        # TODO: figure out way to paramaterize node['osd_ids'] for this test
+        # TODO: figure out way to parameterize node['osd_ids'] for this test
         for osd_id in node["osd_ids"]:
             osd_path = "/var/lib/ceph/osd/{cluster}-{osd_id}".format(
                 cluster=node["cluster_name"],
