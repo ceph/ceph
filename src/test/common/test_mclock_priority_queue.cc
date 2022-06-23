@@ -175,7 +175,7 @@ TEST(mClockPriorityQueue, JustNotStrict)
 }
 
 
-TEST(mClockPriorityQueue, EnqueuFront)
+TEST(mClockPriorityQueue, EnqueueFront)
 {
   ceph::mClockQueue<Request,Client> q(&client_info_func);
 
