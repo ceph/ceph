@@ -326,7 +326,7 @@ options:
   type: float
   level: dev
   desc: Backoff ratio for scheduling scrubs
-  long_desc: This is the precentage of ticks that do NOT schedule scrubs, 66% means
+  long_desc: This is the percentage of ticks that do NOT schedule scrubs, 66% means
     that 1 out of 3 ticks will schedule scrubs
   default: 0.66
   with_legacy: true

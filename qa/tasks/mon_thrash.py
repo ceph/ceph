@@ -180,7 +180,7 @@ class MonitorThrasher(Thrasher):
 
     def should_freeze_mon(self):
         """
-        Indicate that we should freeze a certain percentago of the time
+        Indicate that we should freeze a certain percentage of the time
         as determined by the freeze_mon_probability value.
         """
         return self.rng.randrange(0, 101) < self.freeze_mon_probability
