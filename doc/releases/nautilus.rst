@@ -1695,7 +1695,7 @@ Changelog
 * rgw: RGWCoroutine::call(nullptr) sets retcode=0 (`pr#30248 <https://github.com/ceph/ceph/pull/30248>`_, Casey Bodley)
 * rgw: Swift metadata dropped after S3 bucket versioning enabled (`pr#29961 <https://github.com/ceph/ceph/pull/29961>`_, Marcus Watts)
 * rgw: add S3 object lock feature to support object worm (`pr#29905 <https://github.com/ceph/ceph/pull/29905>`_, Chang Liu, Casey Bodley, zhang Shaowen)
-* rgw: add minssing admin property when sync user info (`pr#30680 <https://github.com/ceph/ceph/pull/30680>`_, zhang Shaowen)
+* rgw: add missing admin property when sync user info (`pr#30680 <https://github.com/ceph/ceph/pull/30680>`_, zhang Shaowen)
 * rgw: beast frontend throws an exception when running out of FDs (`pr#29963 <https://github.com/ceph/ceph/pull/29963>`_, Yuval Lifshitz)
 * rgw: data/bilogs are trimmed when no peers are reading them (`issue#39487 <http://tracker.ceph.com/issues/39487>`_, `pr#30999 <https://github.com/ceph/ceph/pull/30999>`_, Casey Bodley)
 * rgw: datalog/mdlog trim commands loop until done (`pr#30869 <https://github.com/ceph/ceph/pull/30869>`_, Casey Bodley)
