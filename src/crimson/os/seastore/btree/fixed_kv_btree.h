@@ -830,7 +830,7 @@ public:
        * relative offset to correct them to block-relative offsets adjusted
        * for our new transaction location.
        *
-       * Upon commit, these now block relative addresses will be interpretted
+       * Upon commit, these now block relative addresses will be interpreted
        * against the real final address.
        */
       if (!n_fixed_kv_extent->get_paddr().is_absolute()) {
