@@ -1491,7 +1491,7 @@ int libradosstriper::RadosStriperImpl::truncate(const std::string& soid,
   libradosstriper::MultiAioCompletionImplPtr multi_completion{
     new libradosstriper::MultiAioCompletionImpl, false};
   multi_completion->set_complete_callback(cdata->get() /* create ref! */, striper_truncate_aio_req_complete);
-  // call asynchrous version of truncate
+  // call asynchronous version of truncate
   int rc = aio_truncate(soid, multi_completion, original_size, size, layout);
   // wait for completion of the truncation
   multi_completion->finish_adding_requests();
