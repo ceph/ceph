@@ -14,11 +14,11 @@
 # to an appropriate value). Unless the '--no-journal-test' option is
 # specified, we will run the 3 following scenarios:
 #  
-#  1) journal sync'ing for both stores is good as disabled
+#  1) journal syncing for both stores is good as disabled
 #     (we call it '00', for store naming purposes)
-#  2) journal sync'ing for store A is as good as disabled
+#  2) journal syncing for store A is as good as disabled
 #     (we call it '01', for store naming purposes)
-#  3) journal sync'ing for store B is as good as disabled
+#  3) journal syncing for store B is as good as disabled
 #     (we call it '10', for store naming purposes)
 #
 # All log files are also appropriately named accordingly (i.e., a.00.fail,
@@ -216,11 +216,11 @@ do
   #
   # We have already tested whether there are diffs when both journals
   # are properly working. Now let's try on three other scenarios:
-  #  1) journal sync'ing for both stores is good as disabled
+  #  1) journal syncing for both stores is good as disabled
   #     (we call it '00')
-  #  2) journal sync'ing for store A is as good as disabled
+  #  2) journal syncing for store A is as good as disabled
   #     (we call it '01')
-  #  3) journal sync'ing for store B is as good as disabled
+  #  3) journal syncing for store B is as good as disabled
   #     (we call it '10')
   #
   if [[ $num_runs -gt 0 && $journal_test -eq 1 ]]; then
