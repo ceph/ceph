@@ -142,7 +142,7 @@ SegmentManagerGroup::scan_valid_records(
 	      [=, &budget_used, &cursor, &handler, this] {
 		if (cursor.pending_record_groups.empty()) {
 		  /* This is only possible if the segment is empty.
-		   * A record's last_commited must be prior to its own
+		   * A record's last_committed must be prior to its own
 		   * location since it itself cannot yet have been committed
 		   * at its own time of submission.  Thus, the most recently
 		   * read record must always fall after cursor.last_committed */
