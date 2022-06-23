@@ -1866,7 +1866,7 @@ CEPH_RADOS_API int rados_exec(rados_ioctx_t io, const char *oid,
 
 /**
  * @typedef rados_callback_t
- * Callbacks for asynchrous operations take two parameters:
+ * Callbacks for asynchronous operations take two parameters:
  * - cb the completion that has finished
  * - arg application defined data made available to the callback function
  */
@@ -2005,7 +2005,7 @@ CEPH_RADOS_API int rados_aio_is_complete_and_cb(rados_completion_t c);
 CEPH_RADOS_API int rados_aio_is_safe_and_cb(rados_completion_t c);
 
 /**
- * Get the return value of an asychronous operation
+ * Get the return value of an asynchronous operation
  *
  * The return value is set when the operation is complete or safe,
  * whichever comes first.
@@ -2021,7 +2021,7 @@ CEPH_RADOS_API int rados_aio_is_safe_and_cb(rados_completion_t c);
 CEPH_RADOS_API int rados_aio_get_return_value(rados_completion_t c);
 
 /**
- * Get the internal object version of the target of an asychronous operation
+ * Get the internal object version of the target of an asynchronous operation
  *
  * The return value is set when the operation is complete or safe,
  * whichever comes first.
@@ -2032,7 +2032,7 @@ CEPH_RADOS_API int rados_aio_get_return_value(rados_completion_t c);
  * message is received before the complete message
  *
  * @param c async operation to inspect
- * @returns version number of the asychronous operation's target
+ * @returns version number of the asynchronous operation's target
  */
 CEPH_RADOS_API uint64_t rados_aio_get_version(rados_completion_t c);
 

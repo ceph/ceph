@@ -448,7 +448,7 @@ int rados_striper_multi_aio_is_complete_and_cb(rados_striper_multi_completion_t 
 int rados_striper_multi_aio_is_safe_and_cb(rados_striper_multi_completion_t c);
 
 /**
- * Get the return value of a multi asychronous operation
+ * Get the return value of a multi asynchronous operation
  *
  * The return value is set when all operations are complete or safe,
  * whichever comes first.
@@ -464,7 +464,7 @@ int rados_striper_multi_aio_is_safe_and_cb(rados_striper_multi_completion_t c);
 int rados_striper_multi_aio_get_return_value(rados_striper_multi_completion_t c);
 
 /**
- * Release a multi asynchrnous IO completion
+ * Release a multi asynchronous IO completion
  *
  * Call this when you no longer need the completion. It may not be
  * freed immediately if the operation is not acked and committed.
