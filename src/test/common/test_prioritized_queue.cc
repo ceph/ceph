@@ -195,7 +195,7 @@ TEST_F(PrioritizedQueueTest, remove_by_class) {
   EXPECT_EQ(num_to_remove, removed.size());
   EXPECT_EQ(item_size - num_to_remove, pq.length());
   EXPECT_EQ(item_size - num_to_remove, items.size());
-  // see if the remainder are expeceted also.
+  // see if the remainder are expected also.
   while (!pq.empty()) {
     const Item item = pq.dequeue();
     Klass k = ITEM_TO_CLASS(item);
