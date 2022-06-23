@@ -3586,7 +3586,7 @@ Changelog
 * core: osd/MissingLoc, PeeringState: remove osd from missing loc in purge_strays() (`pr#30119 <https://github.com/ceph/ceph/pull/30119>`_, Neha Ojha)
 * core: osd/MissingLoc.cc: do not rely on missing_loc_sources only (`pr#30226 <https://github.com/ceph/ceph/pull/30226>`_, Neha Ojha)
 * core: osd/OSD.cc: make osd bench description consistent with parameters (`issue#39006 <http://tracker.ceph.com/issues/39006>`_, `pr#27600 <https://github.com/ceph/ceph/pull/27600>`_, Neha Ojha)
-* core: osd/osd: add an err log to set_numa_affinty (`pr#30870 <https://github.com/ceph/ceph/pull/30870>`_, luo rixin)
+* core: osd/osd: add an err log to set_numa_affinity (`pr#30870 <https://github.com/ceph/ceph/pull/30870>`_, luo rixin)
 * core: osd/OSD: auto mark heartbeat sessions as stale and tear them down (`issue#40586 <http://tracker.ceph.com/issues/40586>`_, `pr#28752 <https://github.com/ceph/ceph/pull/28752>`_, xie xingguo)
 * core: osd/OSD: choose more heartbeat peers from different subtrees (`pr#33037 <https://github.com/ceph/ceph/pull/33037>`_, xie xingguo)
 * core: osd/OSD: enhance osd numa affinity compatibility (`pr#31274 <https://github.com/ceph/ceph/pull/31274>`_, Dai zhiwei)
