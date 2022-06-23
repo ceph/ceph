@@ -2313,7 +2313,7 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
  *
  * @param copy_subset intervals we want
  * @param data_included intervals we got
- * @param data_recieved data we got
+ * @param data_received data we got
  * @param intervals_usable intervals we want to keep
  * @param data_usable matching data we want to keep
  */
