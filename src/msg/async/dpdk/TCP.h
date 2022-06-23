@@ -360,7 +360,7 @@ class tcp {
     } _rcv;
     EventCenter *center;
     int fd;
-    // positive means no errno, 0 means eof, nagetive means error
+    // positive means no errno, 0 means eof, negative means error
     int16_t _errno = 1;
     tcp_option _option;
     EventCallbackRef delayed_ack_event;
