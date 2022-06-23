@@ -93,7 +93,7 @@
 /* Defined if you have liburing */
 #cmakedefine HAVE_LIBURING
 
-/* Defind if you have POSIX AIO */
+/* Define if you have POSIX AIO */
 #cmakedefine HAVE_POSIXAIO
 
 /* Defined if OpenLDAP enabled */
