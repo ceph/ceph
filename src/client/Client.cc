@@ -3605,7 +3605,7 @@ void Client::put_cap_ref(Inode *in, int cap)
 // get caps for a given file handle -- the inode should have @need caps
 // issued by the mds and @want caps not revoked (or not under revocation).
 // this routine blocks till the cap requirement is satisfied. also account
-// (track) for capability hit when required (when cap requirement succeedes).
+// (track) for capability hit when required (when cap requirement succeeds).
 int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 {
   Inode *in = fh->inode.get();
