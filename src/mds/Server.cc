@@ -8201,7 +8201,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   // respond_to_request() drops locks. So stray reintegration can race with us.
   if (straydn && !straydn->get_projected_linkage()->is_null()) {
     // Tip off the MDCache that this dentry is a stray that
-    // might be elegible for purge.
+    // might be eligible for purge.
     mdcache->notify_stray(straydn);
   }
 }

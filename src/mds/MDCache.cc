@@ -7770,7 +7770,7 @@ void MDCache::dentry_remove_replica(CDentry *dn, mds_rank_t from, set<SimpleLock
   if (dn->lock.remove_replica(from))
     gather_locks.insert(&dn->lock);
 
-  // Replicated strays might now be elegible for purge
+  // Replicated strays might now be eligible for purge
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   if (dnl->is_primary()) {
     maybe_eval_stray(dnl->get_inode());

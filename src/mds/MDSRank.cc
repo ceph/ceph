@@ -96,7 +96,7 @@ private:
       });
 
     // Flush initially so that all the segments older than our new one
-    // will be elegible for expiry
+    // will be eligible for expiry
     mdlog->flush();
     mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, ctx));
   }

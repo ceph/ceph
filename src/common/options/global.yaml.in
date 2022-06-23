@@ -1006,7 +1006,7 @@ options:
 - name: ms_osd_compress_min_size
   type: uint
   level: advanced
-  desc: Minimal message size eligable for on-wire compression
+  desc: Minimal message size eligible for on-wire compression
   default: 1_K
   services:
   - osd

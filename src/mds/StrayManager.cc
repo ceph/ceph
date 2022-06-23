@@ -460,7 +460,7 @@ bool StrayManager::_eval_stray(CDentry *dn)
   ceph_assert(in);
   ceph_assert(!in->state_test(CInode::STATE_REJOINUNDEF));
 
-  // The only dentries elegible for purging are those
+  // The only dentries eligible for purging are those
   // in the stray directories
   ceph_assert(dn->get_dir()->get_inode()->is_stray());
 
