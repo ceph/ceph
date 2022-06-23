@@ -1260,7 +1260,7 @@
                     <publickey/>
                     <privatekey/>
                     <port/>
-                    <description>Miniumum apply latency of OSDs</description>
+                    <description>Minimum apply latency of OSDs</description>
                     <inventory_link>0</inventory_link>
                     <applications>
                         <application>

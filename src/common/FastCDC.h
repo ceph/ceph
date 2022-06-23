@@ -19,7 +19,7 @@
 
 // Note about the target_bits: The goal is an average chunk size of 1
 // << target_bits.  However, in reality the average is ~1.25x that
-// because of the hard mininum chunk size.
+// because of the hard minimum chunk size.
 
 class FastCDC : public CDC {
 private:
