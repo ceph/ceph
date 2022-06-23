@@ -13,7 +13,7 @@ string host = "127.0.0.1";
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-      blk_dir = new RGWBlockDirectory();
+      blk_dir = new RGWBlockDirectory(host, stoi(portStr));
       c_blk = new cache_block();
 
       c_blk->hosts_list.push_back(redisHost);
@@ -43,8 +43,8 @@ TEST_F(DirectoryFixture, DirectoryInit) {
 
 // Successful Set and Get Value Calls
 TEST_F(DirectoryFixture, SetGetValueTest) {
-  int setReturn = blk_dir->setValue(c_blk, stoi(portStr));
-  int getReturn = blk_dir->getValue(c_blk, stoi(portStr));
+  int setReturn = blk_dir->setValue(c_blk);
+  int getReturn = blk_dir->getValue(c_blk);
 
   EXPECT_EQ(setReturn, 0);
   EXPECT_EQ(getReturn, 0);

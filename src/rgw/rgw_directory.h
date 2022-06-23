@@ -33,6 +33,7 @@ class RGWDirectory {
 class RGWBlockDirectory: RGWDirectory {
   public:
     RGWBlockDirectory() {}
+    RGWBlockDirectory(std::string blockHost, int blockPort):host(blockHost), port(blockPort) {}
     
     void init(CephContext *_cct) {
       cct = _cct;
@@ -40,15 +41,15 @@ class RGWBlockDirectory: RGWDirectory {
 	
     virtual ~RGWBlockDirectory() { 
       std::cout << "RGWObject Directory is destroyed!";
-      client.disconnect(true);
+    //  client.disconnect(true);
     }
-    
-    void findClient(std::string key, cpp_redis::client *client, int port);
+   
+    void findClient(cpp_redis::client *client);
     int existKey(std::string key, cpp_redis::client *client);
-    int setValue(cache_block *ptr, int port);
     int setValue(cache_block *ptr);
-    int getValue(cache_block *ptr, int port);
     int getValue(cache_block *ptr);
+    std::string host = "";
+    int port = 0;
   
   private:
     std::string buildIndex(cache_block *ptr);
