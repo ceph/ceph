@@ -64,7 +64,7 @@ a number of things:
 
 - **Monitor Name:** Each monitor instance within a cluster has a unique name.
   In common practice, the Ceph Monitor name is the host name (we recommend one
-  Ceph Monitor per host, and no comingling of Ceph OSD Daemons with
+  Ceph Monitor per host, and no commingling of Ceph OSD Daemons with
   Ceph Monitors). You may retrieve the short hostname with ``hostname -s``.
 
 - **Monitor Map:** Bootstrapping the initial monitor(s) requires you to
