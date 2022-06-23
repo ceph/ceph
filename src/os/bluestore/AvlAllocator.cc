@@ -153,7 +153,7 @@ void AvlAllocator::_process_range_removal(uint64_t start, uint64_t end,
     rs->end = start;
 
     // Insert tail first to be sure insert_pos hasn't been disposed.
-    // This woulnd't dispose rs though since it's out of range_size_tree.
+    // This wouldn't dispose rs though since it's out of range_size_tree.
     // Don't care about a small chance of 'not-the-best-choice-for-removal' case
     // which might happen if rs has the lowest size.
     _try_insert_range(end, old_right_end, &insert_pos);
