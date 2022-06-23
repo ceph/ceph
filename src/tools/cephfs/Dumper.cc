@@ -260,7 +260,7 @@ int Dumper::undump(const char *dump_file, bool force)
 	return -EINVAL;
       }
     } else {
-      derr  << "Invalid header, no fsid embeded" << dendl;
+      derr  << "Invalid header, no fsid embedded" << dendl;
       ::close(fd);
       return -EINVAL;
     }
