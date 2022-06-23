@@ -896,7 +896,7 @@ int Monitor::preinit()
     if (prefix == "injectargs" ||
 	prefix == "version" ||
 	prefix == "tell") {
-      // not registerd by me
+      // not registered by me
       continue;
     }
     r = admin_socket->register_command(command.cmdstring, admin_hook,
