@@ -64,7 +64,7 @@ def obfuscate(command_, on=None):
 
     If matching on a flag (when ``on`` is a string) it will obfuscate on the
     value for that flag. That is a command like ['ls', '-l', '/'] that calls
-    `obfuscate(command, on='-l')` will obfustace '/' which is the value for
+    `obfuscate(command, on='-l')` will obfuscate '/' which is the value for
     `-l`.
 
     The reason for `on` to allow either a string or an integer, altering
