@@ -5058,7 +5058,7 @@ Detailed Changelog
 * tests: osd/OSDMap: set pg_autoscale_mode with setting from conf (`pr#25746 <https://github.com/ceph/ceph/pull/25746>`_, Kefu Chai)
 * tests: os/tests: fix garbageCollection test case from store_test suite (`pr#23752 <https://github.com/ceph/ceph/pull/23752>`_, Igor Fedotov)
 * tests: os/tests: silence -Wsign-compare warning (`pr#25072 <https://github.com/ceph/ceph/pull/25072>`_, Kefu Chai)
-* tests: qa: add librados3 to exclude_packages for ugprade tests (`pr#25037 <https://github.com/ceph/ceph/pull/25037>`_, Kefu Chai)
+* tests: qa: add librados3 to exclude_packages for upgrade tests (`pr#25037 <https://github.com/ceph/ceph/pull/25037>`_, Kefu Chai)
 * tests: qa: add test that builds example librados programs (`issue#35989 <http://tracker.ceph.com/issues/35989>`_, `issue#15100 <http://tracker.ceph.com/issues/15100>`_, `pr#23131 <https://github.com/ceph/ceph/pull/23131>`_, Nathan Cutler)
 * tests: qa/ceph-ansible: Set ceph_stable_release to mimic (`issue#38231 <http://tracker.ceph.com/issues/38231>`_, `pr#26328 <https://github.com/ceph/ceph/pull/26328>`_, Brad Hubbard)
 * tests: qa/distros: add openSUSE Leap 42.3 and 15.0 (`pr#24380 <https://github.com/ceph/ceph/pull/24380>`_, Nathan Cutler)
