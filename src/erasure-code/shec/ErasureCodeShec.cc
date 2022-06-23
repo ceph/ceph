@@ -419,7 +419,7 @@ void ErasureCodeShecReedSolomonVandermonde::prepare()
 }
 
 // ErasureCodeShec::
-// Mearged from shec.cc.
+// Merged from shec.cc.
 
 double ErasureCodeShec::shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2){
   int r_eff_k[k];
