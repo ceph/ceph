@@ -5959,12 +5959,12 @@ options:
   level: dev
   default: 0
   with_legacy: true
-- name: filestore_queue_low_threshhold
+- name: filestore_queue_low_threshold
   type: float
   level: dev
   default: 0.3
   with_legacy: true
-- name: filestore_queue_high_threshhold
+- name: filestore_queue_high_threshold
   type: float
   level: dev
   with_legacy: true
@@ -6124,17 +6124,17 @@ options:
   default: 100
   with_legacy: true
 # Target range for journal fullness
-- name: journal_throttle_low_threshhold
+- name: journal_throttle_low_threshold
   type: float
   level: dev
   default: 0.6
   with_legacy: true
-- name: journal_throttle_high_threshhold
+- name: journal_throttle_high_threshold
   type: float
   level: dev
   default: 0.9
   with_legacy: true
-# Multiple over expected at high_threshhold. Defaults to 0 (disabled).
+# Multiple over expected at high_threshold. Defaults to 0 (disabled).
 - name: journal_throttle_high_multiple
   type: float
   level: dev

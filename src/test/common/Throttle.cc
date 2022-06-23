@@ -213,8 +213,8 @@ TEST_F(ThrottleTest, wait) {
 }
 
 std::pair<double, std::chrono::duration<double> > test_backoff(
-  double low_threshhold,
-  double high_threshhold,
+  double low_threshold,
+  double high_threshold,
   double expected_throughput,
   double high_multiple,
   double max_multiple,
@@ -238,8 +238,8 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
 
   BackoffThrottle throttle(g_ceph_context, "backoff_throttle_test", 5);
   bool valid = throttle.set_params(
-    low_threshhold,
-    high_threshhold,
+    low_threshold,
+    high_threshold,
     expected_throughput,
     high_multiple,
     max_multiple,

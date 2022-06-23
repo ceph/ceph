@@ -23,15 +23,15 @@ filestore.
      This queue needs to be bounded and a backoff throttle is used to gradually 
      induce delays to the queueing threads if the ratio of current outstanding 
      bytes|ops and filestore_queue_max_(bytes|ops) is more than 
-     filestore_queue_low_threshhold. The throttles will block io once the 
+     filestore_queue_low_threshold. The throttles will block io once the 
      outstanding bytes|ops reaches max value (filestore_queue_max_(bytes|ops)).
 
      User configurable config option for adjusting delay is the following.
   
-        filestore_queue_low_threshhold:
+        filestore_queue_low_threshold:
           Valid values should be between 0-1 and shouldn't be > *_high_threshold.
 
-        filestore_queue_high_threshhold:
+        filestore_queue_high_threshold:
           Valid values should be between 0-1 and shouldn't be < *_low_threshold.
 
         filestore_expected_throughput_ops:
@@ -51,8 +51,8 @@ filestore.
      will again induce spiky behavior. The configs work very similarly to the
      Filestore op worker queue throttle.
 
-        journal_throttle_low_threshhold
-	journal_throttle_high_threshhold
+        journal_throttle_low_threshold
+	journal_throttle_high_threshold
 	filestore_expected_throughput_ops
 	filestore_expected_throughput_bytes
 	journal_throttle_high_multiple
@@ -93,7 +93,7 @@ General guideline is the following.
   This directly co-relates to how much delay needs to be induced per throttle.
   Ideally, this should be a bit above (or same) your backend device throughput.
 
-  *_low_threshhold *_high_threshhold :
+  *_low_threshold *_high_threshold :
   ----------------------------------
 
   If your backend is fast you may want to set this threshold value higher so that
