@@ -86,8 +86,8 @@ public:
   int getDecodingTableCacheSize(int matrixtype = 0);
 
 private:
-  codec_technique_tables_t encoding_coefficient; // encoding coefficients accessed via table[matrix][k][m]
-  codec_technique_tables_t encoding_table; // encoding coefficients accessed via table[matrix][k][m]
+  codec_technique_tables_t encoding_coefficient; // encoding coefficlients accessed via table[matrix][k][m]
+  codec_technique_tables_t encoding_table; // encoding coefficlients accessed via table[matrix][k][m]
 
   std::map<int, lru_map_t*> decoding_tables; // decoding table cache accessed via map[matrixtype]
   std::map<int, lru_list_t*> decoding_tables_lru; // decoding table lru list accessed via list[matrixtype]
