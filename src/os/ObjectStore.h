@@ -566,7 +566,7 @@ public:
 
   /**
    * dump_onode -- dumps onode metadata in human readable form,
-     intended primiarily for debugging
+     intended primarily for debugging
    *
    * @param cid collection for object
    * @param oid oid of object
