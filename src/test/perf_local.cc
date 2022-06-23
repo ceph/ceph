@@ -671,7 +671,7 @@ double perf_prefetch()
 
 #if defined(__x86_64__)
 /**
- * This function is used to seralize machine instructions so that no
+ * This function is used to serialize machine instructions so that no
  * instructions that appear after it in the current thread can run before any
  * instructions that appear before it. 
  *
