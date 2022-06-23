@@ -19,7 +19,7 @@ MON=3 MDS=3 OSD=5 MDS=3 MGR=2 RGW=1 ../src/vstart.sh -x -n -l --bluestore -e
 
 export PATH=bin:$PATH
 
-# do some work to generate a hopefully braod set of object instances
+# do some work to generate a hopefully broad set of object instances
 
 echo 'starting some background work'
 ../qa/workunits/rados/test.sh &
