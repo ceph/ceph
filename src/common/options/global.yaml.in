@@ -5606,7 +5606,7 @@ options:
 - name: filestore_wbthrottle_btrfs_ios_start_flusher
   type: uint
   level: advanced
-  desc: Start flushing (fsyncing) when this many IOs are written (brtrfs)
+  desc: Start flushing (fsyncing) when this many IOs are written (btrfs)
   default: 500
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_ios_hard_limit
