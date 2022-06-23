@@ -287,7 +287,7 @@ namespace immutable_obj_cache {
     auto process_reply = new LambdaContext([current_request, reply]
       (bool dedicated) {
        if (dedicated) {
-         // dedicated thrad to execute this context.
+         // dedicated thread to execute this context.
        }
        current_request->process_msg.release()->complete(reply);
        delete current_request;
