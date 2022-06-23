@@ -1944,7 +1944,7 @@ Notable Changes since Infernalis
 * deb: fix rest-bench-dbg and ceph-test-dbg dependencies (Ken Dreyer)
 * debian/changelog: Remove stray 'v' in version (`pr#7936 <http://github.com/ceph/ceph/pull/7936>`_, Dan Mick)
 * debian/changelog: Remove stray 'v' in version (`pr#7938 <http://github.com/ceph/ceph/pull/7938>`_, Dan Mick)
-* debian: include cpio in build-requiers (`pr#7533 <http://github.com/ceph/ceph/pull/7533>`_, Rémi BUISSON)
+* debian: include cpio in build-requires (`pr#7533 <http://github.com/ceph/ceph/pull/7533>`_, Rémi BUISSON)
 * debian: minor package reorg (Ken Dreyer)
 * debian: package librgw_file* tests (`pr#7930 <http://github.com/ceph/ceph/pull/7930>`_, Ken Dreyer)
 * debian: packaging fixes for jewel (`pr#7807 <http://github.com/ceph/ceph/pull/7807>`_, Ken Dreyer, Ali Maredia)
