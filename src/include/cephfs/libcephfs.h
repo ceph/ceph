@@ -2155,7 +2155,7 @@ void ceph_finish_reclaim(struct ceph_mount_info *cmount);
  *
  * This is deprecated, use ceph_ll_register_callbacks2() instead.
  *
- * @param cmount the ceph mount handle on which the cb's should be registerd
+ * @param cmount the ceph mount handle on which the cb's should be registered
  * @param args   callback arguments to register with the cmount
  *
  * Any fields set to NULL will be ignored. There currently is no way to
@@ -2166,7 +2166,7 @@ void ceph_ll_register_callbacks(struct ceph_mount_info *cmount,
 
 /**
  * Register a set of callbacks to be used with this cmount
- * @param cmount the ceph mount handle on which the cb's should be registerd
+ * @param cmount the ceph mount handle on which the cb's should be registered
  * @param args   callback arguments to register with the cmount
  *
  * Any fields set to NULL will be ignored. There currently is no way to
