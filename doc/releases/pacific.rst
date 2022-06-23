@@ -1167,7 +1167,7 @@ Changelog
 * osd: handle inconsistent hash info during backfill and deep scrub gracefully (`pr#43544 <https://github.com/ceph/ceph/pull/43544>`_, Ronen Friedman, Mykola Golub)
 * osd: re-cache peer_bytes on every peering state activate (`pr#43437 <https://github.com/ceph/ceph/pull/43437>`_, Mykola Golub)
 * osd: Run osd bench test to override default max osd capacity for mclock (`pr#41731 <https://github.com/ceph/ceph/pull/41731>`_, Sridhar Seshasayee)
-* Pacific: BlueStore: Omap upgrade to per-pg fix fix (`pr#43922 <https://github.com/ceph/ceph/pull/43922>`_, Adam Kupczyk)
+* Pacific: BlueStore: Omap upgrade to per-pg fix (`pr#43922 <https://github.com/ceph/ceph/pull/43922>`_, Adam Kupczyk)
 * Pacific: client: do not defer releasing caps when revoking (`pr#43782 <https://github.com/ceph/ceph/pull/43782>`_, Xiubo Li)
 * Pacific: mds: add read/write io size metrics support (`pr#43784 <https://github.com/ceph/ceph/pull/43784>`_, Xiubo Li)
 * Pacific: test/libcephfs: put inodes after lookup (`pr#43562 <https://github.com/ceph/ceph/pull/43562>`_, Patrick Donnelly)
