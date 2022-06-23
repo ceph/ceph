@@ -759,7 +759,7 @@ char *spg_t::calc_name(char *buf, const char *suffix_backwards) const
   return pgid.calc_name(buf, "");
 }
 
-std::string spg_t::calc_name_sring() const
+std::string spg_t::calc_name_string() const
 {
   char buf[spg_t::calc_name_buf_size];
   buf[spg_t::calc_name_buf_size - 1] = '\0';
