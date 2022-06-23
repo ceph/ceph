@@ -238,7 +238,7 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_EQ(3, iset1.num_intervals());
   ASSERT_EQ(16, iset1.size());
 
-  //adding leftmost adjucent interval
+  //adding leftmost adjacent interval
   iset1.insert(0, 1, &start, &len);
   ASSERT_EQ(0, start);
   ASSERT_EQ(2, len);
@@ -259,7 +259,7 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_EQ(3, iset1.num_intervals());
   ASSERT_EQ(23, iset1.size());
 
-  //adding rigtmost adjusent interval 
+  //adding rigtmost adjacent interval 
   iset1.insert(35, 10, &start, &len);
   ASSERT_EQ(30, start);
   ASSERT_EQ(15, len );
