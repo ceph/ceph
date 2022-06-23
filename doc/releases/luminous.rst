@@ -3684,7 +3684,7 @@ Other Notable Changes
 * core: osd/PrimaryLogPG solve cache tier osd high memory consumption (`issue#20464 <http://tracker.ceph.com/issues/20464>`_, `pr#16011 <https://github.com/ceph/ceph/pull/16011>`_, Peng Xie)
 * core: osd/PrimaryLogPG::try_lock_for_read: give up if missing (`issue#18583 <http://tracker.ceph.com/issues/18583>`_, `pr#13087 <https://github.com/ceph/ceph/pull/13087>`_, Samuel Just)
 * core: osd/PrimaryLogPG: unify the access to primary pg (`pr#12527 <https://github.com/ceph/ceph/pull/12527>`_, huangjun)
-* core: osd/PrimayLogPG: update modified range to include the whole object size for write_full op (`pr#15021 <https://github.com/ceph/ceph/pull/15021>`_, runsisi)
+* core: osd/PrimaryLogPG: update modified range to include the whole object size for write_full op (`pr#15021 <https://github.com/ceph/ceph/pull/15021>`_, runsisi)
 * core: osd/ReplicatedBackend: clear pull source once we are done with it (`issue#19076 <http://tracker.ceph.com/issues/19076>`_, `pr#13879 <https://github.com/ceph/ceph/pull/13879>`_, Samuel Just)
 * core: osd/ReplicatedBackend: remove MOSDSubOp cruft from repop_applied (`pr#14358 <https://github.com/ceph/ceph/pull/14358>`_, Jianpeng Ma)
 * core: osd/ReplicatedBackend: reset thread heartbeat after every omap entry … (`issue#20375 <http://tracker.ceph.com/issues/20375>`_, `pr#15823 <https://github.com/ceph/ceph/pull/15823>`_, Josh Durgin)

@@ -4823,7 +4823,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 	  } else {
 	    // the survivor missed MDentryLink message ?
 	    ceph_assert(strong->strong_inodes.count(dnl->get_inode()->vino()) == 0);
-	    dout(7) << " sender doesn't have primay dentry" << dendl;
+	    dout(7) << " sender doesn't have primary dentry" << dendl;
 	  }
         } else {
 	  if (d.is_primary()) {

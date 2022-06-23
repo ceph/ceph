@@ -54,7 +54,7 @@ create_snaps()
 
 unset CEPH_CLI_TEST_DUP_COMMAND
 
-echo "running generator on prmary file system..."
+echo "running generator on primary file system..."
 
 # setup git repos to be used as data set
 setup_repos
