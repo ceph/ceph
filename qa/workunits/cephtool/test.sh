@@ -152,17 +152,17 @@ function expect_config_value()
 
 function ceph_watch_start()
 {
-    local whatch_opt=--watch
+    local watch_opt=--watch
 
     if [ -n "$1" ]; then
-	whatch_opt=--watch-$1
+	watch_opt=--watch-$1
 	if [ -n "$2" ]; then
-	    whatch_opt+=" --watch-channel $2"
+	    watch_opt+=" --watch-channel $2"
 	fi
     fi
 
     CEPH_WATCH_FILE=${TEMP_DIR}/CEPH_WATCH_$$
-    ceph $whatch_opt > $CEPH_WATCH_FILE &
+    ceph $watch_opt > $CEPH_WATCH_FILE &
     CEPH_WATCH_PID=$!
 
     # wait until the "ceph" client is connected and receiving
