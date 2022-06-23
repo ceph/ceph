@@ -2945,7 +2945,7 @@ Notable Changes since Infernalis
 * rbd: deprecate --new-format option (Jason Dillman)
 * rbd: dynamically generated bash completion (`issue#13494 <http://tracker.ceph.com/issues/13494>`_, `pr#6316 <http://github.com/ceph/ceph/pull/6316>`_, Jason Dillaman)
 * rbd: fix build with "--without-rbd" (`issue#14058 <http://tracker.ceph.com/issues/14058>`_, `pr#6899 <http://github.com/ceph/ceph/pull/6899>`_, Piotr Dałek)
-* rbd: fix clone isssue (`issue#13553 <http://tracker.ceph.com/issues/13553>`_, `pr#6334 <http://github.com/ceph/ceph/pull/6334>`_, xinxin shu)
+* rbd: fix clone issue (`issue#13553 <http://tracker.ceph.com/issues/13553>`_, `pr#6334 <http://github.com/ceph/ceph/pull/6334>`_, xinxin shu)
 * rbd: fix error messages (#2862 Rajesh Nambiar)
 * rbd: fixes for refactored CLI and related tests (`pr#6738 <http://github.com/ceph/ceph/pull/6738>`_, Ilya Dryomov)
 * rbd: fix init-rbdmap CMDPARAMS (`issue#13214 <http://tracker.ceph.com/issues/13214>`_, `pr#6109 <http://github.com/ceph/ceph/pull/6109>`_, Sage Weil)
