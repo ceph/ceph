@@ -2623,7 +2623,7 @@ Notable Changes since Infernalis
 * osd: dump number of missing objects for each peer with pg query (`pr#6058 <http://github.com/ceph/ceph/pull/6058>`_, Guang Yang)
 * osd: duplicated clear for peer_missing (`pr#8315 <http://github.com/ceph/ceph/pull/8315>`_, Ning Yao)
 * osd: EIO injection (David Zhang)
-* osd: elminiate txn apend, ECSubWrite copy (Samuel Just)
+* osd: elminiate txn append, ECSubWrite copy (Samuel Just)
 * osd: enable perfcounters on sharded work queue mutexes (`pr#6455 <http://github.com/ceph/ceph/pull/6455>`_, Jacek J. Łakis)
 * osd: ensure new osdmaps commit before publishing them to pgs (`issue#15073 <http://tracker.ceph.com/issues/15073>`_, `pr#8096 <http://github.com/ceph/ceph/pull/8096>`_, Sage Weil)
 * osd: erasure-code: drop entries according to LRU (Andreas-Joachim Peters)
