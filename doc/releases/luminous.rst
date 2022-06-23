@@ -2809,7 +2809,7 @@ Other Notable Changes
 * bluestore: os/bluestore: clean up Invalid return value judgment (`pr#14219 <https://github.com/ceph/ceph/pull/14219>`_, shiqi)
 * bluestore: os/bluestore: cleanup min_alloc_size; some formatting nits (`pr#15826 <https://github.com/ceph/ceph/pull/15826>`_, xie xingguo)
 * bluestore: os/bluestore: clear result in BlueRocksEnv::getChildren (`issue#20857 <http://tracker.ceph.com/issues/20857>`_, `pr#16683 <https://github.com/ceph/ceph/pull/16683>`_, liuchang0812)
-* bluestore: os/bluestore: clear up redundant size assignment in KerenelDevice (`pr#16121 <https://github.com/ceph/ceph/pull/16121>`_, Shasha Lu)
+* bluestore: os/bluestore: clear up redundant size assignment in KernelDevice (`pr#16121 <https://github.com/ceph/ceph/pull/16121>`_, Shasha Lu)
 * bluestore: os/bluestore: conditionally load crr option (`pr#12877 <https://github.com/ceph/ceph/pull/12877>`_, xie xingguo)
 * bluestore: os/bluestore: configure rocksdb cache via bluestore_cache_kv_ratio (`pr#15580 <https://github.com/ceph/ceph/pull/15580>`_, Sage Weil)
 * bluestore: os/bluestore: default journal media to store media if bluefs is disabled (`pr#16844 <https://github.com/ceph/ceph/pull/16844>`_, xie xingguo)
