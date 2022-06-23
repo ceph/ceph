@@ -6831,7 +6831,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 
 void OSD::_get_purged_snaps()
 {
-  // NOTE: this is a naive, stateless implementaiton.  it may send multiple
+  // NOTE: this is a naive, stateless implementation.  it may send multiple
   // overlapping requests to the mon, which will be somewhat inefficient, but
   // it should be reliable.
   dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
