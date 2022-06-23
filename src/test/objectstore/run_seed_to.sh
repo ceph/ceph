@@ -6,7 +6,7 @@
 # provided seed.
 #
 # We also perform three additional tests, focused on assessing if 
-# replaying a larger chunck of the journal affects the expected store
+# replaying a larger chunk of the journal affects the expected store
 # behavior. These tests will be performed by increasing the store's
 # journal sync interval to a very large value, allowing the store to
 # finish execution before the first sync (unless the store runs for
