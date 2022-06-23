@@ -321,7 +321,7 @@ Changelog
 * nautilus: krbd: add support for msgr2 (kernel 5.11) (`pr#39202 <https://github.com/ceph/ceph/pull/39202>`_, Ilya Dryomov)
 * nautilus: librados, tests: allow to list objects with the NUL character in names (`pr#39324 <https://github.com/ceph/ceph/pull/39324>`_, Radoslaw Zarzynski)
 * nautilus: librbd: clear implicitly enabled feature bits when creating images (`pr#39121 <https://github.com/ceph/ceph/pull/39121>`_, Jason Dillaman)
-* nautilus: log: fix timestap precision of log can't set to millisecond (`pr#37659 <https://github.com/ceph/ceph/pull/37659>`_, Guan yunfei)
+* nautilus: log: fix timestamp precision of log can't set to millisecond (`pr#37659 <https://github.com/ceph/ceph/pull/37659>`_, Guan yunfei)
 * nautilus: lvm/create.py: fix a typo in the help message (`pr#38371 <https://github.com/ceph/ceph/pull/38371>`_, ZhenLiu94)
 * nautilus: mds : move start_files_to_recover() to recovery_done (`pr#37986 <https://github.com/ceph/ceph/pull/37986>`_, Simon Gao)
 * nautilus: mds: account for closing sessions in hit_session (`pr#37820 <https://github.com/ceph/ceph/pull/37820>`_, Dan van der Ster)

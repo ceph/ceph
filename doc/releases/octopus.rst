@@ -1242,7 +1242,7 @@ Changelog
 * common,core: common, osd: add sanity checks around osd_scrub_max_preemptions (`pr#36034 <https://github.com/ceph/ceph/pull/36034>`_, xie xingguo)
 * common,rbd,tools: rbd: immutable-object-cache: fixed crashes on start up (`pr#36660 <https://github.com/ceph/ceph/pull/36660>`_, Jason Dillaman)
 * common,rbd: crush/CrushWrapper: rebuild reverse maps after rebuilding crush map (`pr#36662 <https://github.com/ceph/ceph/pull/36662>`_, Jason Dillaman)
-* common: common: log: fix timestap precision of log can't set to millisecond (`pr#36048 <https://github.com/ceph/ceph/pull/36048>`_, Guan yunfei)
+* common: common: log: fix timestamp precision of log can't set to millisecond (`pr#36048 <https://github.com/ceph/ceph/pull/36048>`_, Guan yunfei)
 * core,mgr: mgr: decrease pool stats if pg was removed (`pr#36667 <https://github.com/ceph/ceph/pull/36667>`_, Aleksei Gutikov)
 * core,rbd: osd/OSDCap: rbd profile permits use of "rbd_info" (`pr#36414 <https://github.com/ceph/ceph/pull/36414>`_, Florian Florensa)
 * core,tools: tools/rados: Set locator key when exporting or importing a pool (`pr#36666 <https://github.com/ceph/ceph/pull/36666>`_, Iain Buclaw)
