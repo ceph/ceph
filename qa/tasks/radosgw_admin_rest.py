@@ -80,7 +80,7 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     def build_admin_request(conn, method, resource = '', headers=None, data='',
             query_args=None, params=None):
         """
-        Build an administative request adapted from the build_request()
+        Build an administrative request adapted from the build_request()
         method of boto.connection
         """
 
