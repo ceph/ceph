@@ -1043,7 +1043,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    *
    * @param results A freshly-created validated_data struct, with values set
    * as described in the struct documentation.
-   * @param mdr The request to be responeded upon the completion of the
+   * @param mdr The request to be responded upon the completion of the
    * validation (or NULL)
    * @param fin Context to call back on completion (or NULL)
    */
