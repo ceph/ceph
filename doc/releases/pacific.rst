@@ -950,7 +950,7 @@ Changelog
 * qa: do not use any time related suffix for \*_op_timeouts (`pr#44621 <https://github.com/ceph/ceph/pull/44621>`_, Xiubo Li)
 * qa: fsync dir for asynchronous creat on stray tests (`pr#45565 <https://github.com/ceph/ceph/pull/45565>`_, Patrick Donnelly, Ramana Raja)
 * qa: ignore expected metadata cluster log error (`pr#45564 <https://github.com/ceph/ceph/pull/45564>`_, Patrick Donnelly)
-* qa: increase the timeout value to wait a litte longer (`pr#43979 <https://github.com/ceph/ceph/pull/43979>`_, Xiubo Li)
+* qa: increase the timeout value to wait a little longer (`pr#43979 <https://github.com/ceph/ceph/pull/43979>`_, Xiubo Li)
 * qa: move certificates for kmip task into /etc/ceph (`pr#45413 <https://github.com/ceph/ceph/pull/45413>`_, Ali Maredia)
 * qa: remove centos8 from supported distros (`pr#44865 <https://github.com/ceph/ceph/pull/44865>`_, Casey Bodley, Sage Weil)
 * qa: skip sanity check during upgrade (`pr#44840 <https://github.com/ceph/ceph/pull/44840>`_, Milind Changire)
