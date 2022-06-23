@@ -3143,7 +3143,7 @@ class CephManager:
                     if len(self.get_mon_quorum()) == size:
                         break
                 except CommandFailedError as e:
-                    # could fail instea4d of blocked if the rotating key of the
+                    # could fail instead of blocked if the rotating key of the
                     # connected monitor is not updated yet after they form the
                     # quorum
                     if e.exitstatus == errno.EACCES:
