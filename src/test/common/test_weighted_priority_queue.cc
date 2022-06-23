@@ -115,7 +115,7 @@ protected:
         LQ::reverse_iterator ri = strictq.rbegin();
         EXPECT_EQ(std::get<0>(r), ri->first);
         // Check that if there are multiple classes in a priority
-        // that it is not dequeueing the same class each time.
+        // that it is not dequeuing the same class each time.
         LastKlass::iterator si = last_strict.find(std::get<0>(r));
         if (strictq[std::get<0>(r)].size() > 1 && si != last_strict.end()) {
 	  EXPECT_NE(std::get<1>(r), si->second);
@@ -133,7 +133,7 @@ protected:
 	}
       } else {
         // Check that if there are multiple classes in a priority
-        // that it is not dequeueing the same class each time.
+        // that it is not dequeuing the same class each time.
         LastKlass::iterator si = last_norm.find(std::get<0>(r));
         if (normq[std::get<0>(r)].size() > 1 && si != last_norm.end()) {
 	  EXPECT_NE(std::get<1>(r), si->second);
