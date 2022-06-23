@@ -245,7 +245,7 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_EQ(3, iset1.num_intervals());
   ASSERT_EQ(17, iset1.size());
 
-  //adding interim interval that merges leftmost and subseqent intervals
+  //adding interim interval that merges leftmost and subsequent intervals
   iset1.insert(2, 1, &start, &len);
   ASSERT_EQ(0, start);
   ASSERT_EQ(8, len);
