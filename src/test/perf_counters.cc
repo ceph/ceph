@@ -244,7 +244,7 @@ static void counters_readavg_test(std::shared_ptr<PerfCounters> fake_pf) {
 
   while (i--) {
     std::pair<uint64_t, uint64_t> dat = fake_pf->get_tavg_ns(TEST_PERFCOUNTERS3_ELEMENT_READ);
-    // sum and count should be identical as we increment TEST_PERCOUNTERS_ELEMENT_READ by 1 nsec eveytime
+    // sum and count should be identical as we increment TEST_PERCOUNTERS_ELEMENT_READ by 1 nsec every time
     ASSERT_EQ(dat.first, dat.second);
   }
 }
