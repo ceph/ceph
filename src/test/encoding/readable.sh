@@ -175,7 +175,7 @@ do_join() {
         waitall $pids
         pids=""
         # Reading the output of jobs to compute failed & numtests
-        # Tests are run in parallel but sum should be done sequentialy to avoid
+        # Tests are run in parallel but sum should be done sequentially to avoid
         # races between threads
         while [ "$running_jobs" -ge 0 ]; do
             if [ -f $output_file.$running_jobs ]; then
