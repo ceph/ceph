@@ -626,7 +626,7 @@ Notable changes
 * mds: Hammer uclient checking (#11510, John Spray)
 * mds: remove caps from revoking list when caps are voluntarily released (#11482, Yan, Zheng)
 * messenger: double clear of pipe in reaper (#11381, Haomai Wang)
-* mon: Total size of OSDs is a maginitude less than it is supposed to be. (#11534, Zhe Zhang)
+* mon: Total size of OSDs is a magnitude less than it is supposed to be. (#11534, Zhe Zhang)
 * osd: don't check order in finish_proxy_read (#11211, Zhiqiang Wang)
 * osd: handle old semi-deleted pgs after upgrade (#11429, Samuel Just)
 * osd: object creation by write cannot use an offset on an erasure coded pool (#11507, Jianpeng Ma)
