@@ -17655,7 +17655,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
                          nonexistent_count + 1, false, &ls, &next);
     if (r >= 0) {
-      // If true mean collecton has more objects than nonexistent_count,
+      // If true mean collection has more objects than nonexistent_count,
       // so bypass check.
       bool exists = (!next.is_max());
       for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
