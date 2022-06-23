@@ -5369,7 +5369,7 @@ Other Notable Changes
 * tests: qa/tasks/ceph-deploy: Fix bluestore options for ceph-deploy (`pr#16571 <https://github.com/ceph/ceph/pull/16571>`_, Vasu Kulkarni)
 * tests: qa/tasks/ceph-deploy: use the new create option during instantiation (`pr#12892 <https://github.com/ceph/ceph/pull/12892>`_, Vasu Kulkarni)
 * tests: qa/tasks/ceph: don't hard-code cluster name when copying fsid (`pr#16212 <https://github.com/ceph/ceph/pull/16212>`_, Jason Dillaman)
-* tests: qa/tasks/ceph_manager: always fix pgp_num when done with thrashosd task (`issue#19771 <http://tracker.ceph.com/issues/19771>`_, `pr#14931 <https://github.com/ceph/ceph/pull/14931>`_, Kefu Chai)
+* tests: qa/tasks/ceph_manager: always fix pgp_num when done with thrashosds task (`issue#19771 <http://tracker.ceph.com/issues/19771>`_, `pr#14931 <https://github.com/ceph/ceph/pull/14931>`_, Kefu Chai)
 * tests: qa/tasks/ceph_manager: 'ceph $service tell ...' is obsolete (`pr#15252 <https://github.com/ceph/ceph/pull/15252>`_, Sage Weil)
 * tests: qa/tasks/ceph.py: debug which pgs aren't scrubbing (`pr#13649 <https://github.com/ceph/ceph/pull/13649>`_, Sage Weil)
 * tests: qa/tasks/ceph: raise exceptions if scrubbing fails or cannot proceed (`pr#15310 <https://github.com/ceph/ceph/pull/15310>`_, Sage Weil)
