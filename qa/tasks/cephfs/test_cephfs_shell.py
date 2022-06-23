@@ -270,7 +270,7 @@ class TestRmdir(TestCephFSShell):
 
     def test_rmdir_non_existing_dir(self):
         """
-        Test that rmdir does not delete a non existing directory
+        Test that rmdir does not delete a nonexistent directory
         """
         self.negtest_cephfs_shell_cmd(cmd="rmdir test_dir")
         self.dir_does_not_exists()
@@ -880,7 +880,7 @@ class TestQuota(TestCephFSShell):
             self.assertTupleEqual(self.set_and_get_quota_vals(
                 set_values, False), set_values)
             raise Exception(
-                "Something went wrong!! Values set for non existing directory")
+                "Something went wrong!! Values set for nonexistent directory")
         except IndexError:
             # Test should pass as values cannot be set for non
             # existing directory

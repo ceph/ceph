@@ -426,7 +426,7 @@ TEST(LibRadosAio, RmXattr) {
   rados_aio_release(my_completion4);
   // remove object
   ASSERT_EQ(0, rados_remove(test_data.m_ioctx, "foo_rmxattr"));
-  // async rmxattr on non existing object
+  // async rmxattr on nonexistent object
   rados_completion_t my_completion5;
   ASSERT_EQ(0, rados_aio_create_completion2(nullptr,
             nullptr, &my_completion5));

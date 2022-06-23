@@ -2055,15 +2055,15 @@ TEST(LibCephFS, OperationsOnRoot)
 
   ASSERT_EQ(ceph_link(cmount, "/", "/"), -CEPHFS_EEXIST);
   ASSERT_EQ(ceph_link(cmount, dirname, "/"), -CEPHFS_EEXIST);
-  ASSERT_EQ(ceph_link(cmount, "nonExisitingDir", "/"), -CEPHFS_ENOENT);
+  ASSERT_EQ(ceph_link(cmount, "nonexistentDir", "/"), -CEPHFS_ENOENT);
 
   ASSERT_EQ(ceph_unlink(cmount, "/"), -CEPHFS_EISDIR);
 
   ASSERT_EQ(ceph_rename(cmount, "/", "/"), -CEPHFS_EBUSY);
   ASSERT_EQ(ceph_rename(cmount, dirname, "/"), -CEPHFS_EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, "nonExistingDir", "/"), -CEPHFS_EBUSY);
+  ASSERT_EQ(ceph_rename(cmount, "nonexistentDir", "/"), -CEPHFS_EBUSY);
   ASSERT_EQ(ceph_rename(cmount, "/", dirname), -CEPHFS_EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, "/", "nonExistingDir"), -CEPHFS_EBUSY);
+  ASSERT_EQ(ceph_rename(cmount, "/", "nonexistentDir"), -CEPHFS_EBUSY);
 
   ASSERT_EQ(ceph_mkdir(cmount, "/", 0777), -CEPHFS_EEXIST);
 
@@ -2071,7 +2071,7 @@ TEST(LibCephFS, OperationsOnRoot)
 
   ASSERT_EQ(ceph_symlink(cmount, "/", "/"), -CEPHFS_EEXIST);
   ASSERT_EQ(ceph_symlink(cmount, dirname, "/"), -CEPHFS_EEXIST);
-  ASSERT_EQ(ceph_symlink(cmount, "nonExistingDir", "/"), -CEPHFS_EEXIST);
+  ASSERT_EQ(ceph_symlink(cmount, "nonexistentDir", "/"), -CEPHFS_EEXIST);
 
   ceph_shutdown(cmount);
 }

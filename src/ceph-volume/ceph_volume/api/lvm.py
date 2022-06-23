@@ -309,7 +309,7 @@ def dmsetup_splitname(dev):
     Run ``dmsetup splitname`` and parse the results.
 
     .. warning:: This call does not ensure that the device is correct or that
-    it exists. ``dmsetup`` will happily take a non existing path and still
+    it exists. ``dmsetup`` will happily take a nonexistent path and still
     return a 0 exit status.
     """
     command = [

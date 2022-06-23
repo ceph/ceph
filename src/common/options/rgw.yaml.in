@@ -1430,7 +1430,7 @@ options:
   level: advanced
   desc: Should RGW log operations on bucket that does not exist
   long_desc: This config option applies to the ops log. When this option is set, the
-    ops log will log operations that are sent to non existing buckets. These operations
+    ops log will log operations that are sent to nonexistent buckets. These operations
     inherently fail, and do not correspond to a specific user.
   fmt_desc: Enables Ceph Object Gateway to log a request for a non-existent
     bucket.

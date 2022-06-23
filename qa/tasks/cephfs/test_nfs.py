@@ -335,7 +335,7 @@ class TestNFS(MgrTestCase):
                     tries -= 1
                     time.sleep(2)
                     continue
-                # Check if mount failed only when non existing pseudo path is passed
+                # Check if mount failed only when nonexistent pseudo path is passed
                 if not check and e.exitstatus == 32:
                     return
                 raise

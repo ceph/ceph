@@ -2395,7 +2395,7 @@ class TestSubvolumes(TestVolumesHelper):
         else:
             self.fail("expected the 'fs subvolume ls' command to fail with error 'EINVAL' for _index")
 
-    def test_subvolume_ls_for_notexistent_default_group(self):
+    def test_subvolume_ls_for_nonexistent_default_group(self):
         # tests the 'fs subvolume ls' command when the default group '_nogroup' doesn't exist
         # prerequisite: we expect that the volume is created and the default group _nogroup is
         # NOT created (i.e. a subvolume without group is not created)
@@ -4939,7 +4939,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         self._wait_for_trash_empty()
 
     def test_subvolume_snapshot_rm_force(self):
-        # test removing non existing subvolume snapshot with --force
+        # test removing nonexistent subvolume snapshot with --force
         subvolume = self._generate_random_subvolume_name()
         snapshot = self._generate_random_snapshot_name()
 
@@ -7432,7 +7432,7 @@ class TestMisc(TestVolumesHelper):
         self._fs_cmd('volume', 'rm', volname, '--yes-i-really-mean-it')
 
     def test_subvolume_ops_on_nonexistent_vol(self):
-        # tests the fs subvolume operations on non existing volume
+        # tests the fs subvolume operations on nonexistent volume
 
         volname = "non_existent_subvolume"
 

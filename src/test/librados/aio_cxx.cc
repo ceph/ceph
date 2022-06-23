@@ -482,7 +482,7 @@ TEST(LibRadosAioPP, RmXattrPP) {
   ASSERT_EQ(0, my_completion4->get_return_value());
   // remove object
   ASSERT_EQ(0, test_data.m_ioctx.remove("foo_rmxattr"));
-  // async rmxattr on non existing object
+  // async rmxattr on nonexistent object
   AioTestDataPP test_data5;
   ASSERT_EQ("", test_data5.init());
   auto my_completion5 = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};

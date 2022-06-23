@@ -5439,7 +5439,7 @@ Other Notable Changes
 * tests: test/fsx:  Remove the dead code associated with aio backend (`pr#14905 <https://github.com/ceph/ceph/pull/14905>`_, Zhou Zhengping)
 * tests: test: Initialize pointer variables in TestMemIoCtxImpl (`pr#16785 <https://github.com/ceph/ceph/pull/16785>`_, amitkuma)
 * tests: test/librados: Initialize member variables in aio.cc (`pr#16845 <https://github.com/ceph/ceph/pull/16845>`_, amitkuma)
-* tests: test: librados_test_stub: tmap_update: return -ENOENT when removing nonexisent key (`pr#12667 <https://github.com/ceph/ceph/pull/12667>`_, Mykola Golub)
+* tests: test: librados_test_stub: tmap_update: return -ENOENT when removing nonexistent key (`pr#12667 <https://github.com/ceph/ceph/pull/12667>`_, Mykola Golub)
 * tests: test: migrate atomic_t to std::atomic (`pr#14655 <https://github.com/ceph/ceph/pull/14655>`_, Jesse Williamson)
 * tests: test,mon,msg: kill clang analyzer warnings (`pr#16320 <https://github.com/ceph/ceph/pull/16320>`_, Kefu Chai)
 * tests: test/mon: silence warnings from -Wreorder (`pr#15692 <https://github.com/ceph/ceph/pull/15692>`_, Jos Collin)

@@ -34,7 +34,7 @@ function test_ceph_kvstore_tool()
   # exists
   prefix=`ceph-kvstore-tool bluestore-kv ${TEMP_DIR} list 2>/dev/null | head -n 1 | awk '{print $1}'`
   ceph-kvstore-tool bluestore-kv ${TEMP_DIR} exists ${prefix}
-  expect_false ceph-kvstore-tool bluestore-kv ${TEMP_DIR} exists ${prefix}notexist
+  expect_false ceph-kvstore-tool bluestore-kv ${TEMP_DIR} exists ${prefix}nonexistent
 
   # list-crc
   ceph-kvstore-tool  bluestore-kv ${TEMP_DIR} list-crc
