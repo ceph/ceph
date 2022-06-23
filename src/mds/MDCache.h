@@ -807,7 +807,7 @@ class MDCache {
    * MDS_TRAVERSE_DISCOVER: Instead of forwarding request, path_traverse()
    * attempts to look up the path from a different MDS (and bring them into
    * its cache as replicas).
-   * MDS_TRAVERSE_PATH_LOCKED: path_traverse() will procceed when xlocked
+   * MDS_TRAVERSE_PATH_LOCKED: path_traverse() will proceed when xlocked
    * dentry is encountered.
    * MDS_TRAVERSE_WANT_DENTRY: Caller wants tail dentry. Add a null dentry if
    * tail dentry does not exist. return 0 even tail dentry is null.

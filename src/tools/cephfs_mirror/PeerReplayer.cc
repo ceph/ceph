@@ -1168,7 +1168,7 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
   FHandles fh;
   int r = pre_sync_check_and_open_handles(dir_root, current, prev, &fh);
   if (r < 0) {
-    dout(5) << ": cannot proceeed with sync: " << cpp_strerror(r) << dendl;
+    dout(5) << ": cannot proceed with sync: " << cpp_strerror(r) << dendl;
     return r;
   }
 
