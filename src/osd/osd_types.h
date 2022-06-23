@@ -3108,7 +3108,7 @@ struct pg_fast_info_t {
     utime_t last_fullsized;
     int64_t log_size;  // (also ondisk_log_size, which has the same value)
     struct { // object_stat_collection_t stats;
-      struct { // objct_stat_sum_t sum
+      struct { // object_stat_sum_t sum
 	int64_t num_bytes;    // in bytes
 	int64_t num_objects;
 	int64_t num_object_copies;
