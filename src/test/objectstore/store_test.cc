@@ -9900,7 +9900,7 @@ TEST_P(StoreTest, BluestorePerPoolOmapFixOnMount)
   ch = store->open_collection(cid);
 
   {
-    // write to onode which will partiall revert per-pool
+    // write to onode which will partially revert per-pool
     // omap repair done on mount due to #43824.
     // And object removal will leave stray per-pool omap recs
     //
