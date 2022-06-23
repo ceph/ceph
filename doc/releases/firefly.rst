@@ -257,7 +257,7 @@ Notable Changes
 * osd: fix PG ref leak in snaptrimmer on peering (#10421 Kefu Chai)
 * osd: handle no-op write with snapshot (#10262 Sage Weil)
 * radosgw-admin: create subuser when creating user (#10103 Yehuda Sadeh)
-* rgw: change multipart uplaod id magic (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
+* rgw: change multipart upload id magic (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
 * rgw: don't overwrite bucket/object owner when setting ACLs (#10978 Yehuda Sadeh)
 * rgw: enable IPv6 for embedded civetweb (#10965 Yehuda Sadeh)
 * rgw: fix partial swift GET (#10553 Yehuda Sadeh)
