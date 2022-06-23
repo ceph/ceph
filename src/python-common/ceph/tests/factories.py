@@ -12,7 +12,7 @@ class InventoryFactory(object):
         cnt = 0
         if len(self.taken_paths) >= 25:
             raise Exception(
-                "Double-character disks are not implemetend. Maximum amount"
+                "Double-character disks are not implemented. Maximum amount"
                 "of disks reached.")
 
         while self.path in self.taken_paths:
