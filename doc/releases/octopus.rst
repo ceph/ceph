@@ -3939,7 +3939,7 @@ Changelog
 * doc: doc/foundation: add ceph foundation info here (`pr#31955 <https://github.com/ceph/ceph/pull/31955>`_, Sage Weil)
 * doc: doc/foundation: add cloudbase and vexxhost (`pr#32013 <https://github.com/ceph/ceph/pull/32013>`_, Sage Weil)
 * doc: doc/foundation: add Samsung Electronics (`pr#33518 <https://github.com/ceph/ceph/pull/33518>`_, Sage Weil)
-* doc: doc/governance: add cbodey (`pr#27708 <https://github.com/ceph/ceph/pull/27708>`_, Sage Weil)
+* doc: doc/governance: add cbodley (`pr#27708 <https://github.com/ceph/ceph/pull/27708>`_, Sage Weil)
 * doc: doc/index: remove quick start from front page for now (`pr#33207 <https://github.com/ceph/ceph/pull/33207>`_, Sage Weil)
 * doc: doc/install/containers: add summary of containers and branches (`pr#31465 <https://github.com/ceph/ceph/pull/31465>`_, Sage Weil)
 * doc: doc/install/containers: note vX.Y.Z[-YYYYMMDD] tags (`pr#31975 <https://github.com/ceph/ceph/pull/31975>`_, Sage Weil)
