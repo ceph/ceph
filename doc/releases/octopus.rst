@@ -5066,7 +5066,7 @@ Changelog
 * msg: remove xiomessenger (`pr#27021 <https://github.com/ceph/ceph/pull/27021>`_, Sage Weil)
 * msg: set_require_authorizer on messenger, not dispatcher (`pr#27832 <https://github.com/ceph/ceph/pull/27832>`_, Sage Weil)
 * orchestrator: usability fixes (`pr#33118 <https://github.com/ceph/ceph/pull/33118>`_, Yehuda Sadeh)
-* os/bluestore,comon,erasure-code: chmod -x source files (`pr#31179 <https://github.com/ceph/ceph/pull/31179>`_, Sage Weil)
+* os/bluestore,common,erasure-code: chmod -x source files (`pr#31179 <https://github.com/ceph/ceph/pull/31179>`_, Sage Weil)
 * os/bluestore: default bluestore_block_size 1T -> 100G (`pr#32043 <https://github.com/ceph/ceph/pull/32043>`_, Sage Weil)
 * os/kstore: do not cache in-fight stripes on read ops to avoid leaks (`issue#39665 <http://tracker.ceph.com/issues/39665>`_, `pr#32538 <https://github.com/ceph/ceph/pull/32538>`_, Chang Liu)
 * os/memstore, crimson/os: introduce memstore_debug_omit_block_device_write (`pr#28601 <https://github.com/ceph/ceph/pull/28601>`_, Radoslaw Zarzynski)
