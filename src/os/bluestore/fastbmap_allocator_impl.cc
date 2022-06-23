@@ -423,7 +423,7 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
   ceph_assert(0 == (l1_pos_start % (slots_per_slotset * d1)));
   ceph_assert(0 == (l1_pos_end % (slots_per_slotset * d1)));
   if (min_length != l0_granularity) {
-    // probably not the most effecient way but
+    // probably not the most efficient way but
     // don't care much about that at the moment
     bool has_space = true;
     while (length > *allocated && has_space) {
