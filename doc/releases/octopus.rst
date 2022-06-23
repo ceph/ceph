@@ -4890,7 +4890,7 @@ Changelog
 * mgr: mgr/progress: estimated remaining time for events (`pr#30615 <https://github.com/ceph/ceph/pull/30615>`_, xie xingguo)
 * mgr: mgr/progress: Look at PG state when PG epoch >= OSDMap epoch (`pr#28368 <https://github.com/ceph/ceph/pull/28368>`_, Kamoltat (Junior) Sirivadhna)
 * mgr: mgr/progress: remove since from duration string (`pr#31007 <https://github.com/ceph/ceph/pull/31007>`_, Kefu Chai)
-* mgr: mgr/prometheus: Add mgr metdata to prometheus exporter module (`pr#28372 <https://github.com/ceph/ceph/pull/28372>`_, Paul Cuzner)
+* mgr: mgr/prometheus: Add mgr metadata to prometheus exporter module (`pr#28372 <https://github.com/ceph/ceph/pull/28372>`_, Paul Cuzner)
 * mgr: mgr/prometheus: assign a value to osd_dev_node when obj_store is not filestore or bluestore (`pr#30534 <https://github.com/ceph/ceph/pull/30534>`_, jiahuizeng)
 * mgr: mgr/prometheus: Cast collect_timeout (scrape_interval) to float (`pr#29382 <https://github.com/ceph/ceph/pull/29382>`_, Ben Meekhof)
 * mgr: mgr/prometheus: Fix KeyError in get_mgr_status (`pr#30421 <https://github.com/ceph/ceph/pull/30421>`_, Sebastian Wagner)

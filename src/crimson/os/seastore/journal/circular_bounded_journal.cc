@@ -309,7 +309,7 @@ CircularBoundedJournal::return_record(record_group_header_t& header, bufferlist 
       read_record_ertr::ready_future_marker{},
       std::make_pair(header, std::move(bl)));
   } else {
-    DEBUG("invalid matadata");
+    DEBUG("invalid metadata");
     return read_record_ret(
       read_record_ertr::ready_future_marker{},
       std::nullopt);

@@ -4077,7 +4077,7 @@ CEPH_RADOS_API int rados_monitor_log2(rados_t cluster, const char *level,
  *
  * Register us as a daemon providing a particular service.  We identify
  * the service (e.g., 'rgw') and our instance name (e.g., 'rgw.$hostname').
- * The metadata is a map of keys and values with arbitrary static metdata
+ * The metadata is a map of keys and values with arbitrary static metadata
  * for this instance.  The encoding is a series of NULL-terminated strings,
  * alternating key names and values, terminating with an empty key name.
  * For example,  "foo\0bar\0this\0that\0\0" is the dict {foo=bar,this=that}.

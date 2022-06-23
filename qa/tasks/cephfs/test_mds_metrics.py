@@ -346,11 +346,11 @@ class TestMDSMetrics(CephFSTestCase):
         log.debug("metrics={0}".format(metrics))
         self.assertTrue(valid)
 
-        client_matadata = metrics['client_metadata'][self.fs.name]
+        client_metadata = metrics['client_metadata'][self.fs.name]
         # pick an random client
-        client = random.choice(list(client_matadata.keys()))
+        client = random.choice(list(client_metadata.keys()))
         # get IP of client to use in filter
-        client_ip = client_matadata[client]['IP']
+        client_ip = client_metadata[client]['IP']
 
         valid, metrics = self._get_metrics(
             self.verify_mds_metrics(client_count=1), 30, '--client_ip={}'.format(client_ip))
