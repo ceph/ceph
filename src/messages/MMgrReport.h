@@ -43,7 +43,7 @@ public:
   {
     // TODO: decide whether to drop the per-type
     // encoding here, we could rely on the MgrReport
-    // verisoning instead.
+    // versioning instead.
     ENCODE_START(3, 1, bl);
     encode(path, bl);
     encode(description, bl);

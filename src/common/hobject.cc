@@ -153,7 +153,7 @@ void hobject_t::decode(bufferlist::const_iterator& bl)
       ceph_assert(is_min());
     }
 
-    // for compatibility with some earlier verisons which might encoded
+    // for compatibility with some earlier versions which might encoded
     // a non-canonical max object
     if (max) {
       *this = hobject_t::get_max();
