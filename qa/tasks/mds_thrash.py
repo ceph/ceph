@@ -60,7 +60,7 @@ class MDSThrasher(Thrasher, Greenlet):
       dict containing mds.x: weight pairs.  For example, [mds.a: 0.7, mds.b:
       0.3, mds.c: 0.0].  Each weight is a value from 0.0 to 1.0.  Any MDSs not
       specified will be automatically given a weight of 0.0 (not thrashed).
-      For a given MDS, by default the trasher delays for up to
+      For a given MDS, by default the thrasher delays for up to
       max_thrash_delay, trashes, waits for the MDS to recover, and iterates.
       If a non-zero weight is specified for an MDS, for each iteration the
       thrasher chooses whether to thrash during that iteration based on a
