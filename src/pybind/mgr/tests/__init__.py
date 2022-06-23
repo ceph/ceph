@@ -109,8 +109,8 @@ if 'UNITTEST' in os.environ:
             def config_get():
                 who = cmd['who'].split('.')
                 whos = ['global'] + ['.'.join(who[:i + 1]) for i in range(len(who))]
-                for attepmt in reversed(whos):
-                    val = self.mock_store_get('config', f'{attepmt}/{cmd["key"]}', None)
+                for attempt in reversed(whos):
+                    val = self.mock_store_get('config', f'{attempt}/{cmd["key"]}', None)
                     if val is not None:
                         return val
                 return None
@@ -152,8 +152,8 @@ if 'UNITTEST' in os.environ:
         def _ceph_get_foreign_option(self, entity, name):
             who = entity.split('.')
             whos = ['global'] + ['.'.join(who[:i + 1]) for i in range(len(who))]
-            for attepmt in reversed(whos):
-                val = self.mock_store_get('config', f'{attepmt}/{name}', None)
+            for attempt in reversed(whos):
+                val = self.mock_store_get('config', f'{attempt}/{name}', None)
                 if val is not None:
                     return val
             return None
