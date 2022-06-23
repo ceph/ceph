@@ -7963,7 +7963,7 @@ int OSDMonitor::check_pg_num(int64_t pool,
 /**
  * @param name The name of the new pool
  * @param crush_rule The crush rule to use. If <0, will use the system default
- * @param crush_rule_name The crush rule to use, if crush_rulset <0
+ * @param crush_rule_name The crush rule to use, if crush_ruleset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param pg_num_min min pg_num
