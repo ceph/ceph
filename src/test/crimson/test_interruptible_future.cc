@@ -93,7 +93,7 @@ TEST_F(seastar_test_suite_t, loops)
     std::cout << "beginning" << std::endl;
     interruptor::with_interruption(
       [] {
-	std::cout << "interruptiion enabled" << std::endl;
+	std::cout << "interruption enabled" << std::endl;
 	ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	return interruptor::make_interruptible(seastar::now())
 	.then_interruptible([] {
