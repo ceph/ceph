@@ -1287,7 +1287,7 @@ class CephFSShell(Cmd):
                 except OSError as e:
                     set_exit_code_msg(e.errno, f"{e.filename.decode('utf-8')}: "
                                       f"{e.strerror}")
-        # Arguments to the with_argpaser decorator function are sticky.
+        # Arguments to the with_argparser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
         # need to clean it up to ensure the next call works as expected.
