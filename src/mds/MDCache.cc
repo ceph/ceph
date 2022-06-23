@@ -10560,7 +10560,7 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
 
     // xlocked dentry?
     //  ...always block on non-tail items (they are unrelated)
-    //  ...allow xlocked tail disocvery _only_ if explicitly requested
+    //  ...allow xlocked tail discovery _only_ if explicitly requested
     if (dn->lock.is_xlocked()) {
       // is this the last (tail) item in the discover traversal?
       if (dis->is_path_locked()) {
