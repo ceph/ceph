@@ -665,7 +665,7 @@ Changelog
 * mon/PGMap: add pg count for pools in the ceph df command (`pr#36944 <https://github.com/ceph/ceph/pull/36944>`_, Vikhyat Umrao)
 * mon: Warn when too many reads are repaired on an OSD (`pr#36379 <https://github.com/ceph/ceph/pull/36379>`_, David Zafman)
 * mon: fix the \Error ERANGE\ message when conf "osd_objectstore" is filestore' (`pr#37474 <https://github.com/ceph/ceph/pull/37474>`_, wangyunqing')
-* mon: mark pgtemp messages as no_reply more consistenly in preprocess\\_\xe2\x80\xa6 (`pr#37171 <https://github.com/ceph/ceph/pull/37171>`_, Greg Farnum)
+* mon: mark pgtemp messages as no_reply more consistently in preprocess\\_\xe2\x80\xa6 (`pr#37171 <https://github.com/ceph/ceph/pull/37171>`_, Greg Farnum)
 * mon: store mon updates in ceph context for future MonMap instantiation (`pr#36704 <https://github.com/ceph/ceph/pull/36704>`_, Patrick Donnelly, Shyamsundar Ranganathan)
 * monclient: schedule first tick using mon_client_hunt_interval (`pr#36634 <https://github.com/ceph/ceph/pull/36634>`_, Mykola Golub)
 * msg/async/ProtocolV2: allow rxbuf/txbuf get bigger in testing (`pr#37081 <https://github.com/ceph/ceph/pull/37081>`_, Ilya Dryomov)

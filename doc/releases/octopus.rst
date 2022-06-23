@@ -1064,7 +1064,7 @@ Changelog
 * mon: Log "ceph health detail" periodically in cluster log (`pr#38345 <https://github.com/ceph/ceph/pull/38345>`_, Prashant Dhange)
 * mon: deleting a CephFS and its pools causes MONs to crash (`pr#37256 <https://github.com/ceph/ceph/pull/37256>`_, Patrick Donnelly)
 * mon: have 'mon stat' output json as well (`pr#37705 <https://github.com/ceph/ceph/pull/37705>`_, Joao Eduardo Luis)
-* mon: mark pgtemp messages as no_reply more consistenly in preprocess\_… (`pr#37347 <https://github.com/ceph/ceph/pull/37347>`_, Greg Farnum)
+* mon: mark pgtemp messages as no_reply more consistently in preprocess\_… (`pr#37347 <https://github.com/ceph/ceph/pull/37347>`_, Greg Farnum)
 * mon: set session_timeout when adding to session_map (`pr#37553 <https://github.com/ceph/ceph/pull/37553>`_, Ilya Dryomov)
 * mon: store mon updates in ceph context for future MonMap instantiation (`pr#36705 <https://github.com/ceph/ceph/pull/36705>`_, Patrick Donnelly, Shyamsundar Ranganathan)
 * msg/async/ProtocolV2: allow rxbuf/txbuf get bigger in testing (`pr#37080 <https://github.com/ceph/ceph/pull/37080>`_, Ilya Dryomov)
