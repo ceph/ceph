@@ -3068,7 +3068,7 @@ public:
     } else if (r == -EINVAL) {
       // modifying manifest object makes existing chunk_map clear
       // as a result, the modified object is no longer manifest object 
-      // this casues to return -EINVAL
+      // this causes to return -EINVAL
     } else if (r == -ENOENT) {
       // could fail if object is removed
       if (src_value.deleted()) {
