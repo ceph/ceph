@@ -17,7 +17,7 @@ class NodeExtentMutable;
  * The STAGE_STRING implementation for node N0/N1, implements staged contract
  * as an iterative container to resolve crush hash conflicts.
  *
- * The layout of the contaner to index ns, oid strings storing n items:
+ * The layout of the container to index ns, oid strings storing n items:
  *
  * # <--------- container range ---------> #
  * #<~># items [i+1, n)                    #
@@ -26,7 +26,7 @@ class NodeExtentMutable;
  * #   # <--- item_range ---> |        #   #
  * #   #                      |        #   #
  * #   # next-stage | ns-oid  | back_  #   #
- * #   #  contaner  | strings | offset #   #
+ * #   #  container | strings | offset #   #
  * #...#   range    |         |        #...#
  * ^   ^                           |       ^
  * |   |                           |       |

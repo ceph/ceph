@@ -820,7 +820,7 @@ Changelog
 * mgr/cephadm: less log noise when config checks fail (`pr#44526 <https://github.com/ceph/ceph/pull/44526>`_, Sage Weil)
 * mgr/cephadm: nfs migration: avoid port conflicts (`pr#44631 <https://github.com/ceph/ceph/pull/44631>`_, Sebastian Wagner)
 * mgr/cephadm: Show an error when invalid format (`pr#45226 <https://github.com/ceph/ceph/pull/45226>`_, Redouane Kachach)
-* mgr/cephadm: store contianer registry credentials in config-key (`pr#44658 <https://github.com/ceph/ceph/pull/44658>`_, Daniel Pivonka)
+* mgr/cephadm: store container registry credentials in config-key (`pr#44658 <https://github.com/ceph/ceph/pull/44658>`_, Daniel Pivonka)
 * mgr/cephadm: try to get FQDN for configuration files (`pr#45620 <https://github.com/ceph/ceph/pull/45620>`_, Tatjana Dehler)
 * mgr/cephadm: update monitoring stack versions (`pr#45940 <https://github.com/ceph/ceph/pull/45940>`_, Aashish Sharma, Ernesto Puerta)
 * mgr/cephadm: validating service_id for MDS (`pr#45227 <https://github.com/ceph/ceph/pull/45227>`_, Redouane Kachach)

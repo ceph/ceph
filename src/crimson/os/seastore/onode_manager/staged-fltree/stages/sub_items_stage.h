@@ -28,7 +28,7 @@ struct internal_sub_item_t {
  * contract as an indexable container to index snap-gen to child node
  * addresses.
  *
- * The layout of the contaner storing n sub-items:
+ * The layout of the container storing n sub-items:
  *
  * # <--------- container range -----------> #
  * #<~># sub-items [2, n)                    #
@@ -153,7 +153,7 @@ class internal_sub_items_t::Appender {
  * The STAGE_RIGHT implementation for leaf node N0/N1/N2, implements staged
  * contract as an indexable container to index snap-gen to value_header_t.
  *
- * The layout of the contaner storing n sub-items:
+ * The layout of the container storing n sub-items:
  *
  * # <------------------------ container range -------------------------------> #
  * # <---------- sub-items ----------------> # <--- offsets ---------#          #
