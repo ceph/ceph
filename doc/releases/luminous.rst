@@ -291,7 +291,7 @@ Changelog
 * rgw: make dns hostnames matching case insensitive (`issue#40995 <http://tracker.ceph.com/issues/40995>`_, `pr#30375 <https://github.com/ceph/ceph/pull/30375>`_, Casey Bodley, Abhishek Lekshmanan)
 * rgw: mitigate bucket list with max-entries excessively high (`pr#30666 <https://github.com/ceph/ceph/pull/30666>`_, J. Eric Ivancich)
 * rgw: multisite: 'radosgw-admin bucket sync status' should call syncs_from(source.name) instead of id (`issue#40022 <http://tracker.ceph.com/issues/40022>`_, `issue#40143 <http://tracker.ceph.com/issues/40143>`_, `pr#29271 <https://github.com/ceph/ceph/pull/29271>`_, Casey Bodley)
-* rgw: orphans find perf improvments (`issue#39180 <http://tracker.ceph.com/issues/39180>`_, `pr#28314 <https://github.com/ceph/ceph/pull/28314>`_, Abhishek Lekshmanan)
+* rgw: orphans find perf improvements (`issue#39180 <http://tracker.ceph.com/issues/39180>`_, `pr#28314 <https://github.com/ceph/ceph/pull/28314>`_, Abhishek Lekshmanan)
 * rgw: parse_copy_location defers url-decode (`issue#27217 <http://tracker.ceph.com/issues/27217>`_, `pr#31651 <https://github.com/ceph/ceph/pull/31651>`_, Casey Bodley)
 * rgw: policy fix for nonexistent objects (`issue#38638 <http://tracker.ceph.com/issues/38638>`_, `pr#29153 <https://github.com/ceph/ceph/pull/29153>`_, Pritha Srivastava)
 * rgw: remove_olh_pending_entries() does not limit the number of xattrs to remove (`issue#39118 <http://tracker.ceph.com/issues/39118>`_, `issue#39177 <http://tracker.ceph.com/issues/39177>`_, `pr#28349 <https://github.com/ceph/ceph/pull/28349>`_, Casey Bodley)

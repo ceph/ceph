@@ -311,7 +311,7 @@ Notable Changes
 * librbd: do not close a closed parent image on failure (#10030 Jason Dillaman)
 * librbd: fix diff tests (#10002 Josh Durgin)
 * librbd: protect list_children from invalid pools (#10123 Jason Dillaman)
-* make check improvemens (Loic Dachary)
+* make check improvements (Loic Dachary)
 * mds: fix ctime updates (#9514 Greg Farnum)
 * mds: fix journal import tool (#10025 John Spray)
 * mds: fix rare NULL deref in cap flush handler (Greg Farnum)
