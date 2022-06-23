@@ -901,7 +901,9 @@ void rgw_build_iam_environment(rgw::sal::Store* store,
     s->env.emplace("aws:UserAgent", i->second);
   }
 
-  i = m.find("QUERY_STRING"); {
+  i = m.find("QUERY_STRING");
+  // Handle non presence of "QUERY_STRING"
+    if (i != m.end()) {
     std::size_t pos = (i->second).find("versionId");
     if( pos != string::npos) {
       std::size_t pos2 = (i->second).find("&", pos);
