@@ -173,7 +173,7 @@ class FsNewHandler : public FileSystemCommandHandler
     cmd_getval(cmdmap, "fs_name", fs_name);
     if (fs_name.empty()) {
         // Ensure fs name is not empty so that we can implement
-        // commmands that refer to FS by name in future.
+        // commands that refer to FS by name in future.
         ss << "Filesystem name may not be empty";
         return -EINVAL;
     }
