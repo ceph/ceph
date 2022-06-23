@@ -269,7 +269,7 @@ ReplicatedRecoveryBackend::recover_delete(
 	  if (shard == pg.get_pg_whoami())
 	    continue;
 	  if (pg.get_shard_missing(shard)->is_missing(soid)) {
-	    logger().debug("recover_delete: soid {} needs to deleted from replca {}",
+	    logger().debug("recover_delete: soid {} needs to deleted from replica {}",
 			   soid, shard);
 	    object_missing = true;
 	    break;

@@ -30,7 +30,7 @@ public:
     REQUEST = 0,   // primary->replica: please reserve a slot
     GRANT = 1,     // replica->primary: ok, i reserved it
     REJECT_TOOFULL = 2,    // replica->primary: too full, sorry, try again later (*)
-    RELEASE = 3,   // primary->replcia: release the slot i reserved before
+    RELEASE = 3,   // primary->replica: release the slot i reserved before
     REVOKE_TOOFULL = 4,   // replica->primary: too full, stop backfilling
     REVOKE = 5,    // replica->primary: i'm taking back the slot i gave you
     // (*) NOTE: prior to luminous, REJECT was overloaded to also mean release

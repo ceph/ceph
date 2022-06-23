@@ -8624,7 +8624,7 @@ public:
  * destdn->inode) remain connected during the rename.
  *
  * to do this, we freeze srci, then leader (destdn auth) verifies that
- * all other nodes have also replciated destdn and straydn.  note that
+ * all other nodes have also replicated destdn and straydn.  note that
  * destdn replicas need not also replicate srci.  this only works when 
  * destdn is leader.
  *

@@ -152,7 +152,7 @@ public:
 	s = LOCK_MIX_LOCK;
     }
 
-    // If there is a recovering mds who replcated an object when it failed
+    // If there is a recovering mds who replicated an object when it failed
     // and scatterlock in the object was in MIX state, It's possible that
     // the recovering mds needs to take wrlock on the scatterlock when it
     // replays unsafe requests. So this mds should delay taking rdlock on
