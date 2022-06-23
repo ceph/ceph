@@ -874,7 +874,7 @@ def test_disk_quota_exceeeded_error():
     fd = cephfs.open(b'/dir-1/file-1', 'w', 0o755)
     cephfs.ftruncate(fd, 4092)
     cephfs.lseek(fd, 4090, os.SEEK_SET)
-    assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdeghiklmnopqrstuvwxyz1234567890qwertyuioddd", -1)
+    assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdefghijklmnopqrstuvwxyz1234567890qwertyuioddd", -1)
     cephfs.close(fd)
     cephfs.unlink(b"/dir-1/file-1")
 
