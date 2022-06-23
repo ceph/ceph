@@ -318,7 +318,7 @@ void StrayManager::enqueue(CDentry *dn, bool trunc)
   }
 
   /* We consider a stray to be purging as soon as it is enqueued, to avoid
-   * enqueing it twice */
+   * enqueuing it twice */
   dn->state_set(CDentry::STATE_PURGING);
   in->state_set(CInode::STATE_PURGING);
 
