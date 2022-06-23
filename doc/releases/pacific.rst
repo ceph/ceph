@@ -1160,7 +1160,7 @@ Changelog
 * os/bluestore: fix invalid omap name conversion when upgrading to per-pg (`pr#43793 <https://github.com/ceph/ceph/pull/43793>`_, Igor Fedotov)
 * os/bluestore: list obj which equals to pend (`pr#43512 <https://github.com/ceph/ceph/pull/43512>`_, Mykola Golub, Kefu Chai)
 * os/bluestore: multiple repair fixes (`pr#43731 <https://github.com/ceph/ceph/pull/43731>`_, Igor Fedotov)
-* osd/OSD: mkfs need wait for transcation completely finish (`pr#43417 <https://github.com/ceph/ceph/pull/43417>`_, Chen Fan)
+* osd/OSD: mkfs need wait for transaction completely finish (`pr#43417 <https://github.com/ceph/ceph/pull/43417>`_, Chen Fan)
 * osd: fix partial recovery become whole object recovery after restart osd (`pr#43513 <https://github.com/ceph/ceph/pull/43513>`_, Jianwei Zhang)
 * osd: fix to allow inc manifest leaked (`pr#43306 <https://github.com/ceph/ceph/pull/43306>`_, Myoungwon Oh)
 * osd: fix to recover adjacent clone when set_chunk is called (`pr#43099 <https://github.com/ceph/ceph/pull/43099>`_, Myoungwon Oh)

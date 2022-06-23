@@ -3031,7 +3031,7 @@ Notable Changes since Infernalis
 * rgw: add support for metadata upload during PUT on Swift container. (`pr#8002 <http://github.com/ceph/ceph/pull/8002>`_, Radoslaw Zarzynski)
 * rgw: add support for Static Large Objects of Swift API (`issue#12886 <http://tracker.ceph.com/issues/12886>`_, `issue#13452 <http://tracker.ceph.com/issues/13452>`_, `pr#6643 <http://github.com/ceph/ceph/pull/6643>`_, Yehuda Sadeh, Radoslaw Zarzynski)
 * rgw: add support for system requests over Swift API (`pr#7666 <http://github.com/ceph/ceph/pull/7666>`_, Radoslaw Zarzynski)
-* rgw: add Trasnaction-Id to response (Abhishek Dixit)
+* rgw: add Transaction-Id to response (Abhishek Dixit)
 * rgw: add X-Timestamp for Swift containers (#10938 Radoslaw Zarzynski)
 * rgw: add zone delete to rgw-admin help (`pr#8184 <http://github.com/ceph/ceph/pull/8184>`_, Abhishek Lekshmanan)
 * rgw: adjust error code when bucket does not exist in copy operation (`issue#14975 <http://tracker.ceph.com/issues/14975>`_, `pr#7916 <http://github.com/ceph/ceph/pull/7916>`_, Yehuda Sadeh)

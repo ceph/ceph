@@ -61,7 +61,7 @@ class TestSnapshots(CephFSTestCase):
 
     def test_kill_mdstable(self):
         """
-        check snaptable transcation
+        check snaptable transaction
         """
         if not isinstance(self.mount_a, FuseMount):
             self.skipTest("Require FUSE client to forcibly kill mount")
