@@ -4733,7 +4733,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
   if (num_caps > static_cast<uint64_t>(max_caps_per_client * max_caps_throttle_ratio) && session_cap_acquisition >= cap_acquisition_throttle) {
       dout(20) << "readdir throttled. max_caps_per_client: " << max_caps_per_client << " num_caps: " << num_caps
-	       << " session_cap_acquistion: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
+	       << " session_cap_acquisition: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
       if (logger)
           logger->inc(l_mdss_cap_acquisition_throttle);
 
