@@ -214,7 +214,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
       CInode *in = *p;
       ++p;
       if (in->last != CEPH_NOSNAP && in->is_auth() && !in->client_snap_caps.empty()) {
-	// journal snap inodes that need flush. This simplify the mds failover hanlding
+	// journal snap inodes that need flush. This simplify the mds failover handling
 	dout(20) << "try_to_expire requeueing snap needflush inode " << *in << dendl;
 	if (!le) {
 	  le = new EOpen(mds->mdlog);
