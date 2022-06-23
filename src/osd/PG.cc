@@ -2820,7 +2820,7 @@ int PG::pg_stat_adjust(osd_stat_t *ns)
   // or near to backfillfull.
   if (reserved_num_bytes > 0) {
     // TODO: Handle compression by adjusting by the PGs average
-    // compression precentage.
+    // compression percentage.
     dout(20) << __func__ << " reserved_num_bytes " << (reserved_num_bytes >> 10) << "KiB"
              << " Before kb_used " << new_stat.statfs.kb_used() << "KiB" << dendl;
     if (new_stat.statfs.available > reserved_num_bytes)
