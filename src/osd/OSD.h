@@ -831,7 +831,7 @@ public:
   void request_osdmap_update(epoch_t e);
 
   // -- heartbeats --
-  ceph::mutex hb_stamp_lock = ceph::make_mutex("OSDServce::hb_stamp_lock");
+  ceph::mutex hb_stamp_lock = ceph::make_mutex("OSDService::hb_stamp_lock");
 
   /// osd -> heartbeat stamps
   std::vector<HeartbeatStampsRef> hb_stamps;
