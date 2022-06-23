@@ -663,7 +663,7 @@ bool AsyncMessenger::should_use_msgr2()
 {
   // if we are bound to v1 only, and we are connecting to a v2 peer,
   // we cannot use the peer's v2 address. otherwise the connection
-  // is assymetrical, because they would have to use v1 to connect
+  // is asymmetrical, because they would have to use v1 to connect
   // to us, and we would use v2, and connection race detection etc
   // would totally break down (among other things).  or, the other
   // end will be confused that we advertise ourselve with a v1
