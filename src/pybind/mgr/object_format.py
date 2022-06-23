@@ -277,7 +277,7 @@ def _is_return_value_provider(obj: ReturnValueProvider) -> bool:
 
 
 class ObjectFormatAdapter:
-    """A format adapater for a single object.
+    """A format adapter for a single object.
     Given an input object, this type will adapt the object, or a simplified
     representation of the object, to either JSON or YAML when the format_json or
     format_yaml methods are used.
