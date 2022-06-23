@@ -513,7 +513,7 @@ public:
 		      uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) = 0;
 
   /**
-   * readv -- read specfic intervals from an object;
+   * readv -- read specific intervals from an object;
    * caller must call fiemap to fill in the extent-map first.
    *
    * Note: if reading from an offset past the end of the object, we
