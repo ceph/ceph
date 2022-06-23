@@ -4142,7 +4142,7 @@ struct AnonConnection : public Connection {
     // silently ignore
   }
   void mark_disposable() override {
-    // silengtly ignore
+    // silently ignore
   }
   bool is_connected() override { return false; }
   entity_addr_t get_peer_socket_addr() const override {
