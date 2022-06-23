@@ -53,7 +53,7 @@ public:
   const static int EXPORT_CANCELLED	= 0;  // cancelled
   const static int EXPORT_CANCELLING	= 1;  // waiting for cancel notifyacks
   const static int EXPORT_LOCKING	= 2;  // acquiring locks
-  const static int EXPORT_DISCOVERING	= 3;  // dest is disovering export dir
+  const static int EXPORT_DISCOVERING	= 3;  // dest is discovering export dir
   const static int EXPORT_FREEZING	= 4;  // we're freezing the dir tree
   const static int EXPORT_PREPPING	= 5;  // sending dest spanning tree to export bounds
   const static int EXPORT_WARNING	= 6;  // warning bystanders of dir_auth_pending
