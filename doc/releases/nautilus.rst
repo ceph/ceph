@@ -1706,7 +1706,7 @@ Changelog
 * rgw: fix default storage class for get_compression_type (`pr#31026 <https://github.com/ceph/ceph/pull/31026>`_, Casey Bodley)
 * rgw: fix drain handles error when deleting bucket with bypass-gc option (`pr#29956 <https://github.com/ceph/ceph/pull/29956>`_, dongdong tao)
 * rgw: fix list bucket with delimiter wrongly skip some special keys (`issue#40905 <http://tracker.ceph.com/issues/40905>`_, `pr#30068 <https://github.com/ceph/ceph/pull/30068>`_, Tianshan Qu)
-* rgw: fix memory growth while deleteing objects with (`pr#30472 <https://github.com/ceph/ceph/pull/30472>`_, Mark Kogan)
+* rgw: fix memory growth while deleting objects with (`pr#30472 <https://github.com/ceph/ceph/pull/30472>`_, Mark Kogan)
 * rgw: fix the bug of rgw not doing necessary checking to website configuration (`issue#40678 <http://tracker.ceph.com/issues/40678>`_, `pr#30325 <https://github.com/ceph/ceph/pull/30325>`_, Enming Zhang)
 * rgw: fixed "unrecognized arg" error when using "radosgw-admin zone rm" (`pr#30247 <https://github.com/ceph/ceph/pull/30247>`_, Hongang Chen)
 * rgw: housekeeping reset stats (`pr#29803 <https://github.com/ceph/ceph/pull/29803>`_, J. Eric Ivancich)
