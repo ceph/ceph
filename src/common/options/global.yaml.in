@@ -3498,7 +3498,7 @@ options:
     memory when it is opened and remove them from memory when an SST file is closed.  Thus,
     memory consumption by indices and bloom filters is directly tied to the number
     of concurrent SST files allowed to be kept open.  This option instead stores cached
-    indicies and filters in the block cache where they directly compete with other
+    indices and filters in the block cache where they directly compete with other
     cached data.  By default we set this option to true to better account for and
     bound rocksdb memory usage and keep filters in memory even when an SST file is
     closed.
