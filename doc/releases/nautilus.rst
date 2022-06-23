@@ -4674,7 +4674,7 @@ Detailed Changelog
 * rbd: improved trash snapshot namespace handling (`issue#23398 <http://tracker.ceph.com/issues/23398>`_, `pr#23191 <https://github.com/ceph/ceph/pull/23191>`_, Jason Dillaman)
 * rbd: interlock object-map/fast-diff features together (`pr#21969 <https://github.com/ceph/ceph/pull/21969>`_, Mao Zhongyi)
 * rbd: introduce abort_on_full option for rbd map (`pr#25662 <https://github.com/ceph/ceph/pull/25662>`_, Dongsheng Yang)
-* rbd: journal: allow remove set when jounal pool is full (`pr#25166 <https://github.com/ceph/ceph/pull/25166>`_, kungf)
+* rbd: journal: allow remove set when journal pool is full (`pr#25166 <https://github.com/ceph/ceph/pull/25166>`_, kungf)
 * rbd: journal: fix potential race when closing object recorder (`pr#26425 <https://github.com/ceph/ceph/pull/26425>`_, Mykola Golub)
 * rbd:  journal: set max journal order to 26 (`issue#37541 <http://tracker.ceph.com/issues/37541>`_, `pr#25743 <https://github.com/ceph/ceph/pull/25743>`_, Mykola Golub)
 * rbd: krbd: support for images within namespaces (`pr#23841 <https://github.com/ceph/ceph/pull/23841>`_, Ilya Dryomov)
