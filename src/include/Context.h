@@ -522,7 +522,7 @@ public:
   virtual ContextType *build() = 0;
 };
 
-inline auto lambdafy(Context *c) {
+inline auto lambdify(Context *c) {
   return [fin = std::unique_ptr<Context>(c)]
     (boost::system::error_code ec) mutable {
 	   fin.release()->complete(ceph::from_error_code(ec));

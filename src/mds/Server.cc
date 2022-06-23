@@ -5895,7 +5895,7 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
       // well, our map is older. consult mds.
       auto fin = new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr));
 
-      mds->objecter->wait_for_map(req_epoch, lambdafy(fin));
+      mds->objecter->wait_for_map(req_epoch, lambdify(fin));
       return r;
     } else if (req_epoch == 0 && !mdr->waited_for_osdmap) {
 

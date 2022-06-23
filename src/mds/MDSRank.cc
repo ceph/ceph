@@ -1774,7 +1774,7 @@ void MDSRank::replay_start()
     Context *fin = new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_INITIAL));
     objecter->wait_for_map(
       mdsmap->get_last_failure_osd_epoch(),
-      lambdafy(fin));
+      lambdify(fin));
   }
 }
 
@@ -1845,7 +1845,7 @@ void MDSRank::standby_replay_restart()
       dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch()
 	      << " (which blocklists prior instance)" << dendl;
       objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(),
-			     lambdafy(fin));
+			     lambdify(fin));
     }
   }
 }
@@ -3688,7 +3688,7 @@ bool MDSRank::evict_client(int64_t session_id,
 
     Context *on_blocklist_done = new LambdaContext([this, fn](int r) {
       objecter->wait_for_latest_osdmap(
-      lambdafy((new C_OnFinisher(
+      lambdify((new C_OnFinisher(
          new LambdaContext([this, fn](int r) {
               std::lock_guard l(mds_lock);
               auto epoch = objecter->with_osdmap([](const OSDMap &o){
