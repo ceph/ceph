@@ -949,7 +949,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // do this *before* sending the message to avoid a possible
       // race.
       if (session->get_connection()) {
-        // Conditional because terminate_sessions will indiscrimately
+        // Conditional because terminate_sessions will indiscriminately
         // put sessions in CLOSING whether they ever had a conn or not.
         session->get_connection()->mark_disposable();
       }
