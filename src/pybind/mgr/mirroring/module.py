@@ -28,7 +28,7 @@ class Module(MgrModule):
         return self.fs_snapshot_mirror.disable_mirror(fs_name)
 
     @CLIWriteCommand('fs snapshot mirror peer_add')
-    def snapshot_mirorr_peer_add(self,
+    def snapshot_mirror_peer_add(self,
                                  fs_name: str,
                                  remote_cluster_spec: str,
                                  remote_fs_name: Optional[str] = None,
