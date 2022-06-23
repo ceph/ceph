@@ -3925,7 +3925,7 @@ Other Notable Changes
 * doc: document bluestore compression settings (`pr#16747 <https://github.com/ceph/ceph/pull/16747>`_, Kefu Chai)
 * doc: document mClock related options (`pr#16552 <https://github.com/ceph/ceph/pull/16552>`_, Kefu Chai)
 * doc: document `osd-agent-{max,low}-ops` options (`pr#13648 <https://github.com/ceph/ceph/pull/13648>`_, Kefu Chai)
-* doc: document perf historgrams (`pr#15150 <https://github.com/ceph/ceph/pull/15150>`_, Piotr Dałek)
+* doc: document perf histograms (`pr#15150 <https://github.com/ceph/ceph/pull/15150>`_, Piotr Dałek)
 * doc: document "rados cleanup" in rados manpage (`issue#20894 <http://tracker.ceph.com/issues/20894>`_, `pr#16777 <https://github.com/ceph/ceph/pull/16777>`_, Nathan Cutler)
 * doc: document repair/scrub features (`issue#15786 <http://tracker.ceph.com/issues/15786>`_, `pr#9032 <https://github.com/ceph/ceph/pull/9032>`_, Kefu Chai, David Zafman)
 * doc: Document RGW quota cache options (`issue#18747 <http://tracker.ceph.com/issues/18747>`_, `pr#13395 <https://github.com/ceph/ceph/pull/13395>`_, Daniel Gryniewicz)
