@@ -2082,7 +2082,7 @@ void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
                                                    PoolAsyncCompletionImpl *c)
 {
   // pre-Luminous clusters will return -EINVAL and application won't be
-  // preserved until Luminous is configured as minimim version.
+  // preserved until Luminous is configured as minimum version.
   if (!client->get_required_monitor_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
     boost::asio::defer(client->finish_strand,
