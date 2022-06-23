@@ -260,7 +260,7 @@ FixedCPUServerSocket::listen(entity_addr_t addr)
       return crimson::ct_error::address_not_available::make();
     }
     logger().error("FixedCPUServerSocket::listen({}): "
-                   "got unexpeted error {}", addr, e);
+                   "got unexpected error {}", addr, e);
     ceph_abort();
   });
 }

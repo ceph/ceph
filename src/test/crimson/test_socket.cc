@@ -59,13 +59,13 @@ future<> test_refused() {
     ceph_abort();
   }).handle_exception_type([] (const std::system_error& e) {
     if (e.code() != std::errc::connection_refused) {
-      logger.error("test_refused() got unexpeted error {}", e);
+      logger.error("test_refused() got unexpected error {}", e);
       ceph_abort();
     } else {
       logger.info("test_refused() ok\n");
     }
   }).handle_exception([] (auto eptr) {
-    logger.error("test_refused() got unexpeted exception {}", eptr);
+    logger.error("test_refused() got unexpected exception {}", eptr);
     ceph_abort();
   });
 }
@@ -104,7 +104,7 @@ future<> test_bind_same() {
     })).then([pss1] {
       return pss1->destroy();
     }).handle_exception([] (auto eptr) {
-      logger.error("test_bind_same() got unexpeted exception {}", eptr);
+      logger.error("test_bind_same() got unexpected exception {}", eptr);
       ceph_abort();
     });
   });
@@ -143,7 +143,7 @@ future<> test_accept() {
     }).then([pss] {
       return pss->destroy();
     }).handle_exception([] (auto eptr) {
-      logger.error("test_accept() got unexpeted exception {}", eptr);
+      logger.error("test_accept() got unexpected exception {}", eptr);
       ceph_abort();
     });
   });
@@ -213,7 +213,7 @@ class SocketFactory {
             return socket->close();
           }).handle_exception([] (auto eptr) {
             logger.error("dispatch_sockets():"
-                " cb_client() got unexpeted exception {}", eptr);
+                " cb_client() got unexpected exception {}", eptr);
             ceph_abort();
           });
         }),
@@ -224,7 +224,7 @@ class SocketFactory {
             return socket->close();
           }).handle_exception([] (auto eptr) {
             logger.error("dispatch_sockets():"
-                " cb_server() got unexpeted exception {}", eptr);
+                " cb_server() got unexpected exception {}", eptr);
             ceph_abort();
           });
         })
@@ -410,7 +410,7 @@ future<> test_read_write() {
   ).then([] {
     logger.info("test_read_write() ok\n");
   }).handle_exception([] (auto eptr) {
-    logger.error("test_read_write() got unexpeted exception {}", eptr);
+    logger.error("test_read_write() got unexpected exception {}", eptr);
     ceph_abort();
   });
 }
@@ -429,7 +429,7 @@ future<> test_unexpected_down() {
   ).then([] {
     logger.info("test_unexpected_down() ok\n");
   }).handle_exception([] (auto eptr) {
-    logger.error("test_unexpected_down() got unexpeted exception {}", eptr);
+    logger.error("test_unexpected_down() got unexpected exception {}", eptr);
     ceph_abort();
   });
 }
@@ -446,7 +446,7 @@ future<> test_shutdown_propagated() {
   ).then([] {
     logger.info("test_shutdown_propagated() ok\n");
   }).handle_exception([] (auto eptr) {
-    logger.error("test_shutdown_propagated() got unexpeted exception {}", eptr);
+    logger.error("test_shutdown_propagated() got unexpected exception {}", eptr);
     ceph_abort();
   });
 }
@@ -459,7 +459,7 @@ future<> test_preemptive_down() {
   ).then([] {
     logger.info("test_preemptive_down() ok\n");
   }).handle_exception([] (auto eptr) {
-    logger.error("test_preemptive_down() got unexpeted exception {}", eptr);
+    logger.error("test_preemptive_down() got unexpected exception {}", eptr);
     ceph_abort();
   });
 }
