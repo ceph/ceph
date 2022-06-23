@@ -25,7 +25,7 @@ private:
 
 public:
   /*
-    group things by realm (auth delgation root), since that's how auth is determined.
+    group things by realm (auth delegation root), since that's how auth is determined.
     that makes it less work to process when exports are in progress.
   */
   struct realm {
