@@ -8,16 +8,16 @@ Quincy Tentacles from Spongebob Squarepants.
 v17.2.1 Quincy
 ==============
 
-This is the second stable release of Ceph Quincy.
+This is the first bugfix release of Ceph Quincy.
 
 Notable Changes
 ---------------
 * The "BlueStore zero block detection" feature (first introduced to Quincy in
   https://github.com/ceph/ceph/pull/43337) has been turned off by default with a
-  new global configuration called `bluestore_zero_block_detection`. This feature,
+  new global option called `bluestore_zero_block_detection`. This feature,
   intended for large-scale synthetic testing, does not interact well with some RBD
   and CephFS features. Any side effects experienced in previous Quincy versions
-  would no longer occur, provided that the configuration remains set to false.
+  would no longer occur, provided that the config option remains set to false.
   Relevant tracker: https://tracker.ceph.com/issues/55521
 
 * telemetry: Added new Rook metrics to the 'basic' channel to report Rook's
