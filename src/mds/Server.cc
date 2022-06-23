@@ -3542,7 +3542,7 @@ public:
        * all active peers.
        *
        * As a workaround users can run `ls -R ${mountpoint}`
-       * to list all the sub-files or sub-direcotries from the
+       * to list all the sub-files or sub-directories from the
        * mountpoint.
        *
        * We need try to open the ino and try it again.
