@@ -895,7 +895,7 @@ options:
   desc: Do not store full-object checksums if the backend (bluestore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
-# PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
+# PrioritizedQueue (prio), Weighted Priority Queue (wpq ; default),
 # mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
 # and "mclock_client" are based on the mClock/dmClock algorithm
 # (Gulati, et al. 2010). "mclock_opclass" prioritizes based on the
