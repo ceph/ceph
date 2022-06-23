@@ -422,7 +422,7 @@ Notable changes
 * ceph.spec: misc packaging fixes
 * common: thread pool sizes can now be adjusted at runtime
 * config: $pid is now available as a metavariable
-* crush: default root of tree type is now 'root' instead of 'pool' (to avoid confusiong wrt rados pools)
+* crush: default root of tree type is now 'root' instead of 'pool' (to avoid confusion wrt rados pools)
 * crush: fixed retry behavior with chooseleaf via tunable
 * crush: tunables documented; feature bit now present and enforced
 * libcephfs: java wrapper
