@@ -10804,7 +10804,7 @@ void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
   ceph_assert(in->is_auth());
 
   ENCODE_START(2, 1, bl);
-  encode(in->ino(), bl);  // bleh, minor assymetry here
+  encode(in->ino(), bl);  // bleh, minor asymmetry here
   encode(in->last, bl);
 
   __u32 nonce = in->add_replica(to);
