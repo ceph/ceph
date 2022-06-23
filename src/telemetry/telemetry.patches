@@ -270,7 +270,7 @@ index 98fc9720af..6b2a1493fb 100644
      crashes = report.get('crashes', [])
      if isinstance(crashes, dict):
          tmp = []
--        for c in crashes.valeus():
+-        for c in crashes.values():
 +        for c in crashes.values():
              tmp.append(c)
          crashes = tmp
