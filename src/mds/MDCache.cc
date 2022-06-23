@@ -13230,7 +13230,7 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
-  // Fetch all dirfrags and mark filelock/nestlock dirty. This will tirgger
+  // Fetch all dirfrags and mark filelock/nestlock dirty. This will trigger
   // the scatter-gather process, which will fix any fragstat/rstat errors.
   {
     frag_vec_t leaves;
