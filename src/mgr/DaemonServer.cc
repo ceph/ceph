@@ -1825,7 +1825,7 @@ bool DaemonServer::_handle_command(
 
     set<pg_t> candidates; // deduped
     if (granularity == "pg") {
-      // covnert pg names to pgs, discard any invalid ones while at it
+      // convert pg names to pgs, discard any invalid ones while at it
       vector<string> pgids;
       cmd_getval(cmdctx->cmdmap, "pgid", pgids);
       for (auto& i : pgids) {
