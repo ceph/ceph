@@ -105,7 +105,7 @@ class ZFS(object):
         self.load_log_path()
         main_args, subcommand_args = self._get_split_args()
         # no flags where passed in, return the help menu instead of waiting for
-        # argparse which will end up complaning that there are no args
+        # argparse which will end up complaining that there are no args
         if len(argv) < 1:
             print(self.print_help(warning=True))
             return
