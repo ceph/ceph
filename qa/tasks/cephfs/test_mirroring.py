@@ -1083,7 +1083,7 @@ class TestMirroring(CephFSTestCase):
         """Test snapshot synchronization in midst of snapshot deletes.
 
         Deleted the previous snapshot when the mirror daemon is figuring out
-        incremental differences between current and previous snaphot. The
+        incremental differences between current and previous snapshot. The
         mirror daemon should identify the purge and switch to using remote
         comparison to sync the snapshot (in the next iteration of course).
         """

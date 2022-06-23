@@ -1360,7 +1360,7 @@ CEPH_RADOS_API void rados_ioctx_snap_set_read(rados_ioctx_t io,
 /**
  * Allocate an ID for a self-managed snapshot
  *
- * Get a unique ID to put in the snaphot context to create a
+ * Get a unique ID to put in the snapshot context to create a
  * snapshot. A clone of an object is not created until a write with
  * the new snapshot context is completed.
  *

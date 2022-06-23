@@ -423,7 +423,7 @@ inline namespace v14_2_0 {
      *
      * Used with pool snapshots
      *
-     * @param snapid [in] snopshot id specified
+     * @param snapid [in] snapshot id specified
      */
     void snap_rollback(uint64_t snapid);
 

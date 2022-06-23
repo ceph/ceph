@@ -1176,7 +1176,7 @@ cdef class LibCephFS(object):
 
     def snap_info(self, path) -> Dict[str, Any]:
         """
-        Fetch sapshot info
+        Fetch snapshot info
 
         :param path: snapshot path
 
