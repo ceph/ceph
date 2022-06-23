@@ -140,7 +140,7 @@ void ScrubGenerator::add_object(ScrubMap& map,
 
   auto p = real_obj.corrupt_funcs->find(osd_num);
   if (p != real_obj.corrupt_funcs->end()) {
-    // yes, we have a corruption recepie for this OSD
+    // yes, we have a corruption recipe for this OSD
     // \todo c++20: use at()
     relevant_fix = p->second;
   }
