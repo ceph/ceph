@@ -1943,7 +1943,7 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
     // it is possible we pass those checks (we overlap with
     // quorum-to-be) but fail to join a quorum before it moves past
     // us.  We need to be kicked back to bootstrap so we can
-    // synchonize, not keep calling elections.
+    // synchronize, not keep calling elections.
     if (paxos->get_version() + 1 < m->paxos_first_version) {
       dout(1) << " peer " << m->get_source_addr() << " has first_committed "
 	      << "ahead of us, re-bootstrapping" << dendl;
