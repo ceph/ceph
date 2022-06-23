@@ -2429,25 +2429,6 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
 		    uint32_t module_type, code_environment_t code_env,
 		    int flags);
 
-/* datacache */
-enum CacheLocation {
-  LOCAL_READ_CACHE,
-  WRITE_BACK_CACHE,
-  REMOTE_CACHE,
-  DATALAKE
-};
-
-enum HomeLocation {
-  CACHE,
-  BACKEND
-};
-
-enum BackendProtocol {
-  S3,
-  LIBRADOS,
-  SWIFT
-};
-
 struct cache_obj {
   std::string owner; //s3 Object owner who create the object
   std::string bucket_name; // s3 bucket name
@@ -2456,20 +2437,10 @@ struct cache_obj {
   uint64_t size_in_bytes; // s3 object size in bytes
   time_t lastAccessTime; // last access time
   std::string etag;
-  BackendProtocol backendProtocol; // protocol used for backend communication
-  HomeLocation home_location; // Home location of S3 Object
   std::vector<std::string> hosts_list; // list of hostnames for multiple backend
   std::string acl;  // ACLs of S3 Object
   time_t aclTimeStamp; // ACLs timestamp
   time_t creationTime; // Creation time of the S3 Object
-  /* //////// Unused for directory ///////
-  bool dirty;
-  bool intermediate;
-  std::string mapping_id;
-  uint64_t offset;
-  bool is_remote_req;
-  bool is_remote_req_put;
-  ///////////////////////////////////// */
 };
 
 struct cache_block {
@@ -2481,10 +2452,5 @@ struct cache_block {
   std::vector<std::string> hosts_list; // list of hostnames <ip:post> of block locations
   int64_t access_count;
   time_t lastAccessTime;
-  /* //////// Unused for directory ///////
-  bool cachedOnRemote;
-  ///////////////////////////////////// */
-  //CacheLocation cache_location;  
- // string host; // hostname of remote cache
 };
 /* datacache */
