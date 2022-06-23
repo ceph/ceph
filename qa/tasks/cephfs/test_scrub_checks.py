@@ -240,7 +240,7 @@ class TestScrubChecks(CephFSTestCase):
         command = "scrub start {dirpath}".format(dirpath=dirpath)
         self.tell_command(mds_rank, command, success_validator)
 
-        filepath = "{repo_path}/suites/fs/verify/validater/valgrind.yaml".format(
+        filepath = "{repo_path}/suites/fs/verify/validator/valgrind.yaml".format(
             repo_path=test_repo_path)
         if run_seq == 0:
             log.info("First run: flushing {filepath}".format(filepath=filepath))

@@ -3658,7 +3658,7 @@ Detailed Changelog
 * qa/suites/rados/multimon/tasks/mon_lock_with_skew: whitelist PG (`pr#17004 <https://github.com/ceph/ceph/pull/17004>`_, Sage Weil)
 * qa/suites/rados/perf: add optimized settings (`pr#17786 <https://github.com/ceph/ceph/pull/17786>`_, Neha Ojha)
 * qa/suites/rados/perf: add workloads (`pr#18573 <https://github.com/ceph/ceph/pull/18573>`_, Neha Ojha)
-* qa/suites/rados/verify/validater/valgrind: whitelist PG (`pr#17005 <https://github.com/ceph/ceph/pull/17005>`_, Sage Weil)
+* qa/suites/rados/verify/validator/valgrind: whitelist PG (`pr#17005 <https://github.com/ceph/ceph/pull/17005>`_, Sage Weil)
 * qa/suites/upgrade/jewel-x/parallel: tolerate laggy mgr (`pr#17227 <https://github.com/ceph/ceph/pull/17227>`_, Sage Weil)
 * qa/suites/upgrade/kraken-x: fixes (`pr#16881 <https://github.com/ceph/ceph/pull/16881>`_, Sage Weil)
 * qa/suites/upgrade/luminous-x fixes (`pr#22101 <https://github.com/ceph/ceph/pull/22101>`_, Sage Weil)
