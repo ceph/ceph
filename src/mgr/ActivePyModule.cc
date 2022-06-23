@@ -267,7 +267,7 @@ bool ActivePyModule::is_authorized(
   }
 
   // No need to pass command prefix here since that would have already been
-  // tested before command invokation. Instead, only test for service/module
+  // tested before command invocation. Instead, only test for service/module
   // arguments as defined by the module itself.
   MonCommand mon_command {"", "", "", m_command_perms};
   return m_session->caps.is_capable(nullptr, m_session->entity_name, "py",
