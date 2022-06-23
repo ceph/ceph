@@ -11116,7 +11116,7 @@ int Client::fsync(int fd, bool syncdataonly)
   int r = _fsync(f, syncdataonly);
   if (r == 0) {
     // The IOs in this fsync were okay, but maybe something happened
-    // in the background that we shoudl be reporting?
+    // in the background that we should be reporting?
     r = f->take_async_err();
     ldout(cct, 5) << "fsync(" << fd << ", " << syncdataonly
                   << ") = 0, async_err = " << r << dendl;

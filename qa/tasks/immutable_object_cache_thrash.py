@@ -38,7 +38,7 @@ def thrashes_immutable_object_cache_daemon(ctx, config):
                 'sudo', 'killall', '-s', '9', 'ceph-immutable-object-cache', run.Raw('||'), 'true',
                  ]
             )
-        # librbd shoud normally run when ceph-immutable-object-cache
+        # librbd should normally run when ceph-immutable-object-cache
         remote.run(
             args=[
                 'sleep', '{dead_time}'.format(dead_time=dead_time),
