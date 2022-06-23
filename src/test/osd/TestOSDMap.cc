@@ -1789,7 +1789,7 @@ TEST_F(OSDMapTest, BUG_42485) {
       crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
       tmp.apply_incremental(pending_inc);
     }
-    // create a repliacted pool referencing the above rule
+    // create a replicated pool referencing the above rule
     int64_t pool_xeus_993;
     {
       OSDMap::Incremental new_pool_inc(tmp.get_epoch() + 1);
