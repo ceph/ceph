@@ -5898,7 +5898,7 @@ void MDCache::open_snaprealms()
 	  if (r->second.snap_follows < child->first - 1) {
 	    rebuild_need_snapflush(child, realm, r->first, r->second.snap_follows);
 	  } else if (r->second.snapflush) {
-	    // When processing a cap flush message that is re-sent, it's possble
+	    // When processing a cap flush message that is re-sent, it's possible
 	    // that the sender has already released all WR caps. So we should
 	    // force MDCache::cow_inode() to setup CInode::client_need_snapflush.
 	    cap->mark_needsnapflush();
