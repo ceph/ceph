@@ -17,7 +17,7 @@ struct Fh {
   uint64_t  gen;
   UserPerm  actor_perms; // perms I opened the file with
 
-  // the members above once ininitalized in the constructor
+  // the members above once initialized in the constructor
   // they won't change, and putting them under the client_lock
   // makes no sense.
 
