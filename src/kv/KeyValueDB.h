@@ -437,7 +437,7 @@ public:
 
   /**
    * Access implementation specific integral property corresponding
-   * to passed property and prefic.
+   * to passed property and prefix.
    * Return value is true if property is valid for prefix, populates out.
    */
   virtual bool get_property(
