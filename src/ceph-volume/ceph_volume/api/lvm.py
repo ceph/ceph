@@ -604,7 +604,7 @@ class VolumeGroup(object):
         some uncertainty involved. If size/extent_size is within 1% of the
         actual free extents we will return the extent count, otherwise we'll
         throw an error.
-        This accomodates for the size calculation in batch. We need to report
+        This accommodates for the size calculation in batch. We need to report
         the OSD layout but have not yet created any LVM structures. We use the
         disk size in batch if no VG is present and that will overshoot the
         actual free_extent count due to LVM overhead.
