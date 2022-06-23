@@ -1181,7 +1181,7 @@ void MDBalancer::find_exports(CDir *dir,
       return;
   }
 
-  // apprently not enough; drill deeper into the hierarchy (if non-replicated)
+  // apparently not enough; drill deeper into the hierarchy (if non-replicated)
   for (const auto& dir : bigger_unrep) {
     dout(15) << "   descending into " << *dir << dendl;
     find_exports(dir, amount, exports, have, already_exporting);
