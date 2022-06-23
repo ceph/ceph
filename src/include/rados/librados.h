@@ -165,7 +165,7 @@ typedef enum {
 } rados_checksum_type_t;
 
 /*
- * snap id contants
+ * snap id constants
  */
 #define LIBRADOS_SNAP_HEAD  UINT64_C(-2)
 #define LIBRADOS_SNAP_DIR   UINT64_C(-1)
