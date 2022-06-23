@@ -11337,7 +11337,7 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
   while (in != root.get()) {
     ceph_assert(in->dentries.size() < 2); // dirs can't be hard-linked
 
-    // A cwd or ancester is unlinked
+    // A cwd or ancestor is unlinked
     if (in->dentries.empty()) {
       return;
     }
