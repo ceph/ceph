@@ -44,7 +44,7 @@ index 0000000000..111355857e
 +    sigcur = conn.cursor()
 +    crashcur = conn.cursor()
 +
-+    # fetch all the recent stack sigs by frequency of occurence
++    # fetch all the recent stack sigs by frequency of occurrence
 +    cur.execute("""
 +        select stack_sig, count(stack_sig) from crash
 +        where age(timestamp) < interval %s group by stack_sig

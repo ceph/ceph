@@ -1171,7 +1171,7 @@ Other Notable Changes
 * mds: trim log during shutdown to clean metadata (`issue#23923 <http://tracker.ceph.com/issues/23923>`_, `pr#21899 <https://github.com/ceph/ceph/pull/21899>`_, Patrick Donnelly)
 * mds: underwater dentry check in CDir::_omap_fetched is racy (`issue#23032 <http://tracker.ceph.com/issues/23032>`_, `pr#21187 <https://github.com/ceph/ceph/pull/21187>`_, Yan, Zheng)
 * mg_read() call has wrong arguments (`issue#23596 <http://tracker.ceph.com/issues/23596>`_, `pr#21382 <https://github.com/ceph/ceph/pull/21382>`_, Nathan Cutler)
-* mgr/influx: Only split string on first occurence of dot (.) (`issue#23996 <http://tracker.ceph.com/issues/23996>`_, `pr#21965 <https://github.com/ceph/ceph/pull/21965>`_, Wido den Hollander)
+* mgr/influx: Only split string on first occurrence of dot (.) (`issue#23996 <http://tracker.ceph.com/issues/23996>`_, `pr#21965 <https://github.com/ceph/ceph/pull/21965>`_, Wido den Hollander)
 * mgr: Module 'balancer' has failed: could not find bucket -14 (`issue#24167 <http://tracker.ceph.com/issues/24167>`_, `pr#22308 <https://github.com/ceph/ceph/pull/22308>`_, Sage Weil)
 * mon: add  'ceph osd pool get erasure allow_ec_overwrites' command (`issue#23487 <http://tracker.ceph.com/issues/23487>`_, `pr#21378 <https://github.com/ceph/ceph/pull/21378>`_, Mykola Golub)
 * mon: enable level_compaction_dynamic_level_bytes for rocksdb (`issue#24361 <http://tracker.ceph.com/issues/24361>`_, `pr#22360 <https://github.com/ceph/ceph/pull/22360>`_, Kefu Chai)

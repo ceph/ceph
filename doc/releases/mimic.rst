@@ -3259,7 +3259,7 @@ Detailed Changelog
 * mgr: mgr/dashboard_v2: Removed unused `tools.detail_route()` (`pr#20765 <https://github.com/ceph/ceph/pull/20765>`_, Sebastian Wagner)
 * mgr: mgr/influx: Added Additional Stats (`pr#21424 <https://github.com/ceph/ceph/pull/21424>`_, mhdo2)
 * mgr: mgr/influx: Add InfluxDB SSL Option (`pr#19374 <https://github.com/ceph/ceph/pull/19374>`_, Tobias Gall)
-* mgr: mgr/influx: Only split string on first occurence of dot (.) (`issue#23996 <http://tracker.ceph.com/issues/23996>`_, `pr#21795 <https://github.com/ceph/ceph/pull/21795>`_, Wido den Hollander)
+* mgr: mgr/influx: Only split string on first occurrence of dot (.) (`issue#23996 <http://tracker.ceph.com/issues/23996>`_, `pr#21795 <https://github.com/ceph/ceph/pull/21795>`_, Wido den Hollander)
 * mgr: mgr/influx: PEP-8 and other fixes to Influx module (`pr#19229 <https://github.com/ceph/ceph/pull/19229>`_, Wido den Hollander)
 * mgr: mgr/influx: Various fixes and improvements (`pr#20187 <https://github.com/ceph/ceph/pull/20187>`_, Wido den Hollander)
 * mgr: mgr/influx: Various time fixes (`pr#20494 <https://github.com/ceph/ceph/pull/20494>`_, Wido den Hollander)
