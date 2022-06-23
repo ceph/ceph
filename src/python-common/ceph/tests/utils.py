@@ -26,7 +26,7 @@ def _mk_device(rotational=True,
             "model": model,
             "ro": "0",
             "nr_requests": "128",
-            "size": 423347879936  # ignore coversion from human_readable_size
+            "size": 423347879936  # ignore conversion from human_readable_size
         },
         available=not locked,
         rejected_reasons=['locked'] if locked else [],
