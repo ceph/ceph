@@ -60,7 +60,7 @@ def task(ctx, config):
         'osd', 'pool', 'application', 'enable',
         'foo', 'rados', run.Raw('||'), 'true')
 
-    # Remove extra pool to simlify log output
+    # Remove extra pool to simplify log output
     manager.raw_cluster_cmd('osd', 'pool', 'delete', 'rbd', 'rbd', '--yes-i-really-really-mean-it')
 
     for i in osds:
