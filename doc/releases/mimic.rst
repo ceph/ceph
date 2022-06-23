@@ -4139,7 +4139,7 @@ Detailed Changelog
 * rgw: return 'Access-Control-Allow-Origin' header when the set bucket versioning through XMLHttpRequest (`pr#17631 <https://github.com/ceph/ceph/pull/17631>`_, yuliyang)
 * rgw: return bucket's location no matter which zonegroup it located in (`issue#21125 <http://tracker.ceph.com/issues/21125>`_, `pr#17250 <https://github.com/ceph/ceph/pull/17250>`_, Shasha Lu)
 * rgw: return EINVAL if max_keys can not convert correctly (`issue#23586 <http://tracker.ceph.com/issues/23586>`_, `pr#21285 <https://github.com/ceph/ceph/pull/21285>`_, yuliyang)
-* rgw: Return Error if Bucket Policy Contians Undefined Action (`pr#17433 <https://github.com/ceph/ceph/pull/17433>`_, zhangwen)
+* rgw: Return Error if Bucket Policy Contains Undefined Action (`pr#17433 <https://github.com/ceph/ceph/pull/17433>`_, zhangwen)
 * rgw: Returning when dst_ioctx.operate() returns error (`pr#17873 <https://github.com/ceph/ceph/pull/17873>`_, Amit Kumar)
 * rgw: return valid Location element, CompleteMultipartUpload (`pr#19902 <https://github.com/ceph/ceph/pull/19902>`_, Matt Benjamin)
 * rgw: revert PR #8765 (`pr#16807 <https://github.com/ceph/ceph/pull/16807>`_, fang.yuxiang)
