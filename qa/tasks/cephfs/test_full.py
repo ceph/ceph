@@ -209,7 +209,7 @@ class FullnessTestCase(CephFSTestCase):
             log.warning("This test may run rather slowly unless you decrease"
                      "osd_mon_report_interval (5 is a good setting)!")
 
-        # set the object_size to 1MB to make the objects destributed more evenly
+        # set the object_size to 1MB to make the objects distributed more evenly
         # among the OSDs to fix Tracker#45434
         file_layout = "stripe_unit=1048576 stripe_count=1 object_size=1048576"
         self.mount_a.run_python(template.format(
