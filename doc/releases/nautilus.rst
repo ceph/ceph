@@ -1537,7 +1537,7 @@ Changelog
 * ceph-volume: fix warnings raised by pytest (`pr#30676 <https://github.com/ceph/ceph/pull/30676>`_, Rishabh Dave)
 * ceph-volume: lvm list is O(n^2) (`pr#30093 <https://github.com/ceph/ceph/pull/30093>`_, Rishabh Dave)
 * ceph-volume: lvm.zap fix cleanup for db partitions (`issue#40664 <http://tracker.ceph.com/issues/40664>`_, `pr#30304 <https://github.com/ceph/ceph/pull/30304>`_, Dominik Csapak)
-* ceph-volume: mokeypatch calls to lvm related binaries (`pr#31405 <https://github.com/ceph/ceph/pull/31405>`_, Jan Fajerski)
+* ceph-volume: monkeypatch calls to lvm related binaries (`pr#31405 <https://github.com/ceph/ceph/pull/31405>`_, Jan Fajerski)
 * ceph-volume: pre-install python-apt and its variants before test runs (`pr#30294 <https://github.com/ceph/ceph/pull/30294>`_, Alfredo Deza)
 * ceph-volume: rearrange api/lvm.py (`pr#31408 <https://github.com/ceph/ceph/pull/31408>`_, Rishabh Dave)
 * ceph-volume: systemd fix typo in log message (`pr#30520 <https://github.com/ceph/ceph/pull/30520>`_, Manu Zurmühl)

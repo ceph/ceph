@@ -79,7 +79,7 @@ Changelog
 * ceph-volume: lvm: get_device_vgs() filter by provided prefix (`pr#33617 <https://github.com/ceph/ceph/pull/33617>`_, Jan Fajerski, Yehuda Sadeh)
 * ceph-volume: make get_devices fs location independent (`pr#33124 <https://github.com/ceph/ceph/pull/33124>`_, Jan Fajerski)
 * ceph-volume: minor clean-up of "simple scan" subcommand help (`pr#32557 <https://github.com/ceph/ceph/pull/32557>`_, Michael Fritch)
-* ceph-volume: mokeypatch calls to lvm related binaries (`pr#31406 <https://github.com/ceph/ceph/pull/31406>`_, Jan Fajerski)
+* ceph-volume: monkeypatch calls to lvm related binaries (`pr#31406 <https://github.com/ceph/ceph/pull/31406>`_, Jan Fajerski)
 * ceph-volume: pass journal_size as Size not string (`pr#33611 <https://github.com/ceph/ceph/pull/33611>`_, Jan Fajerski)
 * ceph-volume: rearrange api/lvm.py (`pr#31407 <https://github.com/ceph/ceph/pull/31407>`_, Rishabh Dave)
 * ceph-volume: refactor listing.py + fixes (`pr#33603 <https://github.com/ceph/ceph/pull/33603>`_, Jan Fajerski, Rishabh Dave, Theofilos Mouratidis, Guillaume Abrioux)

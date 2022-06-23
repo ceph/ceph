@@ -2767,7 +2767,7 @@ Changelog
 * ceph-volume: make get_devices fs location independent (`pr#31574 <https://github.com/ceph/ceph/pull/31574>`_, Jan Fajerski)
 * ceph-volume: minor clean-up of `simple scan` subcommand help (`pr#31821 <https://github.com/ceph/ceph/pull/31821>`_, Michael Fritch)
 * ceph-volume: minor optimizations related to class Volumess use (`pr#29665 <https://github.com/ceph/ceph/pull/29665>`_, Rishabh Dave)
-* ceph-volume: mokeypatch calls to lvm related binaries (`pr#31197 <https://github.com/ceph/ceph/pull/31197>`_, Jan Fajerski)
+* ceph-volume: monkeypatch calls to lvm related binaries (`pr#31197 <https://github.com/ceph/ceph/pull/31197>`_, Jan Fajerski)
 * ceph-volume: never log to stdout, use stderr instead (`pr#29547 <https://github.com/ceph/ceph/pull/29547>`_, Jan Fajerski)
 * ceph-volume: pass --ssh-config to pytest to resolve hosts when connecting (`issue#40063 <http://tracker.ceph.com/issues/40063>`_, `pr#28294 <https://github.com/ceph/ceph/pull/28294>`_, Alfredo Deza)
 * ceph-volume: pass journal_size as Size not string (`pr#33320 <https://github.com/ceph/ceph/pull/33320>`_, Jan Fajerski)
