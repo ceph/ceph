@@ -3156,7 +3156,7 @@ Detailed Changelog
 * bluestore,performance: os/bluestore: allocator pruning (`pr#21854 <https://github.com/ceph/ceph/pull/21854>`_, Igor Fedotov)
 * bluestore,performance: os/bluestore/BlueFS: reduce bufferlist rebuilds during WAL writes (`pr#21689 <https://github.com/ceph/ceph/pull/21689>`_, Piotr Dałek)
 * bluestore,performance: os/bluestore: use the monotonic clock for perf counters latencies (`pr#22121 <https://github.com/ceph/ceph/pull/22121>`_, Mohamad Gebai)
-* bluestore: silence Clang warning on possible uninitialize usuage (`pr#25702 <https://github.com/ceph/ceph/pull/25702>`_, Willem Jan Withagen)
+* bluestore: silence Clang warning on possible uninitialize usage (`pr#25702 <https://github.com/ceph/ceph/pull/25702>`_, Willem Jan Withagen)
 * bluestore: spdk: fix ceph-osd crash when activate SPDK (`issue#24371 <http://tracker.ceph.com/issues/24371>`_, `pr#22356 <https://github.com/ceph/ceph/pull/22356>`_, tone-zhang)
 * bluestore: test/fio: add option single_pool_mode in ceph-bluestore.fio (`pr#21929 <https://github.com/ceph/ceph/pull/21929>`_, Jianpeng Ma)
 * bluestore,tests: test/objectstore: fix random generator in allocator_bench (`pr#22544 <https://github.com/ceph/ceph/pull/22544>`_, Igor Fedotov)
