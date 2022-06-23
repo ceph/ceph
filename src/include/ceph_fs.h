@@ -1049,7 +1049,7 @@ struct ceph_mds_snap_head {
 	__le32 op;                /* CEPH_SNAP_OP_* */
 	__le64 split;             /* ino to split off, if any */
 	__le32 num_split_inos;    /* # inos belonging to new child realm */
-	__le32 num_split_realms;  /* # child realms udner new child realm */
+	__le32 num_split_realms;  /* # child realms under new child realm */
 	__le32 trace_len;         /* size of snap trace blob */
 } __attribute__ ((packed));
 /* followed by split ino list, then split realms, then the trace blob */
