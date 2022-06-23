@@ -145,7 +145,7 @@ Notable Changes
 * libcephfs, ceph-fuse: fix old bug with O_LAZY vs O_NOATIME confusion
 * ceph-disk: more robust journal device detection on RHEL/CentOS
 * ceph-disk: better, simpler locking
-* ceph-disk: do not inadvertantely mount over existing osd mounts
+* ceph-disk: do not inadvertently mount over existing osd mounts
 * ceph-disk: better handling for unusual device names
 * sysvinit, upstart: handle symlinks in /var/lib/ceph/*
 
