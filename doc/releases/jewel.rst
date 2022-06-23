@@ -2676,7 +2676,7 @@ Notable Changes since Infernalis
 * osd: fixes for several cases where op result code was not checked or set (`issue#13566 <http://tracker.ceph.com/issues/13566>`_, `pr#6347 <http://github.com/ceph/ceph/pull/6347>`_, xie xingguo)
 * osd: fix failure report handling during ms_handle_connect() (`pr#8348 <http://github.com/ceph/ceph/pull/8348>`_, xie xingguo)
 * osd: fix FileStore::_destroy_collection error return code (`pr#6612 <http://github.com/ceph/ceph/pull/6612>`_, Ruifeng Yang)
-* osd: fix forced prmootion for CALL ops (`issue#14745 <http://tracker.ceph.com/issues/14745>`_, `pr#7617 <http://github.com/ceph/ceph/pull/7617>`_, Sage Weil)
+* osd: fix forced promotion for CALL ops (`issue#14745 <http://tracker.ceph.com/issues/14745>`_, `pr#7617 <http://github.com/ceph/ceph/pull/7617>`_, Sage Weil)
 * osd: fix fusestore hanging during stop/quit (`issue#14786 <http://tracker.ceph.com/issues/14786>`_, `pr#7677 <http://github.com/ceph/ceph/pull/7677>`_, xie xingguo)
 * osd: fix hitset object naming to use GMT (Kefu Chai)
 * osd: fix inaccurate counter and skip over queueing an empty transaction (`pr#7754 <http://github.com/ceph/ceph/pull/7754>`_, xie xingguo)
