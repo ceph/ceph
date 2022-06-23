@@ -38,9 +38,9 @@ public:
   SimpleBitmap& operator=(const SimpleBitmap&) = delete;
 
 
-  // set a bit range range of @length starting at @offset
+  // set a bit range of @length starting at @offset
   bool     set(uint64_t offset, uint64_t length);
-  // clear a bit range range of @length starting at @offset
+  // clear a bit range of @length starting at @offset
   bool     clr(uint64_t offset, uint64_t length);
 
   // returns a copy of the next set extent starting at @offset
