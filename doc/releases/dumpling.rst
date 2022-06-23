@@ -90,7 +90,7 @@ We recommend that all Dumpling users upgrade at their convenience.
 Notable Changes
 ---------------
 
-* ceph-disk: partprobe befoere settle, fixing dm-crypt (#6966, Eric Eastman)
+* ceph-disk: partprobe before settle, fixing dm-crypt (#6966, Eric Eastman)
 * librbd: add invalidate cache interface (Josh Durgin)
 * librbd: close image if remove_child fails (Ilya Dryomov)
 * librbd: fix potential null pointer dereference (Danny Al-Gaaf)

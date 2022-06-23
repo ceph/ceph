@@ -304,7 +304,7 @@ Notable Changes
 * crush: fix potential buffer overflow in erasure rules (#9492 Johnu George)
 * debian: fix python-ceph -> ceph file movement (Sage Weil)
 * libcephfs,ceph-fuse: fix flush tid wraparound bug (#9869 Greg Farnum, Yan, Zheng)
-* libcephfs: close fd befure umount (#10415 Yan, Zheng)
+* libcephfs: close fd before umount (#10415 Yan, Zheng)
 * librados: fix crash from C API when read timeout is enabled (#9582 Sage Weil)
 * librados: handle reply race with pool deletion (#10372 Sage Weil)
 * librbd: cap memory utilization for read requests (Jason Dillaman)
