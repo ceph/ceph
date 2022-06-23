@@ -14,7 +14,7 @@ namespace cephfs {
 namespace mirror {
 namespace watcher {
 
-// Rewatch an existing watch -- the watch can be in an operatioal
+// Rewatch an existing watch -- the watch can be in an operational
 // or error state.
 
 class RewatchRequest {
