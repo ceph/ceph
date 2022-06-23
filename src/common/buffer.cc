@@ -1535,7 +1535,7 @@ static ceph::spinlock debug_lock;
     }
   }
 
-  // funky modifer
+  // funky modifier
   void buffer::list::splice(unsigned off, unsigned len, list *claim_by /*, bufferlist& replace_with */)
   {    // fixme?
     if (len == 0)
