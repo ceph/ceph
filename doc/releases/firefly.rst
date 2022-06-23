@@ -1198,7 +1198,7 @@ Notable changes since v0.67 Dumpling
 * osd: cls_hello OSD class example
 * osd: erasure coding doc updates (Loic Dachary)
 * osd: erasure coding plugin infrastructure, tests (Loic Dachary)
-* osd: experiemental support for ZFS (zfsonlinux.org) (Yan, Zheng)
+* osd: experimental support for ZFS (zfsonlinux.org) (Yan, Zheng)
 * osd: fix RWORDER flags
 * osd: fix exponential backoff of slow request warnings (Loic Dachary)
 * osd: fix handling of racing read vs write (Samuel Just)

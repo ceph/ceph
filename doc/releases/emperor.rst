@@ -356,7 +356,7 @@ Notable Changes since v0.67 Dumpling
 * osd: cls_hello OSD class example
 * osd: erasure coding doc updates (Loic Dachary)
 * osd: erasure coding plugin infrastructure, tests (Loic Dachary)
-* osd: experiemental support for ZFS (zfsonlinux.org) (Yan, Zheng)
+* osd: experimental support for ZFS (zfsonlinux.org) (Yan, Zheng)
 * osd: fix RWORDER flags
 * osd: fix exponential backoff of slow request warnings (Loic Dachary)
 * osd: fix handling of racing read vs write (Samuel Just)
@@ -645,7 +645,7 @@ Notable Changes
 * objecter: fix possible hang when cluster is unpaused (Josh Durgin)
 * osd: 'osd recover clone overlap limit' option to limit cloning during recovery (Samuel Just)
 * osd: cls_hello OSD class example
-* osd: experiemental support for ZFS (zfsonlinux.org) (Yan, Zheng)
+* osd: experimental support for ZFS (zfsonlinux.org) (Yan, Zheng)
 * osd: instrument peering states (David Zafman)
 * osd: properly enforce RD/WR flags for rados classes
 * osd: remove old pg log on upgrade (Samuel Just)
