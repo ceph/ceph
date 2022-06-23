@@ -128,7 +128,7 @@ struct HeartbeatStamps : public RefCountedObject {
   //
   // conversely, if we have a remote timestamp T, then that is
   // [T - ub, T - lb] in terms of the local clock.  i.e., if you are
-  // substracting the delta, then take care that you swap the role of the
+  // subtracting the delta, then take care that you swap the role of the
   // lb and ub values.
 
   /// lower bound on peer clock - local clock
