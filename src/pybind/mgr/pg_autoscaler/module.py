@@ -528,7 +528,7 @@ class PgAutoscaler(MgrModule):
         """
         Calculates final_pg_target of each pools and determine if it needs
         scaling, this depends on the profile of the autoscaler. For scale-down,
-        we start out with a full complement of pgs and only descrease it when other
+        we start out with a full complement of pgs and only decrease it when other
         pools needs more pgs due to increased usage. For scale-up, we start out with
         the minimal amount of pgs and only scale when there is increase in usage.
         """
