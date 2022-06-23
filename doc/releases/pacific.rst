@@ -1103,7 +1103,7 @@ Changelog
 * doc/radosgw/nfs: add note about NFSv3 deprecation (`pr#43941 <https://github.com/ceph/ceph/pull/43941>`_, Michael Fritch)
 * doc: document subvolume (group) pins (`pr#43925 <https://github.com/ceph/ceph/pull/43925>`_, Patrick Donnelly)
 * github: add dashboard PRs to Dashboard project (`pr#43610 <https://github.com/ceph/ceph/pull/43610>`_, Ernesto Puerta)
-* librbd/cache/pwl: persistant cache backports (`pr#43772 <https://github.com/ceph/ceph/pull/43772>`_, Kefu Chai, Yingxin Cheng, Yin Congmin, Feng Hualong, Jianpeng Ma, Ilya Dryomov, Hualong Feng)
+* librbd/cache/pwl: persistent cache backports (`pr#43772 <https://github.com/ceph/ceph/pull/43772>`_, Kefu Chai, Yingxin Cheng, Yin Congmin, Feng Hualong, Jianpeng Ma, Ilya Dryomov, Hualong Feng)
 * librbd/cache/pwl: SSD caching backports (`pr#43918 <https://github.com/ceph/ceph/pull/43918>`_, Yin Congmin, Jianpeng Ma)
 * librbd/object_map: rbd diff between two snapshots lists entire image content (`pr#43805 <https://github.com/ceph/ceph/pull/43805>`_, Sunny Kumar)
 * librbd: fix pool validation lockup (`pr#43113 <https://github.com/ceph/ceph/pull/43113>`_, Ilya Dryomov)
