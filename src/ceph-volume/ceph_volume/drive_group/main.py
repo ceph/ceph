@@ -25,7 +25,7 @@ class Deploy(object):
       - read from stdin, pass "-" as a positional argument
       - a json string passed via the --spec argument
 
-    Either the path positional argument or --spec must be specifed.
+    Either the path positional argument or --spec must be specified.
     '''
 
     def __init__(self, argv):
