@@ -3361,7 +3361,7 @@ Detailed Changelog
 * ceph-volume normalize comma to dot for string to int conversions (`issue#37442 <http://tracker.ceph.com/issues/37442>`_, `pr#25674 <https://github.com/ceph/ceph/pull/25674>`_, Alfredo Deza)
 * ceph-volume: patch Device when testing (`issue#36768 <http://tracker.ceph.com/issues/36768>`_, `pr#25063 <https://github.com/ceph/ceph/pull/25063>`_, Alfredo Deza)
 * ceph-volume process.call with stdin in Python 3 fix (`issue#24993 <http://tracker.ceph.com/issues/24993>`_, `pr#23141 <https://github.com/ceph/ceph/pull/23141>`_, Alfredo Deza)
-* ceph-volume: provide a nice errror message when missing ceph.conf (`pr#22828 <https://github.com/ceph/ceph/pull/22828>`_, Andrew Schoen)
+* ceph-volume: provide a nice error message when missing ceph.conf (`pr#22828 <https://github.com/ceph/ceph/pull/22828>`_, Andrew Schoen)
 * ceph-volume: PVolumes.get() should return one PV when using name or uuid (`issue#24784 <http://tracker.ceph.com/issues/24784>`_, `pr#23234 <https://github.com/ceph/ceph/pull/23234>`_, Andrew Schoen)
 * ceph-volume: refuse to zap mapper devices (`issue#24504 <http://tracker.ceph.com/issues/24504>`_, `pr#22764 <https://github.com/ceph/ceph/pull/22764>`_, Andrew Schoen)
 * ceph-volume: reject devices that have existing GPT headers (`issue#27062 <http://tracker.ceph.com/issues/27062>`_, `pr#25098 <https://github.com/ceph/ceph/pull/25098>`_, Andrew Schoen)
