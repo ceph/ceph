@@ -422,7 +422,7 @@ MetricPayload MetricAggregator::get_perf_reports() {
     }
   }
 
-  // stash a copy of dealyed and failed ranks. mgr culls out metrics
+  // stash a copy of delayed and failed ranks. mgr culls out metrics
   // for failed ranks and tags metrics for delayed ranks as "stale".
   for (auto &p : active_rank_addrs) {
     auto rank = p.first;
