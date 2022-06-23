@@ -179,7 +179,7 @@ struct RadosStriperImpl {
   /**
    * opens an existing striped object and takes a shared lock on it
    * @return 0 if everything is ok and the lock was taken. -errcode otherwise
-   * In particulae, if the striped object does not exists, -ENOENT is returned
+   * In particular, if the striped object does not exists, -ENOENT is returned
    * In case the return code in not 0, no lock is taken
    */
   int openStripedObjectForRead(const std::string& soid,
