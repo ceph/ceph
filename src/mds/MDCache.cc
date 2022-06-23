@@ -11096,7 +11096,7 @@ void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
   }
 
   if (!m->has_tried_discover()) {
-    // Update if it already exists. Othwerwise it got updated by discover reply.
+    // Update if it already exists. Otherwise it got updated by discover reply.
     dout(5) << "dir_update on " << *dir << dendl;
     dir->dir_rep = m->get_dir_rep();
     dir->dir_rep_by.clear();
