@@ -413,7 +413,7 @@ Other Notable Changes
 * cephfs: No output for ceph mds rmfailed 0 --yes-i-really-mean-it command (`issue#16709 <http://tracker.ceph.com/issues/16709>`_, `pr#14674 <https://github.com/ceph/ceph/pull/14674>`_, John Spray)
 * cephfs: Test failure: test_data_isolated (tasks.cephfs.test_volume_client.TestVolumeClient) (`issue#18914 <http://tracker.ceph.com/issues/18914>`_, `pr#14685 <https://github.com/ceph/ceph/pull/14685>`_, "Yan, Zheng")
 * cephfs: Test failure: test_open_inode (`issue#18661 <http://tracker.ceph.com/issues/18661>`_, `pr#14669 <https://github.com/ceph/ceph/pull/14669>`_, John Spray)
-* cephfs: The mount point break off when mds switch hanppened (`issue#19437 <http://tracker.ceph.com/issues/19437>`_, `pr#14679 <https://github.com/ceph/ceph/pull/14679>`_, Guan yunfei)
+* cephfs: The mount point break off when mds switch happened (`issue#19437 <http://tracker.ceph.com/issues/19437>`_, `pr#14679 <https://github.com/ceph/ceph/pull/14679>`_, Guan yunfei)
 * cephfs: ceph-fuse does not recover after lost connection to MDS (`issue#16743 <http://tracker.ceph.com/issues/16743>`_, `issue#18757 <http://tracker.ceph.com/issues/18757>`_, `pr#14698 <https://github.com/ceph/ceph/pull/14698>`_, Kefu Chai, Henrik Korkuc, Patrick Donnelly)
 * cephfs: client: fix the cross-quota rename boundary check conditions (`issue#18699 <http://tracker.ceph.com/issues/18699>`_, `pr#14667 <https://github.com/ceph/ceph/pull/14667>`_, Greg Farnum)
 * cephfs: mds is crushed, after I set about 400 64KB xattr kv pairs to a file (`issue#19033 <http://tracker.ceph.com/issues/19033>`_, `pr#14684 <https://github.com/ceph/ceph/pull/14684>`_, Yang Honggang)
