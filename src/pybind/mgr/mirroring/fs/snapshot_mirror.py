@@ -404,7 +404,7 @@ class FSSnapshotMirror:
                     cluster_id = mi['cluster_id']
                     fs_id = mi['fs_id']
                     if not (cluster_id == local_cluster_id and fs_id == local_fsid):
-                        raise MirrorException(-errno.EEXIST, f'peer mirrorred by: (cluster_id: {cluster_id}, fs_id: {fs_id})')
+                        raise MirrorException(-errno.EEXIST, f'peer mirrored by: (cluster_id: {cluster_id}, fs_id: {fs_id})')
                 except MirrorException:
                     # if mirror info cannot be fetched for some reason, let's just
                     # fail.
