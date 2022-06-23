@@ -6105,7 +6105,7 @@ bool OSDMap::try_drop_remap_overfull(
   map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>>& to_upmap)
 {
   //
-  // This function tries to drop existimg upmap items which map data to overfull 
+  // This function tries to drop existing upmap items which map data to overfull 
   // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and rerturns true 
   // if it found an item that can be dropped, false if not. 
   //
@@ -6162,7 +6162,7 @@ bool OSDMap::try_drop_remap_underfull(
     map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap)
 {
   // 
-  // This function tries to drop existimg upmap items which map data from underfull
+  // This function tries to drop existing upmap items which map data from underfull
   // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and rerturns true 
   // if it found an item that can be dropped, false if not. 
   //
