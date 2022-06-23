@@ -2744,7 +2744,7 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
   Worker *new_worker = connection->worker;
   // we can steal the session_stream_handlers under the assumption
   // this happens in the event center's thread as there should be
-  // no user outside its boundaries (simlarly to e.g. outgoing_bl).
+  // no user outside its boundaries (similarly to e.g. outgoing_bl).
   auto temp_stream_handlers = std::move(session_stream_handlers);
   auto temp_compression_handlers = std::move(session_compression_handlers);
   exproto->auth_meta = auth_meta;
