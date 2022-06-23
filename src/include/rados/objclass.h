@@ -39,7 +39,7 @@ CEPH_CLS_API void __cls_init()
 void __cls_init();
 
 /**
- * @typdef cls_handle_t
+ * @typedef cls_handle_t
  *
  * A handle for interacting with the object class.
  */
