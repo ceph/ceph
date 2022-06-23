@@ -105,7 +105,7 @@ public:
   // Perform decryption ciphertext must be ALWAYS aligned to 16 bytes.
   virtual void authenticated_decrypt_update(ceph::bufferlist& bl) = 0;
 
-  // Perform decryption of last cipertext's portion and verify signature
+  // Perform decryption of last ciphertext's portion and verify signature
   // for overall decryption sequence.
   // Throws on integrity/authenticity checks
   virtual void authenticated_decrypt_update_final(ceph::bufferlist& bl) = 0;
