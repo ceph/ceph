@@ -3289,7 +3289,7 @@ bool CDir::freeze_tree()
     }
   );
 
-  if (is_freezeable(true)) {
+  if (is_freezable(true)) {
     _freeze_tree();
     auth_unpin(this);
     return true;
@@ -3304,7 +3304,7 @@ bool CDir::freeze_tree()
 void CDir::_freeze_tree()
 {
   dout(10) << __func__ << " " << *this << dendl;
-  ceph_assert(is_freezeable(true));
+  ceph_assert(is_freezable(true));
 
   if (freeze_tree_state) {
     ceph_assert(is_auth());
@@ -3523,7 +3523,7 @@ bool CDir::freeze_dir()
   ceph_assert(!is_freezing());
   
   auth_pin(this);
-  if (is_freezeable_dir(true)) {
+  if (is_freezable_dir(true)) {
     _freeze_dir();
     auth_unpin(this);
     return true;
@@ -3539,7 +3539,7 @@ bool CDir::freeze_dir()
 void CDir::_freeze_dir()
 {
   dout(10) << __func__ << " " << *this << dendl;
-  //assert(is_freezeable_dir(true));
+  //assert(is_freezable_dir(true));
   // not always true during split because the original fragment may have frozen a while
   // ago and we're just now getting around to breaking it up.
 
@@ -3560,7 +3560,7 @@ void CDir::unfreeze_dir()
     state_clear(STATE_FROZENDIR);
     put(PIN_FROZEN);
 
-    // unpin  (may => FREEZEABLE)   FIXME: is this order good?
+    // unpin  (may => FREEZABLE)   FIXME: is this order good?
     if (is_auth() && !is_subtree_root())
       inode->auth_unpin(this);
 

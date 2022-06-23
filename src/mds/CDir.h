@@ -575,7 +575,7 @@ public:
   bool is_frozen_tree_root() const { return state & STATE_FROZENTREE; }
   bool is_frozen_dir() const { return state & STATE_FROZENDIR; }
 
-  bool is_freezeable(bool freezing=false) const {
+  bool is_freezable(bool freezing=false) const {
     // no nested auth pins.
     if (auth_pins - (freezing ? 1 : 0) > 0 ||
 	(freeze_tree_state && freeze_tree_state->auth_pins != auth_pins))
@@ -588,7 +588,7 @@ public:
     return true;
   }
 
-  bool is_freezeable_dir(bool freezing=false) const {
+  bool is_freezable_dir(bool freezing=false) const {
     if ((auth_pins - freezing) > 0 || dir_auth_pins > 0)
       return false;
 
