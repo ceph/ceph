@@ -210,7 +210,7 @@ void Processor::accept()
 	  lderr(msgr->cct) << __func__ << " open file descriptions limit reached sd = " << listen_socket.fd()
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
 	  if (++accept_error_num > msgr->cct->_conf->ms_max_accept_failures) {
-	    lderr(msgr->cct) << "Proccessor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
+	    lderr(msgr->cct) << "Processor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
 	    ceph_abort();
 	  }
 	  continue;
@@ -222,7 +222,7 @@ void Processor::accept()
 	  lderr(msgr->cct) << __func__ << " no incoming connection?"
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
 	  if (++accept_error_num > msgr->cct->_conf->ms_max_accept_failures) {
-	    lderr(msgr->cct) << "Proccessor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
+	    lderr(msgr->cct) << "Processor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
 	    ceph_abort();
 	  }
 	  continue;
