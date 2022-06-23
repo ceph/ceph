@@ -513,7 +513,7 @@ Changelog
 * cephfs: client: wake up the front pos waiter (`pr#40771 <https://github.com/ceph/ceph/pull/40771>`_, Xiubo Li)
 * client: fire the finish_cap_snap() after buffer being flushed (`pr#40778 <https://github.com/ceph/ceph/pull/40778>`_, Xiubo Li)
 * cmake: build static libs if they are internal ones (`pr#40789 <https://github.com/ceph/ceph/pull/40789>`_, Kefu Chai)
-* cmake: define BOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT globaly (`pr#40784 <https://github.com/ceph/ceph/pull/40784>`_, Kefu Chai)
+* cmake: define BOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT globally (`pr#40784 <https://github.com/ceph/ceph/pull/40784>`_, Kefu Chai)
 * common/buffer: adjust align before calling posix_memalign() (`pr#41247 <https://github.com/ceph/ceph/pull/41247>`_, Ilya Dryomov)
 * common/ipaddr: Allow binding on lo (`pr#39343 <https://github.com/ceph/ceph/pull/39343>`_, Thomas Goirand)
 * common/ipaddr: skip loopback interfaces named 'lo' and test it (`pr#40424 <https://github.com/ceph/ceph/pull/40424>`_, Dan van der Ster)
