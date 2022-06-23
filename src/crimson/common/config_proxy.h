@@ -19,7 +19,7 @@ namespace crimson::common {
 // a facade for managing config. each shard has its own copy of ConfigProxy.
 //
 // In seastar-osd, there could be multiple instances of @c ConfigValues in a
-// single process, as we are using a variant of read-copy-update mechinary to
+// single process, as we are using a variant of read-copy-update machinery to
 // update the settings at runtime.
 class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
 {
