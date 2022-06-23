@@ -1280,7 +1280,7 @@ private:
   /// Add extent to extents handling dirty and refcounting
   void add_extent(CachedExtentRef ref, const Transaction::src_t* t_src);
 
-  /// Mark exising extent ref dirty -- mainly for replay
+  /// Mark existing extent ref dirty -- mainly for replay
   void mark_dirty(CachedExtentRef ref);
 
   /// Add dirty extent to dirty list

@@ -51,7 +51,7 @@ Notable Changes
 * mon: MonitorDBStore: get_next_key() only if prefix matches (`issue#11786 <http://tracker.ceph.com/issues/11786>`_, `pr#5360 <http://github.com/ceph/ceph/pull/5360>`_, Joao Eduardo Luis)
 * mon: PaxosService: call post_refresh() instead of post_paxos_update() (`issue#11470 <http://tracker.ceph.com/issues/11470>`_, `pr#5358 <http://github.com/ceph/ceph/pull/5358>`_, Joao Eduardo Luis)
 * mon: add a cache layer over MonitorDBStore (`issue#12638 <http://tracker.ceph.com/issues/12638>`_, `pr#5698 <http://github.com/ceph/ceph/pull/5698>`_, Kefu Chai)
-* mon: adding exsting pool as tier with --force-nonempty clobbers removed_snaps (`issue#11493 <http://tracker.ceph.com/issues/11493>`_, `pr#5236 <http://github.com/ceph/ceph/pull/5236>`_, Sage Weil, Samuel Just)
+* mon: adding existing pool as tier with --force-nonempty clobbers removed_snaps (`issue#11493 <http://tracker.ceph.com/issues/11493>`_, `pr#5236 <http://github.com/ceph/ceph/pull/5236>`_, Sage Weil, Samuel Just)
 * mon: ceph fails to compile with boost 1.58 (`issue#11576 <http://tracker.ceph.com/issues/11576>`_, `pr#5129 <http://github.com/ceph/ceph/pull/5129>`_, Kefu Chai)
 * mon: does not check for IO errors on every transaction (`issue#13089 <http://tracker.ceph.com/issues/13089>`_, `pr#6091 <http://github.com/ceph/ceph/pull/6091>`_, Sage Weil)
 * mon: get pools health'info have error (`issue#12402 <http://tracker.ceph.com/issues/12402>`_, `pr#5410 <http://github.com/ceph/ceph/pull/5410>`_, renhwztetecs)

@@ -124,7 +124,7 @@ def _handle_kcli_plan(command_type, plan_file_path=None):
     """
     op = None
     if command_type == "create":
-        # TODO : Before creating kcli plan check for exisitng kcli plans
+        # TODO : Before creating kcli plan check for existing kcli plans
         op, code = execute_kcli_cmd(
             f"create plan -f {plan_file_path} {KCLI_PLAN_NAME}"
         )

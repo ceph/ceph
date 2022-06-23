@@ -1065,7 +1065,7 @@ ProtocolV2::reuse_connection(
   }
 #endif
   // close this connection because all the necessary information is delivered
-  // to the exisiting connection, and jump to error handling code to abort the
+  // to the existing connection, and jump to error handling code to abort the
   // current state.
   ABORT_IN_CLOSE(false);
   return seastar::make_ready_future<next_step_t>(next_step_t::none);
@@ -1459,7 +1459,7 @@ ProtocolV2::server_reconnect()
         return send_wait();
       }
     } else { // existing_proto->connect_seq < reconnect.connect_seq()
-      logger().warn("{} server_reconnect: stale exsiting connect_seq exist_cs({}) < peer_cs({}),"
+      logger().warn("{} server_reconnect: stale existing connect_seq exist_cs({}) < peer_cs({}),"
                     " reusing existing {} {}",
                     conn,
                     existing_proto->connect_seq,
