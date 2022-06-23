@@ -2482,7 +2482,7 @@ Changelog
 * build/ops,common,mgr: python-common:  Python common package (`pr#28915 <https://github.com/ceph/ceph/pull/28915>`_, Kefu Chai, Sebastian Wagner)
 * build/ops,common,rgw: rgw, common, build: drop NSS support (`pr#27834 <https://github.com/ceph/ceph/pull/27834>`_, Radoslaw Zarzynski)
 * build/ops,core,rbd: Windows support [part 1] (`pr#31981 <https://github.com/ceph/ceph/pull/31981>`_, Lucian Petrut, Alin Gabriel Serdean)
-* build/ops,core: ceph-crash: use client.crash[.host] to post, and provsion keys via mgr/ssh + ceph-daemon (`pr#30734 <https://github.com/ceph/ceph/pull/30734>`_, Sage Weil)
+* build/ops,core: ceph-crash: use client.crash[.host] to post, and provision keys via mgr/ssh + ceph-daemon (`pr#30734 <https://github.com/ceph/ceph/pull/30734>`_, Sage Weil)
 * build/ops,core: debian: fix ceph-mgr-modules-core files (`pr#33468 <https://github.com/ceph/ceph/pull/33468>`_, Sage Weil)
 * build/ops,core: os/bluestore: fix pmem osd build problem (`pr#28761 <https://github.com/ceph/ceph/pull/28761>`_, Peterson, Scott, Li, Xiaoyan)
 * build/ops,core: qa: stop testing on 16.04 xenial (`pr#28943 <https://github.com/ceph/ceph/pull/28943>`_, Sage Weil)
