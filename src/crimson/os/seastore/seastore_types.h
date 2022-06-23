@@ -1049,7 +1049,7 @@ struct paddr_list_t : std::list<std::pair<paddr_t, extent_len_t>> {
 std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs);
 std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs);
 
-/* identifies type of extent, used for interpretting deltas, managing
+/* identifies type of extent, used for interpreting deltas, managing
  * writeback.
  *
  * Note that any new extent type needs to be added to
