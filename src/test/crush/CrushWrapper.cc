@@ -714,7 +714,7 @@ TEST_F(CrushWrapperTest, insert_item) {
   //
   //   default --> host0 --> item
   //
-  //   Trying to insert the same item higher in the hirarchy will fail
+  //   Trying to insert the same item higher in the hierarchy will fail
   //   because it would create a loop.
   //
   //   default --> host0 --> item

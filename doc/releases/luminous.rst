@@ -482,7 +482,7 @@ Changelog
 * ceph-volume: fix JSON output in `inventory` (`issue#37390 <http://tracker.ceph.com/issues/37390>`_, `pr#25922 <https://github.com/ceph/ceph/pull/25922>`_, Sebastian Wagner)
 * ceph-volume: Fix TypeError: join() takes exactly one argument (2 given) (`issue#37595 <http://tracker.ceph.com/issues/37595>`_, `pr#25772 <https://github.com/ceph/ceph/pull/25772>`_, Sebastian Wagner)
 * ceph-volume fix TypeError on dmcrypt when using Python3 (`pr#26114 <https://github.com/ceph/ceph/pull/26114>`_, Alfredo Deza)
-* ceph-volume: introduce class hierachy for strategies (`pr#25553 <https://github.com/ceph/ceph/pull/25553>`_, Jan Fajerski, Alfredo Deza)
+* ceph-volume: introduce class hierarchy for strategies (`pr#25553 <https://github.com/ceph/ceph/pull/25553>`_, Jan Fajerski, Alfredo Deza)
 * ceph-volume: mark a device not available if it belongs to ceph-disk (`pr#26117 <https://github.com/ceph/ceph/pull/26117>`_, Andrew Schoen)
 * ceph-volume normalize comma to dot for string to int conversions (`issue#37442 <http://tracker.ceph.com/issues/37442>`_, `pr#25776 <https://github.com/ceph/ceph/pull/25776>`_, Alfredo Deza)
 * ceph-volume: set permissions right before prime-osd-dir (`issue#37486 <http://tracker.ceph.com/issues/37486>`_, `pr#25778 <https://github.com/ceph/ceph/pull/25778>`_, Andrew Schoen, Alfredo Deza)

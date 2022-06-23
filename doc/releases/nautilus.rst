@@ -3347,7 +3347,7 @@ Detailed Changelog
 * ceph-volume  fix zap not working with LVs (`issue#35970 <http://tracker.ceph.com/issues/35970>`_, `pr#24077 <https://github.com/ceph/ceph/pull/24077>`_, Alfredo Deza)
 * ceph-volume: implement __format__ in Size to format sizes in py3 (`issue#38291 <http://tracker.ceph.com/issues/38291>`_, `pr#26401 <https://github.com/ceph/ceph/pull/26401>`_, Jan Fajerski)
 * ceph-volume initial take on auto sub-command (`pr#21803 <https://github.com/ceph/ceph/pull/21803>`_, Alfredo Deza)
-* ceph-volume: introduce class hierachy for strategies (`issue#37389 <http://tracker.ceph.com/issues/37389>`_, `pr#25238 <https://github.com/ceph/ceph/pull/25238>`_, Jan Fajerski)
+* ceph-volume: introduce class hierarchy for strategies (`issue#37389 <http://tracker.ceph.com/issues/37389>`_, `pr#25238 <https://github.com/ceph/ceph/pull/25238>`_, Jan Fajerski)
 * ceph-volume:  lsblk can fail to find PARTLABEL, must fallback to blkid (`issue#36098 <http://tracker.ceph.com/issues/36098>`_, `pr#24330 <https://github.com/ceph/ceph/pull/24330>`_, Alfredo Deza)
 * ceph-volume lvm.activate conditional mon-config on prime-osd-dir (`issue#25216 <http://tracker.ceph.com/issues/25216>`_, `pr#23375 <https://github.com/ceph/ceph/pull/23375>`_, Alfredo Deza)
 * ceph-volume lvm.activate Do not search for a MON configuration (`pr#22393 <https://github.com/ceph/ceph/pull/22393>`_, Wido den Hollander)
