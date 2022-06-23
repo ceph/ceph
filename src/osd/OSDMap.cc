@@ -440,7 +440,7 @@ void OSDMap::Incremental::encode_client_old(ceph::buffer::list& bl) const
     // legacy is map<int32_t,uint8_t>
     map<int32_t, uint8_t> os;
     for (auto p : new_state) {
-      // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+      // new_state may only include some new flags(e.g., CEPH_OSD_NOOUT)
       // that an old client could not understand.
       // skip those!
       uint8_t s = p.second;
@@ -494,7 +494,7 @@ void OSDMap::Incremental::encode_classic(ceph::buffer::list& bl, uint64_t featur
   {
     map<int32_t, uint8_t> os;
     for (auto p : new_state) {
-      // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+      // new_state may only include some new flags(e.g., CEPH_OSD_NOOUT)
       // that an old client could not understand.
       // skip those!
       uint8_t s = p.second;
@@ -614,7 +614,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     } else {
       map<int32_t, uint8_t> os;
       for (auto p : new_state) {
-        // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+        // new_state may only include some new flags(e.g., CEPH_OSD_NOOUT)
         // that an old client could not understand.
         // skip those!
         uint8_t s = p.second;
