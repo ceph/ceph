@@ -28,7 +28,7 @@
 
 /*
  * Redefine the FUSE_VERSION macro defined in "fuse_common.h"
- * header file, because the MINOR numner has been forgotten to
+ * header file, because the MINOR number has been forgotten to
  * update since libfuse 3.2 to 3.8. We need to fetch the MINOR
  * number from pkgconfig file.
  */
