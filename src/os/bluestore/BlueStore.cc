@@ -12115,7 +12115,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (cct->_conf->bluestore_debug_inject_csum_err_probability > 0 &&
       (rand() % 10000) < cct->_conf->bluestore_debug_inject_csum_err_probability * 10000.0) {
-    derr << __func__ << " injecting bluestore checksum verifcation error" << dendl;
+    derr << __func__ << " injecting bluestore checksum verification error" << dendl;
     bad = blob_xoffset;
     r = -1;
     bad_csum = 0xDEADBEEF;
