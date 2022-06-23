@@ -1134,7 +1134,7 @@ int get_protection_status(cls_method_context_t hctx, bufferlist *in,
 }
 
 /**
- * set the proctection status of a snapshot
+ * set the protection status of a snapshot
  *
  * Input:
  * @param snapid (uint64_t) which snapshot to set the status of
@@ -3002,7 +3002,7 @@ static int dir_remove_image_helper(cls_method_context_t hctx,
  * Rename an image in the directory, updating both indexes
  * atomically. This can't be done from the client calling
  * dir_add_image and dir_remove_image in one transaction because the
- * results of the first method are not visibale to later steps.
+ * results of the first method are not visible to later steps.
  *
  * Input:
  * @param src original name of the image
@@ -6800,7 +6800,7 @@ int mirror_image_snapshot_unlink_peer(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param snap_id: snapshot id
- * @param complete: true if shapshot fully copied/complete
+ * @param complete: true if snapshot fully copied/complete
  * @param last_copied_object_number: last copied object number
  *
  * Output:

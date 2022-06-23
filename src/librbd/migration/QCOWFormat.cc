@@ -70,7 +70,7 @@ void LookupTable::decode() {
     return;
   }
 
-  // translate the lookup table (big-endian -> CPU endianess)
+  // translate the lookup table (big-endian -> CPU endianness)
   for (auto idx = 0UL; idx < size; ++idx) {
     cluster_offsets[idx] = big_to_native(cluster_offsets[idx]);
   }

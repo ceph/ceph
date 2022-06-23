@@ -900,7 +900,7 @@ if __name__ == '__main__':
     try:
         test_cls = TESTS[args.test_name]
     except KeyError:
-        raise CephTestException("Unkown test: {}".format(args.test_name))
+        raise CephTestException("Unknown test: {}".format(args.test_name))
 
     runner = TestRunner(
         test_cls,

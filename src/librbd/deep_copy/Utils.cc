@@ -36,7 +36,7 @@ void compute_snap_map(CephContext* cct,
       ++dst_snap_id_it;
     }
 
-    // we should only have the HEAD revision in the the last snap seq
+    // we should only have the HEAD revision in the last snap seq
     ceph_assert(snap_ids.empty() || snap_ids[0] != CEPH_NOSNAP);
     snap_ids.insert(snap_ids.begin(), it.second);
 
