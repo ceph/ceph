@@ -10509,7 +10509,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed3Test) {
       ceph_assert(bstore);
       bstore->compact();
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
-      ASSERT_EQ(logger->get(l_bluefs_slow_used_bytes), 0); // reffering to SpilloverFixedTest
+      ASSERT_EQ(logger->get(l_bluefs_slow_used_bytes), 0); // referring to SpilloverFixedTest
     }
   );
 }
