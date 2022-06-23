@@ -125,7 +125,7 @@ int parse_cmd_args(
   // take advantage of but do not wish to show on 'usage()'.
   //
   // For example, consider that program_options matches positional arguments
-  // (specified via 'positional') against the paramenters defined on a
+  // (specified via 'positional') against the parameters defined on a
   // given 'po::options_description' class.  This is performed below,
   // supplying both the description and the positional arguments to the
   // parser.  However, we do not want the parameters that are mapped to

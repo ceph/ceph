@@ -39,7 +39,7 @@ usage() {
     echo ""
     echo "This will help to isolate the network namespace from OS for the mount client!"
     echo ""
-    echo "usage: unshare_ns_mount.sh [OPTIONS [paramters]] [--brxip <ip_address/mask>]"
+    echo "usage: unshare_ns_mount.sh [OPTIONS [parameters]] [--brxip <ip_address/mask>]"
     echo "OPTIONS:" 
     echo -e "  --fuse    <ceph-fuse options>"
     echo -e "\tThe ceph-fuse command options"
