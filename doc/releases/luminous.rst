@@ -3553,7 +3553,7 @@ Other Notable Changes
 * core: misc: SCA fixes (`pr#14426 <https://github.com/ceph/ceph/pull/14426>`_, Danny Al-Gaaf)
 * core,mon: crush, mon: simplify device class manipulation commands (`pr#16388 <https://github.com/ceph/ceph/pull/16388>`_, xie xingguo)
 * core: mon,mgr: fix "ceph osd df", add some tools to find untested commands (`issue#20256 <http://tracker.ceph.com/issues/20256>`_, `pr#15675 <https://github.com/ceph/ceph/pull/15675>`_, Greg Farnum)
-* core: mon/MonClient: discard stray messages from non-acitve conns (`issue#19015 <http://tracker.ceph.com/issues/19015>`_, `pr#13656 <https://github.com/ceph/ceph/pull/13656>`_, Kefu Chai)
+* core: mon/MonClient: discard stray messages from non-active conns (`issue#19015 <http://tracker.ceph.com/issues/19015>`_, `pr#13656 <https://github.com/ceph/ceph/pull/13656>`_, Kefu Chai)
 * core: mon/MonClient: don't return zero global_id (`issue#19134 <http://tracker.ceph.com/issues/19134>`_, `pr#13853 <https://github.com/ceph/ceph/pull/13853>`_, "Yan, Zheng", Kefu Chai)
 * core: mon/MonClient: hunt monitors in parallel (`issue#16091 <http://tracker.ceph.com/issues/16091>`_, `pr#11128 <https://github.com/ceph/ceph/pull/11128>`_, Steven Dieffenbach, Kefu Chai)
 * core: mon/MonClient: persist global_id across re-connecting (`issue#18968 <http://tracker.ceph.com/issues/18968>`_, `pr#13550 <https://github.com/ceph/ceph/pull/13550>`_, Kefu Chai)
