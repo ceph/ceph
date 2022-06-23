@@ -654,7 +654,7 @@ class MDCache {
   void shutdown_start();
   void shutdown_check();
   bool shutdown_pass();
-  bool shutdown();                    // clear cache (ie at shutodwn)
+  bool shutdown();                    // clear cache (ie at shutdown)
   bool shutdown_export_strays();
   void shutdown_export_stray_finish(inodeno_t ino) {
     if (shutdown_exporting_strays.erase(ino))

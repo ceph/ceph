@@ -419,7 +419,7 @@ Client::~Client()
   ceph_assert(ceph_mutex_is_not_locked(client_lock));
 
   // If the task is crashed or aborted and doesn't
-  // get any chance to run the umount and shutdow.
+  // get any chance to run the umount and shutdown.
   {
     std::scoped_lock l{client_lock};
     tick_thread_stopped = true;
