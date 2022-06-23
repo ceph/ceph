@@ -4527,7 +4527,7 @@ Detailed Changelog
 * mon: don't commit osdmap on no-op application ops (`pr#23528 <https://github.com/ceph/ceph/pull/23528>`_, John Spray)
 * mon: fix mgr module config option handling (`issue#35076 <http://tracker.ceph.com/issues/35076>`_, `pr#23846 <https://github.com/ceph/ceph/pull/23846>`_, Sage Weil)
 * mon: fix pg_sum_old not copied correctly (`pr#26110 <https://github.com/ceph/ceph/pull/26110>`_, Yao Zongyou)
-* monitoring/grafana: Fix OSD Capacity Utlization Grafana graph (`pr#24426 <https://github.com/ceph/ceph/pull/24426>`_, Maxime)
+* monitoring/grafana: Fix OSD Capacity Utilization Grafana graph (`pr#24426 <https://github.com/ceph/ceph/pull/24426>`_, Maxime)
 * mon: make rank ordering explicit (not tied to mon address sort order) (`pr#22193 <https://github.com/ceph/ceph/pull/22193>`_, Sage Weil)
 * mon: mon/config-key: increase max key entry size (`pr#24250 <https://github.com/ceph/ceph/pull/24250>`_, Joao Eduardo Luis)
 * mon: mon/MonClient: drop my_addr (`pr#26449 <https://github.com/ceph/ceph/pull/26449>`_, Kefu Chai)

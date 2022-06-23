@@ -4447,7 +4447,7 @@ Other Notable Changes
 * mon: mon/PGMap: add up_primary pg number field for pg-dump cmd (`pr#13451 <https://github.com/ceph/ceph/pull/13451>`_, xie xingguo)
 * mon: mon/PGMap.cc: fix "osd_epochs" section of dump_basic (`pr#14996 <https://github.com/ceph/ceph/pull/14996>`_, xie xingguo)
 * mon: mon/PGMap: make si units more readable in PGMap summary (`pr#14185 <https://github.com/ceph/ceph/pull/14185>`_, liuhong)
-* mon: mon/PGMap: remove skewed utilizatoin warning (`issue#20730 <http://tracker.ceph.com/issues/20730>`_, `pr#16461 <https://github.com/ceph/ceph/pull/16461>`_, Sage Weil)
+* mon: mon/PGMap: remove skewed utilization warning (`issue#20730 <http://tracker.ceph.com/issues/20730>`_, `pr#16461 <https://github.com/ceph/ceph/pull/16461>`_, Sage Weil)
 * mon: mon/PGMap: show %used in formatted output (`issue#20123 <http://tracker.ceph.com/issues/20123>`_, `pr#15387 <https://github.com/ceph/ceph/pull/15387>`_, Joao Eduardo Luis)
 * mon: mon/PGMonitor: clean up min/max span warning (`pr#14611 <https://github.com/ceph/ceph/pull/14611>`_, Sage Weil)
 * mon: mon/PGMonitor: fix description for ceph pg ls (`pr#12807 <https://github.com/ceph/ceph/pull/12807>`_, runsisi)
