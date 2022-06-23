@@ -1519,7 +1519,7 @@ class CephManager:
         if self.config is None:
             self.config = dict()
 
-        # NOTE: These variables are meant to be overriden by vstart_runner.py.
+        # NOTE: These variables are meant to be overridden by vstart_runner.py.
         self.rook = rook
         self.cephadm = cephadm
         self.testdir = teuthology.get_testdir(self.ctx)

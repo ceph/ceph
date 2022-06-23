@@ -771,7 +771,7 @@ class LocalCephManager(CephManager):
         # methods to work though.
         self.pools = {}
 
-        # NOTE: These variables are being overriden here so that parent class
+        # NOTE: These variables are being overridden here so that parent class
         # can pick it up.
         self.cephadm = False
         self.rook = False
