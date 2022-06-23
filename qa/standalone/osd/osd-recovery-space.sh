@@ -83,7 +83,7 @@ function wait_for_recovery_toofull() {
 # set ful-ratio to 50%
 # Write data 600 5K (3000K)
 # Inject fake_statfs_for_testing to 3600K (83% full)
-# Incresase the pool size to 2
+# Increase the pool size to 2
 # The pool shouldn't have room to recovery
 function TEST_recovery_test_simple() {
     local dir=$1

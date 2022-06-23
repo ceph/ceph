@@ -100,7 +100,7 @@ function wait_for_not_activating() {
 
 # Create 2 pools with size 1
 # Write enough data that only 1 pool pg can fit per osd
-# Incresase the pool size to 2
+# Increase the pool size to 2
 # On 3 OSDs this should result in 1 OSD with overlapping replicas,
 # so both pools can't fit.  We assume pgid 1.0 and 2.0 won't
 # map to the same 2 OSDs.
