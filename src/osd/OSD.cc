@@ -772,7 +772,7 @@ float OSDService::get_failsafe_full_ratio()
 
 OSDService::s_names OSDService::recalc_full_state(float ratio, float pratio, string &inject)
 {
-  // The OSDMap ratios take precendence.  So if the failsafe is .95 and
+  // The OSDMap ratios take precedence.  So if the failsafe is .95 and
   // the admin sets the cluster full to .96, the failsafe moves up to .96
   // too.  (Not that having failsafe == full is ideal, but it's better than
   // dropping writes before the clusters appears full.)
