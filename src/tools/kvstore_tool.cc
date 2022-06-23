@@ -232,7 +232,7 @@ int StoreTool::print_stats() const
   return ret;
 }
 
-//Itrerates through the db and collects the stats
+//Iterates through the db and collects the stats
 int StoreTool::build_size_histogram(const string& prefix0) const
 {
   ostringstream ostr;
