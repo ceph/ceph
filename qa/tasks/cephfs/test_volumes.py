@@ -6609,7 +6609,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # wait for clone1 to be in-progress
         self._wait_for_clone_to_be_in_progress(clone1)
 
-        # cancel in-progess clone1
+        # cancel in-progress clone1
         self._fs_cmd("clone", "cancel", self.volname, clone1)
 
         # check clone1 status
