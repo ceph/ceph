@@ -774,7 +774,7 @@ void Inode::unset_deleg(Fh *fh)
 * @caps: the dirty caps
 *
 * note that if there is no dirty and flushing caps before, we need to pin this inode.
-* it will be unpined by handle_cap_flush_ack when there are no dirty and flushing caps.
+* it will be unpinned by handle_cap_flush_ack when there are no dirty and flushing caps.
 */
 void Inode::mark_caps_dirty(int caps)
 {
