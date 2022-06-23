@@ -361,7 +361,7 @@ int Infiniband::QueuePair::init()
   if (!srq) {
     int rq_wrs = infiniband.post_chunks_to_rq(max_recv_wr, this);
     if (rq_wrs  == 0) {
-      lderr(cct) << __func__ << " intialize no SRQ Queue Pair, qp number: " << qp->qp_num
+      lderr(cct) << __func__ << " initialize no SRQ Queue Pair, qp number: " << qp->qp_num
                  << " fatal error: can't post SQ WR " << dendl;
       return -1;
     }
