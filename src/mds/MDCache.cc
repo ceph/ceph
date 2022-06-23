@@ -4370,7 +4370,7 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
 
   if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     survivor = true;
-    dout(10) << "i am a surivivor, and will ack immediately" << dendl;
+    dout(10) << "i am a survivor, and will ack immediately" << dendl;
     ack = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_ACK);
 
     map<inodeno_t,map<client_t,Capability::Import> > imported_caps;
