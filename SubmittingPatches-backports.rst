@@ -362,7 +362,7 @@ if the PR is targeting "nautilus", set the Milestone tag to "nautilus".
 
 If you don't have sufficient GitHub permissions to set the Milestone, don't
 worry. Members of the `Stable Releases and Backports team`_ periodically run
-a script (``ceph-backport.sh --milestones``) which scans all PRs targetting stable
+a script (``ceph-backport.sh --milestones``) which scans all PRs targeting stable
 branches and automatically adds the correct Milestone tag if it is missing.
 
 Next, check which component label was applied to the ``main`` PR corresponding to
