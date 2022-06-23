@@ -280,7 +280,7 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
   return false;
 }
 
-static void dump_status(struct req_state *s, int status,
+static void dump_status(req_state *s, int status,
 			const char *status_name)
 {
   s->formatter->set_status(status, status_name);
@@ -292,7 +292,7 @@ static void dump_status(struct req_state *s, int status,
   }
 }
 
-void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
+void rgw_flush_formatter_and_reset(req_state *s, Formatter *formatter)
 {
   std::ostringstream oss;
   formatter->output_footer();
@@ -305,7 +305,7 @@ void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
   s->formatter->reset();
 }
 
-void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
+void rgw_flush_formatter(req_state *s, Formatter *formatter)
 {
   std::ostringstream oss;
   formatter->flush(oss);
@@ -326,17 +326,17 @@ void dump_errno(const struct rgw_err &err, string& out) {
   dump_errno(err.http_ret, out);
 }
 
-void dump_errno(struct req_state *s)
+void dump_errno(req_state *s)
 {
   dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);
 }
 
-void dump_errno(struct req_state *s, int http_ret)
+void dump_errno(req_state *s, int http_ret)
 {
   dump_status(s, http_ret, http_status_names[http_ret]);
 }
 
-void dump_header(struct req_state* const s,
+void dump_header(req_state* const s,
                  const std::string_view& name,
                  const std::string_view& val)
 {
@@ -348,14 +348,14 @@ void dump_header(struct req_state* const s,
   }
 }
 
-void dump_header(struct req_state* const s,
+void dump_header(req_state* const s,
                  const std::string_view& name,
                  ceph::buffer::list& bl)
 {
   return dump_header(s, name, rgw_sanitized_hdrval(bl));
 }
 
-void dump_header(struct req_state* const s,
+void dump_header(req_state* const s,
                  const std::string_view& name,
                  const long long val)
 {
@@ -365,7 +365,7 @@ void dump_header(struct req_state* const s,
   return dump_header(s, name, std::string_view(buf, len));
 }
 
-void dump_header(struct req_state* const s,
+void dump_header(req_state* const s,
                  const std::string_view& name,
                  const utime_t& ut)
 {
@@ -377,7 +377,7 @@ void dump_header(struct req_state* const s,
   return dump_header(s, name, std::string_view(buf, len));
 }
 
-void dump_content_length(struct req_state* const s, const uint64_t len)
+void dump_content_length(req_state* const s, const uint64_t len)
 {
   try {
     RESTFUL_IO(s)->send_content_length(len);
@@ -388,7 +388,7 @@ void dump_content_length(struct req_state* const s, const uint64_t len)
   dump_header(s, "Accept-Ranges", "bytes");
 }
 
-static void dump_chunked_encoding(struct req_state* const s)
+static void dump_chunked_encoding(req_state* const s)
 {
   try {
     RESTFUL_IO(s)->send_chunked_transfer_encoding();
@@ -398,7 +398,7 @@ static void dump_chunked_encoding(struct req_state* const s)
   }
 }
 
-void dump_etag(struct req_state* const s,
+void dump_etag(req_state* const s,
                const std::string_view& etag,
                const bool quoted)
 {
@@ -413,7 +413,7 @@ void dump_etag(struct req_state* const s,
   }
 }
 
-void dump_bucket_from_state(struct req_state *s)
+void dump_bucket_from_state(req_state *s)
 {
   if (g_conf()->rgw_expose_bucket && ! s->bucket_name.empty()) {
     if (! s->bucket_tenant.empty()) {
@@ -425,7 +425,7 @@ void dump_bucket_from_state(struct req_state *s)
   }
 }
 
-void dump_redirect(struct req_state * const s, const std::string& redirect)
+void dump_redirect(req_state * const s, const std::string& redirect)
 {
   return dump_header_if_nonempty(s, "Location", redirect);
 }
@@ -446,7 +446,7 @@ static size_t dump_time_header_impl(char (&timestr)[TIME_BUF_SIZE],
                   "%a, %d %b %Y %H:%M:%S %Z", tmp);
 }
 
-void dump_time_header(struct req_state *s, const char *name, real_time t)
+void dump_time_header(req_state *s, const char *name, real_time t)
 {
   char timestr[TIME_BUF_SIZE];
 
@@ -467,12 +467,12 @@ std::string dump_time_to_str(const real_time& t)
 }
 
 
-void dump_last_modified(struct req_state *s, real_time t)
+void dump_last_modified(req_state *s, real_time t)
 {
   dump_time_header(s, "Last-Modified", t);
 }
 
-void dump_epoch_header(struct req_state *s, const char *name, real_time t)
+void dump_epoch_header(req_state *s, const char *name, real_time t)
 {
   utime_t ut(t);
   char buf[65];
@@ -483,7 +483,7 @@ void dump_epoch_header(struct req_state *s, const char *name, real_time t)
   return dump_header(s, name, std::string_view(buf, len));
 }
 
-void dump_time(struct req_state *s, const char *name, real_time t)
+void dump_time(req_state *s, const char *name, real_time t)
 {
   char buf[TIME_BUF_SIZE];
   rgw_to_iso8601(t, buf, sizeof(buf));
@@ -491,7 +491,7 @@ void dump_time(struct req_state *s, const char *name, real_time t)
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(struct req_state *s, const rgw_user& id, const string& name,
+void dump_owner(req_state *s, const rgw_user& id, const string& name,
 		const char *section)
 {
   if (!section)
@@ -502,7 +502,7 @@ void dump_owner(struct req_state *s, const rgw_user& id, const string& name,
   s->formatter->close_section();
 }
 
-void dump_access_control(struct req_state *s, const char *origin,
+void dump_access_control(req_state *s, const char *origin,
 			 const char *meth,
 			 const char *hdr, const char *exp_hdr,
 			 uint32_t max_age) {
@@ -547,7 +547,7 @@ void dump_access_control(req_state *s, RGWOp *op)
 		      exp_header.c_str(), max_age);
 }
 
-void dump_start(struct req_state *s)
+void dump_start(req_state *s)
 {
   if (!s->content_started) {
     s->formatter->output_header();
@@ -565,7 +565,7 @@ void dump_trans_id(req_state *s)
   }
 }
 
-void end_header(struct req_state* s, RGWOp* op, const char *content_type,
+void end_header(req_state* s, RGWOp* op, const char *content_type,
 		const int64_t proposed_content_length, bool force_content_type,
 		bool force_no_error)
 {
@@ -654,7 +654,7 @@ static void build_redirect_url(req_state *s, const string& redirect_base, string
   dest_uri += s->info.request_params;
 }
 
-void abort_early(struct req_state *s, RGWOp* op, int err_no,
+void abort_early(req_state *s, RGWOp* op, int err_no,
 		 RGWHandler* handler, optional_yield y)
 {
   string error_content("");
@@ -725,7 +725,7 @@ void abort_early(struct req_state *s, RGWOp* op, int err_no,
   perfcounter->inc(l_rgw_failed_req);
 }
 
-void dump_continue(struct req_state * const s)
+void dump_continue(req_state * const s)
 {
   try {
     RESTFUL_IO(s)->send_100_continue();
@@ -735,7 +735,7 @@ void dump_continue(struct req_state * const s)
   }
 }
 
-void dump_range(struct req_state* const s,
+void dump_range(req_state* const s,
                 const uint64_t ofs,
                 const uint64_t end,
 		const uint64_t total)
@@ -759,7 +759,7 @@ void dump_range(struct req_state* const s,
 }
 
 
-int dump_body(struct req_state* const s,
+int dump_body(req_state* const s,
               const char* const buf,
               const size_t len)
 {
@@ -780,17 +780,17 @@ int dump_body(struct req_state* const s,
   }
 }
 
-int dump_body(struct req_state* const s, /* const */ ceph::buffer::list& bl)
+int dump_body(req_state* const s, /* const */ ceph::buffer::list& bl)
 {
   return dump_body(s, bl.c_str(), bl.length());
 }
 
-int dump_body(struct req_state* const s, const std::string& str)
+int dump_body(req_state* const s, const std::string& str)
 {
   return dump_body(s, str.c_str(), str.length());
 }
 
-int recv_body(struct req_state* const s,
+int recv_body(req_state* const s,
               char* const buf,
               const size_t max)
 {
@@ -835,7 +835,7 @@ int RGWGetObj_ObjStore::get_params(optional_yield y)
   return 0;
 }
 
-int RESTArgs::get_string(struct req_state *s, const string& name,
+int RESTArgs::get_string(req_state *s, const string& name,
 			 const string& def_val, string *val, bool *existed)
 {
   bool exists;
@@ -852,7 +852,7 @@ int RESTArgs::get_string(struct req_state *s, const string& name,
   return 0;
 }
 
-int RESTArgs::get_uint64(struct req_state *s, const string& name,
+int RESTArgs::get_uint64(req_state *s, const string& name,
 			 uint64_t def_val, uint64_t *val, bool *existed)
 {
   bool exists;
@@ -873,7 +873,7 @@ int RESTArgs::get_uint64(struct req_state *s, const string& name,
   return 0;
 }
 
-int RESTArgs::get_int64(struct req_state *s, const string& name,
+int RESTArgs::get_int64(req_state *s, const string& name,
 			int64_t def_val, int64_t *val, bool *existed)
 {
   bool exists;
@@ -894,7 +894,7 @@ int RESTArgs::get_int64(struct req_state *s, const string& name,
   return 0;
 }
 
-int RESTArgs::get_uint32(struct req_state *s, const string& name,
+int RESTArgs::get_uint32(req_state *s, const string& name,
 			 uint32_t def_val, uint32_t *val, bool *existed)
 {
   bool exists;
@@ -915,7 +915,7 @@ int RESTArgs::get_uint32(struct req_state *s, const string& name,
   return 0;
 }
 
-int RESTArgs::get_int32(struct req_state *s, const string& name,
+int RESTArgs::get_int32(req_state *s, const string& name,
 			int32_t def_val, int32_t *val, bool *existed)
 {
   bool exists;
@@ -936,7 +936,7 @@ int RESTArgs::get_int32(struct req_state *s, const string& name,
   return 0;
 }
 
-int RESTArgs::get_time(struct req_state *s, const string& name,
+int RESTArgs::get_time(req_state *s, const string& name,
 		       const utime_t& def_val, utime_t *val, bool *existed)
 {
   bool exists;
@@ -961,7 +961,7 @@ int RESTArgs::get_time(struct req_state *s, const string& name,
   return 0;
 }
 
-int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_val, uint64_t *epoch, bool *existed)
+int RESTArgs::get_epoch(req_state *s, const string& name, uint64_t def_val, uint64_t *epoch, bool *existed)
 {
   bool exists;
   string date = s->info.args.get(name, &exists);
@@ -981,7 +981,7 @@ int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_va
   return 0;
 }
 
-int RESTArgs::get_bool(struct req_state *s, const string& name, bool def_val, bool *val, bool *existed)
+int RESTArgs::get_bool(req_state *s, const string& name, bool def_val, bool *val, bool *existed)
 {
   bool exists;
   string sval = s->info.args.get(name, &exists);
@@ -1529,7 +1529,7 @@ static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const ui
   return std::make_tuple(0, std::move(bl));
 }
 
-std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
+std::tuple<int, bufferlist > rgw_rest_read_all_input(req_state *s,
                                         const uint64_t max_len,
                                         const bool allow_chunked)
 {
@@ -1724,7 +1724,7 @@ void RGWHandler_REST::put_op(RGWOp* op)
   delete op;
 } /* put_op */
 
-int RGWHandler_REST::allocate_formatter(struct req_state *s,
+int RGWHandler_REST::allocate_formatter(req_state *s,
 					int default_type,
 					bool configurable)
 {
@@ -1760,7 +1760,7 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
   return RGWHandler_REST::reallocate_formatter(s, type);
 }
 
-int RGWHandler_REST::reallocate_formatter(struct req_state *s, int type)
+int RGWHandler_REST::reallocate_formatter(req_state *s, int type)
 {
   if (s->format == type) {
     // do nothing, just reset
@@ -1982,7 +1982,7 @@ void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
   default_mgr = mgr;
 }
 
-RGWRESTMgr* RGWRESTMgr::get_resource_mgr(struct req_state* const s,
+RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
                                          const std::string& uri,
                                          std::string* const out_uri)
 {
@@ -2042,7 +2042,7 @@ int64_t parse_content_length(const char *content_length)
   return len;
 }
 
-int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
+int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
 {
   req_info& info = s->info;
 
@@ -2305,7 +2305,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
 
 RGWHandler_REST* RGWREST::get_handler(
   rgw::sal::Store*  const store,
-  struct req_state* const s,
+  req_state* const s,
   const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix,
   RGWRestfulIO* const rio,

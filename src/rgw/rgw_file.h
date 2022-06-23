@@ -1383,7 +1383,7 @@ public:
   }
 
   int header_init() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -1518,7 +1518,7 @@ public:
   }
 
   int header_init() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -1578,7 +1578,7 @@ public:
   }
 
   void send_response() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     auto cnow = real_clock::now();
 
     /* enumerate objs and common_prefixes in parallel,
@@ -1819,7 +1819,7 @@ public:
   }
 
   int header_init() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -1899,7 +1899,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT";
     state->op = OP_PUT;
 
@@ -1915,7 +1915,7 @@ public:
   }
 
   int get_params(optional_yield) override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
@@ -1956,7 +1956,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "DELETE";
     state->op = OP_DELETE;
 
@@ -2012,7 +2012,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT";
     state->op = OP_PUT;
 
@@ -2031,7 +2031,7 @@ public:
   }
 
   int get_params(optional_yield) override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
@@ -2103,7 +2103,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -2184,7 +2184,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "DELETE";
     state->op = OP_DELETE;
 
@@ -2259,7 +2259,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -2333,7 +2333,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -2396,7 +2396,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
 
@@ -2423,7 +2423,7 @@ public:
   }
 
   void send_response() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     // try objects
     for (const auto& iter : objs) {
       auto& name = iter.key.name;
@@ -2518,7 +2518,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT";
     state->op = OP_PUT;
 
@@ -2534,7 +2534,7 @@ public:
   }
 
   int get_params(optional_yield) override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     RGWAccessControlPolicy_S3 s3policy(state->cct);
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
@@ -2607,7 +2607,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT"; // XXX check
     state->op = OP_PUT;
 
@@ -2640,7 +2640,7 @@ public:
   }
 
   int get_params(optional_yield) override {
-    struct req_state* s = get_state();
+    req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
@@ -2688,7 +2688,7 @@ public:
 
   virtual int header_init() {
 
-    struct req_state* s = get_state();
+    req_state* s = get_state();
     s->info.method = "GET";
     s->op = OP_GET;
 
@@ -2739,7 +2739,7 @@ public:
 
   int header_init() override {
 
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "PUT";
     state->op = OP_PUT;
 
@@ -2793,7 +2793,7 @@ public:
 
   virtual int header_init() {
 
-    struct req_state* s = get_state();
+    req_state* s = get_state();
     s->info.method = "DELETE";
     s->op = OP_PUT;
 
@@ -2837,7 +2837,7 @@ public:
   }
 
   int header_init() override {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     state->info.method = "GET";
     state->op = OP_GET;
     return 0;

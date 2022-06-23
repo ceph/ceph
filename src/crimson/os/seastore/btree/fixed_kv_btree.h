@@ -58,7 +58,7 @@ public:
   using iterator_fut = base_iertr::future<iterator>;
 
   using mapped_space_visitor_t = std::function<
-    void(paddr_t, extent_len_t, depth_t)>;
+    void(paddr_t, extent_len_t, depth_t, extent_types_t)>;
 
   class iterator {
   public:
@@ -319,6 +319,7 @@ public:
     root_leaf->set_meta(meta);
     root_leaf->pin.set_range(meta);
     get_tree_stats<self_type>(c.trans).depth = 1u;
+    get_tree_stats<self_type>(c.trans).extents_num_delta++;
     return phy_tree_root_t{root_leaf->get_paddr(), 1u};
   }
 
@@ -1118,7 +1119,8 @@ private:
 	if (visitor) (*visitor)(
           root_node->get_paddr(),
           root_node->get_length(),
-          root.get_depth());
+          root.get_depth(),
+          internal_node_t::TYPE);
 	return lookup_root_iertr::now();
       });
     } else {
@@ -1132,7 +1134,8 @@ private:
 	if (visitor) (*visitor)(
           root_node->get_paddr(),
           root_node->get_length(),
-          root.get_depth());
+          root.get_depth(),
+          leaf_node_t::TYPE);
 	return lookup_root_iertr::now();
       });
     }
@@ -1169,7 +1172,12 @@ private:
       auto node_iter = f(*node);
       assert(node_iter != node->end());
       entry.pos = node_iter->get_offset();
-      if (visitor) (*visitor)(node->get_paddr(), node->get_length(), depth);
+      if (visitor)
+        (*visitor)(
+          node->get_paddr(),
+          node->get_length(),
+          depth,
+          node->get_type());
       return seastar::now();
     });
   }
@@ -1202,7 +1210,12 @@ private:
       iter.leaf.node = node;
       auto node_iter = f(*node);
       iter.leaf.pos = node_iter->get_offset();
-      if (visitor) (*visitor)(node->get_paddr(), node->get_length(), 1);
+      if (visitor)
+        (*visitor)(
+          node->get_paddr(),
+          node->get_length(),
+          1,
+          node->get_type());
       return seastar::now();
     });
   }
@@ -1402,6 +1415,7 @@ private:
       root.set_location(nroot->get_paddr());
       root.set_depth(iter.get_depth());
       get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
+      get_tree_stats<self_type>(c.trans).extents_num_delta++;
       root_dirty = true;
     }
 
@@ -1431,6 +1445,7 @@ private:
         *right);
       c.cache.retire_extent(c.trans, pos.node);
 
+      get_tree_stats<self_type>(c.trans).extents_num_delta++;
       return std::make_pair(left, right);
     };
 
@@ -1546,6 +1561,7 @@ private:
                   iter.internal.pop_back();
                   root.set_depth(iter.get_depth());
                   get_tree_stats<self_type>(c.trans).depth = iter.get_depth();
+                  get_tree_stats<self_type>(c.trans).extents_num_delta--;
                   root_dirty = true;
                 } else {
                   SUBTRACET(seastore_fixedkv_tree, "no need to collapse root", c.trans);
@@ -1656,6 +1672,7 @@ private:
         SUBTRACET(seastore_fixedkv_tree, "l: {}, r: {}, replacement: {}", c.trans, *l, *r, *replacement);
         c.cache.retire_extent(c.trans, l);
         c.cache.retire_extent(c.trans, r);
+        get_tree_stats<self_type>(c.trans).extents_num_delta--;
       } else {
         LOG_PREFIX(FixedKVBtree::merge_level);
         auto [replacement_l, replacement_r, pivot] =

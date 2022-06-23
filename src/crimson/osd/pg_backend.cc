@@ -415,19 +415,19 @@ PGBackend::cmp_ext(const ObjectState& os, OSDOp& osd_op)
   } else {
     read_ext = _read(os.oi.soid, op.extent.offset, ext_len, 0);
   }
-  return read_ext.safe_then_interruptible([&osd_op](auto&& read_bl) {
-    int32_t retcode = 0;
+  return read_ext.safe_then_interruptible([&osd_op](auto&& read_bl)
+    -> cmp_ext_errorator::future<> {
     for (unsigned index = 0; index < osd_op.indata.length(); index++) {
       char byte_in_op = osd_op.indata[index];
       char byte_from_disk = (index < read_bl.length() ? read_bl[index] : 0);
       if (byte_in_op != byte_from_disk) {
         logger().debug("cmp_ext: mismatch at {}", index);
-        retcode = -MAX_ERRNO - index;
-	break;
+        osd_op.rval = -MAX_ERRNO - index;
+        return crimson::ct_error::cmp_fail::make();
       }
     }
-    logger().debug("cmp_ext: {}", retcode);
-    osd_op.rval = retcode;
+    osd_op.rval = 0;
+    return cmp_ext_errorator::make_ready_future<>();
   });
 }
 

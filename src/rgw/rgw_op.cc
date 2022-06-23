@@ -334,7 +334,7 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
 
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
                               rgw::sal::Store* store,
-                              struct req_state *s,
+                              req_state *s,
                               RGWBucketInfo& bucket_info,
                               map<string, bufferlist>& bucket_attrs,
                               RGWAccessControlPolicy *policy,
@@ -361,7 +361,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
 
 static int read_obj_policy(const DoutPrefixProvider *dpp, 
                            rgw::sal::Store* store,
-                           struct req_state *s,
+                           req_state *s,
                            RGWBucketInfo& bucket_info,
                            map<string, bufferlist>& bucket_attrs,
                            RGWAccessControlPolicy* acl,
@@ -449,7 +449,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
  * only_bucket: If true, reads the user and bucket ACLs rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* store, struct req_state* s, optional_yield y)
+int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* store, req_state* s, optional_yield y)
 {
   int ret = 0;
 
@@ -644,7 +644,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
  * Returns: 0 on success, -ERR# otherwise.
  */
 int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-			      struct req_state *s, bool prefetch_data, optional_yield y)
+			      req_state *s, bool prefetch_data, optional_yield y)
 {
   int ret = 0;
 
@@ -666,7 +666,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
   return ret;
 }
 
-static int rgw_iam_remove_objtags(const DoutPrefixProvider *dpp, struct req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
+static int rgw_iam_remove_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
   object->set_atomic();
   int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
@@ -723,7 +723,7 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string_view key, 
     e.emplace(key,val);
 }
 
-static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl, bool has_existing_obj_tag=false, bool has_resource_tag=false){
+static int rgw_iam_add_tags_from_bl(req_state* s, bufferlist& bl, bool has_existing_obj_tag=false, bool has_resource_tag=false){
   RGWObjTags& tagset = s->tagset;
   try {
     auto bliter = bl.cbegin();
@@ -742,7 +742,7 @@ static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl, bool ha
   return 0;
 }
 
-static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, struct req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
+static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
   object->set_atomic();
   int op_ret = object->get_obj_attrs(s->yield, dpp);
   if (op_ret < 0)
@@ -755,14 +755,14 @@ static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, struct req_state* 
   return 0;
 }
 
-static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, struct req_state* s, bool has_existing_obj_tag, bool has_resource_tag) {
+static int rgw_iam_add_objtags(const DoutPrefixProvider *dpp, req_state* s, bool has_existing_obj_tag, bool has_resource_tag) {
   if (!rgw::sal::Object::empty(s->object.get())) {
     return rgw_iam_add_objtags(dpp, s, s->object.get(), has_existing_obj_tag, has_resource_tag);
   }
   return 0;
 }
 
-static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, struct req_state* s, rgw::sal::Bucket* bucket) {
+static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Bucket* bucket) {
   rgw::sal::Attrs attrs = bucket->get_attrs();
   auto tags = attrs.find(RGW_ATTR_TAGS);
   if (tags != attrs.end()) {
@@ -771,7 +771,7 @@ static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, struct req_stat
   return 0;
 }
 
-static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, struct req_state* s) {
+static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s) {
   return rgw_iam_add_buckettags(dpp, s, s->bucket.get());
 }
 
@@ -822,11 +822,11 @@ static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvide
   return make_tuple(has_existing_obj_tag, has_resource_tag);
 }
 
-static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, struct req_state* s, bool check_obj_exist_tag=true) {
+static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag=true) {
   return rgw_check_policy_condition(dpp, s->iam_policy, s->iam_user_policies, s->session_policies, check_obj_exist_tag);
 }
 
-static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct req_state *s){
+static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, req_state *s){
 
   using header_pair_t = std::pair <const char*, const char*>;
   static const std::initializer_list <header_pair_t> acl_header_conditionals {
@@ -848,7 +848,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct re
 }
 
 void rgw_build_iam_environment(rgw::sal::Store* store,
-	                              struct req_state* s)
+	                              req_state* s)
 {
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
@@ -907,7 +907,7 @@ void rgw_build_iam_environment(rgw::sal::Store* store,
   }
 }
 
-void rgw_bucket_object_pre_exec(struct req_state *s)
+void rgw_bucket_object_pre_exec(req_state *s)
 {
   if (s->expect_cont)
     dump_continue(s);
@@ -2110,7 +2110,7 @@ void RGWGetObj::pre_exec()
 }
 
 static inline void rgw_cond_decode_objtags(
-  struct req_state *s,
+  req_state *s,
   const std::map<std::string, buffer::list> &attrs)
 {
   const auto& tags = attrs.find(RGW_ATTR_TAGS);
@@ -7204,7 +7204,7 @@ RGWBulkUploadOp::parse_path(const std::string_view& path)
 }
 
 std::pair<std::string, std::string>
-RGWBulkUploadOp::handle_upload_path(struct req_state *s)
+RGWBulkUploadOp::handle_upload_path(req_state *s)
 {
   std::string bucket_path, file_prefix;
   if (! s->init_state.url_bucket.empty()) {
@@ -7258,7 +7258,7 @@ static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, re
 }
 
 void RGWBulkUploadOp::init(rgw::sal::Store* const store,
-                           struct req_state* const s,
+                           req_state* const s,
                            RGWHandler* const h)
 {
   RGWOp::init(store, s, h);
@@ -7893,7 +7893,7 @@ RGWHandler::~RGWHandler()
 }
 
 int RGWHandler::init(rgw::sal::Store* _store,
-                     struct req_state *_s,
+                     req_state *_s,
                      rgw::io::BasicClient *cio)
 {
   store = _store;

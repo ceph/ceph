@@ -128,7 +128,7 @@ namespace rgw {
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
     static int init_from_header(rgw::sal::Store* store,
-				struct req_state *s);
+				req_state *s);
   }; /* RGWHandler_Lib */
 
   class RGWLibRequest : public RGWRequest,
@@ -139,7 +139,7 @@ namespace rgw {
     CephContext* cct;
 
     /* unambiguiously return req_state */
-    inline struct req_state* get_state() { return this->RGWRequest::s; }
+    inline req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user)
       :  RGWRequest(rgwlib.get_store()->get_new_req_id()),
@@ -161,7 +161,7 @@ namespace rgw {
     using RGWHandler::init;
 
     int init(const RGWEnv& rgw_env, rgw::sal::Store* _store,
-	     RGWLibIO* io, struct req_state* _s) {
+	     RGWLibIO* io, req_state* _s) {
 
       RGWRequest::init_state(_s);
       RGWHandler::init(_store, _s, io);
@@ -189,7 +189,7 @@ namespace rgw {
 
   class RGWLibContinuedReq : public RGWLibRequest {
     RGWLibIO io_ctx;
-    struct req_state rstate;
+    req_state rstate;
   public:
 
     RGWLibContinuedReq(CephContext* _cct,

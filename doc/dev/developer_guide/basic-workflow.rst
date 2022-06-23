@@ -142,6 +142,10 @@ to work on the Ceph repository.".
 
 1. Configure your local git environment with your name and email address.  
 
+   .. note::
+      These commands will work only from within the ``ceph/`` directory
+      that was created when you cloned your fork.
+
    .. prompt:: bash $
 
       git config user.name "FIRST_NAME LAST_NAME"

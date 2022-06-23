@@ -28,7 +28,7 @@ public:
   ~RGWRESTMgr_Bucket() override = default;
 
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state*,
+			       req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Bucket(auth_registry);

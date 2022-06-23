@@ -778,7 +778,7 @@ public:
       virtual std::unique_ptr<Completions> get_completions(void) override;
 
   virtual std::unique_ptr<Notification> get_notification(
-    rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
+    rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
     rgw::notify::EventType event_type, const std::string* object_name) override;
 
   virtual std::unique_ptr<Notification> get_notification(

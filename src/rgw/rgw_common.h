@@ -279,8 +279,6 @@ using ceph::crypto::MD5;
 #define UINT32_MAX (0xffffffffu)
 #endif
 
-struct req_state;
-
 typedef void *RGWAccessHandle;
 
 enum RGWIntentEvent {
@@ -1714,10 +1712,10 @@ struct req_state : DoutPrefixProvider {
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
 };
 
-void set_req_state_err(struct req_state*, int);
-void set_req_state_err(struct req_state*, int, const std::string&);
+void set_req_state_err(req_state*, int);
+void set_req_state_err(req_state*, int, const std::string&);
 void set_req_state_err(struct rgw_err&, int, const int);
-void dump(struct req_state*);
+void dump(req_state*);
 
 /** Store basic data on bucket */
 struct RGWBucketEnt {
@@ -2190,26 +2188,26 @@ rgw::IAM::Effect eval_identity_or_session_policies(const std::vector<rgw::IAM::P
                           const uint64_t op,
                           const rgw::ARN& arn);
 bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            struct req_state * const s,
+                            req_state * const s,
                             RGWAccessControlPolicy * const user_acl,
                             const std::vector<rgw::IAM::Policy>& user_policies,
                             const std::vector<rgw::IAM::Policy>& session_policies,
                             const rgw::ARN& res,
                             const uint64_t op);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
-                                      struct req_state * const s,
+                                      req_state * const s,
                                       RGWAccessControlPolicy * const user_acl,
                                       const int perm);
 bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            struct req_state * const s,
+                            req_state * const s,
                             const rgw::ARN& res,
                             const uint64_t op);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
-                                      struct req_state * const s,
+                                      req_state * const s,
                                       int perm);
 bool verify_bucket_permission(
   const DoutPrefixProvider* dpp,
-  struct req_state * const s,
+  req_state * const s,
   const rgw_bucket& bucket,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
@@ -2217,21 +2215,21 @@ bool verify_bucket_permission(
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * const s, const uint64_t op);
+bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op);
 bool verify_bucket_permission_no_policy(
   const DoutPrefixProvider* dpp,
-  struct req_state * const s,
+  req_state * const s,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   const int perm);
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
-                                        struct req_state * const s,
+                                        req_state * const s,
 					const int perm);
-int verify_bucket_owner_or_policy(struct req_state* const s,
+int verify_bucket_owner_or_policy(req_state* const s,
 				  const uint64_t op);
 extern bool verify_object_permission(
   const DoutPrefixProvider* dpp,
-  struct req_state * const s,
+  req_state * const s,
   const rgw_obj& obj,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
@@ -2240,15 +2238,15 @@ extern bool verify_object_permission(
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
-extern bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s, uint64_t op);
+extern bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op);
 extern bool verify_object_permission_no_policy(
   const DoutPrefixProvider* dpp,
-  struct req_state * const s,
+  req_state * const s,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   RGWAccessControlPolicy * const object_acl,
   int perm);
-extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state *s,
+extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s,
 					       int perm);
 extern int verify_object_lock(
   const DoutPrefixProvider* dpp,

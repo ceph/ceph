@@ -307,7 +307,7 @@ BtreeBackrefManager::scan_mapped_space(
 		  interruptible::ready_future_marker{},
 		  seastar::stop_iteration::yes);
 	      }
-	      visitor(pos.get_key(), pos.get_val().len, 0);
+	      visitor(pos.get_key(), pos.get_val().len, 0, pos.get_val().type);
 	      return BackrefBtree::iterate_repeat_ret_inner(
 		interruptible::ready_future_marker{},
 		seastar::stop_iteration::no);

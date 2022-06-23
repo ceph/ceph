@@ -139,13 +139,13 @@ public:
 }; /* RGWPutObj_BlockEncrypt */
 
 
-int rgw_s3_prepare_encrypt(struct req_state* s,
+int rgw_s3_prepare_encrypt(req_state* s,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
                                     std::string>& crypt_http_responses);
 
-int rgw_s3_prepare_decrypt(struct req_state* s,
+int rgw_s3_prepare_decrypt(req_state* s,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
