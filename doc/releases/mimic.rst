@@ -3473,7 +3473,7 @@ Detailed Changelog
 * msg/async/rdma: fixes crash for multi rados client within one process (`pr#16981 <https://github.com/ceph/ceph/pull/16981>`_, Alex Mikheev, Haomai Wang, Adir Lev)
 * msg/async/rdma: fix Tx buffer leakage that can introduce "heartbeat no reply" (`pr#18053 <https://github.com/ceph/ceph/pull/18053>`_, Yan Lei)
 * msg/async/rdma: refactor rx buffer pool allocator (`pr#17018 <https://github.com/ceph/ceph/pull/17018>`_, Alex Mikheev)
-* msg/async/rdma: unnecessary reinitiliazation of an iterator (`pr#18190 <https://github.com/ceph/ceph/pull/18190>`_, JustL)
+* msg/async/rdma: unnecessary reinitialization of an iterator (`pr#18190 <https://github.com/ceph/ceph/pull/18190>`_, JustL)
 * msg/async: size of EventCenter::file_events should be greater than fd (`issue#23253 <http://tracker.ceph.com/issues/23253>`_, `pr#20764 <https://github.com/ceph/ceph/pull/20764>`_, Yupeng Chen)
 * msg/async: use bitset<> to do the popcnt (`pr#18681 <https://github.com/ceph/ceph/pull/18681>`_, Kefu Chai)
 * msg/async: use device before checking (`pr#19738 <https://github.com/ceph/ceph/pull/19738>`_, Xiaoyan Li)
