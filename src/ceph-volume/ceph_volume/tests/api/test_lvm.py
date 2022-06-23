@@ -143,7 +143,7 @@ class TestVolumeGroupSizing(object):
         assert result['percentages'] == 100
         assert result['parts'] == 1
 
-    def test_extents_are_halfed_rounded_down(self):
+    def test_extents_are_halved_rounded_down(self):
         result = self.vg.sizing(size=512)
         assert result['extents'] == 512
 
