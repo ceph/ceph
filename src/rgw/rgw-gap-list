@@ -2,7 +2,7 @@
 
 # Last revision 2023-01-13
 
-# NOTE: This script based based on rgw-orphan-list but doing the
+# NOTE: This script based on rgw-orphan-list but doing the
 # reverse calculation.
 
 # NOTE: The awk included in this script replaces the 'ceph-diff-sorted'
@@ -276,7 +276,7 @@ for myfile in $rados_out $rgwadmin_out; do
   fi 
 done
 
-# Create an awk script in a file for parsing the two command outoputs.
+# Create an awk script in a file for parsing the two command outputs.
 log "Creating awk script for comparing outputs: ${incremental_grep_awk}"
 
 cat <<"EOF" >$incremental_grep_awk
@@ -292,7 +292,7 @@ cat <<"EOF" >$incremental_grep_awk
 #    indicates a possible deleted tail object and the accompanying
 #    bucket / user object name is output, assuming it had not been
 #    previously identified.
-#    - A map of outputed bucket / user object is maintained in memory
+#    - A map of outputted bucket / user object is maintained in memory
 #  * If a value appears in $rados_out, but not in $rgwadmin_out, the
 #    $rados_out file is iterated until the $rados_out line is equal
 #    or > (alphabetically) the value from the $rgwadmin_out file.

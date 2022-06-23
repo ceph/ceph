@@ -22,7 +22,7 @@
 #define dout_prefix (*_dout << "rgw realm reloader: ")
 
 
-// safe callbacks from SafeTimer are unneccessary. reload() can take a long
+// safe callbacks from SafeTimer are unnecessary. reload() can take a long
 // time, so we don't want to hold the mutex and block handle_notify() for the
 // duration
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;

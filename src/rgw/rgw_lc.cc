@@ -2146,7 +2146,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
   SimpleBackoff shard_lock(5 /* max retries */, 50ms);
   if (! shard_lock.wait_backoff(lock_lambda)) {
-    ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
+    ldpp_dout(this, 0) << "RGWLC::process(): failed to acquire lock on "
 		       << lc_shard << " after " << shard_lock.get_retries()
 		       << dendl;
     return 0;
@@ -2314,7 +2314,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     /* postamble */
     //bucket_lc_post(index, max_lock_secs, entry, ret, worker);
     if (! shard_lock.wait_backoff(lock_lambda)) {
-      ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
+      ldpp_dout(this, 0) << "RGWLC::process(): failed to acquire lock on "
 			 << lc_shard << " after " << shard_lock.get_retries()
 			 << dendl;
       return 0;

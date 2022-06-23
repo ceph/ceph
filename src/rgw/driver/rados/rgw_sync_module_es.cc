@@ -608,7 +608,7 @@ struct es_obj_metadata {
       f->open_array_section("custom-date");
       for (auto i : custom_date) {
         /*
-         * try to exlicitly parse date field, otherwise elasticsearch could reject the whole doc,
+         * try to explicitly parse date field, otherwise elasticsearch could reject the whole doc,
          * which will end up with failed sync
          */
         real_time t;

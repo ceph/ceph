@@ -70,11 +70,11 @@ protected:
   // of RGW instances under heavy use. If you would like to turn off cache expiry,
   // set this value to zero.
   //
-  // Currently POC hasn't implemented the watch-notify menchanism yet. So the
+  // Currently POC hasn't implemented the watch-notify mechanism yet. So the
   // current implementation is similar to cortx-s3server which is based on expiry
   // time. TODO: see comments on distribute_cache).
   //
-  // Beaware: Motr object data is not cached in current POC as RGW!
+  // Beware: Motr object data is not cached in current POC as RGW!
   // RGW caches the first chunk (4MB by default).
   ObjectCache cache;
 
@@ -877,7 +877,7 @@ public:
 // object part index and for each part an entry is created in extended index.
 // The entry for the object is created in bucket (object list) index. The part
 // index is deleted and an entry removed from bucket_nnn_multipart_index. Like
-// bucket multipart index, bucket part extened metadata index is created during
+// bucket multipart index, bucket part extend metadata index is created during
 // bucket creation.
 //
 // The extended metadata index is used mainly due to fault tolerant

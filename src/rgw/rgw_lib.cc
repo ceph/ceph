@@ -114,7 +114,7 @@ namespace rgw {
   void RGWLibProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r)
   {
     /*
-     * invariant: valid requests are derived from RGWLibRequst
+     * invariant: valid requests are derived from RGWLibRequest
      */
     RGWLibRequest* req = static_cast<RGWLibRequest*>(r);
 

@@ -88,7 +88,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
 
   /* TempURL case is completely different than the Keystone auth - you may
    * get account name only through extraction from URL. In turn, knowledge
-   * about account is neccessary to obtain its bucket tenant. Without that,
+   * about account is necessary to obtain its bucket tenant. Without that,
    * the access would be limited to accounts with empty tenant. */
   string bucket_tenant;
   if (!s->account_name.empty()) {

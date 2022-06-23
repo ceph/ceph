@@ -386,7 +386,7 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   orig_info.user_id = info.user_id;
   // XXX: we open and close motr idx 2 times in this method:
   // 1) on load_user_from_idx() here and 2) on do_idx_op_by_name(PUT) below.
-  // Maybe this can be optimised later somewhow.
+  // Maybe this can be optimised later somehow.
   int rc = load_user_from_idx(dpp, store, orig_info, nullptr, &objv_tr);
   ldpp_dout(dpp, 10) << "Get user: rc = " << rc << dendl;
 
@@ -874,7 +874,7 @@ int MotrBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, 
 
 int MotrBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
 {
-  /* XXX: CHECK: Unlike RadosStore, there is no seperate bucket index table.
+  /* XXX: CHECK: Unlike RadosStore, there is no separate bucket index table.
    * Delete all the object in the list from the object table of this
    * bucket
    */
@@ -1014,7 +1014,7 @@ int MotrBucket::list_multiparts(const DoutPrefixProvider *dpp,
     if (prefix.size() &&
         (0 != ent.key.name.compare(0, prefix.size(), prefix))) {
       ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ <<
-        ": skippping \"" << ent.key <<
+        ": skipping \"" << ent.key <<
         "\" because doesn't match prefix" << dendl;
       continue;
     }
@@ -2338,7 +2338,7 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   bufferlist bl;
   rgw_bucket_dir_entry ent;
 
-  // Set rgw_bucet_dir_entry. Some of the member of this structure may not
+  // Set rgw_bucket_dir_entry. Some of the member of this structure may not
   // apply to motr. For example the storage_class.
   //
   // Checkout AtomicObjectProcessor::complete() in rgw_putobj_processor.cc
@@ -2838,7 +2838,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // Update the dir entry and insert it to the bucket index so
   // the object will be seen when listing the bucket.
   bufferlist update_bl;
-  target_obj->get_key().get_index_key(&ent.key);  // Change to offical name :)
+  target_obj->get_key().get_index_key(&ent.key);  // Change to official name :)
   ent.meta.size = off;
   ent.meta.accounted_size = accounted_size;
   ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): obj size=" << ent.meta.size
@@ -3667,7 +3667,7 @@ int MotrStore::open_motr_idx(struct m0_uint128 *id, struct m0_idx *idx)
   return 0;
 }
 
-// The following marcos are from dix/fid_convert.h which are not exposed.
+// The following macros are from dix/fid_convert.h which are not exposed.
 enum {
       M0_DIX_FID_DEVICE_ID_OFFSET   = 32,
       M0_DIX_FID_DIX_CONTAINER_MASK = (1ULL << M0_DIX_FID_DEVICE_ID_OFFSET)

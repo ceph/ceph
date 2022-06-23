@@ -662,7 +662,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
-  /* Passthorugh only! */
+  /* Passthrough only! */
   const req_state* s,
   optional_yield y) const
 {

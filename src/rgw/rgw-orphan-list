@@ -159,7 +159,7 @@ rados_ls() {
         namespace_found=1
     fi
 
-    # check for locators (w/o namespace); we idenitfy them by skipping
+    # check for locators (w/o namespace); we identify them by skipping
     # past the empty namespace (i.e., one TAB), skipping past the oid,
     # then looking for a TAB; note we use egrep to get the '+' character
     # and the $ in front of the ' allows the \t to be interpreted as a TAB

@@ -376,7 +376,7 @@ TEST(TestDecoder, BasicParsing)
   ASSERT_STREQ(to_string(result).c_str(), expected_output);
 }
 
-TEST(TestDecoder, MalfomedInput)
+TEST(TestDecoder, MalformedInput)
 {
   RGWXMLDecoder::XMLParser parser;
   ASSERT_TRUE(parser.init());

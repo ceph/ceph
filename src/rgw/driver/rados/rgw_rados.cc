@@ -1911,7 +1911,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
       if (cur_end_marker_valid && cur_end_marker <= index_key) {
         truncated = false;
 	ldpp_dout(dpp, 10) << __func__ <<
-	  ": finished due to gitting end marker of \"" << cur_end_marker <<
+	  ": finished due to getting end marker of \"" << cur_end_marker <<
 	  "\" with \"" << entry.key << "\"" << dendl;
         goto done;
       }
@@ -2194,14 +2194,14 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 
       if (!params.list_versions && !entry.is_visible()) {
         ldpp_dout(dpp, 20) << __func__ <<
-	  ": skippping \"" << index_key <<
-	  "\" because not listing versions and entry not visibile" << dendl;
+	  ": skipping \"" << index_key <<
+	  "\" because not listing versions and entry not visible" << dendl;
         continue;
       }
 
       if (params.enforce_ns && obj.ns != params.ns) {
         ldpp_dout(dpp, 20) << __func__ <<
-	  ": skippping \"" << index_key <<
+	  ": skipping \"" << index_key <<
 	  "\" because namespace does not match" << dendl;
         continue;
       }
@@ -2210,7 +2210,7 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 	// we're not guaranteed items will come in order, so we have
 	// to loop through all
         ldpp_dout(dpp, 20) << __func__ <<
-	  ": skippping \"" << index_key <<
+	  ": skipping \"" << index_key <<
 	  "\" because after end_marker" << dendl;
 	continue;
       }
@@ -2218,7 +2218,7 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
       if (params.access_list_filter &&
 	  !params.access_list_filter->filter(obj.name, index_key.name)) {
         ldpp_dout(dpp, 20) << __func__ <<
-	  ": skippping \"" << index_key <<
+	  ": skipping \"" << index_key <<
 	  "\" because doesn't match filter" << dendl;
         continue;
       }
@@ -2226,7 +2226,7 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
       if (params.prefix.size() &&
 	  (0 != obj.name.compare(0, params.prefix.size(), params.prefix))) {
         ldpp_dout(dpp, 20) << __func__ <<
-	  ": skippping \"" << index_key <<
+	  ": skipping \"" << index_key <<
 	  "\" because doesn't match prefix" << dendl;
 	continue;
       }
@@ -3297,7 +3297,7 @@ done_cancel:
 
   /* we lost in a race. There are a few options:
    * - existing object was rewritten (ECANCELED)
-   * - non existing object was created (EEXIST)
+   * - nonexistent object was created (EEXIST)
    * - object was removed (ENOENT)
    * should treat it as a success
    */
@@ -4627,7 +4627,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
     // Current implementation does not follow S3 spec and even
     // may result in data corruption silently when copying
-    // multipart objects acorss pools. So reject COPY operations
+    // multipart objects across pools. So reject COPY operations
     //on encrypted objects before it is fully functional.
     ldpp_dout(dpp, 0) << "ERROR: copy op for encrypted object " << src_obj
                   << " has not been implemented." << dendl;
@@ -9451,7 +9451,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   for (auto& r : shard_list_results) {
     results_trackers.emplace_back(r.first, r.second, shard_oids[r.first]);
 
-    // if any *one* shard's result is trucated, the entire result is
+    // if any *one* shard's result is truncated, the entire result is
     // truncated
     *is_truncated = *is_truncated || r.second.is_truncated;
 

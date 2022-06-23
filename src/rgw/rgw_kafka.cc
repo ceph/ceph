@@ -23,7 +23,7 @@
 // (2) check performance of emptying queue to local list, and go over the list and publish
 // (3) use std::shared_mutex (c++17) or equivalent for the connections lock
 
-// cmparisson operator between topic pointer and name
+// comparison operator between topic pointer and name
 bool operator==(const rd_kafka_topic_t* rkt, const std::string& name) {
     return name == std::string_view(rd_kafka_topic_name(rkt)); 
 }
@@ -69,7 +69,7 @@ struct connection_t {
   CallbackList callbacks;
   const std::string broker;
   const bool use_ssl;
-  const bool verify_ssl; // TODO currently iognored, not supported in librdkafka v0.11.6
+  const bool verify_ssl; // TODO currently ignored, not supported in librdkafka v0.11.6
   const boost::optional<std::string> ca_location;
   const std::string user;
   const std::string password;
@@ -209,7 +209,7 @@ bool new_producer(connection_t* conn) {
     return false;
   }
 
-  // get list of brokers based on the bootsrap broker
+  // get list of brokers based on the bootstrap broker
   if (rd_kafka_conf_set(conn->temp_conf, "bootstrap.servers", conn->broker.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
   if (conn->use_ssl) {
@@ -459,7 +459,7 @@ private:
         
         auto& conn = conn_it->second;
 
-        // Checking the connection idlesness
+        // Checking the connection idleness
         if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
           ldout(conn->cct, 20) << "kafka run: deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
           std::lock_guard lock(connections_lock);
@@ -478,7 +478,7 @@ private:
             // TODO: add error counter for failed retries
             // TODO: add exponential backoff for retries
           } else {
-            ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry successfull" << dendl;
+            ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry successful" << dendl;
           }
           ++conn_it;
           continue;
@@ -570,7 +570,7 @@ public:
 
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(broker);
-    // note that ssl vs. non-ssl connection to the same host are two separate conenctions
+    // note that ssl vs. non-ssl connection to the same host are two separate connections
     if (it != connections.end()) {
       // connection found - return even if non-ok
       ldout(cct, 20) << "Kafka connect: connection found" << dendl;

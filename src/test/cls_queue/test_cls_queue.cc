@@ -85,7 +85,7 @@ TEST_F(TestClsQueue, Enqueue)
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   // test multiple enqueues
-  // 10 iterations, 100 elelemts each
+  // 10 iterations, 100 elements each
   // expect 0 (OK)
   test_enqueue(queue_name, 10, 100, 0);
 }
@@ -99,10 +99,10 @@ TEST_F(TestClsQueue, QueueFull)
   cls_queue_init(op, queue_name, queue_size);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
-  // 8 iterations, 5 elelemts each
+  // 8 iterations, 5 elements each
   // expect 0 (OK)
   test_enqueue(queue_name, 8, 5, 0);
-  // 2 iterations, 5 elelemts each
+  // 2 iterations, 5 elements each
   // expect -28 (Q FULL)
   test_enqueue(queue_name, 2, 5, -28);
 }
