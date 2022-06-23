@@ -505,7 +505,7 @@ static int omap_remove(cls_method_context_t hctx,
     return r;
   }
 
-  //check for existance of the key first
+  //check for existence of the key first
   for (set<string>::const_iterator it = omap.begin();
       it != omap.end(); ++it) {
     bufferlist bl;

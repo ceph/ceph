@@ -32,7 +32,7 @@ class TestSnapSchedulesHelper(CephFSTestCase):
         now = time.time()
         delta = now - exec_time
         log.debug(f'exec={exec_time}, now = {now}, timo = {timo}')
-        # tolerate snapshot existance in the range [-5,+5]
+        # tolerate snapshot existence in the range [-5,+5]
         self.assertTrue((delta <= timo + 5) and (delta >= timo - 5))
 
     def _fs_cmd(self, *args):
@@ -255,7 +255,7 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
         self.mount_a.run_shell(['rmdir', TestSnapSchedules.TEST_DIRECTORY])
 
     def test_multi_snap_schedule(self):
-        """Test exisitence of multiple scheduled snapshots"""
+        """Test existence of multiple scheduled snapshots"""
         self.mount_a.run_shell(['mkdir', '-p', TestSnapSchedules.TEST_DIRECTORY])
 
         # set schedules on the dir
