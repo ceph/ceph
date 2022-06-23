@@ -43,7 +43,7 @@ def is_bootstrap_script_complete():
         print(proc.stdout[len(proc.stdout) - 240:])
         time.sleep(30)
     print(
-        f"Timeout reached {30*timeout}. Giving up for boostrap to complete"
+        f"Timeout reached {30*timeout}. Giving up for bootstrap to complete"
     )
     return False
 

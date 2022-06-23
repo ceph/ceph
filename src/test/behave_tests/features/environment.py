@@ -104,7 +104,7 @@ def _parse_vm_description(specs):
 
 def _parse_ceph_description(specs):
     """
-    Parse the ceph boostrap script configuration descriptions.
+    Parse the ceph bootstrap script configuration descriptions.
     """
     bootstrap_script_config = Bootstrap_Config.copy()
     parsed_str = re.search(
