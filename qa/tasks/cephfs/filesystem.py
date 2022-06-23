@@ -396,7 +396,7 @@ class MDSCluster(CephCluster):
         """
         Block (using iptables) client communications to this MDS.  Be careful: if
         other services are running on this MDS, or other MDSs try to talk to this
-        MDS, their communications may also be blocked as collatoral damage.
+        MDS, their communications may also be blocked as collateral damage.
 
         :param mds_id: Optional ID of MDS to block, default to all
         :return:
