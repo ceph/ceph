@@ -2100,7 +2100,7 @@ TEST_F(PGLogTest, filter_log_1) {
         e.soid.oid.name = name.str();
 	// First has no namespace
         if (i != 1) {
-           // num_internal have the internal namspace
+           // num_internal have the internal namespace
           if (i <= num_internal + 1) {
             e.soid.nspace = hit_set_namespace;
           } else { // rest have different namespaces
