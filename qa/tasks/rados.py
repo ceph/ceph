@@ -1,5 +1,5 @@
 """
-Rados modle-based integration tests
+Rados module-based integration tests
 """
 import contextlib
 import logging
