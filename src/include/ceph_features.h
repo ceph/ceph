@@ -60,7 +60,7 @@
  *      DEFINE_CEPH_FEATURE_RETIRED( 2, 1, MON_METADATA, MIMIC, OCTOPUS)
  *
  *  - The bit can be reused in the next release that will never talk to
- *    a pre-octopus daemon (13 mimic or 14 nautlius) that advertises the
+ *    a pre-octopus daemon (13 mimic or 14 nautilus) that advertises the
  *    bit: in this case, the 16.y.z (P-release).
  *
  * This ensures that no two versions who have different meanings for
