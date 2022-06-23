@@ -38,7 +38,7 @@ TEST(FairMutex, fair)
   auto play = [&](int team) {
     for (int i = 0; i < NR_ROUNDS; i++) {
       std::unique_lock lock{mutex};
-      // pretent that i am running.. and it takes time
+      // pretend that i am running.. and it takes time
       std::this_thread::sleep_for(std::chrono::microseconds(20));
       // score!
       scoreboard[team]++;
