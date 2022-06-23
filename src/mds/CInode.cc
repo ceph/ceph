@@ -4549,7 +4549,7 @@ void InodeStoreBase::decode_json(JSONObj *obj)
   }
 
   JSONDecoder::decode_json("symlink", symlink, obj, true);
-  // JSONDecoder::decode_json("dirfragtree", dirfragtree, obj, true); // cann't decode it now
+  // JSONDecoder::decode_json("dirfragtree", dirfragtree, obj, true); // can't decode it now
   //
   //
   {
@@ -4560,11 +4560,11 @@ void InodeStoreBase::decode_json(JSONObj *obj)
     else
       reset_xattrs(allocate_xattr_map(std::move(tmp)));
   }
-  // JSONDecoder::decode_json("old_inodes", old_inodes, InodeStoreBase::old_indoes_cb, obj, true); // cann't decode old_inodes now
+  // JSONDecoder::decode_json("old_inodes", old_inodes, InodeStoreBase::old_indoes_cb, obj, true); // can't decode old_inodes now
   JSONDecoder::decode_json("oldest_snap", oldest_snap.val, obj, true);
   JSONDecoder::decode_json("damage_flags", damage_flags, obj, true);
   //sr_t srnode;
-  //JSONDecoder::decode_json("snap_blob", srnode, obj, true);   // cann't decode it now
+  //JSONDecoder::decode_json("snap_blob", srnode, obj, true);   // can't decode it now
   //snap_blob = srnode;
 }
 
@@ -4582,7 +4582,7 @@ void InodeStoreBase::old_indoes_cb(InodeStoreBase::mempool_old_inode_map& c, JSO
   snapid_t s;
   JSONDecoder::decode_json("last", s.val, obj, true);
   InodeStoreBase::mempool_old_inode i;
-  // i.decode_json(obj); // cann't decode now, simon
+  // i.decode_json(obj); // can't decode now, simon
   c[s] = i;
 }
 
