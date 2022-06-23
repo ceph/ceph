@@ -221,7 +221,7 @@ Notable Changes
 * mon: fix bug incorrectly marking osds down with insufficient failure reports
 * osd: fixed small bug in pg request map
 * osd: avoid rewriting pg info on every osdmap
-* osd: avoid internal heartbeta timeouts when scrubbing very large objects
+* osd: avoid internal heartbeat timeouts when scrubbing very large objects
 * osd: fix narrow race with journal replay
 * mon: fixed narrow pg split race
 * rgw: fix leaked space when copying object

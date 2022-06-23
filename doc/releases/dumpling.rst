@@ -721,7 +721,7 @@ Notable changes since v0.61 "Cuttlefish"
 * osd: fix for an op ordering bug
 * osd: fix handling for split after upgrade from bobtail
 * osd: fix incorrect mark-down of osds
-* osd: fix internal heartbeart timeouts when scrubbing very large objects
+* osd: fix internal heartbeat timeouts when scrubbing very large objects
 * osd: fix memory/network inefficiency during deep scrub
 * osd: fixed problem with front-side heartbeats and mixed clusters (David Zafman)
 * osd: limit number of incremental osdmaps sent to peers (could cause osds to be wrongly marked down)
@@ -915,7 +915,7 @@ Notable Changes
 * librbd: ability to read from local replicas
 * osd: resurrect partially deleted PGs
 * osd: prioritize recovery for degraded PGs
-* osd: fix internal heartbeart timeouts when scrubbing very large objects
+* osd: fix internal heartbeat timeouts when scrubbing very large objects
 * osd: close narrow journal race
 * rgw: fix usage log scanning for large, untrimmed logs
 * rgw: fix locking issue, user operation mask,
