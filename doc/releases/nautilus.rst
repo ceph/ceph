@@ -1320,7 +1320,7 @@ Changelog
 * rgw: fix an endless loop error when to show usage (`pr#31684 <https://github.com/ceph/ceph/pull/31684>`_, lvshuhua)
 * rgw: fix bugs in listobjectsv1 (`pr#32239 <https://github.com/ceph/ceph/pull/32239>`_, Albin Antony)
 * rgw: fix compile errors with boost 1.70 (`pr#31289 <https://github.com/ceph/ceph/pull/31289>`_, Casey Bodley)
-* rgw: fix data consistency error casued by rgw sent timeout (`pr#32821 <https://github.com/ceph/ceph/pull/32821>`_, 李纲彬82225)
+* rgw: fix data consistency error caused by rgw sent timeout (`pr#32821 <https://github.com/ceph/ceph/pull/32821>`_, 李纲彬82225)
 * rgw: fix list versions starts with version_id=null (`pr#30743 <https://github.com/ceph/ceph/pull/30743>`_, Tianshan Qu)
 * rgw: fix one part of the bulk delete(RGWDeleteMultiObj_ObjStore_S3) fails but no error messages (`pr#33151 <https://github.com/ceph/ceph/pull/33151>`_, Snow Si)
 * rgw: fix opslog operation field as per Amazon s3 (`issue#20978 <http://tracker.ceph.com/issues/20978>`_, `pr#32834 <https://github.com/ceph/ceph/pull/32834>`_, Jiaying Ren)

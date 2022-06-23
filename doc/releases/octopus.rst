@@ -5560,7 +5560,7 @@ Changelog
 * rgw: fix bugs in listobjectsv1 (`pr#28873 <https://github.com/ceph/ceph/pull/28873>`_, Albin Antony)
 * rgw: fix cls_bucket_list_unordered() partial results (`pr#29692 <https://github.com/ceph/ceph/pull/29692>`_, Mark Kogan)
 * rgw: fix compile errors with boost 1.70 (`pr#27730 <https://github.com/ceph/ceph/pull/27730>`_, Casey Bodley)
-* rgw: fix data consistency error casued by rgw sent timeout (`pr#30257 <https://github.com/ceph/ceph/pull/30257>`_, \xe6\x9d\x8e\xe7\xba\xb2\xe5\xbd\xac82225)
+* rgw: fix data consistency error caused by rgw sent timeout (`pr#30257 <https://github.com/ceph/ceph/pull/30257>`_, \xe6\x9d\x8e\xe7\xba\xb2\xe5\xbd\xac82225)
 * rgw: fix data sync start delay if remote havent init data_log (`pr#30393 <https://github.com/ceph/ceph/pull/30393>`_, Tianshan Qu)
 * rgw: fix default storage class for get_compression_type (`pr#29909 <https://github.com/ceph/ceph/pull/29909>`_, Casey Bodley)
 * rgw: fix default_placement containing / when storage_class is standard (`issue#39380 <http://tracker.ceph.com/issues/39380>`_, `pr#27676 <https://github.com/ceph/ceph/pull/27676>`_, mkogan1)
