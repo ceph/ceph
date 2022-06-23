@@ -2806,7 +2806,7 @@ void PeeringState::activate(
 	/* ^ This last case covers a situation where a replica is not contiguous
 	 * with the auth_log, but is contiguous with this replica.  Reshuffling
 	 * the active set to handle this would be tricky, so instead we just go
-	 * ahead and backfill it anyway.  This is probably preferrable in any
+	 * ahead and backfill it anyway.  This is probably preferable in any
 	 * case since the replica in question would have to be significantly
 	 * behind.
 	 */
