@@ -1152,7 +1152,7 @@ class TestMigrate(object):
             '--target', 'vgname/new_wal'
         ]
         m = migrate.Migrate(argv=argv)
-        m.args = m.make_parser('ceph-volume lvm migation', 'help').parse_args(argv)
+        m.args = m.make_parser('ceph-volume lvm migration', 'help').parse_args(argv)
         res_devices = m.get_source_devices(devices)
 
         assert 2 == len(res_devices)
@@ -1166,7 +1166,7 @@ class TestMigrate(object):
             '--target', 'vgname/new_wal'
         ]
         m = migrate.Migrate(argv=argv)
-        m.args = m.make_parser('ceph-volume lvm migation', 'help').parse_args(argv)
+        m.args = m.make_parser('ceph-volume lvm migration', 'help').parse_args(argv)
         res_devices = m.get_source_devices(devices)
 
         assert 3 == len(res_devices)
