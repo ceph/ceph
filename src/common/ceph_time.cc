@@ -305,7 +305,7 @@ std::chrono::seconds parse_timespan(const std::string& s)
       auto unit = s.substr(unit_start, pos - unit_start);
       auto p = units.find(unit);
       if (p == units.end()) {
-	throw std::invalid_argument("unrecogized unit '"s + unit + "'");
+	throw std::invalid_argument("unrecognized unit '"s + unit + "'");
       }
       val *= p->second;
     } else if (pos < s.size()) {
