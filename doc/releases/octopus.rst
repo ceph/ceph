@@ -5019,7 +5019,7 @@ Changelog
 * msg/async/dpdk: destroy fd in do_request (`pr#32690 <https://github.com/ceph/ceph/pull/32690>`_, Chunsong Feng, luo rixin)
 * msg/async/dpdk: Fix build when DPDK enabled (`pr#33203 <https://github.com/ceph/ceph/pull/33203>`_, Jun Su)
 * msg/async/dpdk: fix compilation errors when WITH_DPDK=on (`pr#31840 <https://github.com/ceph/ceph/pull/31840>`_, Chunsong Feng)
-* msg/async/dpdk: fix complie errors from fix FTBFS (`pr#30086 <https://github.com/ceph/ceph/pull/30086>`_, yehu)
+* msg/async/dpdk: fix compile errors from fix FTBFS (`pr#30086 <https://github.com/ceph/ceph/pull/30086>`_, yehu)
 * msg/async/dpdk: fix FTBFS (`pr#28763 <https://github.com/ceph/ceph/pull/28763>`_, Kefu Chai)
 * msg/async/dpdk: Fix infinite loop when sending packets (`pr#32691 <https://github.com/ceph/ceph/pull/32691>`_, Chunsong Feng, luo rixin)
 * msg/async/dpdk: fix SEGV caused by zero length packet (`pr#31876 <https://github.com/ceph/ceph/pull/31876>`_, Chunsong Feng)
