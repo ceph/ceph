@@ -316,7 +316,7 @@ function TEST_recovery_priority() {
 #
 # Show that pool recovery_priority is added to recovery priority
 #
-# Create 2 pools with 2 OSDs with different primarys
+# Create 2 pools with 2 OSDs with different primaries
 # pool 1 with recovery_priority 1
 # pool 2 with recovery_priority 2
 #
