@@ -503,7 +503,7 @@ class TestDamage(CephFSTestCase):
 
         self.mount_a.mount_wait()
 
-        # Case 1: un-decodeable backtrace
+        # Case 1: un-decodable backtrace
 
         # Validate that the backtrace is present and decodable
         self.fs.read_backtrace(file1_ino)
