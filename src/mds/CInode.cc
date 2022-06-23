@@ -4560,7 +4560,7 @@ void InodeStoreBase::decode_json(JSONObj *obj)
     else
       reset_xattrs(allocate_xattr_map(std::move(tmp)));
   }
-  // JSONDecoder::decode_json("old_inodes", old_inodes, InodeStoreBase::old_indoes_cb, obj, true); // can't decode old_inodes now
+  // JSONDecoder::decode_json("old_inodes", old_inodes, InodeStoreBase::old_inodes_cb, obj, true); // can't decode old_inodes now
   JSONDecoder::decode_json("oldest_snap", oldest_snap.val, obj, true);
   JSONDecoder::decode_json("damage_flags", damage_flags, obj, true);
   //sr_t srnode;
@@ -4577,7 +4577,7 @@ void InodeStoreBase::xattrs_cb(InodeStoreBase::mempool_xattr_map& c, JSONObj *ob
   c[k.c_str()] = buffer::copy(v.c_str(), v.size());
 }
 
-void InodeStoreBase::old_indoes_cb(InodeStoreBase::mempool_old_inode_map& c, JSONObj *obj){
+void InodeStoreBase::old_inodes_cb(InodeStoreBase::mempool_old_inode_map& c, JSONObj *obj){
 
   snapid_t s;
   JSONDecoder::decode_json("last", s.val, obj, true);

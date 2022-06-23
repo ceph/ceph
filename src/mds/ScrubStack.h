@@ -201,7 +201,7 @@ private:
    * Scrub a directory inode. It queues child dirfrags, then does
    * final scrub of the inode.
    *
-   * @param in The directory indoe to scrub
+   * @param in The directory inode to scrub
    * @param added_children set to true if we pushed some of our children
    * @param done set to true if we started to do final scrub
    */

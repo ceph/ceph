@@ -1124,7 +1124,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     ldout(cct, 12) << __func__ << " adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
 
   if (!st->cap.caps)
-    return in;   // as with readdir returning indoes in different snaprealms (no caps!)
+    return in;   // as with readdir returning inodes in different snaprealms (no caps!)
 
   if (in->snapid == CEPH_NOSNAP) {
     add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.wanted,
