@@ -246,7 +246,7 @@ backed by the original data pool.
    You may rename the recovery metadata pool and file system at a future time.
    The ``--recover`` flag prevents any MDS from joining the new file system.
 
-Next, we will create the intial metadata for the fs:
+Next, we will create the initial metadata for the fs:
 
 ::
 

@@ -314,7 +314,7 @@ bool QccCrypto::perform_op_batch(unsigned char* out, const unsigned char* in, si
     optional_yield y)
 {
   if (!init_called) {
-    dout(10) << "QAT not intialized yet. Initializing now..." << dendl;
+    dout(10) << "QAT not initialized yet. Initializing now..." << dendl;
     if (!QccCrypto::init(chunk_size, max_requests)) {
       derr << "QAT init failed" << dendl;
       return false;
