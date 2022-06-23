@@ -2982,7 +2982,7 @@ Changelog
 * cephfs: cephfs-shell: fix string decoding for ls command (`issue#39404 <http://tracker.ceph.com/issues/39404>`_, `pr#27716 <https://github.com/ceph/ceph/pull/27716>`_, Milind Changire)
 * cephfs: cephfs-shell: Fix TypeError in poutput() (`pr#28906 <https://github.com/ceph/ceph/pull/28906>`_, Varsha Rao)
 * cephfs: cephfs-shell: Fix typo for mounting (`pr#28718 <https://github.com/ceph/ceph/pull/28718>`_, Varsha Rao)
-* cephfs: cephfs-shell: fix unecessary usage of to_bytes for file paths (`issue#40455 <http://tracker.ceph.com/issues/40455>`_, `pr#28663 <https://github.com/ceph/ceph/pull/28663>`_, Patrick Donnelly)
+* cephfs: cephfs-shell: fix unnecessary usage of to_bytes for file paths (`issue#40455 <http://tracker.ceph.com/issues/40455>`_, `pr#28663 <https://github.com/ceph/ceph/pull/28663>`_, Patrick Donnelly)
 * cephfs: cephfs-shell: fix various tracebacks (`issue#38743 <http://tracker.ceph.com/issues/38743>`_, `issue#38739 <http://tracker.ceph.com/issues/38739>`_, `issue#38741 <http://tracker.ceph.com/issues/38741>`_, `issue#38740 <http://tracker.ceph.com/issues/38740>`_, `pr#27235 <https://github.com/ceph/ceph/pull/27235>`_, Milind Changire)
 * cephfs: cephfs-shell: make compatible with cmd2 versions after 0.9.13 (`pr#30585 <https://github.com/ceph/ceph/pull/30585>`_, Rishabh Dave)
 * cephfs: cephfs-shell: make every command set a return value on failure (`pr#32213 <https://github.com/ceph/ceph/pull/32213>`_, Rishabh Dave)

@@ -77,7 +77,7 @@ class Btree {
       p_cursor.reset();
     }
 
-    // XXX: return key_view_t to avoid unecessary ghobject_t constructions
+    // XXX: return key_view_t to avoid unnecessary ghobject_t constructions
     ghobject_t get_ghobj() const {
       assert(!is_end());
       auto view = p_cursor->get_key_view(

@@ -409,7 +409,7 @@ static ceph::spinlock debug_lock;
     // BE CAREFUL: this is called also for hypercombined ptr_node. After
     // freeing underlying raw, `*this` can become inaccessible as well!
     //
-    // cache the pointer to avoid unncecessary reloads and repeated
+    // cache the pointer to avoid unnecessary reloads and repeated
     // checks.
     if (auto* const cached_raw = std::exchange(_raw, nullptr);
 	cached_raw) {
