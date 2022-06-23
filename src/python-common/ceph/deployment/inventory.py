@@ -79,6 +79,8 @@ class Device(object):
                 if key != 'human_readable_type'
             }
         )
+        if ret.rejected_reasons:
+            ret.rejected_reasons = sorted(ret.rejected_reasons)
         return ret
 
     @property
