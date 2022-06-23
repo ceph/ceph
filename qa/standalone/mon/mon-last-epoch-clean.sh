@@ -153,7 +153,7 @@ function get_pool_id() {
 }
 
 function wait_for_total_num_maps() {
-  # rip wait_for_health, becaue it's easier than deduplicating the code
+  # rip wait_for_health, because it's easier than deduplicating the code
   local -a delays=($(get_timeout_delays $TIMEOUT .1))
   local -i loop=0
   local -i v_diff=$1
