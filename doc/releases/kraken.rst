@@ -1142,7 +1142,7 @@ Notable Changes
 * osd: Fix map gaps again (bug 15943) (`issue#15943 <http://tracker.ceph.com/issues/15943>`_, `pr#12571 <http://github.com/ceph/ceph/pull/12571>`_, Samuel Just)
 * osd: fix memory leak from EC write workload (`issue#18093 <http://tracker.ceph.com/issues/18093>`_, `pr#12256 <http://github.com/ceph/ceph/pull/12256>`_, Sage Weil)
 * osd: fix rados write op hang (`pr#11143 <http://github.com/ceph/ceph/pull/11143>`_, Yunchuan Wen)
-* osd: Fix read error propogation in ECBackend (`issue#17966 <http://tracker.ceph.com/issues/17966>`_, `pr#12142 <http://github.com/ceph/ceph/pull/12142>`_, Samuel Just)
+* osd: Fix read error propagation in ECBackend (`issue#17966 <http://tracker.ceph.com/issues/17966>`_, `pr#12142 <http://github.com/ceph/ceph/pull/12142>`_, Samuel Just)
 * osd: fix scrub boundary to not include a SnapSet (`pr#11255 <http://github.com/ceph/ceph/pull/11255>`_, Samuel Just)
 * osd: fix signed/unsigned comparison warning (`pr#12400 <http://github.com/ceph/ceph/pull/12400>`_, Greg Farnum)
 * osd: fix typo in PG::clear_primary_state (`pr#11513 <http://github.com/ceph/ceph/pull/11513>`_, Brad Hubbard)

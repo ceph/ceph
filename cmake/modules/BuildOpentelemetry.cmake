@@ -27,7 +27,7 @@ function(build_opentelemetry)
                                 ${opentelemetry_SOURCE_DIR}/exporters/jaeger/include/
                                 ${opentelemetry_SOURCE_DIR}/ext/include/
                                 ${opentelemetry_SOURCE_DIR}/sdk/include/)
-  # TODO: add target based propogation
+  # TODO: add target based propagation
   set(opentelemetry_deps opentelemetry_trace opentelemetry_resources opentelemetry_common
                          opentelemetry_exporter_jaeger_trace http_client_curl
 			 ${CURL_LIBRARIES})
