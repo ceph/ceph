@@ -14598,7 +14598,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
     ceph_assert(osr->deferred_running == b);
     osr->deferred_running = nullptr;
     if (!osr->deferred_pending) {
-      dout(20) << __func__ << " dequeueing" << dendl;
+      dout(20) << __func__ << " dequeuing" << dendl;
       {
 	deferred_lock.lock();
 	auto q = deferred_queue.iterator_to(*osr);
