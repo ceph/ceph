@@ -4541,7 +4541,7 @@ int OSD::shutdown()
     if (cct->_conf->osd_fast_shutdown_notify_mon)
       service.prepare_to_stop();
 
-    // There is no state we need to keep wehn running in NULL-FM moode
+    // There is no state we need to keep wehn running in NULL-FM mode
     if (!store->has_null_manager()) {
       cct->_log->flush();
       _exit(0);
