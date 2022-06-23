@@ -1311,7 +1311,7 @@ class Module(MgrModule):
         # located.
 
         # Parse rbd_stats_pools option, which is a comma or space separated
-        # list of pool[/namespace] entries. If no namespace is specifed the
+        # list of pool[/namespace] entries. If no namespace is specified the
         # stats are collected for every namespace in the pool. The wildcard
         # '*' can be used to indicate all pools or namespaces
         pools_string = cast(str, self.get_localized_module_option('rbd_stats_pools'))

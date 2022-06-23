@@ -300,7 +300,7 @@ class Prepare(object):
         }
         if self.args.filestore:
             if not self.args.journal:
-                logger.info(('no journal was specifed, creating journal lv '
+                logger.info(('no journal was specified, creating journal lv '
                              'on {}').format(self.args.data))
                 self.args.journal = self.args.data
                 self.args.journal_size = disk.Size(g=5)
