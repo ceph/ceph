@@ -4532,7 +4532,7 @@ Detailed Changelog
 * mon: mon/config-key: increase max key entry size (`pr#24250 <https://github.com/ceph/ceph/pull/24250>`_, Joao Eduardo Luis)
 * mon: mon/MonClient: drop my_addr (`pr#26449 <https://github.com/ceph/ceph/pull/26449>`_, Kefu Chai)
 * mon: mon/MonClient: use mon_client_ping_timeout during ping_monitor (`pr#23563 <https://github.com/ceph/ceph/pull/23563>`_, Yao Zongyou)
-* mon: mon/MonMap: add more const'ness to its methods (`pr#23709 <https://github.com/ceph/ceph/pull/23709>`_, Kefu Chai)
+* mon: mon/MonMap: add more constness to its methods (`pr#23709 <https://github.com/ceph/ceph/pull/23709>`_, Kefu Chai)
 * mon: mon/MonMap: remove duplicate code in get_rank (`pr#23547 <https://github.com/ceph/ceph/pull/23547>`_, Yao Zongyou)
 * mon: mon,osd: avoid str copy in parse (`pr#25640 <https://github.com/ceph/ceph/pull/25640>`_, Jos Collin)
 * mon: mon/OSDMonitor: add boundary check for pool recovery_priority (`issue#38578 <http://tracker.ceph.com/issues/38578>`_, `pr#26729 <https://github.com/ceph/ceph/pull/26729>`_, xie xingguo)
