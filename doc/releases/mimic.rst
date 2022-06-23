@@ -4366,7 +4366,7 @@ Detailed Changelog
 * tests: qa/workunits/rados/test_large_omap_detection: Scrub pgs instead of OSDs (`pr#21410 <https://github.com/ceph/ceph/pull/21410>`_, Brad Hubbard)
 * tests: qa/workunits: silence py warnings for ceph-disk tests (`issue#22154 <http://tracker.ceph.com/issues/22154>`_, `pr#19075 <https://github.com/ceph/ceph/pull/19075>`_, Kefu Chai)
 * tests: rados: Copy payload in ceph_perf_msgr_client (`issue#22100 <http://tracker.ceph.com/issues/22100>`_, `pr#18862 <https://github.com/ceph/ceph/pull/18862>`_, Jeegn Chen)
-* tests: rados: Intializing members class StriperTest (`pr#16843 <https://github.com/ceph/ceph/pull/16843>`_, amitkuma)
+* tests: rados: Initializing members class StriperTest (`pr#16843 <https://github.com/ceph/ceph/pull/16843>`_, amitkuma)
 * tests: remove TestPGLog ASSERT_DEATH test (`issue#23504 <http://tracker.ceph.com/issues/23504>`_, `pr#21117 <https://github.com/ceph/ceph/pull/21117>`_, Nathan Cutler)
 * tests: run-standalone.sh improve error message (`pr#17093 <https://github.com/ceph/ceph/pull/17093>`_, David Zafman)
 * tests: run-standalone.sh skip core_pattern if already set (`pr#17098 <https://github.com/ceph/ceph/pull/17098>`_, David Zafman)
