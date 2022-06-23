@@ -147,7 +147,7 @@ TEST_F(PrioritizedQueueTest, fairness_by_class) {
     pq.enqueue(k, priority, cost, Item(item));
   }
   // just sample first 1/2 of the items
-  // if i pick too small a dataset, the result won't be statisitcally
+  // if i pick too small a dataset, the result won't be statistically
   // significant. if the sample dataset is too large, it will converge to the
   // distribution of the full set.
   vector<unsigned> num_picked_in_class(num_classes, 0u);
