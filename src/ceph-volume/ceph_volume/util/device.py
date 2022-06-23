@@ -679,7 +679,7 @@ class CephDiskDevice(object):
         """
         In containers, the 'PARTLABEL' attribute might not be detected
         correctly via ``lsblk``, so we poke at the value with ``lsblk`` first,
-        falling back to ``blkid`` (which works correclty in containers).
+        falling back to ``blkid`` (which works correctly in containers).
         """
         lsblk_partlabel = self.device.disk_api.get('PARTLABEL')
         if lsblk_partlabel:
