@@ -2298,7 +2298,7 @@ Notable Changes since Infernalis
 * mds: don't double-shutdown the timer when suiciding (`issue#14697 <http://tracker.ceph.com/issues/14697>`_, `pr#7616 <http://github.com/ceph/ceph/pull/7616>`_, Greg Farnum)
 * mds: expose frags via asok (John Spray)
 * mds: expose state of recovery to status ASOK command (`issue#14146 <http://tracker.ceph.com/issues/14146>`_, `pr#7068 <http://github.com/ceph/ceph/pull/7068>`_, Yan, Zheng)
-* mds: Extend the existing pool access checking to include specific RADOS namespacse. (`pr#8444 <https://github.com/ceph/ceph/pull/8444>`_, Yan, Zheng)
+* mds: Extend the existing pool access checking to include specific RADOS namespace. (`pr#8444 <https://github.com/ceph/ceph/pull/8444>`_, Yan, Zheng)
 * mds: filelock deadlock (`pr#7713 <http://github.com/ceph/ceph/pull/7713>`_, Yan, Zheng)
 * mds: fix client capabilities during reconnect (client.XXXX isn't responding to mclientcaps(revoke)) (`issue#11482 <http://tracker.ceph.com/issues/11482>`_, `pr#6432 <http://github.com/ceph/ceph/pull/6432>`_, Yan, Zheng)
 * mds: fix client cap/message replay order on restart (`issue#14254 <http://tracker.ceph.com/issues/14254>`_, `issue#13546 <http://tracker.ceph.com/issues/13546>`_, `pr#7199 <http://github.com/ceph/ceph/pull/7199>`_, Yan, Zheng)
