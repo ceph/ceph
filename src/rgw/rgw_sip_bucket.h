@@ -177,6 +177,9 @@ class SIProvider_BucketInc : public SIProvider_SingleStage
 
   SIProvider::Entry create_entry(rgw_bi_log_entry& be) const;
 
+  rgw::bucket_log_layout_generation log_layout;
+
+
 protected:
   int do_fetch(const DoutPrefixProvider *dpp,
                int shard_id, std::string marker, int max, fetch_result *result) override;
@@ -212,6 +215,9 @@ public:
                                                                              !_bucket_info.datasync_flag_enabled()),
                                                        store(_store),
                                                        bucket_info(_bucket_info) {
+    
+    const auto& logs = bucket_info.layout.logs;
+    log_layout = std::reference_wrapper{logs.back()};
   }
 };
 

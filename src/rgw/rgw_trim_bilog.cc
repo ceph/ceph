@@ -374,7 +374,7 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
       }
       // always take the first marker, or any later marker that's smaller
       if (peer == first || !marker || marker > shard.inc_marker->position) {
-        marker = std::move(shard.inc_marker.raw().position);
+        marker = std::move(shard.inc_marker.position);
       }
     }
   }
@@ -472,7 +472,7 @@ class BucketCleanIndexCollectCR : public RGWShardCollectCR {
       dpp(dpp), store(store), bucket_info(bucket_info),
       index(index)
   {}
-  bool spawn_next() override {
+  bool spawn_next(const DoutPrefixProvider *dpp) override {
     if (shard < num_shards) {
       RGWRados::BucketShard bs(store->getRados());
       bs.init(dpp, bucket_info, index, shard);
@@ -601,6 +601,7 @@ int take_min_status(
   std::vector<BucketTrimInstanceCR::StatusShards>::const_iterator first,
   std::vector<BucketTrimInstanceCR::StatusShards>::const_iterator last,
   std::vector<std::optional<std::string> > *status)
+{
   for (auto peer = first; peer != last; ++peer) {
     // Peers on later generations don't get a say in the matter
     if (peer->generation > min_generation) {
@@ -616,7 +617,7 @@ int take_min_status(
       auto& marker = *m++;
       // always take the first marker, or any later marker that's smaller
       if (peer == first || !marker || marker > shard.inc_marker.position) {
-	marker = std::move(shard.inc_marker.raw().position);
+	marker = std::move(shard.inc_marker.position);
       }
     }
   }

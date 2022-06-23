@@ -31,7 +31,7 @@ namespace {
 
 std::string incremental_marker(const rgw_bucket_shard_sync_info& info)
 {
-  return BucketIndexShardsManager::get_shard_marker(info.inc_marker->position);
+  return BucketIndexShardsManager::get_shard_marker(info.inc_marker.position);
 }
 
 bool operator<(const std::vector<rgw_bucket_shard_sync_info>& lhs,
@@ -91,7 +91,7 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
 
   const int num_shards = remote_markers.get().size();
   rgw_bucket_sync_status full_status;
-  int r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, null_yield);
+  int r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, nullptr, null_yield);
   if (r < 0 && r != -ENOENT) { // retry on ENOENT
     return r;
   }
@@ -106,7 +106,7 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
     ldout(store->ctx(), 1) << "waiting to reach incremental sync.." << dendl;
     std::this_thread::sleep_until(delay_until);
 
-    r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, null_yield);
+    r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, nullptr, null_yield);
     if (r < 0 && r != -ENOENT) { // retry on ENOENT
       return r;
     }
@@ -124,7 +124,7 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
         << ", on " << full_status.incremental_gen << ".." << dendl;
     std::this_thread::sleep_until(delay_until);
 
-    r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, null_yield);
+    r = rgw_read_bucket_full_sync_status(dpp, store, pipe, &full_status, nullptr, null_yield);
     if (r < 0 && r != -ENOENT) { // retry on ENOENT
       return r;
     }
@@ -145,8 +145,7 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
   std::vector<rgw_bucket_shard_sync_info> status;
   status.resize(std::max<size_t>(1, num_shards));
   r = rgw_read_bucket_inc_sync_status(dpp, store, pipe,
-                                      full_status.incremental_gen, &status,
-                                      nullptr);
+                                      full_status.incremental_gen, &status);
   if (r < 0) {
     return r;
   }
@@ -162,8 +161,7 @@ int bucket_source_sync_checkpoint(const DoutPrefixProvider* dpp,
         << "    remote markers: " << remote_markers << dendl;
     std::this_thread::sleep_until(delay_until);
     r = rgw_read_bucket_inc_sync_status(dpp, store, pipe,
-                                        full_status.incremental_gen, &status,
-                                        nullptr);
+                                        full_status.incremental_gen, &status);
     if (r < 0) {
       return r;
     }

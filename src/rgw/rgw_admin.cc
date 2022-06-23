@@ -2630,7 +2630,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   int i = 0;
   for (const auto& r : remote_markers) {
     auto shard_id = i++;
-    if (r.marker.empty()) {
+    if (r.max_marker.empty()) {
       continue; // empty bucket index shard
     }
     if (shard_id >= total_shards) {
@@ -2639,8 +2639,8 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
       continue;
     }
     auto& m = shard_status[shard_id];
-    const auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker->position);
-    if (pos < r.marker) {
+    const auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
+    if (pos < r.max_marker) {
       shards_behind.insert(shard_id);
     }
   }

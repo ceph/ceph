@@ -305,7 +305,7 @@ int SIProvider_BucketInc::do_fetch(const DoutPrefixProvider *dpp, int shard_id, 
   while (max > 0 && truncated) {
     list<rgw_bi_log_entry> entries;
 
-    int ret = store->svc()->bilog_rados->log_list(dpp, bucket_info, sid, marker, max - count, entries, &truncated);
+    int ret = store->svc()->bilog_rados->log_list(dpp, bucket_info, log_layout, sid, marker, max - count, entries, &truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: list_bi_log_entries(): ret=" << ret << dendl;
       return -ret;
@@ -336,7 +336,7 @@ int SIProvider_BucketInc::do_get_cur_state(const DoutPrefixProvider *dpp,
   int sid = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? shard_id : -1);
 
   map<int, RGWSI_BILog_RADOS::Status> markers;
-  int ret = store->svc()->bilog_rados->get_log_status(dpp, bucket_info, sid, &markers, y);
+  int ret = store->svc()->bilog_rados->get_log_status(dpp, bucket_info, log_layout, sid, &markers, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": get_log_status() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " returned ret=" << ret << dendl;
     return ret;
@@ -358,7 +358,7 @@ int SIProvider_BucketInc::do_trim(const DoutPrefixProvider *dpp, int shard_id, c
 {
   int sid = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? shard_id : -1);
 
-  int ret = store->svc()->bilog_rados->log_trim(dpp, bucket_info, sid, string(), marker);
+  int ret = store->svc()->bilog_rados->log_trim(dpp, bucket_info, log_layout, sid, string(), marker);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": log_trim() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " marker=" << marker << " returned ret=" << ret << dendl;
     return ret;
@@ -387,6 +387,8 @@ SIProviderRef RGWSIPGen_BucketInc::get(const DoutPrefixProvider *dpp,
     ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
     return nullptr;
   }
+
+#warning missing multi gen handling
 
   SIProviderRef result;
 

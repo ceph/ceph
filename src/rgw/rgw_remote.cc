@@ -107,7 +107,8 @@ void RGWRemoteCtl::init_conn(const DoutPrefixProvider *dpp,
   if (z.data_access_conf) {
     conns.data = add_conn(create_conn(dpp, z.name, z.id, *def_endpoints, *z.data_access_conf, api_name));
   } else {
-    conns.data = add_conn(new RGWRESTConn(cct, svc.zone, z.id, z.endpoints, api_name));
+    conns.data = add_conn(new RGWRESTConn(cct, z.id, z.endpoints, svc.zone->get_zone_params().system_key,
+                                          svc.zone->get_zonegroup().get_id(), api_name));
   }
 
   if (z.sip_conf) {
@@ -187,7 +188,7 @@ RGWRESTConn *RGWRemoteCtl::create_conn(const DoutPrefixProvider *dpp,
   }
 
   ldpp_dout(dpp, 20) << __func__ << "(): remote sip connection for zone=" << zone_name << ": using access_key=" <<  access_key.id << dendl;
-  return new RGWRESTConn(cct, svc.zone, zone_id.id, endpoints, access_key, api_name);
+  return new RGWRESTConn(cct, zone_id.id, endpoints, access_key, svc.zone->get_zonegroup().get_id(), api_name);
 }
 
 RGWRESTConn *RGWRemoteCtl::create_conn(const DoutPrefixProvider *dpp,
@@ -196,7 +197,7 @@ RGWRESTConn *RGWRemoteCtl::create_conn(const DoutPrefixProvider *dpp,
                                        const RGWAccessKey& key,
                                        std::optional<string> api_name)
 {
-  return new RGWRESTConn(cct, svc.zone, remote_id, endpoints, key, api_name);
+  return new RGWRESTConn(cct, remote_id, endpoints, key, svc.zone->get_zonegroup().get_id(), api_name);
 }
 
 bool RGWRemoteCtl::get_redirect_zone_endpoint(string *endpoint)
