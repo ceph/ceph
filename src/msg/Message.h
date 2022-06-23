@@ -256,7 +256,7 @@ public:
 #endif
 
 protected:
-  ceph_msg_header  header;      // headerelope
+  ceph_msg_header  header;      // headerenvelope
   ceph_msg_footer  footer;
   ceph::buffer::list       payload;  // "front" unaligned blob
   ceph::buffer::list       middle;   // "middle" unaligned blob
