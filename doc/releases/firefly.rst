@@ -334,7 +334,7 @@ Notable Changes
 * osd: fix journal dump (Ma Jianpeng)
 * osd: fix occasional stall during peering or activation (Sage Weil)
 * osd: fix past_interval display bug (#9752 Loic Dachary)
-* osd: fix rare crash triggered by admin socket dump_ops_in_filght (#9916 Dong Lei)
+* osd: fix rare crash triggered by admin socket dump_ops_in_flight (#9916 Dong Lei)
 * osd: fix snap trimming performance issues (#9487 #9113 Samuel Just, Sage Weil, Dan van der Ster, Florian Haas)
 * osd: fix snapdir handling on cache eviction (#8629 Sage Weil)
 * osd: handle map gaps in map advance code (Sage Weil)
