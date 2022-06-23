@@ -222,7 +222,7 @@ private:
     return res;
   }
   virtual void _spillover_range(uint64_t start, uint64_t end) {
-    // this should be overriden when range count cap is present,
+    // this should be overridden when range count cap is present,
     // i.e. (range_count_cap > 0)
     ceph_assert(false);
   }
