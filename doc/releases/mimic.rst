@@ -4134,7 +4134,7 @@ Detailed Changelog
 * rgw: remove useless lines in RGWDeleteBucket::execute (`pr#19699 <https://github.com/ceph/ceph/pull/19699>`_, Bingyin Zhang)
 * rgw: reshard cancel command should clear bucket resharding flag (`issue#21619 <http://tracker.ceph.com/issues/21619>`_, `pr#21120 <https://github.com/ceph/ceph/pull/21120>`_, Orit Wasserman)
 * rgw: reshard should not update stats when linking new bucket instance (`issue#22124 <http://tracker.ceph.com/issues/22124>`_, `pr#19253 <https://github.com/ceph/ceph/pull/19253>`_, Orit Wasserman)
-* rgw: retry CORS put/delete operations on ECANCELLED (`issue#22517 <http://tracker.ceph.com/issues/22517>`_, `pr#19601 <https://github.com/ceph/ceph/pull/19601>`_, Adam C. Emerson)
+* rgw: retry CORS put/delete operations on ECANCELED (`issue#22517 <http://tracker.ceph.com/issues/22517>`_, `pr#19601 <https://github.com/ceph/ceph/pull/19601>`_, Adam C. Emerson)
 * rgw: return 'Access-Control-Allow-Origin' header when the set and delete bucket website through XMLHttpRequest (`pr#17632 <https://github.com/ceph/ceph/pull/17632>`_, yuliyang)
 * rgw: return 'Access-Control-Allow-Origin' header when the set bucket versioning through XMLHttpRequest (`pr#17631 <https://github.com/ceph/ceph/pull/17631>`_, yuliyang)
 * rgw: return bucket's location no matter which zonegroup it located in (`issue#21125 <http://tracker.ceph.com/issues/21125>`_, `pr#17250 <https://github.com/ceph/ceph/pull/17250>`_, Shasha Lu)
