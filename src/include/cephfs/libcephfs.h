@@ -1084,7 +1084,7 @@ int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
 int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
 
 /**
- * Change the ownership of a file/directory releative to a file descriptor.
+ * Change the ownership of a file/directory relative to a file descriptor.
  *
  * @param cmount the ceph mount handle to use for performing the chown.
  * @param dirfd open file descriptor (or CEPHFS_AT_FDCWD)
