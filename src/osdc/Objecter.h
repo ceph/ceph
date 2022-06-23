@@ -643,7 +643,7 @@ struct ObjectOperation {
 	      decode(*ptruncated, p);
 	    } else {
 	      // The OSD did not provide this.  Since old OSDs do not
-	      // enfoce omap result limits either, we can infer it from
+	      // enforce omap result limits either, we can infer it from
 	      // the size of the result
 	      *ptruncated = (pattrs->size() == max_entries);
 	    }
