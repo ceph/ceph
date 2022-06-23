@@ -969,7 +969,7 @@ Changelog
 * mgr/dashboard: Remove fieldsets when using CdTable (`issue#27851 <http://tracker.ceph.com/issues/27851>`_, `issue#26999 <http://tracker.ceph.com/issues/26999>`_, `pr#24478 <https://github.com/ceph/ceph/pull/24478>`_, Tiago Melo)
 * mgr: hold lock while accessing the request list and submittin request (`pr#25113 <https://github.com/ceph/ceph/pull/25113>`_, Jerry Lee)
 * mgr: [restful] deep_scrub is not a valid OSD command (`issue#36720 <http://tracker.ceph.com/issues/36720>`_, `issue#36749 <http://tracker.ceph.com/issues/36749>`_, `pr#25040 <https://github.com/ceph/ceph/pull/25040>`_, Boris Ranto)
-* mon: mgr options not parse propertly (`issue#35076 <http://tracker.ceph.com/issues/35076>`_, `issue#35836 <http://tracker.ceph.com/issues/35836>`_, `pr#24176 <https://github.com/ceph/ceph/pull/24176>`_, Sage Weil)
+* mon: mgr options not parse properly (`issue#35076 <http://tracker.ceph.com/issues/35076>`_, `issue#35836 <http://tracker.ceph.com/issues/35836>`_, `pr#24176 <https://github.com/ceph/ceph/pull/24176>`_, Sage Weil)
 * mon/OSDMonitor: invalidate max_failed_since on cancel_report (`issue#35930 <http://tracker.ceph.com/issues/35930>`_, `issue#35860 <http://tracker.ceph.com/issues/35860>`_, `pr#24281 <https://github.com/ceph/ceph/pull/24281>`_, xie xingguo)
 * mon: test if gid exists in pending for prepare_beacon (`issue#35848 <http://tracker.ceph.com/issues/35848>`_, `pr#24272 <https://github.com/ceph/ceph/pull/24272>`_, Patrick Donnelly)
 * msg/async: clean up local buffers on dispatch (`issue#36127 <http://tracker.ceph.com/issues/36127>`_, `issue#35987 <http://tracker.ceph.com/issues/35987>`_, `pr#24386 <https://github.com/ceph/ceph/pull/24386>`_, Greg Farnum)
