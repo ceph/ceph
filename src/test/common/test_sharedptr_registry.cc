@@ -220,7 +220,7 @@ TEST_F(SharedPtrRegistry_all, get_next) {
     std::shared_ptr<int> ptr2 = registry.lookup_or_create(key2);
     const int value2 = *ptr2 = 400;
 
-    // entries with expired pointers are silentely ignored
+    // entries with expired pointers are silently ignored
     const unsigned int key_gone = 222;
     registry.get_contents()[key_gone] = make_pair(std::shared_ptr<int>(), (int*)0);
 
