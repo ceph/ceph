@@ -145,7 +145,7 @@ void ServiceBase::set_status(DWORD current_state, DWORD exit_code) {
   status.dwWin32ExitCode = exit_code;
 
   if (hstatus) {
-    dout(5) << "Updating service service status (" << current_state
+    dout(5) << "Updating service status (" << current_state
              << ") and exit code(" << exit_code << ")." << dendl;
     ::SetServiceStatus(hstatus, &status);
   } else {
