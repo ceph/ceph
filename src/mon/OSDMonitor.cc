@@ -10273,7 +10273,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
         // note that we do not verify if class_is_in_use here
         // in case the device is misclassified and user wants
-        // to overridely reset...
+        // to override reset...
 
         err = newcrush.remove_device_class(cct, osd, &ss);
         if (err < 0) {
