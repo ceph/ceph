@@ -216,7 +216,7 @@ static NTSTATUS WinCephCreateFile(
              << ": Unsupported st_mode: " << stbuf.stx_mode << dendl;
       return STATUS_BAD_FILE_TYPE;
     }
-  } else { // The file doens't exist.
+  } else { // The file doesn't exist.
     if (DokanFileInfo->IsDirectory) {
       // TODO: check create disposition.
       dout(20) << __func__ << " " << path << ". New directory." << dendl;

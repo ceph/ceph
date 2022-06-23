@@ -103,7 +103,7 @@ TEST(AuthRegistry, con_modes)
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, secure);
 
-  //  ms_mon)client_mode doesn't does't affect daemons, though...
+  //  ms_mon)client_mode doesn't doesn't affect daemons, though...
   cct->_conf.set_val("ms_mon_service_mode", "crc secure");
   cct->_conf.apply_changes(NULL);
 
