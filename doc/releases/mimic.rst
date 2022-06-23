@@ -4011,7 +4011,7 @@ Detailed Changelog
 * rgw: fix handling of ENOENT in RGWRadosGetOmapKeysCR (`pr#19878 <https://github.com/ceph/ceph/pull/19878>`_, Casey Bodley)
 * rgw: fix index cancel op miss update header (`pr#20396 <https://github.com/ceph/ceph/pull/20396>`_, Tianshan Qu)
 * rgw: Fix infinite call for bi list when resharding a bucket (`issue#22721 <http://tracker.ceph.com/issues/22721>`_, `pr#21584 <https://github.com/ceph/ceph/pull/21584>`_, Orit Wasserman)
-* rgw: fix lc process only schdule the first item of lc objects (`issue#21022 <http://tracker.ceph.com/issues/21022>`_, `pr#17061 <https://github.com/ceph/ceph/pull/17061>`_, Shasha Lu)
+* rgw: fix lc process only schedule the first item of lc objects (`issue#21022 <http://tracker.ceph.com/issues/21022>`_, `pr#17061 <https://github.com/ceph/ceph/pull/17061>`_, Shasha Lu)
 * rgw:fix list objects with marker wrong result  when bucket is enable versioning (`issue#21500 <http://tracker.ceph.com/issues/21500>`_, `pr#17934 <https://github.com/ceph/ceph/pull/17934>`_, yuliyang)
 * rgw: fix memory fragmentation problem reading data from client (`pr#20724 <https://github.com/ceph/ceph/pull/20724>`_, Marcus Watts)
 * rgw: Fix multisite Synchronization failed when read and write delete … (`issue#22804 <http://tracker.ceph.com/issues/22804>`_, `pr#20814 <https://github.com/ceph/ceph/pull/20814>`_, Niu Pengju)

@@ -1797,7 +1797,7 @@ Other Notable Changes
 * rgw: fix bilog entries on multipart complete (`issue#21772 <http://tracker.ceph.com/issues/21772>`_, `pr#18334 <https://github.com/ceph/ceph/pull/18334>`_, Casey Bodley)
 * rgw: fix error handling in ListBucketIndexesCR (`issue#21735 <http://tracker.ceph.com/issues/21735>`_, `pr#18591 <https://github.com/ceph/ceph/pull/18591>`_, Casey Bodley)
 * rgw: fix refcnt issues (`issue#21819 <http://tracker.ceph.com/issues/21819>`_, `pr#18539 <https://github.com/ceph/ceph/pull/18539>`_, baixueyu)
-* rgw: lc process only schdule the first item of lc objects (`issue#21022 <http://tracker.ceph.com/issues/21022>`_, `pr#17859 <https://github.com/ceph/ceph/pull/17859>`_, Shasha Lu)
+* rgw: lc process only schedule the first item of lc objects (`issue#21022 <http://tracker.ceph.com/issues/21022>`_, `pr#17859 <https://github.com/ceph/ceph/pull/17859>`_, Shasha Lu)
 * rgw: list bucket which enable versioning get wrong result when user marker (`issue#21500 <http://tracker.ceph.com/issues/21500>`_, `pr#18569 <https://github.com/ceph/ceph/pull/18569>`_, yuliyang)
 * rgw: list_objects() honors end_marker regardless of namespace (`issue#18977 <http://tracker.ceph.com/issues/18977>`_, `pr#17832 <https://github.com/ceph/ceph/pull/17832>`_, Radoslaw Zarzynski)
 * rgw: Multipart upload may double the quota (`issue#21586 <http://tracker.ceph.com/issues/21586>`_, `pr#18435 <https://github.com/ceph/ceph/pull/18435>`_, Sibei Gao)
