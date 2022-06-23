@@ -619,7 +619,7 @@ function TEST_backfill_grow() {
 # Write the EC pool on 5 OSDs
 # Take down 1 (must contain an EC shard)
 # Bring up OSD with fill data
-# Not enought room to backfill to partially full OSD
+# Not enough room to backfill to partially full OSD
 function TEST_ec_backfill_simple() {
     local dir=$1
     local EC=$2
