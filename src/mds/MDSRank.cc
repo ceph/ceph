@@ -839,7 +839,7 @@ void MDSRankDispatcher::shutdown()
   // inited.
   metrics_handler.shutdown();
 
-  // shutdown metric aggergator
+  // shutdown metric aggregator
   if (metric_aggregator != nullptr) {
     metric_aggregator->shutdown();
   }
