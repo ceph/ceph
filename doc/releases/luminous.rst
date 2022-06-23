@@ -1787,7 +1787,7 @@ Other Notable Changes
 * rgw: add support for Swift's per storage policy statistics (`issue#17932 <http://tracker.ceph.com/issues/17932>`_, `issue#21506 <http://tracker.ceph.com/issues/21506>`_, `pr#17835 <https://github.com/ceph/ceph/pull/17835>`_, Radoslaw Zarzynski, Casey Bodley)
 * rgw: add support for Swift's reversed account listings (`issue#21148 <http://tracker.ceph.com/issues/21148>`_, `pr#17834 <https://github.com/ceph/ceph/pull/17834>`_, Radoslaw Zarzynski)
 * rgw: avoid logging keystone revocation failures when no keystone is configured (`issue#21400 <http://tracker.ceph.com/issues/21400>`_, `pr#18441 <https://github.com/ceph/ceph/pull/18441>`_, Abhishek Lekshmanan)
-* rgw: disable dynamic resharding in multisite enviorment (`issue#21725 <http://tracker.ceph.com/issues/21725>`_, `pr#18432 <https://github.com/ceph/ceph/pull/18432>`_, Orit Wasserman)
+* rgw: disable dynamic resharding in multisite environment (`issue#21725 <http://tracker.ceph.com/issues/21725>`_, `pr#18432 <https://github.com/ceph/ceph/pull/18432>`_, Orit Wasserman)
 * rgw: encryption: PutObj response does not include sse-kms headers (`issue#21576 <http://tracker.ceph.com/issues/21576>`_, `pr#18442 <https://github.com/ceph/ceph/pull/18442>`_, Casey Bodley)
 * rgw: encryption: reject requests that don't provide all expected headers (`issue#21581 <http://tracker.ceph.com/issues/21581>`_, `pr#18429 <https://github.com/ceph/ceph/pull/18429>`_, Enming Zhang)
 * rgw: expose --sync-stats via admin api (`issue#21301 <http://tracker.ceph.com/issues/21301>`_, `pr#18439 <https://github.com/ceph/ceph/pull/18439>`_, Nathan Johnson)

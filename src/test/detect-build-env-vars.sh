@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 if [ -n "$CEPH_BUILD_DIR" ] && [ -n "$CEPH_ROOT" ] && [ -n "$CEPH_BIN" ] && [ -n "$CEPH_LIB" ]; then
-  echo "Enivronment Variables Already Set"
+  echo "Environment Variables Already Set"
 elif [ -e CMakeCache.txt ]; then
   echo "Environment Variables Not All Set, Detected Build System CMake"
   echo "Setting Environment Variables"
