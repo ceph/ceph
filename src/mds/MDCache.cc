@@ -10413,7 +10413,7 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
       // dentry specifies
       fg = cur->pick_dirfrag(dis->get_dentry(i));
     } else {
-      // requester explicity specified the frag
+      // requester explicitly specified the frag
       ceph_assert(dis->wants_base_dir() || MDS_INO_IS_BASE(dis->get_base_ino()));
       fg = dis->get_base_dir_frag();
       if (!cur->dirfragtree.is_leaf(fg))
