@@ -182,7 +182,7 @@ Notable Changes
 * rgw: use correct objv_tracker for bucket instance (`issue#11416 <http://tracker.ceph.com/issues/11416>`_, `pr#4379 <http://github.com/ceph/ceph/pull/4379>`_, Yehuda Sadeh)
 * tests: force checkout of submodules (`issue#11157 <http://tracker.ceph.com/issues/11157>`_, `pr#4079 <http://github.com/ceph/ceph/pull/4079>`_, Loic Dachary)
 * tools: Backport ceph-objectstore-tool changes to firefly (`issue#12327 <http://tracker.ceph.com/issues/12327>`_, `pr#3866 <http://github.com/ceph/ceph/pull/3866>`_, David Zafman)
-* tools: ceph-objectstore-tool: Output only unsupported features when incomatible (`issue#11176 <http://tracker.ceph.com/issues/11176>`_, `pr#4126 <http://github.com/ceph/ceph/pull/4126>`_, David Zafman)
+* tools: ceph-objectstore-tool: Output only unsupported features when incompatible (`issue#11176 <http://tracker.ceph.com/issues/11176>`_, `pr#4126 <http://github.com/ceph/ceph/pull/4126>`_, David Zafman)
 * tools: ceph-objectstore-tool: Use exit status 11 for incompatible import attemp... (`issue#11139 <http://tracker.ceph.com/issues/11139>`_, `pr#4129 <http://github.com/ceph/ceph/pull/4129>`_, David Zafman)
 * tools: Fix do_autogen.sh so that -L is allowed (`issue#11303 <http://tracker.ceph.com/issues/11303>`_, `pr#4247 <http://github.com/ceph/ceph/pull/4247>`_, Alfredo Deza)
 
