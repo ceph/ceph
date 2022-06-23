@@ -1416,7 +1416,7 @@ Changelog
 * rgw: allow rgw-orphan-list to process multiple data pools (`pr#42635 <https://github.com/ceph/ceph/pull/42635>`_, J. Eric Ivancich)
 * rgw: allow to set ssl options and ciphers for beast frontend (`pr#42363 <https://github.com/ceph/ceph/pull/42363>`_, Mykola Golub)
 * rgw: avoid infinite loop when deleting a bucket (`issue#49206 <http://tracker.ceph.com/issues/49206>`_, `pr#42230 <https://github.com/ceph/ceph/pull/42230>`_, Jeegn Chen)
-* rgw: avoid occuring radosgw daemon crash when access a conditionally … (`pr#42626 <https://github.com/ceph/ceph/pull/42626>`_, xiangrui meng, yupeng chen)
+* rgw: avoid occurring radosgw daemon crash when access a conditionally … (`pr#42626 <https://github.com/ceph/ceph/pull/42626>`_, xiangrui meng, yupeng chen)
 * rgw: Backport of 51674 to Pacific (`pr#42346 <https://github.com/ceph/ceph/pull/42346>`_, Adam C. Emerson)
 * rgw: deprecate the civetweb frontend (`pr#41367 <https://github.com/ceph/ceph/pull/41367>`_, Casey Bodley)
 * rgw: Don't segfault on datalog trim (`pr#42336 <https://github.com/ceph/ceph/pull/42336>`_, Adam C. Emerson)

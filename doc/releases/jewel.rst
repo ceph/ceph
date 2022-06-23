@@ -1049,7 +1049,7 @@ Notable Changes
 * rgw: Bug when using port 443s in rgw. (`issue#16548 <http://tracker.ceph.com/issues/16548>`_, `pr#10664 <http://github.com/ceph/ceph/pull/10664>`_, Pritha Srivastava)
 * rgw: Fallback to Host header for bucket name. (`issue#15975 <http://tracker.ceph.com/issues/15975>`_, `pr#10693 <http://github.com/ceph/ceph/pull/10693>`_, Robin H. Johnson)
 * rgw: Fix civetweb IPv6 (`issue#16928 <http://tracker.ceph.com/issues/16928>`_, `pr#10580 <http://github.com/ceph/ceph/pull/10580>`_, Robin H. Johnson)
-* rgw: Increase log level for messages occuring while running rgw admin command (`issue#16935 <http://tracker.ceph.com/issues/16935>`_, `pr#10765 <http://github.com/ceph/ceph/pull/10765>`_, Shilpa Jagannath)
+* rgw: Increase log level for messages occurring while running rgw admin command (`issue#16935 <http://tracker.ceph.com/issues/16935>`_, `pr#10765 <http://github.com/ceph/ceph/pull/10765>`_, Shilpa Jagannath)
 * rgw: No Last-Modified, Content-Size and X-Object-Manifest headers if no segments in DLO manifest (`issue#15812 <http://tracker.ceph.com/issues/15812>`_, `pr#9265 <http://github.com/ceph/ceph/pull/9265>`_, Radoslaw Zarzynski)
 * rgw: RGWPeriodPuller tries to pull from itself (`issue#16939 <http://tracker.ceph.com/issues/16939>`_, `pr#10764 <http://github.com/ceph/ceph/pull/10764>`_, Casey Bodley)
 * rgw: Set Access-Control-Allow-Origin to a Asterisk if allowed in a rule (`issue#15348 <http://tracker.ceph.com/issues/15348>`_, `pr#9453 <http://github.com/ceph/ceph/pull/9453>`_, Wido den Hollander)
