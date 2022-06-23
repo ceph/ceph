@@ -4373,7 +4373,7 @@ Other Notable Changes
 * mon: enable luminous monmap feature on full quorum (`pr#13379 <https://github.com/ceph/ceph/pull/13379>`_, Joao Eduardo Luis)
 * mon: extensible output format for health checks (`pr#16701 <https://github.com/ceph/ceph/pull/16701>`_, John Spray)
 * mon: Filter `log last` output by severity and channel (`pr#15924 <https://github.com/ceph/ceph/pull/15924>`_, John Spray)
-* mon: fix accesing pending_fsmap from peon (`issue#20040 <http://tracker.ceph.com/issues/20040>`_, `pr#15213 <https://github.com/ceph/ceph/pull/15213>`_, John Spray)
+* mon: fix accessing pending_fsmap from peon (`issue#20040 <http://tracker.ceph.com/issues/20040>`_, `pr#15213 <https://github.com/ceph/ceph/pull/15213>`_, John Spray)
 * mon: fix a few bugs with the osd health reporting (`pr#15179 <https://github.com/ceph/ceph/pull/15179>`_, Sage Weil)
 * mon: fix a few nits (`pr#12670 <https://github.com/ceph/ceph/pull/12670>`_, Sage Weil)
 * mon: Fix deep_age copy paste error (`pr#16434 <https://github.com/ceph/ceph/pull/16434>`_, Brad Hubbard)
