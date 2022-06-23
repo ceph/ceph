@@ -2846,7 +2846,7 @@ void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 
     _abort_mds_sessions(-CEPHFS_EBLOCKLISTED);
 
-    // Since we know all our OSD ops will fail, cancel them all preemtively,
+    // Since we know all our OSD ops will fail, cancel them all preemptively,
     // so that on an unhealthy cluster we can umount promptly even if e.g.
     // some PGs were inaccessible.
     objecter->op_cancel_writes(-CEPHFS_EBLOCKLISTED);
