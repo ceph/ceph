@@ -43,7 +43,7 @@ struct hw_features {
   bool tx_ufo = false;
   // Maximum Transmission Unit
   uint16_t mtu = 1500;
-  // Maximun packet len when TCP/UDP offload is enabled
+  // Maximum packet len when TCP/UDP offload is enabled
   uint16_t max_packet_len = ip_packet_len_max - eth_hdr_len;
 };
 
