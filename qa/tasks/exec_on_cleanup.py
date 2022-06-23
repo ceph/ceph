@@ -1,5 +1,5 @@
 """
-Exececute custom commands during unwind/cleanup
+Execute custom commands during unwind/cleanup
 """
 import logging
 import contextlib

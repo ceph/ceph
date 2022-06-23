@@ -462,7 +462,7 @@ int AdminSocket::execute_command(
 #else
   bool done = false;
   int rval = 0;
-  ceph::mutex mylock = ceph::make_mutex("admin_socket::excute_command::mylock");
+  ceph::mutex mylock = ceph::make_mutex("admin_socket::execute_command::mylock");
   ceph::condition_variable mycond;
   C_SafeCond fin(mylock, mycond, &done, &rval);
   execute_command(
