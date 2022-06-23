@@ -3151,7 +3151,7 @@ Other Notable Changes
 * cephfs,core: Add test for is_hacky_ecoverwrites in cephfs pool checks (`pr#13466 <https://github.com/ceph/ceph/pull/13466>`_, John Spray)
 * cephfs,core: cleanup: use std::make_shared to replace new (`pr#12276 <https://github.com/ceph/ceph/pull/12276>`_, Yunchuan Wen)
 * cephfs,core,mon: mon/MDSMonitor: fix segv when multiple MDSs raise same alert (`pr#16302 <https://github.com/ceph/ceph/pull/16302>`_, Sage Weil)
-* cephfs: fix mount point break off problem after mds switch occured (`issue#19437 <http://tracker.ceph.com/issues/19437>`_, `pr#14267 <https://github.com/ceph/ceph/pull/14267>`_, Guan yunfei)
+* cephfs: fix mount point break off problem after mds switch occurred (`issue#19437 <http://tracker.ceph.com/issues/19437>`_, `pr#14267 <https://github.com/ceph/ceph/pull/14267>`_, Guan yunfei)
 * cephfs: fix write_buf's _len overflow problem (`issue#19033 <http://tracker.ceph.com/issues/19033>`_, `pr#13587 <https://github.com/ceph/ceph/pull/13587>`_, Yang Honggang)
 * cephfs: fs/ceph-fuse: normalize file open flags on the wire (`pr#14822 <https://github.com/ceph/ceph/pull/14822>`_, Jan Fajerski)
 * cephfs: libcephfs.cc: fix memory leak (`pr#12557 <https://github.com/ceph/ceph/pull/12557>`_, Michal Jarzabek)

@@ -487,7 +487,7 @@ done
                     count = count + 1
                     break
 
-        log.info("{0} migrations have occured due to the cluster resizing".format(count))
+        log.info("{0} migrations have occurred due to the cluster resizing".format(count))
         # ~50% of subtrees from the two rank will migrate to another rank
         self.assertLessEqual((count/len(subtrees_old)), (0.5)*1.25) # with 25% overbudget
 
@@ -514,6 +514,6 @@ done
                     count = count + 1
                     break
 
-        log.info("{0} migrations have occured due to the cluster resizing".format(count))
+        log.info("{0} migrations have occurred due to the cluster resizing".format(count))
         # rebalancing from 3 -> 2 may cause half of rank 0/1 to move and all of rank 2
         self.assertLessEqual((count/len(subtrees_old)), (1.0/3.0/2.0 + 1.0/3.0/2.0 + 1.0/3.0)*1.25) # aka .66 with 25% overbudget

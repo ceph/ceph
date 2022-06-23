@@ -84,7 +84,7 @@ class TestNFS(MgrTestCase):
 
     def _check_nfs_cluster_event(self, expected_event):
         '''
-        Check whether an event occured during the lifetime of the NFS service
+        Check whether an event occurred during the lifetime of the NFS service
         :param expected_event: event that was expected to occur
         '''
         event_occurred = False
