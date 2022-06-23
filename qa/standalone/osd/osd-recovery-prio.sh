@@ -116,7 +116,7 @@ function TEST_recovery_priority() {
 
     if [ "$pool2" = "" -o "pool3" = "" ];
     then
-      echo "Failure to find appropirate PGs"
+      echo "Failure to find appropriate PGs"
       return 1
     fi
 
@@ -387,7 +387,7 @@ function TEST_recovery_pool_priority() {
 
     if [ "$pool2" = "" ];
     then
-      echo "Failure to find appropirate PGs"
+      echo "Failure to find appropriate PGs"
       return 1
     fi
 
