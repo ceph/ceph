@@ -1412,13 +1412,13 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
 
   r = propagate_snap_deletes(dir_root, snaps_deleted);
   if (r < 0) {
-    derr << ": failed to propgate deleted snapshots" << dendl;
+    derr << ": failed to propagate deleted snapshots" << dendl;
     return r;
   }
 
   r = propagate_snap_renames(dir_root, snaps_renamed);
   if (r < 0) {
-    derr << ": failed to propgate renamed snapshots" << dendl;
+    derr << ": failed to propagate renamed snapshots" << dendl;
     return r;
   }
 

@@ -1092,7 +1092,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
     if (r != 0) {
       logger().warn("can't open class {}: {}", class_name, cpp_strerror(r));
       if (r == -EPERM) {
-        // propogate permission error
+        // propagate permission error
         throw crimson::osd::permission_denied{};
       } else {
         throw crimson::osd::invalid_argument{};
