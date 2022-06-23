@@ -368,7 +368,7 @@ int ErasureCodeIsaDefault::parse(ErasureCodeProfile &profile,
 void
 ErasureCodeIsaDefault::prepare()
 {
-  // setup shared encoding table and coefficlients
+  // setup shared encoding table and coefficients
   unsigned char** p_enc_table =
     tcache.getEncodingTable(matrixtype, k, m);
 
@@ -378,7 +378,7 @@ ErasureCodeIsaDefault::prepare()
   if (!*p_enc_coeff) {
     dout(10) << "[ cache tables ] creating coeff for k=" <<
       k << " m=" << m << dendl;
-    // build encoding coefficlients which need to be computed once for each (k,m)
+    // build encoding coefficients which need to be computed once for each (k,m)
     encode_coeff = (unsigned char*) malloc(k * (m + k));
 
     if (matrixtype == kVandermonde)
@@ -386,8 +386,8 @@ ErasureCodeIsaDefault::prepare()
     if (matrixtype == kCauchy)
       gf_gen_cauchy1_matrix(encode_coeff, k + m, k);
 
-      // either our new created coefficlients are stored or if they have been
-      // created in the meanwhile the locally allocated coefficlients will be
+      // either our new created coefficients are stored or if they have been
+      // created in the meanwhile the locally allocated coefficients will be
       // freed by setEncodingCoefficient
     encode_coeff = tcache.setEncodingCoefficient(matrixtype, k, m, encode_coeff);
   } else {

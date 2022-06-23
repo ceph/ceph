@@ -174,7 +174,7 @@ ErasureCodeIsaTableCache::getEncodingCoefficient(int matrix, int k, int m)
 unsigned char**
 ErasureCodeIsaTableCache::getEncodingCoefficientNoLock(int matrix, int k, int m)
 {
-  // create a pointer to store an encoding coefficlients address
+  // create a pointer to store an encoding coefficients address
   if (!encoding_coefficient[matrix][k][m]) {
     encoding_coefficient[matrix][k][m] = new (unsigned char*);
     *encoding_coefficient[matrix][k][m] = 0;
@@ -209,12 +209,12 @@ ErasureCodeIsaTableCache::setEncodingCoefficient(int matrix, int k, int m, unsig
   std::lock_guard lock{codec_tables_guard};
   unsigned char** ec_out_coeff = getEncodingCoefficientNoLock(matrix, k, m);
   if (*ec_out_coeff) {
-    // somebody might have deposited these coefficlients in the meanwhile, so clean
-    // the input coefficlients and return the stored ones
+    // somebody might have deposited these coefficients in the meanwhile, so clean
+    // the input coefficients and return the stored ones
     free (ec_in_coeff);
     return *ec_out_coeff;
   } else {
-    // we store the provided input coefficlients and return these
+    // we store the provided input coefficients and return these
     *encoding_coefficient[matrix][k][m] = ec_in_coeff;
     return ec_in_coeff;
   }
