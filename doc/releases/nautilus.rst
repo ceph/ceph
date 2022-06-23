@@ -4894,7 +4894,7 @@ Detailed Changelog
 * rgw: multiple es related fixes and improvements (`issue#22877 <http://tracker.ceph.com/issues/22877>`_, `issue#38028 <http://tracker.ceph.com/issues/38028>`_, `issue#38030 <http://tracker.ceph.com/issues/38030>`_, `issue#36092 <http://tracker.ceph.com/issues/36092>`_, `pr#26106 <https://github.com/ceph/ceph/pull/26106>`_, Yehuda Sadeh, Abhishek Lekshmanan)
 * rgw: need to give a type in list constructor (`pr#25161 <https://github.com/ceph/ceph/pull/25161>`_, Willem Jan Withagen)
 * rgw: new librgw_admin_us (`pr#21439 <https://github.com/ceph/ceph/pull/21439>`_, Orit Wasserman, Matt Benjamin)
-* rgw: policy: fix NotAction, NotPricipal, NotResource does not take effect (`pr#23625 <https://github.com/ceph/ceph/pull/23625>`_, xiangxiang)
+* rgw: policy: fix NotAction, NotPrincipal, NotResource does not take effect (`pr#23625 <https://github.com/ceph/ceph/pull/23625>`_, xiangxiang)
 * rgw: policy: fix s3:x-amz-grant-read-acp keyword error (`pr#23610 <https://github.com/ceph/ceph/pull/23610>`_, xiangxiang)
 * rgw: policy: modify some operation permission keyword (`issue#24061 <http://tracker.ceph.com/issues/24061>`_, `pr#20974 <https://github.com/ceph/ceph/pull/20974>`_, xiangxiang)
 * rgw: pub-sub (`pr#23298 <https://github.com/ceph/ceph/pull/23298>`_, Yehuda Sadeh)
