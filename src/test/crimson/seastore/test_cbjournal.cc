@@ -51,7 +51,7 @@ std::optional<record_t> decode_record(
     for (auto e : iter.extent_infos) {
       extent_t ex;
       auto bptr = bufferptr(ceph::buffer::create_page_aligned(e.len));
-      logger().debug(" exten len {} remaining {} ", e.len, bliter_ex.get_remaining());
+      logger().debug(" extent len {} remaining {} ", e.len, bliter_ex.get_remaining());
       bliter_ex.copy(e.len, bptr.c_str());
       ex.bl.append(bptr);
       record.extents.push_back(ex);
