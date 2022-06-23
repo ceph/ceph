@@ -337,8 +337,8 @@ namespace immutable_obj_cache {
     }
 
     /* when current session don't work, ASIO will don't receive any new request from hook.
-     * On the other hand, for pending request of ASIO, cancle these request,
-     * then call their callback. these request which are cancled by this method,
+     * On the other hand, for pending request of ASIO, cancel these request,
+     * then call their callback. these request which are canceld by this method,
      * will be re-dispatched to RADOS layer.
      * make sure just have one thread to modify execute below code. */
     m_session_work.store(false);
