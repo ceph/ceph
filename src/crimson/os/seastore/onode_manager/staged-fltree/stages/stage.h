@@ -416,7 +416,7 @@ struct staged {
       return current_size;
     }
 
-    // Note: possible to return an end iterater if to_index == INDEX_END
+    // Note: possible to return an end iterator if to_index == INDEX_END
     template <KeyT KT>
     void copy_out_until(
         typename container_t::template Appender<KT>& appender, index_t& to_index) {
@@ -754,7 +754,7 @@ struct staged {
       return current_size;
     }
 
-    // Note: possible to return an end iterater if to_index == INDEX_END
+    // Note: possible to return an end iterator if to_index == INDEX_END
     template <KeyT KT>
     void copy_out_until(
         typename container_t::template Appender<KT>& appender, index_t& to_index) {

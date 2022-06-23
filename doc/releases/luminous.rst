@@ -2858,7 +2858,7 @@ Other Notable Changes
 * bluestore: os/bluestore: kill BufferSpace.empty() (`pr#12871 <https://github.com/ceph/ceph/pull/12871>`_, xie xingguo)
 * bluestore: os/bluestore: kill orphan declaration of do_write_check_depth() (`pr#12853 <https://github.com/ceph/ceph/pull/12853>`_, xie xingguo)
 * bluestore: os/bluestore: leverage the type knowledge in BitMapAreaLeaf (`pr#13736 <https://github.com/ceph/ceph/pull/13736>`_, Radoslaw Zarzynski)
-* bluestore: os/bluestore: Make BitmapFreelistManager kv itereator short lived (`pr#16243 <https://github.com/ceph/ceph/pull/16243>`_, Mark Nelson)
+* bluestore: os/bluestore: Make BitmapFreelistManager kv iterator short lived (`pr#16243 <https://github.com/ceph/ceph/pull/16243>`_, Mark Nelson)
 * bluestore: os/bluestore: make live changes for BlueStore throttle config work like initial config (`pr#14225 <https://github.com/ceph/ceph/pull/14225>`_, J. Eric Ivancich)
 * bluestore: os/bluestore: miscellaneous fixes to BitAllocator (`pr#12696 <https://github.com/ceph/ceph/pull/12696>`_, xie xingguo)
 * bluestore: os/bluestore: misc fix and cleanups (`pr#16315 <https://github.com/ceph/ceph/pull/16315>`_, Jianpeng Ma)
