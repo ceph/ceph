@@ -2289,7 +2289,7 @@ Notable Changes since Infernalis
 * mds: add 'p' flag in auth caps to control setting pool in layout (`pr#6567 <http://github.com/ceph/ceph/pull/6567>`_, John Spray)
 * mds: advance clientreplay when replying (`issue#14357 <http://tracker.ceph.com/issues/14357>`_, `pr#7216 <http://github.com/ceph/ceph/pull/7216>`_, John Spray)
 * mds: allow client to request caps when opening file (`issue#14360 <http://tracker.ceph.com/issues/14360>`_, `pr#7952 <http://github.com/ceph/ceph/pull/7952>`_, Yan, Zheng)
-* mds: avoid emitting cap warnigns before evicting session (John Spray)
+* mds: avoid emitting cap warnings before evicting session (John Spray)
 * mds: avoid getting stuck in XLOCKDONE (#11254 Yan, Zheng)
 * mds, client: add namespace to file_layout_t (previously ceph_file_layout) (`pr#7098 <http://github.com/ceph/ceph/pull/7098>`_, Yan, Zheng, Sage Weil)
 * mds, client: fix locking around handle_conf_change (`issue#14365 <http://tracker.ceph.com/issues/14365>`_, `issue#14374 <http://tracker.ceph.com/issues/14374>`_, `pr#7312 <http://github.com/ceph/ceph/pull/7312>`_, John Spray)
