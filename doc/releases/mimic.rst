@@ -3175,7 +3175,7 @@ Detailed Changelog
 * mgr/dashboard: RESTController improvements (`pr#21516 <https://github.com/ceph/ceph/pull/21516>`_, Ricardo Dias)
 * mgr/dashboard: run-tox: pass CEPH_BUILD_DIR value into tox script (`pr#21445 <https://github.com/ceph/ceph/pull/21445>`_, Ricardo Dias)
 * mgr: dashboard: show per pool IOPS on health page (#22495) (`issue#22495 <http://tracker.ceph.com/issues/22495>`_, `pr#19981 <https://github.com/ceph/ceph/pull/19981>`_, Konstantin Shalygin)
-* mgr/dashboard: Support aditional info on 'cd-view-cache' (`pr#21060 <https://github.com/ceph/ceph/pull/21060>`_, Ricardo Marques)
+* mgr/dashboard: Support additional info on 'cd-view-cache' (`pr#21060 <https://github.com/ceph/ceph/pull/21060>`_, Ricardo Marques)
 * mgr/dashboard: TaskManager bug fixes (`pr#21240 <https://github.com/ceph/ceph/pull/21240>`_, Ricardo Dias)
 * mgr/dashboard: Update selected items on table refresh (`pr#21099 <https://github.com/ceph/ceph/pull/21099>`_, Ricardo Marques)
 * mgr/dashboard: Use Bootstrap CSS (`pr#21780 <https://github.com/ceph/ceph/pull/21780>`_, Volker Theile)

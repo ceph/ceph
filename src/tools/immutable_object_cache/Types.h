@@ -43,7 +43,7 @@ class ObjectCacheRequest {
 
   // encode consists of two steps
   // step 1 : directly encode common bits using encode method of base classs.
-  // step 2 : according to payload_empty, determine whether addtional bits
+  // step 2 : according to payload_empty, determine whether additional bits
   //          need to be encoded which be implements by child class.
   void encode();
   void decode(bufferlist& bl);
