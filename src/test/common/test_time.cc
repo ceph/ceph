@@ -145,7 +145,7 @@ TEST(CoarseRealClock, Conversions) {
   system_clock_conversions<coarse_real_clock>();
 }
 
-TEST(TimePoints, SignedSubtraciton) {
+TEST(TimePoints, SignedSubtraction) {
   ceph::real_time rta(std::chrono::seconds(3));
   ceph::real_time rtb(std::chrono::seconds(5));
 
