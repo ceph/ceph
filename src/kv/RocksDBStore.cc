@@ -1357,7 +1357,7 @@ int RocksDBStore::repair(std::ostream &out)
       derr << __func__ << " cannot write to " << sharding_recreate << dendl;
       return -1;
     }
-    // fiinalize sharding recreate
+    // finalize sharding recreate
     if (do_open(out, false, false)) {
       derr << __func__ << " cannot finalize repair" << dendl;
       return -1;
