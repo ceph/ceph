@@ -978,7 +978,7 @@ Changelog
 * rgw/sts: adding role name and role session to ops log (`pr#43956 <https://github.com/ceph/ceph/pull/43956>`_, Pritha Srivastava)
 * rgw: add object null point judging when listing pubsub  topics (`pr#45476 <https://github.com/ceph/ceph/pull/45476>`_, zhipeng li)
 * rgw: add OPT_BUCKET_SYNC_RUN to gc_ops_list, so that (`pr#45421 <https://github.com/ceph/ceph/pull/45421>`_, Pritha Srivastava)
-* rgw: add the condition of lock mode conversion to PutObjRentention (`pr#45440 <https://github.com/ceph/ceph/pull/45440>`_, wangzhong)
+* rgw: add the condition of lock mode conversion to PutObjRetention (`pr#45440 <https://github.com/ceph/ceph/pull/45440>`_, wangzhong)
 * rgw: bucket chown bad memory usage (`pr#45491 <https://github.com/ceph/ceph/pull/45491>`_, Mohammad Fatemipour)
 * rgw: change order of xml elements in ListRoles response (`pr#45448 <https://github.com/ceph/ceph/pull/45448>`_, Casey Bodley)
 * rgw: clean-up logging of function entering to make thorough and consistent (`pr#45450 <https://github.com/ceph/ceph/pull/45450>`_, J. Eric Ivancich)
