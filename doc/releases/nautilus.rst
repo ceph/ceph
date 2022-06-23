@@ -3604,7 +3604,7 @@ Detailed Changelog
 * core: msg/async: fix include in frames_v2.h (`pr#26711 <https://github.com/ceph/ceph/pull/26711>`_, Yingxin Cheng)
 * core: msg/async: fix is_queued() semantics (`pr#24693 <https://github.com/ceph/ceph/pull/24693>`_, Ilya Dryomov)
 * core: msg/async: keep connection alive only actually sending (`pr#24301 <https://github.com/ceph/ceph/pull/24301>`_, Haomai Wang, Kefu Chai)
-* core: os/bluestore: fix deep-scrub operation againest disk silent errors (`pr#23629 <https://github.com/ceph/ceph/pull/23629>`_, Xiaoguang Wang)
+* core: os/bluestore: fix deep-scrub operation against disk silent errors (`pr#23629 <https://github.com/ceph/ceph/pull/23629>`_, Xiaoguang Wang)
 * core: os/bluestore: fix flush_commit locking (`issue#21480 <http://tracker.ceph.com/issues/21480>`_, `pr#22083 <https://github.com/ceph/ceph/pull/22083>`_, Sage Weil)
 * core: OSD: add impl for filestore to get dbstatistics (`issue#24591 <http://tracker.ceph.com/issues/24591>`_, `pr#22633 <https://github.com/ceph/ceph/pull/22633>`_, lvshuhua)
 * core: osdc: Change 'bool budgeted' to 'int budget' to avoid recalculating (`pr#21242 <https://github.com/ceph/ceph/pull/21242>`_, Jianpeng Ma)
