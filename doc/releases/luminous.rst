@@ -5502,7 +5502,7 @@ Other Notable Changes
 * tools: ceph.in: add help for locally-handled commands (`pr#13288 <https://github.com/ceph/ceph/pull/13288>`_, Dan Mick)
 * tools: ceph.in: adjust usage width according to user's tty (`pr#15190 <https://github.com/ceph/ceph/pull/15190>`_, Kefu Chai)
 * tools: ceph.in: assert(state==connected) before help_for_target() (`pr#15156 <https://github.com/ceph/ceph/pull/15156>`_, Kefu Chai)
-* tools: ceph.in: drop the compatiiblity to handle non json commands (`pr#15508 <https://github.com/ceph/ceph/pull/15508>`_, Kefu Chai)
+* tools: ceph.in: drop the compatibility to handle non json commands (`pr#15508 <https://github.com/ceph/ceph/pull/15508>`_, Kefu Chai)
 * tools: ceph.in: filter out audit from ceph -w (`pr#16345 <https://github.com/ceph/ceph/pull/16345>`_, John Spray)
 * tools: ceph.in, mgr: misc cleanups (`pr#16229 <https://github.com/ceph/ceph/pull/16229>`_, liuchang0812)
 * tools: ceph.in: print return code when json_command failed (`pr#15378 <https://github.com/ceph/ceph/pull/15378>`_, liuchang0812)

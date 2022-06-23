@@ -848,7 +848,7 @@ options:
   level: advanced
   desc: RGW handle cross domain policy
   long_desc: Returned cross domain policy when accessing the crossdomain.xml resource
-    (Swift compatiility).
+    (Swift compatibility).
   default: <allow-access-from domain="*" secure="false" />
   services:
   - rgw

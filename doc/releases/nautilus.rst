@@ -2333,7 +2333,7 @@ Changelog
 * mgr: mgr/balancer: Python 3 compatibility fix (`issue#38831 <http://tracker.ceph.com/issues/38831>`_, `issue#38855 <http://tracker.ceph.com/issues/38855>`_, `pr#27227 <https://github.com/ceph/ceph/pull/27227>`_, Marius Schiffer)
 * mgr: mgr/dashboard: Check if gateway is in use before allowing the deletion via `iscsi-gateway-rm` command (`pr#27457 <https://github.com/ceph/ceph/pull/27457>`_, Ricardo Marques)
 * mgr: mgr/dashboard: Display the number of active sessions for each iSCSI target (`pr#27450 <https://github.com/ceph/ceph/pull/27450>`_, Ricardo Marques)
-* mgr: mgr/devicehealth: Fix python 3 incompatiblity (`issue#38957 <http://tracker.ceph.com/issues/38957>`_, `issue#38939 <http://tracker.ceph.com/issues/38939>`_, `pr#27390 <https://github.com/ceph/ceph/pull/27390>`_, Marius Schiffer)
+* mgr: mgr/devicehealth: Fix python 3 incompatibility (`issue#38957 <http://tracker.ceph.com/issues/38957>`_, `issue#38939 <http://tracker.ceph.com/issues/38939>`_, `pr#27390 <https://github.com/ceph/ceph/pull/27390>`_, Marius Schiffer)
 * mgr: mgr/telemetry: add report_timestamp to sent reports (`pr#27701 <https://github.com/ceph/ceph/pull/27701>`_, Dan Mick)
 * mgr: mgr/telemetry: use list; redact host; 24h default interval (`pr#27709 <https://github.com/ceph/ceph/pull/27709>`_, Sage Weil, Dan Mick)
 * mgr: mgr: Configure Py root logger for Mgr modules (`issue#38969 <http://tracker.ceph.com/issues/38969>`_, `pr#27261 <https://github.com/ceph/ceph/pull/27261>`_, Volker Theile)

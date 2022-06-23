@@ -130,7 +130,7 @@
 #define O_DIRECT 0x0
 #endif
 
-// Windows doesn't define those values. While the Posix compatibilty layer
+// Windows doesn't define those values. While the Posix compatibility layer
 // doesn't support those values, the Windows native functions do provide
 // similar flags. Special care should be taken if we're going to use those
 // flags in ceph-dokan. The current values are no-ops, while propagating
