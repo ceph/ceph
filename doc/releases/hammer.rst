@@ -1047,7 +1047,7 @@ Notable changes since v0.87.x Giant
 -----------------------------------
 
 * add experimental features option (Sage Weil)
-* arch: fix NEON feaeture detection (#10185 Loic Dachary)
+* arch: fix NEON feature detection (#10185 Loic Dachary)
 * asyncmsgr: misc fixes (Haomai Wang)
 * buffer: add 'shareable' construct (Matt Benjamin)
 * buffer: add list::get_contiguous (Sage Weil)
@@ -2082,7 +2082,7 @@ Upgrading
 Notable Changes
 ---------------
 
-* arch: fix NEON feaeture detection (#10185 Loic Dachary)
+* arch: fix NEON feature detection (#10185 Loic Dachary)
 * build: adjust build deps for yasm, virtualenv (Jianpeng Ma)
 * build: improve build dependency tooling (Loic Dachary)
 * ceph-disk: call partx/partprobe consistency (#9721 Loic Dachary)
