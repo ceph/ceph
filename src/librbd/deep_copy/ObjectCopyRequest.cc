@@ -574,7 +574,7 @@ void ObjectCopyRequest<I>::merge_write_ops() {
   for (auto& [write_read_snap_ids, read_op] : m_read_ops) {
     auto src_snap_seq = write_read_snap_ids.first;
 
-    // convert the the resulting sparse image extent map to an interval ...
+    // convert the resulting sparse image extent map to an interval ...
     auto& image_data_interval = m_dst_data_interval[src_snap_seq];
     for (auto [image_offset, image_length] : read_op.image_extent_map) {
       image_data_interval.union_insert(image_offset, image_length);

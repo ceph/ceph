@@ -191,7 +191,7 @@ function init_env_admin()
       exit
     fi
     lines=$(($lines + 1))
-    # in case : there are servral hostnames on the same node
+    # in case : there are several hostnames on the same node
     # just need output of `hostname`
     local hostname_alias=
     hostname_alias=`ssh $ssh_option $node "hostname" 2>/dev/null </dev/null`

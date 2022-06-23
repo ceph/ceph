@@ -2401,7 +2401,7 @@ namespace librbd {
     return exists;
   }
 
-  // A safer verion of snap_exists.
+  // A safer version of snap_exists.
   int Image::snap_exists2(const char *snap_name, bool *exists)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;

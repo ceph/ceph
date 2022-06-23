@@ -1724,7 +1724,7 @@ Shell::Action action_bootstrap_create(
   {"mirror", "pool", "peer", "bootstrap", "create"}, {},
   "Create a peer bootstrap token to import in a remote cluster", "",
   &get_peer_bootstrap_create_arguments, &execute_peer_bootstrap_create);
-Shell::Action action_bootstreap_import(
+Shell::Action action_bootstrap_import(
   {"mirror", "pool", "peer", "bootstrap", "import"}, {},
   "Import a peer bootstrap token created from a remote cluster", "",
   &get_peer_bootstrap_import_arguments, &execute_peer_bootstrap_import);

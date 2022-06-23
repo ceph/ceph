@@ -207,7 +207,7 @@ bool ObjectCacherObjectDispatch<I>::read(
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
 
-  // embed the RBD-internal read flags in the genenric RADOS op_flags and
+  // embed the RBD-internal read flags in the generic RADOS op_flags and
   op_flags = ((op_flags & ~ObjectCacherWriteback::READ_FLAGS_MASK) |
               ((read_flags << ObjectCacherWriteback::READ_FLAGS_SHIFT) &
                ObjectCacherWriteback::READ_FLAGS_MASK));
