@@ -130,9 +130,9 @@ const char *ceph_osd_op_flag_name(unsigned flag);
 
 /// convert CEPH_OSD_FLAG_* op flags to a std::string
 std::string ceph_osd_flag_string(unsigned flags);
-/// conver CEPH_OSD_OP_FLAG_* op flags to a std::string
+/// convert CEPH_OSD_OP_FLAG_* op flags to a std::string
 std::string ceph_osd_op_flag_string(unsigned flags);
-/// conver CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a std::string
+/// convert CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a std::string
 std::string ceph_osd_alloc_hint_flag_string(unsigned flags);
 
 typedef std::map<std::string,std::string> osd_alert_list_t;
