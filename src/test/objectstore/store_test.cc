@@ -8689,7 +8689,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
 // with unloaded shard map.
 // Second extent might be filled with zeros this way due to wrong result
 // returned by has_any_extents() call in do_write_small. The latter is caused
-// by incompletly loaded extent map.
+// by incompletely loaded extent map.
 TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
   if (string(GetParam()) != "bluestore")
     return;
