@@ -2093,7 +2093,7 @@ static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t loca
 // the OSDService::stat_lock which protects all OSD usage
 bool PG::try_reserve_recovery_space(
   int64_t primary_bytes, int64_t local_bytes) {
-  // Use tentative_bacfill_full() to make sure enough
+  // Use tentative_backfill_full() to make sure enough
   // space is available to handle target bytes from primary.
 
   // TODO: If we passed num_objects from primary we could account for
