@@ -600,7 +600,7 @@ Changelog
 * qa/suites/krbd: address recent issues caused by newer kernels (`pr#40065 <https://github.com/ceph/ceph/pull/40065>`_, Ilya Dryomov)
 * qa/suites/rados/cephadm/upgrade: change starting version by distro (`pr#40364 <https://github.com/ceph/ceph/pull/40364>`_, Sage Weil)
 * qa/suites/rados/cephadm: rm ubuntu_18.04_podman (`pr#39949 <https://github.com/ceph/ceph/pull/39949>`_, Sebastian Wagner)
-* qa/suites/rados/singletone: whitelist MON_DOWN when injecting msgr errors (`pr#40138 <https://github.com/ceph/ceph/pull/40138>`_, Sage Weil)
+* qa/suites/rados/singleton: whitelist MON_DOWN when injecting msgr errors (`pr#40138 <https://github.com/ceph/ceph/pull/40138>`_, Sage Weil)
 * qa/tasks/mgr/test_progress.py:  remove calling of _osd_in_out_completed_events_count() (`pr#40225 <https://github.com/ceph/ceph/pull/40225>`_, Kamoltat)
 * qa/tasks/mgr/test_progress: fix wait_until_equal (`pr#39360 <https://github.com/ceph/ceph/pull/39360>`_, Kamoltat)
 * qa/tasks/vstart_runner.py: start max required mgrs (`pr#40792 <https://github.com/ceph/ceph/pull/40792>`_, Alfonso Martínez)
