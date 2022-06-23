@@ -243,7 +243,7 @@ template<typename T> int DencDumper<T>::i = 0;
   in your code.
 
   - These methods are optimised for contiguous buffer, but denc() will try
-    rebuild a contigous one if the decoded ceph::buffer::list is segmented. If you are
+    rebuild a contiguous one if the decoded ceph::buffer::list is segmented. If you are
     concerned about the cost, you might want to define yet another method:
 
     void decode(ceph::buffer::list::iterator &p);
@@ -1693,11 +1693,11 @@ inline std::enable_if_t<traits::supported && !traits::need_contiguous> decode(
     throw ::ceph::buffer::end_of_buffer();
   const auto& bl = p.get_bl();
   const auto remaining = bl.length() - p.get_off();
-  // it is expensive to rebuild a contigous buffer and drop it, so avoid this.
+  // it is expensive to rebuild a contiguous buffer and drop it, so avoid this.
   if (!p.is_pointing_same_raw(bl.back()) && remaining > CEPH_PAGE_SIZE) {
     traits::decode(o, p);
   } else {
-    // ensure we get a contigous buffer... until the end of the
+    // ensure we get a contiguous buffer... until the end of the
     // ceph::buffer::list.  we don't really know how much we'll need here,
     // unfortunately.  hopefully it is already contiguous and we're just
     // bumping the raw ref and initializing the ptr tmp fields.
@@ -1718,7 +1718,7 @@ inline std::enable_if_t<traits::supported && traits::need_contiguous> decode(
 {
   if (p.end())
     throw ceph::buffer::end_of_buffer();
-  // ensure we get a contigous buffer... until the end of the
+  // ensure we get a contiguous buffer... until the end of the
   // ceph::buffer::list.  we don't really know how much we'll need here,
   // unfortunately.  hopefully it is already contiguous and we're just
   // bumping the raw ref and initializing the ptr tmp fields.
