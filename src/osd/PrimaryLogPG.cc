@@ -10756,7 +10756,7 @@ int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_
     * In this case, if the new chunk_map is as follows,
     * new_chunk_map : [0, 2) ddd, [6, 2) bbb, [8, 2) ccc
     * we should drop aaa from head by using calc_refs_to_drop_on_removal().
-    * So, the precedure is 
+    * So, the procedure is 
     * 	1. calc_refs_to_drop_on_removal()
     * 	2. register old references to drop after tier_flush() is committed
     * 	3. update new chunk_map
