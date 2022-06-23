@@ -18,7 +18,7 @@ class TestFSRecovery(CephFSTestCase):
         metadata_pool = self.fs.get_metadata_pool_name()
         # write data in mount, and fsync
         self.mount_a.create_n_files('file_on_fs', 1, sync=True)
-        # faild MDSs to allow removing the file system in the next step
+        # failed MDSs to allow removing the file system in the next step
         self.fs.fail()
         # Remove file system to lose FSMap and keep the pools intact.
         # This mimics the scenario where the monitor store is rebuilt
