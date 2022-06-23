@@ -4237,7 +4237,7 @@ Detailed Changelog
 * mgr/dashboard: fix: toast notifications hiding utility menu (`pr#26429 <https://github.com/ceph/ceph/pull/26429>`_, Alfonso Martínez)
 * mgr/dashboard: fix: tox not detecting deps changes (`pr#26409 <https://github.com/ceph/ceph/pull/26409>`_, Alfonso Martínez)
 * mgr/dashboard: Fix ts error on iSCSI page (`pr#24715 <https://github.com/ceph/ceph/pull/24715>`_, Ricardo Marques)
-* mgr/dashboard: Fix typo in NoOrchesrtatorConfiguredException class name (`pr#26334 <https://github.com/ceph/ceph/pull/26334>`_, Volker Theile)
+* mgr/dashboard: Fix typo in NoOrchestratorConfiguredException class name (`pr#26334 <https://github.com/ceph/ceph/pull/26334>`_, Volker Theile)
 * mgr/dashboard: Fix typo in pools management (`pr#26323 <https://github.com/ceph/ceph/pull/26323>`_, Lenz Grimmer)
 * mgr/dashboard: Fix typo (`pr#23363 <https://github.com/ceph/ceph/pull/23363>`_, Volker Theile)
 * mgr/dashboard: Fix unit tests cli warnings (`pr#21933 <https://github.com/ceph/ceph/pull/21933>`_, Tiago Melo)
