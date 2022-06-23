@@ -114,7 +114,7 @@ public:
 struct rxtx_t {
   //rxtx_t(rxtx_t&& r) : rx(std::move(rx)), tx(std::move(tx)) {}
   // Each peer can use different handlers.
-  // Hmm, isn't that too much flexbility?
+  // Hmm, isn't that too much flexibility?
   std::unique_ptr<RxHandler> rx;
   std::unique_ptr<TxHandler> tx;
 
