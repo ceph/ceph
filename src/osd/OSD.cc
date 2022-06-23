@@ -5188,7 +5188,7 @@ bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
   if (pg->is_primary())
     service.logger->dec(l_osd_pg_primary);
   else if (pg->is_nonprimary())
-    service.logger->dec(l_osd_pg_replica); // misnomver
+    service.logger->dec(l_osd_pg_replica); // misnomer
   else
     service.logger->dec(l_osd_pg_stray);
 
