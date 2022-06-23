@@ -5293,7 +5293,7 @@ options:
   level: dev
   desc: Allows mkfs to create OSD in legacy OMAP naming mode (neither per-pool nor per-pg).
     This is intended primarily for developers' purposes. The resulting OSD might/would
-    be transformed to the currrently default 'per-pg' format when BlueStore's quick-fix or
+    be transformed to the currently default 'per-pg' format when BlueStore's quick-fix or
     repair are applied.
   default: false
   with_legacy: true
