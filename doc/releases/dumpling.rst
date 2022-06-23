@@ -654,7 +654,7 @@ Notable changes since v0.61 "Cuttlefish"
 * ceph-fuse, libcephfs: fix a few caps revocation bugs
 * ceph-fuse, libcephfs: fix read zeroing at EOF
 * ceph-fuse, libcephfs: fix request refcounting bug (hang on shutdown)
-* ceph-fuse, libcephfs: fix truncatation bug on >4MB files (Yan, Zheng)
+* ceph-fuse, libcephfs: fix truncation bug on >4MB files (Yan, Zheng)
 * ceph-fuse, libcephfs: fix for cap release/hang
 * ceph-fuse: add ioctl support
 * ceph-fuse: fixed long-standing O_NOATIME vs O_LAZY bug
@@ -774,7 +774,7 @@ Notable changes
 * rgw: fix radosgw-admin buckets list (Yehuda Sadeh)
 * mds: support robust lookup by ino number (good for NFS) (Yan, Zheng)
 * mds: fix several bugs (Yan, Zheng)
-* ceph-fuse, libcephfs: fix truncatation bug on >4MB files (Yan, Zheng)
+* ceph-fuse, libcephfs: fix truncation bug on >4MB files (Yan, Zheng)
 * ceph/librados: fix resending of commands on mon reconnect
 * librados python: fix xattrs > 4KB (Josh Durgin)
 * librados: configurable max object size (default 100 GB)

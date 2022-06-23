@@ -2308,7 +2308,7 @@ Notable Changes since Infernalis
 * mds: fix FSMap upgrade with daemons in the map (`pr#8073 <http://github.com/ceph/ceph/pull/8073>`_, John Spray, Greg Farnum)
 * mds: fix handling for missing mydir dirfrag (#11641 John Spray)
 * mds: fix inode_t::compare() (`issue#15038 <http://tracker.ceph.com/issues/15038>`_, `pr#8014 <http://github.com/ceph/ceph/pull/8014>`_, Yan, Zheng)
-* mds: fix integer truncateion on large client ids (Henry Chang)
+* mds: fix integer truncation on large client ids (Henry Chang)
 * mds: fix mydir replica issue with shutdown (#10743 John Spray)
 * mds: fix out-of-order messages (#11258 Yan, Zheng)
 * mds: fix rejoin (Yan, Zheng)
