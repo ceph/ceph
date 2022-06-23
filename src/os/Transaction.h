@@ -822,7 +822,7 @@ public:
   /**
    * touch
    *
-   * Ensure the existance of an object in a collection. Create an
+   * Ensure the existence of an object in a collection. Create an
    * empty object if necessary
    */
   void touch(const coll_t& cid, const ghobject_t& oid) {
