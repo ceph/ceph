@@ -810,7 +810,7 @@ Changelog
 * octopus: librbd: fix regression in object map diff request (`pr#38455 <https://github.com/ceph/ceph/pull/38455>`_, Mykola Golub, Jason Dillaman)
 * octopus: librbd: update hidden global config when removing pool config override (`pr#38343 <https://github.com/ceph/ceph/pull/38343>`_, Jason Dillaman)
 * octopus: mds: dump granular cap info in mds_sessions (`pr#37362 <https://github.com/ceph/ceph/pull/37362>`_, Yanhu Cao)
-* octopus: mds: provide altrenatives to increase the total cephfs subvolume snapshot counts to greater than the current 400 across a Cephfs volume (`pr#38553 <https://github.com/ceph/ceph/pull/38553>`_, "Yan, Zheng")
+* octopus: mds: provide alternatives to increase the total cephfs subvolume snapshot counts to greater than the current 400 across a Cephfs volume (`pr#38553 <https://github.com/ceph/ceph/pull/38553>`_, "Yan, Zheng")
 * octopus: mds: throttle cap acquisition via readdir (`pr#38095 <https://github.com/ceph/ceph/pull/38095>`_, Kotresh HR)
 * octopus: mgr/ActivePyModules.cc: always release GIL before attempting to acquire a lock (`pr#38801 <https://github.com/ceph/ceph/pull/38801>`_, Cory Snyder)
 * octopus: mgr/balancer: fix available pgs sent to calc_pg_upmaps (`pr#38337 <https://github.com/ceph/ceph/pull/38337>`_, Dan van der Ster)
