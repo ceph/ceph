@@ -986,7 +986,7 @@ protected:
     const hobject_t &hoid,               ///< [in] object we are merging
     const mempool::osd_pglog::list<pg_log_entry_t> &orig_entries, ///< [in] entries for hoid to merge
     const pg_info_t &info,              ///< [in] info for merging entries
-    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input InedexedLog
+    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input IndexedLog
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
