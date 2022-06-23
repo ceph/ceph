@@ -591,42 +591,21 @@ static int list_lc_head(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stm
 int SQLiteDB::InitializeDBOps(const DoutPrefixProvider *dpp)
 {
   (void)createTables(dpp);
-  dbops.InsertUser = new SQLInsertUser(&this->db, this->getDBname(), cct);
-  dbops.RemoveUser = new SQLRemoveUser(&this->db, this->getDBname(), cct);
-  dbops.GetUser = new SQLGetUser(&this->db, this->getDBname(), cct);
-  dbops.InsertBucket = new SQLInsertBucket(&this->db, this->getDBname(), cct);
-  dbops.UpdateBucket = new SQLUpdateBucket(&this->db, this->getDBname(), cct);
-  dbops.RemoveBucket = new SQLRemoveBucket(&this->db, this->getDBname(), cct);
-  dbops.GetBucket = new SQLGetBucket(&this->db, this->getDBname(), cct);
-  dbops.ListUserBuckets = new SQLListUserBuckets(&this->db, this->getDBname(), cct);
-  dbops.InsertLCEntry = new SQLInsertLCEntry(&this->db, this->getDBname(), cct);
-  dbops.RemoveLCEntry = new SQLRemoveLCEntry(&this->db, this->getDBname(), cct);
-  dbops.GetLCEntry = new SQLGetLCEntry(&this->db, this->getDBname(), cct);
-  dbops.ListLCEntries = new SQLListLCEntries(&this->db, this->getDBname(), cct);
-  dbops.InsertLCHead = new SQLInsertLCHead(&this->db, this->getDBname(), cct);
-  dbops.RemoveLCHead = new SQLRemoveLCHead(&this->db, this->getDBname(), cct);
-  dbops.GetLCHead = new SQLGetLCHead(&this->db, this->getDBname(), cct);
-
-  return 0;
-}
-
-int SQLiteDB::FreeDBOps(const DoutPrefixProvider *dpp)
-{
-  delete dbops.InsertUser;
-  delete dbops.RemoveUser;
-  delete dbops.GetUser;
-  delete dbops.InsertBucket;
-  delete dbops.UpdateBucket;
-  delete dbops.RemoveBucket;
-  delete dbops.GetBucket;
-  delete dbops.ListUserBuckets;
-  delete dbops.InsertLCEntry;
-  delete dbops.RemoveLCEntry;
-  delete dbops.GetLCEntry;
-  delete dbops.ListLCEntries;
-  delete dbops.InsertLCHead;
-  delete dbops.RemoveLCHead;
-  delete dbops.GetLCHead;
+  dbops.InsertUser = make_shared<SQLInsertUser>(&this->db, this->getDBname(), cct);
+  dbops.RemoveUser = make_shared<SQLRemoveUser>(&this->db, this->getDBname(), cct);
+  dbops.GetUser = make_shared<SQLGetUser>(&this->db, this->getDBname(), cct);
+  dbops.InsertBucket = make_shared<SQLInsertBucket>(&this->db, this->getDBname(), cct);
+  dbops.UpdateBucket = make_shared<SQLUpdateBucket>(&this->db, this->getDBname(), cct);
+  dbops.RemoveBucket = make_shared<SQLRemoveBucket>(&this->db, this->getDBname(), cct);
+  dbops.GetBucket = make_shared<SQLGetBucket>(&this->db, this->getDBname(), cct);
+  dbops.ListUserBuckets = make_shared<SQLListUserBuckets>(&this->db, this->getDBname(), cct);
+  dbops.InsertLCEntry = make_shared<SQLInsertLCEntry>(&this->db, this->getDBname(), cct);
+  dbops.RemoveLCEntry = make_shared<SQLRemoveLCEntry>(&this->db, this->getDBname(), cct);
+  dbops.GetLCEntry = make_shared<SQLGetLCEntry>(&this->db, this->getDBname(), cct);
+  dbops.ListLCEntries = make_shared<SQLListLCEntries>(&this->db, this->getDBname(), cct);
+  dbops.InsertLCHead = make_shared<SQLInsertLCHead>(&this->db, this->getDBname(), cct);
+  dbops.RemoveLCHead = make_shared<SQLRemoveLCHead>(&this->db, this->getDBname(), cct);
+  dbops.GetLCHead = make_shared<SQLGetLCHead>(&this->db, this->getDBname(), cct);
 
   return 0;
 }
@@ -1062,31 +1041,16 @@ int SQLiteDB::ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params)
 
 int SQLObjectOp::InitializeObjectOps(string db_name, const DoutPrefixProvider *dpp)
 {
-  PutObject = new SQLPutObject(sdb, db_name, cct);
-  DeleteObject = new SQLDeleteObject(sdb, db_name, cct);
-  GetObject = new SQLGetObject(sdb, db_name, cct);
-  UpdateObject = new SQLUpdateObject(sdb, db_name, cct);
-  ListBucketObjects = new SQLListBucketObjects(sdb, db_name, cct);
-  PutObjectData = new SQLPutObjectData(sdb, db_name, cct);
-  UpdateObjectData = new SQLUpdateObjectData(sdb, db_name, cct);
-  GetObjectData = new SQLGetObjectData(sdb, db_name, cct);
-  DeleteObjectData = new SQLDeleteObjectData(sdb, db_name, cct);
-  DeleteStaleObjectData = new SQLDeleteStaleObjectData(sdb, db_name, cct);
-
-  return 0;
-}
-
-int SQLObjectOp::FreeObjectOps(const DoutPrefixProvider *dpp)
-{
-  delete PutObject;
-  delete DeleteObject;
-  delete GetObject;
-  delete UpdateObject;
-  delete PutObjectData;
-  delete UpdateObjectData;
-  delete GetObjectData;
-  delete DeleteObjectData;
-  delete DeleteStaleObjectData;
+  PutObject = make_shared<SQLPutObject>(sdb, db_name, cct);
+  DeleteObject = make_shared<SQLDeleteObject>(sdb, db_name, cct);
+  GetObject = make_shared<SQLGetObject>(sdb, db_name, cct);
+  UpdateObject = make_shared<SQLUpdateObject>(sdb, db_name, cct);
+  ListBucketObjects = make_shared<SQLListBucketObjects>(sdb, db_name, cct);
+  PutObjectData = make_shared<SQLPutObjectData>(sdb, db_name, cct);
+  UpdateObjectData = make_shared<SQLUpdateObjectData>(sdb, db_name, cct);
+  GetObjectData = make_shared<SQLGetObjectData>(sdb, db_name, cct);
+  DeleteObjectData = make_shared<SQLDeleteObjectData>(sdb, db_name, cct);
+  DeleteStaleObjectData = make_shared<SQLDeleteStaleObjectData>(sdb, db_name, cct);
 
   return 0;
 }

@@ -82,8 +82,6 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
   closeDB(dpp);
 
 
-  FreeDBOps(dpp);
-
   ldpp_dout(dpp, 20)<<"DB successfully destroyed - name:" \
     <<db_name << dendl;
 
@@ -91,7 +89,7 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
 }
 
 
-DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
+std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
                   const DBOpParams *params)
 {
   if (!Op.compare("InsertUser"))
@@ -138,7 +136,7 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
     ldpp_dout(dpp, 30)<<"No objectmap found for bucket: " \
       <<params->op.bucket.info.bucket.name << dendl;
     /* not found */
-    return NULL;
+    return nullptr;
   }
 
   Ob = iter->second;
@@ -164,7 +162,7 @@ DBOp *DB::getDBOp(const DoutPrefixProvider *dpp, std::string_view Op,
   if (!Op.compare("DeleteStaleObjectData"))
     return Ob->DeleteStaleObjectData;
 
-  return NULL;
+  return nullptr;
 }
 
 int DB::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, class ObjectOp* ptr)
@@ -198,7 +196,6 @@ int DB::objectmapInsert(const DoutPrefixProvider *dpp, string bucket, class Obje
 int DB::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
 {
   map<string, class ObjectOp*>::iterator iter;
-  class ObjectOp *Ob;
 
   const std::lock_guard<std::mutex> lk(mtx);
   iter = DB::objectmap.find(bucket);
@@ -211,9 +208,6 @@ int DB::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
       <<"doesnt exist to delete " << dendl;
     return 0;
   }
-
-  Ob = (class ObjectOp*) (iter->second);
-  Ob->FreeObjectOps(dpp);
 
   DB::objectmap.erase(iter);
 
@@ -243,7 +237,7 @@ out:
 
 int DB::ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params) {
   int ret = -1;
-  class DBOp *db_op;
+  shared_ptr<class DBOp> db_op;
 
   db_op = getDBOp(dpp, Op, params);
 
