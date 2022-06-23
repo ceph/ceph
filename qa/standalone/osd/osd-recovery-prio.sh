@@ -230,7 +230,7 @@ function TEST_recovery_priority() {
     fi
     flush_pg_stats || return 1
 
-    # 4. Item is in progress, if higher priority items waiting prempt item
+    # 4. Item is in progress, if higher priority items waiting preempt item
     #ceph osd unset norecover
     ceph pg cancel-force-recovery $PG3 || return 1
     sleep 2

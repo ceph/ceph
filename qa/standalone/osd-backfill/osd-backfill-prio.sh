@@ -235,7 +235,7 @@ function TEST_backfill_priority() {
     fi
     flush_pg_stats || return 1
 
-    # 4. Item is in progress, if higher priority items waiting prempt item
+    # 4. Item is in progress, if higher priority items waiting preempt item
     ceph pg cancel-force-backfill $PG3 || return 1
     sleep 2
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/out || return 1
