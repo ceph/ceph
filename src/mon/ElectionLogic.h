@@ -365,7 +365,7 @@ private:
   void bump_epoch(epoch_t e);
   /**
    * If the incoming proposal is newer, bump our own epoch; if
-   * it comes from an out-of-quorum peer, trigger a new eleciton.
+   * it comes from an out-of-quorum peer, trigger a new election.
    * @returns true if you should drop this proposal, false otherwise.
    */
   bool propose_classic_prefix(int from, epoch_t mepoch);
