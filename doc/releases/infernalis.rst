@@ -1076,7 +1076,7 @@ Notable Changes
   * crush: add --check to validate dangling names, max osd id (Kefu Chai)
   * crush: cleanup, sync with kernel (Ilya Dryomov)
   * crush: fix subtree base weight on adjust_subtree_weight (#11855 Sage Weil)
-  * crypo: fix NSS leak (Jason Dillaman)
+  * crypto: fix NSS leak (Jason Dillaman)
   * crypto: fix unbalanced init/shutdown (#12598 Zheng Yan)
   * doc: misc updates (Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao)
   * erasure-code: cleanup (Kefu Chai)
