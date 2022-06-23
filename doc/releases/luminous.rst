@@ -4924,7 +4924,7 @@ Other Notable Changes
 * rgw: clean-up error mapping in Swift's authentication strategy (`pr#15756 <https://github.com/ceph/ceph/pull/15756>`_, Radoslaw Zarzynski)
 * rgw: cleanup: fix variable name in RGWRados::create_pool() declaration (`pr#14547 <https://github.com/ceph/ceph/pull/14547>`_, Nathan Cutler)
 * rgw: cleanup lc continuation (`pr#14906 <https://github.com/ceph/ceph/pull/14906>`_, Jiaying Ren)
-* rgw: cleanup lifecycle managament (`pr#13820 <https://github.com/ceph/ceph/pull/13820>`_, Jiaying Ren)
+* rgw: cleanup lifecycle management (`pr#13820 <https://github.com/ceph/ceph/pull/13820>`_, Jiaying Ren)
 * rgw: cleanup rgw-admin duplicated judge during OLH GET/READLOG (`pr#15700 <https://github.com/ceph/ceph/pull/15700>`_, Jiaying Ren)
 * rgw: clean up the redundant assignment in last_entry_in_listing (`pr#13387 <https://github.com/ceph/ceph/pull/13387>`_, Jing Wenjun)
 * rgw: clean up the unneeded rgw::io::ChunkingFilter::has_content_length (`pr#13504 <https://github.com/ceph/ceph/pull/13504>`_, Radoslaw Zarzynski)
