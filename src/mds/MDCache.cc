@@ -2010,7 +2010,7 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
   if (!pi->quota.is_enabled() && !quota_change)
     return;
 
-  // creaete snaprealm for quota inode (quota was set before mimic)
+  // create snaprealm for quota inode (quota was set before mimic)
   if (!in->get_projected_srnode())
     mds->server->create_quota_realm(in);
 
