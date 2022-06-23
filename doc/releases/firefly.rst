@@ -1391,7 +1391,7 @@ Notable Changes
 * common: fall back to json-pretty for admin socket (Loic Dachary)
 * common: fix 'config dump' debug prefix (Danny Al-Gaaf)
 * common: misc coverity fixes (Danny Al-Gaaf)
-* common: throtller, shared_cache performance improvements, TrackedOp (Greg Farnum, Samuel Just)
+* common: throttler, shared_cache performance improvements, TrackedOp (Greg Farnum, Samuel Just)
 * crush: fix JSON schema for dump (John Spray)
 * crush: misc cleanups, tests (Loic Dachary)
 * crush: new vary_r tunable (Sage Weil)
