@@ -1572,7 +1572,7 @@
                     <logtimefmt/>
                 </item>
                 <item>
-                    <name>Overal Ceph status (numeric)</name>
+                    <name>Overall Ceph status (numeric)</name>
                     <type>2</type>
                     <snmp_community/>
                     <multiplier>0</multiplier>
@@ -1604,7 +1604,7 @@
                     <publickey/>
                     <privatekey/>
                     <port/>
-                    <description>Overal Ceph status in numeric value. OK: 0, WARN: 1, ERR: 2</description>
+                    <description>Overall Ceph status in numeric value. OK: 0, WARN: 1, ERR: 2</description>
                     <inventory_link>0</inventory_link>
                     <applications>
                         <application>
