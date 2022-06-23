@@ -652,7 +652,7 @@ class PgAutoscaler(MgrModule):
         ret: List[Dict[str, Any]] = []
 
         # Iterate over all pools to determine how they should be sized.
-        # First call of _get_pool_pg_targets() is to find/adjust pools that uses more capacaity than
+        # First call of _get_pool_pg_targets() is to find/adjust pools that uses more capacity than
         # the even_ratio of other pools and we adjust those first.
         # Second call make use of the even_pools we keep track of in the first call.
         # All we need to do is iterate over those and give them 1/pool_count of the
