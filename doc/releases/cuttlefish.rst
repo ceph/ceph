@@ -233,7 +233,7 @@ Notable Changes
 * debian: fix prerm/postinst hooks to start/stop daemons appropriately
 * upstart: allow uppercase daemons names (and thus hostnames)
 * sysvinit: fix enumeration of local daemons by type
-* sysvinit: fix osd weight calcuation when using -a
+* sysvinit: fix osd weight calculation when using -a
 * fix build on unsigned char platforms (e.g., arm)
 
 For more detailed information, see :download:`the complete changelog <../changelog/v0.61.3.txt>`.
