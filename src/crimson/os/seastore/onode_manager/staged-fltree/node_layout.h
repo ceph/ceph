@@ -679,7 +679,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        * to say: right_node_size + string_size < node_block_size.
        *
        * Say that the largest allowed string size is 1/S of the largest allowed
-       * insert_size N/I KiB. If we go with stragety B, and when split happens
+       * insert_size N/I KiB. If we go with strategy B, and when split happens
        * with snap-gen indexes and split just overflow the target_split_size:
        * - left_node_size  ~= target_split_size - 1/2 * (1/I - 1/IS)
        *                   ~= 1/2 + 1/2IS
