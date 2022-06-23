@@ -74,7 +74,7 @@ static const __s32 ceph_to_hostos_conv[256] = {
        C2H_ERRNO(82,  EPERM),	 //TODO ELIBMAX
        C2H_ERRNO(83,  EPERM),	 //TODO ELIBEXEC
        C2H_ERRNO(84,  EILSEQ),	
-       C2H_ERRNO(85,  EINTR),	 /* not quite, since this is a syscll restart */
+       C2H_ERRNO(85,  EINTR),	 /* not quite, since this is a syscall restart */
        C2H_ERRNO(86,  EPERM),	 //ESTRPIPE;
        C2H_ERRNO(87,  EUSERS),	
        C2H_ERRNO(88,  ENOTSOCK),	
