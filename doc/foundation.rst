@@ -63,7 +63,7 @@ Associate
 * `Monash University <http://www.monash.edu/>`_
 * `NRF SARAO <http://www.ska.ac.za/about/sarao/>`_
 * `Open Infrastructure Foundation <http://openinfra.dev>`_
-* `Science & Technology Facilities Councel (STFC) <https://stfc.ukri.org/>`_
+* `Science & Technology Facilities Council (STFC) <https://stfc.ukri.org/>`_
 * `SWITCH <https://switch.ch/>`_
 * `University of Michigan <http://www.osris.org/>`_
 
