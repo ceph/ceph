@@ -207,7 +207,11 @@ private:
   seastar::future<> handle_command(crimson::net::ConnectionRef conn,
 				   Ref<MCommand> m);
   seastar::future<> start_asok_admin();
-
+  seastar::future<> handle_update_log_missing(crimson::net::ConnectionRef conn,
+                                              Ref<MOSDPGUpdateLogMissing> m);
+  seastar::future<> handle_update_log_missing_reply(
+    crimson::net::ConnectionRef conn,
+    Ref<MOSDPGUpdateLogMissingReply> m);
 public:
   OSD_OSDMapGate osdmap_gate;
 

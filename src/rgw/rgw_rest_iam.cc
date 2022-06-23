@@ -92,7 +92,7 @@ RGWOp *RGWHandler_REST_IAM::op_post()
 }
 
 int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
-                              struct req_state *s,
+                              req_state *s,
                               rgw::io::BasicClient *cio)
 {
   s->dialect = "iam";
@@ -110,7 +110,7 @@ int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp, optional_yield
   return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
-int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
+int RGWHandler_REST_IAM::init_from_header(req_state* s,
                                           int default_formatter,
                                           bool configurable_format)
 {
@@ -154,7 +154,7 @@ int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
 
 RGWHandler_REST*
 RGWRESTMgr_IAM::get_handler(rgw::sal::Store* store,
-			    struct req_state* const s,
+			    req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)
 {

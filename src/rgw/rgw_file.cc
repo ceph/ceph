@@ -1820,7 +1820,7 @@ namespace rgw {
   }
 
   int RGWWriteRequest::exec_start() {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
 
     /* Object needs a bucket from this point */
     state->object->set_bucket(state->bucket.get());
@@ -1892,7 +1892,7 @@ namespace rgw {
 
   int RGWWriteRequest::exec_continue()
   {
-    struct req_state* state = get_state();
+    req_state* state = get_state();
     op_ret = 0;
 
     /* check guards (e.g., contig write) */
@@ -1930,7 +1930,7 @@ namespace rgw {
     map<string, string>::iterator iter;
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    struct req_state* state = get_state();
+    req_state* state = get_state();
 
     size_t osize = rgw_fh->get_size();
     struct timespec octime = rgw_fh->get_ctime();

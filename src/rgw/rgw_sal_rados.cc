@@ -1209,7 +1209,7 @@ std::unique_ptr<Completions> RadosStore::get_completions(void)
 }
 
 std::unique_ptr<Notification> RadosStore::get_notification(
-  rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s, rgw::notify::EventType event_type, const std::string* object_name)
+  rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s, rgw::notify::EventType event_type, const std::string* object_name)
 {
   return std::make_unique<RadosNotification>(s, this, obj, src_obj, s, event_type, object_name);
 }

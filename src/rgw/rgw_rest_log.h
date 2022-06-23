@@ -327,7 +327,7 @@ public:
   ~RGWRESTMgr_Log() override = default;
 
   RGWHandler_REST* get_handler(rgw::sal::Store* store,
-			       struct req_state* const,
+			       req_state* const,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefixs) override {
     return new RGWHandler_Log(auth_registry);
