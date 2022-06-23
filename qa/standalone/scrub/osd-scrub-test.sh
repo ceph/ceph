@@ -461,7 +461,7 @@ function TEST_scrub_permit_time() {
 }
 
 #  a test to recreate the problem described in bug #52901 - setting 'noscrub'
-#  without explicitly preventing deep scrubs made the PG 'unscrubable'.
+#  without explicitly preventing deep scrubs made the PG 'unscrubbable'.
 #  Fixed by PR#43521
 function TEST_just_deep_scrubs() {
     local dir=$1
