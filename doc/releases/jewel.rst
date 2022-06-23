@@ -332,7 +332,7 @@ Notable Changes
 * rgw: set latest object's acl failed (`issue#18649 <http://tracker.ceph.com/issues/18649>`_, `pr#15451 <https://github.com/ceph/ceph/pull/15451>`_, Zhang Shaowen)
 * rgw: Truncated objects (`issue#20107 <http://tracker.ceph.com/issues/20107>`_, `pr#17166 <https://github.com/ceph/ceph/pull/17166>`_, Yehuda Sadeh)
 * rgw: uninitialized memory is accessed during creation of bucket's metadata (`issue#20774 <http://tracker.ceph.com/issues/20774>`_, `pr#17280 <https://github.com/ceph/ceph/pull/17280>`_, Radoslaw Zarzynski)
-* rgw: usage logging on tenated buckets causes invalid memory reads (`issue#20779 <http://tracker.ceph.com/issues/20779>`_, `pr#17279 <https://github.com/ceph/ceph/pull/17279>`_, Radoslaw Zarzynski)
+* rgw: usage logging on tenanted buckets causes invalid memory reads (`issue#20779 <http://tracker.ceph.com/issues/20779>`_, `pr#17279 <https://github.com/ceph/ceph/pull/17279>`_, Radoslaw Zarzynski)
 * rgw: user quota did not work well on multipart upload (`issue#19285 <http://tracker.ceph.com/issues/19285>`_, `issue#19602 <http://tracker.ceph.com/issues/19602>`_, `pr#17277 <https://github.com/ceph/ceph/pull/17277>`_, Zhang Shaowen)
 * rgw: VersionIdMarker and NextVersionIdMarker are not returned when listing object versions (`issue#19886 <http://tracker.ceph.com/issues/19886>`_, `pr#16316 <https://github.com/ceph/ceph/pull/16316>`_, Zhang Shaowen)
 * rgw: when uploading objects continuously into a versioned bucket, some objects will not sync (`issue#18208 <http://tracker.ceph.com/issues/18208>`_, `pr#15452 <https://github.com/ceph/ceph/pull/15452>`_, lvshuhua)
