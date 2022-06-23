@@ -1227,7 +1227,7 @@ Notable changes since v0.67 Dumpling
 * rgw: fix inefficient use of std::list::size() (Yehuda Sadeh)
 * rgw: fix major CPU utilization bug with internal caching (Yehuda Sadeh, Mark Nelson)
 * rgw: fix ordering of write operations (preventing data loss on crash) (Yehuda Sadeh)
-* rgw: fix ordering of writes for mulitpart upload (Yehuda Sadeh)
+* rgw: fix ordering of writes for multipart upload (Yehuda Sadeh)
 * rgw: fix various CORS bugs (Yehuda Sadeh)
 * rgw: fix/improve swift COPY support (Yehuda Sadeh)
 * rgw: improve help output (Christophe Courtaut)

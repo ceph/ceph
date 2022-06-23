@@ -3101,7 +3101,7 @@ Notable Changes since Infernalis
 * rgw: fix lockdep false positive (`pr#8284 <http://github.com/ceph/ceph/pull/8284>`_, Yehuda Sadeh)
 * rgw: fix log rotation (Wuxingyi)
 * rgw: fix mdlog (`pr#8183 <http://github.com/ceph/ceph/pull/8183>`_, Orit Wasserman)
-* rgw: fix mulitipart upload in retry path (#11604 Yehuda Sadeh)
+* rgw: fix multipart upload in retry path (#11604 Yehuda Sadeh)
 * rgw: fix objects can not be displayed which object name does not cont… (`issue#12963 <http://tracker.ceph.com/issues/12963>`_, `pr#5738 <http://github.com/ceph/ceph/pull/5738>`_, Weijun Duan)
 * rgw: fix openssl linkage (`pr#6513 <http://github.com/ceph/ceph/pull/6513>`_, Yehuda Sadeh)
 * rgw: fix partial read issue in rgw_admin and rgw_tools (`pr#6761 <http://github.com/ceph/ceph/pull/6761>`_, Jiaying Ren)
