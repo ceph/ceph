@@ -5939,7 +5939,7 @@ Changelog
 * tests: qa/tests: reduced distro to run to be random (`pr#28435 <https://github.com/ceph/ceph/pull/28435>`_, Yuri Weinstein)
 * tests: qa/tests: reduced frequency for luminous and mimic runs (`pr#27057 <https://github.com/ceph/ceph/pull/27057>`_, Yuri Weinstein)
 * tests: qa/tests: removed all runs for luminous - EOL (`pr#33186 <https://github.com/ceph/ceph/pull/33186>`_, Yuri Weinstein)
-* tests: qa/tests: removed upgrade/client-upgrade-hammer becasue ubuntu 14.04 \xe2\x80\xa6 (`pr#28518 <https://github.com/ceph/ceph/pull/28518>`_, Yuri Weinstein)
+* tests: qa/tests: removed upgrade/client-upgrade-hammer because ubuntu 14.04 \xe2\x80\xa6 (`pr#28518 <https://github.com/ceph/ceph/pull/28518>`_, Yuri Weinstein)
 * tests: qa/tests: removed `1node` and `systemd` tests as ceph-deploy is not actively developed (`issue#40207 <http://tracker.ceph.com/issues/40207>`_, `issue#40208 <http://tracker.ceph.com/issues/40208>`_, `pr#28455 <https://github.com/ceph/ceph/pull/28455>`_, Yuri Weinstein)
 * tests: qa/valgrind.supp: generalize the whiterule for aes-128-gcm to help rgw suite (`issue#38827 <http://tracker.ceph.com/issues/38827>`_, `pr#28305 <https://github.com/ceph/ceph/pull/28305>`_, Radoslaw Zarzynski)
 * tests: qa/workunits/cephadm/test_cephadm: drop stray exit 0 (`pr#32622 <https://github.com/ceph/ceph/pull/32622>`_, Sage Weil)

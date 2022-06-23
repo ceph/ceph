@@ -118,7 +118,7 @@ void Log::set_flush_on_exit()
   std::scoped_lock lock(m_flush_mutex);
   // Make sure we flush on shutdown.  We do this by deliberately
   // leaking an indirect pointer to ourselves (on_exit() can't
-  // unregister a callback).  This is not racy only becuase we
+  // unregister a callback).  This is not racy only because we
   // assume that exit() won't race with ~Log().
   if (m_indirect_this == NULL) {
     m_indirect_this = new (Log*)(this);

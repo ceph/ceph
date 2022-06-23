@@ -133,7 +133,7 @@ static int record_hello(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   //    be returned to the caller.  No change is made to the object.
   //
   //  * For a success, we must return 0 and *no* data in the out
-  //    buffer.  This is becaues the OSD does not log write result
+  //    buffer.  This is becauses the OSD does not log write result
   //    codes or output buffers and we need a replayed/resent
   //    operation (e.g., after a TCP disconnect) to be idempotent.
   //
