@@ -407,7 +407,7 @@ public:
                      Buffer *buffer, int level, Buffer *near) {
       cache->_audit("_add_buffer start");
       if (buffer->is_writing()) {
-        // we might get already cached data for which resetting mempool is inppropriate
+        // we might get already cached data for which resetting mempool is inappropriate
         // hence calling try_assign_to_mempool
         buffer->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
         if (writing.empty() || writing.rbegin()->seq <= buffer->seq) {
