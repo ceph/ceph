@@ -178,7 +178,7 @@ private:
   void remove_from_waiting(MDSCacheObject *obj, bool kick=true);
   /**
    * Validate authority of the inode. If current mds is not auth of the inode,
-   * forword scrub to auth mds.
+   * forward scrub to auth mds.
    */
   bool validate_inode_auth(CInode *in);
 

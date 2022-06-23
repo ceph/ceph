@@ -113,8 +113,8 @@ public:
     if (header.version >= 3) {
       decode(min_last_complete_ondisk, p);
     } else {
-      /* This field used to mean pg_roll_foward_to, but ReplicatedBackend
-       * simply assumes that we're rolling foward to version. */
+      /* This field used to mean pg_roll_forward_to, but ReplicatedBackend
+       * simply assumes that we're rolling forward to version. */
       eversion_t pg_roll_forward_to;
       decode(pg_roll_forward_to, p);
     }
