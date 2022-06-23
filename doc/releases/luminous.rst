@@ -4909,7 +4909,7 @@ Other Notable Changes
 * rgw: auto reshard old buckets (`pr#15665 <https://github.com/ceph/ceph/pull/15665>`_, Orit Wasserman)
 * rgw: avoid listing user buckets for rgw_delete_user (`pr#13991 <https://github.com/ceph/ceph/pull/13991>`_, liuchang0812)
 * rgw: avoid using null pointer in rgw_file.cc (`pr#14474 <https://github.com/ceph/ceph/pull/14474>`_, lihongjie)
-* rgw: be aware abount tenants on cls_user_bucket -> rgw_bucket conversion (`issue#18364 <http://tracker.ceph.com/issues/18364>`_, `issue#16355 <http://tracker.ceph.com/issues/16355>`_, `pr#13220 <https://github.com/ceph/ceph/pull/13220>`_, Radoslaw Zarzynski)
+* rgw: be aware about tenants on cls_user_bucket -> rgw_bucket conversion (`issue#18364 <http://tracker.ceph.com/issues/18364>`_, `issue#16355 <http://tracker.ceph.com/issues/16355>`_, `pr#13220 <https://github.com/ceph/ceph/pull/13220>`_, Radoslaw Zarzynski)
 * rgw: bucket index check in radosgw-admin removes valid index (`issue#18470 <http://tracker.ceph.com/issues/18470>`_, `pr#12851 <https://github.com/ceph/ceph/pull/12851>`_, Zhang Shaowen)
 * rgw: bucket stats display bucket index type (`pr#14466 <https://github.com/ceph/ceph/pull/14466>`_, fang yuxiang)
 * rgw: change default chunk size to 4MB (`issue#18621 <http://tracker.ceph.com/issues/18621>`_, `issue#18622 <http://tracker.ceph.com/issues/18622>`_, `issue#18623 <http://tracker.ceph.com/issues/18623>`_, `pr#13035 <https://github.com/ceph/ceph/pull/13035>`_, Yehuda Sadeh)
