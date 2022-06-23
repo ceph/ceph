@@ -2391,7 +2391,7 @@ Detailed Changelog
 * common: Revert "core: hint the dout()'s message crafting as a cold code." (`issue#23169 <http://tracker.ceph.com/issues/23169>`_, `pr#20636 <https://github.com/ceph/ceph/pull/20636>`_, Kefu Chai)
 * common,rgw: rgw,common,rbd: s/boost::regex/std::regex/ (`pr#19393 <https://github.com/ceph/ceph/pull/19393>`_, Kefu Chai)
 * common,rgw: rgw,common: remove already included header files (`pr#19390 <https://github.com/ceph/ceph/pull/19390>`_, Yao Zongyou)
-* common: silence jenkins's buiding warning in obj_bencher.cc (`pr#17272 <https://github.com/ceph/ceph/pull/17272>`_, Luo Kexue)
+* common: silence jenkins's building warning in obj_bencher.cc (`pr#17272 <https://github.com/ceph/ceph/pull/17272>`_, Luo Kexue)
 * common: src/common: update some ms\_\* options to be more consistent (`pr#20652 <https://github.com/ceph/ceph/pull/20652>`_, shangfufei)
 * common: src/msg/async/rdma: decrease cpu usage by rdtsc instruction (`pr#16965 <https://github.com/ceph/ceph/pull/16965>`_, Jin Cai)
 * common: Static Pointer (`pr#19079 <https://github.com/ceph/ceph/pull/19079>`_, Adam C. Emerson)
