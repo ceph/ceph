@@ -572,7 +572,7 @@ TEST_F(TestTScrubberBe_data_1, smaps_creation_1)
   ASSERT_EQ(sbe->get_omap_stats().omap_bytes, 0);
 
   // for test data 'minimal_snaps_configuration':
-  // scrub_compare_maps() should not emmit any error, nor
+  // scrub_compare_maps() should not emit any error, nor
   // return any snap-mapper fix
   auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
 
