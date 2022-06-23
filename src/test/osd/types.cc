@@ -1443,7 +1443,7 @@ TEST(coll_t, temp) {
   ASSERT_EQ(pgid, pgid2);
 }
 
-TEST(coll_t, assigment) {
+TEST(coll_t, assignment) {
   spg_t pgid;
   coll_t right(pgid);
   ASSERT_EQ(right.to_str(), string("0.0_head"));
