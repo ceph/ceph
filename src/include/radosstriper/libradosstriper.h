@@ -358,7 +358,7 @@ typedef void *rados_striper_multi_completion_t;
  *
  * @param cb_arg application-defined data passed to the callback functions
  * @param cb_complete the function to be called when the operation is
- * in memory on all relpicas
+ * in memory on all replicas
  * @param cb_safe the function to be called when the operation is on
  * stable storage on all replicas
  * @param pc where to store the completion
