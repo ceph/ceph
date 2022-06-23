@@ -745,7 +745,7 @@ class TestDU(TestCephFSShell):
                 f, follow_symlinks=False)['st_size'])
             append_expected_output_pattern(f)
 
-        # get size for directories containig regfiles within
+        # get size for directories containing regfiles within
         for f in [dir2_abspath, dir21_abspath]:
             size = humansize(self.mount_a.stat(regfile121_abspath,
                                                follow_symlinks=False)[
