@@ -208,7 +208,7 @@ int MonClient::get_monmap_and_config()
  * the provided @p result_reply, if this last parameter is not NULL.
  *
  * So that we don't rely on the MonClient's default messenger, set up
- * during connect(), we create our own messenger to comunicate with the
+ * during connect(), we create our own messenger to communicate with the
  * specified monitor.  This is advantageous in the following ways:
  *
  * - Isolate the ping procedure from the rest of the MonClient's operations,
