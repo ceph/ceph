@@ -764,7 +764,7 @@ options:
 - name: osd_pg_epoch_max_lag_factor
   type: float
   level: advanced
-  desc: Max multiple of the map cache that PGs can lag before we throttle map injest
+  desc: Max multiple of the map cache that PGs can lag before we throttle map ingest
   default: 2
   see_also:
   - osd_map_cache_size
