@@ -154,7 +154,7 @@ class Policy:
         if include_stalled_dirs:
             for dir_path, dir_state in self.dir_states.items():
                 if dir_state.stalled:
-                    log.debug(f'{dir_path} is stalled: {dir_state} -- trigerring kick')
+                    log.debug(f'{dir_path} is stalled: {dir_state} -- triggering kick')
                     dir_state.stalled = False
                     shuffle_dirs.append(dir_path)
         return shuffle_dirs
