@@ -301,7 +301,7 @@ Notable Changes
 * rgw: folders starting with _ underscore are not in bucket index (`issue#19432 <http://tracker.ceph.com/issues/19432>`_, `pr#16276 <https://github.com/ceph/ceph/pull/16276>`_, Giovani Rinaldi, Orit Wasserman)
 * rgw: 'gc list --include-all' command infinite loop the first 1000 items (`issue#19978 <http://tracker.ceph.com/issues/19978>`_, `pr#15719 <https://github.com/ceph/ceph/pull/15719>`_, Shasha Lu, fang yuxiang)
 * rgw: meta sync thread crash at RGWMetaSyncShardCR (`issue#20251 <http://tracker.ceph.com/issues/20251>`_, `pr#16711 <https://github.com/ceph/ceph/pull/16711>`_, fang yuxiang, Nathan Cutler)
-* rgw: multipart copy-part remove '/' for s3 java sdk request header (`issue#20075 <http://tracker.ceph.com/issues/20075>`_, `pr#16266 <https://github.com/ceph/ceph/pull/16266>`_, donglingpeng)
+* rgw: multipart copy-part remove '/' for s3 java sdk request header (`issue#20075 <http://tracker.ceph.com/issues/20075>`_, `pr#16266 <https://github.com/ceph/ceph/pull/16266>`_, donglinpeng)
 * rgw: multipart parts on versioned bucket create versioned bucket index entries (`issue#19604 <http://tracker.ceph.com/issues/19604>`_, `issue#17964 <http://tracker.ceph.com/issues/17964>`_, `pr#17278 <https://github.com/ceph/ceph/pull/17278>`_, Zhang Shaowen)
 * rgw: multisite: after CreateBucket is forwarded to master, local bucket may use different value for bucket index shards (`issue#19745 <http://tracker.ceph.com/issues/19745>`_, `pr#15450 <https://github.com/ceph/ceph/pull/15450>`_, Shasha Lu)
 * rgw: multisite: bucket zonegroup redirect not working (`issue#19488 <http://tracker.ceph.com/issues/19488>`_, `pr#15448 <https://github.com/ceph/ceph/pull/15448>`_, Casey Bodley)
