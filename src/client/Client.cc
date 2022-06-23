@@ -681,7 +681,7 @@ void Client::shutdown()
   {
     std::scoped_lock l{client_lock};
 
-    // To make sure the tick thread will be stoppped before
+    // To make sure the tick thread will be stopped before
     // destructing the Client, just in case like the _mount()
     // failed but didn't not get a chance to stop the tick
     // thread
