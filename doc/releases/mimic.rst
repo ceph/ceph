@@ -4341,7 +4341,7 @@ Detailed Changelog
 * tests: qa/suites/rados/thrash-old-clients: ms_type=simple (`issue#23922 <http://tracker.ceph.com/issues/23922>`_, `pr#21739 <https://github.com/ceph/ceph/pull/21739>`_, Kefu Chai)
 * tests: qa/suites/rados/upgrade/jewel-x-singleton: tolerate sloppy past_intervals (`pr#17293 <https://github.com/ceph/ceph/pull/17293>`_, Kefu Chai)
 * tests: qa/suites/rest/basic/tasks/rest_test: more whitelisting (`issue#21425 <http://tracker.ceph.com/issues/21425>`_, `pr#17794 <https://github.com/ceph/ceph/pull/17794>`_, huangjun)
-* tests: qa/suites/rest/basic/tasks/rest_test: whiltelist OSD_DOWN (`issue#21425 <http://tracker.ceph.com/issues/21425>`_, `pr#18144 <https://github.com/ceph/ceph/pull/18144>`_, huangjun)
+* tests: qa/suites/rest/basic/tasks/rest_test: whitelist OSD_DOWN (`issue#21425 <http://tracker.ceph.com/issues/21425>`_, `pr#18144 <https://github.com/ceph/ceph/pull/18144>`_, huangjun)
 * tests: qa/suites/upgrade/jewel-x/parallel: tolerate mgr warning (`pr#17203 <https://github.com/ceph/ceph/pull/17203>`_, Sage Weil)
 * tests: qa/suites/upgrade/jewel-x/point-to-point-x: disable app warnings (`pr#16947 <https://github.com/ceph/ceph/pull/16947>`_, Sage Weil)
 * tests: qa/suites: whitelist SLOW_OPS (`issue#23495 <http://tracker.ceph.com/issues/23495>`_, `pr#21324 <https://github.com/ceph/ceph/pull/21324>`_, Kefu Chai)
