@@ -154,7 +154,7 @@ static void shutdown() {
   // https://wiki.openssl.org/index.php/Library_Initialization#Cleanup
   // http://stackoverflow.com/questions/29845527/how-to-properly-uninitialize-openssl
   //
-  // The call to CONF_modules_free() has been introduced after a valgring run.
+  // The call to CONF_modules_free() has been introduced after a valgrind run.
   CRYPTO_set_locking_callback(nullptr);
   CRYPTO_set_id_callback(nullptr);
   ENGINE_cleanup();
