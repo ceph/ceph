@@ -92,7 +92,7 @@ struct nop_delete {
 // Considered options:
 //  * unique_ptr with custom deleter implemented in .cc (would provide
 //    the non-zero-cost resource management),
-//  * GSL's owner<T*> (pretty neat but would impose an extra depedency),
+//  * GSL's owner<T*> (pretty neat but would impose an extra dependency),
 //  * unique_ptr with nop deleter,
 //  * raw pointer (doesn't embed ownership enforcement - std::move).
 template <class T>

@@ -550,7 +550,7 @@ void PGRecovery::dispatch_backfill_event(
 void PGRecovery::on_backfill_reserved()
 {
   logger().debug("{}", __func__);
-  // PIMP and depedency injection for the sake unittestability.
+  // PIMP and dependency injection for the sake unittestability.
   // I'm not afraid about the performance here.
   using BackfillState = crimson::osd::BackfillState;
   backfill_state = std::make_unique<BackfillState>(
