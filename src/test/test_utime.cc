@@ -10,7 +10,7 @@ TEST(utime_t, localtime)
   utime_t t(1556122013, 839991182);
   string s = stringify(t);
   cout << s << std::endl;
-  // time zone may vary where unit test is run, so be cirsumspect...
+  // time zone may vary where unit test is run, so be circumspect...
   ASSERT_EQ(s.size(), strlen("2019-04-24T11:06:53.839991-0500"));
   ASSERT_TRUE(s[26] == '-' || s[26] == '+');
   ASSERT_EQ(s.substr(0, 9), "2019-04-2");
