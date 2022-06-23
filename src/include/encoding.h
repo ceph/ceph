@@ -135,7 +135,7 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 // Under this assumption, we can use raw encoding of floating-point types
 // on little-endian machines, but we still need to perform a byte swap
 // on big-endian machines to ensure cross-architecture compatibility.
-// To achive that, we reinterpret the values as integers first, which are
+// To achieve that, we reinterpret the values as integers first, which are
 // byte-swapped via the ceph_le types as above.  The extra conversions
 // are optimized away on little-endian machines by the compiler.
 #define WRITE_FLTTYPE_ENCODER(type, itype, etype)			\
