@@ -1033,7 +1033,7 @@ TEST_P(seastore_test_t, fiemap_holes)
   run_async([this] {
     const uint64_t MAX_EXTENTS = 100;
 
-    // large enough to ensure that seastore will allocate each write seperately
+    // large enough to ensure that seastore will allocate each write separately
     const uint64_t SKIP_STEP = 16 << 10;
     auto &test_obj = get_object(make_oid(0));
     bufferlist bl;

@@ -4033,7 +4033,7 @@ Detailed Changelog
 * librbd: send_copyup() fixes and cleanups (`pr#26483 <https://github.com/ceph/ceph/pull/26483>`_, Ilya Dryomov)
 * librbd: simplify config override handling (`pr#24450 <https://github.com/ceph/ceph/pull/24450>`_, Jason Dillaman)
 * librbd: skip small, unaligned discard extents by default (`issue#38146 <http://tracker.ceph.com/issues/38146>`_, `pr#26432 <https://github.com/ceph/ceph/pull/26432>`_, Jason Dillaman)
-* librbd: support bps throttle and throttle read and write seperately (`pr#21635 <https://github.com/ceph/ceph/pull/21635>`_, Dongsheng Yang)
+* librbd: support bps throttle and throttle read and write separately (`pr#21635 <https://github.com/ceph/ceph/pull/21635>`_, Dongsheng Yang)
 * librbd: support migrating images with minimal downtime (`issue#18430 <http://tracker.ceph.com/issues/18430>`_, `issue#24439 <http://tracker.ceph.com/issues/24439>`_, `issue#26874 <http://tracker.ceph.com/issues/26874>`_, `issue#23659 <http://tracker.ceph.com/issues/23659>`_, `pr#15831 <https://github.com/ceph/ceph/pull/15831>`_, Patrick Donnelly, Sage Weil, Alfredo Deza, Kefu Chai, Patrick Nawracay, Pavani Rajula, Mykola Golub, Casey Bodley, Yingxin, Jason Dillaman)
 * librbd: support v2 cloning across namespaces (`pr#23662 <https://github.com/ceph/ceph/pull/23662>`_, Jason Dillaman)
 * librbd: use object map when doing snap rollback (`pr#23110 <https://github.com/ceph/ceph/pull/23110>`_, songweibin)

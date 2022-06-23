@@ -1282,7 +1282,7 @@ Notable Changes
 * rgw: metadata sync info should be shown at master zone of slave zoneg… (`issue#18091 <http://tracker.ceph.com/issues/18091>`_, `pr#12187 <http://github.com/ceph/ceph/pull/12187>`_, Jing Wenjun)
 * rgw: minor cleanup (`pr#10057 <http://github.com/ceph/ceph/pull/10057>`_, Yan Jun)
 * rgw: move compression config into zone placement (`pr#12113 <http://github.com/ceph/ceph/pull/12113>`_, Casey Bodley)
-* rgw: move xfs to a seperate directory (`pr#969 <http://github.com/ceph/ceph/pull/969>`_, Orit Wasserman)
+* rgw: move xfs to a separate directory (`pr#969 <http://github.com/ceph/ceph/pull/969>`_, Orit Wasserman)
 * rgw: multipart upload copy (`issue#12790 <http://tracker.ceph.com/issues/12790>`_, `pr#11269 <http://github.com/ceph/ceph/pull/11269>`_, Yehuda Sadeh, Javier M. Mellid)
 * rgw: need to close_section in lc list op (`pr#12232 <http://github.com/ceph/ceph/pull/12232>`_, weiqiaomiao)
 * rgw: policy acl format should be xml (`pr#946 <http://github.com/ceph/ceph/pull/946>`_, Orit Wasserman)
