@@ -177,7 +177,7 @@ static constexpr uint32_t FRAME_PREAMBLE_WITH_INLINE_SIZE =
 // For msgr 2.1, FRAME_EARLY_X flags are sent as part of epilogue.
 //
 // This flag indicates whether frame segments have been compressed by 
-// sender, and used in segments' disassemblig phase. 
+// sender, and used in segments' disassembling phase. 
 #define FRAME_EARLY_DATA_COMPRESSED       0X1
 
 struct FrameError : std::runtime_error {
