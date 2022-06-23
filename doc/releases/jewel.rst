@@ -2668,7 +2668,7 @@ Notable Changes since Infernalis
 * osd: fix/clean up full map request handling (`pr#8446 <http://github.com/ceph/ceph/pull/8446>`_, Sage Weil)
 * osd: fix debug message in OSD::is_healthy (`pr#6226 <http://github.com/ceph/ceph/pull/6226>`_, Xiaoxi Chen)
 * osd: fix dirty accounting in make_writeable (Zhiqiang Wang)
-* osd: fix dirtying info without correctly setting drity_info field (`pr#8275 <http://github.com/ceph/ceph/pull/8275>`_, xie xingguo)
+* osd: fix dirtying info without correctly setting dirty_info field (`pr#8275 <http://github.com/ceph/ceph/pull/8275>`_, xie xingguo)
 * osd: fix dump_ops_in_flight races (`issue#8885 <http://tracker.ceph.com/issues/8885>`_, `pr#8044 <http://github.com/ceph/ceph/pull/8044>`_, David Zafman)
 * osd: fix dup promotion lost op bug (Zhiqiang Wang)
 * osd: fix endless repair when object is unrecoverable (Jianpeng Ma, Kefu Chai)
