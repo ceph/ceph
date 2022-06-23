@@ -2515,7 +2515,7 @@ Detailed Changelog
 * core: os/bluestore: debug bluestore cache shutdown (`issue#21259 <http://tracker.ceph.com/issues/21259>`_, `pr#17844 <https://github.com/ceph/ceph/pull/17844>`_, Sage Weil)
 * core: os/bluestore: disable on_applied sync_complete (`issue#22668 <http://tracker.ceph.com/issues/22668>`_, `pr#20169 <https://github.com/ceph/ceph/pull/20169>`_, Sage Weil)
 * core: os/bluestore: make bdev label parsing error more meaningful and less noisy (`pr#20090 <https://github.com/ceph/ceph/pull/20090>`_, Sage Weil)
-* core: os/bluestore: make BlueStore opened by start_kv_only umountable (`issue#21624 <http://tracker.ceph.com/issues/21624>`_, `pr#18082 <https://github.com/ceph/ceph/pull/18082>`_, Chang Liu)
+* core: os/bluestore: make BlueStore opened by start_kv_only unmountable (`issue#21624 <http://tracker.ceph.com/issues/21624>`_, `pr#18082 <https://github.com/ceph/ceph/pull/18082>`_, Chang Liu)
 * core: os/bluestore: use db->rm_range_keys to delete range of keys (`pr#18279 <https://github.com/ceph/ceph/pull/18279>`_, Xiaoyan Li)
 * core: OSD/admin_socket: add get_mapped_pools command (`pr#19112 <https://github.com/ceph/ceph/pull/19112>`_, Xiaoxi Chen)
 * core: osdc, class_api: kill implicit string conversions (`pr#16648 <https://github.com/ceph/ceph/pull/16648>`_, Piotr Dałek)
