@@ -130,7 +130,7 @@ TEST_F(PrioritizedQueueTest, lowest_among_eligible_otherwise_highest) {
 }
 
 static const unsigned num_classes = 4;
-// just a determinitic number
+// just a deterministic number
 #define ITEM_TO_CLASS(item_) Klass((item_ + 43) % num_classes)
 
 TEST_F(PrioritizedQueueTest, fairness_by_class) {

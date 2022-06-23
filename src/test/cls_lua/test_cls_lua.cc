@@ -342,7 +342,7 @@ function getxattrs(input, output)
     -- result
     xattrs = objclass.getxattrs()
 
-    -- sort for determisitic test
+    -- sort for deterministic test
     arr = {}
     for n in pairs(xattrs) do
         table.insert(arr, n)
@@ -365,7 +365,7 @@ function map_get_keys(input, output)
     -- result
     keys = objclass.map_get_keys("", 5)
 
-    -- sort for determisitic test
+    -- sort for deterministic test
     arr = {}
     for n in pairs(keys) do
         table.insert(arr, n)
@@ -389,7 +389,7 @@ function map_get_vals(input, output)
     -- result
     kvs = objclass.map_get_vals("", "", 10)
 
-    -- sort for determisitic test
+    -- sort for deterministic test
     arr = {}
     for n in pairs(kvs) do
         table.insert(arr, n)
