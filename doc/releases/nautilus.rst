@@ -1633,7 +1633,7 @@ Changelog
 * mgr/dashboard: Add transifex-i18ntool (`pr#31160 <https://github.com/ceph/ceph/pull/31160>`_, Sebastian Krah)
 * mgr/dashboard: Allow disabling redirection on standby dashboards (`issue#41813 <https://tracker.ceph.com/issues/41813>`_, `pr#30382 <https://github.com/ceph/ceph/pull/30382>`_, Volker Theile)
 * mgr/dashboard: Configuring an URL prefix does not work as expected (`pr#31375 <https://github.com/ceph/ceph/pull/31375>`_, Volker Theile)
-* mgr/dashbaord: Fix calculation of PG status percentage (`issue#41809 <https://tracker.ceph.com/issues/41089>`_, `pr#30394 <https://github.com/ceph/ceph/pull/30394>`_, Tiago Melo)
+* mgr/dashboard: Fix calculation of PG status percentage (`issue#41809 <https://tracker.ceph.com/issues/41089>`_, `pr#30394 <https://github.com/ceph/ceph/pull/30394>`_, Tiago Melo)
 * mgr/dashboard: Fix CephFS chart (`pr#30691 <https://github.com/ceph/ceph/pull/30691>`_, Stephan Müller)
 * mgr/dashboard: Fix grafana dashboards (`pr#31733 <https://github.com/ceph/ceph/pull/31733>`_, Radu Toader)
 * mgr/dashboard: Improve position of MDS chart tooltip (`pr#31565 <https://github.com/ceph/ceph/pull/31565>`_, Tiago Melo)
