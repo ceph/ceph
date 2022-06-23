@@ -13678,7 +13678,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      */
 
     // We check if the transition is valid against the current pool mode, as
-    // it is the only committed state thus far.  We will blantly squash
+    // it is the only committed state thus far.  We will blindly squash
     // whatever mode is on the pending state.
 
     if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
