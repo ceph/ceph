@@ -5160,7 +5160,7 @@ Changelog
 * osd: Turn off repair pg state when leaving recovery (`pr#30852 <https://github.com/ceph/ceph/pull/30852>`_, David Zafman)
 * osd: unify sources of no{up,down,in,out} flags into singleton helpers (`pr#28403 <https://github.com/ceph/ceph/pull/28403>`_, xie xingguo)
 * osd: update comment as sub_op_scrub_map has been removed (`pr#28338 <https://github.com/ceph/ceph/pull/28338>`_, Jing Wenjun)
-* osd: Use physical ratio for nearfull (doesnt include backfill resserve) (`pr#31954 <https://github.com/ceph/ceph/pull/31954>`_, David Zafman)
+* osd: Use physical ratio for nearfull (doesnt include backfill reserve) (`pr#31954 <https://github.com/ceph/ceph/pull/31954>`_, David Zafman)
 * osd: use steady clock in prepare_to_stop() (`pr#26457 <https://github.com/ceph/ceph/pull/26457>`_, Mohamad Gebai)
 * osd: use unique_ptr for managing life cycles (`pr#32007 <https://github.com/ceph/ceph/pull/32007>`_, Kefu Chai)
 * osdc/Striper: specialize std::min<> (`pr#28732 <https://github.com/ceph/ceph/pull/28732>`_, Kefu Chai)

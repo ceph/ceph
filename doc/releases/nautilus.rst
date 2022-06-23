@@ -1299,7 +1299,7 @@ Changelog
 * osd/PrimaryLogPG: skip obcs that don't exist during backfill scan_range (`pr#31028 <https://github.com/ceph/ceph/pull/31028>`_, Sage Weil)
 * osd: set affinity for \*all\* threads (`pr#31359 <https://github.com/ceph/ceph/pull/31359>`_, Sage Weil)
 * osd: set collection pool opts on collection create, pg load (`pr#32123 <https://github.com/ceph/ceph/pull/32123>`_, Sage Weil)
-* osd: Use physical ratio for nearfull (doesn't include backfill resserve) (`pr#32773 <https://github.com/ceph/ceph/pull/32773>`_, David Zafman)
+* osd: Use physical ratio for nearfull (doesn't include backfill reserve) (`pr#32773 <https://github.com/ceph/ceph/pull/32773>`_, David Zafman)
 * pybind/mgr: Cancel output color control (`pr#31697 <https://github.com/ceph/ceph/pull/31697>`_, Zheng Yin)
 * rbd:  creating thick-provision image progress percent info exceeds 100% (`pr#32840 <https://github.com/ceph/ceph/pull/32840>`_, Xiangdong Mu)
 * rbd: librbd: don't call refresh from mirror::GetInfoRequest state machine (`pr#32900 <https://github.com/ceph/ceph/pull/32900>`_, Mykola Golub)
