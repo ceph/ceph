@@ -321,7 +321,7 @@ class TestFsNew(TestAdminCommands):
             self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid}')
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
-                "invalid error code on creating a file system with specifc ID without --force flag")
+                "invalid error code on creating a file system with specific ID without --force flag")
         else:
             self.fail("expected creating file system with specific ID without '--force' flag to fail")
 
@@ -340,7 +340,7 @@ class TestFsNew(TestAdminCommands):
             self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
-                "invalid error code on creating a file system with specifc ID that is already in use")
+                "invalid error code on creating a file system with specific ID that is already in use")
         else:
             self.fail("expected creating file system with ID already in use to fail")
 

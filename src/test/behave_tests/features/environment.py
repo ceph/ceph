@@ -75,7 +75,7 @@ def _parse_to_config_dict(values, config):
 
 def _parse_vm_description(specs):
     """
-    Parse's vm specfication description into configuration dictionary
+    Parse's vm specification description into configuration dictionary
     """
     kcli_config = Kcli_Config.copy()
     parsed_str = re.search(
