@@ -370,7 +370,7 @@ int MetaTool::_amend_meta(string& k, inode_meta_t& inode_meta, const string& fn,
   }
   
   if (!op.confirm_chg()) {
-    cout << "warning: this operation is irreversibl!!!\n"
+    cout << "warning: this operation is irreversible!!!\n"
          << "         You must confirm that all logs of mds have been flushed!!!\n"
          << "         if you want amend it, please add --yes-i-really-really-mean-it!!!"
          << std::endl;
@@ -482,7 +482,7 @@ int MetaTool::_amend_fn(const string& fn, bool confirm)
     return -1;
   }
   if (!confirm) {
-    cout << "warning: this operation is irreversibl!!!\n"
+    cout << "warning: this operation is irreversible!!!\n"
          << "         You must confirm that all logs of mds have been flushed!!!\n"
          << "         if you want amend it, please add --yes-i-really-really-mean-it!!!"
          << std::endl;
