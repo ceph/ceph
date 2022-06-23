@@ -311,7 +311,7 @@ namespace immutable_obj_cache {
     if (err_type == ASIO_ERROR_CONNECT) {
        ceph_assert(!m_session_work.load());
        if (ec == boost::asio::error::connection_refused) {
-         ldout(m_cct, 20) << "Connecting RO daenmon fails : "<< ec.message()
+         ldout(m_cct, 20) << "Connecting RO daemon fails : "<< ec.message()
                         << ". Immutable-object-cache daemon is down ? "
                         << "Data will be read from ceph cluster " << dendl;
        } else {

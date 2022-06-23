@@ -204,7 +204,7 @@ For more detailed information, see :download:`the complete changelog <../changel
 Notable Changes
 ---------------
 
-* auth: keyring permisions for mon deamon (`issue#14950 <http://tracker.ceph.com/issues/14950>`_, `pr#8049 <http://github.com/ceph/ceph/pull/8049>`_, Owen Synge)
+* auth: keyring permisions for mon daemon (`issue#14950 <http://tracker.ceph.com/issues/14950>`_, `pr#8049 <http://github.com/ceph/ceph/pull/8049>`_, Owen Synge)
 * auth: PK11_DestroyContext() is called twice if PK11_DigestFinal() fails (`issue#14958 <http://tracker.ceph.com/issues/14958>`_, `pr#7922 <http://github.com/ceph/ceph/pull/7922>`_, Brad Hubbard, Dunrong Huang)
 * auth: use libnss more safely (`issue#14620 <http://tracker.ceph.com/issues/14620>`_, `pr#7488 <http://github.com/ceph/ceph/pull/7488>`_, Sage Weil)
 * ceph-disk: use blkid instead of sgdisk -i (`issue#14080 <http://tracker.ceph.com/issues/14080>`_, `issue#14094 <http://tracker.ceph.com/issues/14094>`_, `pr#7475 <http://github.com/ceph/ceph/pull/7475>`_, Ilya Dryomov, Loic Dachary)
