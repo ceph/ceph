@@ -39,7 +39,7 @@ class CrushTester {
 
 /*
  * mark a ratio of devices down, can be used to simulate placement distributions
- * under degrated cluster conditions
+ * under degraded cluster conditions
  */
   void adjust_weights(std::vector<__u32>& weight);
 
