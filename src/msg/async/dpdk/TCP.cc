@@ -631,7 +631,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
     if (p.len()) {
       // Once the TCP takes responsibility for the data it advances
       // RCV.NXT over the data accepted, and adjusts RCV.WND as
-      // apporopriate to the current buffer availability.  The total of
+      // appropriate to the current buffer availability.  The total of
       // RCV.NXT and RCV.WND should not be reduced.
       _rcv.data.push_back(std::move(p));
       _rcv.next += seg_len;

@@ -353,7 +353,7 @@ function TEST_backfill_test_sametarget() {
 
     if [ "$pool2" = "" ];
     then
-      echo "Failure to find appropirate PGs"
+      echo "Failure to find appropriate PGs"
       return 1
     fi
 
