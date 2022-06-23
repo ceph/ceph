@@ -190,7 +190,7 @@ TEST(ErasureCodeExample, decode)
                               &encoded));
   EXPECT_EQ(3u, encoded.size());
 
-  // successfull decode
+  // successful decode
   bufferlist out;
   EXPECT_EQ(0, example.decode_concat(encoded, &out));
   bufferlist usable;

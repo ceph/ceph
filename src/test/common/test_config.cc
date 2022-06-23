@@ -36,7 +36,7 @@ public:
   {}
 
   void test_expand_meta() {
-    // successfull meta expansion $run_dir and ${run_dir}
+    // successful meta expansion $run_dir and ${run_dir}
     {
       ostringstream oss;
       std::string before = " BEFORE ";
