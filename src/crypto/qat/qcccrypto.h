@@ -91,7 +91,7 @@ class QccCrypto {
 
     /*
      * Cipher Memory Allocations
-     * Holds bufferlist, flatbuffer, cipher opration data and buffermeta needed
+     * Holds bufferlist, flatbuffer, cipher operation data and buffermeta needed
      * by QAT to perform the operation. Also buffers for IV, SRC, DEST.
      */
     struct QCCOPMEM {
