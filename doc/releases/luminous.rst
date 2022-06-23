@@ -4063,7 +4063,7 @@ Other Notable Changes
 * doc: Update .organizationmap (`pr#16507 <https://github.com/ceph/ceph/pull/16507>`_, luokexue)
 * doc: update packages mentioned by build-doc and related doc (`pr#14649 <https://github.com/ceph/ceph/pull/14649>`_, Yu Shengzuo)
 * doc: Update sample.ceph.conf (`pr#13751 <https://github.com/ceph/ceph/pull/13751>`_, Saumay Agrawal)
-* doc: update sample explaning "%" operator in test suites (`pr#15511 <https://github.com/ceph/ceph/pull/15511>`_, Kefu Chai)
+* doc: update sample explaining "%" operator in test suites (`pr#15511 <https://github.com/ceph/ceph/pull/15511>`_, Kefu Chai)
 * doc: Update some RGW documentation (`pr#15175 <https://github.com/ceph/ceph/pull/15175>`_, Jens Rosenboom)
 * doc: update the pool names created by vstart.sh by default (`pr#16652 <https://github.com/ceph/ceph/pull/16652>`_, Zhu Shangzhong)
 * doc: update the rados namespace docs (`pr#15838 <https://github.com/ceph/ceph/pull/15838>`_, Abhishek Lekshmanan)
