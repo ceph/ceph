@@ -847,7 +847,7 @@ Changelog
 * mgr/dashboard: highlight the search text in cluster logs (`pr#45678 <https://github.com/ceph/ceph/pull/45678>`_, Sarthak0702)
 * mgr/dashboard: Implement drain host functionality in dashboard (`pr#44376 <https://github.com/ceph/ceph/pull/44376>`_, Nizamudeen A)
 * mgr/dashboard: Improve notifications for osd nearfull, full (`pr#44876 <https://github.com/ceph/ceph/pull/44876>`_, Aashish Sharma)
-* mgr/dashboard: Imrove error message of '/api/grafana/validation' API endpoint (`pr#45956 <https://github.com/ceph/ceph/pull/45956>`_, Volker Theile)
+* mgr/dashboard: Improve error message of '/api/grafana/validation' API endpoint (`pr#45956 <https://github.com/ceph/ceph/pull/45956>`_, Volker Theile)
 * mgr/dashboard: introduce HAProxy metrics for RGW (`pr#44273 <https://github.com/ceph/ceph/pull/44273>`_, Avan Thakkar)
 * mgr/dashboard: introduce separate front-end component for API docs (`pr#44400 <https://github.com/ceph/ceph/pull/44400>`_, Aashish Sharma)
 * mgr/dashboard: Language dropdown box is partly hidden on login page (`pr#45618 <https://github.com/ceph/ceph/pull/45618>`_, Volker Theile)
