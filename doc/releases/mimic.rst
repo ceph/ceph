@@ -3543,7 +3543,7 @@ Detailed Changelog
 * osd: fix build_initial_pg_history (`issue#21203 <http://tracker.ceph.com/issues/21203>`_, `pr#17423 <https://github.com/ceph/ceph/pull/17423>`_, w11979, Sage Weil)
 * osd: fix crash caused by divide by zero in heartbeat code (`pr#21373 <https://github.com/ceph/ceph/pull/21373>`_, Piotr Dałek)
 * osd: fix dpdk memzon mz_name setting issue (`pr#19809 <https://github.com/ceph/ceph/pull/19809>`_, chunmei Liu)
-* osd: fix dpdk runtime issue based on spdk/dpdk libarary (`pr#19559 <https://github.com/ceph/ceph/pull/19559>`_, chunmei Liu)
+* osd: fix dpdk runtime issue based on spdk/dpdk library (`pr#19559 <https://github.com/ceph/ceph/pull/19559>`_, chunmei Liu)
 * osd: fix dpdk worker references issue (`pr#19886 <https://github.com/ceph/ceph/pull/19886>`_, chunmei Liu)
 * osd: Fixes for osd_scrub_during_recovery handling (`issue#18206 <http://tracker.ceph.com/issues/18206>`_, `pr#17039 <https://github.com/ceph/ceph/pull/17039>`_, David Zafman)
 * osd: fix out of order caused by letting old msg from down osd be processed (`issue#22570 <http://tracker.ceph.com/issues/22570>`_, `pr#19796 <https://github.com/ceph/ceph/pull/19796>`_, Mingxin Liu)
