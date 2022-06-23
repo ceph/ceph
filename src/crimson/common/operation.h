@@ -62,7 +62,7 @@ private:
   virtual const char *get_type_name() const = 0;
 };
 
-// the main template. by default an operation has no extenral
+// the main template. by default an operation has no external
 // event handler (the empty tuple). specializing the template
 // allows to define backends on per-operation-type manner.
 // NOTE: basically this could be a function but C++ disallows
