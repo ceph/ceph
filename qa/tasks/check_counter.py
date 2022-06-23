@@ -84,19 +84,20 @@ class CheckCounter(Task):
                         name = counter
                         minval = 1
                     expected.add(name)
-                    subsys, counter_id = name.split(".")
-                    if subsys not in perf_dump or counter_id not in perf_dump[subsys]:
-                        log.warning("Counter '{0}' not found on daemon {1}.{2}".format(
-                            name, daemon_type, daemon_id))
-                        continue
-                    value = perf_dump[subsys][counter_id]
 
-                    log.info("Daemon {0}.{1} {2}={3}".format(
-                        daemon_type, daemon_id, name, value
-                    ))
+                    val = perf_dump
+                    for key in name.split('.'):
+                        if key not in val:
+                            log.warning(f"Counter '{name}' not found on daemon {daemon_type}.{daemon_id}")
+                            val = None
+                            break
 
-                    if value >= minval:
-                        seen.add(name)
+                        val = val[key]
+
+                    if val is not None:
+                        log.info(f"Daemon {daemon_type}.{daemon_id} {name}={val}")
+                        if val >= minval:
+                            seen.add(name)
 
             if not dry_run:
                 unseen = set(expected) - set(seen)
