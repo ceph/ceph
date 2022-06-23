@@ -18755,7 +18755,7 @@ bool RocksDBBlueFSVolumeSelector::compare(BlueFSVolumeSelector* other) {
 // This cause a delay in write path and add significant load to the CPU/Memory/Disk.
 // The reason for the RocksDB updates is that it allows Ceph to survive any failure without losing the allocation state.
 //
-// We changed the code skiping RocksDB updates on allocation time and instead performing a full desatge of the allocator object
+// We changed the code skiping RocksDB updates on allocation time and instead performing a full destage of the allocator object
 // with all the OSD allocation state in a single step during umount().
 // This change leads to a 25% increase in IOPS and reduced latency in small random-write workload, but exposes the system
 // to losing allocation info in failure cases where we don't call umount.
