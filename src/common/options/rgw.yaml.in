@@ -2799,7 +2799,7 @@ options:
   - rgw_crypt_vault_auth
   - rgw_crypt_vault_addr
   with_legacy: true
-#  Vault Namespace (only availabe in Vault Enterprise Version)
+#  Vault Namespace (only available in Vault Enterprise Version)
 - name: rgw_crypt_vault_namespace
   type: str
   level: advanced
@@ -3013,7 +3013,7 @@ options:
   - rgw_crypt_sse_s3_vault_addr
   - rgw_crypt_sse_s3_vault_auth
   with_legacy: true
-#  Vault Namespace (only availabe in Vault Enterprise Version)
+#  Vault Namespace (only available in Vault Enterprise Version)
 - name: rgw_crypt_sse_s3_vault_namespace
   type: str
   level: advanced

@@ -135,7 +135,7 @@ class DBConnectionManager():
         self.dbinfo: DBInfo = info
 
     # using string as return type hint since __future__.annotations is not
-    # available with Python 3.6; its availabe starting from Pytohn 3.7
+    # available with Python 3.6; its available starting from Pytohn 3.7
     def __enter__(self) -> 'DBConnectionManager':
         log.debug(f'locking db connection for {self.dbinfo.fs}')
         self.dbinfo.lock.acquire()

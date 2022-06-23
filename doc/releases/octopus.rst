@@ -5241,7 +5241,7 @@ Changelog
 * qa/workunits/cephadm/test_cephadm.sh: need --fsid always (`pr#32220 <https://github.com/ceph/ceph/pull/32220>`_, Sage Weil)
 * qa/workunits/cephadm/test_cephadm.sh: re-enable `adopt` tests (`pr#32244 <https://github.com/ceph/ceph/pull/32244>`_, Michael Fritch)
 * qa/workunits/cephadm/test_cephadm.sh: skip docker when service is disabled (`pr#33018 <https://github.com/ceph/ceph/pull/33018>`_, Michael Fritch)
-* qa/workunits/cephadm/test_cephadm.sh: use avialable pythons; test on ubuntu and centos (`pr#32333 <https://github.com/ceph/ceph/pull/32333>`_, Sage Weil)
+* qa/workunits/cephadm/test_cephadm.sh: use available pythons; test on ubuntu and centos (`pr#32333 <https://github.com/ceph/ceph/pull/32333>`_, Sage Weil)
 * qa/workunits/cephadm/test_cephadm: --skip-monitoring-stack (`pr#34013 <https://github.com/ceph/ceph/pull/34013>`_, Sage Weil)
 * qa/workunits/cephadm/test_cephadm: fix typo (`pr#33181 <https://github.com/ceph/ceph/pull/33181>`_, Sage Weil)
 * qa/workunits/cephadm/test_cephadm: workunit test cleanup (`pr#32625 <https://github.com/ceph/ceph/pull/32625>`_, Michael Fritch)
