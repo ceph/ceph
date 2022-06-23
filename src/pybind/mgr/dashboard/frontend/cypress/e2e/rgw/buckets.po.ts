@@ -162,7 +162,7 @@ export class BucketsPageHelper extends PageHelper {
 
     // Check invalid placement target input
     this.selectOwner(BucketsPageHelper.USERS[1]);
-    // The drop down error message will not appear unless a valid option is previsously selected.
+    // The drop down error message will not appear unless a valid option is previously selected.
     this.selectPlacementTarget('default-placement');
     this.selectPlacementTarget('-- Select a placement target --');
     cy.get('@nameInputField').click(); // Trigger validation

@@ -81,7 +81,7 @@ describe('RgwUserListComponent', () => {
     });
   });
 
-  it('should test if rgw-user data is tranformed correctly', () => {
+  it('should test if rgw-user data is transformed correctly', () => {
     rgwUserServiceListSpy.and.returnValue(
       of([
         {

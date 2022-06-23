@@ -84,12 +84,12 @@ export class RbdNamespaceListComponent implements OnInit {
       pools = pools.filter(
         (pool: any) => this.rbdService.isRBDPool(pool) && pool.type === 'replicated'
       );
-      const promisses: Observable<any>[] = [];
+      const promises: Observable<any>[] = [];
       pools.forEach((pool: any) => {
-        promisses.push(this.rbdService.listNamespaces(pool['pool_name']));
+        promises.push(this.rbdService.listNamespaces(pool['pool_name']));
       });
-      if (promisses.length > 0) {
-        forkJoin(promisses).subscribe((data: Array<Array<string>>) => {
+      if (promises.length > 0) {
+        forkJoin(promises).subscribe((data: Array<Array<string>>) => {
           const result: any[] = [];
           for (let i = 0; i < data.length; i++) {
             const namespaces = data[i];
