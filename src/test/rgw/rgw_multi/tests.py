@@ -505,6 +505,7 @@ def create_role_per_zone(zonegroup_conns, roles_per_zone = 1):
     for zone in zonegroup_conns.rw_zones:
         for i in range(roles_per_zone):
             role_name = gen_role_name()
+            log.info('create role zone=%s name=%s', zone.name, role_name)
             policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/testuser\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
             role = zone.create_role("", role_name, policy_document, "")
             roles.append(role_name)
@@ -600,7 +601,8 @@ def check_bucket_eq(zone_conn1, zone_conn2, bucket):
         zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
 
 def check_role_eq(zone_conn1, zone_conn2, role):
-    zone_conn2.check_role_eq(zone_conn1, role['create_role_response']['create_role_result']['role']['role_name'])
+    if zone_conn2.zone.has_roles():
+        zone_conn2.check_role_eq(zone_conn1, role['create_role_response']['create_role_result']['role']['role_name'])
 
 def test_object_sync():
     zonegroup = realm.master_zonegroup()
