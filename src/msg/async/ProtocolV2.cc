@@ -1866,7 +1866,7 @@ CtPtr ProtocolV2::finish_client_auth() {
 CtPtr ProtocolV2::finish_server_auth() {
   // server had sent AuthDone and client responded with correct pre-auth
   // signature. 
-  // We can start conditioanl msgr protocol
+  // We can start conditional msgr protocol
   if (HAVE_MSGR2_FEATURE(peer_supported_features, COMPRESSION)) {
     state = COMPRESSION_ACCEPTING;
   } else {
