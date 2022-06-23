@@ -2074,7 +2074,7 @@ Notable Changes
 * osd: cleanup options and other redundancies (`pr#10450 <http://github.com/ceph/ceph/pull/10450>`_, xie xingguo)
 * osd: drop unused variables/methods (`pr#10559 <http://github.com/ceph/ceph/pull/10559>`_, xie xingguo)
 * osd: fix the mem leak of RepGather (`issue#16801 <http://tracker.ceph.com/issues/16801>`_, `pr#10423 <http://github.com/ceph/ceph/pull/10423>`_, Kefu Chai)
-* osd: fixups to explicitly persistenting missing sets (`pr#10405 <http://github.com/ceph/ceph/pull/10405>`_, Samuel Just)
+* osd: fixups to explicitly persisting missing sets (`pr#10405 <http://github.com/ceph/ceph/pull/10405>`_, Samuel Just)
 * osd: increment stats on recovery pull also (`issue#16277 <http://tracker.ceph.com/issues/16277>`_, `pr#10152 <http://github.com/ceph/ceph/pull/10152>`_, Kefu Chai)
 * osd: limit omap data in push op (`issue#16128 <http://tracker.ceph.com/issues/16128>`_, `pr#9894 <http://github.com/ceph/ceph/pull/9894>`_, Wanlong Gao)
 * osd: minor performance improvements (`pr#10470 <http://github.com/ceph/ceph/pull/10470>`_, xie xingguo)
