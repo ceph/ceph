@@ -17069,7 +17069,7 @@ void BlueStore::_wctx_finish(
 
 #ifdef HAVE_LIBZBD
   if (!zones_with_releases.empty()) {
-    // we need to fault the entire extent range in here to determinte if we've dropped
+    // we need to fault the entire extent range in here to determine if we've dropped
     // all refs to a zone.
     o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
     for (auto& b : o->extent_map.extent_map) {
