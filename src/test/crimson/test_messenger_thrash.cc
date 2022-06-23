@@ -555,7 +555,7 @@ seastar::future<> test_stress(thrash_params_t tp)
 
 // Test Parameters:
 // Clients: 8              (statefull)
-// Servers: 32             (loseless)
+// Servers: 32             (lossless)
 // Connections: 100        (Generated between random clients/server)
 // Random Operations: 120 (Generate/Drop Connection, Send Message, Sleep)
 seastar::future<> test_injection(thrash_params_t tp)
