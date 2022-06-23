@@ -2058,7 +2058,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
     am->skip_authorizer_challenge = true;
   }
   connection->lock.unlock();
-  ldout(cct,10) << __func__ << " authorizor_protocol "
+  ldout(cct,10) << __func__ << " authorizer_protocol "
 		<< connect_msg.authorizer_protocol
 		<< " len " << auth_bl_copy.length()
 		<< dendl;
