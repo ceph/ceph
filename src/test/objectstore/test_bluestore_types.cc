@@ -1755,7 +1755,7 @@ TEST(bluestore_blob_t, unused)
     // _do_write_small 0x2a000~1000
     // and 0x1d000~1000
     uint64_t unused_granularity = 0x3000;
-    // offsets and lenght below are selected to
+    // offsets and length below are selected to
     // be aligned with unused_granularity
     uint64_t offset0 = 0x2a000;
     uint64_t offset = 0x1d000;

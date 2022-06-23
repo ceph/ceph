@@ -225,7 +225,7 @@ class requestlog_queue():
                 bytes_out = int(j['o'].headers['Content-Length'])
             bytes_in = 0
             msg = j['i'].msg
-            if 'content-length'in msg:
+            if 'content-length' in msg:
                 bytes_in = int(msg['content-length'])
             log.info('RL: %s %s %s bytes_out=%d bytes_in=%d failed=%r'
                      % (cat, bucket, user, bytes_out, bytes_in, j['e']))
