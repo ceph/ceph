@@ -101,17 +101,17 @@ def stream():
 class TestWriteUnicode(object):
 
     def setup(self):
-        self.octpus_and_squid_en = u'octpus and squid'
-        self.octpus_and_squid_zh = u'章鱼和鱿鱼'
-        self.message = self.octpus_and_squid_en + self.octpus_and_squid_zh
+        self.octopus_and_squid_en = u'octopus and squid'
+        self.octopus_and_squid_zh = u'章鱼和鱿鱼'
+        self.message = self.octopus_and_squid_en + self.octopus_and_squid_zh
         setup_console()
 
     def test_stdout_writer(self, capsys):
         # should work with whatever stdout is
         terminal.stdout(self.message)
         _, err = capsys.readouterr()
-        assert self.octpus_and_squid_en in err
-        assert self.octpus_and_squid_zh in err
+        assert self.octopus_and_squid_en in err
+        assert self.octopus_and_squid_zh in err
 
     @pytest.mark.parametrize('encoding', ['ascii', 'utf8'])
     def test_writer_log(self, stream, encoding, monkeypatch, caplog):
@@ -120,7 +120,7 @@ class TestWriteUnicode(object):
         writer.flush()
         writer.seek(0)
         output = writer.readlines()[0]
-        assert self.octpus_and_squid_en in output
+        assert self.octopus_and_squid_en in output
 
     @pytest.mark.parametrize('encoding', ['utf8'])
     def test_writer(self, encoding, stream, monkeypatch, capsys, caplog):
@@ -130,7 +130,7 @@ class TestWriteUnicode(object):
         writer.flush()
         writer.seek(0)
         val = buffer.getvalue()
-        assert self.octpus_and_squid_en.encode(encoding) in val
+        assert self.octopus_and_squid_en.encode(encoding) in val
 
     def test_writer_uses_log_on_unicodeerror(self, stream, monkeypatch, capture):
 
@@ -140,4 +140,4 @@ class TestWriteUnicode(object):
         buffer = io.BytesIO()
         writer = stream(buffer, 'ascii')
         terminal._Write(_writer=writer).raw(self.message)
-        assert self.octpus_and_squid_en in capture.calls[0]['args'][0]
+        assert self.octopus_and_squid_en in capture.calls[0]['args'][0]
