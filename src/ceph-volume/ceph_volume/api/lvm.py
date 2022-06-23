@@ -953,7 +953,7 @@ def create_lv(name_prefix,
 
         {"ceph.block_device": "/dev/ceph/osd-1"}
 
-    :param name_prefix: name prefix for the LV, typically somehting like ceph-osd-block
+    :param name_prefix: name prefix for the LV, typically something like ceph-osd-block
     :param uuid: UUID to ensure uniqueness; is combined with name_prefix to
                  form the LV name
     :param vg: optional, pass an existing VG to create LV
