@@ -4152,7 +4152,7 @@ Detailed Changelog
 * rgw: rgw-admin: properly filtering bucket stats by user_id or bucket_name (`pr#19401 <https://github.com/ceph/ceph/pull/19401>`_, Yao Zongyou)
 * rgw: rgw-admin: require --yes-i-really-mean-it when using --inconsistent_index (`issue#20777 <http://tracker.ceph.com/issues/20777>`_, `pr#17185 <https://github.com/ceph/ceph/pull/17185>`_, Orit Wasserman)
 * rgw: rgw-admin: support for processing all gc objects including unexpired (`pr#17482 <https://github.com/ceph/ceph/pull/17482>`_, Yao Zongyou)
-* rgw: RGW: change function parameters from value to refrence (`pr#18355 <https://github.com/ceph/ceph/pull/18355>`_, Sibei Gao)
+* rgw: RGW: change function parameters from value to reference (`pr#18355 <https://github.com/ceph/ceph/pull/18355>`_, Sibei Gao)
 * rgw: RGWCivetWeb::read_data: fix arguments to mg_read() call (`issue#23596 <http://tracker.ceph.com/issues/23596>`_, `pr#21291 <https://github.com/ceph/ceph/pull/21291>`_, Nathan Cutler)
 * rgw: rgw clean-up: remove unreferenced pure virtual class StreamObjData (`pr#18799 <https://github.com/ceph/ceph/pull/18799>`_, J. Eric Ivancich)
 * rgw: rgw clean-up: remove unused var & func in RGWRados::SystemObject (`pr#18987 <https://github.com/ceph/ceph/pull/18987>`_, J. Eric Ivancich)
