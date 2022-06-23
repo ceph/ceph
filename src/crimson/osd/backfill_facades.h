@@ -11,7 +11,7 @@ namespace crimson::osd {
 
 // PeeringFacade -- main implementation of the BackfillState::PeeringFacade
 // interface. We have the abstraction to decuple BackfillState from Peering
-// State, and thus cut dependencies in unit testing. The second implemention
+// State, and thus cut dependencies in unit testing. The second implementation
 // is BackfillFixture::PeeringFacade and sits in test_backfill.cc.
 struct PeeringFacade final : BackfillState::PeeringFacade {
   PeeringState& peering_state;

@@ -1,5 +1,5 @@
 /*
- * Very simple and fast lockless ring buffer implementatation for
+ * Very simple and fast lockless ring buffer implementation for
  * one producer and one consumer.
  */
 
