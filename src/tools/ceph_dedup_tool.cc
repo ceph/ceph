@@ -84,7 +84,7 @@ struct EstimateResult {
       sha512_digest_t sha512_val = crypto::digest<crypto::SHA512>(chunk);
       fp = sha512_val.to_str();
     } else {
-      ceph_assert(0 == "no support fingerperint algorithm");
+      ceph_assert(0 == "no support fingerprint algorithm");
     }
 
     std::lock_guard l(lock);
