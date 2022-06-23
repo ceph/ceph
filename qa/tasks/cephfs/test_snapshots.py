@@ -52,7 +52,7 @@ class TestSnapshots(CephFSTestCase):
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EPERM, "expected EPERM")
         else:
-            self.fail("expected snap creatiion to fail")
+            self.fail("expected snap creation to fail")
 
         self.fs.set_allow_new_snaps(True);
         self.mount_a.run_shell(["mkdir", "test-allow-snaps/.snap/snap00"])
