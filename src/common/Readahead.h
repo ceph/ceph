@@ -139,7 +139,7 @@ private:
   /// Number of consecutive read requests in the current sequential stream
   int m_nr_consec_read;
 
-  /// Number of bytes read in the current sequenial stream
+  /// Number of bytes read in the current sequential stream
   uint64_t m_consec_read_bytes;
 
   /// Position of the read stream
