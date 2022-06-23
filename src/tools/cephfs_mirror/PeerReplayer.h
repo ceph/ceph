@@ -252,7 +252,7 @@ private:
   RadosRef m_local_cluster;
   Filesystem m_filesystem;
   Peer m_peer;
-  // probably need to be encapsulated when supporting cancelations
+  // probably need to be encapsulated when supporting cancellations
   std::map<std::string, DirRegistry> m_registered;
   std::vector<std::string> m_directories;
   std::map<std::string, SnapSyncStat> m_snap_sync_stats;
