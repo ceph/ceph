@@ -19974,7 +19974,7 @@ Allocator* BlueStore::initialize_allocator_from_freelist(FreelistManager *real_f
 //---------------------------------------------------------
 // close the active fm and open it in a new mode like makefs()
 // but make sure to mark the full device space as allocated
-// later we will mark all exetents from the allocator as free
+// later we will mark all extents from the allocator as free
 int BlueStore::reset_fm_for_restore()
 {
   dout(5) << "<<==>> fm->clear_null_manager()" << dendl;
