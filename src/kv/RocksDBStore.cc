@@ -2708,7 +2708,7 @@ public:
       return r;
     if (current_shard->second->valid())
       return 0;
-    //current shard exhaused, search for key
+    //current shard exhausted, search for key
     ++current_shard;
     while (current_shard != shards.end()) {
       r = current_shard->second->seek_to_first();
