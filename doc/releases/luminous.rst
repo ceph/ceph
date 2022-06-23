@@ -5044,7 +5044,7 @@ Other Notable Changes
 * rgw: fix versioned bucket data sync fail when upload is busy (`issue#18208 <http://tracker.ceph.com/issues/18208>`_, `pr#12357 <https://github.com/ceph/ceph/pull/12357>`_, lvshuhua)
 * rgw: fix wrong error code for expired Swift TempURL's links (`issue#20384 <http://tracker.ceph.com/issues/20384>`_, `pr#15850 <https://github.com/ceph/ceph/pull/15850>`_, Radoslaw Zarzynski)
 * rgw: fix X-Object-Meta-Static-Large-Object in SLO download (`issue#19951 <http://tracker.ceph.com/issues/19951>`_, `pr#15045 <https://github.com/ceph/ceph/pull/15045>`_, Shasha Lu)
-* rgw: fix zone did't update realm_id when added to zonegroup (`issue#17995 <http://tracker.ceph.com/issues/17995>`_, `pr#12139 <https://github.com/ceph/ceph/pull/12139>`_, Tianshan Qu)
+* rgw: fix zone didn't update realm_id when added to zonegroup (`issue#17995 <http://tracker.ceph.com/issues/17995>`_, `pr#12139 <https://github.com/ceph/ceph/pull/12139>`_, Tianshan Qu)
 * rgw: forward RGWPutBucketPolicy to meta master (`issue#20297 <http://tracker.ceph.com/issues/20297>`_, `pr#15736 <https://github.com/ceph/ceph/pull/15736>`_, Casey Bodley)
 * rgw: get torrent request's parameter is not the same as amazon s3 (`issue#19136 <http://tracker.ceph.com/issues/19136>`_, `pr#13760 <https://github.com/ceph/ceph/pull/13760>`_, Zhang Shaowen)
 * rgw: get wrong content when download object with specific range with compression (`issue#20100 <http://tracker.ceph.com/issues/20100>`_, `pr#15323 <https://github.com/ceph/ceph/pull/15323>`_, fang yuxiang)
