@@ -2943,7 +2943,7 @@ Detailed Changelog
 * doc: reorganize releases (`pr#20784 <https://github.com/ceph/ceph/pull/20784>`_, Abhishek Lekshmanan)
 * doc: replace injectargs usage with "config set" (`pr#18789 <https://github.com/ceph/ceph/pull/18789>`_, John Spray)
 * doc: replace region with zonegroup in configure bucket sharding section (`issue#21610 <http://tracker.ceph.com/issues/21610>`_, `pr#18063 <https://github.com/ceph/ceph/pull/18063>`_, Orit Wasserman)
-* doc: restructure bluestore migration insructions (`pr#17603 <https://github.com/ceph/ceph/pull/17603>`_, Sage Weil)
+* doc: restructure bluestore migration instructions (`pr#17603 <https://github.com/ceph/ceph/pull/17603>`_, Sage Weil)
 * doc: Revise the Example of Bucket Policy (`pr#17362 <https://github.com/ceph/ceph/pull/17362>`_, zhangwen)
 * doc: rgw: add a note for resharding in 12.2.1 docs (`pr#17675 <https://github.com/ceph/ceph/pull/17675>`_, Abhishek Lekshmanan)
 * doc: rgw add some basic documentation for sync plugins & ES (`pr#15849 <https://github.com/ceph/ceph/pull/15849>`_, Abhishek Lekshmanan)
