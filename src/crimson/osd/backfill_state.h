@@ -275,7 +275,7 @@ private:
 };
 
 // BackfillListener -- an interface used by the backfill FSM to request
-// low-level services like issueing `MOSDPGPush` or `MOSDPGBackfillRemove`.
+// low-level services like issuing `MOSDPGPush` or `MOSDPGBackfillRemove`.
 // The goals behind the interface are: 1) unittestability; 2) possibility
 // to retrofit classical OSD with BackfillState. For the second reason we
 // never use `seastar::future` -- instead responses to the requests are
