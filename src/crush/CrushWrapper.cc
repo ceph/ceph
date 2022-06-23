@@ -3296,7 +3296,7 @@ void CrushWrapper::decode(bufferlist::const_iterator& blp)
     }
 
     // name info
-    // NOTE: we had a bug where we were incoding int instead of int32, which means the
+    // NOTE: we had a bug where we were encoding int instead of int32, which means the
     // 'key' field for these maps may be either 32 or 64 bits, depending.  tolerate
     // both by assuming the string is always non-empty.
     decode_32_or_64_string_map(type_map, blp);
