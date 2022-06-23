@@ -413,7 +413,7 @@ int32_t ipv4::frag::merge(ip_hdr &h, uint16_t offset, Packet p) {
   if (offset == 0) {
     header = p.share(0, ip_hdr_len);
   }
-  // Sotre IP payload
+  // Store IP payload
   p.trim_front(ip_hdr_len);
   data.merge(offset, std::move(p));
   // Update mem size
