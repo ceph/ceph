@@ -1099,7 +1099,7 @@ options:
 - name: rgw_verify_ssl
   type: bool
   level: advanced
-  desc: Should RGW verify SSL when connecing to a remote HTTP server
+  desc: Should RGW verify SSL when connecting to a remote HTTP server
   long_desc: RGW can send requests to other RGW servers (e.g., in multi-site sync
     work). This configurable selects whether RGW should verify the certificate for
     the remote peer and host.
