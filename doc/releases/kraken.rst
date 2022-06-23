@@ -2331,7 +2331,7 @@ Notable Changes
 * tools: fio engine for objectstore (`pr#10267 <http://github.com/ceph/ceph/pull/10267>`_, Casey Bodley, Igor Fedotov, Daniel Gollub)
 * tools: rados/client: fix typo (`pr#10493 <http://github.com/ceph/ceph/pull/10493>`_, Yan Jun)
 * tools: rados/client: fix waiting on the condition variable more efficient. (`pr#9939 <http://github.com/ceph/ceph/pull/9939>`_, Yan Jun)
-* tools: tools/rebuild_mondb: kill comipling warning and other fixes (`pr#11117 <http://github.com/ceph/ceph/pull/11117>`_, xie xingguo)
+* tools: tools/rebuild_mondb: kill compiling warning and other fixes (`pr#11117 <http://github.com/ceph/ceph/pull/11117>`_, xie xingguo)
 * tools: authtool: Enhance argument combinations validation (`issue#2904 <http://tracker.ceph.com/issues/2904>`_, `pr#9704 <http://github.com/ceph/ceph/pull/9704>`_, Brad Hubbard)
 * tools: ceph-disk: change ownership of initfile to ceph:ceph (`issue#16280 <http://tracker.ceph.com/issues/16280>`_, `pr#9688 <http://github.com/ceph/ceph/pull/9688>`_, Shylesh Kumar)
 * test: ceph_test_rados_api_tmap_migrate: remove test for tmap_upgrade (`pr#10234 <http://github.com/ceph/ceph/pull/10234>`_, Kefu Chai)
