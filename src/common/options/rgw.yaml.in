@@ -233,7 +233,7 @@ options:
   long_desc: The lifecycle maintenance thread is responsible for lifecycle related
     maintenance work. The thread itself can be disabled, but in order for lifecycle
     to work correctly, at least one RGW in each zone needs to have this thread running.
-    Havingthe thread enabled on multiple RGW processes within the same zone can spread
+    Having the thread enabled on multiple RGW processes within the same zone can spread
     some of the maintenance work between them.
   default: true
   services:
