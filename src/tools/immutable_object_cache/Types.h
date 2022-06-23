@@ -42,7 +42,7 @@ class ObjectCacheRequest {
   virtual ~ObjectCacheRequest();
 
   // encode consists of two steps
-  // step 1 : directly encode common bits using encode method of base classs.
+  // step 1 : directly encode common bits using encode method of base class.
   // step 2 : according to payload_empty, determine whether additional bits
   //          need to be encoded which be implements by child class.
   void encode();

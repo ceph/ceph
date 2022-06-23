@@ -5925,7 +5925,7 @@ Changelog
 * tests: qa/tasks/mgr/test_progress.py: s/ev/new_event/ (`issue#40618 <http://tracker.ceph.com/issues/40618>`_, `pr#29368 <https://github.com/ceph/ceph/pull/29368>`_, Kefu Chai)
 * tests: qa/tasks/mgr: set mgr module option with --force (`pr#32588 <https://github.com/ceph/ceph/pull/32588>`_, Kefu Chai)
 * tests: qa/tasks/vstart_runner: write string to StringIO (`pr#32438 <https://github.com/ceph/ceph/pull/32438>`_, Kefu Chai)
-* tests: qa/tasks: call super classs setUp() (`pr#33325 <https://github.com/ceph/ceph/pull/33325>`_, Kefu Chai)
+* tests: qa/tasks: call super class setUp() (`pr#33325 <https://github.com/ceph/ceph/pull/33325>`_, Kefu Chai)
 * tests: qa/tasks: py3 compat (tasks exercised by rados suites) (`pr#33709 <https://github.com/ceph/ceph/pull/33709>`_, Kyr Shatskyy, Kefu Chai)
 * tests: qa/tasks: use items() for py3 compatibility (`pr#30813 <https://github.com/ceph/ceph/pull/30813>`_, Kyr Shatskyy)
 * tests: qa/tests:  filtered in only trusty (`issue#40195 <http://tracker.ceph.com/issues/40195>`_, `pr#28439 <https://github.com/ceph/ceph/pull/28439>`_, Yuri Weinstein)
