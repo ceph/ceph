@@ -1099,7 +1099,7 @@ void EMetaBlob::dump(Formatter *f) const
   }
   f->close_section(); // roots
 
-  f->open_array_section("tableclient tranactions");
+  f->open_array_section("tableclient transactions");
   for (const auto& p : table_tids) {
     f->open_object_section("transaction");
     f->dump_int("tid", p.first);

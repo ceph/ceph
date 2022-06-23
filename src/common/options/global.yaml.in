@@ -1944,7 +1944,7 @@ options:
 - name: mon_debug_dump_json
   type: bool
   level: dev
-  desc: dump paxos transasctions to log as json
+  desc: dump paxos transactions to log as json
   default: false
   services:
   - mon
