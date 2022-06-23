@@ -158,5 +158,5 @@ Task to do:
 	with all the packages FreeBSD already has in place. Lots of minute 
 	details to figure out
 
- -	Design a virtual disk implementation that can be used with behyve and 
+ -	Design a virtual disk implementation that can be used with bhyve and 
 	attached to an RBD image. 
