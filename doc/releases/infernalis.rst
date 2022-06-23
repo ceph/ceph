@@ -1512,7 +1512,7 @@ Notable Changes
 * rgw: add X-Timestamp for Swift containers (#10938 Radoslaw Zarzynski)
 * rgw: add missing headers to Swift container details (#10666 Ahmad Faheem, Dmytro Iurchenko)
 * rgw: add stats to headers for account GET (#10684 Yuan Zhou)
-* rgw: do not prefecth data for HEAD requests (Guang Yang)
+* rgw: do not prefetch data for HEAD requests (Guang Yang)
 * rgw: don't clobber bucket/object owner when setting ACLs (#10978 Yehuda Sadeh)
 * rgw: don't use rgw_socket_path if frontend is configured (#11160 Yehuda Sadeh)
 * rgw: enforce Content-Lenth for POST on Swift cont/obj (#10661 Radoslaw Zarzynski)
