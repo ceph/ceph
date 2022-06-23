@@ -304,7 +304,7 @@ add_executable(ceph_test_rgw_directory
   )
 target_include_directories(ceph_test_rgw_directory SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(ceph_test_rgw_directory PRIVATE
-  rgw
+  rgw_common
   librados
   ceph-common
   ${UNITTEST_LIBS}
