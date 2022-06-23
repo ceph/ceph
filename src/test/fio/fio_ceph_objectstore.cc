@@ -479,7 +479,7 @@ struct Job {
   const bool unlink; //< unlink objects on destruction
 
   bufferptr one_for_all_data; //< preallocated buffer long enough
-                              //< to use for vairious operations
+                              //< to use for various operations
   std::mutex throttle_lock;
   const vector<unsigned> throttle_values;
   const vector<unsigned> deferred_throttle_values;
