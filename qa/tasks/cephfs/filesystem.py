@@ -1267,7 +1267,7 @@ class Filesystem(MDSCluster):
         Block until the MDS reaches a particular state, or a failure condition
         is met.
 
-        When there are multiple MDSs, succeed when exaclty one MDS is in the
+        When there are multiple MDSs, succeed when exactly one MDS is in the
         goal state, or fail when any MDS is in the reject state.
 
         :param goal_state: Return once the MDS is in this state
