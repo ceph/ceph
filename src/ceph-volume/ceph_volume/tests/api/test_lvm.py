@@ -342,7 +342,7 @@ class TestTags(object):
                     'ceph.foo1=baz1', '--addtag', 'ceph.foo2=baz2', '/path']),
             sorted(['lvchange', '--addtag', 'ceph.foo1=other1', '/path']),
         ]
-        # The order isn't guaranted
+        # The order isn't guaranteed
         for call in capture.calls:
             assert sorted(call['args'][0]) in expected
         assert len(capture.calls) == len(expected)
@@ -365,7 +365,7 @@ class TestTags(object):
                     'ceph.foo1=bar1', '--deltag', 'ceph.foo2=bar2',
                     '/pathclean']),
         ]
-        # The order isn't guaranted
+        # The order isn't guaranteed
         for call in capture.calls:
             assert sorted(call['args'][0]) in expected
         assert len(capture.calls) == len(expected)
