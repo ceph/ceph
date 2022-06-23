@@ -18,7 +18,7 @@
 #     export PTL_TOOL_BASE_REMOTE=<remotename>
 #
 #
-# ** Here are some basic exmples to get started: **
+# ** Here are some basic examples to get started: **
 #
 # Merging all PRs labeled 'wip-pdonnell-testing' into a new test branch:
 #
