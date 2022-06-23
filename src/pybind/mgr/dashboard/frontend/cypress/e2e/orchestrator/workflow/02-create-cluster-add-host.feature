@@ -51,7 +51,7 @@ Feature: Cluster expansion host addition
             | ceph-node-01 |
             | ceph-node-02 |
 
-    Scenario: Add exisiting host and verify it failed
+    Scenario: Add existing host and verify it failed
         Given I am on the "Add Hosts" section
         And I should see a row with "ceph-node-00"
         When I click on "Add" button

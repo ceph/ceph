@@ -784,7 +784,7 @@ tests:
           type: ceph_default
           oid: 1.3.6.1.4.1.50495.1.2.1.11.1
         exp_annotations:
-          summary: A ceph daemon manged by cephadm is down
+          summary: A ceph daemon managed by cephadm is down
           description: "A daemon managed by cephadm is no longer active. Determine, which daemon is down with 'ceph health detail'. you may start daemons with the 'ceph orch daemon start <daemon_id>'"
  - interval: 1m
    input_series:
@@ -1243,7 +1243,7 @@ tests:
         exp_annotations:
           documentation: https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-toomany
           summary: Too many devices are predicted to fail, unable to resolve
-          description: "The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availabililty. Prevent data integrity issues by adding new OSDs so that data may be relocated."
+          description: "The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availability. Prevent data integrity issues by adding new OSDs so that data may be relocated."
  - interval: 1m
    input_series:
     - series: 'ceph_health_detail{name="DEVICE_HEALTH_IN_USE"}'
@@ -1754,15 +1754,15 @@ tests:
    alert_rule_test:
     # PG_AVAILABILITY and OSD_DOWN not firing .. no alert
     - eval_time: 1m
-      alertname: CephPGUnavilableBlockingIO
+      alertname: CephPGUnavailableBlockingIO
       exp_alerts:
     # PG_AVAILABILITY firing, but osd_down is active .. no alert
     - eval_time: 5m
-      alertname: CephPGUnavilableBlockingIO
+      alertname: CephPGUnavailableBlockingIO
       exp_alerts:
     # PG_AVAILABILITY firing, AND OSD_DOWN is not active...raise the alert
     - eval_time: 15m
-      alertname: CephPGUnavilableBlockingIO
+      alertname: CephPGUnavailableBlockingIO
       exp_alerts:
       - exp_labels:
           name: "PG_AVAILABILITY"

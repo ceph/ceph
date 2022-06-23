@@ -196,7 +196,7 @@ groups:
           type: "ceph_default"
       - alert: "CephDeviceFailurePredictionTooHigh"
         annotations:
-          description: "The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availabililty. Prevent data integrity issues by adding new OSDs so that data may be relocated."
+          description: "The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availability. Prevent data integrity issues by adding new OSDs so that data may be relocated."
           documentation: "https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-toomany"
           summary: "Too many devices are predicted to fail, unable to resolve"
         expr: "ceph_health_detail{name=\"DEVICE_HEALTH_TOOMANY\"} == 1"
@@ -393,7 +393,7 @@ groups:
           oid: "1.3.6.1.4.1.50495.1.2.1.7.5"
           severity: "critical"
           type: "ceph_default"
-      - alert: "CephPGUnavilableBlockingIO"
+      - alert: "CephPGUnavailableBlockingIO"
         annotations:
           description: "Data availability is reduced, impacting the cluster's ability to service I/O. One or more placement groups (PGs) are in a state that blocks I/O."
           documentation: "https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-availability"
@@ -597,7 +597,7 @@ groups:
       - alert: "CephadmDaemonFailed"
         annotations:
           description: "A daemon managed by cephadm is no longer active. Determine, which daemon is down with 'ceph health detail'. you may start daemons with the 'ceph orch daemon start <daemon_id>'"
-          summary: "A ceph daemon manged by cephadm is down"
+          summary: "A ceph daemon managed by cephadm is down"
         expr: "ceph_health_detail{name=\"CEPHADM_FAILED_DAEMON\"} > 0"
         for: "30s"
         labels:

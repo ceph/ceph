@@ -50,7 +50,7 @@ describe('Notification page', () => {
     notification.getToast().should('not.exist');
     notification.open();
     notification.getNotifications().should('have.length.gt', 0);
-    notification.getClearNotficationsBtn().should('be.visible');
+    notification.getClearNotificationsBtn().should('be.visible');
     notification.clearNotifications();
   });
 });
