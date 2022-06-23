@@ -4965,7 +4965,7 @@ Detailed Changelog
 * rgw: scheduler (`pr#26008 <https://github.com/ceph/ceph/pull/26008>`_, Casey Bodley, Abhishek Lekshmanan)
 * rgw: set cr state if aio_read err return in RGWCloneMetaLogCoroutine (`issue#24566 <http://tracker.ceph.com/issues/24566>`_, `pr#22617 <https://github.com/ceph/ceph/pull/22617>`_, Tianshan Qu)
 * rgw: set default objecter_inflight_ops = 24576 (`issue#25109 <http://tracker.ceph.com/issues/25109>`_, `pr#23242 <https://github.com/ceph/ceph/pull/23242>`_, Matt Benjamin)
-* rgw:  should recode  canonical_uri when caculate s3 v4 auth (`issue#23587 <http://tracker.ceph.com/issues/23587>`_, `pr#21286 <https://github.com/ceph/ceph/pull/21286>`_, yuliyang)
+* rgw:  should recode  canonical_uri when calculate s3 v4 auth (`issue#23587 <http://tracker.ceph.com/issues/23587>`_, `pr#21286 <https://github.com/ceph/ceph/pull/21286>`_, yuliyang)
 * rgw: some fix for es sync (`issue#23842 <http://tracker.ceph.com/issues/23842>`_, `issue#23841 <http://tracker.ceph.com/issues/23841>`_, `pr#21622 <https://github.com/ceph/ceph/pull/21622>`_, Tianshan Qu, Shang Ding)
 * rgw: support admin rest api get user info through user's access-key (`pr#22790 <https://github.com/ceph/ceph/pull/22790>`_, yuliyang)
 * rgw: support server-side encryption when SSL is terminated in a proxy (`issue#27221 <http://tracker.ceph.com/issues/27221>`_, `pr#24700 <https://github.com/ceph/ceph/pull/24700>`_, Casey Bodley)
