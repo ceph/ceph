@@ -15,7 +15,7 @@
  * Introduced a conversion function in include/compat.h
  *     (uint64_t)ceph_pthread_self()
  *
- * libc returns an opague pthread_t that is not default convertable
+ * libc returns an opaque pthread_t that is not default convertable
  * to a uint64_t, which is what gtest expects.
  * And tests using gtest will not compile because of this difference.
  * 
