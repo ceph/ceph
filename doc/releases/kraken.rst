@@ -1702,7 +1702,7 @@ Notable Changes
 * cephfs: mds/CDir: remove the part of judgment for _next_dentry_on_set (`pr#10476 <http://github.com/ceph/ceph/pull/10476>`_, zhang.zezhu)
 * cephfs: mds/CInode: fix potential fin hanging (`pr#9773 <http://github.com/ceph/ceph/pull/9773>`_, xie xingguo)
 * cephfs: mds/MDBalancer: cleanup (`pr#10512 <http://github.com/ceph/ceph/pull/10512>`_, huanwen ren)
-* cephfs: mds/MDCache: kill a comipler warning (`pr#11254 <http://github.com/ceph/ceph/pull/11254>`_, xie xingguo)
+* cephfs: mds/MDCache: kill a compiler warning (`pr#11254 <http://github.com/ceph/ceph/pull/11254>`_, xie xingguo)
 * cephfs: mds/MDSMap default metadata pool to -1 (was: output None instead of 0 when no fs present.) (`issue#16588 <http://tracker.ceph.com/issues/16588>`_, `pr#10202 <http://github.com/ceph/ceph/pull/10202>`_, Xiaoxi Chen)
 * cephfs: mds/MDSTable: add const to member functions (`pr#10846 <http://github.com/ceph/ceph/pull/10846>`_, Michal Jarzabek)
 * cephfs: mds/SessionMap.h: change statement to assertion (`pr#11289 <http://github.com/ceph/ceph/pull/11289>`_, Michal Jarzabek)
