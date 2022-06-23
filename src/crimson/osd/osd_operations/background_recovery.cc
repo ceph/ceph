@@ -91,7 +91,7 @@ seastar::future<> BackgroundRecoveryT<T>::start()
           }, pg);
         }).handle_exception_type([ref, this](const std::system_error& err) {
           if (err.code() == std::make_error_code(std::errc::interrupted)) {
-            logger().debug("{} recovery interruped: {}", *pg, err.what());
+            logger().debug("{} recovery interrupted: {}", *pg, err.what());
             return seastar::now();
           }
           return seastar::make_exception_future<>(err);

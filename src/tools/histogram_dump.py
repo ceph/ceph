@@ -121,7 +121,7 @@ def loop_print(sockets, counter, loop_seconds, batch):
            print(content)
            time.sleep(loop_seconds)
     except KeyboardInterrupt:
-       print("...interupted")
+       print("...interrupted")
        sys.exit(0)
 
 
