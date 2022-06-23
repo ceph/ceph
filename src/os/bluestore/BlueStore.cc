@@ -18011,7 +18011,7 @@ void BlueStore::BlueStoreThrottle::complete(TransContext &txc)
 const string prefix_onode = "o";
 const string prefix_onode_shard = "x";
 const string prefix_other = "Z";
-//Itrerates through the db and collects the stats
+//Iterates through the db and collects the stats
 void BlueStore::generate_db_histogram(Formatter *f)
 {
   //globals
