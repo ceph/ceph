@@ -1,6 +1,6 @@
 meta:
 - desc: |
-   run run randomized correctness test for rados operations
+   run randomized correctness test for rados operations
    on an erasure-coded pool
 workload:
   full_sequential:
