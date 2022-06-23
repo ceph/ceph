@@ -4439,7 +4439,7 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   ceph_assert(b->get_blob().get_logical_length() != 0);
 
   // Do get_ref prior to punch_hole to prevent from putting reused blob into 
-  // old_extents list if we overwre the blob totally
+  // old_extents list if we overwrite the blob totally
   // This might happen during WAL overwrite.
   b->get_ref(onode->c, blob_offset, length);
 
