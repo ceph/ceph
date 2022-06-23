@@ -53,7 +53,7 @@ class OSDMap:
     # This is an artificial class to help
     # _osd_in_out function have all the 
     # necessary characteristics, some
-    # of the funcitons are copied from
+    # of the functions are copied from
     # mgr_module
 
     def __init__(self, dump, pg_stats):

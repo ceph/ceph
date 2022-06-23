@@ -454,7 +454,7 @@ template <bool IsNoexcept>
 throw_or_abort(std::false_type /*is_throwing*/) noexcept {
   std::abort();
 }
-/// Throws bad_function_call on empty funciton calls
+/// Throws bad_function_call on empty function calls
 [[noreturn]] inline void throw_or_abort(std::true_type /*is_throwing*/) {
 #ifdef FU2_HAS_DISABLED_EXCEPTIONS
   throw_or_abort(std::false_type{});
