@@ -348,7 +348,7 @@ public class CephMountTest {
     String newpath = makePath();
     mount.rename(path, newpath);
 
-    /* verfiy the sizes are the same */
+    /* verify the sizes are the same */
     CephStat st = new CephStat();
     mount.lstat(newpath, st);
     assertTrue(st.size == 1);

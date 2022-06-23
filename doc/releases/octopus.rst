@@ -5425,7 +5425,7 @@ Changelog
 * rgw,tests: qa: bump maven repo version in s3a_hadoop.py (`pr#30531 <https://github.com/ceph/ceph/pull/30531>`_, Ali Maredia)
 * rgw,tests: qa: radosgw-admin: remove dependency on bunch package (`pr#32100 <https://github.com/ceph/ceph/pull/32100>`_, Yehuda Sadeh)
 * rgw,tests: qa: radosgw_admin: validate a simple user stats output (`pr#30684 <https://github.com/ceph/ceph/pull/30684>`_, Abhishek Lekshmanan)
-* rgw,tests: qa: remove mon valgrind check in rgw verfiy suite (`issue#38827 <http://tracker.ceph.com/issues/38827>`_, `pr#28155 <https://github.com/ceph/ceph/pull/28155>`_, Ali Maredia)
+* rgw,tests: qa: remove mon valgrind check in rgw verify suite (`issue#38827 <http://tracker.ceph.com/issues/38827>`_, `pr#28155 <https://github.com/ceph/ceph/pull/28155>`_, Ali Maredia)
 * rgw,tests: qa: remove s3-tests from rados/basic/tasks/rgw_snaps.yml (`pr#32940 <https://github.com/ceph/ceph/pull/32940>`_, Ali Maredia)
 * rgw,tests: qa: rgw: add user-policy caps for the s3tests users (`pr#31127 <https://github.com/ceph/ceph/pull/31127>`_, Abhishek Lekshmanan)
 * rgw,tests: qa: use curl in wait_for_radosgw() in util/rgw.py (`pr#28521 <https://github.com/ceph/ceph/pull/28521>`_, Ali Maredia)

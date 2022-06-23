@@ -20,7 +20,7 @@ class WeightedPriorityQueueTest : public testing::Test
 {
 protected:
   typedef unsigned Klass;
-  // tuple<Prio, Klass, OpID> so that we can verfiy the op
+  // tuple<Prio, Klass, OpID> so that we can verify the op
   typedef std::tuple<unsigned, unsigned, unsigned> Item;
   typedef unsigned Prio;
   typedef unsigned Kost;
