@@ -2450,7 +2450,7 @@ Detailed Changelog
 * core: librados.h:  add LIBRADOS_SUPPORTS_APP_METADATA (`pr#16542 <https://github.com/ceph/ceph/pull/16542>`_, Matt Benjamin)
 * core: libradosstriper: fix the function declaration of rados_striper_trunc (`pr#20301 <https://github.com/ceph/ceph/pull/20301>`_, yuelongguang)
 * core: libradosstriper: silence warning from -Wreorder (`pr#16890 <https://github.com/ceph/ceph/pull/16890>`_, songweibin)
-* core: make the main dout() paths faster and more maintanable (`pr#20290 <https://github.com/ceph/ceph/pull/20290>`_, Radoslaw Zarzynski)
+* core: make the main dout() paths faster and more maintainable (`pr#20290 <https://github.com/ceph/ceph/pull/20290>`_, Radoslaw Zarzynski)
 * core: messages: Initialization of variable beat (`pr#17641 <https://github.com/ceph/ceph/pull/17641>`_, Amit Kumar)
 * core: messages: Initialize member variables (`pr#16846 <https://github.com/ceph/ceph/pull/16846>`_, amitkuma)
 * core: messages: initialize variable tid in MMDSFindIno (`pr#16793 <https://github.com/ceph/ceph/pull/16793>`_, amitkuma)
