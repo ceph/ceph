@@ -82,7 +82,7 @@ struct cpu_set_t;
 // And when this case occurs it is due to the fact that boost files
 // are included before this file. Redefinition might not help in this
 // case since already parsed code has evaluated to the wrong value.
-// This would warrrant for d definition that would actually be evaluated
+// This would warrant for d definition that would actually be evaluated
 // at the location of usage and report a possible conflict.
 // This is left up to a future improvement
 #elif (ENODATA != 87)
