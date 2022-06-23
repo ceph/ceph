@@ -121,7 +121,7 @@ static int bl_le(lua_State *L)
 }
 
 /*
- * Bufferlist concatentation
+ * Bufferlist concatenation
  */
 static int bl_concat(lua_State *L)
 {
