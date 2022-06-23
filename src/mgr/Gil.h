@@ -80,7 +80,7 @@ private:
 // 2. always hold a GIL when calling python functions, for example, when
 //    constructing a PyFormatter instance.
 //
-// a wrapper that provides a convenient RAII-style mechinary for acquiring
+// a wrapper that provides a convenient RAII-style machinery for acquiring
 // and releasing GIL, like the macros of Py_BEGIN_ALLOW_THREADS and
 // Py_END_ALLOW_THREADS.
 struct without_gil_t {
