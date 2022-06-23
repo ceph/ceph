@@ -194,7 +194,7 @@ struct string_key_view_t {
  *
  * A common class to hide the underlying string implementation regardless of a
  * string_key_view_t (maybe compressed), a string/string_view, or a compressed
- * string. And leverage this consistant class to do compare, print, convert and
+ * string. And leverage this consistent class to do compare, print, convert and
  * append operations.
  */
 class string_view_masked_t {
