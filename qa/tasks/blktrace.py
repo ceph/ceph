@@ -68,7 +68,7 @@ def execute(ctx, config):
         yield
     finally:
         osds = ctx.cluster.only(teuthology.is_type('osd'))
-        log.info('stopping blktrace processs')
+        log.info('stopping blktrace processes')
         for proc in procs:
             proc.stdin.close()
 
