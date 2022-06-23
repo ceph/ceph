@@ -2328,7 +2328,7 @@ Changelog
 * mgr/orchestrator: Add error handling to interface (`issue#38837 <http://tracker.ceph.com/issues/38837>`_, `pr#27095 <https://github.com/ceph/ceph/pull/27095>`_, Sebastian Wagner)
 * mgr/pg_autoscaler: add pg_autoscale_bias (`pr#27387 <https://github.com/ceph/ceph/pull/27387>`_, Sage Weil)
 * mgr:  mgr/dashboard: Error on iSCSI target submission (`pr#27461 <https://github.com/ceph/ceph/pull/27461>`_, Ricardo Marques)
-* mgr: ceph-mgr:  ImportError: Interpreter change detected - this module can only be loaded into one interprer per process (`issue#38865 <http://tracker.ceph.com/issues/38865>`_, `pr#27128 <https://github.com/ceph/ceph/pull/27128>`_, Tim Serong)
+* mgr: ceph-mgr:  ImportError: Interpreter change detected - this module can only be loaded into one interpret per process (`issue#38865 <http://tracker.ceph.com/issues/38865>`_, `pr#27128 <https://github.com/ceph/ceph/pull/27128>`_, Tim Serong)
 * mgr: mgr/DaemonServer: handle_conf_change - fix broken locking (`issue#38964 <http://tracker.ceph.com/issues/38964>`_, `issue#38899 <http://tracker.ceph.com/issues/38899>`_, `pr#27454 <https://github.com/ceph/ceph/pull/27454>`_, xie xingguo)
 * mgr: mgr/balancer: Python 3 compatibility fix (`issue#38831 <http://tracker.ceph.com/issues/38831>`_, `issue#38855 <http://tracker.ceph.com/issues/38855>`_, `pr#27227 <https://github.com/ceph/ceph/pull/27227>`_, Marius Schiffer)
 * mgr: mgr/dashboard: Check if gateway is in use before allowing the deletion via `iscsi-gateway-rm` command (`pr#27457 <https://github.com/ceph/ceph/pull/27457>`_, Ricardo Marques)
