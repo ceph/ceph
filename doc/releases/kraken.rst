@@ -1814,7 +1814,7 @@ Notable Changes
 * core: cephx: Fix multiple segfaults due to attempts to encrypt or decrypt (`issue#16266 <http://tracker.ceph.com/issues/16266>`_, `pr#9703 <http://github.com/ceph/ceph/pull/9703>`_, Brad Hubbard)
 * core: https://github.com/ceph/ceph/pull/11052 (`pr#10371 <http://github.com/ceph/ceph/pull/10371>`_, Yan Jun)
 * core: include write error codes in the pg log (`issue#14468 <http://tracker.ceph.com/issues/14468>`_, `pr#10170 <http://github.com/ceph/ceph/pull/10170>`_, Josh Durgin)
-* core: kv/MemDB: fix assert triggerred by m_total_bytes underflow (`pr#10471 <http://github.com/ceph/ceph/pull/10471>`_, xie xingguo)
+* core: kv/MemDB: fix assert triggered by m_total_bytes underflow (`pr#10471 <http://github.com/ceph/ceph/pull/10471>`_, xie xingguo)
 * core: kv/RocksDB: add perfcounter for submit_transaction_sync operation (`pr#9770 <http://github.com/ceph/ceph/pull/9770>`_, Haodong Tang)
 * core: logmon: check is_leader() before doing any work on get_trim_to() (`pr#10342 <http://github.com/ceph/ceph/pull/10342>`_, song baisen)
 * core: memstore: clone zero-fills holes from source range (`pr#11157 <http://github.com/ceph/ceph/pull/11157>`_, Casey Bodley)
