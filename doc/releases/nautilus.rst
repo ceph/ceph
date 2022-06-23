@@ -391,7 +391,7 @@ Changelog
 * nautilus: os/bluestore: fix segfault on out-of-bound offset provided to  claim\_… (`pr#38637 <https://github.com/ceph/ceph/pull/38637>`_, Igor Fedotov)
 * nautilus: os/bluestore: go beyond pinned onodes while trimming the cache (`pr#39720 <https://github.com/ceph/ceph/pull/39720>`_, Igor Fedotov)
 * nautilus: os/bluestore: mempool's finer granularity + adding missed structs (`pr#38310 <https://github.com/ceph/ceph/pull/38310>`_, Deepika Upadhyay, Igor Fedotov, Adam Kupczyk)
-* nautilus: osd: Check for nosrub/nodeep-scrub in between chunks, to avoid races (`pr#38411 <https://github.com/ceph/ceph/pull/38411>`_, David Zafman)
+* nautilus: osd: Check for noscrub/nodeep-scrub in between chunks, to avoid races (`pr#38411 <https://github.com/ceph/ceph/pull/38411>`_, David Zafman)
 * nautilus: osd: fix bluestore bitmap allocator calculate wrong last_pos with hint (`pr#39708 <https://github.com/ceph/ceph/pull/39708>`_, Xue Yantao)
 * nautilus: osd: optimize PG removal (part1) (`pr#38478 <https://github.com/ceph/ceph/pull/38478>`_, Neha Ojha, Igor Fedotov)
 * nautilus: pybind/ceph_volume_client: Update the 'volumes' key to 'subvolumes' in auth-metadata file (`pr#39658 <https://github.com/ceph/ceph/pull/39658>`_, Kotresh HR, Michael Fritch)

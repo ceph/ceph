@@ -1070,7 +1070,7 @@ Changelog
 * msg/async/ProtocolV2: allow rxbuf/txbuf get bigger in testing (`pr#37080 <https://github.com/ceph/ceph/pull/37080>`_, Ilya Dryomov)
 * os/bluestore: enable more flexible bluefs space management by default (`pr#37092 <https://github.com/ceph/ceph/pull/37092>`_, Igor Fedotov)
 * osd/osd-rep-recov-eio.sh: TEST_rados_repair_warning:  return 1 (`pr#37853 <https://github.com/ceph/ceph/pull/37853>`_, David Zafman)
-* osd: Check for nosrub/nodeep-scrub in between chunks, to avoid races (`pr#38359 <https://github.com/ceph/ceph/pull/38359>`_, David Zafman)
+* osd: Check for noscrub/nodeep-scrub in between chunks, to avoid races (`pr#38359 <https://github.com/ceph/ceph/pull/38359>`_, David Zafman)
 * osdc/ObjectCacher: overwrite might cause stray read request callbacks (`pr#37674 <https://github.com/ceph/ceph/pull/37674>`_, Jason Dillaman)
 * osdc: add timeout configs for mons/osds (`pr#37530 <https://github.com/ceph/ceph/pull/37530>`_, Patrick Donnelly)
 * prometheus: Properly split the port off IPv6 addresses (`pr#36985 <https://github.com/ceph/ceph/pull/36985>`_, Matthew Oliver)
