@@ -13,7 +13,7 @@
  * ============
  *
  * This is a common read/write reference framework, which will work
- * simliarly to a RW lock, the difference here is that for the "readers"
+ * similarly to a RW lock, the difference here is that for the "readers"
  * they won't hold any lock but will increase a reference instead when
  * the "require" state is matched, or set a flag to tell the callers
  * that the "require" state is not matched and also there is no any
