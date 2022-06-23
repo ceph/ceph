@@ -3256,7 +3256,7 @@ Other Notable Changes
 * cmake: support optional argument for overriding default ctag excludes (`pr#14379 <https://github.com/ceph/ceph/pull/14379>`_, Kefu Chai)
 * cmake: turn libcommon into a shared library (`pr#12840 <https://github.com/ceph/ceph/pull/12840>`_, Kefu Chai)
 * cmake: use CMAKE_INSTALL_INCLUDEDIR (`pr#16483 <https://github.com/ceph/ceph/pull/16483>`_, David Disseldorp)
-* cmake: workaound ccache issue with .S assembly files (`pr#15142 <https://github.com/ceph/ceph/pull/15142>`_, Bassam Tabbara)
+* cmake: workaround ccache issue with .S assembly files (`pr#15142 <https://github.com/ceph/ceph/pull/15142>`_, Bassam Tabbara)
 * common: add ceph::size() (`pr#15181 <https://github.com/ceph/ceph/pull/15181>`_, Kefu Chai)
 * common: add override in common and misc (`issue#18922 <http://tracker.ceph.com/issues/18922>`_, `pr#13443 <https://github.com/ceph/ceph/pull/13443>`_, liuchang0812)
 * common: add override in header file (`pr#13774 <https://github.com/ceph/ceph/pull/13774>`_, liuchang0812)
