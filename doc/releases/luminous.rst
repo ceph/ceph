@@ -1804,7 +1804,7 @@ Other Notable Changes
 * rgw: multisite: Get bucket location which is located in another zonegroup, will return 301 Moved Permanently (`issue#21125 <http://tracker.ceph.com/issues/21125>`_, `pr#17857 <https://github.com/ceph/ceph/pull/17857>`_, Shasha Lu)
 * rgw: multisite: race between sync of bucket and bucket instance metadata (`issue#21990 <http://tracker.ceph.com/issues/21990>`_, `pr#18767 <https://github.com/ceph/ceph/pull/18767>`_, Casey Bodley)
 * rgw: policy checks missing from Get/SetRequestPayment operations (`issue#21389 <http://tracker.ceph.com/issues/21389>`_, `pr#18440 <https://github.com/ceph/ceph/pull/18440>`_, Adam C. Emerson)
-* rgw: radosgw-admin usage show loops indefinitly (`issue#21196 <http://tracker.ceph.com/issues/21196>`_, `pr#18437 <https://github.com/ceph/ceph/pull/18437>`_, Mark Kogan)
+* rgw: radosgw-admin usage show loops indefinitely (`issue#21196 <http://tracker.ceph.com/issues/21196>`_, `pr#18437 <https://github.com/ceph/ceph/pull/18437>`_, Mark Kogan)
 * rgw: rgw_file: explicit NFSv3 open() emulation (`issue#21854 <http://tracker.ceph.com/issues/21854>`_, `pr#18446 <https://github.com/ceph/ceph/pull/18446>`_, Matt Benjamin)
 * rgw: rgw_file: fix write error when the write offset overlaps (`issue#21455 <http://tracker.ceph.com/issues/21455>`_, `pr#18004 <https://github.com/ceph/ceph/pull/18004>`_, Yao Zongyou)
 * rgw: rgw file write error (`issue#21455 <http://tracker.ceph.com/issues/21455>`_, `pr#18433 <https://github.com/ceph/ceph/pull/18433>`_, Yao Zongyou)
