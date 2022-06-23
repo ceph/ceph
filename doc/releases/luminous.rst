@@ -1362,7 +1362,7 @@ Other Notable Changes
 * msg/async: size of EventCenter::file_events should be greater than fd (`issue#23253 <http://tracker.ceph.com/issues/23253>`_, `issue#23306 <http://tracker.ceph.com/issues/23306>`_, `pr#20867 <https://github.com/ceph/ceph/pull/20867>`_, Yupeng Chen)
 * Objecter: add ignore overlay flag if got redirect reply (`pr#20766 <https://github.com/ceph/ceph/pull/20766>`_, Ting Yi Lin)
 * os/bluestore: avoid overhead of std::function in blob_t (`pr#20674 <https://github.com/ceph/ceph/pull/20674>`_, Radoslaw Zarzynski)
-* os/bluestore: avoid unneeded BlobRefing in _do_read() (`pr#20675 <https://github.com/ceph/ceph/pull/20675>`_, Radoslaw Zarzynski)
+* os/bluestore: avoid unneeded BlobReffing in _do_read() (`pr#20675 <https://github.com/ceph/ceph/pull/20675>`_, Radoslaw Zarzynski)
 * os/bluestore: backport fixes around _reap_collection (`pr#20964 <https://github.com/ceph/ceph/pull/20964>`_, Jianpeng Ma)
 * os/bluestore: change the type of aio_t:res to long (`issue#23527 <http://tracker.ceph.com/issues/23527>`_, `issue#23544 <http://tracker.ceph.com/issues/23544>`_, `pr#21231 <https://github.com/ceph/ceph/pull/21231>`_, kungf)
 * os/bluestore: _dump_onode() don't prolongate Onode anymore (`pr#20676 <https://github.com/ceph/ceph/pull/20676>`_, Radoslaw Zarzynski)

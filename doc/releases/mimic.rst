@@ -1899,7 +1899,7 @@ Detailed Changelog
 * bluestore: os/bluestore: avoid excessive ops in _txc_release_alloc (`pr#18854 <https://github.com/ceph/ceph/pull/18854>`_, Igor Fedotov)
 * bluestore: os/bluestore: avoid omit cache for remove-collection (`pr#18785 <https://github.com/ceph/ceph/pull/18785>`_, Jianpeng Ma)
 * bluestore: os/bluestore: avoid overhead of std::function in blob_t (`pr#20294 <https://github.com/ceph/ceph/pull/20294>`_, Radoslaw Zarzynski)
-* bluestore: os/bluestore: avoid unneeded BlobRefing in _do_read() (`pr#19864 <https://github.com/ceph/ceph/pull/19864>`_, Radoslaw Zarzynski)
+* bluestore: os/bluestore: avoid unneeded BlobReffing in _do_read() (`pr#19864 <https://github.com/ceph/ceph/pull/19864>`_, Radoslaw Zarzynski)
 * bluestore: os/bluestore: be more verbose when hitting unloaded shard in extent map (`pr#21245 <https://github.com/ceph/ceph/pull/21245>`_, Igor Fedotov)
 * bluestore: os/bluestore/BlueFS: compact log even when sync_metadata sees no work (`pr#17354 <https://github.com/ceph/ceph/pull/17354>`_, Sage Weil)
 * bluestore: os/bluestore/BlueFS: Don't call debug related code under any condition (`pr#17627 <https://github.com/ceph/ceph/pull/17627>`_, Jianpeng Ma)
