@@ -486,7 +486,7 @@ int ceph_flags_sys2wire(int flags);
 #define CEPH_READDIR_HASH_ORDER		(1<<9)
 #define CEPH_READDIR_OFFSET_HASH       (1<<10)
 
-/* Note that this is embedded wthin ceph_mds_request_head_legacy. */
+/* Note that this is embedded within ceph_mds_request_head_legacy. */
 union ceph_mds_request_args_legacy {
 	struct {
 		__le32 mask;                 /* CEPH_CAP_* */
@@ -560,7 +560,7 @@ struct ceph_mds_request_head_legacy {
 } __attribute__ ((packed));
 
 /*
- * Note that this is embedded wthin ceph_mds_request_head. Also, compatibility
+ * Note that this is embedded within ceph_mds_request_head. Also, compatibility
  * with the ceph_mds_request_args_legacy must be maintained!
  */
 union ceph_mds_request_args {
