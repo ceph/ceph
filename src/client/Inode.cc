@@ -779,7 +779,7 @@ void Inode::unset_deleg(Fh *fh)
 void Inode::mark_caps_dirty(int caps)
 {
   /*
-   * If auth_cap is nullptr means the reonnecting is not finished or
+   * If auth_cap is nullptr means the reconnecting is not finished or
    * already rejected.
    */
   if (!auth_cap) {
