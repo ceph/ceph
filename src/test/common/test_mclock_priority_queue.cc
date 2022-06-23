@@ -148,7 +148,7 @@ TEST(mClockPriorityQueue, JustNotStrict)
   Client c1(1);
   Client c2(2);
 
-  // non-strict queue ignores priorites, but will divide between
+  // non-strict queue ignores priorities, but will divide between
   // clients evenly and maintain orders between clients
   q.enqueue(c1, 1, 1u, Request(1));
   q.enqueue(c1, 2, 1u, Request(2));
@@ -182,7 +182,7 @@ TEST(mClockPriorityQueue, EnqueueFront)
   Client c1(1);
   Client c2(2);
 
-  // non-strict queue ignores priorites, but will divide between
+  // non-strict queue ignores priorities, but will divide between
   // clients evenly and maintain orders between clients
   q.enqueue(c1, 1, 1u, Request(1));
   q.enqueue(c1, 2, 1u, Request(2));
