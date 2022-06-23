@@ -19,7 +19,7 @@ class HealthEncoder(json.JSONEncoder):
 
 class HealthCheckAccumulator(object):
     """
-    Deuplicated storage of health checks.
+    Deduplicated storage of health checks.
     """
 
     def __init__(self, init_checks=None):
