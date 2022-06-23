@@ -12,7 +12,7 @@ private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 public:
-  // metrics messsage (client -> metrics map, rank, etc..)
+  // metrics message (client -> metrics map, rank, etc..)
   metrics_message_t metrics_message;
 
 protected:
