@@ -287,7 +287,7 @@ private:
    * list of connection are closed which need to be clean up
    *
    * Because AsyncMessenger and AsyncConnection follow a lock rule that
-   * we can lock AsyncMesenger::lock firstly then lock AsyncConnection::lock
+   * we can lock AsyncMessenger::lock firstly then lock AsyncConnection::lock
    * but can't reversed. This rule is aimed to avoid dead lock.
    * So if AsyncConnection want to unregister itself from AsyncMessenger,
    * we pick up this idea that just queue itself to this set and do lazy
