@@ -481,7 +481,7 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 // libstdc++'s std::equal is specialized to use memcmp if T is integer or
 // pointer. this is good enough for our usecase. use
 // std::is_trivially_copyable<T> to expand the support to more types if
-// nececssary.
+// necessary.
 template<typename T, mempool::pool_index_t pool_index>
 bool operator==(const std::vector<T, std::allocator<T>>& lhs,
 		const std::vector<T, mempool::pool_allocator<pool_index, T>>& rhs)
