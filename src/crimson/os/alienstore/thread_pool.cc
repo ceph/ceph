@@ -58,7 +58,7 @@ void ThreadPool::block_sighup()
   sigemptyset(&sigs);
   // alien threads must ignore the SIGHUP. It's necessary as in
   // `crimson/osd/main.cc` we set a handler using the Seastar's
-  // signal handling infrastrucute which assumes the `_backend`
+  // signal handling infrastructure which assumes the `_backend`
   // of `seastar::engine()` is not null. Grep `reactor.cc` for
   // `sigaction` or just visit `reactor::signals::handle_signal()`.
   sigaddset(&sigs, SIGHUP);
