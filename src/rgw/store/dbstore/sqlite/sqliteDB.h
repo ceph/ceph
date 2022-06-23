@@ -34,7 +34,6 @@ class SQLiteDB : public DB, virtual public DBOp {
     void *openDB(const DoutPrefixProvider *dpp) override;
     int closeDB(const DoutPrefixProvider *dpp) override;
     int InitializeDBOps(const DoutPrefixProvider *dpp) override;
-    int FreeDBOps(const DoutPrefixProvider *dpp) override;
 
     int InitPrepareParams(const DoutPrefixProvider *dpp, DBOpPrepareParams &p_params,
                           DBOpParams* params) override;
@@ -82,7 +81,6 @@ class SQLObjectOp : public ObjectOp {
     ~SQLObjectOp() {}
 
     int InitializeObjectOps(std::string db_name, const DoutPrefixProvider *dpp);
-    int FreeObjectOps(const DoutPrefixProvider *dpp);
 };
 
 class SQLInsertUser : public SQLiteDB, public InsertUserOp {
