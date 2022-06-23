@@ -1414,7 +1414,7 @@ Other Notable Changes
 * rgw: reject encrypted object COPY before supported (`issue#23232 <http://tracker.ceph.com/issues/23232>`_, `issue#23346 <http://tracker.ceph.com/issues/23346>`_, `pr#20937 <https://github.com/ceph/ceph/pull/20937>`_, Jeegn Chen)
 * rgw: rgw: reshard cancel command should clear bucket resharding flag (`issue#21619 <http://tracker.ceph.com/issues/21619>`_, `pr#21389 <https://github.com/ceph/ceph/pull/21389>`_, Orit Wasserman)
 * rgw: s3website error handler uses original object name (`issue#23201 <http://tracker.ceph.com/issues/23201>`_, `issue#23310 <http://tracker.ceph.com/issues/23310>`_, `pr#20889 <https://github.com/ceph/ceph/pull/20889>`_, Casey Bodley)
-* rgw: upldate the max-buckets when the quota is uploaded (`issue#23022 <http://tracker.ceph.com/issues/23022>`_, `pr#20477 <https://github.com/ceph/ceph/pull/20477>`_, zhaokun)
+* rgw: update the max-buckets when the quota is uploaded (`issue#23022 <http://tracker.ceph.com/issues/23022>`_, `pr#20477 <https://github.com/ceph/ceph/pull/20477>`_, zhaokun)
 * rgw: usage log fixes (`issue#23686 <http://tracker.ceph.com/issues/23686>`_, `issue#23758 <http://tracker.ceph.com/issues/23758>`_, `pr#21388 <https://github.com/ceph/ceph/pull/21388>`_, Yehuda Sadeh, Greg Farnum, Robin H. Johnson)
 * rocksdb: incorporate the fix in RocksDB for no fast CRC32 path (`issue#22534 <http://tracker.ceph.com/issues/22534>`_, `pr#20825 <https://github.com/ceph/ceph/pull/20825>`_, Radoslaw Zarzynski)
 * scrub errors not cleared on replicas can cause inconsistent pg state when replica takes over primary (`issue#23267 <http://tracker.ceph.com/issues/23267>`_, `pr#21103 <https://github.com/ceph/ceph/pull/21103>`_, David Zafman)

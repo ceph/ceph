@@ -201,7 +201,7 @@ Changelog
 * rgw: stale bucket index entry remains after object deletion (`issue#22555 <http://tracker.ceph.com/issues/22555>`_, `pr#20293 <https://github.com/ceph/ceph/pull/20293>`_, J. Eric Ivancich)
 * rgw: system user can't delete bucket completely (`issue#22248 <http://tracker.ceph.com/issues/22248>`_, `pr#21212 <https://github.com/ceph/ceph/pull/21212>`_, Casey Bodley)
 * rgw: tcmalloc (`issue#23469 <http://tracker.ceph.com/issues/23469>`_, `pr#21073 <https://github.com/ceph/ceph/pull/21073>`_, Matt Benjamin)
-* rgw: upldate the max-buckets when the quota is uploaded (`issue#22745 <http://tracker.ceph.com/issues/22745>`_, `pr#20496 <https://github.com/ceph/ceph/pull/20496>`_, zhaokun)
+* rgw: update the max-buckets when the quota is uploaded (`issue#22745 <http://tracker.ceph.com/issues/22745>`_, `pr#20496 <https://github.com/ceph/ceph/pull/20496>`_, zhaokun)
 * rgw: user creation can overwrite existing user even if different uid is given (`issue#21685 <http://tracker.ceph.com/issues/21685>`_, `pr#20074 <https://github.com/ceph/ceph/pull/20074>`_, Casey Bodley)
 * RHEL 7.3 Selinux denials at OSD start (`issue#19200 <http://tracker.ceph.com/issues/19200>`_, `pr#18780 <https://github.com/ceph/ceph/pull/18780>`_, Boris Ranto)
 * scrub errors not cleared on replicas can cause inconsistent pg state when replica takes over primary (`issue#23267 <http://tracker.ceph.com/issues/23267>`_, `pr#21194 <https://github.com/ceph/ceph/pull/21194>`_, David Zafman)
