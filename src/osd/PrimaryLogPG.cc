@@ -6013,7 +6013,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     auto bp = osd_op.indata.cbegin();
 
-    // user-visible modifcation?
+    // user-visible modification?
     switch (op.op) {
       // non user-visible modifications
     case CEPH_OSD_OP_WATCH:
