@@ -1331,7 +1331,7 @@ void shared_blob_2hash_tracker_t::inc_range(
   uint32_t alloc_unit = 1 << au_void_bits;
   int64_t l = len;
   while (l > 0) {
-    // don't care about ofset alignment as inc() trims it anyway
+    // don't care about offset alignment as inc() trims it anyway
     inc(sbid, offset, n);
     offset += alloc_unit;
     l -= alloc_unit;
@@ -1371,7 +1371,7 @@ bool shared_blob_2hash_tracker_t::test_all_zero_range(
   uint32_t alloc_unit = 1 << au_void_bits;
   int64_t l = len;
   while (l > 0) {
-    // don't care about ofset alignment as inc() trims it anyway
+    // don't care about offset alignment as inc() trims it anyway
     if (!test_all_zero(sbid, offset)) {
       return false;
     }
