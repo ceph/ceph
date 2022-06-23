@@ -840,7 +840,7 @@ static int mount_old_device_format(const char *node, struct ceph_mount_info *cmi
 /*
  * check whether to fall-back to using old-style mount syntax (called
  * when new-style mount syntax fails). this is mostly to catch any
- * new-style (v2) implementation bugs in the kernel and is primarly
+ * new-style (v2) implementation bugs in the kernel and is primarily
  * used in teuthology tests.
  */
 static bool should_fallback()
