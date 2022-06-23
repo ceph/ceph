@@ -2439,7 +2439,7 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
   case CEPH_SESSION_RECALL_STATE:
     /*
      * Call the renew caps and flush cap releases just before
-     * triming the caps in case the tick() won't get a chance
+     * trimming the caps in case the tick() won't get a chance
      * to run them, which could cause the client to be blocklisted
      * and MDS daemons trying to recall the caps again and
      * again.
