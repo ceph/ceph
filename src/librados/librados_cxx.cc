@@ -98,7 +98,7 @@ size_t librados::ObjectOperation::size()
     return 0;
 }
 
-//deprcated
+//deprecated
 void librados::ObjectOperation::set_op_flags(ObjectOperationFlags flags)
 {
   set_op_flags2((int)flags);
