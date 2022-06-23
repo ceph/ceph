@@ -1011,7 +1011,7 @@ private:
    * Generate a new Proposal Number based on @p gt
    *
    * @todo Check what @p gt actually means and what its usage entails
-   * @param gt A hint for the geration of the Proposal Number
+   * @param gt A hint for the generation of the Proposal Number
    * @return A globally unique, monotonically increasing Proposal Number
    */
   version_t get_new_proposal_number(version_t gt=0);
