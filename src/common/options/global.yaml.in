@@ -833,7 +833,7 @@ options:
     are client or daemon names (e.g., 'osd.0') and each section contains a 'key' property
     with CephX authentication key as the value.
   # please note, document are generated without accessing to the CMake
-  # variables, so please update the document manually with a representive
+  # variables, so please update the document manually with a representative
   # default value using the ":default:" option of ".. confval::" directive.
   default: @keyring_paths@
   see_also:
