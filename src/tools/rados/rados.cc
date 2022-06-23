@@ -144,7 +144,7 @@ void usage(ostream& out)
 "                                    set allocation hint for an object\n"
 "   set-redirect <object A> --target-pool <caspool> <target object A> [--with-reference]\n"
 "                                    set redirect target\n"
-"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset> [--with-reference]\n"
+"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <target-offset> [--with-reference]\n"
 "                                    convert an object to chunked object\n"
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
 "   unset-manifest <obj-name>	     unset redirect or chunked object\n"
