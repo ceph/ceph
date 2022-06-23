@@ -79,7 +79,7 @@ def create_histogram(sockets, counter, last, seconds, batch):
 
     current = []
 
-    # initalize with zeros
+    # initialize with zeros
     for i in range(len(current_datasets[socket])):
        current.append([])
        for j in range(len(current_datasets[socket][i])):
