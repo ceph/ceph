@@ -1905,7 +1905,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     // we simply added last_force_op_resend here, which is a fully
     // backward compatible change.  however, encoding the same map
     // differently between monitors triggers scrub noise (even though
-    // they are decodable without the feature), so let's be pendantic
+    // they are decodable without the feature), so let's be pedantic
     // about it.
     ENCODE_START(14, 5, bl);
     encode(type, bl);
