@@ -304,7 +304,7 @@ public:
    virtual nvme_command_ertr::future<> set_data_recovery_level(
      uint32_t level) { return nvme_command_ertr::now(); }
   /*
-   * For passsing through nvme IO or Admin command to SSD
+   * For passing through nvme IO or Admin command to SSD
    * Caller can construct and execute its own nvme command
    */
   nvme_command_ertr::future<int> pass_admin(

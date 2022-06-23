@@ -2040,7 +2040,7 @@ Notable Changes
 * mon: Elector:move C_ElectionExpire class to cc file (`pr#10416 <http://github.com/ceph/ceph/pull/10416>`_, Michal Jarzabek)
 * mon: HealthMonitor: add override to virtual functs (`pr#10549 <http://github.com/ceph/ceph/pull/10549>`_, Michal Jarzabek)
 * mon: HealthMonitor: remove unneeded include (`pr#10563 <http://github.com/ceph/ceph/pull/10563>`_, Michal Jarzabek)
-* mon: MonClient.h: delete copy constr and assing op (`pr#10599 <http://github.com/ceph/ceph/pull/10599>`_, Michal Jarzabek)
+* mon: MonClient.h: delete copy constr and passing op (`pr#10599 <http://github.com/ceph/ceph/pull/10599>`_, Michal Jarzabek)
 * mon: MonClient: move C_CancelMonCommand to cc file (`pr#10392 <http://github.com/ceph/ceph/pull/10392>`_, Michal Jarzabek)
 * mon: MonClient: move C_Tick struct to cc file (`pr#10383 <http://github.com/ceph/ceph/pull/10383>`_, Michal Jarzabek)
 * mon: Monitor.h: add override to virtual functions (`pr#10515 <http://github.com/ceph/ceph/pull/10515>`_, Michal Jarzabek)
