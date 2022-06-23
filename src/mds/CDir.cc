@@ -2693,7 +2693,7 @@ void CDir::_commit(version_t want, int op_prio)
     return;
   }
 
-  // alrady committed an older version?
+  // already committed an older version?
   if (committing_version > committed_version) {
     dout(10) << "already committing older " << committing_version << ", waiting for that to finish" << dendl;
     return;
