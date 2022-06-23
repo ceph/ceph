@@ -65,7 +65,7 @@ Changelog
 * cls/rgw: look for plain entries in non-ascii plain namespace too (`pr#41776 <https://github.com/ceph/ceph/pull/41776>`_, Mykola Golub)
 * cmake,zstd,debian: allow use libzstd in system (`pr#40516 <https://github.com/ceph/ceph/pull/40516>`_, Kefu Chai, Bryan Stillwell, Dan van der Ster)
 * cmake: build static libs if they are internal ones (`pr#39903 <https://github.com/ceph/ceph/pull/39903>`_, Kefu Chai)
-* cmake: detect gettid() presense (`pr#40333 <https://github.com/ceph/ceph/pull/40333>`_, Igor Fedotov)
+* cmake: detect gettid() presence (`pr#40333 <https://github.com/ceph/ceph/pull/40333>`_, Igor Fedotov)
 * cmake: set empty RPATH for some test executables (`pr#40619 <https://github.com/ceph/ceph/pull/40619>`_, Nathan Cutler, Kefu Chai)
 * common/buffer: adjust align before calling posix_memalign() (`pr#41246 <https://github.com/ceph/ceph/pull/41246>`_, Ilya Dryomov)
 * common/ipaddr: skip loopback interfaces named 'lo' and test it (`pr#40423 <https://github.com/ceph/ceph/pull/40423>`_, Dan van der Ster)

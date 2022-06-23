@@ -3383,7 +3383,7 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
 
   // take all waiters on this dir
   // NOTE: a pass of imported data is guaranteed to get all of my waiters because
-  // a replica's presense in my cache implies/forces it's presense in authority's.
+  // a replica's presence in my cache implies/forces it's presence in authority's.
   MDSContext::vec waiters;
   dir->take_waiting(CDir::WAIT_ANY_MASK, waiters);
   for (auto c : waiters)
