@@ -10,7 +10,7 @@
 #
 #  Boost_USE_STATIC_LIBS : boolean (default: OFF)
 #  Boost_USE_MULTITHREADED : boolean (default: OFF)
-#  BOOST_J: integer (defanult 1)
+#  BOOST_J: integer (default 1)
 
 function(check_boost_version source_dir expected_version)
   set(version_hpp "${source_dir}/boost/version.hpp")

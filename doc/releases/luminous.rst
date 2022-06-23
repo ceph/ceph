@@ -4526,7 +4526,7 @@ Other Notable Changes
 * msg: msg/async/rdma: Fix broken compilation (`pr#13603 <https://github.com/ceph/ceph/pull/13603>`_, Sarit Zubakov)
 * msg: msg/async/rdma: Fix memory leak of OSD (`pr#13101 <https://github.com/ceph/ceph/pull/13101>`_, Sarit Zubakov)
 * msg: msg/async/rdma: fix outstanding queuepair when destruct RDMAStack (`pr#13905 <https://github.com/ceph/ceph/pull/13905>`_, Haomai Wang)
-* msg: msg/async/rdma: fix RoCE v2 deafult value (`pr#12648 <https://github.com/ceph/ceph/pull/12648>`_, Adir Lev, Oren Duer)
+* msg: msg/async/rdma: fix RoCE v2 default value (`pr#12648 <https://github.com/ceph/ceph/pull/12648>`_, Adir Lev, Oren Duer)
 * msg: msg/async/rdma: Fix small memory leaks detected by valgrind (`pr#14288 <https://github.com/ceph/ceph/pull/14288>`_, Amir Vadai)
 * msg: msg/async/rdma: handle buffers after close msg (`pr#15749 <https://github.com/ceph/ceph/pull/15749>`_, DanielBar-On, Alexander Mikheev, Adir Lev)
 * msg: msg/async/rdma: move active_queue_pairs perf counter dec to polling (`pr#13716 <https://github.com/ceph/ceph/pull/13716>`_, DanielBar-On)
