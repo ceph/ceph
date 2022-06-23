@@ -589,7 +589,7 @@ double perf_cycles_to_seconds()
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of the Cylcles::toNanoseconds method.
+// Measure the cost of the Cycles::toNanoseconds method.
 double perf_cycles_to_nanoseconds()
 {
   int count = 1000000;
