@@ -247,7 +247,7 @@ class TestScheduleDB(object):
 
         assert after['retention'] == json.dumps(parse_retention(retention + retention2))
 
-    def test_per_path_and_repeat_uniqness(self, db):
+    def test_per_path_and_repeat_uniqueness(self, db):
         s1 = Schedule(*('/foo', '24h', 'fs_name', '/foo'))
         s2 = Schedule(*('/foo', '1d', 'fs_name', '/foo'))
 
