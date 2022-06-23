@@ -225,7 +225,7 @@ class RHDiskFailurePredictor(Predictor):
         # print error message, return Unknown, and continue execution
         if manufacturer is None:
             RHDiskFailurePredictor.LOGGER.debug(
-                "Manufacturer could not be determiend. This may be because \
+                "Manufacturer could not be determined. This may be because \
                 DiskPredictor has never encountered this manufacturer before, \
                     or the model name is not according to the manufacturer's \
                         naming conventions known to DiskPredictor"
