@@ -811,7 +811,7 @@ static int autoreg(sqlite3* db, char** err, const struct sqlite3_api_routines* t
  * static-duration structures are destructed due to ordering guarantees by
  * exit(3). Generally, we only see this called when the VFS is used by
  * /bin/sqlite3 and only during sqlite3 error scenarios (like I/O errors
- * arrising from blocklisting).
+ * arising from blocklisting).
  */
 
 static void cephsqlite_atexit()
