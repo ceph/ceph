@@ -103,7 +103,7 @@ int ec_init(const std::string &profile_str,
 
 int do_test_plugin_exists(const std::vector<const char*> &args) {
   if (args.size() < 1) {
-    usage("not enought arguments", std::cerr);
+    usage("not enough arguments", std::cerr);
     return 1;
   }
 
@@ -120,7 +120,7 @@ int do_test_plugin_exists(const std::vector<const char*> &args) {
 
 int do_validate_profile(const std::vector<const char*> &args) {
   if (args.size() < 1) {
-    usage("not enought arguments", std::cerr);
+    usage("not enough arguments", std::cerr);
     return 1;
   }
 
@@ -163,7 +163,7 @@ int do_validate_profile(const std::vector<const char*> &args) {
 
 int do_calc_chunk_size(const std::vector<const char*> &args) {
   if (args.size() < 2) {
-    usage("not enought arguments", std::cerr);
+    usage("not enough arguments", std::cerr);
     return 1;
   }
 
@@ -185,7 +185,7 @@ int do_calc_chunk_size(const std::vector<const char*> &args) {
 
 int do_encode(const std::vector<const char*> &args) {
   if (args.size() < 4) {
-    usage("not enought arguments", std::cerr);
+    usage("not enough arguments", std::cerr);
     return 1;
   }
 
@@ -240,7 +240,7 @@ int do_encode(const std::vector<const char*> &args) {
 
 int do_decode(const std::vector<const char*> &args) {
   if (args.size() < 4) {
-    usage("not enought arguments", std::cerr);
+    usage("not enough arguments", std::cerr);
     return 1;
   }
 
@@ -299,7 +299,7 @@ int main(int argc, const char **argv) {
   }
 
   if (args.size() < 1) {
-    usage("not enought arguments", std::cerr);
+    usage("not enough arguments", std::cerr);
     return 1;
   }
 
