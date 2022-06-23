@@ -28,7 +28,7 @@ def _format_val(block_name: str, key: str, val: str) -> str:
 def _validate_squash(squash: str) -> None:
     valid_squash_ls = [
         "root", "root_squash", "rootsquash", "rootid", "root_id_squash",
-        "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous",
+        "rootidsquash", "all", "all_squash", "allsquash", "all_anonymous",
         "allanonymous", "no_root_squash", "none", "noidsquash",
     ]
     if squash.lower() not in valid_squash_ls:

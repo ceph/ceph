@@ -1022,7 +1022,7 @@ Changelog
 * rgw: GET/HEAD and PUT operations on buckets w/lifecycle expiration configured do not return x-amz-expiration header (`pr#32924 <https://github.com/ceph/ceph/pull/32924>`_, Matt Benjamin, Yuval Lifshitz)
 * rgw: MultipartObjectProcessor supports stripe size > chunk size (`pr#33271 <https://github.com/ceph/ceph/pull/33271>`_, Casey Bodley)
 * rgw: ReplaceKeyPrefixWith and ReplaceKeyWith can not set at the same … (`pr#34599 <https://github.com/ceph/ceph/pull/34599>`_, yuliyang)
-* rgw: anonomous swift to obj that dont exist should 401 (`pr#35045 <https://github.com/ceph/ceph/pull/35045>`_, Matthew Oliver)
+* rgw: anonymous swift to obj that dont exist should 401 (`pr#35045 <https://github.com/ceph/ceph/pull/35045>`_, Matthew Oliver)
 * rgw: clear ent_list for each loop of bucket list (`issue#44394 <http://tracker.ceph.com/issues/44394>`_, `pr#34099 <https://github.com/ceph/ceph/pull/34099>`_, Yao Zongyou)
 * rgw: dmclock: wait until the request is handled (`pr#34954 <https://github.com/ceph/ceph/pull/34954>`_, GaryHyg)
 * rgw: find oldest period and update RGWMetadataLogHistory() (`pr#34597 <https://github.com/ceph/ceph/pull/34597>`_, Shilpa Jagannath)

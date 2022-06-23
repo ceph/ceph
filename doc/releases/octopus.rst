@@ -1504,7 +1504,7 @@ Changelog
 * rbd: rbd-mirror: wait for in-flight start/stop/restart (`pr#35437 <https://github.com/ceph/ceph/pull/35437>`_, Mykola Golub)
 * rgw: add "rgw-orphan-list" tool and "radosgw-admin bucket radoslist ..." (`pr#34991 <https://github.com/ceph/ceph/pull/34991>`_, J. Eric Ivancich)
 * rgw: amqp: fix the "routable" delivery mode (`pr#35433 <https://github.com/ceph/ceph/pull/35433>`_, Yuval Lifshitz)
-* rgw: anonomous swift to obj that dont exist should 401 (`pr#35120 <https://github.com/ceph/ceph/pull/35120>`_, Matthew Oliver)
+* rgw: anonymous swift to obj that dont exist should 401 (`pr#35120 <https://github.com/ceph/ceph/pull/35120>`_, Matthew Oliver)
 * rgw: fix bug where bucket listing end marker not always set correctly (`pr#34993 <https://github.com/ceph/ceph/pull/34993>`_, J. Eric Ivancich)
 * rgw: fix rgw tries to fetch anonymous user (`pr#34988 <https://github.com/ceph/ceph/pull/34988>`_, Or Friedmann)
 * rgw: fix some list buckets handle leak (`pr#34985 <https://github.com/ceph/ceph/pull/34985>`_, Tianshan Qu)
