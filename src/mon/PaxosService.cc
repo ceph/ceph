@@ -263,7 +263,7 @@ bool PaxosService::should_stash_full()
 {
   version_t latest_full = get_version_latest_full();
   /* @note The first member of the condition is moot and it is here just for
-   *	   clarity's sake. The second member would end up returing true
+   *	   clarity's sake. The second member would end up returning true
    *	   nonetheless because, in that event,
    *	      latest_full == get_trim_to() == 0.
    */
