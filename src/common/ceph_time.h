@@ -192,7 +192,7 @@ public:
   }
 };
 
-// Low-resolution but preusmably faster real-time clock
+// Low-resolution but presumably faster real-time clock
 class coarse_real_clock {
 public:
   typedef timespan duration;
