@@ -42,7 +42,7 @@ private:
   using time = ceph::coarse_mono_time;
 
   // Initial Sequence Number (ISN) of the first ping message sent
-  // by rank 0 to other active ranks (incuding itself).
+  // by rank 0 to other active ranks (including itself).
   static constexpr uint64_t MDS_PINGER_ISN = 1;
 
   struct PingState {
