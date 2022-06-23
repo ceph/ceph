@@ -1057,7 +1057,7 @@ protected:
     const hobject_t& oid,
     bool can_create,
     const std::map<std::string, ceph::buffer::list, std::less<>> *attrs = 0,
-    bool oid_existed = true //indicate this oid whether exsited in backend
+    bool oid_existed = true //indicate this oid whether existed in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
     std::lock_guard l(snapset_contexts_lock);
