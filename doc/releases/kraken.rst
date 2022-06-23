@@ -1773,7 +1773,7 @@ Notable Changes
 * common: instantiate strict_si_cast<long> not strict_si_cast<int64_t> (`issue#16398 <http://tracker.ceph.com/issues/16398>`_, `pr#9934 <http://github.com/ceph/ceph/pull/9934>`_, Kefu Chai)
 * common: lockdep: verbose even if no logging is set (`pr#10576 <http://github.com/ceph/ceph/pull/10576>`_, Willem Jan Withagen)
 * common: messages/MOSDMap: mark as enlighten OSDMap encoder (`pr#10843 <http://github.com/ceph/ceph/pull/10843>`_, Sage Weil)
-* common: mon/Monitor.cc:replce lock/unlock with Mutex:Lockr (`pr#9792 <http://github.com/ceph/ceph/pull/9792>`_, Michal Jarzabek)
+* common: mon/Monitor.cc:replace lock/unlock with Mutex:Lockr (`pr#9792 <http://github.com/ceph/ceph/pull/9792>`_, Michal Jarzabek)
 * common: msg/AsyncMessenger.cc: remove code duplication (`pr#10030 <http://github.com/ceph/ceph/pull/10030>`_, Michal Jarzabek)
 * common: msg/async: less verbose debug messages at debug_ms=1 (`pr#11205 <http://github.com/ceph/ceph/pull/11205>`_, Sage Weil)
 * common: msg/async: remove static member variable (`issue#16686 <http://tracker.ceph.com/issues/16686>`_, `pr#10440 <http://github.com/ceph/ceph/pull/10440>`_, Kefu Chai)
