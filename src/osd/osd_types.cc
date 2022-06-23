@@ -6130,7 +6130,7 @@ void object_manifest_t::calc_refs_to_inc_on_set(
    * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
    * 20:   [0, 2) aaa, <- set_chunk
    * 30:   [0, 2) abc, [6, 2) bbb, [8, 2) ccc
-   * --> incremnt the reference
+   * --> increment the reference
    *
    * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
    * 20:   [0, 2) ccc, <- set_chunk
