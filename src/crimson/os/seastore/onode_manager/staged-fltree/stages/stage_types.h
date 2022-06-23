@@ -90,7 +90,7 @@ struct MatchHistory {
     } else if (*match == MatchKindCMP::GT) {
       return os << "GT";
     } else {
-      ceph_abort("impossble path");
+      ceph_abort("impossible path");
     }
   }
 
