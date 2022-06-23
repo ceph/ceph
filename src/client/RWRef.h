@@ -24,7 +24,7 @@
  *
  * The Readers:
  *
- *   For the ll_read()/ll_write(), etc fucntions, they will work as
+ *   For the ll_read()/ll_write(), etc functions, they will work as
  *   "readers", in the beginning they just need to define a RWRef
  *   object and in RWRef constructor it will check if the state is
  *   MOUNTED or MOUTING, if not it will fail and return directly with
