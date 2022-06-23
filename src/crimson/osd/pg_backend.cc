@@ -358,7 +358,7 @@ namespace {
 PGBackend::checksum_ierrorator::future<>
 PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
 {
-  // sanity tests and normalize the argments
+  // sanity tests and normalize the arguments
   auto& checksum = osd_op.op.checksum;
   if (checksum.offset == 0 && checksum.length == 0) {
     // zeroed offset+length implies checksum whole object
