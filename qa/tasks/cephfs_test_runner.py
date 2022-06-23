@@ -158,7 +158,7 @@ def task(ctx, config):
     ctx.mds_cluster = mds_cluster
     ctx.mgr_cluster = mgr_cluster
 
-    # Depending on config, either load specific modules, or scan for moduless
+    # Depending on config, either load specific modules, or scan for modules
     if config and 'modules' in config and config['modules']:
         module_suites = []
         for mod_name in config['modules']:
