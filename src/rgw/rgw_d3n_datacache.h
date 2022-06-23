@@ -14,7 +14,6 @@
 #include "include/Context.h"
 #include "include/lru.h"
 #include "rgw_d3n_cacherequest.h"
-#include "rgw_directory.h"
 
 /*D3nDataCache*/
 struct D3nDataCache;
@@ -41,7 +40,6 @@ struct D3nChunkDataInfo : public LRUObject {
 };
 
 struct D3nCacheAioWriteRequest {
-	cache_block *c_blk;
         std::string oid;
 	void *data;
 	int fd;
@@ -95,7 +93,6 @@ public:
   }
 
   std::string cache_location;
-  RGWBlockDirectory *blk_dir;
 
   bool get(const std::string& oid, const off_t len);
   void put(bufferlist& bl, unsigned int len, std::string& obj_key);
