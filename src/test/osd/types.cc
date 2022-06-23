@@ -1210,7 +1210,7 @@ TEST(pg_missing_t, revise_have)
 {
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
-  // a non existing entry means noop
+  // a nonexistent entry means noop
   EXPECT_FALSE(missing.is_missing(oid));
   eversion_t have(1,1);
   missing.revise_have(oid, have);
