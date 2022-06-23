@@ -1835,7 +1835,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
   }
 
-  // Special case: Old export has SHARDS incompat feature on replicated pg, removqqe it
+  // Special case: Old export has SHARDS incompat feature on replicated pg, remove it
   if (pgid.is_no_shard())
     pgb.superblock.compat_features.incompat.remove(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
 
