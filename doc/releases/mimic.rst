@@ -3414,7 +3414,7 @@ Detailed Changelog
 * mon: mon/OSDMonitor: clean up cmd 'osd tree-from' (`pr#20839 <https://github.com/ceph/ceph/pull/20839>`_, Gu Zhongyan)
 * mon: mon/OSDMonitor: do not send_pg_creates with stale info (`issue#20785 <http://tracker.ceph.com/issues/20785>`_, `pr#17065 <https://github.com/ceph/ceph/pull/17065>`_, Kefu Chai)
 * mon: mon/OSDMonitor: error out if setting ruleset-\* ec profile property (`pr#17848 <https://github.com/ceph/ceph/pull/17848>`_, Sage Weil)
-* mon: mon/OSDMonitor: fix improper input/testing range of crush somke testing (`pr#17179 <https://github.com/ceph/ceph/pull/17179>`_, xie xingguo)
+* mon: mon/OSDMonitor: fix improper input/testing range of crush smoke testing (`pr#17179 <https://github.com/ceph/ceph/pull/17179>`_, xie xingguo)
 * mon: mon/OSDMonitor: fix 'osd pg temp' unable to cleanup pg-temp (`pr#16892 <https://github.com/ceph/ceph/pull/16892>`_, xie xingguo)
 * mon: mon/OSDMonitor: implement 'osd crush ls <node>' (`pr#16920 <https://github.com/ceph/ceph/pull/16920>`_, Sage Weil)
 * mon: mon/OSDMonitor: kill pending upmap changes too if pool is gone (`pr#20704 <https://github.com/ceph/ceph/pull/20704>`_, xie xingguo)

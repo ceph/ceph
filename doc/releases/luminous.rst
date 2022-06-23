@@ -4461,7 +4461,7 @@ Other Notable Changes
 * mon/OSDMonitor: check creating_pgs.last_scan_epoch instead when sending creates (`issue#20785 <http://tracker.ceph.com/issues/20785>`_, `pr#17257 <https://github.com/ceph/ceph/pull/17257>`_, Kefu Chai)
 * mon: OSDMonitor: check mon_max_pool_pg_num when set pool pg_num (`pr#16511 <https://github.com/ceph/ceph/pull/16511>`_, chenhg)
 * mon/OSDMonitor: do not send_pg_creates with stale info (`issue#20785 <http://tracker.ceph.com/issues/20785>`_, `pr#17191 <https://github.com/ceph/ceph/pull/17191>`_, Kefu Chai)
-* mon/OSDMonitor: fix improper input/testing range of crush somke testing (`pr#17232 <https://github.com/ceph/ceph/pull/17232>`_, xie xingguo)
+* mon/OSDMonitor: fix improper input/testing range of crush smoke testing (`pr#17232 <https://github.com/ceph/ceph/pull/17232>`_, xie xingguo)
 * mon: osd/PGMonitor: always update pgmap with latest osdmap (`issue#19398 <http://tracker.ceph.com/issues/19398>`_, `pr#14777 <https://github.com/ceph/ceph/pull/14777>`_, Kefu Chai)
 * mon/pgmap: add objects prefix for unfound type (`issue#21127 <http://tracker.ceph.com/issues/21127>`_, `pr#17264 <https://github.com/ceph/ceph/pull/17264>`_, huanwen ren, Sage Weil)
 * mon/PGMap: fix "0 stuck requests are blocked > 4096 sec" warn (`pr#17215 <https://github.com/ceph/ceph/pull/17215>`_, xie xingguo)
