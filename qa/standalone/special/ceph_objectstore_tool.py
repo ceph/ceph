@@ -435,7 +435,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
         assert(ret == 0)
         old_crush_file, new_crush_file = new_crush_file, old_crush_file
 
-    # change them back, since we don't need to preapre for another round
+    # change them back, since we don't need to prepare for another round
     old_crush_file, new_crush_file = new_crush_file, old_crush_file
     old_crush_file.close()
 
