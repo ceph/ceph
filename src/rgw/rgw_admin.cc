@@ -314,7 +314,8 @@ void usage()
   cout << "   --uid=<id>                user id\n";
   cout << "   --new-uid=<id>            new user id\n";
   cout << "   --subuser=<name>          subuser name\n";
-  cout << "   --account=<id>            account id\n";
+  cout << "   --account-name=<name>     account name\n";
+  cout << "   --account-id=<id>         account id\n";
   cout << "   --access-key=<key>        S3 access key\n";
   cout << "   --email=<email>           user's email address\n";
   cout << "   --secret/--secret-key=<key>\n";
@@ -3459,6 +3460,7 @@ int main(int argc, const char **argv)
   std::unique_ptr<rgw::sal::User> user;
   string tenant;
   string user_ns;
+  string account_name;
   string account_id;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
@@ -3701,7 +3703,9 @@ int main(int argc, const char **argv)
       opt_tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--user_ns", (char*)NULL)) {
       user_ns = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--account", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--account-name", (char*)NULL)) {
+      account_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--account-id", (char*)NULL)) {
       account_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
@@ -10491,8 +10495,8 @@ next:
       opt_cmd == OPT::ACCOUNT_USER_ADD ||
       opt_cmd == OPT::ACCOUNT_USER_RM ||
       opt_cmd == OPT::ACCOUNT_USER_LIST) {
-    if (account_id.empty()) {
-      cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
+    if (account_name.empty() && account_id.empty()) {
+      cerr << "ERROR: Account was not provided (via --account-name or --account-id)" << std::endl;
       return EINVAL;
     }
     RGWObjVersionTracker objv_tracker;
