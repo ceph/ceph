@@ -1865,7 +1865,7 @@ Changelog
 * doc: steps to disable metadata_heap on existing rgw zones (`issue#18174 <http://tracker.ceph.com/issues/18174>`_, `pr#28738 <https://github.com/ceph/ceph/pull/28738>`_, Dan van der Ster)
 * doc: Update 'ceph-iscsi' min version (`pr#29444 <https://github.com/ceph/ceph/pull/29444>`_, Ricardo Marques)
 * journal: properly advance read offset after skipping invalid range (`pr#28816 <https://github.com/ceph/ceph/pull/28816>`_, Mykola Golub)
-* librbd: improve journal performance to match expected degredation (`issue#40072 <http://tracker.ceph.com/issues/40072>`_, `pr#29723 <https://github.com/ceph/ceph/pull/29723>`_, Mykola Golub, Jason Dillaman)
+* librbd: improve journal performance to match expected degradation (`issue#40072 <http://tracker.ceph.com/issues/40072>`_, `pr#29723 <https://github.com/ceph/ceph/pull/29723>`_, Mykola Golub, Jason Dillaman)
 * librbd: properly track in-flight flush requests (`issue#40555 <http://tracker.ceph.com/issues/40555>`_, `pr#28769 <https://github.com/ceph/ceph/pull/28769>`_, Jason Dillaman)
 * librbd: snapshot object maps can go inconsistent during copyup (`issue#39435 <http://tracker.ceph.com/issues/39435>`_, `pr#29722 <https://github.com/ceph/ceph/pull/29722>`_, Ilya Dryomov)
 * mds: change how mds revoke stale caps (`issue#17854 <http://tracker.ceph.com/issues/17854>`_, `pr#28583 <https://github.com/ceph/ceph/pull/28583>`_, Rishabh Dave, "Yan, Zheng")
