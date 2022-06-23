@@ -338,7 +338,7 @@ def task(ctx, config):
         - shard [0-9]+ .* : missing
         - deep-scrub 1 missing, 1 inconsistent objects
         - does not match object info size
-        - attr name mistmatch
+        - attr name mismatch
         - deep-scrub 1 missing, 0 inconsistent objects
         - failed to pick suitable auth object
         - candidate size [0-9]+ info size [0-9]+ mismatch
