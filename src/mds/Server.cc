@@ -8541,7 +8541,7 @@ void Server::_rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentr
  *
  * check if a directory is non-empty (i.e. we can rmdir it).
  *
- * the unlocked varient this is a fastpath check.  we can't really be
+ * the unlocked variant this is a fastpath check.  we can't really be
  * sure until we rdlock the filelock.
  */
 bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
