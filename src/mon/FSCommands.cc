@@ -1933,7 +1933,7 @@ int FileSystemCommandHandler::_check_pool(
              " Use --force to override.";
       return -EINVAL;
     } else if (!pool->allows_ecoverwrites()) {
-      // non-overwriteable EC pools are only acceptable with a cache tier overlay
+      // non-overwritable EC pools are only acceptable with a cache tier overlay
       if (!pool->has_tiers() || !pool->has_read_tier() || !pool->has_write_tier()) {
         *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
             << " is an erasure-coded pool, with no overwrite support";
