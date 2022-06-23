@@ -1144,7 +1144,7 @@ class MDCache {
    * Resolve path to a dentry and pass it onto the ScrubStack.
    *
    * TODO: return enough information to the original mdr formatter
-   * and completion that they can subsequeuntly check the progress of
+   * and completion that they can subsequently check the progress of
    * this scrub (we won't block them on a whole scrub as it can take a very
    * long time)
    */
