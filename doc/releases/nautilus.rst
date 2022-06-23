@@ -3657,7 +3657,7 @@ Detailed Changelog
 * core,performance: msg/async: avoid put message within write_lock (`pr#20731 <https://github.com/ceph/ceph/pull/20731>`_, Haomai Wang)
 * core,performance: os/bluestore: make osd shard-thread do oncommits (`pr#22739 <https://github.com/ceph/ceph/pull/22739>`_, Jianpeng Ma)
 * core,performance: osd/filestore: Change default filestore_merge_threshold to -10 (`issue#24686 <http://tracker.ceph.com/issues/24686>`_, `pr#22761 <https://github.com/ceph/ceph/pull/22761>`_, Douglas Fuller)
-* core,performance: osd/OSDMap: map pgs with smaller batchs in calc_pg_upmaps (`pr#23734 <https://github.com/ceph/ceph/pull/23734>`_, huangjun)
+* core,performance: osd/OSDMap: map pgs with smaller batches in calc_pg_upmaps (`pr#23734 <https://github.com/ceph/ceph/pull/23734>`_, huangjun)
 * core: PG: release reservations after backfill completes (`issue#23614 <http://tracker.ceph.com/issues/23614>`_, `pr#22255 <https://github.com/ceph/ceph/pull/22255>`_, Neha Ojha)
 * core: pg stuck in backfill_wait with plenty of disk space (`issue#38034 <http://tracker.ceph.com/issues/38034>`_, `pr#26375 <https://github.com/ceph/ceph/pull/26375>`_, xie xingguo, David Zafman)
 * core,pybind: pybind/rados: new methods for manipulating self-managed snapshots (`pr#22579 <https://github.com/ceph/ceph/pull/22579>`_, Jason Dillaman)
