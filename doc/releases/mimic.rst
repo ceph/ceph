@@ -4315,7 +4315,7 @@ Detailed Changelog
 * tests: qa: revert "qa: use config_path property instead of literal" (`pr#17850 <https://github.com/ceph/ceph/pull/17850>`_, Patrick Donnelly)
 * tests: qa/run-standalone.sh: set PYTHONPATH for FreeBSD also (`pr#20646 <https://github.com/ceph/ceph/pull/20646>`_, Kefu Chai)
 * tests: qa: s/backfill/backfilling/ (`pr#18235 <https://github.com/ceph/ceph/pull/18235>`_, Kefu Chai)
-* tests: qa/stanalone: pass options using --<option-name>=<value> (`pr#19544 <https://github.com/ceph/ceph/pull/19544>`_, Kefu Chai)
+* tests: qa/standalone: pass options using --<option-name>=<value> (`pr#19544 <https://github.com/ceph/ceph/pull/19544>`_, Kefu Chai)
 * tests: qa/standalone: Add trap for signals to restore the kernel core pattern (`pr#17026 <https://github.com/ceph/ceph/pull/17026>`_, David Zafman)
 * tests: qa/standalone/ceph-helpers.sh: provide argument to dirname (`issue#23805 <http://tracker.ceph.com/issues/23805>`_, `pr#21552 <https://github.com/ceph/ceph/pull/21552>`_, Nathan Cutler)
 * tests: qa/standalone/ceph-helpers.sh: silence ceph-disk DEPRECATION_WARNING (`pr#19478 <https://github.com/ceph/ceph/pull/19478>`_, Kefu Chai)
