@@ -15,7 +15,7 @@ ZIP_DEST="${ZIP_DEST:-$BUILD_DIR/ceph.zip}"
 
 CLEAN_BUILD=${CLEAN_BUILD:-}
 SKIP_BUILD=${SKIP_BUILD:-}
-# Usefull when packaging existing binaries.
+# Useful when packaging existing binaries.
 SKIP_CMAKE=${SKIP_CMAKE:-}
 SKIP_DLL_COPY=${SKIP_DLL_COPY:-}
 SKIP_TESTS=${SKIP_TESTS:-}
