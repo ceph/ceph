@@ -60,7 +60,7 @@ Changelog
 * cephfs: client: add ability to lookup snapped inodes by inode number (`pr#40769 <https://github.com/ceph/ceph/pull/40769>`_, Jeff Layton, Xiubo Li)
 * cephfs: client: only check pool permissions for regular files (`pr#40730 <https://github.com/ceph/ceph/pull/40730>`_, Xiubo Li)
 * cephfs: client: wake up the front pos waiter (`pr#40865 <https://github.com/ceph/ceph/pull/40865>`_, Xiubo Li)
-* client: Fix executeable access check for the root user (`pr#41297 <https://github.com/ceph/ceph/pull/41297>`_, Kotresh HR)
+* client: Fix executable access check for the root user (`pr#41297 <https://github.com/ceph/ceph/pull/41297>`_, Kotresh HR)
 * client: fire the finish_cap_snap() after buffer being flushed (`pr#40722 <https://github.com/ceph/ceph/pull/40722>`_, Xiubo Li)
 * cls/rgw: look for plain entries in non-ascii plain namespace too (`pr#41776 <https://github.com/ceph/ceph/pull/41776>`_, Mykola Golub)
 * cmake,zstd,debian: allow use libzstd in system (`pr#40516 <https://github.com/ceph/ceph/pull/40516>`_, Kefu Chai, Bryan Stillwell, Dan van der Ster)

@@ -212,7 +212,7 @@ Changelog
 * ceph-volume: util/prepare fix osd_id_available() (`pr#43952 <https://github.com/ceph/ceph/pull/43952>`_, Guillaume Abrioux)
 * cephadm/ceph-volume: do not use lvm binary in containers (`pr#43953 <https://github.com/ceph/ceph/pull/43953>`_, Guillaume Abrioux)
 * cephadm: Fix iscsi client caps (allow mgr <service status> calls) (`pr#43822 <https://github.com/ceph/ceph/pull/43822>`_, Juan Miguel Olmo Martínez)
-* cephfs: client: Fix executeable access check for the root user (`pr#41295 <https://github.com/ceph/ceph/pull/41295>`_, Kotresh HR)
+* cephfs: client: Fix executable access check for the root user (`pr#41295 <https://github.com/ceph/ceph/pull/41295>`_, Kotresh HR)
 * cls/journal: skip disconnected clients when calculating min_commit_position (`pr#44689 <https://github.com/ceph/ceph/pull/44689>`_, Mykola Golub)
 * common/PriorityCache: low perf counters priorities for submodules (`pr#44176 <https://github.com/ceph/ceph/pull/44176>`_, Igor Fedotov)
 * doc: Use older mistune (`pr#44227 <https://github.com/ceph/ceph/pull/44227>`_, David Galloway)

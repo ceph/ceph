@@ -1513,7 +1513,7 @@ Changelog
 * cephfs-mirror: backports (`issue#50447 <http://tracker.ceph.com/issues/50447>`_, `issue#50867 <http://tracker.ceph.com/issues/50867>`_, `issue#51204 <http://tracker.ceph.com/issues/51204>`_, `pr#41947 <https://github.com/ceph/ceph/pull/41947>`_, Venky Shankar)
 * cephfs-mirror: reopen logs on SIGHUP (`issue#51413 <http://tracker.ceph.com/issues/51413>`_, `issue#51318 <http://tracker.ceph.com/issues/51318>`_, `pr#42097 <https://github.com/ceph/ceph/pull/42097>`_, Venky Shankar)
 * cephfs-top: self-adapt the display according the window size (`pr#41053 <https://github.com/ceph/ceph/pull/41053>`_, Xiubo Li)
-* client: Fix executeable access check for the root user (`pr#41294 <https://github.com/ceph/ceph/pull/41294>`_, Kotresh HR)
+* client: Fix executable access check for the root user (`pr#41294 <https://github.com/ceph/ceph/pull/41294>`_, Kotresh HR)
 * client: fix the opened inodes counter increasing (`pr#40685 <https://github.com/ceph/ceph/pull/40685>`_, Xiubo Li)
 * client: make Inode to inherit from RefCountedObject (`pr#41052 <https://github.com/ceph/ceph/pull/41052>`_, Xiubo Li)
 * cls/rgw: look for plain entries in non-ascii plain namespace too (`pr#41774 <https://github.com/ceph/ceph/pull/41774>`_, Mykola Golub)
