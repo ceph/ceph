@@ -56,7 +56,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         """
         test if MDS behave correct when it's readonly
         """
-        # operation should successd when MDS is not readonly
+        # operation should succeed when MDS is not readonly
         self.mount_a.run_shell(["touch", "test_file1"])
         writer = self.mount_a.write_background(loop=True)
 
