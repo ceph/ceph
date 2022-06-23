@@ -1835,7 +1835,7 @@ Notable Changes
 * core: mon/osdmonitor: fix incorrect output of "osd df" due to osd out (`issue#16706 <http://tracker.ceph.com/issues/16706>`_, `pr#10308 <http://github.com/ceph/ceph/pull/10308>`_, xie xingguo)
 * core: msg/AsyncMessenger: change return type to void (`pr#10230 <http://github.com/ceph/ceph/pull/10230>`_, Michal Jarzabek)
 * core: msg/Messenger: add const and override to function (`pr#10183 <http://github.com/ceph/ceph/pull/10183>`_, Michal Jarzabek)
-* core: msg/async/AsyncConnection: replace Mutex with std::mutex for peformance (`issue#16714 <http://tracker.ceph.com/issues/16714>`_, `issue#16715 <http://tracker.ceph.com/issues/16715>`_, `pr#10340 <http://github.com/ceph/ceph/pull/10340>`_, Haomai Wang)
+* core: msg/async/AsyncConnection: replace Mutex with std::mutex for performance (`issue#16714 <http://tracker.ceph.com/issues/16714>`_, `issue#16715 <http://tracker.ceph.com/issues/16715>`_, `pr#10340 <http://github.com/ceph/ceph/pull/10340>`_, Haomai Wang)
 * core: msg/async/Event: ensure not refer to member variable which may destroyed (`issue#16714 <http://tracker.ceph.com/issues/16714>`_, `pr#10369 <http://github.com/ceph/ceph/pull/10369>`_, Haomai Wang)
 * core: msg/async/kqueue: avoid remove nonexist kqueue event (`pr#9869 <http://github.com/ceph/ceph/pull/9869>`_, Haomai Wang)
 * core: msg/async: Support close idle connection feature  (`issue#16366 <http://tracker.ceph.com/issues/16366>`_, `pr#9783 <http://github.com/ceph/ceph/pull/9783>`_, Haomai Wang)
