@@ -6077,7 +6077,7 @@ std::default_random_engine OSDMap::get_random_engine(
   // This function creates a random_engine to be used for shuffling.
   // When p_seed == nullptr it generates random engine with a seed from /dev/random
   // when p_seed is not null, it uses (*p_seed + seed_set) as the seed and 
-  // increments seed_set. This is used in order to craete regression test without 
+  // increments seed_set. This is used in order to create regression test without 
   // random effect on the results. 
   //
   static std::random_device::result_type seed_set = 0;
