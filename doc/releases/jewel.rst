@@ -1941,7 +1941,7 @@ Notable Changes since Infernalis
 * crush: validate bucket id before indexing buckets array (`issue#13477 <http://tracker.ceph.com/issues/13477>`_, `pr#6246 <http://github.com/ceph/ceph/pull/6246>`_, Sage Weil)
 * crypto: fix NSS leak (Jason Dillaman)
 * crypto: fix unbalanced init/shutdown (#12598 Zheng Yan)
-* deb: fix rest-bench-dbg and ceph-test-dbg dependendies (Ken Dreyer)
+* deb: fix rest-bench-dbg and ceph-test-dbg dependencies (Ken Dreyer)
 * debian/changelog: Remove stray 'v' in version (`pr#7936 <http://github.com/ceph/ceph/pull/7936>`_, Dan Mick)
 * debian/changelog: Remove stray 'v' in version (`pr#7938 <http://github.com/ceph/ceph/pull/7938>`_, Dan Mick)
 * debian: include cpio in build-requiers (`pr#7533 <http://github.com/ceph/ceph/pull/7533>`_, Rémi BUISSON)

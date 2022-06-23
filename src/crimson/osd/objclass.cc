@@ -49,7 +49,7 @@ int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
                                  char **outdata, int *outdatalen)
 {
 // FIXME, HACK: this is for testing only. Let's use dynamic linker to verify
-// our depedencies
+// our dependencies
   return 0;
 }
 
