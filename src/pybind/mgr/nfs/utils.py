@@ -54,7 +54,7 @@ def conf_obj_name(cluster_id: str) -> str:
 
 
 def user_conf_obj_name(cluster_id: str) -> str:
-    """Returna a rados object name for the user config."""
+    """Return a rados object name for the user config."""
     return f"{USER_CONF_PREFIX}{cluster_id}"
 
 

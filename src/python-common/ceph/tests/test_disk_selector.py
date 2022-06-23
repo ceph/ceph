@@ -21,7 +21,7 @@ class TestMatcher(object):
         """
         virtual is False
         key is found
-        retrun value of key is expected
+        return value of key is expected
         """
         disk_map = Device(path='/dev/vdb', sys_api={'foo': 'bar'})
         ret = drive_selection.Matcher('foo', 'bar')._get_disk_key(disk_map)
