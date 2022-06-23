@@ -130,7 +130,7 @@ void CacheController::handle_request(CacheSession* session,
       break;
     }
     default:
-      ldout(m_cct, 5) << "can't recongize request" << dendl;
+      ldout(m_cct, 5) << "can't recognize request" << dendl;
       ceph_assert(0);
   }
 }
