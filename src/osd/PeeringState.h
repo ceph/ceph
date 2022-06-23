@@ -1979,7 +1979,7 @@ public:
   bool discover_all_missing(
     BufferedRecoveryMessages &rctx);
 
-  /// Notify that hoid has been fully recocovered
+  /// Notify that hoid has been fully recovered
   void object_recovered(
     const hobject_t &hoid,
     const object_stat_sum_t &stat_diff) {
