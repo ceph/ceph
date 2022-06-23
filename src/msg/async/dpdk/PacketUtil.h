@@ -102,7 +102,7 @@ class packet_merger {
 
     // Second, merge adjacent segments after this packet has been merged,
     // because this packet might fill a "whole" and make two adjacent
-    // segments mergable
+    // segments mergeable
     for (auto it = map.begin(); it != map.end();) {
       // The first segment
       auto& seg_pkt = it->second;
