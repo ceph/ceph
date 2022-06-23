@@ -382,7 +382,7 @@ public:
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
-        // we might get already cached data for which resetting mempool is inppropriate
+        // we might get already cached data for which resetting mempool is inappropriate
         // hence calling try_assign_to_mempool
         b->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
         if (writing.empty() || writing.rbegin()->seq <= b->seq) {
