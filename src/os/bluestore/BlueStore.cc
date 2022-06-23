@@ -19453,7 +19453,7 @@ static uint32_t    s_serial         = 0x01;
 #define HTOCEPH_64 htobe64
 #endif
 
-// 48 Bytes header for on-disk alloator image
+// 48 Bytes header for on-disk allocator image
 const uint64_t ALLOCATOR_IMAGE_VALID_SIGNATURE = 0x1FACE0FF;
 struct allocator_image_header {
   uint32_t format_version;	// 0x00
@@ -19518,7 +19518,7 @@ struct allocator_image_header {
 };
 WRITE_CLASS_DENC(allocator_image_header)
 
-// 56 Bytes trailer for on-disk alloator image
+// 56 Bytes trailer for on-disk allocator image
 struct allocator_image_trailer {
   extent_t null_extent;         // 0x00
 
@@ -20570,7 +20570,7 @@ Allocator* BlueStore::clone_allocator_without_bluefs(Allocator *src_allocator)
   uint64_t num_entries = 0;
   copy_allocator(src_allocator, allocator, &num_entries);
 
-  // BlueFS stores its internal allocation outside RocksDB (FM) so we should not destage them to the allcoator-file
+  // BlueFS stores its internal allocation outside RocksDB (FM) so we should not destage them to the allocator-file
   // we are going to hide bluefs allocation during allocator-destage as they are stored elsewhere
   {
     bluefs->foreach_block_extents(
