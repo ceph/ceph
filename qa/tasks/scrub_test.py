@@ -108,7 +108,7 @@ def test_repair_bad_omap(ctx, manager, pg, osd, objname):
     manager.osd_admin_socket(osd, ['setomapheader', 'rbd', objname, 'badhdr'])
 
     deep_scrub(manager, pg, 'rbd')
-    # please note, the repair here is errnomous, it rewrites the correct omap
+    # please note, the repair here is erroneous, it rewrites the correct omap
     # digest and data digest on the replicas with the corresponding digests
     # from the primary osd which is hosting the victim object, see
     # find_victim_object().

@@ -3625,7 +3625,7 @@ Detailed Changelog
 * osd: subscribe osdmaps if any pending pgs (`issue#22113 <http://tracker.ceph.com/issues/22113>`_, `pr#18916 <https://github.com/ceph/ceph/pull/18916>`_, Kefu Chai)
 * osd: subscribe to new osdmap while waiting_for_healthy (`issue#21121 <http://tracker.ceph.com/issues/21121>`_, `pr#17244 <https://github.com/ceph/ceph/pull/17244>`_, Sage Weil)
 * osd: support class method whitelisting within caps (`pr#19786 <https://github.com/ceph/ceph/pull/19786>`_, Jason Dillaman)
-* osd: treat successful and erroroneous writes the same for log trimming (`issue#22050 <http://tracker.ceph.com/issues/22050>`_, `pr#20827 <https://github.com/ceph/ceph/pull/20827>`_, Josh Durgin)
+* osd: treat successful and erroneous writes the same for log trimming (`issue#22050 <http://tracker.ceph.com/issues/22050>`_, `pr#20827 <https://github.com/ceph/ceph/pull/20827>`_, Josh Durgin)
 * osd: two cleanups (`pr#20830 <https://github.com/ceph/ceph/pull/20830>`_, songweibin)
 * osd: update dmclock library w git subtree pull (`pr#17737 <https://github.com/ceph/ceph/pull/17737>`_, J. Eric Ivancich)
 * osd: update info only if new_interval (`pr#17437 <https://github.com/ceph/ceph/pull/17437>`_, Kefu Chai)
