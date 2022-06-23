@@ -108,7 +108,7 @@ unlock_mtab (void) {
  * maximal number of attempts has been 5.
  *
  * There was very small number of attempts and extremely long waiting (1s)
- * that is useless on machines with large number of concurret mount processes.
+ * that is useless on machines with large number of concurrent mount processes.
  *
  * Now we wait few thousand microseconds between attempts and we have global
  * time limit (30s) rather than limit for number of attempts. The advantage

@@ -7611,7 +7611,7 @@ void Server::handle_peer_link_prep(MDRequestRef& mdr)
   link_rollback rollback;
   rollback.reqid = mdr->reqid;
   rollback.ino = targeti->ino();
-  rollback.old_ctime = targeti->get_inode()->ctime;   // we hold versionlock xlock; no concorrent projections
+  rollback.old_ctime = targeti->get_inode()->ctime;   // we hold versionlock xlock; no concurrent projections
   const auto& pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
   rollback.old_dir_mtime = pf->fragstat.mtime;
   rollback.old_dir_rctime = pf->rstat.rctime;
