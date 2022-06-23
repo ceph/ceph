@@ -1821,7 +1821,7 @@ void Objecter::_send_command_map_check(CommandOp *c)
 
 void Objecter::_command_cancel_map_check(CommandOp *c)
 {
-  // rwlock is locked uniqe
+  // rwlock is locked unique
 
   auto iter = check_latest_map_commands.find(c->tid);
   if (iter != check_latest_map_commands.end()) {
