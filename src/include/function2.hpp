@@ -1551,7 +1551,7 @@ using function_view =
 /// This type will default to std::bad_function_call if the
 /// functional header is used, otherwise the library provides its own type.
 ///
-/// You may disable the inclusion of the functionl header
+/// You may disable the inclusion of the functional header
 /// through defining `FU2_WITH_NO_FUNCTIONAL_HEADER`.
 ///
 using detail::type_erasure::invocation_table::bad_function_call;
