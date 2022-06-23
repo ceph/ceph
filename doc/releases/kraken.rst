@@ -972,7 +972,7 @@ Notable Changes
 * doc: doc/rados/configuration/osd-config-ref.rst: document the fast mark down (`pr#12124 <http://github.com/ceph/ceph/pull/12124>`_, Piotr Dałek)
 * doc: doc/release-notes: kraken release notes (draft) (`pr#12338 <http://github.com/ceph/ceph/pull/12338>`_, Sage Weil)
 * doc: doc/releases: add links to kraken and v10.2.4 (`pr#12409 <http://github.com/ceph/ceph/pull/12409>`_, Kefu Chai)
-* doc: doc/start/hardware-recommentdations: cosmetic (`pr#10585 <http://github.com/ceph/ceph/pull/10585>`_, Zhao Junwang)
+* doc: doc/start/hardware-recommendations: cosmetic (`pr#10585 <http://github.com/ceph/ceph/pull/10585>`_, Zhao Junwang)
 * doc: Documentation syntax cleanup (`pr#11784 <http://github.com/ceph/ceph/pull/11784>`_, John Spray)
 * doc: document osd tell bench (`issue#5431 <http://tracker.ceph.com/issues/5431>`_, `pr#16 <http://github.com/ceph/ceph/pull/16>`_, Sage Weil)
 * doc: drop --journal-check from ceph-mds man page (`issue#17747 <http://tracker.ceph.com/issues/17747>`_, `pr#11912 <http://github.com/ceph/ceph/pull/11912>`_, Nathan Cutler)
