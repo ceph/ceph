@@ -41,7 +41,7 @@ class filepath {
   std::string path;     // relative path.
 
   /** bits - path segments
-   * this is ['a', 'b', 'c'] for both the aboslute and relative case.
+   * this is ['a', 'b', 'c'] for both the absolute and relative case.
    *
    * NOTE: this value is LAZILY maintained... i.e. it's a cache
    */
