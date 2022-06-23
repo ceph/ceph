@@ -6096,8 +6096,8 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
 		"Average kv_queued state latency",
 		"skql", PerfCountersBuilder::PRIO_USEFUL);
-  b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_commiting_lat",
-		 "Average kv_commiting state latency",
+  b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_committing_lat",
+		 "Average kv_committing state latency",
 		 "skcl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_kv_done_lat, "state_kv_done_lat",
 		 "Average kv_done state latency",
