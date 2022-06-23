@@ -1748,7 +1748,7 @@ uint64_t pg_pool_t::add_unmanaged_snap(bool preoctopus_compat)
     if (preoctopus_compat) {
       // kludge for pre-mimic tracking of pool vs selfmanaged snaps.  after
       // mimic this field is not decoded but our flag is set; pre-mimic, we
-      // have a non-empty removed_snaps to signifiy a non-pool-snaps pool.
+      // have a non-empty removed_snaps to signify a non-pool-snaps pool.
       removed_snaps.insert(snapid_t(1));
     }
     snap_seq = 1;
