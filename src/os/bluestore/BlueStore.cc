@@ -10149,7 +10149,7 @@ Detection stage (in processing order):
   - Apply 'Remove' actions
   - Apply fix for misreference pextents
   - Apply Shared Blob recreate 
-    (can be merged with the step above if misreferences were dectected)
+    (can be merged with the step above if misreferences were detected)
   - Apply StatFS update
 */
 int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
