@@ -1377,7 +1377,7 @@ bool PG::can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const
   // before the pg advances to this new osdmap, the repop replies before this
   // repop can be discarded by that replica OSD, because the primary resets the
   // connection to it when handling the new osdmap marking it down, and also
-  // resets the messenger sesssion when the replica reconnects. to avoid the
+  // resets the messenger session when the replica reconnects. to avoid the
   // out-of-order replies, the messages from that replica should be discarded.
   const auto osdmap = peering_state.get_osdmap();
   const int from_osd = m.get_source().num();
