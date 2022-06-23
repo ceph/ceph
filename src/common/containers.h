@@ -38,7 +38,7 @@ namespace ceph::containers {
 //
 // For the special case of no internal slots (InternalCapacity eq 0),
 // tiny_vector doesn't require moving any elements (changing pointers
-// is enough), and thus should be MoveConstructibile.
+// is enough), and thus should be MoveConstructible.
 //
 // Alternatives:
 //  1. std::vector<boost::optional<ValueT>> initialized with the known
