@@ -418,7 +418,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
         }
         case IOCommand::FLUSH_COMMAND:
         {
-          dout(20) << __func__ << " flush command issueed " << dendl;
+          dout(20) << __func__ << " flush command issued " << dendl;
           r = spdk_nvme_ns_cmd_flush(ns, qpair, io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to flush: " << cpp_strerror(r) << dendl;
