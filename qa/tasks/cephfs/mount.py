@@ -573,7 +573,7 @@ class CephFSMount(object):
     def remount(self, **kwargs):
         """
         Update mount object's attributes and attempt remount with these
-        new values for these attrbiutes.
+        new values for these attributes.
 
         1. Run umount_wait().
         2. Run update_attrs().

@@ -267,7 +267,7 @@ typedef uint64_t rados_snap_t;
 
 /**
  * @typedef rados_xattrs_iter_t
- * An iterator for listing extended attrbutes on an object.
+ * An iterator for listing extended attributes on an object.
  * Used with rados_getxattrs(), rados_getxattrs_next(), and
  * rados_getxattrs_end().
  */
