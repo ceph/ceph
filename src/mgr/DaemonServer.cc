@@ -2635,15 +2635,24 @@ void DaemonServer::adjust_pgs()
 	    } else {
 	      active = false;
 	    }
+	    unsigned pg_gap = p.get_pg_num() - p.get_pgp_num();
+        unsigned max_jump = cct->_conf.get_val<uint64_t>("mgr_max_pg_num_change");
 	    if (!active) {
 	      dout(10) << "pool " << i.first
 		       << " pg_num_target " << p.get_pg_num_target()
 		       << " pg_num " << p.get_pg_num()
 		       << " - not all pgs active"
 		       << dendl;
+	    } else if (pg_gap >= max_jump) {
+	      dout(10) << "pool " << i.first
+		       << " pg_num " << p.get_pg_num()
+		       << " - pgp_num " << p.get_pgp_num()
+		       << " gap > max_pg_num_change " << max_jump
+		       << " - must scale pgp_num first"
+		       << dendl;
 	    } else {
 	      unsigned add = std::min(
-		left,
+		std::min(left, max_jump - pg_gap),
 		p.get_pg_num_target() - p.get_pg_num());
 	      unsigned target = p.get_pg_num() + add;
 	      left -= add;
