@@ -175,7 +175,7 @@ def before_feature(context, feature):
     )
     vm_config = _parse_vm_description("".join(vm_feature_specs))
     kcli_plan_path = os.path.join(kcli_plans_dir_path, "gen_kcli_plan.yml")
-    print(f"Kcli vm configureaton \n {vm_config}")
+    print(f"Kcli vm configuration \n {vm_config}")
     _write_file(
         kcli_plan_path,
         loaded_kcli.render(vm_config)
@@ -186,7 +186,7 @@ def before_feature(context, feature):
         "".join(ceph_description)
     ) if ceph_description else Bootstrap_Config
 
-    print(f"Bootstrap configuraton \n {ceph_config}\n")
+    print(f"Bootstrap configuration \n {ceph_config}\n")
     _write_file(
         os.path.join(kcli_plans_dir_path, "bootstrap_cluster_dev.sh"),
         loaded_script.render(ceph_config),
