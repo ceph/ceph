@@ -381,7 +381,7 @@ struct BasicStatCompletionData : CompletionData {
   // MultiAioCompletionImpl used to handle the double aysnc
   // call in the back (stat + getxattr)
   libradosstriper::MultiAioCompletionImpl *m_multiCompletion;
-  // where to store the size of first objct
+  // where to store the size of first object
   // this will be ignored but we need a place to store it when
   // async stat is called
   uint64_t m_objectSize;
