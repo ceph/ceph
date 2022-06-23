@@ -867,7 +867,7 @@ class Module(MgrModule):
                     # has a uniquely-named collection that starts off identically (i.e.
                     # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
                     # This bit of code combines these unique counters all under one rgw instance.
-                    # Without this check, the schema would remain separeted out in the final report.
+                    # Without this check, the schema would remain separated out in the final report.
                     if col_0[0:11] == "objecter-0x":
                         col_0 = "objecter-0x"
 
