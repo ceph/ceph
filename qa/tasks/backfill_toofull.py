@@ -88,7 +88,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'set', 'nobackfill')
     manager.raw_cluster_cmd('osd', 'set', 'norecover')
 
-    log.debug("stop tartget osd %s" % target)
+    log.debug("stop target osd %s" % target)
     manager.kill_osd(target)
     manager.wait_till_active()
 
@@ -124,7 +124,7 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'set-backfillfull-ratio',
                             '{:.3f}'.format(backfillfull + 0.001))
 
-    log.debug("start tartget osd %s" % target)
+    log.debug("start target osd %s" % target)
 
     manager.revive_osd(target)
     manager.wait_for_active()
