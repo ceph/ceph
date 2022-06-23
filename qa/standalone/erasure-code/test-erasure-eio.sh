@@ -152,7 +152,7 @@ function rados_put_get_data() {
     shift
     local arg=$1
 
-    # inject eio to speificied shard
+    # inject eio to specified shard
     #
     local poolname=pool-jerasure
     local objname=obj-$inject-$$-$shard_id
@@ -186,7 +186,7 @@ function rados_put_get_data() {
 
 }
 
-# Change the size of speificied shard
+# Change the size of specified shard
 #
 function set_size() {
     local objname=$1
@@ -231,7 +231,7 @@ function rados_get_data_bad_size() {
     local objname=obj-size-$$-$shard_id-$bytes
     rados_put $dir $poolname $objname || return 1
 
-    # Change the size of speificied shard
+    # Change the size of specified shard
     #
     set_size $objname $dir $shard_id $bytes $mode || return 1
 
