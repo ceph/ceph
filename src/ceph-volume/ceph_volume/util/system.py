@@ -312,7 +312,7 @@ class Mounts(object):
         Create a mapping of all available system mounts so that other helpers can
         detect nicely what path or device is mounted
 
-        It ignores (most of) non existing devices, but since some setups might need
+        It ignores (most of) nonexistent devices, but since some setups might need
         some extra device information, it will make an exception for:
 
         - tmpfs
