@@ -761,7 +761,6 @@ struct RGWZone : public RGWDataProvider {
     if (struct_v >= 9) {
       decode_dp_extra(bl);
     }
-    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
