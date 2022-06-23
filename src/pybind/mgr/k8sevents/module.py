@@ -1016,7 +1016,7 @@ class Module(MgrModule):
         },
         {
             "cmd": "k8sevents ls",
-            "desc": "List all current Kuberenetes events from the Ceph namespace",
+            "desc": "List all current Kubernetes events from the Ceph namespace",
             "perm": "r"
         },
         {
