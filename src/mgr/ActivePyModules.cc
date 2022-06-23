@@ -1176,7 +1176,7 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
   // blocking python land. ActivePyModules::lock needs to be dropped to make
   // lockdep happy:
   //
-  //   send_report callers: DaemonServer::lock -> PyModuleRegistery::lock
+  //   send_report callers: DaemonServer::lock -> PyModuleRegistry::lock
   //   active_start: PyModuleRegistry::lock -> ActivePyModules::lock
   //
   // if we don't release this->lock before calling schedule_tick a cycle is
