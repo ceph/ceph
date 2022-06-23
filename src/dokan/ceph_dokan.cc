@@ -880,7 +880,7 @@ NTSTATUS get_volume_serial(PDWORD serial) {
   int ret = ceph_getxattr(cmount, "/", "ceph.cluster_fsid",
                           fsid_str, sizeof(fsid_str));
   if (ret < 0) {
-    dout(2) << "Coudln't retrieve the cluster fsid. Error: " << ret << dendl;
+    dout(2) << "Couldn't retrieve the cluster fsid. Error: " << ret << dendl;
     return cephfs_errno_to_ntstatus_map(ret);
   }
 
