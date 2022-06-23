@@ -340,7 +340,7 @@ Notable Changes
 * tools: ceph-disk: dmcrypt cluster must default to ceph (`issue#20893 <http://tracker.ceph.com/issues/20893>`_, `pr#16870 <https://github.com/ceph/ceph/pull/16870>`_, Loic Dachary)
 * tools: ceph-disk: don't activate suppressed journal devices (`issue#19489 <http://tracker.ceph.com/issues/19489>`_, `pr#16703 <https://github.com/ceph/ceph/pull/16703>`_, David Disseldorp)
 * tools: ceph-disk: separate ceph-osd --check-needs-\* logs (`issue#19888 <http://tracker.ceph.com/issues/19888>`_, `pr#15503 <https://github.com/ceph/ceph/pull/15503>`_, Loic Dachary)
-* tools: ceph-disk: systemd unit timesout too quickly (`issue#20229 <http://tracker.ceph.com/issues/20229>`_, `pr#17133 <https://github.com/ceph/ceph/pull/17133>`_, Loic Dachary)
+* tools: ceph-disk: systemd unit times out too quickly (`issue#20229 <http://tracker.ceph.com/issues/20229>`_, `pr#17133 <https://github.com/ceph/ceph/pull/17133>`_, Loic Dachary)
 * tools: ceph-disk: Use stdin for 'config-key put' command (`issue#21059 <http://tracker.ceph.com/issues/21059>`_, `pr#17084 <https://github.com/ceph/ceph/pull/17084>`_, Brad Hubbard, Loic Dachary, Sage Weil)
 * tools: libradosstriper processes arbitrary printf placeholders in user input (`issue#20240 <http://tracker.ceph.com/issues/20240>`_, `pr#17574 <https://github.com/ceph/ceph/pull/17574>`_, Stan K)
 
@@ -1092,7 +1092,7 @@ Notable Changes
 * rgw: updating CORS/ACLs might not work in some circumstances (`issue#15976 <http://tracker.ceph.com/issues/15976>`_, `pr#9543 <http://github.com/ceph/ceph/pull/9543>`_, Radoslaw Zarzynski)
 * rgw: use zone endpoints instead of zonegroup endpoints (`issue#16834 <http://tracker.ceph.com/issues/16834>`_, `pr#10659 <http://github.com/ceph/ceph/pull/10659>`_, Casey Bodley)
 * tests: improve rbd-mirror test case coverage (`issue#16197 <http://tracker.ceph.com/issues/16197>`_, `pr#9631 <http://github.com/ceph/ceph/pull/9631>`_, Mykola Golub, Jason Dillaman)
-* tests: rados/test.sh workunit timesout on OpenStack (`issue#15403 <http://tracker.ceph.com/issues/15403>`_, `pr#8904 <http://github.com/ceph/ceph/pull/8904>`_, Loic Dachary)
+* tests: rados/test.sh workunit times out on OpenStack (`issue#15403 <http://tracker.ceph.com/issues/15403>`_, `pr#8904 <http://github.com/ceph/ceph/pull/8904>`_, Loic Dachary)
 * tools: ceph-disk: Accept bcache devices as data disks (`issue#13278 <http://tracker.ceph.com/issues/13278>`_, `pr#8497 <http://github.com/ceph/ceph/pull/8497>`_, Peter Sabaini)
 * tools: rados: Add cleanup message with time to rados bench output (`issue#15704 <http://tracker.ceph.com/issues/15704>`_, `pr#9740 <http://github.com/ceph/ceph/pull/9740>`_, Vikhyat Umrao)
 * tools: src/script/subman fails with KeyError: 'nband' (`issue#16961 <http://tracker.ceph.com/issues/16961>`_, `pr#10625 <http://github.com/ceph/ceph/pull/10625>`_, Loic Dachary, Ali Maredia)
