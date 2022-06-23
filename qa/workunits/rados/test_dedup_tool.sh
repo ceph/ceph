@@ -203,7 +203,7 @@ function test_dedup_chunk_repair()
   POOL_ID=$($CEPH_TOOL osd pool ls detail | grep $POOL |  awk '{print$2}')
   $RADOS_TOOL -p $CHUNK_POOL put $CHUNK_OID ./foo
 
-  # increase ref count by two, resuling in mismatch
+  # increase ref count by two, resulting in mismatch
   $DEDUP_TOOL --op chunk-get-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref foo --target-ref-pool-id $POOL_ID
   $DEDUP_TOOL --op chunk-get-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref foo --target-ref-pool-id $POOL_ID
   $DEDUP_TOOL --op chunk-get-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref foo --target-ref-pool-id $POOL_ID
