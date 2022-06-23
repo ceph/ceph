@@ -2467,7 +2467,7 @@ Notable Changes since Infernalis
 * mount.ceph: memory leaks (`pr#6905 <http://github.com/ceph/ceph/pull/6905>`_, Qiankun Zheng)
 * mount.fuse.ceph: better parsing of arguments passed to mount.fuse.ceph by mount command (`issue#14735 <http://tracker.ceph.com/issues/14735>`_, `pr#7607 <http://github.com/ceph/ceph/pull/7607>`_, Florent Bautista)
 * mrun: update path to cmake binaries (`pr#8447 <http://github.com/ceph/ceph/pull/8447>`_, Casey Bodley)
-* msg: add override to virutal methods (`pr#6977 <http://github.com/ceph/ceph/pull/6977>`_, Michal Jarzabek)
+* msg: add override to virtual methods (`pr#6977 <http://github.com/ceph/ceph/pull/6977>`_, Michal Jarzabek)
 * msg: add thread safety for "random" Messenger + fix wrong usage of random functions (`pr#7650 <http://github.com/ceph/ceph/pull/7650>`_, Avner BenHanoch)
 * msg/async: AsyncConnection: avoid debug log in cleanup_handler (`pr#7547 <http://github.com/ceph/ceph/pull/7547>`_, Haomai Wang)
 * msg/async: AsyncMessenger: fix several bugs (`pr#7831 <http://github.com/ceph/ceph/pull/7831>`_, Haomai Wang)
