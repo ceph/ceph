@@ -334,7 +334,7 @@ namespace PriorityCache
       cur_ratios += it->second->get_cache_ratio();
     }
 
-    // For other priorities, loop until caches are satisified or we run out of
+    // For other priorities, loop until caches are satisfied or we run out of
     // memory (stop if we can't guarantee a full byte allocation).
     while (!tmp_caches.empty() && *mem_avail > static_cast<int64_t>(tmp_caches.size())) {
       uint64_t total_assigned = 0;
