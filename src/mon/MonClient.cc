@@ -1282,7 +1282,7 @@ void MonClient::_resend_mon_commands()
     auto cmd = p->second;
     ++p;
     if (cmd->is_tell() && monmap.min_mon_release >= ceph_release_t::octopus) {
-      // starting with octopus, tell commands use their own connetion and need no
+      // starting with octopus, tell commands use their own connection and need no
       // special resend when we finish hunting.
     } else {
       _send_command(cmd); // might remove cmd from mon_commands
