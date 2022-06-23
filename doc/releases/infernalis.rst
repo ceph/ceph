@@ -1218,7 +1218,7 @@ Notable Changes
 * mds: fix handling for missing mydir dirfrag (#11641 John Spray)
 * mds: fix rejoin (Yan, Zheng)
 * mds: fix stra reintegration (Yan, Zheng)
-* mds: fix suicide beason (John Spray)
+* mds: fix suicide beacon (John Spray)
 * mds: misc repair improvements (John Spray)
 * mds: misc snapshot fixes (Yan, Zheng)
 * mds: respawn instead of suicide on blacklist (John Spray)
