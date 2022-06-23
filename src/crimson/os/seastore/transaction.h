@@ -474,7 +474,7 @@ private:
 
   /**
    * If set, *this may not be used to perform writes and will not provide
-   * consistentency allowing operations using to avoid maintaining a read_set.
+   * consistency allowing operations using to avoid maintaining a read_set.
    */
   const bool weak;
 
