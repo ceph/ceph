@@ -8016,7 +8016,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   {
     // we extend the map cache pins to accomodate pgs slow to consume maps
     // for some period, until we hit the max_lag_factor bound, at which point
-    // we block here to stop injesting more maps than they are able to keep
+    // we block here to stop ingesting more maps than they are able to keep
     // up with.
     epoch_t max_lag = cct->_conf->osd_map_cache_size *
       m_osd_pg_epoch_max_lag_factor;
