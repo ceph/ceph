@@ -1768,7 +1768,7 @@ void MDCache::project_rstat_inode_to_frag(const MutationRef& mut,
     bool update = true;
     if (cur->state_test(CInode::STATE_AMBIGUOUSAUTH) && cur->is_auth()) {
       // rename src inode is not projected in the peer rename prep case. so we should
-      // avoid updateing the inode.
+      // avoid updating the inode.
       ceph_assert(linkunlink < 0);
       ceph_assert(cur->is_frozen_inode());
       update = false;
