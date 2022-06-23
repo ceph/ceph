@@ -2708,7 +2708,7 @@ CEPH_RADOS_API void rados_free_notify_response(struct notify_ack_t *acks, size_t
                                                struct notify_timeout_t *timeouts);
 
 /**
- * Acknolwedge receipt of a notify
+ * Acknowledge receipt of a notify
  *
  * @param io the pool the object is in
  * @param o the name of the object
