@@ -6,7 +6,7 @@ Common Settings
 The `Hardware Recommendations`_ section provides some hardware guidelines for
 configuring a Ceph Storage Cluster. It is possible for a single :term:`Ceph
 Node` to run multiple daemons. For example, a single node with multiple drives
-ususally runs one ``ceph-osd`` for each drive. Ideally, each node will be
+usually runs one ``ceph-osd`` for each drive. Ideally, each node will be
 assigned to a particular type of process. For example, some nodes might run
 ``ceph-osd`` daemons, other nodes might run ``ceph-mds`` daemons, and still
 other nodes might run ``ceph-mon`` daemons.
