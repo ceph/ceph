@@ -59,7 +59,7 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
     , m_conf{m_scrubber.get_pg_cct()->_conf}
     , clog{m_scrubber.get_logger()}
 {
-  m_formatted_id = m_pg_id.calc_name_sring();
+  m_formatted_id = m_pg_id.calc_name_string();
 
   m_acting_but_me.reserve(acting.size());
   std::copy_if(acting.begin(),
@@ -89,7 +89,7 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
     , m_conf{m_scrubber.get_pg_cct()->_conf}
     , clog{m_scrubber.get_logger()}
 {
-  m_formatted_id = m_pg_id.calc_name_sring();
+  m_formatted_id = m_pg_id.calc_name_string();
   m_is_replicated = m_pool.info.is_replicated();
   m_mode_desc =
     (m_repair ? "repair"sv
