@@ -233,7 +233,7 @@ public:
       }
       _cct->_heartbeat_map->check_touch_file();
 
-      // refresh the perf coutners
+      // refresh the perf counters
       _cct->_refresh_perf_values();
     }
     return NULL;

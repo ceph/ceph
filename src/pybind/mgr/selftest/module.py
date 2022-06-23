@@ -365,7 +365,7 @@ class Module(MgrModule):
         self.get_perf_schema("osd", "0")
         self.get_counter("osd", "0", "osd.op")
         # get_counter
-        # get_all_perf_coutners
+        # get_all_perf_counters
 
     def _self_test_misc(self) -> None:
         self.set_uri("http://this.is.a.test.com")
