@@ -4142,7 +4142,7 @@ Changelog
 * doc: split up SubmittingPatches.rst (`issue#20953 <http://tracker.ceph.com/issues/20953>`_, `pr#30705 <https://github.com/ceph/ceph/pull/30705>`_, Nathan Cutler)
 * doc: Switch spelling of utilization (`pr#32537 <https://github.com/ceph/ceph/pull/32537>`_, Bryan Stillwell)
 * doc: tools/rados: add --pgid in help (`pr#30383 <https://github.com/ceph/ceph/pull/30383>`_, Vikhyat Umrao)
-* doc: typo fix in doc/dev/dev_cluster_deployement.rst: s/hostanme/hostname/ (`pr#31515 <https://github.com/ceph/ceph/pull/31515>`_, Drunkard Zhang)
+* doc: typo fix in doc/dev/dev_cluster_deployment.rst: s/hostanme/hostname/ (`pr#31515 <https://github.com/ceph/ceph/pull/31515>`_, Drunkard Zhang)
 * doc: update --force flag to be precise (`pr#32343 <https://github.com/ceph/ceph/pull/32343>`_, Jos Collin)
 * doc: update adding an MDS (`pr#32291 <https://github.com/ceph/ceph/pull/32291>`_, Jos Collin)
 * doc: update and improve mounting with fuse/kernel docs (`pr#30754 <https://github.com/ceph/ceph/pull/30754>`_, Rishabh Dave)
