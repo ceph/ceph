@@ -37,7 +37,7 @@ else
   extraopts += -DWITH_RBD_RWL=OFF
 endif
 extraopts += -DWITH_RBD_SSD_CACHE=ON
-# assumes that ceph is exmpt from multiarch support, so we override the libdir.
+# assumes that ceph is exempt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/libexec
 extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
