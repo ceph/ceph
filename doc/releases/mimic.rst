@@ -2695,7 +2695,7 @@ Detailed Changelog
 * core: src/messages/MOSDMap: reencode OSDMap for older clients (`issue#21660 <http://tracker.ceph.com/issues/21660>`_, `pr#18134 <https://github.com/ceph/ceph/pull/18134>`_, Sage Weil)
 * core: src/osd/PG.cc: 6455: FAILED assert(0 == "we got a bad state machine event") (`pr#20933 <https://github.com/ceph/ceph/pull/20933>`_, David Zafman)
 * core: src/test/osd: add two pool test for manifest objects (`pr#20096 <https://github.com/ceph/ceph/pull/20096>`_, Myoungwon Oh)
-* core: test/cli/osdmaptool/test-map-pgs.t: remove nondetermimistic test (`pr#20872 <https://github.com/ceph/ceph/pull/20872>`_, Sage Weil)
+* core: test/cli/osdmaptool/test-map-pgs.t: remove nondeterministic test (`pr#20872 <https://github.com/ceph/ceph/pull/20872>`_, Sage Weil)
 * core: test/objectstore_bench: Don't forget judging whether call usage (`pr#21369 <https://github.com/ceph/ceph/pull/21369>`_, Jianpeng Ma)
 * core,tests: ceph_test_filestore_idempotent_sequence: many fixes (`issue#22920 <http://tracker.ceph.com/issues/22920>`_, `pr#20279 <https://github.com/ceph/ceph/pull/20279>`_, Sage Weil)
 * core,tests: ceph_test_objectstore: drop expect regex (`pr#16968 <https://github.com/ceph/ceph/pull/16968>`_, Sage Weil)
