@@ -350,7 +350,7 @@ class NodeExtentAccessorT {
     }
   }
 
-  // must be called before any mutate attempes.
+  // must be called before any mutate attempts.
   // for the safety of mixed read and mutate, call before read.
   void prepare_mutate(context_t c) {
     assert(!is_retired());

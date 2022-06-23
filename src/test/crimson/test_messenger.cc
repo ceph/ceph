@@ -775,7 +775,7 @@ struct TestInterceptor : public Interceptor {
       logger().info("[Test] accept_attempts={}", result->accept_attempts);
     } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::READ}) {
       ++result->server_connect_attempts;
-      logger().info("[Test] server_connect_attemps={}", result->server_connect_attempts);
+      logger().info("[Test] server_connect_attempts={}", result->server_connect_attempts);
     } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
       ++result->server_reconnect_attempts;
       logger().info("[Test] server_reconnect_attempts={}", result->server_reconnect_attempts);
