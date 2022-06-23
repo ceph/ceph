@@ -203,7 +203,7 @@ Changelog
 * ceph-volume: don't use MultiLogger in find_executable_on_host() (`pr#44766 <https://github.com/ceph/ceph/pull/44766>`_, Guillaume Abrioux)
 * ceph-volume: fix a typo causing AttributeError (`pr#43950 <https://github.com/ceph/ceph/pull/43950>`_, Taha Jahangir)
 * ceph-volume: fix bug with miscalculation of required db/wal slot size for VGs with multiple PVs (`pr#43947 <https://github.com/ceph/ceph/pull/43947>`_, Guillaume Abrioux, Cory Snyder)
-* ceph-volume: fix regression introcuded via #43536 (`pr#44757 <https://github.com/ceph/ceph/pull/44757>`_, Guillaume Abrioux)
+* ceph-volume: fix regression introduced via #43536 (`pr#44757 <https://github.com/ceph/ceph/pull/44757>`_, Guillaume Abrioux)
 * ceph-volume: honour osd_dmcrypt_key_size option (`pr#44974 <https://github.com/ceph/ceph/pull/44974>`_, Guillaume Abrioux)
 * ceph-volume: human_readable_size() refactor (`pr#44210 <https://github.com/ceph/ceph/pull/44210>`_, Guillaume Abrioux)
 * ceph-volume: improve mpath devices support (`pr#44791 <https://github.com/ceph/ceph/pull/44791>`_, Guillaume Abrioux)

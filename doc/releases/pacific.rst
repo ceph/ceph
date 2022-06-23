@@ -725,7 +725,7 @@ Changelog
 * ceph-volume: abort when passed devices have partitions (`pr#45146 <https://github.com/ceph/ceph/pull/45146>`_, Guillaume Abrioux)
 * ceph-volume: don't use MultiLogger in find_executable_on_host() (`pr#44701 <https://github.com/ceph/ceph/pull/44701>`_, Guillaume Abrioux)
 * ceph-volume: fix error 'KeyError' with inventory (`pr#44884 <https://github.com/ceph/ceph/pull/44884>`_, Guillaume Abrioux)
-* ceph-volume: fix regression introcuded via #43536 (`pr#44644 <https://github.com/ceph/ceph/pull/44644>`_, Guillaume Abrioux)
+* ceph-volume: fix regression introduced via #43536 (`pr#44644 <https://github.com/ceph/ceph/pull/44644>`_, Guillaume Abrioux)
 * ceph-volume: fix tags dict output in `lvm list` (`pr#44767 <https://github.com/ceph/ceph/pull/44767>`_, Guillaume Abrioux)
 * ceph-volume: honour osd_dmcrypt_key_size option (`pr#44973 <https://github.com/ceph/ceph/pull/44973>`_, Guillaume Abrioux)
 * ceph-volume: human_readable_size() refactor (`pr#44209 <https://github.com/ceph/ceph/pull/44209>`_, Guillaume Abrioux)
