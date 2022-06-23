@@ -341,7 +341,7 @@ int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Op
     if (ret != 0)
       return ret;
   } else {
-    //unrecognize config options.
+    //unrecognized config options.
     return -EINVAL;
   }
   return 0;
