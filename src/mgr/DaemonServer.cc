@@ -2707,7 +2707,7 @@ void DaemonServer::adjust_pgs()
 
       // FIXME: These checks are fundamentally racy given that adjust_pgs()
       // can run more frequently than we get updated pg stats from OSDs.  We
-      // may make multiple adjustments with stale informaiton.
+      // may make multiple adjustments with stale information.
       double misplaced_ratio, degraded_ratio;
       double inactive_pgs_ratio, unknown_pgs_ratio;
       pg_map.get_recovery_stats(&misplaced_ratio, &degraded_ratio,
