@@ -9502,7 +9502,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobTest) {
   }
 
   // check the scenario when shared blob contains
-  // references to extents from two objects which don't overlapp
+  // references to extents from two objects which don't overlap
   // o1 -> 0x2000~1K
   // o2 -> 0x4000~1k
   cerr << "introduce 2 non-overlapped extents in a shared blob"
