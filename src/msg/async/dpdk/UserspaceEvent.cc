@@ -50,7 +50,7 @@ int UserspaceEventManager::notify(int fd, int mask)
   if (!impl)
     return -ENOENT;
 
-  ldout(cct, 20) << __func__ << " activing=" << int(impl->activating_mask)
+  ldout(cct, 20) << __func__ << " activating=" << int(impl->activating_mask)
                  << " listening=" << int(impl->listening_mask)
                  << " waiting_idx=" << int(impl->waiting_idx) << dendl;
 
@@ -65,7 +65,7 @@ int UserspaceEventManager::notify(int fd, int mask)
     waiting_fds[max_wait_idx] = fd;
   }
 
-  ldout(cct, 20) << __func__ << " activing=" << int(impl->activating_mask)
+  ldout(cct, 20) << __func__ << " activating=" << int(impl->activating_mask)
                  << " listening=" << int(impl->listening_mask)
                  << " waiting_idx=" << int(impl->waiting_idx) << " done " << dendl;
   return 0;
