@@ -251,8 +251,8 @@ class CommonFormatter(Protocol):
 # runtime_checkable is not available and isinstance can not be used with a
 # protocol type.  These could be replaced by isinstance in a later version of
 # python.  Note that these functions *can not* be methods of the protocol types
-# for neatness - including methods on the protocl types makes mypy consider
-# those methods as part of the protcol & a required method. Using decorators
+# for neatness - including methods on the protocol types makes mypy consider
+# those methods as part of the protocol & a required method. Using decorators
 # did not change that - I checked.
 
 

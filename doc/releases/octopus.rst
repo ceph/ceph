@@ -6016,7 +6016,7 @@ Changelog
 * tests: test/librados: avoid residual crush rule after test case execution (`issue#40970 <http://tracker.ceph.com/issues/40970>`_, `pr#29341 <https://github.com/ceph/ceph/pull/29341>`_, Bingyi Zhang)
 * tests: test/librados: free AioCompletion using AioCompletion::release() (`pr#30204 <https://github.com/ceph/ceph/pull/30204>`_, Kefu Chai)
 * tests: test/librados: use GTEST_SKIP() to skip test (`pr#32770 <https://github.com/ceph/ceph/pull/32770>`_, Kefu Chai)
-* tests: test/msgr: fix ComplexTest fail when using DPDK protocal stack (`pr#31910 <https://github.com/ceph/ceph/pull/31910>`_, Chunsong Feng)
+* tests: test/msgr: fix ComplexTest fail when using DPDK protocol stack (`pr#31910 <https://github.com/ceph/ceph/pull/31910>`_, Chunsong Feng)
 * tests: test/msgr: make ceph_perf_msgr_client/server work (`pr#28842 <https://github.com/ceph/ceph/pull/28842>`_, Jianpeng Ma)
 * tests: test/objectstore: silence -Wsign-compare warning (`pr#27750 <https://github.com/ceph/ceph/pull/27750>`_, Kefu Chai)
 * tests: test/old: remove stale tests (`pr#29124 <https://github.com/ceph/ceph/pull/29124>`_, Kefu Chai)
