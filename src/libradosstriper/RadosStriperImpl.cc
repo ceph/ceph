@@ -378,7 +378,7 @@ private:
  * versions (time_t or struct timespec)
  */
 struct BasicStatCompletionData : CompletionData {
-  // MultiAioCompletionImpl used to handle the double aysnc
+  // MultiAioCompletionImpl used to handle the double async
   // call in the back (stat + getxattr)
   libradosstriper::MultiAioCompletionImpl *m_multiCompletion;
   // where to store the size of first objct
