@@ -1076,7 +1076,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
     const auto& new_loc_i = new_info.crush_loc.find(stretch_bucket_divider);
     if (new_loc_i == new_info.crush_loc.end()) {
-      ss << "mon." << name << " has a specificed location, but not a "
+      ss << "mon." << name << " has a specified location, but not a "
 	 << stretch_bucket_divider << ", which is the stretch divider";
       err = -EINVAL;
       goto reply_no_propose;

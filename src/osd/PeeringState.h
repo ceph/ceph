@@ -1883,7 +1883,7 @@ public:
    * @param pg_stats_publish the latest pg_stat possessed by caller
    * @param unstable_stats additional stats which should be included in the
    *        returned stats
-   * @return the up to date stats if it is different from the specfied
+   * @return the up to date stats if it is different from the specified
    *         @c pg_stats_publish
    */
   std::optional<pg_stat_t> prepare_stats_for_publish(
