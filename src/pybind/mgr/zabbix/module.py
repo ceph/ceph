@@ -372,7 +372,7 @@ class Module(MgrModule):
             }
             for osd, rule in osd_discovery.items()
         ]}
-        # Preparing recieved data for sending
+        # Preparing received data for sending
         data = {
             "zabbix.pool.discovery": json.dumps(pools_discovery_data),
             "zabbix.osd.discovery": json.dumps(osd_discovery_data)
