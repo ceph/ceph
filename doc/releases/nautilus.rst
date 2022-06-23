@@ -785,7 +785,7 @@ Changelog
 * mgr: mon/PGMap: do not consider changing pg stuck (`pr#35959 <https://github.com/ceph/ceph/pull/35959>`_, Kefu Chai)
 * monitoring: fixing some issues in RBD detail dashboard (`pr#35464 <https://github.com/ceph/ceph/pull/35464>`_, Kiefer Chang)
 * msgr: New msgr2 crc and secure modes (msgr2.1) (`pr#35733 <https://github.com/ceph/ceph/pull/35733>`_, Jianpeng Ma, Ilya Dryomov)
-* rbd: librbd: new 'write_zeroes' API methods to suppliment the `discard` APIs (`pr#36250 <https://github.com/ceph/ceph/pull/36250>`_, Jason Dillaman)
+* rbd: librbd: new 'write_zeroes' API methods to supplement the `discard` APIs (`pr#36250 <https://github.com/ceph/ceph/pull/36250>`_, Jason Dillaman)
 * rbd: mgr/dashboard: work with v1 RBD images (`pr#35712 <https://github.com/ceph/ceph/pull/35712>`_, Ernesto Puerta)
 * rbd: rbd: librbd: Watcher should not attempt to re-watch after detecting blacklisting (`pr#35385 <https://github.com/ceph/ceph/pull/35385>`_, Jason Dillaman)
 * rgw,tests: test/rgw: update hadoop versions (`pr#35778 <https://github.com/ceph/ceph/pull/35778>`_, Casey Bodley, Vasu Kulkarni)

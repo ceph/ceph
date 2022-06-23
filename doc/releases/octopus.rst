@@ -1323,7 +1323,7 @@ Changelog
 * msgr: New msgr2 crc and secure modes (msgr2.1) (`pr#35720 <https://github.com/ceph/ceph/pull/35720>`_, Ilya Dryomov)
 * rbd,tests: tests/rbd_mirror: fix race on test shut down (`pr#36657 <https://github.com/ceph/ceph/pull/36657>`_, Mykola Golub)
 * rbd: librbd:  global and pool-level config overrides require image refresh to apply (`pr#36638 <https://github.com/ceph/ceph/pull/36638>`_, Jason Dillaman)
-* rbd: librbd: new 'write_zeroes' API methods to suppliment the `discard` APIs (`pr#36247 <https://github.com/ceph/ceph/pull/36247>`_, Jason Dillaman)
+* rbd: librbd: new 'write_zeroes' API methods to supplement the `discard` APIs (`pr#36247 <https://github.com/ceph/ceph/pull/36247>`_, Jason Dillaman)
 * rbd: librbd: potential race conditions handling API IO completions (`pr#36331 <https://github.com/ceph/ceph/pull/36331>`_, Jason Dillaman)
 * rbd: mgr/dashboard: work with v1 RBD images (`pr#35711 <https://github.com/ceph/ceph/pull/35711>`_, Ernesto Puerta)
 * rbd: rbd: librbd: Align rbd_write_zeroes declarations (`pr#36717 <https://github.com/ceph/ceph/pull/36717>`_, Corey Bryant)
