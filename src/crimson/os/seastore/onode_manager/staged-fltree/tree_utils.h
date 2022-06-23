@@ -360,7 +360,7 @@ class TreeBuilder {
       }
     }).si_then([&t, this, cursors, ref_kv_iter] {
       if (!cursors->empty()) {
-        logger().info("Verifing tracked cursors ...");
+        logger().info("Verifying tracked cursors ...");
         *ref_kv_iter = kvs.random_begin();
         return seastar::do_with(
             cursors->begin(),
@@ -474,7 +474,7 @@ class TreeBuilder {
       });
     }).si_then([this, cursors, ref_kv_iter, erase_end] {
       if constexpr (TRACK) {
-        logger().info("Verifing tracked cursors ...");
+        logger().info("Verifying tracked cursors ...");
         *ref_kv_iter = kvs.random_begin();
         while (*ref_kv_iter != erase_end) {
           auto p_kv = **ref_kv_iter;
@@ -534,7 +534,7 @@ class TreeBuilder {
   }
 
   eagain_ifuture<> validate(Transaction& t) {
-    logger().info("Verifing inserted ...");
+    logger().info("Verifying inserted ...");
     return seastar::do_with(
       kvs.begin(),
       [this, &t] (auto &iter) {
