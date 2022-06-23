@@ -523,7 +523,7 @@ class TestVolumes(TestVolumesHelper):
 
     def test_volume_rm_when_mon_delete_pool_false(self):
         """
-        That the volume can only be removed when mon_allowd_pool_delete is set
+        That the volume can only be removed when mon_allowed_pool_delete is set
         to true and verify that the pools are removed after volume deletion.
         """
         for m in self.mounts:
