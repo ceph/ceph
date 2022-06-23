@@ -3230,7 +3230,7 @@ Other Notable Changes
 * cmake: do not try to add submodule to exclude list if .git is not around (`pr#14495 <https://github.com/ceph/ceph/pull/14495>`_, Kefu Chai)
 * cmake: enable cross-compilation of boost (`issue#18938 <http://tracker.ceph.com/issues/18938>`_, `pr#14881 <https://github.com/ceph/ceph/pull/14881>`_, Kefu Chai)
 * cmake: exclude \*.css while generating ctags (`pr#15663 <https://github.com/ceph/ceph/pull/15663>`_, Leo Zhang)
-* cmake: explictly call find_package(PythonInterp) first to fix build err (`pr#12385 <https://github.com/ceph/ceph/pull/12385>`_, Yixun Lan)
+* cmake: explicitly call find_package(PythonInterp) first to fix build err (`pr#12385 <https://github.com/ceph/ceph/pull/12385>`_, Yixun Lan)
 * cmake: fix boost components for WITH_SYSTEM_BOOST (`pr#15160 <https://github.com/ceph/ceph/pull/15160>`_, Bassam Tabbara)
 * cmake: Fix broken async/rdma compilation since move to libceph-common (`pr#13122 <https://github.com/ceph/ceph/pull/13122>`_, Oren Duer)
 * cmake: fix broken RDMA compilation after merge PR #12878 (`pr#13186 <https://github.com/ceph/ceph/pull/13186>`_, Oren Duer)
