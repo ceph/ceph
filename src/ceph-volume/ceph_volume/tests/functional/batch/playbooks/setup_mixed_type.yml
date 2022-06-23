@@ -12,7 +12,7 @@
         path: /etc/lvm/lvm.conf
         line: "\tfilter = [ 'r|loop.*|' ]"
         insertafter: 'devices {'
-    - name: lvm allow changes depsite duplicate PVIDs
+    - name: lvm allow changes despite duplicate PVIDs
       lineinfile:
         path: /etc/lvm/lvm.conf
         line: '        allow_changes_with_duplicate_pvs = 1'
