@@ -8,7 +8,7 @@
 
 namespace ScrubDatasets {
 /*
- * Two objects with some clones. No inconsitencies.
+ * Two objects with some clones. No inconsistencies.
  */
 extern ScrubGenerator::RealObjsConf minimal_snaps_configuration;
 
