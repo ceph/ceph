@@ -466,7 +466,7 @@ def get_pvs(fields=PV_FIELDS, filters='', tags=None):
                    pvs command
     :param sep: string containing separator to be used between two fields
     :param filters: dictionary containing LVM filters
-    :param tags: dictionary containng LVM tags
+    :param tags: dictionary containing LVM tags
     :returns: list of class PVolume object representing pvs on the system
     """
     filters = make_filters_lvmcmd_ready(filters, tags)
@@ -748,7 +748,7 @@ def get_vgs(fields=VG_FIELDS, filters='', tags=None):
                    vgs command
     :param sep: string containing separator to be used between two fields
     :param filters: dictionary containing LVM filters
-    :param tags: dictionary containng LVM tags
+    :param tags: dictionary containing LVM tags
     :returns: list of class VolumeGroup object representing vgs on the system
     """
     filters = make_filters_lvmcmd_ready(filters, tags)
@@ -1120,7 +1120,7 @@ def get_lvs(fields=LV_FIELDS, filters='', tags=None):
                    lvs command
     :param sep: string containing separator to be used between two fields
     :param filters: dictionary containing LVM filters
-    :param tags: dictionary containng LVM tags
+    :param tags: dictionary containing LVM tags
     :returns: list of class Volume object representing LVs on the system
     """
     filters = make_filters_lvmcmd_ready(filters, tags)
