@@ -6228,7 +6228,7 @@ void object_manifest_t::calc_refs_to_drop_on_removal(
    *
    * current will always be derived from the min of *giter, *iter, and
    * *liter on each cycle, so the result will be that each loop iteration
-   * will pick up all chunks at the offest being considered, each offset
+   * will pick up all chunks at the offset being considered, each offset
    * will be considered once, and all offsets will be considered.
    */
   auto get_chunk = [](
