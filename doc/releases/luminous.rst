@@ -3958,7 +3958,7 @@ Other Notable Changes
 * doc: Have install put manpages in the FreeBSD correct location (`pr#13301 <https://github.com/ceph/ceph/pull/13301>`_, Willem Jan Withagen)
 * doc: how to specify filesystem for cephfs clients (`pr#14087 <https://github.com/ceph/ceph/pull/14087>`_, John Spray)
 * doc: improve firewalld instructions (`pr#13360 <https://github.com/ceph/ceph/pull/13360>`_, Ken Dreyer)
-* doc: Indicate how to add multiple admin capbabilies (`pr#13956 <https://github.com/ceph/ceph/pull/13956>`_, Chu, Hua-Rong)
+* doc: Indicate how to add multiple admin capabilities (`pr#13956 <https://github.com/ceph/ceph/pull/13956>`_, Chu, Hua-Rong)
 * doc: instructions and guidance for multimds (`issue#19135 <http://tracker.ceph.com/issues/19135>`_, `pr#13830 <https://github.com/ceph/ceph/pull/13830>`_, John Spray)
 * doc: instructions for provisioning OpenStack VMs ad hoc (`pr#13368 <https://github.com/ceph/ceph/pull/13368>`_, Nathan Cutler)
 * doc: Jewel 10.2.6 release notes (`pr#13835 <https://github.com/ceph/ceph/pull/13835>`_, Abhishek Lekshmanan)
