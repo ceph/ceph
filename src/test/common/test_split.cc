@@ -87,7 +87,7 @@ TEST(split, iterator_singular)
   const auto parts = split("a,b");
   auto i = parts.begin();
 
-  // test comparions against default-constructed 'singular' iterators
+  // test comparisons against default-constructed 'singular' iterators
   split::iterator j;
   split::iterator k;
   EXPECT_EQ(j, parts.end()); // singular == end
