@@ -4423,7 +4423,7 @@ Changelog
 * mgr/cephadm: auto-select python version to use remotely (`pr#32327 <https://github.com/ceph/ceph/pull/32327>`_, Sage Weil)
 * mgr/cephadm: cache device inventory; zap (`pr#33394 <https://github.com/ceph/ceph/pull/33394>`_, Sage Weil)
 * mgr/cephadm: catch exceptions when scraping ceph-volume inventory (`pr#33484 <https://github.com/ceph/ceph/pull/33484>`_, Sage Weil)
-* mgr/cephadm: catch excpetions in serve() thread (`pr#33139 <https://github.com/ceph/ceph/pull/33139>`_, Sage Weil)
+* mgr/cephadm: catch exceptions in serve() thread (`pr#33139 <https://github.com/ceph/ceph/pull/33139>`_, Sage Weil)
 * mgr/cephadm: check-host on host add (`pr#32385 <https://github.com/ceph/ceph/pull/32385>`_, Sage Weil)
 * mgr/cephadm: clean up client.crash.\\* container_image settings after upgrade (`pr#34068 <https://github.com/ceph/ceph/pull/34068>`_, Sage Weil)
 * mgr/cephadm: consolidate/refactor all add\\_ and apply\\_ methods (`pr#33496 <https://github.com/ceph/ceph/pull/33496>`_, Sage Weil)
