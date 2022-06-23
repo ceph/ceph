@@ -1097,7 +1097,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       tmp.apply_incremental(pending_inc);
     }
 
-    // create a erasuce-coded pool referencing the above rule
+    // create a erasure-coded pool referencing the above rule
     int64_t pool_37968;
     {
       OSDMap::Incremental new_pool_inc(tmp.get_epoch() + 1);
@@ -2025,7 +2025,7 @@ TEST_F(OSDMapTest, BUG_43124) {
       f->flush(cout);
       delete f;
     }
-    // create a erasuce-coded pool referencing the above rule
+    // create a erasure-coded pool referencing the above rule
     int64_t pool_angel_1944;
     {
       OSDMap::Incremental new_pool_inc(tmp.get_epoch() + 1);

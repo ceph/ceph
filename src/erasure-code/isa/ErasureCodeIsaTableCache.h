@@ -19,7 +19,7 @@
  *
  * The INTEL ISA-L library supports two pre-defined encoding matrices (cauchy = default, reed_sol_van = default)
  * The default CODEC implementation using these two matrices is implemented in class ErasureCodeIsaDefault.
- * ISA-L allows to use custom matrices which might be added later as implementations deriving from the base class ErasoreCodeIsa.
+ * ISA-L allows to use custom matrices which might be added later as implementations deriving from the base class ErasureCodeIsa.
  */
 
 #ifndef CEPH_ERASURE_CODE_ISA_TABLE_CACHE_H

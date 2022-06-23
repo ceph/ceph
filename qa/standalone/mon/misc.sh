@@ -87,7 +87,7 @@ function TEST_osd_pool_get_set() {
 
     local ecpool=erasepool
     create_pool $ecpool 12 12 erasure default || return 1
-    #erasue pool size=k+m, min_size=k
+    #erasure pool size=k+m, min_size=k
     local size=$(ceph osd pool get $ecpool size|awk '{print $2}')
     local min_size=$(ceph osd pool get $ecpool min_size|awk '{print $2}')
     local k=$(expr $min_size - 1)  # default min_size=k+1
