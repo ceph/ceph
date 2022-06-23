@@ -2833,7 +2833,7 @@ public:
     return init.result.get();
   }
 
-  void _get_latest_version(epoch_t oldest, epoch_t neweset,
+  void _get_latest_version(epoch_t oldest, epoch_t newest,
 			   std::unique_ptr<OpCompletion> fin,
 			   std::unique_lock<ceph::shared_mutex>&& ul);
 
