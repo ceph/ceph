@@ -3776,7 +3776,7 @@ Detailed Changelog
 * rbd: resource agent needs to be executable (`issue#22980 <http://tracker.ceph.com/issues/22980>`_, `issue#22362 <http://tracker.ceph.com/issues/22362>`_, `pr#20397 <https://github.com/ceph/ceph/pull/20397>`_, Tim Bishop)
 * rbd:rm unnecessary conversion from string to char\* in image-meta function (`pr#17184 <https://github.com/ceph/ceph/pull/17184>`_, PCzhangPC)
 * rbd: show read:write proportion in the information of readwrite bench test (`pr#18249 <https://github.com/ceph/ceph/pull/18249>`_, PCzhangPC)
-* rbd: snap limit should't be set smaller than the number of  existing snaps (`pr#16597 <https://github.com/ceph/ceph/pull/16597>`_, PCzhangPC)
+* rbd: snap limit shouldn't be set smaller than the number of  existing snaps (`pr#16597 <https://github.com/ceph/ceph/pull/16597>`_, PCzhangPC)
 * rbd: support cloning an image from a non-primary snapshot (`issue#18480 <http://tracker.ceph.com/issues/18480>`_, `pr#19724 <https://github.com/ceph/ceph/pull/19724>`_, Jason Dillaman)
 * rbd: support iterating over metadata items when listing (`issue#21179 <http://tracker.ceph.com/issues/21179>`_, `pr#17532 <https://github.com/ceph/ceph/pull/17532>`_, Jason Dillaman)
 * rbd: support lock_timeout in rbd mapping (`pr#21344 <https://github.com/ceph/ceph/pull/21344>`_, Dongsheng Yang)
