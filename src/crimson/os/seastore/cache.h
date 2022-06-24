@@ -798,7 +798,7 @@ public:
     const delta_info_t &delta,
     const journal_seq_t &, // journal seq from which alloc
 			   // delta should be replayed
-    seastar::lowres_system_clock::time_point& last_modified);
+    sea_time_point &modify_time);
 
   /**
    * init_cached_extents

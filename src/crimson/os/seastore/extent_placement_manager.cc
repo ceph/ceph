@@ -83,17 +83,7 @@ SegmentedOolWriter::do_write(
   }
   record_t record;
   std::list<LogicalCachedExtentRef> pending_extents;
-
   auto commit_time = seastar::lowres_system_clock::now();
-  record_commit_type_t commit_type;
-  if (t.get_src() == Transaction::src_t::MUTATE) {
-    commit_type = record_commit_type_t::MODIFY;
-  } else {
-    assert(is_cleaner_transaction(t.get_src()));
-    commit_type = record_commit_type_t::REWRITE;
-  }
-  record.commit_time = commit_time.time_since_epoch().count();
-  record.commit_type = commit_type;
 
   for (auto it = extents.begin(); it != extents.end();) {
     auto& extent = *it;
@@ -126,21 +116,20 @@ SegmentedOolWriter::do_write(
     TRACET("{} extents={} add extent to record -- {}",
            t, segment_allocator.get_name(),
            extents.size(), *extent);
-    if (commit_type == record_commit_type_t::MODIFY) {
-      extent->set_last_modified(commit_time);
-    } else {
-      assert(commit_type == record_commit_type_t::REWRITE);
-      extent->set_last_rewritten(commit_time);
-    }
     ceph::bufferlist bl;
     extent->prepare_write();
     bl.append(extent->get_bptr());
     assert(bl.length() == extent->get_length());
-    record.push_back(extent_t{
-      extent->get_type(),
-      extent->get_laddr(),
-      std::move(bl),
-      extent->get_last_modified().time_since_epoch().count()});
+    auto modify_time = extent->get_modify_time();
+    if (modify_time == NULL_TIME) {
+      modify_time = commit_time;
+    }
+    record.push_back(
+      extent_t{
+        extent->get_type(),
+        extent->get_laddr(),
+        std::move(bl)},
+      modify_time);
     pending_extents.push_back(extent);
     it = extents.erase(it);
 

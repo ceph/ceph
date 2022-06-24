@@ -443,7 +443,8 @@ public:
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
-    reclaim_gen_t target_generation) final;
+    reclaim_gen_t target_generation,
+    sea_time_point modify_time) final;
 
   using AsyncCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
   get_extent_if_live_ret get_extent_if_live(

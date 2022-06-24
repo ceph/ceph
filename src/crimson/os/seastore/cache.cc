@@ -712,6 +712,7 @@ void Cache::add_to_dirty(CachedExtentRef ref)
 {
   assert(ref->is_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
+  ceph_assert(ref->get_modify_time() != NULL_TIME);
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
   stats.dirty_bytes += ref->get_length();
@@ -1025,10 +1026,6 @@ record_t Cache::prepare_record(
 
   record_t record;
   auto commit_time = seastar::lowres_system_clock::now();
-  record.commit_time = commit_time.time_since_epoch().count();
-  record.commit_type = (t.get_src() == Transaction::src_t::MUTATE)
-			? record_commit_type_t::MODIFY
-			: record_commit_type_t::REWRITE;
 
   // Add new copy of mutated blocks, set_io_wait to block until written
   record.deltas.reserve(t.mutated_block_list.size());
@@ -1046,12 +1043,12 @@ record_t Cache::prepare_record(
     auto delta_length = delta_bl.length();
     DEBUGT("mutated extent with {}B delta, commit replace extent ... -- {}, prior={}",
            t, delta_length, *i, *i->prior_instance);
+    i->set_modify_time(commit_time);
     commit_replace_extent(t, i, i->prior_instance);
 
     i->prepare_write();
     i->set_io_wait();
 
-    i->set_last_modified(commit_time);
     assert(i->get_version() > 0);
     auto final_crc = i->get_crc32c();
     if (i->get_type() == extent_types_t::ROOT) {
@@ -1155,14 +1152,11 @@ record_t Cache::prepare_record(
       ceph_assert(0 == "ROOT never gets written as a fresh block");
     }
 
-    if (t.get_src() == Transaction::src_t::MUTATE) {
-      i->set_last_modified(commit_time);
-    } else {
-      assert(is_cleaner_transaction(t.get_src()));
-      i->set_last_rewritten(commit_time);
-    }
-
     assert(bl.length() == i->get_length());
+    auto modify_time = i->get_modify_time();
+    if (modify_time == NULL_TIME) {
+      modify_time = commit_time;
+    }
     record.push_back(extent_t{
 	i->get_type(),
 	i->is_logical()
@@ -1170,9 +1164,9 @@ record_t Cache::prepare_record(
 	: (is_lba_node(i->get_type())
 	  ? i->cast<lba_manager::btree::LBANode>()->get_node_meta().begin
 	  : L_ADDR_NULL),
-	std::move(bl),
-	i->get_last_modified().time_since_epoch().count()
-      });
+	std::move(bl)
+      },
+      modify_time);
     if (i->is_valid()
 	&& is_backref_mapped_extent_node(i)) {
       alloc_delta.alloc_blk_ranges.emplace_back(
@@ -1241,10 +1235,14 @@ record_t Cache::prepare_record(
     assert(ool_stats.is_clear());
   }
 
+  if (record.modify_time == NULL_TIME) {
+    record.modify_time = commit_time;
+  }
+
   SUBDEBUGT(seastore_t,
       "commit H{} dirty_from={}, {} read, {} fresh with {} invalid, "
       "{} delta, {} retire, {}(md={}B, data={}B) ool-records, "
-      "{}B md, {}B data",
+      "{}B md, {}B data, modify_time={}",
       t, (void*)&t.get_handle(),
       get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
       read_stat,
@@ -1256,7 +1254,8 @@ record_t Cache::prepare_record(
       ool_stats.md_bytes,
       ool_stats.get_data_bytes(),
       record.size.get_raw_mdlength(),
-      record.size.dlength);
+      record.size.dlength,
+      sea_time_point_printer_t{record.modify_time});
   if (is_cleaner_transaction(trans_src)) {
     // CLEANER transaction won't contain any onode tree operations
     assert(t.onode_tree_stats.is_clear());
@@ -1399,13 +1398,7 @@ void Cache::complete_commit(
       if (cleaner) {
 	cleaner->mark_space_used(
 	  i->get_paddr(),
-	  i->get_length(),
-	  (t.get_src() == Transaction::src_t::MUTATE)
-	    ? i->last_modified
-	    : seastar::lowres_system_clock::time_point(),
-	  (is_cleaner_transaction(t.get_src()))
-	    ? i->last_rewritten
-	    : seastar::lowres_system_clock::time_point());
+	  i->get_length());
       }
       if (is_backref_mapped_extent_node(i)) {
 	backref_list.emplace_back(
@@ -1547,10 +1540,11 @@ Cache::replay_delta(
   paddr_t record_base,
   const delta_info_t &delta,
   const journal_seq_t &alloc_replay_from,
-  seastar::lowres_system_clock::time_point& last_modified)
+  sea_time_point &modify_time)
 {
   LOG_PREFIX(Cache::replay_delta);
   assert(alloc_replay_from != JOURNAL_SEQ_NULL);
+  ceph_assert(modify_time != NULL_TIME);
   if (delta.type == extent_types_t::ROOT) {
     TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
           journal_seq, record_base, delta, *root);
@@ -1560,7 +1554,7 @@ Cache::replay_delta(
     root->state = CachedExtent::extent_state_t::DIRTY;
     DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
           journal_seq, record_base, delta, *root);
-    root->set_last_modified(last_modified);
+    root->set_modify_time(modify_time);
     add_extent(root);
     return replay_delta_ertr::now();
   } else if (delta.type == extent_types_t::ALLOC_INFO) {
@@ -1642,7 +1636,7 @@ Cache::replay_delta(
 
       assert(extent->last_committed_crc == delta.prev_crc);
       extent->apply_delta_and_adjust_crc(record_base, delta.bl);
-      extent->set_last_modified(last_modified);
+      extent->set_modify_time(modify_time);
       assert(extent->last_committed_crc == delta.final_crc);
 
       extent->version++;

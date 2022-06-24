@@ -79,6 +79,8 @@ struct btree_test_base :
 
   void update_segment_avail_bytes(segment_type_t, paddr_t) final {}
 
+  void update_modify_time(segment_id_t, sea_time_point, std::size_t) final {}
+
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
 
   journal_seq_t get_dirty_extents_replay_from() const final {
