@@ -1,13 +1,14 @@
 import json
 import errno
 import logging
+import os
 from typing import TYPE_CHECKING
 
 import cephfs
 
 from mgr_util import CephfsClient
 
-from .fs_util import listdir
+from .fs_util import listdir, has_subdir
 
 from .operations.volume import create_volume, \
     delete_volume, list_volumes, open_volume, get_pool_names
@@ -451,6 +452,28 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def subvolume_exists(self, **kwargs):
+        volname = kwargs['vol_name']
+        groupname = kwargs['group_name']
+        ret = 0, "", ""
+        volume_exists = False
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                volume_exists = True
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    res = group.has_subvolumes()
+                    if res:
+                        ret = 0, "subvolume exists", ""
+                    else:
+                        ret = 0, "no subvolume exists", ""
+        except VolumeException as ve:
+            if volume_exists and ve.errno == -errno.ENOENT:
+                ret = 0, "no subvolume exists", ""
+            else:
+                ret = self.volume_exception_to_retval(ve)
+        return ret
+
     ### subvolume snapshot
 
     def create_subvolume_snapshot(self, **kwargs):
@@ -847,6 +870,27 @@ class VolumeClient(CephfsClient["Module"]):
                     ret = 0, json.dumps({}), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_group_exists(self, **kwargs):
+        volname = kwargs['vol_name']
+        ret = 0, "", ""
+        volume_exists = False
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                volume_exists = True
+                res = has_subdir(fs_handle, self.volspec.base_dir, filter_entries=[
+                                 dir.encode('utf-8') for dir in self.volspec.INTERNAL_DIRS])
+                if res:
+                    ret = 0, "subvolumegroup exists", ""
+                else:
+                    ret = 0, "no subvolumegroup exists", ""
+        except VolumeException as ve:
+            if volume_exists and ve.errno == -errno.ENOENT:
+                ret = 0, "no subvolumegroup exists", ""
+            else:
+                ret = self.volume_exception_to_retval(ve)
         return ret
 
     ### group snapshot

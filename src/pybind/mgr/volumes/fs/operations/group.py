@@ -8,7 +8,7 @@ import cephfs
 from .snapshot_util import mksnap, rmsnap
 from .pin_util import pin
 from .template import GroupTemplate
-from ..fs_util import listdir, listsnaps, get_ancestor_xattr, create_base_dir
+from ..fs_util import listdir, listsnaps, get_ancestor_xattr, create_base_dir, has_subdir
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
@@ -61,6 +61,15 @@ class Group(GroupTemplate):
             # listing a default group when it's not yet created
             if ve.errno == -errno.ENOENT and self.is_default_group():
                 return []
+            raise
+
+    def has_subvolumes(self):
+        try:
+            return has_subdir(self.fs, self.path)
+        except VolumeException as ve:
+            # listing a default group when it's not yet created
+            if ve.errno == -errno.ENOENT and self.is_default_group():
+                return False
             raise
 
     def pin(self, pin_type, pin_setting):

@@ -78,6 +78,28 @@ def listdir(fs, dirpath, filter_entries=None):
         raise VolumeException(-e.args[0], e.args[1])
     return dirs
 
+
+def has_subdir(fs, dirpath, filter_entries=None):
+    """
+    Check the presence of directory (only dirs) for a given path
+    """
+    res = False
+    if filter_entries is None:
+        filter_entries = [b".", b".."]
+    else:
+        filter_entries.extend([b".", b".."])
+    try:
+        with fs.opendir(dirpath) as dir_handle:
+            d = fs.readdir(dir_handle)
+            while d:
+                if (d.d_name not in filter_entries) and d.is_dir():
+                    res = True
+                    break
+                d = fs.readdir(dir_handle)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+    return res
+
 def is_inherited_snap(snapname):
     """
     Returns True if the snapname is inherited else False
