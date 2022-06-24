@@ -347,12 +347,9 @@ struct RGWDataSyncCtx {
 
   void init(RGWDataSyncEnv *_env,
             const RGWRemoteCtl::Conns& _conns,
-            const rgw_zone_id& _source_zone) {
-    cct = _env->cct;
-    env = _env;
-    conns = _conns;
-    source_zone = _source_zone;
-  }
+            const rgw_zone_id& _source_zone);
+
+  void reset_env(RGWDataSyncEnv *new_env);
 };
 
 class RGWRados;
@@ -374,6 +371,8 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   RGWSyncTraceNodeRef tn;
 
   bool initialized;
+
+  int local_call(const DoutPrefixProvider *dpp, std::function<int(RGWCoroutinesManager&, RGWDataSyncCtx&)> f);
 
 public:
   RGWRemoteDataLog(const DoutPrefixProvider *dpp,

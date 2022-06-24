@@ -716,9 +716,8 @@ void RGWRemoteDataLog::finish()
   stop();
 }
 
-int RGWRemoteDataLog::read_sync_status(const DoutPrefixProvider *dpp, rgw_data_sync_status *sync_status)
+int RGWRemoteDataLog::local_call(const DoutPrefixProvider *dpp, std::function<int(RGWCoroutinesManager&, RGWDataSyncCtx&)> f)
 {
-  // cannot run concurrently with run_sync(), so run in a separate manager
   RGWCoroutinesManager crs(cct, cr_registry);
   RGWHTTPManager http_manager(cct, crs.get_completion_mgr());
   int ret = http_manager.start();
@@ -730,35 +729,37 @@ int RGWRemoteDataLog::read_sync_status(const DoutPrefixProvider *dpp, rgw_data_s
   sync_env_local.http_manager = &http_manager;
 
   RGWDataSyncCtx sc_local = sc;
-  sc_local.env = &sync_env_local;
+  sc_local.reset_env(&sync_env_local);
 
-  ret = crs.run(dpp, new RGWReadDataSyncStatusCoroutine(&sc_local, sync_status));
+  ret = f(crs, sc_local);
+
   http_manager.stop();
+  return ret;
+}
+
+int RGWRemoteDataLog::read_sync_status(const DoutPrefixProvider *dpp, rgw_data_sync_status *sync_status)
+ {
+   // cannot run concurrently with run_sync(), so run in a separate manager
+  int ret = local_call(dpp, [&](RGWCoroutinesManager& crs, RGWDataSyncCtx& sc_local) {
+
+    return crs.run(dpp, new RGWReadDataSyncStatusCoroutine(&sc, sync_status));
+  });
+
   return ret;
 }
 
 int RGWRemoteDataLog::read_recovering_shards(const DoutPrefixProvider *dpp, const int num_shards, set<int>& recovering_shards)
 {
-  // cannot run concurrently with run_sync(), so run in a separate manager
-  RGWCoroutinesManager crs(cct, cr_registry);
-  RGWHTTPManager http_manager(cct, crs.get_completion_mgr());
-  int ret = http_manager.start();
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
-    return ret;
-  }
-  RGWDataSyncEnv sync_env_local = sync_env;
-  sync_env_local.http_manager = &http_manager;
-
-  RGWDataSyncCtx sc_local = sc;
-  sc_local.env = &sync_env_local;
-
   std::vector<RGWRadosGetOmapKeysCR::ResultPtr> omapkeys;
-  omapkeys.resize(num_shards);
-  uint64_t max_entries{1};
 
-  ret = crs.run(dpp, new RGWReadDataSyncRecoveringShardsCR(&sc_local, max_entries, num_shards, omapkeys));
-  http_manager.stop();
+  // cannot run concurrently with run_sync(), so run in a separate manager
+  int ret = local_call(dpp, [&](RGWCoroutinesManager& crs, RGWDataSyncCtx& sc_local) {
+
+    omapkeys.resize(num_shards);
+    uint64_t max_entries{1};
+
+    return crs.run(dpp, new RGWReadDataSyncRecoveringShardsCR(&sc, max_entries, num_shards, omapkeys));
+  });
 
   if (ret == 0) {
     for (int i = 0; i < num_shards; i++) {
@@ -773,23 +774,14 @@ int RGWRemoteDataLog::read_recovering_shards(const DoutPrefixProvider *dpp, cons
 
 int RGWRemoteDataLog::init_sync_status(const DoutPrefixProvider *dpp, int num_shards)
 {
-  rgw_data_sync_status sync_status;
-  sync_status.sync_info.num_shards = num_shards;
+  int ret = local_call(dpp, [&](RGWCoroutinesManager& crs, RGWDataSyncCtx& sc_local) {
+    rgw_data_sync_status sync_status;
+    sync_status.sync_info.num_shards = num_shards;
+    auto instance_id = ceph::util::generate_random_number<uint64_t>();
 
-  RGWCoroutinesManager crs(cct, cr_registry);
-  RGWHTTPManager http_manager(cct, crs.get_completion_mgr());
-  int ret = http_manager.start();
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
-    return ret;
-  }
-  RGWDataSyncEnv sync_env_local = sync_env;
-  sync_env_local.http_manager = &http_manager;
-  auto instance_id = ceph::util::generate_random_number<uint64_t>();
-  RGWDataSyncCtx sc_local = sc;
-  sc_local.env = &sync_env_local;
-  ret = crs.run(dpp, new RGWInitDataSyncStatusCoroutine(&sc_local, num_shards, instance_id, tn, &sync_status));
-  http_manager.stop();
+    return crs.run(dpp, new RGWInitDataSyncStatusCoroutine(&sc_local, num_shards, instance_id, tn, &sync_status));
+  });
+
   return ret;
 }
 
@@ -1413,6 +1405,21 @@ public:
     return 0;
   }
 };
+
+void RGWDataSyncCtx::init(RGWDataSyncEnv *_env,
+                          const RGWRemoteCtl::Conns& _conns,
+                          const rgw_zone_id& _source_zone) {
+  cct = _env->cct;
+  env = _env;
+  conns = _conns;
+  source_zone = _source_zone;
+}
+
+void RGWDataSyncCtx::reset_env(RGWDataSyncEnv *new_env)
+{
+  env = new_env;
+  cct = new_env->cct;
+}
 
 #define DATA_SYNC_MAX_ERR_ENTRIES 10
 
