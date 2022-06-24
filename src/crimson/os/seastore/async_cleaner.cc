@@ -65,8 +65,8 @@ void segment_info_t::init_closed(
 
 std::ostream& operator<<(std::ostream &out, const segment_info_t &info)
 {
-  out << "seg_info_t("
-      << "state=" << info.state;
+  out << "seg_info_t(" << info.id
+      << ", state=" << info.state;
   if (info.is_empty()) {
     // pass
   } else { // open or closed
@@ -569,11 +569,13 @@ segment_id_t AsyncCleaner::allocate_segment(
       segments.mark_open(seg_id, seq, type, category, generation);
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
-      INFO("opened, should_block_on_gc {}, projected_avail_ratio {}, "
-           "reclaim_ratio {}",
-           should_block_on_gc(),
+      INFO("opened, should_block_on_trim {}, should_block_on_reclaim {}, "
+           "projected_avail_ratio {}, reclaim_ratio {}, alive_ratio {}",
+           should_block_on_trim(),
+           should_block_on_reclaim(),
            get_projected_available_ratio(),
-           get_reclaim_ratio());
+           get_reclaim_ratio(),
+           get_alive_ratio());
       return seg_id;
     }
   }
@@ -670,11 +672,14 @@ void AsyncCleaner::close_segment(segment_id_t segment)
   }
   auto new_usage = calc_utilization(segment);
   adjust_segment_util(old_usage, new_usage);
-  INFO("closed, should_block_on_gc {}, projected_avail_ratio {}, "
-       "reclaim_ratio {}",
-       should_block_on_gc(),
+  INFO("closed, should_block_on_trim {}, should_block_on_reclaim {}, "
+       "projected_avail_ratio {}, reclaim_ratio {}, alive_ratio {} -- {}",
+       should_block_on_trim(),
+       should_block_on_reclaim(),
        get_projected_available_ratio(),
-       get_reclaim_ratio());
+       get_reclaim_ratio(),
+       get_alive_ratio(),
+       seg_info);
 }
 
 AsyncCleaner::trim_backrefs_ret AsyncCleaner::trim_backrefs(
@@ -888,7 +893,8 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];
-    INFO("reclaim {} {} start", seg_id, segment_info);
+    INFO("reclaim {} {} start, usage={}",
+         seg_id, segment_info, space_tracker->calc_utilization(seg_id));
     ceph_assert(segment_info.is_closed());
     reclaim_state = reclaim_state_t::create(
         seg_id, segment_info.generation, segments.get_segment_size());
@@ -1023,9 +1029,10 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
       auto d = seastar::lowres_system_clock::now() - start;
       DEBUG("duration: {}, pavail_ratio before: {}, repeats: {}", d, pavail_ratio, runs);
       if (reclaim_state->is_complete()) {
-	INFO("reclaim {} finish, alive/total={}",
+	INFO("reclaim {} finish, reclaimed alive/total={}, usage={}",
              reclaim_state->get_segment_id(),
-             stats.reclaiming_bytes/(double)segments.get_segment_size());
+             stats.reclaiming_bytes/(double)segments.get_segment_size(),
+             space_tracker->calc_utilization(reclaim_state->get_segment_id()));
 	stats.reclaimed_bytes += stats.reclaiming_bytes;
 	stats.reclaimed_segment_bytes += segments.get_segment_size();
 	stats.reclaiming_bytes = 0;
@@ -1058,6 +1065,7 @@ AsyncCleaner::mount_ret AsyncCleaner::mount()
   for (auto sm : sms) {
     segments.add_segment_manager(*sm);
   }
+  segments.assign_ids();
   metrics.clear();
   register_metrics();
 
@@ -1221,12 +1229,14 @@ AsyncCleaner::maybe_release_segment(Transaction &t)
       segments.mark_empty(to_release);
       auto new_usage = calc_utilization(to_release);
       adjust_segment_util(old_usage, new_usage);
-      INFOT("released, should_block_on_gc {}, projected_avail_ratio {}, "
-           "reclaim_ratio {}",
-           t,
-           should_block_on_gc(),
-           get_projected_available_ratio(),
-           get_reclaim_ratio());
+      INFOT("released, should_block_on_trim {}, should_block_on_reclaim {}, "
+            "projected_avail_ratio {}, reclaim_ratio {}, alive_ratio {}",
+            t,
+            should_block_on_trim(),
+            should_block_on_reclaim(),
+            get_projected_available_ratio(),
+            get_reclaim_ratio(),
+            get_alive_ratio());
       if (space_tracker->get_usage(to_release) != 0) {
         space_tracker->dump_usage(to_release);
         ceph_abort();
@@ -1372,7 +1382,8 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       "unavailable_unused {}B; "
       "reclaim_ratio {}, "
       "available_ratio {}, "
-      "should_block_on_gc {}, "
+      "should_block_on_trim {}, "
+      "should_block_on_reclaim {}, "
       "gc_should_reclaim_space {}, "
       "journal_head {}, "
       "journal_tail_target {}, "
@@ -1392,7 +1403,8 @@ void AsyncCleaner::log_gc_state(const char *caller) const
       get_unavailable_unused_bytes(),
       get_reclaim_ratio(),
       segments.get_available_ratio(),
-      should_block_on_gc(),
+      should_block_on_trim(),
+      should_block_on_reclaim(),
       gc_should_reclaim_space(),
       segments.get_journal_head(),
       journal_tail_target,
