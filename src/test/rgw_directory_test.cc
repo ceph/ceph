@@ -9,6 +9,9 @@ using namespace std;
 string portStr;
 string redisHost = "";
 string host = "127.0.0.1";
+string oid = "samoid";
+string bucketName = "testBucket";
+int blkSize = 123;
 
 class DirectoryFixture: public ::testing::Test {
   protected:
@@ -17,9 +20,9 @@ class DirectoryFixture: public ::testing::Test {
       c_blk = new cache_block();
 
       c_blk->hosts_list.push_back(redisHost);
-      c_blk->size_in_bytes = 123; 
-      c_blk->c_obj.bucket_name = "testBucket";
-      c_blk->c_obj.obj_name = "samoid";
+      c_blk->size_in_bytes = blkSize; 
+      c_blk->c_obj.bucket_name = bucketName;
+      c_blk->c_obj.obj_name = oid;
     } 
 
     virtual void TearDown() {
@@ -70,7 +73,7 @@ TEST(DirectoryTest, RedisTest) {
   client.connect(host, stoi(portStr), nullptr, 0, 5, 1000);
   ASSERT_EQ((bool)client.is_connected(), (bool)1);
 
-  client.hmget("samoid", fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply& reply) {
+  client.hmget(oid, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
@@ -86,11 +89,11 @@ TEST(DirectoryTest, RedisTest) {
   client.sync_commit(std::chrono::milliseconds(1000));
 
   EXPECT_EQ(key_exist, 0);
-  EXPECT_EQ(key, "samoid");
+  EXPECT_EQ(key, oid);
   EXPECT_EQ(hosts, redisHost);
-  EXPECT_EQ(size, "123");
-  EXPECT_EQ(bucket_name, "testBucket");
-  EXPECT_EQ(obj_name, "samoid");
+  EXPECT_EQ(size, to_string(blkSize));
+  EXPECT_EQ(bucket_name, bucketName);
+  EXPECT_EQ(obj_name, oid);
 }
 
 int main(int argc, char *argv[]) {
