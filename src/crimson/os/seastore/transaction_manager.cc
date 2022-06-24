@@ -93,7 +93,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	const auto &offsets,
 	const auto &e,
 	const journal_seq_t alloc_replay_from,
-	auto last_modified)
+	auto modify_time)
       {
 	auto start_seq = offsets.write_result.start_seq;
 	async_cleaner->update_journal_tail_target(
@@ -104,7 +104,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	  offsets.record_block_base,
 	  e,
 	  alloc_replay_from,
-	  last_modified);
+	  modify_time);
       });
   }).safe_then([this] {
     return journal->open_for_write();
@@ -142,8 +142,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    async_cleaner->mark_space_used(
 		      addr,
 		      len ,
-		      seastar::lowres_system_clock::time_point(),
-		      seastar::lowres_system_clock::time_point(),
 		      /* init_scan = */ true);
 		  }
 		  if (is_backref_node(type)) {
@@ -164,8 +162,6 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    async_cleaner->mark_space_used(
 		      backref.paddr,
 		      backref.len,
-		      seastar::lowres_system_clock::time_point(),
-		      seastar::lowres_system_clock::time_point(),
 		      true);
 		    cache->update_tree_extents_num(backref.type, 1);
 		  }
@@ -479,7 +475,7 @@ TransactionManager::rewrite_logical_extent(
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
   nlextent->set_pin(lextent->get_pin().duplicate());
-  nlextent->last_modified = lextent->last_modified;
+  nlextent->set_modify_time(lextent->get_modify_time());
 
   DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
@@ -497,7 +493,8 @@ TransactionManager::rewrite_logical_extent(
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent,
-  reclaim_gen_t target_generation)
+  reclaim_gen_t target_generation,
+  sea_time_point modify_time)
 {
   LOG_PREFIX(TransactionManager::rewrite_extent);
 
@@ -516,6 +513,8 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     extent->set_reclaim_generation(DIRTY_GENERATION);
   } else {
     extent->set_reclaim_generation(target_generation);
+    ceph_assert(modify_time != NULL_TIME);
+    extent->set_modify_time(modify_time);
   }
 
   t.get_rewrite_version_stats().increment(extent->get_version());

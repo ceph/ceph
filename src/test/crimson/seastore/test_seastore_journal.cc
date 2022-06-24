@@ -128,6 +128,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   void update_segment_avail_bytes(segment_type_t, paddr_t) final {}
 
+  void update_modify_time(segment_id_t, sea_time_point, std::size_t) final {}
+
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
 
   seastar::future<> set_up_fut() final {

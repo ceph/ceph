@@ -823,6 +823,7 @@ public:
         0,
         fixed_kv_extent.get_length(),
         n_fixed_kv_extent->get_bptr().c_str());
+      n_fixed_kv_extent->set_modify_time(fixed_kv_extent.get_modify_time());
       n_fixed_kv_extent->pin.set_range(n_fixed_kv_extent->get_node_meta());
       
       /* This is a bit underhanded.  Any relative addrs here must necessarily

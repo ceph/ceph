@@ -221,6 +221,10 @@ SegmentAllocator::close_segment()
     cur_journal_tail = NO_DELTAS;
     new_alloc_replay_from = NO_DELTAS;
   }
+  ceph_assert((close_seg_info.modify_time == NULL_TIME &&
+               close_seg_info.num_extents == 0) ||
+              (close_seg_info.modify_time != NULL_TIME &&
+               close_seg_info.num_extents != 0));
   auto tail = segment_tail_t{
     close_seg_info.seq,
     close_segment_id,
@@ -228,8 +232,8 @@ SegmentAllocator::close_segment()
     new_alloc_replay_from,
     current_segment_nonce,
     type,
-    close_seg_info.last_modified.time_since_epoch().count(),
-    close_seg_info.last_rewritten.time_since_epoch().count()};
+    timepoint_to_mod(close_seg_info.modify_time),
+    close_seg_info.num_extents};
   ceph::bufferlist bl;
   encode(tail, bl);
   INFO("{} close segment id={}, seq={}, written_to={}, nonce={}, journal_tail={}",
@@ -519,6 +523,10 @@ RecordSubmitter::submit(record_t&& record)
   LOG_PREFIX(RecordSubmitter::submit);
   assert(is_available());
   assert(check_action(record.size) != action_t::ROLL);
+  segment_allocator.get_provider().update_modify_time(
+      segment_allocator.get_segment_id(),
+      record.modify_time,
+      record.extents.size());
   auto eval = p_current_batch->evaluate_submit(
       record.size, segment_allocator.get_block_size());
   bool needs_flush = (

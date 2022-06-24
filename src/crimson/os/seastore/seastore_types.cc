@@ -196,6 +196,22 @@ std::ostream &operator<<(std::ostream &out, data_category_t c)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, sea_time_point_printer_t tp)
+{
+  if (tp.tp == NULL_TIME) {
+    return out << "tp(NULL)";
+  }
+  auto time = seastar::lowres_system_clock::to_time_t(tp.tp);
+  char buf[32];
+  std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&time));
+  return out << "tp(" << buf << ")";
+}
+
+std::ostream &operator<<(std::ostream &out, mod_time_point_printer_t tp) {
+  auto time = mod_to_timepoint(tp.tp);
+  return out << "mod_" << sea_time_point_printer_t{time};
+}
+
 std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs)
 {
   bool first = false;
@@ -259,8 +275,8 @@ std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail)
 	     << ", segment_id=" << tail.physical_segment_id
 	     << ", journal_tail=" << tail.journal_tail
 	     << ", segment_nonce=" << tail.segment_nonce
-	     << ", last_modified=" << tail.last_modified
-	     << ", last_rewritten=" << tail.last_rewritten
+	     << ", modify_time=" << mod_time_point_printer_t{tail.modify_time}
+	     << ", num_extents=" << tail.num_extents
 	     << ")";
 }
 
@@ -297,6 +313,7 @@ std::ostream &operator<<(std::ostream& out, const record_t& r)
   return out << "record_t("
              << "num_extents=" << r.extents.size()
              << ", num_deltas=" << r.deltas.size()
+             << ", modify_time=" << sea_time_point_printer_t{r.modify_time}
              << ")";
 }
 
@@ -305,6 +322,7 @@ std::ostream &operator<<(std::ostream& out, const record_header_t& r)
   return out << "record_header_t("
              << "num_extents=" << r.extents
              << ", num_deltas=" << r.deltas
+             << ", modify_time=" << mod_time_point_printer_t{r.modify_time}
              << ")";
 }
 
@@ -404,8 +422,7 @@ ceph::bufferlist encode_records(
     record_header_t rheader{
       (extent_len_t)r.deltas.size(),
       (extent_len_t)r.extents.size(),
-      r.commit_time,
-      r.commit_type
+      timepoint_to_mod(r.modify_time)
     };
     encode(rheader, bl);
   }
@@ -599,7 +616,7 @@ try_decode_deltas(
     for (auto& i: result_iter->deltas) {
       try {
         decode(i.second, bliter);
-	i.first = r.header.commit_time;
+        i.first = mod_to_timepoint(r.header.modify_time);
       } catch (ceph::buffer::error &e) {
         journal_logger().debug(
             "try_decode_deltas: failed, "

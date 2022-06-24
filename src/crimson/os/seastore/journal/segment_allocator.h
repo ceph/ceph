@@ -40,6 +40,10 @@ class SegmentAllocator {
     return print_name;
   }
 
+  SegmentProvider &get_provider() {
+    return segment_provider;
+  }
+
   seastore_off_t get_block_size() const {
     return sm_group.get_block_size();
   }

@@ -101,10 +101,7 @@ class CachedExtent : public boost::intrusive_ref_counter<
   CachedExtentRef prior_instance;
 
   // time of the last modification
-  seastar::lowres_system_clock::time_point last_modified;
-
-  // time of the last rewrite
-  seastar::lowres_system_clock::time_point last_rewritten;
+  sea_time_point modify_time = NULL_TIME;
 
 public:
   void init(extent_state_t _state,
@@ -117,29 +114,14 @@ public:
     reclaim_generation = gen;
   }
 
-  void set_last_modified(seastar::lowres_system_clock::duration d) {
-    last_modified = seastar::lowres_system_clock::time_point(d);
+  void set_modify_time(sea_time_point t) {
+    modify_time = t;
   }
 
-  void set_last_modified(seastar::lowres_system_clock::time_point t) {
-    last_modified = t;
+  sea_time_point get_modify_time() const {
+    return modify_time;
   }
 
-  seastar::lowres_system_clock::time_point get_last_modified() const {
-    return last_modified;
-  }
-
-  void set_last_rewritten(seastar::lowres_system_clock::duration d) {
-    last_rewritten = seastar::lowres_system_clock::time_point(d);
-  }
-
-  void set_last_rewritten(seastar::lowres_system_clock::time_point t) {
-    last_rewritten = t;
-  }
-
-  seastar::lowres_system_clock::time_point get_last_rewritten() const {
-    return last_rewritten;
-  }
   /**
    *  duplicate_for_write
    *
@@ -213,8 +195,7 @@ public:
 	<< ", type=" << get_type()
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
-	<< ", last_modified=" << last_modified.time_since_epoch()
-	<< ", last_rewritten=" << last_rewritten.time_since_epoch()
+	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
 	<< ", paddr=" << get_paddr()
 	<< ", length=" << get_length()
 	<< ", state=" << state
