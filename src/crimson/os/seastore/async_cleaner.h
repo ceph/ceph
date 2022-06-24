@@ -546,8 +546,8 @@ public:
 	  12,   // target_journal_segments
 	  16,   // max_journal_segments
 	  2,	// target_backref_inflight_segments
-	  .1,   // available_ratio_gc_max
-	  .05,  // available_ratio_hard_limit
+	  .15,  // available_ratio_gc_max
+	  .1,   // available_ratio_hard_limit
 	  .1,   // reclaim_ratio_gc_threshold
 	  1<<20,// reclaim_bytes_per_cycle
 	  1<<17,// rewrite_dirty_bytes_per_cycle
