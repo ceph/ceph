@@ -29,6 +29,8 @@ namespace crimson::os::seastore {
 struct segment_info_t {
   using time_point = seastar::lowres_system_clock::time_point;
 
+  segment_id_t id = NULL_SEG_ID;
+
   // segment_info_t is initiated as set_empty()
   Segment::segment_state_t state = Segment::segment_state_t::EMPTY;
 
@@ -195,6 +197,12 @@ public:
   void reset();
 
   void add_segment_manager(SegmentManager &segment_manager);
+
+  void assign_ids() {
+    for (auto &item : segments) {
+      item.second.id = item.first;
+    }
+  }
 
   // initiate non-empty segments, the others are by default empty
   void init_closed(segment_id_t, segment_seq_t, segment_type_t,
@@ -1156,6 +1164,9 @@ private:
   double get_reclaim_ratio() const {
     if (segments.get_unavailable_bytes() == 0) return 0;
     return (double)get_unavailable_unused_bytes() / (double)segments.get_unavailable_bytes();
+  }
+  double get_alive_ratio() const {
+    return stats.used_bytes / (double)segments.get_total_bytes();
   }
 
   /*
