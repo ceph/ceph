@@ -1309,7 +1309,6 @@ seastar::future<> OSD::handle_scrub(crimson::net::ConnectionRef conn,
     PeeringState::RequestScrub scrub_request{m->deep, m->repair};
     return start_pg_operation<RemotePeeringEvent>(
       conn,
-      shard_services,
       from_shard,
       pgid,
       PGPeeringEvent{m->epoch, m->epoch, scrub_request}).second;
@@ -1419,7 +1418,6 @@ seastar::future<> OSD::handle_peering_op(
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
   (void) start_pg_operation<RemotePeeringEvent>(
     conn,
-    shard_services,
     pg_shard_t{from, m->get_spg().shard},
     m->get_spg(),
     std::move(*evt));

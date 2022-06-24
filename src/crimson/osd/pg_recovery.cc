@@ -73,7 +73,6 @@ PGRecovery::start_recovery_ops(
                       pg->get_pgid());
         (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
           static_cast<crimson::osd::PG*>(pg),
-          pg->get_shard_services(),
           pg->get_pg_whoami(),
           pg->get_pgid(),
           pg->get_osdmap_epoch(),
@@ -84,7 +83,6 @@ PGRecovery::start_recovery_ops(
                       pg->get_pgid());
         (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
           static_cast<crimson::osd::PG*>(pg),
-          pg->get_shard_services(),
           pg->get_pg_whoami(),
           pg->get_pgid(),
           pg->get_osdmap_epoch(),
@@ -534,7 +532,6 @@ void PGRecovery::backfilled()
   using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
   std::ignore = pg->get_shard_services().start_operation<LocalPeeringEvent>(
     static_cast<crimson::osd::PG*>(pg),
-    pg->get_shard_services(),
     pg->get_pg_whoami(),
     pg->get_pgid(),
     pg->get_osdmap_epoch(),

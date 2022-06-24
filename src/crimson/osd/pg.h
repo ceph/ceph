@@ -203,7 +203,6 @@ public:
   void start_peering_event_operation(T &&evt, float delay = 0) {
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
-      shard_services,
       pg_whoami,
       pgid,
       delay,
