@@ -558,7 +558,7 @@ bool DaemonServer::handle_update(const ref_t<MMgrUpdate>& m)
       dout(20) << "updating existing DaemonState for " << key << dendl;
 
       daemon = daemon_state.get(key);
-      if (m->need_metadata_update == true &&
+      if (m->need_metadata_update &&
           !m->daemon_metadata.empty()) {
         daemon_state.update_metadata(daemon, m->daemon_metadata);
       }

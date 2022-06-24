@@ -256,8 +256,7 @@ void MgrClient::_send_update()
     } else {
       update->daemon_name = cct->_conf->name.get_id();
     }
-    if (service_daemon) {
-      update->service_daemon = service_daemon;
+    if (need_metadata_update) {
       update->daemon_metadata = daemon_metadata;
     }
     update->need_metadata_update = need_metadata_update;
@@ -598,13 +597,12 @@ int MgrClient::update_daemon_metadata(
     return -EEXIST;
   }
   ldout(cct,1) << service << "." << name << " metadata " << metadata << dendl;
-  service_daemon = true;
   service_name = service;
   daemon_name = name;
   daemon_metadata = metadata;
   daemon_dirty_status = true;
 
-  if (need_metadata_update == true &&
+  if (need_metadata_update &&
       !daemon_metadata.empty()) {
     _send_update();
     need_metadata_update = false;
