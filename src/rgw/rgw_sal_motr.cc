@@ -1580,6 +1580,10 @@ int MotrObject::fetch_obj_entry_and_key(const DoutPrefixProvider* dpp, rgw_bucke
       ldpp_dout(dpp, 0) <<__func__<< ": ERROR: failed to get object entry. rc=" << rc << dendl;
       return rc;
   }
+  if (ent.is_delete_marker()) {
+    ldpp_dout(dpp, 0) <<__func__<< ": ERROR: delete marker is not an object." << dendl;
+    return -ENOENT;
+  }
 
   read_bucket_info(dpp, bname, key, target_obj);
 
