@@ -108,7 +108,6 @@ Members
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
-* Sage Weil (Red Hat) - Ceph project leader
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
 

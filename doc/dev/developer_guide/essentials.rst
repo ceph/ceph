@@ -7,9 +7,9 @@ to know.
 Leads
 -----
 
-The Ceph project is led by Sage Weil. In addition, each major project
-component has its own lead. The following table shows all the leads and
-their nicks on `GitHub`_:
+The Ceph project was created by Sage Weil and is led by the Ceph Leadership
+Team (CLT). In addition, each major project component has its own lead. The
+following table shows all the leads and their nicks on `GitHub`_:
 
 .. _github: https://github.com/
 
