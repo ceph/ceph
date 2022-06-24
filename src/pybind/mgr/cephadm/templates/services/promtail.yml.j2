@@ -12,10 +12,6 @@ clients:
 scrape_configs:
 - job_name: system
   static_configs:
-  - targets:
-{% for url in hostnames %}
-    - {{ url }}
-{% endfor %}
-    labels:
+  - labels:
       job: Cluster Logs
       __path__: /var/log/ceph/**/*.log
