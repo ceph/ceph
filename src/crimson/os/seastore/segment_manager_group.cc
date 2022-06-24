@@ -91,68 +91,6 @@ SegmentManagerGroup::read_segment_header(segment_id_t segment)
   });
 }
 
-SegmentManagerGroup::scan_extents_ret
-SegmentManagerGroup::scan_extents(
-  scan_extents_cursor &cursor,
-  extent_len_t bytes_to_read)
-{
-  auto ret = std::make_unique<scan_extents_ret_bare>();
-  auto* extents = ret.get();
-  return read_segment_header(cursor.get_segment_id()
-  ).handle_error(
-    scan_extents_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in SegmentManagerGroup::scan_extents"
-    }
-  ).safe_then([bytes_to_read, extents, &cursor, this](auto segment_header) {
-    auto segment_nonce = segment_header.segment_nonce;
-    return seastar::do_with(
-      found_record_handler_t([extents](
-        record_locator_t locator,
-        const record_group_header_t& header,
-        const bufferlist& mdbuf) mutable -> scan_valid_records_ertr::future<>
-      {
-        LOG_PREFIX(SegmentManagerGroup::scan_extents);
-        DEBUG("decoding {} records", header.records);
-        auto maybe_record_extent_infos = try_decode_extent_infos(header, mdbuf);
-        if (!maybe_record_extent_infos) {
-          // This should be impossible, we did check the crc on the mdbuf
-          ERROR("unable to decode extents for record {}",
-                locator.record_block_base);
-          return crimson::ct_error::input_output_error::make();
-        }
-
-        paddr_t extent_offset = locator.record_block_base;
-        for (auto& r: *maybe_record_extent_infos) {
-          DEBUG("decoded {} extents", r.extent_infos.size());
-          for (const auto &i : r.extent_infos) {
-            extents->emplace_back(
-              extent_offset,
-              std::pair<commit_info_t, extent_info_t>(
-                {r.header.commit_time,
-                r.header.commit_type},
-                i));
-            auto& seg_addr = extent_offset.as_seg_paddr();
-            seg_addr.set_segment_off(
-              seg_addr.get_segment_off() + i.len);
-          }
-        }
-        return scan_extents_ertr::now();
-      }),
-      [bytes_to_read, segment_nonce, &cursor, this](auto &dhandler) {
-        return scan_valid_records(
-          cursor,
-          segment_nonce,
-          bytes_to_read,
-          dhandler
-        ).discard_result();
-      }
-    );
-  }).safe_then([ret=std::move(ret)] {
-    return std::move(*ret);
-  });
-}
-
 SegmentManagerGroup::scan_valid_records_ret
 SegmentManagerGroup::scan_valid_records(
   scan_valid_records_cursor &cursor,
