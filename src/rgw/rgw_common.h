@@ -2428,4 +2428,3 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
 		    std::vector < const char* >& args,
 		    uint32_t module_type, code_environment_t code_env,
 		    int flags);
-/* datacache */
