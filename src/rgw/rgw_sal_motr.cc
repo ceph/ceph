@@ -1991,36 +1991,12 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
       rc = source->update_version_entries(dpp);
       if (rc < 0)
         return rc;
-      // creating a delete marker
-      bufferlist del_mark_bl;
-      rgw_bucket_dir_entry ent_del_marker;
-      ent_del_marker.key.name = source->get_name();
-      ent_del_marker.key.instance = result.version_id;
-      ent_del_marker.meta.owner = params.obj_owner.get_id().to_str();
-      ent_del_marker.meta.owner_display_name = params.obj_owner.get_display_name();
-      ent_del_marker.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER | rgw_bucket_dir_entry::FLAG_CURRENT;
-      if (real_clock::is_zero(params.mtime))
-        ent_del_marker.meta.mtime = real_clock::now();
-      else
-        ent_del_marker.meta.mtime = params.mtime;
-
-      rgw::sal::Attrs attrs;
-      ent_del_marker.encode(del_mark_bl);
-      encode(attrs, del_mark_bl);
-      ent_del_marker.meta.encode(del_mark_bl);
-
-      // key for delete marker - obj1[delete-markers's ver-id].
-      std::string delete_marker_key = source->get_key().to_str();
-      ldpp_dout(dpp, 20) << "Add delete marker in bucket index, key=" <<  delete_marker_key << dendl;
-      rc = source->store->do_idx_op_by_name(bucket_index_iname,
-                                            M0_IC_PUT, delete_marker_key, del_mark_bl);
-      if(rc < 0) {
-        ldpp_dout(dpp, 0) << "Failed to add delete marker in bucket." << dendl;
+      rc = this->create_delete_marker(dpp, ent);
+      if (rc < 0)
         return rc;
-      }
-      // Update in the cache.
-      source->store->get_obj_meta_cache()->put(dpp, delete_marker_key, del_mark_bl);
     }
+    if (result.version_id == "")
+      result.version_id = "null"; // show it as "null" in the reply
   } else {
     // Unversioned flow
     // handling empty size object case
@@ -2033,10 +2009,42 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
     }
   }
 
-  if (result.version_id == "")
-    result.version_id = "null"; // show it as "null" in the reply
-
   return 0;
+}
+
+int MotrObject::MotrDeleteOp::create_delete_marker(const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& ent)
+{
+  // creating a delete marker
+  string tenant_bkt_name = get_bucket_name(source->get_bucket()->get_tenant(), source->get_bucket()->get_name());
+  string bucket_index_iname = "motr.rgw.bucket.index." + tenant_bkt_name;
+  bufferlist del_mark_bl;
+  rgw_bucket_dir_entry ent_del_marker;
+  ent_del_marker.key.name = source->get_name();
+  ent_del_marker.key.instance = result.version_id;
+  ent_del_marker.meta.owner = params.obj_owner.get_id().to_str();
+  ent_del_marker.meta.owner_display_name = params.obj_owner.get_display_name();
+  ent_del_marker.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER | rgw_bucket_dir_entry::FLAG_CURRENT;
+  if (real_clock::is_zero(params.mtime))
+    ent_del_marker.meta.mtime = real_clock::now();
+  else
+    ent_del_marker.meta.mtime = params.mtime;
+
+  rgw::sal::Attrs attrs;
+  ent_del_marker.encode(del_mark_bl);
+  encode(attrs, del_mark_bl);
+  ent_del_marker.meta.encode(del_mark_bl);
+  // key for delete marker - obj1[delete-markers's ver-id].
+  std::string delete_marker_key = source->get_key().to_str();
+  ldpp_dout(dpp, 20) <<__func__<< ": Add delete marker in bucket index, key=  " <<  delete_marker_key << dendl;
+  int rc = source->store->do_idx_op_by_name(bucket_index_iname,
+                                        M0_IC_PUT, delete_marker_key, del_mark_bl);
+  if (rc < 0) {
+    ldpp_dout(dpp, 0) <<__func__ << " ERROR : Failed to add delete marker in bucket." << dendl;
+    return rc;
+  }
+  // Update in the cache.
+  source->store->get_obj_meta_cache()->put(dpp, delete_marker_key, del_mark_bl);
+  return rc;
 }
 
 int MotrObject::remove_mobj_and_index_entry(

@@ -608,6 +608,7 @@ class MotrObject : public Object {
         MotrDeleteOp(MotrObject* _source, RGWObjectCtx* _rctx);
 
         virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
+        int create_delete_marker(const DoutPrefixProvider* dpp, rgw_bucket_dir_entry& ent);
     };
 
     MotrObject() = default;
