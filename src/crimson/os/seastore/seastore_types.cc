@@ -47,11 +47,11 @@ std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id)
 std::ostream &operator<<(std::ostream &out, const segment_id_t &segment)
 {
   if (segment == NULL_SEG_ID) {
-    return out << "NULL_SEG";
+    return out << "Seg[NULL]";
   } else if (segment == FAKE_SEG_ID) {
-    return out << "FAKE_SEG";
+    return out << "Seg[FAKE]";
   } else {
-    return out << "[" << device_id_printer_t{segment.device_id()}
+    return out << "Seg[" << device_id_printer_t{segment.device_id()}
                << "," << segment.device_segment_id()
                << "]";
   }
@@ -297,6 +297,14 @@ std::ostream &operator<<(std::ostream& out, const record_t& r)
   return out << "record_t("
              << "num_extents=" << r.extents.size()
              << ", num_deltas=" << r.deltas.size()
+             << ")";
+}
+
+std::ostream &operator<<(std::ostream& out, const record_header_t& r)
+{
+  return out << "record_header_t("
+             << "num_extents=" << r.extents
+             << ", num_deltas=" << r.deltas
              << ")";
 }
 

@@ -1586,6 +1586,7 @@ struct record_header_t {
     DENC_FINISH(p);
   }
 };
+std::ostream &operator<<(std::ostream&, const record_header_t&);
 
 struct record_group_header_t {
   uint32_t      records;

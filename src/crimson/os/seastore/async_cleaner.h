@@ -1068,7 +1068,7 @@ private:
   } gc_process;
 
   using gc_ertr = work_ertr::extend_ertr<
-    SegmentManagerGroup::scan_extents_ertr
+    SegmentManagerGroup::scan_valid_records_ertr
     >;
 
   gc_cycle_ret do_gc_cycle();
@@ -1241,13 +1241,10 @@ private:
     }
   }
 
-  using scan_extents_ret_bare =
-    std::vector<std::pair<segment_id_t, segment_header_t>>;
-  using scan_extents_ertr = SegmentManagerGroup::scan_extents_ertr;
+  using scan_extents_ertr = SegmentManagerGroup::scan_valid_records_ertr;
   using scan_extents_ret = scan_extents_ertr::future<>;
-  scan_extents_ret scan_nonfull_segment(
+  scan_extents_ret scan_no_tail_segment(
     const segment_header_t& header,
-    scan_extents_ret_bare& segment_set,
     segment_id_t segment_id);
 
   /**
