@@ -10,7 +10,7 @@ import SwaggerUI from 'swagger-ui';
 export class ApiDocsComponent implements OnInit {
   ngOnInit(): void {
     SwaggerUI({
-      url: window.location.origin + '/docs/openapi.json',
+      url: window.location.origin + '/docs/api-all.json',
       dom_id: '#swagger-ui',
       layout: 'BaseLayout'
     });
