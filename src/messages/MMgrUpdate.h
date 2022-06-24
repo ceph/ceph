@@ -19,7 +19,7 @@
 
 class MMgrUpdate : public Message {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -27,7 +27,6 @@ public:
   std::string daemon_name;
   std::string service_name;  // optional; otherwise infer from entity type
 
-  bool service_daemon = false;
   std::map<std::string,std::string> daemon_metadata;
   std::map<std::string,std::string> daemon_status;
 
@@ -40,14 +39,11 @@ public:
     decode(daemon_name, p);
     if (header.version >= 2) {
       decode(service_name, p);
-      decode(service_daemon, p);
-      if (service_daemon) {
+      decode(need_metadata_update, p);
+      if (need_metadata_update) {
 	decode(daemon_metadata, p);
 	decode(daemon_status, p);
       }
-    }
-    if (header.version >= 3) {
-      decode(need_metadata_update, p);
     }
   }
 
@@ -55,12 +51,11 @@ public:
     using ceph::encode;
     encode(daemon_name, payload);
     encode(service_name, payload);
-    encode(service_daemon, payload);
-    if (service_daemon) {
+    encode(need_metadata_update, payload);
+    if (need_metadata_update) {
       encode(daemon_metadata, payload);
       encode(daemon_status, payload);
     }
-    encode(need_metadata_update, payload);
   }
 
   std::string_view get_type_name() const override { return "mgrupdate"; }
@@ -72,9 +67,6 @@ public:
       out << ceph_entity_type_name(get_source().type());
     }
     out << "." << daemon_name;
-    if (service_daemon) {
-      out << " daemon";
-    }
     out << ")";
   }
 
