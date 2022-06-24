@@ -44,7 +44,9 @@ public:
     RemotePeeringEvent(std::forward<Args>(args)...), state(state) {}
 
   PeeringEvent::interruptible_future<>
-  complete_rctx(Ref<crimson::osd::PG> pg) final {
+  complete_rctx(
+    ShardServices &shard_services,
+    Ref<crimson::osd::PG> pg) final {
     logger().debug("{}: submitting ctx transaction", *this);
     state->ctx.accept_buffered_messages(ctx);
     state = {};
@@ -86,7 +88,6 @@ std::vector<crimson::OperationRef> handle_pg_create(
       auto op = osd.start_pg_operation<PeeringSubEvent>(
 	  state,
 	  conn,
-	  osd.get_shard_services(),
 	  pg_shard_t(),
 	  pgid,
 	  m->epoch,

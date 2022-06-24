@@ -52,7 +52,6 @@ public:
 protected:
   PGPeeringPipeline &pp(PG &pg);
 
-  ShardServices &shard_services;
   PeeringCtx ctx;
   pg_shard_t from;
   spg_t pgid;
@@ -71,28 +70,28 @@ protected:
     return evt;
   }
 
-  virtual void on_pg_absent();
+  virtual void on_pg_absent(ShardServices &);
 
   virtual typename PeeringEvent::template interruptible_future<>
-  complete_rctx(Ref<PG>);
+  complete_rctx(ShardServices &, Ref<PG>);
 
-  virtual seastar::future<> complete_rctx_no_pg() { return seastar::now();}
+  virtual seastar::future<> complete_rctx_no_pg(
+    ShardServices &shard_services
+  ) { return seastar::now();}
 
 public:
   template <typename... Args>
   PeeringEvent(
-    ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
+    const pg_shard_t &from, const spg_t &pgid,
     Args&&... args) :
-    shard_services(shard_services),
     from(from),
     pgid(pgid),
     evt(std::forward<Args>(args)...)
   {}
   template <typename... Args>
   PeeringEvent(
-    ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
+    const pg_shard_t &from, const spg_t &pgid,
     float delay, Args&&... args) :
-    shard_services(shard_services),
     from(from),
     pgid(pgid),
     delay(delay),
@@ -111,9 +110,13 @@ protected:
   // must be after conn due to ConnectionPipeline's life-time
   PipelineHandle handle;
 
-  void on_pg_absent() final;
-  PeeringEvent::interruptible_future<> complete_rctx(Ref<PG> pg) override;
-  seastar::future<> complete_rctx_no_pg() override;
+  void on_pg_absent(ShardServices &) final;
+  PeeringEvent::interruptible_future<> complete_rctx(
+    ShardServices &shard_services,
+    Ref<PG> pg) override;
+  seastar::future<> complete_rctx_no_pg(
+    ShardServices &shard_services
+  ) override;
 
 public:
   class OSDPipeline {

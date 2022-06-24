@@ -137,7 +137,6 @@ bool PG::try_flush_or_schedule_async() {
     [this, epoch=get_osdmap_epoch()]() {
       return shard_services.start_operation<LocalPeeringEvent>(
 	this,
-	shard_services,
 	pg_whoami,
 	pgid,
 	epoch,
@@ -176,7 +175,6 @@ void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
   check_readable_timer.set_callback([last_peering_reset, this] {
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
-      shard_services,
       pg_whoami,
       pgid,
       last_peering_reset,
@@ -266,7 +264,6 @@ void PG::on_activate_complete()
                   __func__);
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
-      shard_services,
       pg_whoami,
       pgid,
       float(0.001),
@@ -278,7 +275,6 @@ void PG::on_activate_complete()
                   __func__);
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
-      shard_services,
       pg_whoami,
       pgid,
       float(0.001),
@@ -290,7 +286,6 @@ void PG::on_activate_complete()
 		   " for pg: {}", __func__, pgid);
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
-      shard_services,
       pg_whoami,
       pgid,
       float(0.001),
@@ -397,7 +392,6 @@ void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
   renew_lease_timer.set_callback([last_peering_reset, this] {
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
-      shard_services,
       pg_whoami,
       pgid,
       last_peering_reset,
@@ -459,7 +453,6 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
     epoch_t epoch = get_osdmap_epoch();
     (void) shard_services.start_operation<LocalPeeringEvent>(
 	this,
-	shard_services,
 	pg_whoami,
 	pgid,
 	epoch,
