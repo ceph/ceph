@@ -7,8 +7,8 @@
 using namespace std;
 
 string portStr;
+string hostStr;
 string redisHost = "";
-string host = "127.0.0.1";
 string oid = "samoid";
 string bucketName = "testBucket";
 int blkSize = 123;
@@ -16,7 +16,7 @@ int blkSize = 123;
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-      blk_dir = new RGWBlockDirectory(host, stoi(portStr));
+      blk_dir = new RGWBlockDirectory(hostStr, stoi(portStr));
       c_blk = new cache_block();
 
       c_blk->hosts_list.push_back(redisHost);
@@ -70,7 +70,7 @@ TEST(DirectoryTest, RedisTest) {
   fields.push_back("bucket_name");
   fields.push_back("obj_name");
 
-  client.connect(host, stoi(portStr), nullptr, 0, 5, 1000);
+  client.connect(hostStr, stoi(portStr), nullptr, 0, 5, 1000);
   ASSERT_EQ((bool)client.is_connected(), (bool)1);
 
   client.hmget(oid, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply& reply) {
@@ -102,10 +102,15 @@ int main(int argc, char *argv[]) {
   // Other ports can be passed to the program
   if (argc == 1)
     portStr = "6379";
-  else
-    portStr = argv[1];
+  else if (argc == 3) {
+    hostStr = argv[1];
+    portStr = argv[2];
+  } else {
+    cout << "Incorrect number of arguments." << std::endl;
+    return -1;
+  }
   
-  redisHost = "127.0.0.1:" + portStr;
+  redisHost = hostStr + portStr;
   
   return RUN_ALL_TESTS();
 }
