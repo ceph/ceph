@@ -3506,7 +3506,7 @@ void MDSRankDispatcher::handle_osd_map()
   // reconnect state will journal blocklisted clients (journal
   // is opened for writing in `replay_done` before moving to
   // up:resolve).
-  if (!is_replay()) {
+  if (!is_any_replay()) {
     std::set<entity_addr_t> newly_blocklisted;
     objecter->consume_blocklist_events(&newly_blocklisted);
     auto epoch = objecter->with_osdmap([](const OSDMap &o){return o.get_epoch();});
