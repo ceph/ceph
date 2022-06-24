@@ -98,7 +98,7 @@ OSD::OSD(int id, uint32_t nonce,
       update_stats();
     }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
-    osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services))),
+    osdmap_gate("OSD::osdmap_gate"),
     log_client(cluster_msgr.get(), LogClient::NO_FLAGS),
     clog(log_client.create_channel())
 {

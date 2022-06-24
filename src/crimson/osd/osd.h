@@ -273,8 +273,11 @@ public:
 	OSD_OSDMapGate::OSDMapBlocker::BlockingEvent;
       return opref.template with_blocking_event<OSDMapBlockingEvent>(
 	[this, &opref](auto &&trigger) {
-	  return osdmap_gate.wait_for_map(std::move(trigger),
-					  opref.get_epoch());
+	  return osdmap_gate.wait_for_map(
+	    std::move(trigger),
+	    opref.get_epoch(),
+	    &shard_services
+	  );
 	});
     }).then([&logger, &opref](auto epoch) {
       logger.debug("{}: got map {}, entering get_pg", opref, epoch);
