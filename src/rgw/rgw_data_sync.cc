@@ -13,6 +13,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
+#include "rgw_cr_sip.h"
 #include "rgw_cr_rest.h"
 #include "rgw_cr_tools.h"
 #include "rgw_http_client.h"
@@ -515,6 +516,36 @@ bool RGWListRemoteDataLogCR::spawn_next(const DoutPrefixProvider *dpp) {
   ++iter;
   return true;
 }
+
+template <class T, class M>
+class RGWSyncInfoCRHandler {
+public:
+  virtual ~RGWSyncInfoCRHandler() {}
+
+
+  virtual string sip_id() const {
+    return get_sip_name();
+  }
+
+  virtual string get_sip_name() const = 0;
+
+  virtual int num_shards() const = 0;
+
+  virtual RGWCoroutine *init_cr(RGWSyncTraceNodeRef& tn) = 0;
+
+  virtual RGWCoroutine *get_pos_cr(const DoutPrefixProvider *dpp, int shard_id, M *pos, bool *disabled) = 0;
+  virtual RGWCoroutine *fetch_cr(int shard_id,
+                                 const string& marker,
+                                 T *result) = 0;
+
+  virtual RGWCoroutine *update_marker_cr(const DoutPrefixProvider *dpp,
+                                         int shard_id,
+                                         const RGWSI_SIP_Marker::SetParams& params) {
+    return nullptr;
+  }
+};
+
+
 
 class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   static constexpr uint32_t lock_duration = 30;
