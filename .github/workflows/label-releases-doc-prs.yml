@@ -3,8 +3,6 @@ name: "Label doc/releases PRs so our backport GitHub Action picks them up"
 
 on:
   pull_request:
-    types:
-      - closed
     branches:
       - main
     paths:
