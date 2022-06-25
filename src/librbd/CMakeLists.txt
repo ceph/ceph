@@ -14,7 +14,7 @@ add_library(rbd_types STATIC
 
 if (WITH_RBD_RWL)
   target_link_libraries(rbd_types
-    PUBLIC pmem::pmemobj)
+    PUBLIC pmdk::pmemobj)
 endif()
 
 set(librbd_internal_srcs
@@ -306,8 +306,8 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
 
   if(WITH_RBD_RWL)
     target_link_libraries(librbd_plugin_pwl_cache
-      PUBLIC pmem::pmemobj
-      PRIVATE pmem::pmem)
+      PUBLIC pmdk::pmemobj
+      PRIVATE pmdk::pmem)
   endif()
 
   set_target_properties(librbd_plugin_pwl_cache PROPERTIES
