@@ -154,6 +154,14 @@ Adoption process
       cephadm adopt --style legacy --name osd.1
       cephadm adopt --style legacy --name osd.2
 
+#. Set the default container image for the cluster by running an orchestrated update
+
+   .. prompt:: bash #
+
+      ceph orch upgrade start $IMAGE
+
+   This will set the config property container_image.
+
 #. Redeploy MDS daemons by telling cephadm how many daemons to run for
    each file system. List file systems by name with the command ``ceph fs
    ls``. Run the following command on the master nodes to redeploy the MDS
@@ -211,3 +219,22 @@ Adoption process
 
 #. Check the output of the command ``ceph health detail`` for cephadm warnings
    about stray cluster daemons or hosts that are not yet managed by cephadm.
+
+#. Remove ceph packages from the host except for ceph-common to keep ceph commandline tools.
+
+#. Deploy ceph-crash service
+
+   .. prompt:: bash #
+
+      ceph orch apply crash '*'
+
+#. Create MON and MGR services
+
+   .. prompt:: bash #
+
+      ceph orch apply mon --placement=<placement>
+      ceph orch apply mgr --placement=<placement>
+
+   For the placement see :ref:`orchestrator-cli-placement-spec`.
+
+#. Add node-exporter, prometheus, grafana and alert-manager services
