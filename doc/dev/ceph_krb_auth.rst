@@ -86,7 +86,7 @@ Authorization
 
 Auditing
     Auditing takes the results from both *authentication and authorization* and
-    records them into an audit log. The audit log records records all actions
+    records them into an audit log. The audit log records all actions
     taking by/during the authentication and authorization for later review by
     the administrators. While authentication and authorization are preventive
     systems (in which unauthorized access is prevented), auditing is a reactive
@@ -584,8 +584,8 @@ In order to configure connections (from Ceph nodes) to the KDC:
 
 
     Given that the *keytab client file* is/should already be copied and available at the
-    Kerberos client (Ceph cluster node), we should be able to athenticate using it before
-    going forward:  ::
+    Kerberos client (Ceph cluster node), we should be able to authenticate using it before
+    continuing:  ::
 
         # kdestroy -A && kinit -k -t /etc/gss_client_mon1.ktab -f 'ceph/ceph-mon1@MYDOMAIN.COM' && klist -f
         Ticket cache: KEYRING:persistent:0:0
@@ -1030,7 +1030,7 @@ In order to get a new MIT KDC Server running:
 
 
 6. Name Resolution
-    As mentioned earlier, Kerberos *relies heavly on name resolution*. Most of
+    As mentioned earlier, Kerberos *relies heavily on name resolution*. Most of
     the Kerberos issues are usually related to name resolution, since Kerberos
     is *very picky* on both *systems names* and *host lookups*.
 

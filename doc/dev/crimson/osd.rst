@@ -22,7 +22,7 @@ osd
 .. describe:: waiting_for_healthy
 
    If an OSD daemon is able to connected to its heartbeat peers, and its own
-   internal hearbeat does not fail, it is considered healthy. Otherwise, it
+   internal heartbeat does not fail, it is considered healthy. Otherwise, it
    puts itself in the state of `waiting_for_healthy`, and check its own
    reachability and internal heartbeat periodically.
 
