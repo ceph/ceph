@@ -254,7 +254,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 20) << "service_token_id=" << service_token_id << dendl;
 
     /* Check cache for service token first. */
-    st = token_cache.find(service_token_id);
+    st = token_cache.find_service(service_token_id);
     if (st) {
       ldpp_dout(dpp, 20) << "cached service_token.project.id=" << st->get_project_id()
                      << dendl;
@@ -293,7 +293,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                          << " is valid, role: "
                          << role << dendl;
           allow_expired = true;
-          token_cache.add(service_token_id, *st);
+          token_cache.add_service(service_token_id, *st);
           break;
         }
       }
