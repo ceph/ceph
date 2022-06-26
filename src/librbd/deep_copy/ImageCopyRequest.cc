@@ -4,6 +4,7 @@
 #include "ImageCopyRequest.h"
 #include "ObjectCopyRequest.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/Utils.h"
@@ -20,6 +21,7 @@
 namespace librbd {
 namespace deep_copy {
 
+using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 using librbd::util::unique_lock_name;
 
@@ -178,6 +180,13 @@ int ImageCopyRequest<I>::send_next_object_copy() {
   }
 
   uint64_t ono = m_object_no++;
+  Context *ctx = new LambdaContext(
+    [this, ono](int r) {
+      handle_object_copy(ono, r);
+    });
+
+  ldout(m_cct, 20) << "object_num=" << ono << dendl;
+  ++m_current_ops;
 
   if (m_object_diff_state.size() > 0) {
     std::set<uint64_t> src_objects;
@@ -194,22 +203,16 @@ int ImageCopyRequest<I>::send_next_object_copy() {
 
     if (skip) {
       ldout(m_cct, 20) << "skipping clean object " << ono << dendl;
-      return 1;
+      create_async_context_callback(*m_src_image_ctx, ctx)->complete(0);
+      return 0;
     }
   }
-
-  ldout(m_cct, 20) << "object_num=" << ono << dendl;
-  ++m_current_ops;
 
   uint32_t flags = 0;
   if (m_flatten) {
     flags |= OBJECT_COPY_REQUEST_FLAG_FLATTEN;
   }
 
-  Context *ctx = new LambdaContext(
-    [this, ono](int r) {
-      handle_object_copy(ono, r);
-    });
   auto req = ObjectCopyRequest<I>::create(
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_dst_snap_id_start,
     m_snap_map, ono, flags, m_handler, ctx);
@@ -249,13 +252,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
       }
     }
 
-    while (true) {
-      r = send_next_object_copy();
-      if (r != 1) {
-        break;
-      }
-    }
-
+    send_next_object_copy();
     complete = (m_current_ops == 0) && !m_updating_progress;
   }
 
