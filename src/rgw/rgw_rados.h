@@ -1397,6 +1397,18 @@ public:
 
   using ent_map_t =
     boost::container::flat_map<std::string, rgw_bucket_dir_entry>;
+  int handle_object(const DoutPrefixProvider *dpp, librados::IoCtx &ioctx,
+        const std::string &oid_name,
+        size_t shard_idx,
+        const std::string &name,
+        struct rgw_bucket_dir_entry& dirent,
+        ent_map_t& m,
+        RGWBucketInfo& bucket_info,
+        std::map<std::string, bufferlist> &updates,
+        uint32_t *count,
+        rgw_bucket_dir_entry **last_entry_visited,
+        optional_yield y,
+        RGWBucketListNameFilter force_check_filter = {});
 
   int cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
                               RGWBucketInfo& bucket_info,

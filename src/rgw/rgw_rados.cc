@@ -8527,6 +8527,71 @@ uint32_t RGWRados::calc_ordered_bucket_list_per_shard(uint32_t num_entries,
   return std::max(min_read, calc_read);
 }
 
+int RGWRados::handle_object(const DoutPrefixProvider *dpp, librados::IoCtx &ioctx,
+                                const std::string &oid_name,
+                                size_t shard_idx,
+                                const std::string &name,
+                                struct rgw_bucket_dir_entry& dirent,
+                                ent_map_t& m,
+                                RGWBucketInfo& bucket_info,
+                                std::map<std::string, bufferlist> &updates,
+                                uint32_t *count,
+                                rgw_bucket_dir_entry **last_entry_visited,
+                                optional_yield y,
+                                RGWBucketListNameFilter force_check_filter)
+{
+  int r = 0;
+
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ": currently processing " <<
+                       dirent.key << " from shard " << shard_idx << dendl;
+
+  const bool force_check = force_check_filter && force_check_filter(dirent.key.name);
+
+  if ((!dirent.exists &&
+    !dirent.is_delete_marker() &&
+    !dirent.is_common_prefix()) ||
+    !dirent.pending_map.empty() ||
+    force_check) {
+    /* there are uncommitted ops. We need to check the current
+     * state, and if the tags are old we need to do clean-up as
+     * well. */
+    librados::IoCtx sub_ctx;
+    sub_ctx.dup(ioctx);
+    r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent,
+                         updates[oid_name], y);
+    if (r < 0 && r != -ENOENT) {
+      ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ <<
+        ": check_disk_state for \"" << dirent.key <<
+        "\" failed with r=" << r << dendl;
+      return r;
+    }
+  } else {
+    r = 0;
+  }
+
+  // at this point either r >= 0 or r == -ENOENT
+  if (r >= 0) { // i.e., if r != -ENOENT
+    ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ << ": got " <<
+                       dirent.key << dendl;
+
+    auto [it, inserted] = m.insert_or_assign(name, std::move(dirent));
+    *last_entry_visited = &it->second;
+    if (inserted) {
+      ++(*count);
+    } else {
+      ldpp_dout(dpp, 0) << "WARNING: " << __PRETTY_FUNCTION__ <<
+                        " reassigned map value at \"" << name <<
+                        "\", which should not happen" << dendl;
+    }
+  } else {
+    ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ << ": skipping " <<
+                       dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
+    *last_entry_visited = &dirent;
+  }
+
+  return r;
+}
+
 
 int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
                                       RGWBucketInfo& bucket_info,
@@ -8650,6 +8715,12 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       // as x.advance().at_end()
       return *this;
     }
+    inline ShardTracker& retreat() {
+      --cursor;
+      // return a self-reference to allow for chaining of calls, such
+      // as x.retreat().at_end()
+      return *this;
+    }
     inline bool at_end() const {
       return cursor == end;
     }
@@ -8707,59 +8778,13 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
     // into results_trackers vector
     tracker_idx = candidates.begin()->second;
     auto& tracker = results_trackers.at(tracker_idx);
-
     const std::string& name = tracker.entry_name();
     rgw_bucket_dir_entry& dirent = tracker.dir_entry();
 
-    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ": currently processing " <<
-      dirent.key << " from shard " << tracker.shard_idx << dendl;
-
-    const bool force_check =
-      force_check_filter && force_check_filter(dirent.key.name);
-
-    if ((!dirent.exists &&
-	 !dirent.is_delete_marker() &&
-	 !dirent.is_common_prefix()) ||
-        !dirent.pending_map.empty() ||
-        force_check) {
-      /* there are uncommitted ops. We need to check the current
-       * state, and if the tags are old we need to do clean-up as
-       * well. */
-      librados::IoCtx sub_ctx;
-      sub_ctx.dup(ioctx);
-      ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
-	" calling check_disk_state bucket=" << bucket_info.bucket <<
-	" entry=" << dirent.key << dendl_bitx;
-      r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent,
-			   updates[tracker.oid_name], y);
-      if (r < 0 && r != -ENOENT) {
-	ldpp_dout(dpp, 0) << __PRETTY_FUNCTION__ <<
-	  ": check_disk_state for \"" << dirent.key <<
-	  "\" failed with r=" << r << dendl;
-	return r;
-      }
-    } else {
-      r = 0;
-    }
-
-    // at this point either r >= 0 or r == -ENOENT
-    if (r >= 0) { // i.e., if r != -ENOENT
-      ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ << ": got " <<
-	dirent.key << dendl;
-
-      auto [it, inserted] = m.insert_or_assign(name, std::move(dirent));
-      last_entry_visited = &it->second;
-      if (inserted) {
-	++count;
-      } else {
-	ldpp_dout(dpp, 0) << "WARNING: " << __PRETTY_FUNCTION__ <<
-	  " reassigned map value at \"" << name <<
-	  "\", which should not happen" << dendl;
-      }
-    } else {
-      ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ << ": skipping " <<
-	dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
-      last_entry_visited = &tracker.dir_entry();
+    r = handle_object(dpp, ioctx, tracker.oid_name, tracker.shard_idx, name, dirent, m, bucket_info,
+      updates, &count, &last_entry_visited, y, force_check_filter);
+    if (r < 0 && r != -ENOENT) {
+      return r;
     }
 
     // refresh the candidates map
@@ -8769,14 +8794,38 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
     next_candidate(cct, tracker, candidates, tracker_idx);
 
     if (tracker.at_end() && tracker.is_truncated()) {
+      // Scenario: many sibling directories, many objects under each directory,
+      // if cls_filtered is true, tracker's entries may be the same as each other.
+      // the next_candidate operation may advance to end directly,
+      // so need to add candidates's entries which less than last key in the tracker, otherwise,
+      // only one object may be returned, this will slow down the list operation.
+      string end_key = tracker.retreat().entry_name();
+      auto citer = candidates.upper_bound(end_key);
+      for(auto iter = candidates.begin(); iter != citer; iter++) {
+        size_t tracker_idx = iter->second;
+        auto& tracker = results_trackers.at(tracker_idx);
+        const string& name = tracker.entry_name();
+        rgw_bucket_dir_entry& dirent = tracker.dir_entry();
+
+        r = handle_object(dpp, ioctx, tracker.oid_name, tracker.shard_idx, name, dirent, m, bucket_info,
+          updates, &count, &last_entry_visited, y, force_check_filter);
+        if (r < 0 && r != -ENOENT) {
+          return r;
+        }
+
+        ldpp_dout(dpp, 10) << "RGWRados::" << __func__ << " addtional key: "<< name <<
+          " added, shard " << tracker.oid_name << dendl;
+
+      }
+
       // once we exhaust one shard that is truncated, we need to stop,
       // as we cannot be certain that one of the next entries needs to
       // come from that shard; S3 and swift protocols allow returning
       // fewer than what was requested
       ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ <<
-	": stopped accumulating results at count=" << count <<
-	", dirent=\"" << dirent.key <<
-	"\", because its shard is untruncated and exhaused" << dendl;
+        ": stopped accumulating results at count=" << count <<
+        ", dirent=\"" << dirent.key <<
+        "\", because its shard: " << tracker.oid_name << " is untruncated and exhaused" << dendl;
       break;
     }
   } // while we haven't provided requested # of result entries
@@ -8810,7 +8859,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ <<
     ": returning, count=" << count << ", is_truncated=" << *is_truncated <<
     dendl;
-
+  
   if (*is_truncated && count < num_entries) {
     ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ <<
       ": requested " << num_entries << " entries but returning " <<
