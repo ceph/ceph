@@ -38,12 +38,12 @@ Notifications may be sent synchronously, as part of the operation that triggered
 In this mode, the operation is acked only after the notification is sent to the topic's configured endpoint, which means that the
 round trip time of the notification is added to the latency of the operation itself.
 
-.. note:: The original triggering operation will still be considered as successful even if the notification fail with an error, cannot be deliverd or times out
+.. note:: The original triggering operation will still be considered as successful even if the notification fail with an error, cannot be delivered or times out
 
 Notifications may also be sent asynchronously. They will be committed into persistent storage and then asynchronously sent to the topic's configured endpoint.
 In this case, the only latency added to the original operation is of committing the notification to persistent storage.
 
-.. note:: If the notification fail with an error, cannot be deliverd or times out, it will be retried until successfully acked
+.. note:: If the notification fail with an error, cannot be delivered or times out, it will be retried until successfully acked
 
 .. tip:: To minimize the added latency in case of asynchronous notifications, it is recommended to place the "log" pool on fast media
 

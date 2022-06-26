@@ -1510,7 +1510,7 @@ Supported Features
 resharding
 ~~~~~~~~~~
 
-Allows buckets to be resharded in a multisite configuration without interrupting the replication of their objects. When ``rgw_dynamic_resharding`` is enabled, it runs on each zone independently, and zones may choose different shard counts for the same bucket. When buckets are resharded manunally with ``radosgw-admin bucket reshard``, only that zone's bucket is modified. A zone feature should only be marked as supported after all of its radosgws and osds have upgraded.
+Allows buckets to be resharded in a multisite configuration without interrupting the replication of their objects. When ``rgw_dynamic_resharding`` is enabled, it runs on each zone independently, and zones may choose different shard counts for the same bucket. When buckets are resharded manually with ``radosgw-admin bucket reshard``, only that zone's bucket is modified. A zone feature should only be marked as supported after all of its radosgws and osds have upgraded.
 
 
 Commands

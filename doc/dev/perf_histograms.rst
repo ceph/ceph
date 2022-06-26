@@ -669,9 +669,9 @@ The actual dump is similar to the schema, except that there are actual value gro
         }
     },
 
-This represents the 2d histogram, consisting of 9 history entrires and 32 value groups per each history entry. 
+This represents the 2D histogram, consisting of 9 history entries and 32 value groups per each history entry.
 "Ranges" element denote value bounds for each of value groups. "Buckets" denote amount of value groups ("buckets"), 
-"Min" is a minimum accepted valaue, "quant_size" is quantization unit and "scale_type" is either "log2" (logarhitmic
+"Min" is a minimum accepted value, "quant_size" is quantization unit and "scale_type" is either "log2" (logarithmic
 scale) or "linear" (linear scale).
 You can use histogram_dump.py tool (see src/tools/histogram_dump.py) for quick visualisation of existing histogram
 data.

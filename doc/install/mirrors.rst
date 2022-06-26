@@ -43,7 +43,7 @@ Mirroring
 =========
 
 You can easily mirror Ceph yourself using a Bash script and rsync. An easy-to-use
-script can be found at `Github`_.
+script can be found at `GitHub`_.
 
 When mirroring Ceph, please keep the following guidelines in mind:
 
@@ -59,9 +59,9 @@ If you want to provide a public mirror for other users of Ceph you can opt to
 become a official mirror.
 
 To make sure all mirrors meet the same standards some requirements have been
-set for all mirrors. These can be found on `Github`_.
+set for all mirrors. These can be found on `GitHub`_.
 
 If you want to apply for an official mirror, please contact the ceph-users mailinglist.
 
 
-.. _Github: https://github.com/ceph/ceph/tree/master/mirroring
+.. _GitHub: https://github.com/ceph/ceph/tree/master/mirroring

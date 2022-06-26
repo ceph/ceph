@@ -90,7 +90,7 @@ map / 6 / - / 10 / 1fee4ccd5277b52292e255daf458330eef5f0255 / 0.64 / 2013
 inc / 6 / - / 10 /
       * encode front hb addr
         * osdmap::incremental ext version bumped to 10
-        * osdmap's ext versiont bumped to 10
+        * osdmap's ext version bumped to 10
         * because we're adding osd_addrs->hb_front_addr to map
 
 // below we have the change to ENCODE_START() for osdmap and others

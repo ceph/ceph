@@ -391,7 +391,7 @@ Cost
 The larger the Ceph cluster, the more common OSD failures will be.
 The faster that a placement group (PG) can recover from a ``degraded`` state to
 an ``active + clean`` state, the better. Notably, fast recovery minimizes
-the liklihood of multiple, overlapping failures that can cause data to become
+the likelihood of multiple, overlapping failures that can cause data to become
 temporarily unavailable or even lost. Of course, when provisioning your
 network, you will have to balance price against performance. 
 

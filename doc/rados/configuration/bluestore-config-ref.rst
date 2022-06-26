@@ -409,7 +409,7 @@ single RADOS object.  With the default :confval:`min_alloc_size` value, 4KB of
 underlying drive space is allocated.  This means that roughly
 (4KB - 1KB) == 3KB is allocated but never used, which corresponds to 300%
 overhead or 25% efficiency. Similarly, a 5KB user object will be stored
-as one 4KB and one 1KB RADOS object, again stranding 4KB of device capcity,
+as one 4KB and one 1KB RADOS object, again stranding 4KB of device capacity,
 though in this case the overhead is a much smaller percentage.  Think of this
 in terms of the remainder from a modulus operation. The overhead *percentage*
 thus decreases rapidly as user object size increases.
@@ -423,7 +423,7 @@ will allocate (6 * 4KB) = 24KB of device capacity.
 
 When an RGW bucket pool contains many relatively large user objects, the effect
 of this phenomenon is often negligible, but should be considered for deployments
-that expect a signficiant fraction of relatively small objects.
+that expect a significant fraction of relatively small objects.
 
 The 4KB default value aligns well with conventional HDD and SSD devices.  Some
 new coarse-IU (Indirection Unit) QLC SSDs however perform and wear best

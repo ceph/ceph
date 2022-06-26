@@ -16,7 +16,7 @@ Ceph binaries must be built for your branch before you can use teuthology to run
 
 #. To ensure that the build process has been initiated, confirm that the branch
    name has appeared in the list of "Latest Builds Available" at `Shaman`_.
-   Soon after you start the build process, the testing infrastructrure adds
+   Soon after you start the build process, the testing infrastructure adds
    other, similarly-named builds to the list of "Latest Builds Available".
    The names of these new builds will contain the names of various Linux
    distributions of Linux and will be used to test your build against those
@@ -110,7 +110,7 @@ run), and ``--subset`` (used to reduce the number of tests that are triggered). 
 
 .. _teuthology_testing_qa_changes:
 
-Testing QA changes (without re-building binaires)
+Testing QA changes (without re-building binaries)
 *************************************************
 
 If you are making changes only in the ``qa/`` directory, you do not have to
@@ -273,8 +273,8 @@ a branch named ``feature-x`` should be named ``wip-$yourname-feature-x``, where
 ``$yourname`` is replaced with your name. Identifying your branch with your
 name makes your branch easily findable on Shaman and Pulpito.
 
-If you are using one of the stable branches (for example, nautilis, mimic,
-etc.), include the name of that stable branch in your ceph-ci branch name.
+If you are using one of the stable branches (`quincy`, `pacific`, etc.), include
+the name of that stable branch in your ceph-ci branch name.
 For example, the ``feature-x`` PR branch should be named 
 ``wip-feature-x-nautilus``. *This is not just a convention. This ensures that your branch is built in the correct environment.*
 
