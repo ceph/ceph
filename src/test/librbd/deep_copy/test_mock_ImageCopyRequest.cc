@@ -312,6 +312,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, FastDiffNonExistent) {
 
   expect_get_image_size(mock_src_image_ctx, 1 << m_src_image_ctx->order);
   expect_get_image_size(mock_src_image_ctx, 0);
+  expect_op_work_queue(mock_src_image_ctx);
 
   librbd::deep_copy::NoOpHandler no_op;
   C_SaferCond ctx;
@@ -389,6 +390,85 @@ TEST_F(TestMockDeepCopyImageCopyRequest, FastDiffExistsClean) {
   ASSERT_EQ(m_snap_map, wait_for_snap_map(mock_object_copy_request));
   ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, nullptr, 0));
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockDeepCopyImageCopyRequest, FastDiffMix) {
+  librados::snap_t snap_id_end;
+  ASSERT_EQ(0, create_snap("copy", &snap_id_end));
+
+  uint64_t object_count = 12;
+
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+  MockObjectCopyRequest mock_object_copy_request;
+
+  InSequence seq;
+
+  MockDiffRequest mock_diff_request;
+  BitVector<2> diff_state;
+  diff_state.resize(object_count);
+  diff_state[1] = object_map::DIFF_STATE_DATA_UPDATED;
+  diff_state[2] = object_map::DIFF_STATE_DATA_UPDATED;
+  diff_state[3] = object_map::DIFF_STATE_DATA;
+  diff_state[5] = object_map::DIFF_STATE_DATA_UPDATED;
+  diff_state[8] = object_map::DIFF_STATE_DATA;
+  diff_state[9] = object_map::DIFF_STATE_DATA;
+  diff_state[10] = object_map::DIFF_STATE_DATA_UPDATED;
+  expect_diff_send(mock_diff_request, diff_state, 0);
+
+  expect_get_image_size(mock_src_image_ctx,
+                        object_count * (1 << m_src_image_ctx->order));
+  expect_get_image_size(mock_src_image_ctx, 0);
+
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_object_copy_send(mock_object_copy_request, 0);
+  expect_object_copy_send(mock_object_copy_request, 0);
+  expect_object_copy_send(mock_object_copy_request,
+                          OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN);
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_object_copy_send(mock_object_copy_request, 0);
+  expect_op_work_queue(mock_src_image_ctx);
+  expect_object_copy_send(mock_object_copy_request,
+                          OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN);
+  expect_object_copy_send(mock_object_copy_request,
+                          OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN);
+  expect_object_copy_send(mock_object_copy_request, 0);
+  expect_op_work_queue(mock_src_image_ctx);
+
+  std::vector<bool> seen(object_count);
+  struct Handler : public librbd::deep_copy::NoOpHandler {
+    Handler(std::vector<bool>* seen) : m_seen(seen) {}
+
+    int update_progress(uint64_t object_no, uint64_t end_object_no) override {
+      EXPECT_THAT(object_no, ::testing::AllOf(::testing::Ge(1),
+                                              ::testing::Le(m_seen->size())));
+      EXPECT_EQ(end_object_no, m_seen->size());
+      EXPECT_FALSE((*m_seen)[object_no - 1]);
+      (*m_seen)[object_no - 1] = true;
+      return 0;
+    }
+
+    std::vector<bool>* m_seen;
+  } handler(&seen);
+
+  C_SaferCond ctx;
+  auto request = new MockImageCopyRequest(&mock_src_image_ctx,
+                                          &mock_dst_image_ctx,
+                                          0, snap_id_end, 0, false, boost::none,
+                                          m_snap_seqs, &handler, &ctx);
+  request->send();
+
+  ASSERT_EQ(m_snap_map, wait_for_snap_map(mock_object_copy_request));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 1, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 2, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 3, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 5, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 8, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 9, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 10, nullptr, 0));
+  ASSERT_EQ(0, ctx.wait());
+
+  EXPECT_THAT(seen, ::testing::Each(::testing::IsTrue()));
 }
 
 TEST_F(TestMockDeepCopyImageCopyRequest, OutOfOrder) {
