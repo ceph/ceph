@@ -19,6 +19,15 @@ bool is_aligned(uint64_t offset, uint64_t alignment)
   return (offset % alignment) == 0;
 }
 
+std::ostream& operator<<(std::ostream &out, const omap_root_t &root)
+{
+  return out << "omap_root{addr=" << root.addr
+	      << ", depth=" << root.depth
+	      << ", hint=" << root.hint
+	      << ", mutated=" << root.mutated
+	      << "}";
+}
+
 std::ostream& operator<<(std::ostream& out, const seastore_meta_t& meta)
 {
   return out << meta.seastore_id;
