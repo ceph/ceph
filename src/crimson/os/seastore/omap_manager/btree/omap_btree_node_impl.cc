@@ -10,11 +10,7 @@
 #include "crimson/os/seastore/omap_manager/btree/omap_btree_node_impl.h"
 #include "seastar/core/thread.hh"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_omap);
-  }
-}
+SET_SUBSYS(seastore_omap);
 
 namespace crimson::os::seastore::omap_manager {
 
@@ -61,6 +57,8 @@ OMapInnerNode::make_split_insert(
   std::string key,
   laddr_t laddr)
 {
+  LOG_PREFIX(OMapInnerNode::make_split_insert);
+  DEBUGT("this: {}, key: {}", oc.t, *this, key);
   return make_split_children(oc).si_then([=] (auto tuple) {
     auto [left, right, pivot] = tuple;
     if (pivot > key) {
@@ -87,7 +85,8 @@ OMapInnerNode::handle_split(
   internal_iterator_t iter,
   mutation_result_t mresult)
 {
-  logger().debug("OMapInnerNode: {}",  __func__);
+  LOG_PREFIX(OMapInnerNode::handle_split);
+  DEBUGT("this: {}",  oc.t, *this);
   if (!is_pending()) {
     auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
     auto mut_iter = mut->iter_idx(iter.get_index());
@@ -121,7 +120,8 @@ OMapInnerNode::get_value(
   omap_context_t oc,
   const std::string &key)
 {
-  logger().debug("OMapInnerNode: {} key = {}",  __func__, key);
+  LOG_PREFIX(OMapInnerNode::get_value);
+  DEBUGT("key = {}, this: {}", oc.t, key, *this);
   auto child_pt = get_containing_child(key);
   assert(child_pt != iter_cend());
   auto laddr = child_pt->get_val();
@@ -137,7 +137,8 @@ OMapInnerNode::insert(
   const std::string &key,
   const ceph::bufferlist &value)
 {
-  logger().debug("OMapInnerNode: {}  {}->{}",  __func__, key, value);
+  LOG_PREFIX(OMapInnerNode::insert);
+  DEBUGT("{}->{}, this: {}",  oc.t, key, value, *this);
   auto child_pt = get_containing_child(key);
   assert(child_pt != iter_cend());
   auto laddr = child_pt->get_val();
@@ -160,7 +161,8 @@ OMapInnerNode::insert(
 OMapInnerNode::rm_key_ret
 OMapInnerNode::rm_key(omap_context_t oc, const std::string &key)
 {
-  logger().debug("OMapInnerNode: {}", __func__);
+  LOG_PREFIX(OMapInnerNode::rm_key);
+  DEBUGT("key={}, this: {}", oc.t, key, *this);
   auto child_pt = get_containing_child(key);
   assert(child_pt != iter_cend());
   auto laddr = child_pt->get_val();
@@ -196,7 +198,12 @@ OMapInnerNode::list(
   const std::optional<std::string> &start,
   omap_list_config_t config)
 {
-  logger().debug("OMapInnerNode: {}", __func__);
+  LOG_PREFIX(OMapInnerNode::list);
+  if (start) {
+    DEBUGT("start={}, this: {}", oc.t, start, *this);
+  } else {
+    DEBUGT("this: {}", oc.t, *this);
+  }
 
   auto child_iter = start ?
     get_containing_child(*start) :
@@ -251,7 +258,8 @@ OMapInnerNode::list(
 OMapInnerNode::clear_ret
 OMapInnerNode::clear(omap_context_t oc)
 {
-  logger().debug("OMapInnerNode: {}", __func__);
+  LOG_PREFIX(OMapInnerNode::clear);
+  DEBUGT("this: {}", oc.t, *this);
   return trans_intr::do_for_each(iter_begin(), iter_end(), [this, oc] (auto iter) {
     auto laddr = iter->get_val();
     return omap_load_extent(oc, laddr, get_meta().depth - 1).si_then(
@@ -268,12 +276,15 @@ OMapInnerNode::clear(omap_context_t oc)
 OMapInnerNode::split_children_ret
 OMapInnerNode:: make_split_children(omap_context_t oc)
 {
-  logger().debug("OMapInnerNode: {}", __func__);
+  LOG_PREFIX(OMapInnerNode::make_split_children);
+  DEBUGT("this: {}", oc.t, *this);
   return oc.tm.alloc_extents<OMapInnerNode>(oc.t, oc.hint,
     OMAP_INNER_BLOCK_SIZE, 2)
-    .si_then([this] (auto &&ext_pair) {
+    .si_then([this, oc] (auto &&ext_pair) {
+      LOG_PREFIX(OMapInnerNode::make_split_children);
       auto left = ext_pair.front();
       auto right = ext_pair.back();
+      DEBUGT("this: {}, split into: l {} r {}", oc.t, *this, *left, *right);
       return split_children_ret(
              interruptible::ready_future_marker{},
              std::make_tuple(left, right, split_into(*left, *right)));
@@ -283,7 +294,8 @@ OMapInnerNode:: make_split_children(omap_context_t oc)
 OMapInnerNode::full_merge_ret
 OMapInnerNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 {
-  logger().debug("OMapInnerNode: {}", __func__);
+  LOG_PREFIX(OMapInnerNode::make_full_merge);
+  DEBUGT("", oc.t);
   return oc.tm.alloc_extent<OMapInnerNode>(oc.t, oc.hint,
     OMAP_INNER_BLOCK_SIZE)
     .si_then([this, right] (auto &&replacement) {
@@ -297,7 +309,8 @@ OMapInnerNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 OMapInnerNode::make_balanced_ret
 OMapInnerNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 {
-  logger().debug("OMapInnerNode: {}", __func__);
+  LOG_PREFIX(OMapInnerNode::make_balanced);
+  DEBUGT("l: {}, r: {}", oc.t, *this, *_right);
   ceph_assert(_right->get_type() == TYPE);
   return oc.tm.alloc_extents<OMapInnerNode>(oc.t, oc.hint,
     OMAP_INNER_BLOCK_SIZE, 2)
@@ -319,7 +332,8 @@ OMapInnerNode::merge_entry(
   internal_iterator_t iter,
   OMapNodeRef entry)
 {
-  logger().debug("OMapInnerNode: {}", __func__);
+  LOG_PREFIX(OMapInnerNode::merge_entry);
+  DEBUGT("{}, parent: {}", oc.t, *entry, *this);
   if (!is_pending()) {
     auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
     auto mut_iter = mut->iter_idx(iter->get_index());
@@ -329,16 +343,18 @@ OMapInnerNode::merge_entry(
   auto donor_iter = is_left ? iter - 1 : iter + 1;
   return omap_load_extent(oc, donor_iter->get_val(), get_meta().depth - 1)
     .si_then([=] (auto &&donor) mutable {
+    LOG_PREFIX(OMapInnerNode::merge_entry);
     auto [l, r] = is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
     auto [liter, riter] = is_left ?
       std::make_pair(donor_iter, iter) : std::make_pair(iter, donor_iter);
     if (donor->extent_is_below_min()) {
-      logger().debug("{}::merge_entry make_full_merge l {} r {}", __func__, *l, *r);
+      DEBUGT("make_full_merge l {} r {}", oc.t, *l, *r);
       assert(entry->extent_is_below_min());
       return l->make_full_merge(oc, r).si_then([liter=liter, riter=riter,
                                                   l=l, r=r, oc, this] (auto &&replacement){
-	logger().debug("OMapInnerNode::merge_entry to update parent: {}", *this);
+	LOG_PREFIX(OMapInnerNode::merge_entry);
+	DEBUGT("to update parent: {}", oc.t, *this);
         journal_inner_update(liter, replacement->get_laddr(), maybe_get_delta_buffer());
         journal_inner_remove(riter, maybe_get_delta_buffer());
         //retire extent
@@ -358,10 +374,11 @@ OMapInnerNode::merge_entry(
         });
       });
     } else {
-      logger().debug("{}::merge_entry balanced l {} r {}", __func__, *l, *r);
+      DEBUGT("balanced l {} r {}", oc.t, *l, *r);
       return l->make_balanced(oc, r).si_then([liter=liter, riter=riter,
                                                 l=l, r=r, oc, this] (auto tuple) {
-	logger().debug("OMapInnerNode::merge_entry to update parent: {}", *this);
+	LOG_PREFIX(OMapInnerNode::merge_entry);
+	DEBUGT("to update parent: {}", oc.t, *this);
         auto [replacement_l, replacement_r, replacement_pivot] = tuple;
         //update operation will not cuase node overflow, so we can do it first
         journal_inner_update(liter, replacement_l->get_laddr(), maybe_get_delta_buffer());
@@ -380,7 +397,7 @@ OMapInnerNode::merge_entry(
                    mutation_result_t(mutation_status_t::SUCCESS, std::nullopt, std::nullopt));
           });
         } else {
-          logger().debug("{}::merge_entry balanced and split {} r {}", __func__, *l, *r);
+          DEBUGT("balanced and split {} r {}", oc.t, *l, *r);
           //use remove and insert to instead of replace,
           //remove operation will not cause node split, so we can do it first
           journal_inner_remove(riter, maybe_get_delta_buffer());
@@ -418,7 +435,8 @@ std::ostream &OMapLeafNode::print_detail_l(std::ostream &out) const
 OMapLeafNode::get_value_ret
 OMapLeafNode::get_value(omap_context_t oc, const std::string &key)
 {
-  logger().debug("OMapLeafNode: {} key = {}", __func__, key);
+  LOG_PREFIX(OMapLeafNode::get_value);
+  DEBUGT("key = {}, this: {}", oc.t, *this, key);
   auto ite = find_string_key(key);
   if (ite != iter_end()) {
     auto value = ite->get_val();
@@ -438,7 +456,8 @@ OMapLeafNode::insert(
   const std::string &key,
   const ceph::bufferlist &value)
 {
-  logger().debug("OMapLeafNode: {}, {} -> {}", __func__, key, value);
+  LOG_PREFIX(OMapLeafNode::insert);
+  DEBUGT("{} -> {}, this: {}", oc.t, key, value, *this);
   bool overflow = extent_will_overflow(key.size(), value.length());
   if (!overflow) {
     if (!is_pending()) {
@@ -454,9 +473,7 @@ OMapLeafNode::insert(
       auto insert_pt = string_lower_bound(key);
       journal_leaf_insert(insert_pt, key, value, maybe_get_delta_buffer());
 
-      logger().debug(
-        "{}: {} inserted {}"," OMapLeafNode",  __func__,
-        insert_pt.get_key());
+      DEBUGT("inserted {}, this: {}", oc.t, insert_pt.get_key(), *this);
     }
     return insert_ret(
            interruptible::ready_future_marker{},
@@ -499,7 +516,8 @@ OMapLeafNode::insert(
 OMapLeafNode::rm_key_ret
 OMapLeafNode::rm_key(omap_context_t oc, const std::string &key)
 {
-  logger().debug("OMapLeafNode: {} : {}", __func__, key);
+  LOG_PREFIX(OMapLeafNode::rm_key);
+  DEBUGT("{}, this: {}", oc.t, key, *this);
   if(!is_pending()) {
     auto mut =  oc.tm.get_mutable_extent(oc.t, this)->cast<OMapLeafNode>();
     return mut->rm_key(oc, key);
@@ -533,12 +551,14 @@ OMapLeafNode::list(
   const std::optional<std::string> &start,
   omap_list_config_t config)
 {
-  logger().debug(
-    "OMapLeafNode::{} start {} max_result_size {} inclusive {}",
-    __func__,
+  LOG_PREFIX(OMapLeafNode::list);
+  DEBUGT(
+    "start {} max_result_size {} inclusive {}, this: {}",
+    oc.t,
     start ? start->c_str() : "",
     config.max_result_size,
-    config.inclusive
+    config.inclusive,
+    *this
   );
   auto ret = list_bare_ret(false, {});
   auto &[complete, result] = ret;
@@ -567,7 +587,8 @@ OMapLeafNode::clear(omap_context_t oc)
 OMapLeafNode::split_children_ret
 OMapLeafNode::make_split_children(omap_context_t oc)
 {
-  logger().debug("OMapLeafNode: {}", __func__);
+  LOG_PREFIX(OMapLeafNode::make_split_children);
+  DEBUGT("this: {}", oc.t, *this);
   return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, OMAP_LEAF_BLOCK_SIZE, 2)
     .si_then([this] (auto &&ext_pair) {
       auto left = ext_pair.front();
@@ -582,7 +603,8 @@ OMapLeafNode::full_merge_ret
 OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 {
   ceph_assert(right->get_type() == TYPE);
-  logger().debug("OMapLeafNode: {}", __func__);
+  LOG_PREFIX(OMapLeafNode::make_full_merge);
+  DEBUGT("this: {}", oc.t, *this);
   return oc.tm.alloc_extent<OMapLeafNode>(oc.t, oc.hint, OMAP_LEAF_BLOCK_SIZE)
     .si_then([this, right] (auto &&replacement) {
       replacement->merge_from(*this, *right->cast<OMapLeafNode>());
@@ -596,7 +618,8 @@ OMapLeafNode::make_balanced_ret
 OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 {
   ceph_assert(_right->get_type() == TYPE);
-  logger().debug("OMapLeafNode: {}",  __func__);
+  LOG_PREFIX(OMapLeafNode::make_balanced);
+  DEBUGT("this: {}",  oc.t, *this);
   return oc.tm.alloc_extents<OMapLeafNode>(oc.t, oc.hint, OMAP_LEAF_BLOCK_SIZE, 2)
     .si_then([this, _right] (auto &&replacement_pair) {
       auto replacement_left = replacement_pair.front();
