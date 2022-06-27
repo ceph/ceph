@@ -31,6 +31,7 @@ class RGWFormatterFlusher;
 
 struct RGWAccountInfo {
   std::string id;
+  std::string name;
   std::string tenant;
 
   static constexpr uint32_t DEFAULT_QUOTA_LIMIT = 1000;
@@ -39,6 +40,7 @@ struct RGWAccountInfo {
   void encode(bufferlist& bl) const {
     ENCODE_START(1,1,bl);
     encode(id, bl);
+    encode(name, bl);
     encode(tenant, bl);
     encode(max_users, bl);
     ENCODE_FINISH(bl);
@@ -47,6 +49,7 @@ struct RGWAccountInfo {
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(id, bl);
+    decode(name, bl);
     decode(tenant, bl);
     decode(max_users, bl);
     DECODE_FINISH(bl);
@@ -177,18 +180,14 @@ struct RGWAccountAdminOpState
   RGWAccountInfo info;
   std::string account_id;
   std::string tenant;
+  std::string account_name;
   uint32_t max_users;
   RGWObjVersionTracker objv_tracker;
 
-  bool has_account_id() {
-    return !account_id.empty();
-  }
+  bool has_account_id() const { return !account_id.empty(); }
+  bool has_account_name() const { return !account_name.empty(); }
 
   void set_max_users(uint32_t _max_users) { max_users = _max_users;}
-  RGWAccountAdminOpState(const std::string& _account_id): account_id(_account_id) {};
-  RGWAccountAdminOpState(const std::string& _account_id,
-			 const std::string& _tenant) : account_id(_account_id),
-						       tenant(_tenant) {}
 };
 
 /*

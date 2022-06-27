@@ -41,6 +41,7 @@ void RGWAccountInfo::dump(Formatter * const f) const
 {
   encode_json("id", id, f);
   encode_json("tenant", tenant, f);
+  encode_json("name", name, f);
   encode_json("max_users", max_users, f);
 }
 
@@ -48,6 +49,7 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
 {
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("tenant", tenant, obj);
+  JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("max_users", max_users, obj);
 }
 
@@ -57,6 +59,7 @@ void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
   auto p = new RGWAccountInfo;
   p->id = "account1";
   p->tenant = "tenant1";
+  p->name = "name1";
   o.push_back(p);
 }
 

@@ -10500,7 +10500,10 @@ next:
       return EINVAL;
     }
     RGWObjVersionTracker objv_tracker;
-    RGWAccountAdminOpState acc_op_state(account_id, tenant);
+    RGWAccountAdminOpState acc_op_state;
+    acc_op_state.account_id = account_id;
+    acc_op_state.tenant = tenant;
+    acc_op_state.account_name = account_name;
 
     if (opt_cmd == OPT::ACCOUNT_CREATE) {
       ret = RGWAdminOp_Account::add(dpp(), store, acc_op_state,

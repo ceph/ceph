@@ -16,15 +16,20 @@ public:
 
 void RGWOp_Account_Create::execute(optional_yield y)
 {
-  std::string account_id;
+  std::string id;
   std::string tenant;
+  std::string name;
   uint32_t max_users;
-  RESTArgs::get_string(s, "account", account_id, &account_id);
-  RESTArgs::get_string(s, "tenant", tenant, &tenant);
+  RESTArgs::get_string(s, "id", "", &id);
+  RESTArgs::get_string(s, "tenant", "", &tenant);
+  RESTArgs::get_string(s, "name", "", &name);
   bool has_max_users = false;
   RESTArgs::get_uint32(s, "max-users", 0, &max_users, &has_max_users);
 
-  RGWAccountAdminOpState acc_op_state(account_id, tenant);
+  RGWAccountAdminOpState acc_op_state;
+  acc_op_state.account_id = id;
+  acc_op_state.tenant = tenant;
+  acc_op_state.account_name = name;
   if (has_max_users) {
     acc_op_state.set_max_users(max_users);
   }
@@ -51,10 +56,18 @@ public:
 
 void RGWOp_Account_Get::execute(optional_yield y)
 {
-  std::string account_id;
+  std::string id;
+  std::string tenant;
+  std::string name;
 
-  RESTArgs::get_string(s, "account", account_id, &account_id);
-  RGWAccountAdminOpState acc_op_state(account_id);
+  RESTArgs::get_string(s, "id", "", &id);
+  RESTArgs::get_string(s, "tenant", "", &tenant);
+  RESTArgs::get_string(s, "name", "", &name);
+
+  RGWAccountAdminOpState acc_op_state;
+  acc_op_state.account_id = id;
+  acc_op_state.tenant = tenant;
+  acc_op_state.account_name = name;
 
   op_ret = RGWAdminOp_Account::info(this, store, acc_op_state, flusher, s->yield);
 }
@@ -72,10 +85,18 @@ public:
 
 void RGWOp_Account_Delete::execute(optional_yield y)
 {
-  std::string account_id;
+  std::string id;
+  std::string tenant;
+  std::string name;
 
-  RESTArgs::get_string(s, "account", account_id, &account_id);
-  RGWAccountAdminOpState acc_op_state(account_id);
+  RESTArgs::get_string(s, "id", "", &id);
+  RESTArgs::get_string(s, "tenant", "", &tenant);
+  RESTArgs::get_string(s, "name", "", &name);
+
+  RGWAccountAdminOpState acc_op_state;
+  acc_op_state.account_id = id;
+  acc_op_state.tenant = tenant;
+  acc_op_state.account_name = name;
 
   op_ret = RGWAdminOp_Account::remove(this, store, acc_op_state, flusher, s->yield);
 }
