@@ -145,6 +145,16 @@
 %endif
 %endif
 
+%if 0%{with seastar}
+# disable -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1, as gcc-toolset-{10,11}-annobin
+# do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
+# redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
+%undefine _annotated_build
+%if 0%{?enable_devtoolset11:1}
+%enable_devtoolset11
+%endif
+%endif
+
 #################################################################################
 # main package definition
 #################################################################################
@@ -192,6 +202,7 @@ BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
 %if 0%{with seastar} && 0%{?rhel}
 BuildRequires:	gcc-toolset-11-gcc-c++
+BuildRequires:	gcc-toolset-11-build
 %else
 %if 0%{?suse_version}
 BuildRequires:	gcc11-c++
@@ -1246,10 +1257,6 @@ This package provides Ceph default alerts for Prometheus.
 %define _lto_cflags %{nil}
 %endif
 
-%if 0%{with seastar} && 0%{?rhel}
-. /opt/rh/gcc-toolset-11/enable
-%endif
-
 %if 0%{with cephfs_java}
 # Find jni.h
 for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
@@ -1272,12 +1279,6 @@ export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
 # remove from CFLAGS too because it causes the arrow submodule to fail with:
 #   warning _FORTIFY_SOURCE requires compiling with optimization (-O)
 export CFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
-%if 0%{?fedora} || 0%{?rhel}
-# disable -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1, as gcc-toolset-{9,10}-annobin
-# do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
-# redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
-%undefine _annotated_build
-%endif
 %endif
 
 env | sort
@@ -1407,13 +1408,6 @@ popd
 
 
 %install
-
-%if 0%{with seastar}
-%if 0%{?fedora} || 0%{?rhel}
-%undefine _annotated_build
-. /opt/rh/gcc-toolset-11/enable
-%endif
-%endif
 
 pushd %{_vpath_builddir}
 %make_install
