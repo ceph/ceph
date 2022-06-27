@@ -30,7 +30,8 @@
       "es2017",
       "dom"
     ],
-    "allowJs": true
+    "allowJs": true,
+    "skipLibCheck": true
   },
   "exclude": [
     "coverage",
