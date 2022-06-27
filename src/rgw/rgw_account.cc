@@ -2,6 +2,8 @@
 #include "rgw_metadata.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h" // TODO
+#include "common/random_string.h"
+#include "common/utf8.h"
 
 #include "services/svc_account.h"
 #include "services/svc_meta.h"
@@ -21,6 +23,51 @@ RGWAccountCtl::RGWAccountCtl(RGWSI_Zone *zone_svc,
 RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account *account_svc) {
   base_init(account_svc->ctx(), account_svc->get_be_handler());
   svc.account = account_svc;
+}
+
+// account ids start with 'RGW' followed by 17 numeric digits
+static constexpr std::string_view account_id_prefix = "RGW";
+static constexpr std::size_t account_id_len = 20;
+
+std::string RGWAccountCtl::generate_account_id(CephContext* cct)
+{
+  // fill with random numeric digits
+  std::string id = gen_rand_numeric(cct, account_id_len);
+  // overwrite the prefix bytes
+  std::copy(account_id_prefix.begin(), account_id_prefix.end(), id.begin());
+  return id;
+}
+
+bool RGWAccountCtl::valid_account_id(std::string_view id)
+{
+  if (id.size() != account_id_len) {
+    return false;
+  }
+  // must match prefix 'RGW'
+  if (id.compare(0, account_id_prefix.size(), account_id_prefix) != 0) {
+    return false;
+  }
+  // all remaining bytes must be numeric digits
+  auto suffix = id.substr(account_id_prefix.size());
+  return std::all_of(suffix.begin(), suffix.end(),
+                     [] (int c) { return std::isdigit(c); });
+}
+
+bool RGWAccountCtl::valid_account_name(std::string_view name)
+{
+  if (name.empty()) {
+    return false;
+  }
+  // must not contain the tenant delimiter $
+  if (name.find('$') != name.npos) {
+    return false;
+  }
+  // must not contain the metadata section delimeter :
+  if (name.find(':') != name.npos) {
+    return false;
+  }
+  // must be valid utf8
+  return check_utf8(name.data(), name.size());
 }
 
 int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,

@@ -100,6 +100,10 @@ public:
 
   ~RGWAccountCtl() = default;
 
+  static std::string generate_account_id(CephContext* cct);
+  static bool valid_account_id(std::string_view id);
+  static bool valid_account_name(std::string_view name);
+
   int add_user(const DoutPrefixProvider* dpp,
 	       const std::string& account_id,
 	       const rgw_user& user,
