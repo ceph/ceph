@@ -37,16 +37,16 @@ public:
   virtual int read_account_info(const DoutPrefixProvider *dpp,
 				RGWSI_MetaBackend::Context *ctx,
 				const std::string& account_id,
-				RGWAccountInfo *info,
-				RGWObjVersionTracker * const objv_tracker,
-				real_time * const pmtime,
-				std::map<std::string, bufferlist> * const pattrs,
+				RGWAccountInfo& info,
+				RGWObjVersionTracker& objv,
+				real_time* pmtime,
+				std::map<std::string, bufferlist>*  pattrs,
 				optional_yield y) = 0;
 
-  virtual int remove_account_info(const DoutPrefixProvider *dpp,
-				  RGWSI_MetaBackend::Context *ctx,
+  virtual int remove_account_info(const DoutPrefixProvider* dpp,
+				  RGWSI_MetaBackend::Context* ctx,
 				  const std::string& account_id,
-				  RGWObjVersionTracker *objv_tracker,
+				  RGWObjVersionTracker& objv,
 				  optional_yield y) = 0;
 
   virtual int add_user(const DoutPrefixProvider *dpp,
@@ -62,10 +62,9 @@ public:
   virtual int store_account_info(const DoutPrefixProvider *dpp,
 				 RGWSI_MetaBackend::Context *ctx,
 				 const RGWAccountInfo& info,
-				 RGWObjVersionTracker * const objv_tracker,
-				 const real_time& mtime,
-				 bool exclusive,
-				 std::map<std::string, bufferlist> * const pattrs,
+				 RGWObjVersionTracker& objv,
+				 const real_time& mtime, bool exclusive,
+				 std::map<std::string, bufferlist>* pattrs,
 				 optional_yield y) = 0;
 
   virtual int list_users(const DoutPrefixProvider *dpp,

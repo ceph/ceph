@@ -25,21 +25,15 @@ RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account *account_svc)
 
 int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
                               const RGWAccountInfo& info,
-                              RGWObjVersionTracker *objv_tracker,
-                              const real_time& mtime,
-                              bool exclusive,
+                              RGWObjVersionTracker& objv,
+                              const real_time& mtime, bool exclusive,
                               std::map<std::string, bufferlist> *pattrs,
                               optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-   return svc.account->store_account_info(dpp, op->ctx(),
-                                          info,
-                                          objv_tracker,
-                                          mtime,
-                                          exclusive,
-                                          pattrs,
-                                          y);
-                          });
+      return svc.account->store_account_info(
+          dpp, op->ctx(), info, objv, mtime, exclusive, pattrs, y);
+    });
 }
 
 void RGWAccountInfo::dump(Formatter * const f) const
@@ -67,29 +61,26 @@ void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
 
 int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
                              const std::string& account_id,
-                             RGWAccountInfo* info,
-                             RGWObjVersionTracker * const objv_tracker,
-                             real_time * const pmtime,
-                             std::map<std::string, bufferlist> * pattrs,
+                             RGWAccountInfo& info,
+                             RGWObjVersionTracker& objv,
+                             real_time* pmtime,
+                             std::map<std::string, bufferlist>* pattrs,
                              optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-        return svc.account->read_account_info(dpp, op->ctx(), account_id,
-                                              info, objv_tracker, pmtime,
-                                              pattrs, y);
-
-      }
-    );
+      return svc.account->read_account_info(
+          dpp, op->ctx(), account_id, info, objv, pmtime, pattrs, y);
+    });
 }
 
 int RGWAccountCtl::remove_info(const DoutPrefixProvider* dpp,
                                const std::string& account_id,
-                               RGWObjVersionTracker *objv_tracker,
+                               RGWObjVersionTracker& objv,
                                optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-      return svc.account->remove_account_info(dpp, op->ctx(), account_id,
-                                              objv_tracker, y);
+      return svc.account->remove_account_info(
+          dpp, op->ctx(), account_id, objv, y);
     });
 }
 
@@ -100,10 +91,10 @@ int RGWAccountCtl::add_user(const DoutPrefixProvider* dpp,
                             optional_yield y)
 {
   RGWAccountInfo info;
-  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker objv;
   real_time mtime;
 
-  int ret = read_info(dpp, account_id, &info, &objv_tracker, &mtime, nullptr, y);
+  int ret = read_info(dpp, account_id, info, objv, &mtime, nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -117,10 +108,9 @@ int RGWAccountCtl::remove_user(const DoutPrefixProvider* dpp,
                                optional_yield y)
 {
   RGWAccountInfo info;
-  RGWObjVersionTracker objv_tracker;
-  real_time mtime;
+  RGWObjVersionTracker objv;
 
-  int ret = read_info(dpp, account_id, &info, &objv_tracker, &mtime, nullptr, y);
+  int ret = read_info(dpp, account_id, info, objv, nullptr, nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -136,10 +126,9 @@ int RGWAccountCtl::list_users(const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
   RGWAccountInfo info;
-  RGWObjVersionTracker objv_tracker;
-  real_time mtime;
+  RGWObjVersionTracker objv;
 
-  int ret = read_info(dpp, account_id, &info, &objv_tracker, &mtime, nullptr, y);
+  int ret = read_info(dpp, account_id, info, objv, nullptr, nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -170,13 +159,13 @@ int RGWAccountMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
                                       const DoutPrefixProvider* dpp)
 {
   RGWAccountCompleteInfo aci;
-  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker objv;
   real_time mtime;
 
   int ret = svc.account->read_account_info(dpp, op->ctx(),
                                            entry,
-                                           &aci.info,
-                                           &objv_tracker,
+                                           aci.info,
+                                           objv,
                                            &mtime,
                                            &aci.attrs,
                                            y);
@@ -184,7 +173,7 @@ int RGWAccountMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
     return ret;
   }
 
-  RGWAccountMetadataObject *mdo = new RGWAccountMetadataObject(aci, objv_tracker.read_version,mtime);
+  RGWAccountMetadataObject *mdo = new RGWAccountMetadataObject(aci, objv.read_version, mtime);
   *obj = mdo;
 
   return 0;
@@ -222,7 +211,7 @@ int RGWMetadataHandlerPut_Account::put_checked(const DoutPrefixProvider *dpp)
   auto mtime = obj->get_mtime();
   int r = ahandler->svc.account->store_account_info(dpp, op->ctx(),
                                                     aci.info,
-                                                    &objv_tracker,
+                                                    objv_tracker,
                                                     mtime,
                                                     false,
                                                     pattrs,
@@ -249,12 +238,12 @@ int RGWAccountMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
 
 int RGWAccountMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                          std::string& entry,
-                                         RGWObjVersionTracker& objv_tracker,
+                                         RGWObjVersionTracker& objv,
                                          optional_yield y,
                                          const DoutPrefixProvider* dpp)
 {
   // TODO find out if we need to error if the key doesn't exist?
-  return svc.account->remove_account_info(dpp, op->ctx(), entry, &objv_tracker, y);
+  return svc.account->remove_account_info(dpp, op->ctx(), entry, objv, y);
 }
 
 int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
@@ -273,7 +262,7 @@ int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
   account_info.id = op_state.account_id;
 
   int ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
-      dpp, account_info, &op_state.objv_tracker, real_time(), true, nullptr, y);
+      dpp, account_info, op_state.objv_tracker, real_time(), true, nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -296,7 +285,7 @@ int RGWAdminOp_Account::remove(const DoutPrefixProvider *dpp,
   }
 
   return static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->remove_info(
-      dpp, op_state.account_id, &op_state.objv_tracker, y);
+      dpp, op_state.account_id, op_state.objv_tracker, y);
 }
 
 int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
@@ -314,8 +303,8 @@ int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
   }
 
   int ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->read_info(
-      dpp, op_state.account_id, &account_info,
-      &op_state.objv_tracker, &mtime, &attrs, y);
+      dpp, op_state.account_id, account_info,
+      op_state.objv_tracker, &mtime, &attrs, y);
 
   if (ret < 0) {
     return ret;

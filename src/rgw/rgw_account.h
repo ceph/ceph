@@ -97,7 +97,7 @@ public:
 
   int store_info(const DoutPrefixProvider* dpp,
 		 const RGWAccountInfo& info,
-		 RGWObjVersionTracker *objv_tracker,
+		 RGWObjVersionTracker& objv,
 		 const real_time& mtime,
 		 bool exclusive,
 		 std::map<std::string, bufferlist> *pattrs,
@@ -105,20 +105,16 @@ public:
 
   int read_info(const DoutPrefixProvider* dpp,
 		const std::string& account_id,
-		RGWAccountInfo* info,
-		RGWObjVersionTracker * const objv_tracker,
-		real_time * const pmtime,
-		std::map<std::string, bufferlist> * pattrs,
+		RGWAccountInfo& info,
+		RGWObjVersionTracker& objv,
+		real_time* pmtime,
+		std::map<std::string, bufferlist>* pattrs,
 		optional_yield y);
 
   int remove_info(const DoutPrefixProvider* dpp,
 		  const std::string& account_id,
-		  RGWObjVersionTracker *objv_tracker,
+		  RGWObjVersionTracker& objv,
 		  optional_yield y);
-  // TODO
-  int get_info_by_tenant(const std::string& tenant,
-			 RGWAccountInfo* info,
-			 optional_yield y);
 };
 
 using RGWAccountCompleteInfo = CompleteInfo<RGWAccountInfo>;

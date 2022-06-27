@@ -49,26 +49,25 @@ public:
   int store_account_info(const DoutPrefixProvider *dpp,
 			 RGWSI_MetaBackend::Context *ctx,
 			 const RGWAccountInfo& info,
-			 RGWObjVersionTracker * const objv_tracker,
-			 const real_time& mtime,
-			 bool exclusive,
-			 std::map<std::string, bufferlist> * const pattrs,
+			 RGWObjVersionTracker& objv,
+			 const real_time& mtime, bool exclusive,
+			 std::map<std::string, bufferlist>* pattrs,
 			 optional_yield y) override;
 
   int read_account_info(const DoutPrefixProvider *dpp,
-                        RGWSI_MetaBackend::Context *ctx,
-  			const std::string& account_id,
-  			RGWAccountInfo *info,
-  			RGWObjVersionTracker * const objv_tracker,
-			real_time * const pmtime,
-  			std::map<std::string, bufferlist> * const pattrs,
-  			optional_yield y) override;
+			RGWSI_MetaBackend::Context *ctx,
+			const std::string& account_id,
+			RGWAccountInfo& info,
+			RGWObjVersionTracker& objv,
+			real_time* pmtime,
+			std::map<std::string, bufferlist>* pattrs,
+			optional_yield y) override;
 
-  int remove_account_info(const DoutPrefixProvider *dpp,
-                          RGWSI_MetaBackend::Context *ctx,
-  			  const std::string& account_id,
-  			  RGWObjVersionTracker *objv_tracker,
-  			  optional_yield y) override;
+  int remove_account_info(const DoutPrefixProvider* dpp,
+                          RGWSI_MetaBackend::Context* ctx,
+                          const std::string& account_id,
+                          RGWObjVersionTracker& objv,
+                          optional_yield y) override;
 
   int add_user(const DoutPrefixProvider *dpp,
                const RGWAccountInfo& info,

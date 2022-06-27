@@ -87,9 +87,9 @@ rgw_raw_obj RGWSI_Account_RADOS::get_account_user_obj(const std::string& account
 }
 
 int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
-                                            RGWSI_MetaBackend::Context *_ctx,
+                                            RGWSI_MetaBackend::Context* _ctx,
                                             const RGWAccountInfo& info,
-                                            RGWObjVersionTracker *objv_tracker,
+                                            RGWObjVersionTracker& objv,
                                             const real_time& mtime,
                                             bool exclusive,
                                             std::map<std::string, bufferlist> *pattrs,
@@ -99,34 +99,34 @@ int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
   encode(info, data_bl);
 
   RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
-  return svc.meta_be->put(_ctx, get_meta_key(info), params, objv_tracker, y, dpp);
+  return svc.meta_be->put(_ctx, get_meta_key(info), params, &objv, y, dpp);
 }
 
 int RGWSI_Account_RADOS::read_account_info(const DoutPrefixProvider* dpp,
                                            RGWSI_MetaBackend::Context *ctx,
                                            const std::string& account_id,
-                                           RGWAccountInfo *info,
-                                           RGWObjVersionTracker * const objv_tracker,
-                                           real_time * const pmtime,
-                                           std::map<std::string, bufferlist> * const pattrs,
+                                           RGWAccountInfo& info,
+                                           RGWObjVersionTracker& objv,
+                                           real_time* pmtime,
+                                           std::map<std::string, bufferlist>* pattrs,
                                            optional_yield y)
 {
   bufferlist bl;
   RGWSI_MBSObj_GetParams params(&bl, pattrs, pmtime);
-  int r = svc.meta_be->get_entry(ctx, account_id, params, objv_tracker, y, dpp);
+  int r = svc.meta_be->get_entry(ctx, account_id, params, &objv, y, dpp);
   if (r < 0) {
     return r;
   }
 
   auto bl_iter = bl.cbegin();
   try {
-    decode(*info, bl_iter);
+    decode(info, bl_iter);
   } catch (buffer::error& err) {
     ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode account info, caught buffer::error" << dendl;
     return -EIO;
   }
-  if (info->id != account_id) {
-    lderr(svc.meta_be->ctx()) << "ERROR: read_account_info account id mismatch" << info->id << "!= " << account_id << dendl;
+  if (info.id != account_id) {
+    lderr(svc.meta_be->ctx()) << "ERROR: read_account_info account id mismatch" << info.id << " != " << account_id << dendl;
     return -EIO;
   }
   return 0;
@@ -135,11 +135,11 @@ int RGWSI_Account_RADOS::read_account_info(const DoutPrefixProvider* dpp,
 int RGWSI_Account_RADOS::remove_account_info(const DoutPrefixProvider* dpp,
                                              RGWSI_MetaBackend::Context *ctx,
                                              const std::string& account_id,
-                                             RGWObjVersionTracker *objv_tracker,
+                                             RGWObjVersionTracker& objv,
                                              optional_yield y)
 {
   RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove(ctx, account_id, params, objv_tracker, y, dpp);
+  int ret = svc.meta_be->remove(ctx, account_id, params, &objv, y, dpp);
   if (ret <0 && ret != -ENOENT && ret != -ECANCELED) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove account: " << account_id << dendl;
     return ret;
