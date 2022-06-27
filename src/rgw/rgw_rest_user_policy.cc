@@ -208,11 +208,6 @@ void RGWGetUserPolicy::execute(optional_yield y)
   }
 
   if (op_ret == 0) {
-    s->formatter->open_object_section("GetUserPolicyResponse");
-    s->formatter->open_object_section("ResponseMetadata");
-    s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
-    s->formatter->open_object_section("GetUserPolicyResult");
     map<string, string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
       bufferlist bl = it->second;
@@ -225,19 +220,30 @@ void RGWGetUserPolicy::execute(optional_yield y)
       }
       if (auto it = policies.find(policy_name); it != policies.end()) {
         policy = policies[policy_name];
-        dump(s->formatter);
       } else {
         ldpp_dout(this, 0) << "ERROR: policy not found" << policy << dendl;
         op_ret = -ERR_NO_SUCH_ENTITY;
-        return;
       }
     } else {
       ldpp_dout(this, 0) << "ERROR: RGW_ATTR_USER_POLICY not found" << dendl;
       op_ret = -ERR_NO_SUCH_ENTITY;
-      return;
     }
-    s->formatter->close_section();
-    s->formatter->close_section();
+    if (op_ret == 0) {
+       s->formatter->open_object_section("GetUserPolicyResponse");
+       s->formatter->open_object_section("ResponseMetadata");
+       s->formatter->dump_string("RequestId", s->trans_id);
+       s->formatter->close_section();
+       s->formatter->open_object_section("GetUserPolicyResult");
+       dump(s->formatter);
+       s->formatter->close_section();
+       s->formatter->close_section();
+    }
+    else
+    {
+        s->formatter->dump_string("Response", "NoSuchEntity" );
+        op_ret = 0;
+    }
+    return;
   }
   if (op_ret < 0) {
     op_ret = -ERR_INTERNAL_ERROR;
