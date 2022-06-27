@@ -489,10 +489,9 @@ class MotrZone : public Zone {
     }
     MotrZone(MotrStore* _store, MotrZoneGroup _zg) : store(_store), zonegroup(_zg) {
       realm = new RGWRealm();
-      zonegroup = new RGWZoneGroup();
       // TODO: fetch zonegroup params (eg. id) from provisioner config.
-      zonegroup->set_id("0956b174-fe14-4f97-8b50-bb7ec5e1cf62");
-      zonegroup->api_name = "default";
+      zonegroup.set_id("0956b174-fe14-4f97-8b50-bb7ec5e1cf62");
+      zonegroup.api_name = "default";
       zone_public_config = new RGWZone();
       zone_params = new RGWZoneParams();
       current_period = new RGWPeriod();
