@@ -913,6 +913,7 @@ class MotrMultipartUpload : public MultipartUpload {
   ceph::real_time mtime;
   rgw_placement_rule placement;
   RGWObjManifest manifest;
+  std::string version_id;
 
 public:
   MotrMultipartUpload(MotrStore* _store, Bucket* _bucket, const std::string& oid,
@@ -921,6 +922,8 @@ public:
        }
   virtual ~MotrMultipartUpload() = default;
 
+  void set_version_id(std::string _version_id) { version_id = _version_id; };
+  std::string get_version_id() { return version_id; };
   virtual const std::string& get_meta() const { return mp_obj.get_meta(); }
   virtual const std::string& get_key() const { return mp_obj.get_key(); }
   virtual const std::string& get_upload_id() const { return mp_obj.get_upload_id(); }

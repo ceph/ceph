@@ -3657,6 +3657,7 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp, std::string
   int marker = 0;
   bool truncated = false;
 
+  this->set_version_id(version_id);
   // Scan all parts and delete the corresponding motr objects.
   do {
     rc = this->list_parts(dpp, store->ctx(), max_parts, marker, &marker, &truncated);
@@ -3912,8 +3913,9 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
     std::string key_name;
 
     // Get the object entry
+    mobj_ver->set_instance(this->get_version_id());
     int ret_rc = mobj_ver->get_bucket_dir_ent(dpp, ent);
-    if(ret_rc < 0)
+    if (ret_rc < 0)
       return ret_rc;
 
     if (!ent.is_delete_marker()) {
