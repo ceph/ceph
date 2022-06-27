@@ -18,5 +18,9 @@ module.exports = {
   saveDebugData: true,
   failCypressOnDiff: true,
   concurrency: 4,
-  baselineBranchName: branch
+  baselineBranchName: branch,
+  isDisabled: false,
+  failCypressOnDiff: true,
+  disableBrowserFetching: false,
+  testConcurrency: 5
 };
