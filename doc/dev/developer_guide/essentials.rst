@@ -21,7 +21,7 @@ RADOS     Neha Ojha        neha-ojha
 RGW       Yehuda Sadeh     yehudasa
 RGW       Matt Benjamin    mattbenjamin
 RBD       Ilya Dryomov     dis 
-CephFS    Patrick Donnelly batrick
+CephFS    Venky Shankar    vshankar
 Dashboard Ernesto Puerta   epuertat
 MON       Joao Luis        jecluis
 Build/Ops Ken Dreyer       ktdreyer
