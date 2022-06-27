@@ -1407,6 +1407,14 @@ popd
 
 
 %install
+
+%if 0%{with seastar}
+%if 0%{?fedora} || 0%{?rhel}
+%undefine _annotated_build
+. /opt/rh/gcc-toolset-11/enable
+%endif
+%endif
+
 pushd %{_vpath_builddir}
 %make_install
 # we have dropped sysvinit bits
