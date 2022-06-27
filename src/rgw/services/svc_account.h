@@ -45,7 +45,7 @@ public:
 
   virtual int remove_account_info(const DoutPrefixProvider* dpp,
 				  RGWSI_MetaBackend::Context* ctx,
-				  const std::string& account_id,
+				  const RGWAccountInfo& info,
 				  RGWObjVersionTracker& objv,
 				  optional_yield y) = 0;
 
@@ -62,6 +62,7 @@ public:
   virtual int store_account_info(const DoutPrefixProvider *dpp,
 				 RGWSI_MetaBackend::Context *ctx,
 				 const RGWAccountInfo& info,
+				 const RGWAccountInfo* old_info,
 				 RGWObjVersionTracker& objv,
 				 const real_time& mtime, bool exclusive,
 				 std::map<std::string, bufferlist>* pattrs,

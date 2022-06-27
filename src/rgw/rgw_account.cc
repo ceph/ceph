@@ -25,6 +25,7 @@ RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account *account_svc)
 
 int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
                               const RGWAccountInfo& info,
+                              const RGWAccountInfo* old_info,
                               RGWObjVersionTracker& objv,
                               const real_time& mtime, bool exclusive,
                               std::map<std::string, bufferlist> *pattrs,
@@ -32,7 +33,7 @@ int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
       return svc.account->store_account_info(
-          dpp, op->ctx(), info, objv, mtime, exclusive, pattrs, y);
+          dpp, op->ctx(), info, old_info, objv, mtime, exclusive, pattrs, y);
     });
 }
 
@@ -74,13 +75,13 @@ int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
 }
 
 int RGWAccountCtl::remove_info(const DoutPrefixProvider* dpp,
-                               const std::string& account_id,
+                               const RGWAccountInfo& info,
                                RGWObjVersionTracker& objv,
                                optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
       return svc.account->remove_account_info(
-          dpp, op->ctx(), account_id, objv, y);
+          dpp, op->ctx(), info, objv, y);
     });
 }
 
@@ -202,6 +203,9 @@ public:
 
 int RGWMetadataHandlerPut_Account::put_checked(const DoutPrefixProvider *dpp)
 {
+  auto orig_obj = static_cast<RGWAccountMetadataObject*>(old_obj);
+  RGWAccountInfo *pold_info = (orig_obj ? &orig_obj->get_aci().info : nullptr);
+
   RGWAccountCompleteInfo& aci = aobj->get_aci();
   std::map<std::string, bufferlist> *pattrs {nullptr};
   if (aci.has_attrs) {
@@ -211,6 +215,7 @@ int RGWMetadataHandlerPut_Account::put_checked(const DoutPrefixProvider *dpp)
   auto mtime = obj->get_mtime();
   int r = ahandler->svc.account->store_account_info(dpp, op->ctx(),
                                                     aci.info,
+                                                    pold_info,
                                                     objv_tracker,
                                                     mtime,
                                                     false,
@@ -242,8 +247,15 @@ int RGWAccountMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
                                          optional_yield y,
                                          const DoutPrefixProvider* dpp)
 {
-  // TODO find out if we need to error if the key doesn't exist?
-  return svc.account->remove_account_info(dpp, op->ctx(), entry, objv, y);
+  const std::string account_id = entry;
+
+  RGWAccountInfo info;
+  int ret = svc.account->read_account_info(dpp, op->ctx(), account_id, info,
+                                           objv, nullptr, nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+  return svc.account->remove_account_info(dpp, op->ctx(), info, objv, y);
 }
 
 int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
@@ -261,8 +273,11 @@ int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
   account_info.tenant = op_state.tenant;
   account_info.id = op_state.account_id;
 
+  constexpr RGWAccountInfo* old_info = nullptr;
+  constexpr bool exclusive = true;
+
   int ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
-      dpp, account_info, op_state.objv_tracker, real_time(), true, nullptr, y);
+      dpp, account_info, old_info, op_state.objv_tracker, real_time(), exclusive, nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -283,9 +298,19 @@ int RGWAdminOp_Account::remove(const DoutPrefixProvider *dpp,
   if (!op_state.has_account_id()) {
     return -EINVAL;
   }
+  RGWAccountInfo info;
 
-  return static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->remove_info(
-      dpp, op_state.account_id, op_state.objv_tracker, y);
+  // TODO: use sal::Account
+  auto account_svc = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
+
+  auto& objv = op_state.objv_tracker;
+  int ret = account_svc->read_info(dpp, op_state.account_id, info,
+                                   objv, nullptr, nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return account_svc->remove_info(dpp, info, objv, y);
 }
 
 int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
@@ -294,24 +319,23 @@ int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
                              RGWFormatterFlusher& flusher,
                              optional_yield y)
 {
-  RGWAccountInfo account_info;
-  real_time mtime;
-  std::map<std::string, bufferlist> attrs;
 
   if (!op_state.has_account_id()) {
     return -EINVAL;
   }
+  // TODO: use sal::Account
+  auto account_svc = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
 
-  int ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->read_info(
-      dpp, op_state.account_id, account_info,
-      op_state.objv_tracker, &mtime, &attrs, y);
-
+  RGWAccountInfo info;
+  auto& objv = op_state.objv_tracker;
+  int ret = account_svc->read_info(dpp, op_state.account_id, info,
+                                   objv, nullptr, nullptr, y);
   if (ret < 0) {
     return ret;
   }
 
   flusher.start(0);
-  encode_json("AccountInfo", account_info, flusher.get_formatter());
+  encode_json("AccountInfo", info, flusher.get_formatter());
   flusher.flush();
 
   return 0;

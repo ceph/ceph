@@ -97,6 +97,7 @@ public:
 
   int store_info(const DoutPrefixProvider* dpp,
 		 const RGWAccountInfo& info,
+		 const RGWAccountInfo* old_info,
 		 RGWObjVersionTracker& objv,
 		 const real_time& mtime,
 		 bool exclusive,
@@ -112,7 +113,7 @@ public:
 		optional_yield y);
 
   int remove_info(const DoutPrefixProvider* dpp,
-		  const std::string& account_id,
+                  const RGWAccountInfo& info,
 		  RGWObjVersionTracker& objv,
 		  optional_yield y);
 };
