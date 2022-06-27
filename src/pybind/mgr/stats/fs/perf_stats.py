@@ -23,11 +23,11 @@ QUERY_RAW_COUNTERS = "query_raw_counters"
 QUERY_RAW_COUNTERS_GLOBAL = "query_raw_counters_global"
 
 MDS_RANK_ALL = (-1,)
-CLIENT_ID_ALL = "\d*"
+CLIENT_ID_ALL = r"\d*"
 CLIENT_IP_ALL = ".*"
 
 MDS_PERF_QUERY_REGEX_MATCH_ALL_RANKS = '^(.*)$'
-MDS_PERF_QUERY_REGEX_MATCH_CLIENTS = '^(client.{0}\s+{1}):.*'
+MDS_PERF_QUERY_REGEX_MATCH_CLIENTS = r'^(client.{0}\s+{1}):.*'
 MDS_PERF_QUERY_COUNTERS_MAP = OrderedDict({'cap_hit': 0,
                                            'read_latency': 1,
                                            'write_latency': 2,
