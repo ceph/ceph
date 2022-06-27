@@ -1,4 +1,3 @@
-from asyncio.log import logger
 import ceph_module  # noqa
 
 from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
@@ -1775,8 +1774,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def get_mgr_ip(self) -> str:
         if not self._mgr_ips:
             ips = self.get("mgr_ips").get('ips', [])
-            logger.info("woww %s", ips)
-            logger.info("chamayla %s", socket.gethostbyname(socket.gethostname()))
             if not ips:
                 return socket.gethostname()
             self._mgr_ips = ips[0]

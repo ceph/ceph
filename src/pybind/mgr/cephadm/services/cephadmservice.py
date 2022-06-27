@@ -12,7 +12,7 @@ from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec, CephExporterSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
-from mgr_util import build_url
+from mgr_util import build_url, merge_dicts
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
@@ -1030,11 +1030,10 @@ class CephExporterService(CephService):
         if spec.prio_limit:
             exporter_config.update({'prio-limit': spec.prio_limit})
         if spec.stats_period:
-            exporter_config.update({'stats-period': spec.stats_period})               
+            exporter_config.update({'stats-period': spec.stats_period})
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        daemon_spec.final_config = daemon_spec.final_config + exporter_config
-        logger.info("eni mane %s", daemon_spec.final_config)
+        daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
         return daemon_spec
 
 
