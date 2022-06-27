@@ -385,8 +385,8 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     on_start_fail(0, "local image is primary");
     return;
   } else if (r == -EREMOTEIO) {
-    dout(5) << "remote image is non-primary" << dendl;
-    on_start_fail(-EREMOTEIO, "remote image is non-primary");
+    dout(5) << "remote image is not primary" << dendl;
+    on_start_fail(-EREMOTEIO, "remote image is not primary");
     return;
   } else if (r == -EEXIST) {
     on_start_fail(r, "split-brain detected");
