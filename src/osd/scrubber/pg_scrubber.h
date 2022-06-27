@@ -459,6 +459,9 @@ class PgScrubber : public ScrubPgIF,
   void select_range_n_notify() final;
 
   Scrub::BlockedRangeWarning acquire_blocked_alarm() final;
+  void set_scrub_blocked(utime_t since) final;
+  void clear_scrub_blocked() final;
+
 
   /// walk the log to find the latest update that affects our chunk
   eversion_t search_log_for_updates() const final;

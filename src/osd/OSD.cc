@@ -7569,6 +7569,18 @@ void OSD::sched_scrub()
 {
   auto& scrub_scheduler = service.get_scrub_services();
 
+  if (auto blocked_pgs = scrub_scheduler.get_blocked_pgs_count();
+      blocked_pgs > 0) {
+    // some PGs managed by this OSD were blocked by a locked object during
+    // scrub. This means we might not have the resources needed to scrub now.
+    dout(10)
+      << fmt::format(
+	   "{}: PGs are blocked while scrubbing due to locked objects ({} PGs)",
+	   __func__,
+	   blocked_pgs)
+      << dendl;
+  }
+
   // fail fast if no resources are available
   if (!scrub_scheduler.can_inc_scrubs()) {
     dout(20) << __func__ << ": OSD cannot inc scrubs" << dendl;

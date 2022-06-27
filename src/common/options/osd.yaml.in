@@ -449,6 +449,14 @@ options:
   see_also:
   - osd_deep_scrub_large_omap_object_key_threshold
   with_legacy: true
+# when scrubbing blocks on a locked object
+- name: osd_blocked_scrub_grace_period
+  type: int
+  level: advanced
+  desc: Time (seconds) before issuing a cluster-log warning
+  long_desc: Waiting too long for an object in the scrubbed chunk to be unlocked.
+  default: 120
+  with_legacy: true
 # where rados plugins are stored
 - name: osd_class_dir
   type: str

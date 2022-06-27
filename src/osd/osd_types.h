@@ -2170,7 +2170,8 @@ enum class pg_scrub_sched_status_t : uint16_t {
   not_queued,	   ///< not in the OSD's scrub queue. Probably not active.
   active,          ///< scrubbing
   scheduled,	   ///< scheduled for a scrub at an already determined time
-  queued	   ///< queued to be scrubbed
+  queued,	   ///< queued to be scrubbed
+  blocked	   ///< blocked waiting for objects to be unlocked
 };
 
 struct pg_scrubbing_status_t {
