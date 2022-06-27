@@ -160,7 +160,7 @@ Adoption process
 
       ceph orch upgrade start $IMAGE
 
-   This will set the config property container_image.
+   This will set the config property ``container_image``.
 
 #. Redeploy MDS daemons by telling cephadm how many daemons to run for
    each file system. List file systems by name with the command ``ceph fs
