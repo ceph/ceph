@@ -147,6 +147,13 @@ if(WITH_BLUESTORE)
   add_ceph_unittest(unittest_bdev)
   target_link_libraries(unittest_bdev os global)
 
+  # unittest_deferred
+  add_executable(unittest_deferred
+    test_deferred.cc
+    )
+  add_ceph_unittest(unittest_deferred)
+  target_link_libraries(unittest_deferred os global)
+
 endif(WITH_BLUESTORE)
 
 # unittest_transaction
