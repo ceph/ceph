@@ -220,7 +220,7 @@ Adoption process
 #. Check the output of the command ``ceph health detail`` for cephadm warnings
    about stray cluster daemons or hosts that are not yet managed by cephadm.
 
-#. Remove ceph packages from the host except for ceph-common to keep ceph commandline tools.
+#. Remove Ceph packages from the host except for ceph-common to keep Ceph commandline tools.
 
 #. Deploy ceph-crash service
 
