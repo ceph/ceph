@@ -321,11 +321,11 @@ int RGWAccountMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
   return svc.account->remove_account_info(dpp, op->ctx(), info, objv, y);
 }
 
-int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
-                            rgw::sal::Store *store,
-                            RGWAccountAdminOpState& op_state,
-                            RGWFormatterFlusher& flusher,
-                            optional_yield y)
+int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,
+                               rgw::sal::Store *store,
+                               RGWAccountAdminOpState& op_state,
+                               RGWFormatterFlusher& flusher,
+                               optional_yield y)
 {
   auto account_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
 
@@ -343,7 +343,7 @@ int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
 
   // account id is optional, but must be valid
   if (!op_state.has_account_id()) {
-    info.id = account_ctl->gen_account_id(dpp->get_cct());
+    info.id = account_ctl->generate_account_id(dpp->get_cct());
   } else if (account_ctl->valid_account_id(op_state.account_id)) {
     info.id = op_state.account_id;
   } else {
@@ -353,7 +353,7 @@ int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
   constexpr RGWAccountInfo* old_info = nullptr;
   constexpr bool exclusive = true;
 
-  int ret = account_ctl->store_info(dpp, account_info, old_info,
+  int ret = account_ctl->store_info(dpp, info, old_info,
                                     op_state.objv_tracker, real_time(),
                                     exclusive, nullptr, y);
   // TODO: on -EEXIST, retry with new random id unless has_account_id()
@@ -362,7 +362,61 @@ int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
   }
 
   flusher.start(0);
-  encode_json("AccountInfo", account_info, flusher.get_formatter());
+  encode_json("AccountInfo", info, flusher.get_formatter());
+  flusher.flush();
+
+  return 0;
+}
+
+int RGWAdminOp_Account::modify(const DoutPrefixProvider *dpp,
+                               rgw::sal::Store *store,
+                               RGWAccountAdminOpState& op_state,
+                               RGWFormatterFlusher& flusher,
+                               optional_yield y)
+{
+  auto account_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
+
+  int ret = 0;
+  RGWAccountInfo info;
+  auto& objv = op_state.objv_tracker;
+  if (op_state.has_account_id()) {
+    ret = account_ctl->read_info(dpp, op_state.account_id, info,
+                                 objv, nullptr, nullptr, y);
+  } else if (op_state.has_account_name()) {
+    ret = account_ctl->read_by_name(dpp, op_state.tenant, op_state.account_name,
+                                    info, objv, nullptr, nullptr, y);
+  } else {
+    return -EINVAL;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  const RGWAccountInfo old_info = info;
+
+  if (!op_state.tenant.empty() && op_state.tenant != info.tenant) {
+    return -EINVAL; // cannot change tenant
+  }
+
+  // name must be valid
+  if (!op_state.has_account_name()) {
+    // leave info.name as-is
+  } else if (account_ctl->valid_account_name(op_state.account_name)) {
+    info.name = op_state.account_name; // rename the account
+  } else {
+    return -EINVAL;
+  }
+
+  constexpr bool exclusive = false;
+
+  ret = account_ctl->store_info(dpp, info, &old_info,
+                                op_state.objv_tracker, real_time(),
+                                exclusive, nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  flusher.start(0);
+  encode_json("AccountInfo", info, flusher.get_formatter());
   flusher.flush();
 
   return 0;

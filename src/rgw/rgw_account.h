@@ -230,10 +230,15 @@ struct RGWAccountAdminOpState
 class RGWAdminOp_Account
 {
 public:
-  static int add(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-		 RGWAccountAdminOpState& op_state,
-		 RGWFormatterFlusher& flusher,
-		 optional_yield y);
+  static int create(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+                    RGWAccountAdminOpState& op_state,
+                    RGWFormatterFlusher& flusher,
+                    optional_yield y);
+
+  static int modify(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+                    RGWAccountAdminOpState& op_state,
+                    RGWFormatterFlusher& flusher,
+                    optional_yield y);
 
   static int remove(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
 		    RGWAccountAdminOpState& op_state,

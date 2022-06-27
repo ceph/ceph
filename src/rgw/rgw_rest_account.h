@@ -22,7 +22,7 @@ class RGWHandler_Account : public RGWHandler_Auth_S3 {
  protected:
   RGWOp *op_get() override;
   RGWOp *op_put() override;
-  //RGWOp *op_post() override;
+  RGWOp *op_post() override;
   RGWOp *op_delete() override;
  public:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;

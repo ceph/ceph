@@ -833,6 +833,7 @@ enum class OPT {
   SCRIPT_PACKAGE_RM,
   SCRIPT_PACKAGE_LIST,
   ACCOUNT_CREATE,
+  ACCOUNT_MODIFY,
   ACCOUNT_GET,
   ACCOUNT_RM,
   ACCOUNT_USER_ADD,
@@ -1072,6 +1073,7 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
   { "account create", OPT::ACCOUNT_CREATE },
+  { "account modify", OPT::ACCOUNT_MODIFY },
   { "account get", OPT::ACCOUNT_GET },
   { "account rm", OPT::ACCOUNT_RM },
   { "account user add", OPT::ACCOUNT_USER_ADD },
@@ -10490,6 +10492,7 @@ next:
   }
 
   if (opt_cmd == OPT::ACCOUNT_CREATE ||
+      opt_cmd == OPT::ACCOUNT_MODIFY ||
       opt_cmd == OPT::ACCOUNT_GET ||
       opt_cmd == OPT::ACCOUNT_RM ||
       opt_cmd == OPT::ACCOUNT_USER_ADD ||
@@ -10506,10 +10509,19 @@ next:
     acc_op_state.account_name = account_name;
 
     if (opt_cmd == OPT::ACCOUNT_CREATE) {
-      ret = RGWAdminOp_Account::add(dpp(), store, acc_op_state,
-                                    stream_flusher, null_yield);
+      ret = RGWAdminOp_Account::create(dpp(), store, acc_op_state,
+                                       stream_flusher, null_yield);
       if (ret < 0) {
-        cerr << "ERROR: could not store account " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: could not create account " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_MODIFY) {
+      ret = RGWAdminOp_Account::modify(dpp(), store, acc_op_state,
+                                       stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: could not modify account " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
     }
