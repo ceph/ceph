@@ -5,8 +5,10 @@
     <ng-container *ngFor="let config of matcherConfig">
       <div class="input-group-prepend">
         <span class="input-group-text"
+              *ngIf="config.attribute === 'isRegex'"
               [ngbTooltip]="config.tooltip">
-          <i [ngClass]="[config.icon]"></i>
+          <i *ngIf="matcher[config.attribute]">~</i>
+          <i *ngIf="!matcher[config.attribute]">=</i>
         </span>
       </div>
 
@@ -17,18 +19,6 @@
                [value]="matcher[config.attribute]"
                disabled
                readonly>
-      </ng-container>
-
-      <ng-container *ngIf="config.attribute === 'isRegex'">
-        <div class="input-group-append">
-          <div class="input-group-text">
-            <input type="checkbox"
-                   id="matcher-{{config.attribute}}-{{index}}"
-                   [checked]="matcher[config.attribute]"
-                   disabled
-                   readonly>
-          </div>
-        </div>
       </ng-container>
     </ng-container>
 
