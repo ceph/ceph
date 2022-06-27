@@ -26,10 +26,11 @@ class RGWSI_Account_RADOS : public RGWSI_Account
 {
 public:
   struct Svc {
-    RGWSI_Zone *zone {nullptr};
-    RGWSI_Meta *meta {nullptr};
-    RGWSI_MetaBackend *meta_be {nullptr};
-    RGWSI_RADOS *rados{nullptr};
+    RGWSI_Zone* zone = nullptr;
+    RGWSI_Meta* meta = nullptr;
+    RGWSI_MetaBackend* meta_be = nullptr;
+    RGWSI_SysObj* sysobj = nullptr;
+    RGWSI_RADOS* rados = nullptr;
   } svc;
 
   RGWSI_Account_RADOS(CephContext *cct);
@@ -41,10 +42,11 @@ public:
 
   int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
 
-  void init(RGWSI_Zone *_zone_svc,
-	    RGWSI_Meta *_meta_svc,
-	    RGWSI_MetaBackend *_meta_be_svc,
-	    RGWSI_RADOS *_rados_svc);
+  void init(RGWSI_Zone* zone_svc,
+	    RGWSI_Meta* meta_svc,
+	    RGWSI_MetaBackend* meta_be_svc,
+	    RGWSI_SysObj* sysobj_svc,
+	    RGWSI_RADOS* rados_svc);
 
   int store_account_info(const DoutPrefixProvider *dpp,
 			 RGWSI_MetaBackend::Context *ctx,
@@ -54,6 +56,16 @@ public:
 			 const real_time& mtime, bool exclusive,
 			 std::map<std::string, bufferlist>* pattrs,
 			 optional_yield y) override;
+
+  int read_account_by_name(const DoutPrefixProvider *dpp,
+                           RGWSI_MetaBackend::Context *ctx,
+                           std::string_view tenant,
+                           std::string_view name,
+                           RGWAccountInfo& info,
+                           RGWObjVersionTracker& objv,
+                           real_time* pmtime,
+                           std::map<std::string, bufferlist>* pattrs,
+                           optional_yield y) override;
 
   int read_account_info(const DoutPrefixProvider *dpp,
 			RGWSI_MetaBackend::Context *ctx,

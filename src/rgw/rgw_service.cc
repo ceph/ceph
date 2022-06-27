@@ -120,7 +120,8 @@ int RGWServices_Def::init(CephContext *cct,
   user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
   role_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), sysobj.get());
-  account_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), rados.get());
+  account_rados->init(zone.get(), meta.get(), meta_be_sobj.get(),
+                      sysobj.get(), rados.get());
 
   can_shutdown = true;
 

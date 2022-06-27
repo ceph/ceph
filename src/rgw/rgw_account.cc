@@ -63,6 +63,21 @@ void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
   o.push_back(p);
 }
 
+int RGWAccountCtl::read_by_name(const DoutPrefixProvider* dpp,
+                                std::string_view tenant,
+                                std::string_view name,
+                                RGWAccountInfo& info,
+                                RGWObjVersionTracker& objv,
+                                real_time* pmtime,
+                                std::map<std::string, bufferlist>* pattrs,
+                                optional_yield y)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+      return svc.account->read_account_by_name(
+          dpp, op->ctx(), tenant, name, info, objv, pmtime, pattrs, y);
+    });
+}
+
 int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
                              const std::string& account_id,
                              RGWAccountInfo& info,

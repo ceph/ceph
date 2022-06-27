@@ -32,7 +32,21 @@ public:
 
   static std::string get_meta_key(const RGWAccountInfo& info);
 
+  // metadata key for RGWAccountNameToId
+  static std::string get_name_meta_key(std::string_view tenant,
+                                       std::string_view name);
+
   virtual RGWSI_MetaBackend_Handler *get_be_handler() = 0;
+
+  virtual int read_account_by_name(const DoutPrefixProvider *dpp,
+                                   RGWSI_MetaBackend::Context *ctx,
+                                   std::string_view tenant,
+                                   std::string_view name,
+                                   RGWAccountInfo& info,
+                                   RGWObjVersionTracker& objv,
+                                   real_time* pmtime,
+                                   std::map<std::string, bufferlist>* pattrs,
+                                   optional_yield y) = 0;
 
   virtual int read_account_info(const DoutPrefixProvider *dpp,
 				RGWSI_MetaBackend::Context *ctx,

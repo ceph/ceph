@@ -61,6 +61,27 @@ struct RGWAccountInfo {
 };
 WRITE_CLASS_ENCODER(RGWAccountInfo)
 
+struct RGWAccountNameToId {
+  std::string id;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1,1,bl);
+    encode(id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(id, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter * const f) const;
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWAccountNameToId*>& o);
+};
+WRITE_CLASS_ENCODER(RGWAccountNameToId)
+
 class RGWAccountMetadataHandler;
 
 class RGWAccountCtl
@@ -106,6 +127,15 @@ public:
 		 bool exclusive,
 		 std::map<std::string, bufferlist> *pattrs,
 		 optional_yield y);
+
+  int read_by_name(const DoutPrefixProvider* dpp,
+                   std::string_view tenant,
+                   std::string_view name,
+                   RGWAccountInfo& info,
+                   RGWObjVersionTracker& objv,
+                   real_time* pmtime,
+                   std::map<std::string, bufferlist>* pattrs,
+                   optional_yield y);
 
   int read_info(const DoutPrefixProvider* dpp,
 		const std::string& account_id,
