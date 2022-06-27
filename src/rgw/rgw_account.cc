@@ -239,16 +239,14 @@ int RGWAccountMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
     return ret;
   }
 
-  RGWAccountMetadataObject *mdo = new RGWAccountMetadataObject(aci, objv.read_version, mtime);
-  *obj = mdo;
-
+  *obj = new RGWAccountMetadataObject(aci, objv.read_version, mtime);
   return 0;
 }
 
 class RGWMetadataHandlerPut_Account : public RGWMetadataHandlerPut_SObj
 {
-  RGWAccountMetadataHandler *ahandler;
-  RGWAccountMetadataObject *aobj;
+  RGWAccountMetadataHandler* ahandler;
+  RGWAccountMetadataObject* aobj;
 public:
   RGWMetadataHandlerPut_Account(RGWAccountMetadataHandler *_handler,
                                 RGWSI_MetaBackend_Handler::Op *op,
@@ -329,20 +327,36 @@ int RGWAdminOp_Account::add(const DoutPrefixProvider *dpp,
                             RGWFormatterFlusher& flusher,
                             optional_yield y)
 {
+  auto account_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
 
-  if (!op_state.has_account_id()) {
+  // account name is required
+  if (!op_state.has_account_name()) {
+    return -EINVAL;
+  }
+  if (!account_ctl->valid_account_name(op_state.account_name)) {
     return -EINVAL;
   }
 
-  RGWAccountInfo account_info;
-  account_info.tenant = op_state.tenant;
-  account_info.id = op_state.account_id;
+  RGWAccountInfo info;
+  info.tenant = op_state.tenant;
+  info.name = op_state.account_name;
+
+  // account id is optional, but must be valid
+  if (!op_state.has_account_id()) {
+    info.id = account_ctl->gen_account_id(dpp->get_cct());
+  } else if (account_ctl->valid_account_id(op_state.account_id)) {
+    info.id = op_state.account_id;
+  } else {
+    return -EINVAL;
+  }
 
   constexpr RGWAccountInfo* old_info = nullptr;
   constexpr bool exclusive = true;
 
-  int ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
-      dpp, account_info, old_info, op_state.objv_tracker, real_time(), exclusive, nullptr, y);
+  int ret = account_ctl->store_info(dpp, account_info, old_info,
+                                    op_state.objv_tracker, real_time(),
+                                    exclusive, nullptr, y);
+  // TODO: on -EEXIST, retry with new random id unless has_account_id()
   if (ret < 0) {
     return ret;
   }
@@ -360,17 +374,22 @@ int RGWAdminOp_Account::remove(const DoutPrefixProvider *dpp,
                                RGWFormatterFlusher& flusher,
                                optional_yield y)
 {
-  if (!op_state.has_account_id()) {
-    return -EINVAL;
-  }
+  int ret = 0;
   RGWAccountInfo info;
 
   // TODO: use sal::Account
   auto account_svc = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
 
   auto& objv = op_state.objv_tracker;
-  int ret = account_svc->read_info(dpp, op_state.account_id, info,
-                                   objv, nullptr, nullptr, y);
+  if (op_state.has_account_id()) {
+    ret = account_svc->read_info(dpp, op_state.account_id, info,
+                                 objv, nullptr, nullptr, y);
+  } else if (op_state.has_account_name()) {
+    ret = account_svc->read_by_name(dpp, op_state.tenant, op_state.account_name,
+                                    info, objv, nullptr, nullptr, y);
+  } else {
+    return -EINVAL;
+  }
   if (ret < 0) {
     return ret;
   }
@@ -384,17 +403,22 @@ int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
                              RGWFormatterFlusher& flusher,
                              optional_yield y)
 {
+  int ret = 0;
+  RGWAccountInfo info;
 
-  if (!op_state.has_account_id()) {
-    return -EINVAL;
-  }
   // TODO: use sal::Account
   auto account_svc = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
 
-  RGWAccountInfo info;
   auto& objv = op_state.objv_tracker;
-  int ret = account_svc->read_info(dpp, op_state.account_id, info,
-                                   objv, nullptr, nullptr, y);
+  if (op_state.has_account_id()) {
+    ret = account_svc->read_info(dpp, op_state.account_id, info,
+                                 objv, nullptr, nullptr, y);
+  } else if (op_state.has_account_name()) {
+    ret = account_svc->read_by_name(dpp, op_state.tenant, op_state.account_name,
+                                    info, objv, nullptr, nullptr, y);
+  } else {
+    return -EINVAL;
+  }
   if (ret < 0) {
     return ret;
   }
