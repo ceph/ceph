@@ -34,7 +34,8 @@ void RGWOp_Account_Create::execute(optional_yield y)
     acc_op_state.set_max_users(max_users);
   }
 
-  op_ret = RGWAdminOp_Account::create(this, store, acc_op_state, flusher, s->yield);
+  op_ret = RGWAdminOp_Account::create(this, store, acc_op_state,
+                                      s->err.message, flusher, s->yield);
   if (op_ret < 0) {
     if (op_ret == -EEXIST) {
       op_ret = -ERR_ACCOUNT_EXISTS;
@@ -73,7 +74,8 @@ void RGWOp_Account_Modify::execute(optional_yield y)
     acc_op_state.set_max_users(max_users);
   }
 
-  op_ret = RGWAdminOp_Account::modify(this, store, acc_op_state, flusher, s->yield);
+  op_ret = RGWAdminOp_Account::modify(this, store, acc_op_state,
+                                      s->err.message, flusher, s->yield);
 }
 
 
@@ -103,7 +105,8 @@ void RGWOp_Account_Get::execute(optional_yield y)
   acc_op_state.tenant = tenant;
   acc_op_state.account_name = name;
 
-  op_ret = RGWAdminOp_Account::info(this, store, acc_op_state, flusher, s->yield);
+  op_ret = RGWAdminOp_Account::info(this, store, acc_op_state,
+                                    s->err.message, flusher, s->yield);
 }
 
 class RGWOp_Account_Delete : public RGWRESTOp {
@@ -132,7 +135,8 @@ void RGWOp_Account_Delete::execute(optional_yield y)
   acc_op_state.tenant = tenant;
   acc_op_state.account_name = name;
 
-  op_ret = RGWAdminOp_Account::remove(this, store, acc_op_state, flusher, s->yield);
+  op_ret = RGWAdminOp_Account::remove(this, store, acc_op_state,
+                                      s->err.message, flusher, s->yield);
 }
 
 RGWOp *RGWHandler_Account::op_post()

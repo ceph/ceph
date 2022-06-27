@@ -101,8 +101,8 @@ public:
   ~RGWAccountCtl() = default;
 
   static std::string generate_account_id(CephContext* cct);
-  static bool valid_account_id(std::string_view id);
-  static bool valid_account_name(std::string_view name);
+  static bool validate_account_id(std::string_view id, std::string& err_msg);
+  static bool validate_account_name(std::string_view name, std::string& err_msg);
 
   int add_user(const DoutPrefixProvider* dpp,
 	       const std::string& account_id,
@@ -231,27 +231,22 @@ class RGWAdminOp_Account
 {
 public:
   static int create(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-                    RGWAccountAdminOpState& op_state,
-                    RGWFormatterFlusher& flusher,
-                    optional_yield y);
+                    RGWAccountAdminOpState& op_state, std::string& err_msg,
+                    RGWFormatterFlusher& flusher, optional_yield y);
 
   static int modify(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-                    RGWAccountAdminOpState& op_state,
-                    RGWFormatterFlusher& flusher,
-                    optional_yield y);
+                    RGWAccountAdminOpState& op_state, std::string& err_msg,
+                    RGWFormatterFlusher& flusher, optional_yield y);
 
   static int remove(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-		    RGWAccountAdminOpState& op_state,
-		    RGWFormatterFlusher& flusher,
-		    optional_yield y);
+		    RGWAccountAdminOpState& op_state, std::string& err_msg,
+		    RGWFormatterFlusher& flusher, optional_yield y);
 
   static int info(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-		  RGWAccountAdminOpState& op_state,
-		  RGWFormatterFlusher& flusher,
-		  optional_yield y);
+		  RGWAccountAdminOpState& op_state, std::string& err_msg,
+		  RGWFormatterFlusher& flusher, optional_yield y);
 
   static int list(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-		  RGWAccountAdminOpState& op_state,
-		  RGWFormatterFlusher& flusher,
-		  optional_yield y);
+		  RGWAccountAdminOpState& op_state, std::string& err_msg,
+		  RGWFormatterFlusher& flusher, optional_yield y);
 };

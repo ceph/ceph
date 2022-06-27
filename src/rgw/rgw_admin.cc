@@ -10502,6 +10502,7 @@ next:
       cerr << "ERROR: Account was not provided (via --account-name or --account-id)" << std::endl;
       return EINVAL;
     }
+    std::string err_msg;
     RGWObjVersionTracker objv_tracker;
     RGWAccountAdminOpState acc_op_state;
     acc_op_state.account_id = account_id;
@@ -10509,37 +10510,41 @@ next:
     acc_op_state.account_name = account_name;
 
     if (opt_cmd == OPT::ACCOUNT_CREATE) {
-      ret = RGWAdminOp_Account::create(dpp(), store, acc_op_state,
+      ret = RGWAdminOp_Account::create(dpp(), store, acc_op_state, err_msg,
                                        stream_flusher, null_yield);
       if (ret < 0) {
-        cerr << "ERROR: could not create account " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: failed to create account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
         return -ret;
       }
     }
 
     if (opt_cmd == OPT::ACCOUNT_MODIFY) {
-      ret = RGWAdminOp_Account::modify(dpp(), store, acc_op_state,
+      ret = RGWAdminOp_Account::modify(dpp(), store, acc_op_state, err_msg,
                                        stream_flusher, null_yield);
       if (ret < 0) {
-        cerr << "ERROR: could not modify account " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: failed to modify account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
         return -ret;
       }
     }
 
     if (opt_cmd == OPT::ACCOUNT_GET) {
-      ret = RGWAdminOp_Account::info(dpp(), store, acc_op_state,
+      ret = RGWAdminOp_Account::info(dpp(), store, acc_op_state, err_msg,
                                      stream_flusher, null_yield);
       if (ret < 0) {
-        cerr << "ERROR: could not get account " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: failed to read account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
         return -ret;
       }
     }
 
     if (opt_cmd == OPT::ACCOUNT_RM) {
-      ret = RGWAdminOp_Account::remove(dpp(), store, acc_op_state,
+      ret = RGWAdminOp_Account::remove(dpp(), store, acc_op_state, err_msg,
                                        stream_flusher, null_yield);
       if (ret < 0) {
-        cerr << "ERROR: could not remove account " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: failed to remove account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
         return -ret;
       }
     }

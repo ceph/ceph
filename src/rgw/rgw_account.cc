@@ -38,36 +38,50 @@ std::string RGWAccountCtl::generate_account_id(CephContext* cct)
   return id;
 }
 
-bool RGWAccountCtl::valid_account_id(std::string_view id)
+bool RGWAccountCtl::validate_account_id(std::string_view id,
+                                        std::string& err_msg)
 {
   if (id.size() != account_id_len) {
+    err_msg = fmt::format("account id must be {} bytes long", account_id_len);
     return false;
   }
-  // must match prefix 'RGW'
   if (id.compare(0, account_id_prefix.size(), account_id_prefix) != 0) {
+    err_msg = fmt::format("account id must start with {}", account_id_prefix);
     return false;
   }
-  // all remaining bytes must be numeric digits
   auto suffix = id.substr(account_id_prefix.size());
-  return std::all_of(suffix.begin(), suffix.end(),
-                     [] (int c) { return std::isdigit(c); });
+  // all remaining bytes must be digits
+  constexpr auto digit = [] (int c) { return std::isdigit(c); };
+  if (!std::all_of(suffix.begin(), suffix.end(), digit)) {
+    err_msg = "account id must end with numeric digits";
+    return false;
+  }
+  return true;
 }
 
-bool RGWAccountCtl::valid_account_name(std::string_view name)
+bool RGWAccountCtl::validate_account_name(std::string_view name,
+                                          std::string& err_msg)
 {
   if (name.empty()) {
+    err_msg = "account name must not be empty";
     return false;
   }
   // must not contain the tenant delimiter $
   if (name.find('$') != name.npos) {
+    err_msg = "account name must not contain $";
     return false;
   }
   // must not contain the metadata section delimeter :
   if (name.find(':') != name.npos) {
+    err_msg = "account name must not contain :";
     return false;
   }
   // must be valid utf8
-  return check_utf8(name.data(), name.size());
+  if (check_utf8(name.data(), name.size()) != 0) {
+    err_msg = "account name must be valid utf8";
+    return false;
+  }
+  return true;
 }
 
 int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
@@ -324,6 +338,7 @@ int RGWAccountMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
 int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,
                                rgw::sal::Store *store,
                                RGWAccountAdminOpState& op_state,
+                               std::string& err_msg,
                                RGWFormatterFlusher& flusher,
                                optional_yield y)
 {
@@ -331,9 +346,10 @@ int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,
 
   // account name is required
   if (!op_state.has_account_name()) {
+    err_msg = "requires an account name";
     return -EINVAL;
   }
-  if (!account_ctl->valid_account_name(op_state.account_name)) {
+  if (!account_ctl->validate_account_name(op_state.account_name, err_msg)) {
     return -EINVAL;
   }
 
@@ -344,10 +360,10 @@ int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,
   // account id is optional, but must be valid
   if (!op_state.has_account_id()) {
     info.id = account_ctl->generate_account_id(dpp->get_cct());
-  } else if (account_ctl->valid_account_id(op_state.account_id)) {
-    info.id = op_state.account_id;
-  } else {
+  } else if (!account_ctl->validate_account_id(op_state.account_id, err_msg)) {
     return -EINVAL;
+  } else {
+    info.id = op_state.account_id;
   }
 
   constexpr RGWAccountInfo* old_info = nullptr;
@@ -371,6 +387,7 @@ int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,
 int RGWAdminOp_Account::modify(const DoutPrefixProvider *dpp,
                                rgw::sal::Store *store,
                                RGWAccountAdminOpState& op_state,
+                               std::string& err_msg,
                                RGWFormatterFlusher& flusher,
                                optional_yield y)
 {
@@ -386,6 +403,7 @@ int RGWAdminOp_Account::modify(const DoutPrefixProvider *dpp,
     ret = account_ctl->read_by_name(dpp, op_state.tenant, op_state.account_name,
                                     info, objv, nullptr, nullptr, y);
   } else {
+    err_msg = "requires account id or name";
     return -EINVAL;
   }
   if (ret < 0) {
@@ -394,16 +412,16 @@ int RGWAdminOp_Account::modify(const DoutPrefixProvider *dpp,
   const RGWAccountInfo old_info = info;
 
   if (!op_state.tenant.empty() && op_state.tenant != info.tenant) {
-    return -EINVAL; // cannot change tenant
+    err_msg = "cannot modify account tenant";
+    return -EINVAL;
   }
 
-  // name must be valid
-  if (!op_state.has_account_name()) {
-    // leave info.name as-is
-  } else if (account_ctl->valid_account_name(op_state.account_name)) {
-    info.name = op_state.account_name; // rename the account
-  } else {
-    return -EINVAL;
+  if (op_state.has_account_name()) {
+    // name must be valid
+    if (!account_ctl->validate_account_name(op_state.account_name, err_msg)) {
+      return -EINVAL;
+    }
+    info.name = op_state.account_name;
   }
 
   constexpr bool exclusive = false;
@@ -425,6 +443,7 @@ int RGWAdminOp_Account::modify(const DoutPrefixProvider *dpp,
 int RGWAdminOp_Account::remove(const DoutPrefixProvider *dpp,
                                rgw::sal::Store *store,
                                RGWAccountAdminOpState& op_state,
+                               std::string& err_msg,
                                RGWFormatterFlusher& flusher,
                                optional_yield y)
 {
@@ -442,6 +461,7 @@ int RGWAdminOp_Account::remove(const DoutPrefixProvider *dpp,
     ret = account_svc->read_by_name(dpp, op_state.tenant, op_state.account_name,
                                     info, objv, nullptr, nullptr, y);
   } else {
+    err_msg = "requires account id or name";
     return -EINVAL;
   }
   if (ret < 0) {
@@ -454,6 +474,7 @@ int RGWAdminOp_Account::remove(const DoutPrefixProvider *dpp,
 int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
                              rgw::sal::Store *store,
                              RGWAccountAdminOpState& op_state,
+                             std::string& err_msg,
                              RGWFormatterFlusher& flusher,
                              optional_yield y)
 {
