@@ -2215,14 +2215,14 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
     store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
   } else {
     /* use upload id as tag and do it synchronously */
-    ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
-    if (ret < 0) {
+    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
+    if (ret < 0 && leftover_chain) {
       ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
       if (ret == -ENOENT) {
         return -ERR_NO_SUCH_UPLOAD;
       }
       //Delete objects inline if send chain to gc fails
-      store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id());
     }
   }
 
