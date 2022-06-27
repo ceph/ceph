@@ -432,11 +432,11 @@ disable and remove it.
 #. Change the cache mode to ``proxy`` so that new and modified objects will 
    flush to the backing storage pool. ::
 
-	ceph osd tier cache-mode {cachepool} proxy
+	ceph osd tier cache-mode {cachepool} readproxy
 
    For example:: 
 
-	ceph osd tier cache-mode hot-storage proxy
+	ceph osd tier cache-mode hot-storage readproxy
 
 
 #. Ensure that the cache pool has been flushed. This may take a few minutes::
