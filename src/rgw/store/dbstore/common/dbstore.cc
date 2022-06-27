@@ -1133,6 +1133,60 @@ out:
   return ret;
 }
 
+int DB::Object::transition(const DoutPrefixProvider *dpp,
+                           const rgw_placement_rule& rule,
+                           const real_time& mtime,
+                           uint64_t olh_epoch)
+{
+  int ret = 0;
+
+  DBOpParams params = {};
+  map<string, bufferlist> *attrset;
+
+  store->InitializeParams(dpp, &params);
+  InitializeParamsfromObject(dpp, &params);
+
+  ret = store->ProcessOp(dpp, "GetObject", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0) <<"In GetObject failed err:(" <<ret<<")" << dendl;
+    goto out;
+  }
+
+  /* pick one field check if object exists */
+  if (!params.op.obj.state.exists) {
+    ldpp_dout(dpp, 0)<<"Object(bucket:" << bucket_info.bucket.name << ", Object:"<< obj.key.name << ") doesn't exist" << dendl;
+    return -1;
+  }
+
+  params.op.query_str = "meta";
+  params.op.obj.state.mtime = real_clock::now();
+  params.op.obj.storage_class = rule.storage_class;
+  attrset = &params.op.obj.state.attrset;
+  if (!rule.storage_class.empty()) {
+    bufferlist bl;
+    bl.append(rule.storage_class);
+    (*attrset)[RGW_ATTR_STORAGE_CLASS] = bl;
+  }
+  params.op.obj.versioned_epoch = olh_epoch; // XXX: not sure if needed
+
+  /* Unlike Rados, in dbstore for now, both head and tail objects
+   * refer to same storage class
+   */
+  params.op.obj.head_placement_rule = rule;
+  params.op.obj.tail_placement.placement_rule = rule;
+
+  ret = store->ProcessOp(dpp, "UpdateObject", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In UpdateObject failed err:(" <<ret<<") " << dendl;
+    goto out;
+  }
+
+out:
+  return ret;
+}
+
 int DB::raw_obj::read(const DoutPrefixProvider *dpp, int64_t ofs,
                       uint64_t len, bufferlist& bl)
 {

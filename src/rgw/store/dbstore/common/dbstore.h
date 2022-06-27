@@ -625,9 +625,7 @@ class DBOp {
       BucketName TEXT NOT NULL , \
       StartTime  INTEGER , \
       Status     INTEGER , \
-      PRIMARY KEY (LCIndex, BucketName), \
-      FOREIGN KEY (BucketName) \
-      REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+      PRIMARY KEY (LCIndex, BucketName) \n);";
 
     static constexpr std::string_view CreateLCHeadTableQ =
       "CREATE TABLE IF NOT EXISTS '{}' ( \
@@ -1910,6 +1908,9 @@ class DB {
       int InitializeParamsfromObject(const DoutPrefixProvider *dpp, DBOpParams* params);
       int set_attrs(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& setattrs,
           std::map<std::string, bufferlist>* rmattrs);
+      int transition(const DoutPrefixProvider *dpp,
+                     const rgw_placement_rule& rule, const real_time& mtime,
+                     uint64_t olh_epoch);
       int obj_omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val, bool must_exist);
       int obj_omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
           const std::set<std::string>& keys,
