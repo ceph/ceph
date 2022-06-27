@@ -150,6 +150,9 @@
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
+%if 0%{?enable_devtoolset11:1}
+%enable_devtoolset11
+%endif
 %endif
 
 #################################################################################
@@ -199,6 +202,7 @@ BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
 %if 0%{with seastar} && 0%{?rhel}
 BuildRequires:	gcc-toolset-11-gcc-c++ >= 10.3.1-1.2
+BuildRequires:	gcc-toolset-11-build
 %else
 %if 0%{?suse_version}
 BuildRequires:	gcc11-c++
@@ -1251,10 +1255,6 @@ This package provides Ceph default alerts for Prometheus.
 # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
 %if ( 0%{?rhel} && 0%{?rhel} < 9 ) || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
 %define _lto_cflags %{nil}
-%endif
-
-%if 0%{with seastar} && 0%{?rhel}
-. /opt/rh/gcc-toolset-11/enable
 %endif
 
 %if 0%{with cephfs_java}
