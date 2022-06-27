@@ -1031,13 +1031,15 @@ void RGWGetObjTags::execute(optional_yield y)
 
   s->object->set_atomic();
 
-  op_ret = s->object->get_obj_attrs(y, this);
+  op_ret = s->object->get_obj_attrs(s->obj_ctx, y, this);
 
-  attrs = s->object->get_attrs();
-  auto tags = attrs.find(RGW_ATTR_TAGS);
-  if(tags != attrs.end()){
-    has_tags = true;
-    tags_bl.append(tags->second);
+  if (op_ret == 0){
+    attrs = s->object->get_attrs();
+    auto tags = attrs.find(RGW_ATTR_TAGS);
+    if(tags != attrs.end()){
+      has_tags = true;
+      tags_bl.append(tags->second);
+    }
   }
   send_response_data(tags_bl);
 }
