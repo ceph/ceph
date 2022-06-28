@@ -15,7 +15,7 @@ protected:
   RGWOp* op_delete() override;
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
-  virtual ~RGWHandler_REST_PSNotifs_S3() = default;
+  ~RGWHandler_REST_PSNotifs_S3() = default;
   // following are used to generate the operations when invoked by another REST handler
   static RGWOp* create_get_op();
   static RGWOp* create_put_op();
@@ -33,7 +33,7 @@ public:
   RGWHandler_REST_PSTopic_AWS(const rgw::auth::StrategyRegistry& _auth_registry, const std::string& _post_body) : 
       auth_registry(_auth_registry),
       post_body(_post_body) {}
-  virtual ~RGWHandler_REST_PSTopic_AWS() = default;
+  ~RGWHandler_REST_PSTopic_AWS() = default;
   int postauth_init(optional_yield) override { return 0; }
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
 };

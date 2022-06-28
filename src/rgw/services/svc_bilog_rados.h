@@ -33,6 +33,8 @@ public:
 
   RGWSI_BILog_RADOS(CephContext *cct);
 
+  ~RGWSI_BILog_RADOS() {}
+
   void init(RGWSI_BucketIndex_RADOS *bi_rados_svc);
 
   int log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id);

@@ -18,6 +18,8 @@ struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
 
   RGWSI_SysObj_Core_GetObjState() {}
 
+  ~RGWSI_SysObj_Core_GetObjState() {}
+
   int get_rados_obj(const DoutPrefixProvider *dpp,
                     RGWSI_RADOS *rados_svc,
                     RGWSI_Zone *zone_svc,
@@ -31,6 +33,7 @@ struct RGWSI_SysObj_Core_PoolListImplInfo : public RGWSI_SysObj_Pool_ListInfo {
   RGWAccessListFilterPrefix filter;
 
   RGWSI_SysObj_Core_PoolListImplInfo(const std::string& prefix) : op(pool.op()), filter(prefix) {}
+  ~RGWSI_SysObj_Core_PoolListImplInfo() {}
 };
 
 struct RGWSysObjState {
@@ -78,6 +81,7 @@ class RGWSysObjectCtxBase {
 
 public:
   RGWSysObjectCtxBase() = default;
+  ~RGWSysObjectCtxBase() {}
 
   RGWSysObjectCtxBase(const RGWSysObjectCtxBase& rhs) : objs_state(rhs.objs_state) {}
   RGWSysObjectCtxBase(RGWSysObjectCtxBase&& rhs) : objs_state(std::move(rhs.objs_state)) {}

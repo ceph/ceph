@@ -939,9 +939,9 @@ const std::string& MotrZone::get_current_period_id()
   return current_period->get_id();
 }
 
-std::unique_ptr<LuaScriptManager> MotrStore::get_lua_script_manager()
+std::unique_ptr<LuaManager> MotrStore::get_lua_manager()
 {
-  return std::make_unique<MotrLuaScriptManager>(this);
+  return std::make_unique<MotrLuaManager>(this);
 }
 
 int MotrObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **_state, optional_yield y, bool follow_olh)

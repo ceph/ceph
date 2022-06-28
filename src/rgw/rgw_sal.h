@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "rgw_lua.h"
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
 #include "common/tracer.h"
@@ -84,7 +85,7 @@ protected:
   std::map<RGWObjCategory, RGWStorageStats>* stats;
 public:
   explicit RGWGetBucketStats_CB(const rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
-  ~RGWGetBucketStats_CB() override {}
+  virtual ~RGWGetBucketStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(std::map<RGWObjCategory, RGWStorageStats>* _stats) {
     stats = _stats;
@@ -97,7 +98,7 @@ protected:
   RGWStorageStats stats;
 public:
   explicit RGWGetUserStats_CB(const rgw_user& _user) : user(_user) {}
-  ~RGWGetUserStats_CB() override {}
+  virtual ~RGWGetUserStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(RGWStorageStats& _stats) {
     stats = _stats;
@@ -212,7 +213,7 @@ class Notification;
 class GCChain;
 class Writer;
 class Zone;
-class LuaScriptManager;
+class LuaManager;
 class RGWOIDCProvider;
 class RGWRole;
 class PlacementTier;
@@ -410,7 +411,7 @@ class Store {
     /** Get the ID of the current host */
     virtual std::string get_host_id() = 0;
     /** Get a Lua script manager for running lua scripts */
-    virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() = 0;
+    virtual std::unique_ptr<LuaManager> get_lua_manager() = 0;
     /** Get an IAM Role by name etc. */
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
@@ -1541,20 +1542,28 @@ class Zone {
 };
 
 /**
- * @brief Abstraction of a manager for Lua scripts
+ * @brief Abstraction of a manager for Lua scripts and packages
  *
- * RGW can load and process Lua scripts.  This will handle loading/storing scripts.
+ * RGW can load and process Lua scripts.  This will handle loading/storing scripts; adding, deleting, and listing packages.
  */
-class LuaScriptManager {
+class LuaManager {
 public:
-  virtual ~LuaScriptManager() = default;
+  virtual ~LuaManager() = default;
 
   /** Get a script named with the given key from the backing store */
-  virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) = 0;
+  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) = 0;
   /** Put a script named with the given key to the backing store */
-  virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) = 0;
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) = 0;
   /** Delete a script named with the given key from the backing store */
-  virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) = 0;
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) = 0;
+  /** Add a lua package */
+  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name, bool allow_compilation) = 0;
+  /** Remove a lua package */
+  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) = 0;
+  /** List lua packages */
+  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) = 0;
+  /** Install lua packages */
+  virtual int install_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& failed_packages, std::string& output) = 0;
 };
 
 /** @} namespace rgw::sal in group RGWSAL */

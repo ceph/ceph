@@ -436,7 +436,7 @@ public:
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
-  ~RGWRESTSendResource() = default;
+  virtual ~RGWRESTSendResource() = default;
 
   rgw_io_id get_io_id(int io_type) {
     return req.get_io_id(io_type);

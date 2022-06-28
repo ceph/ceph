@@ -62,7 +62,7 @@ protected:
   public:
   DBNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type)
     : Notification(_obj, _src_obj, _type) {}
-    ~DBNotification() = default;
+    virtual ~DBNotification() = default;
 
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0;}
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
@@ -175,7 +175,7 @@ protected:
         acls() {
         }
 
-      ~DBBucket() { }
+      virtual ~DBBucket() { }
 
       virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
       virtual int list(const DoutPrefixProvider *dpp, ListParams&, int, ListResults&, optional_yield y) override;
@@ -314,7 +314,7 @@ protected:
         info.storage_classes = sc;
         zone_params->placement_pools["default"] = info;
       }
-      ~DBZone() {
+      virtual ~DBZone() {
 	delete realm;
 	delete zonegroup;
 	delete zone_public_config;
@@ -336,25 +336,29 @@ protected:
       virtual const std::string& get_realm_id() override;
   };
 
-  class DBLuaScriptManager : public LuaScriptManager {
+  class DBLuaManager : public LuaManager {
     DBStore* store;
 
     public:
-    DBLuaScriptManager(DBStore* _s) : store(_s)
+    DBLuaManager(DBStore* _s) : store(_s)
     {
     }
-    virtual ~DBLuaScriptManager() = default;
+    virtual ~DBLuaManager() = default;
 
-    virtual int get(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override { return -ENOENT; }
-    virtual int put(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override { return -ENOENT; }
-    virtual int del(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override { return -ENOENT; }
+    virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override { return -ENOENT; }
+    virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override { return -ENOENT; }
+    virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override { return -ENOENT; }
+    virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name, bool allow_compilation) { return -ENOENT; }
+    virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) { return -ENOENT; }
+    virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) { return -ENOENT; }
+    virtual int install_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& failed_packages, std::string& output) {return -ENOENT; }
   };
 
   class DBOIDCProvider : public RGWOIDCProvider {
     DBStore* store;
     public:
     DBOIDCProvider(DBStore* _store) : store(_store) {}
-    ~DBOIDCProvider() = default;
+    virtual ~DBOIDCProvider() = default;
 
     virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) override { return 0; }
     virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant) override { return 0; }
@@ -652,7 +656,7 @@ protected:
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag);
-    ~DBAtomicWriter() = default;
+    virtual ~DBAtomicWriter() = default;
 
     // prepare to start processing object data
     virtual int prepare(optional_yield y) override;
@@ -700,7 +704,7 @@ public:
 		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t part_num, const std::string& part_num_str);
-    ~DBMultipartWriter() = default;
+    virtual ~DBMultipartWriter() = default;
 
     // prepare to start processing object data
     virtual int prepare(optional_yield y) override;
@@ -740,7 +744,7 @@ public:
     public:
       DBStore(): dbsm(nullptr), zone(this), cct(nullptr), dpp(nullptr),
                  use_lc_thread(false) {}
-      ~DBStore() { delete dbsm; }
+      virtual ~DBStore() { delete dbsm; }
 
       DBStore& set_run_lc_thread(bool _use_lc_thread) {
         use_lc_thread = _use_lc_thread;
@@ -825,7 +829,7 @@ public:
       virtual const RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
       virtual std::string get_host_id() { return ""; }
 
-      virtual std::unique_ptr<LuaScriptManager> get_lua_script_manager() override;
+      virtual std::unique_ptr<LuaManager> get_lua_manager() override;
       virtual std::unique_ptr<RGWRole> get_role(std::string name,
           std::string tenant,
           std::string path="",
