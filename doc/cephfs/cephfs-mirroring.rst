@@ -44,6 +44,22 @@ The mirror daemon should be spawned using `systemctl(1)` unit files::
 
 .. note:: The user specified here is `mirror` created in the `Creating Users` section.
 
+Multiple `cephfs-mirror` daemons may be deployed for concurrent synchronization and high
+availability. Mirror daemons share the synchronization load using a simple `M/N` policy,
+where `M` is the number of directories and `N` is the number of `cephfs-mirror` daemons.
+
+When `cephadm` is used to manage a Ceph cluster, `cephfs-mirror` daemons can be deployed using::
+
+  $ ceph orch apply cephfs-mirror
+
+To deploy multiple mirror daemons use::
+
+  $ ceph orch apply cephfs-mirror --placement=<placement-spec>
+
+E.g., to deploy 3 `cephfs-mirror` daemons on different hosts, use::
+
+  $ ceph orch apply cephfs-mirror --placement="3 host1,host2,host3"
+
 Interface
 ---------
 
