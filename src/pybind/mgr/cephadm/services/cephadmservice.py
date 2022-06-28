@@ -1026,11 +1026,11 @@ class CephExporterService(CephService):
         if spec.sock_dir:
             exporter_config.update({'sock-dir': spec.sock_dir})
         if spec.port:
-            exporter_config.update({'port': spec.port})
+            exporter_config.update({'port': f'{spec.port}'})
         if spec.prio_limit:
-            exporter_config.update({'prio-limit': spec.prio_limit})
+            exporter_config.update({'prio-limit': f'{spec.prio_limit}'})
         if spec.stats_period:
-            exporter_config.update({'stats-period': spec.stats_period})
+            exporter_config.update({'stats-period': f'{spec.stats_period}'})
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
