@@ -11266,9 +11266,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // General case: report the cluster statistics returned from RADOS. Because
     // multiple pools may be used without one filesystem namespace via
     // layouts, this is the most correct thing we can do.
-    stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
-    stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
-    stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_blocks = stats.kb >> CEPH_4K_BLOCK_SHIFT;
+    stbuf->f_bfree = stats.kb_avail >> CEPH_4K_BLOCK_SHIFT;
+    stbuf->f_bavail = stats.kb_avail >> CEPH_4K_BLOCK_SHIFT;
   }
 
   // NOTE: for the time being, we make bsize == frsize to humor
