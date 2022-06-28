@@ -12,6 +12,7 @@
 
 SET_SUBSYS(seastore_device);
 
+#define SECT_SHIFT 9
 namespace crimson::os::seastore::segment_manager::zns {
 
 using open_device_ret = ZNSSegmentManager::access_ertr::future<
@@ -53,31 +54,35 @@ static zns_sm_metadata_t make_metadata(
     "seastore_device_size");
   
   size_t size = (data.size == 0) ? config_size : data.size;
+  size_t segment_size = zone_size << SECT_SHIFT;
+  size_t zones_per_segment = segment_size / (zone_size << SECT_SHIFT);
+  size_t segments = (num_zones - 1) / zones_per_segment;
   
-  auto config_segment_size = get_conf<Option::size_t>(
-    "seastore_segment_size");
-  INFO("config segment size: {}", config_segment_size);
-  size_t zones_per_segment = config_segment_size / zone_capacity;
-  size_t segments = (num_zones - 1) * zones_per_segment;
-  
-  INFO("size {}, block_size {}, allocated_size {}, configured_size {}, "
-    "segment_size {}",
-    data.size,
+  INFO(
+    "device size {}, block_size {}, allocated_size {}, config_size {},"
+    " total zones {}, zone_size {}, zone_capacity {},"
+    " total segments {}, zones per segment {}, segment size {}",
+    size,
     data.block_size,
     data.allocated_size,
     config_size,
-    config_segment_size);
+    num_zones,
+    zone_size << SECT_SHIFT,
+    zone_capacity << SECT_SHIFT,
+    segments,
+    zones_per_segment,
+    (zone_capacity << SECT_SHIFT) * zones_per_segment);
   
   zns_sm_metadata_t ret = zns_sm_metadata_t{
     size,
-    config_segment_size,
-    zone_capacity * zones_per_segment,
+    segment_size,
+    (zone_capacity << SECT_SHIFT) * zones_per_segment,
     zones_per_segment,
-    zone_capacity,
+    zone_capacity << SECT_SHIFT,
     data.block_size,
     segments,
-    zone_size,
-    zone_size,
+    zone_size << SECT_SHIFT,
+    zone_size << SECT_SHIFT,
     meta};
   return ret;
 }
@@ -119,7 +124,6 @@ static seastar::future<> reset_device(
 
 static seastar::future<size_t> get_zone_capacity(
   seastar::file &device,
-  uint32_t zone_size,
   uint32_t nr_zones)
 {
   return seastar::do_with(
@@ -320,7 +324,7 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
           ceph_assert(zone_size);
 	  return reset_device(device, zone_size, nr_zones);
 	}).then([&] {
-	  return get_zone_capacity(device, zone_size, nr_zones); 
+	  return get_zone_capacity(device, nr_zones);
 	}).then([&, FNAME, config] (auto zone_capacity){
           ceph_assert(zone_capacity);
 	  sb = make_metadata(

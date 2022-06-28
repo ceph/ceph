@@ -164,11 +164,9 @@ namespace crimson::os::seastore::segment_manager::zns {
 
     uint64_t get_offset(paddr_t addr) {
       auto& seg_addr = addr.as_seg_paddr();
-      const auto default_sector_size = 512;
       return (metadata.first_segment_offset +
 	      (seg_addr.get_segment_id().device_segment_id() * 
-	       metadata.zone_size)) * default_sector_size + 
-	seg_addr.get_segment_off();
+	       metadata.zone_size)) + seg_addr.get_segment_off();
     }
   };
 
