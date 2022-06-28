@@ -5678,6 +5678,9 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
   // delete temp pool, so flushing chunk will fail
   ASSERT_EQ(0, s_cluster.pool_delete(temp_pool_name.c_str()));
 
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
   // flush to check if proper error is returned
   {
     ObjectReadOperation op;
