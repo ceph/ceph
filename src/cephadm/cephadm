@@ -920,11 +920,10 @@ class CephExporter(object):
 
     daemon_type = 'ceph-exporter'
     entrypoint = '/usr/bin/ceph-exporter'
-
-    port_map = {
-        'ceph-exporter': 9926,
-    }
     DEFAULT_PORT = 9926
+    port_map = {
+        'ceph-exporter': DEFAULT_PORT,
+    }
 
     def __init__(self,
                  ctx: CephadmContext,
