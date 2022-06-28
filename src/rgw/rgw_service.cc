@@ -79,7 +79,6 @@ int RGWServices_Def::init(CephContext *cct,
   sysobj_core = std::make_unique<RGWSI_SysObj_Core>(cct);
   user_rados = std::make_unique<RGWSI_User_RADOS>(cct);
   role_rados = std::make_unique<RGWSI_Role_RADOS>(cct);
-  account_rados = std::make_unique<RGWSI_Account_RADOS>(cct);
 
   if (have_cache) {
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(dpp, cct);
@@ -120,8 +119,9 @@ int RGWServices_Def::init(CephContext *cct,
   user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
   role_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), sysobj.get());
-  account_rados->init(zone.get(), meta.get(), meta_be_sobj.get(),
-                      sysobj.get(), rados.get());
+
+  account_rados = std::make_unique<RGWSI_Account_RADOS>(
+      zone.get(), mdlog.get(), sysobj.get(), rados.get());
 
   can_shutdown = true;
 
@@ -372,10 +372,13 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
 {
   meta.mgr.reset(new RGWMetadataManager(svc.meta));
 
-  meta.account = std::make_unique<RGWAccountMetadataHandler>(svc.account);
-  account = std::make_unique<RGWAccountCtl>(svc.zone, svc.account,
-					    (RGWAccountMetadataHandler *)meta.account.get());
-
+  {
+    auto account_handler = std::make_unique<RGWAccountMetadataHandler>(
+        svc.account, svc.sysobj);
+    account = std::make_unique<RGWAccountCtl>(svc.account, svc.sysobj,
+                                              account_handler.get());
+    meta.account = std::move(account_handler);
+  }
   meta.user.reset(RGWUserMetaHandlerAllocator::alloc(svc.user, account.get()));
 
   auto sync_module = svc.sync_modules->get_sync_module();

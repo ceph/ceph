@@ -14,93 +14,79 @@
  */
 #pragma once
 
-#include "svc_account.h"
+#include "rgw_service.h"
 
-class RGWSI_RADOS;
-class RGWSI_Zone;
-class RGWSI_Meta;
-class RGWSI_SyncModules;
-class RGWSI_MetaBackend_Handler;
+struct RGWAccountInfo;
 
-class RGWSI_Account_RADOS : public RGWSI_Account
+class RGWSI_Account_RADOS : public RGWServiceInstance
 {
 public:
   struct Svc {
     RGWSI_Zone* zone = nullptr;
-    RGWSI_Meta* meta = nullptr;
-    RGWSI_MetaBackend* meta_be = nullptr;
+    RGWSI_MDLog* mdlog = nullptr;
     RGWSI_SysObj* sysobj = nullptr;
     RGWSI_RADOS* rados = nullptr;
   } svc;
 
-  RGWSI_Account_RADOS(CephContext *cct);
+  RGWSI_Account_RADOS(RGWSI_Zone* zone_svc,
+                      RGWSI_MDLog* mdlog_svc,
+                      RGWSI_SysObj* sysobj_svc,
+                      RGWSI_RADOS* rados_svc);
   ~RGWSI_Account_RADOS() = default;
 
-  RGWSI_MetaBackend_Handler *get_be_handler() override {
-    return be_handler;
-  }
-
-  int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
-
-  void init(RGWSI_Zone* zone_svc,
-	    RGWSI_Meta* meta_svc,
-	    RGWSI_MetaBackend* meta_be_svc,
-	    RGWSI_SysObj* sysobj_svc,
-	    RGWSI_RADOS* rados_svc);
+  const rgw_pool& account_pool() const;
+  const rgw_pool& account_name_pool() const;
 
   int store_account_info(const DoutPrefixProvider *dpp,
-			 RGWSI_MetaBackend::Context *ctx,
+			 RGWSysObjectCtx& obj_ctx,
 			 const RGWAccountInfo& info,
 			 const RGWAccountInfo* old_info,
 			 RGWObjVersionTracker& objv,
 			 const real_time& mtime, bool exclusive,
 			 std::map<std::string, bufferlist>* pattrs,
-			 optional_yield y) override;
+			 optional_yield y);
 
   int read_account_by_name(const DoutPrefixProvider *dpp,
-                           RGWSI_MetaBackend::Context *ctx,
+                           RGWSysObjectCtx& obj_ctx,
                            std::string_view tenant,
                            std::string_view name,
                            RGWAccountInfo& info,
                            RGWObjVersionTracker& objv,
                            real_time* pmtime,
                            std::map<std::string, bufferlist>* pattrs,
-                           optional_yield y) override;
+                           optional_yield y);
 
   int read_account_info(const DoutPrefixProvider *dpp,
-			RGWSI_MetaBackend::Context *ctx,
+			RGWSysObjectCtx& obj_ctx,
 			std::string_view account_id,
 			RGWAccountInfo& info,
 			RGWObjVersionTracker& objv,
 			real_time* pmtime,
 			std::map<std::string, bufferlist>* pattrs,
-			optional_yield y) override;
+			optional_yield y);
 
   int remove_account_info(const DoutPrefixProvider* dpp,
-                          RGWSI_MetaBackend::Context* ctx,
+                          RGWSysObjectCtx& obj_ctx,
                           const RGWAccountInfo& info,
                           RGWObjVersionTracker& objv,
-                          optional_yield y) override;
+                          optional_yield y);
 
   int add_user(const DoutPrefixProvider *dpp,
                const RGWAccountInfo& info,
                const rgw_user& rgw_user,
-               optional_yield y) override;
+               optional_yield y);
 
   int remove_user(const DoutPrefixProvider *dpp,
                   const RGWAccountInfo& info,
                   const rgw_user& rgw_user,
-                  optional_yield y) override;
+                  optional_yield y);
 
   int list_users(const DoutPrefixProvider *dpp,
                  const RGWAccountInfo& info,
                  const std::string& marker,
                  bool *more,
                  std::vector<rgw_user>& results,
-                 optional_yield y) override;
+                 optional_yield y);
 
   rgw_raw_obj get_account_user_obj(const std::string& account_id) const;
-private:
-  RGWSI_MetaBackend_Handler *be_handler;
-  std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
 };

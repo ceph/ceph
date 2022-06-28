@@ -4,24 +4,25 @@
 #include "common/random_string.h"
 #include "common/utf8.h"
 
-#include "services/svc_account.h"
-#include "services/svc_meta.h"
-#include "services/svc_meta_be.h"
+#include "services/svc_account_rados.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWAccountCtl::RGWAccountCtl(RGWSI_Zone *zone_svc,
-                             RGWSI_Account *account_svc,
-                             RGWAccountMetadataHandler *_am_handler) : am_handler(_am_handler)
+RGWAccountCtl::RGWAccountCtl(RGWSI_Account_RADOS* account_svc,
+                             RGWSI_SysObj* sysobj_svc,
+                             RGWAccountMetadataHandler* handler)
+  : handler(handler)
 {
-  svc.zone = zone_svc;
   svc.account = account_svc;
-  be_handler = am_handler->get_be_handler();
+  svc.sysobj = sysobj_svc;
 }
 
-RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account *account_svc) {
-  base_init(account_svc->ctx(), account_svc->get_be_handler());
-  svc.account = account_svc;
+RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account_RADOS* svc_account,
+                                                     RGWSI_SysObj* svc_sysobj)
+  : svc_account(svc_account), svc_sysobj(svc_sysobj)
+{
+  base_init(svc_account->ctx());
 }
 
 // account ids start with 'RGW' followed by 17 numeric digits
@@ -89,10 +90,9 @@ int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
                               std::map<std::string, bufferlist> *pattrs,
                               optional_yield y)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-      return svc.account->store_account_info(
-          dpp, op->ctx(), info, old_info, objv, mtime, exclusive, pattrs, y);
-    });
+  RGWSysObjectCtx ctx{svc.sysobj};
+  return svc.account->store_account_info(dpp, ctx, info, old_info, objv,
+                                         mtime, exclusive, pattrs, y);
 }
 
 void RGWAccountInfo::dump(Formatter * const f) const
@@ -130,10 +130,9 @@ int RGWAccountCtl::read_by_name(const DoutPrefixProvider* dpp,
                                 std::map<std::string, bufferlist>* pattrs,
                                 optional_yield y)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-      return svc.account->read_account_by_name(
-          dpp, op->ctx(), tenant, name, info, objv, pmtime, pattrs, y);
-    });
+  RGWSysObjectCtx ctx{svc.sysobj};
+  return svc.account->read_account_by_name(dpp, ctx, tenant, name,
+                                           info, objv, pmtime, pattrs, y);
 }
 
 int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
@@ -144,10 +143,9 @@ int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
                              std::map<std::string, bufferlist>* pattrs,
                              optional_yield y)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-      return svc.account->read_account_info(
-          dpp, op->ctx(), account_id, info, objv, pmtime, pattrs, y);
-    });
+  RGWSysObjectCtx ctx{svc.sysobj};
+  return svc.account->read_account_info(dpp, ctx, account_id, info,
+                                        objv, pmtime, pattrs, y);
 }
 
 int RGWAccountCtl::remove_info(const DoutPrefixProvider* dpp,
@@ -155,10 +153,8 @@ int RGWAccountCtl::remove_info(const DoutPrefixProvider* dpp,
                                RGWObjVersionTracker& objv,
                                optional_yield y)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-      return svc.account->remove_account_info(
-          dpp, op->ctx(), info, objv, y);
-    });
+  RGWSysObjectCtx ctx{svc.sysobj};
+  return svc.account->remove_account_info(dpp, ctx, info, objv, y);
 }
 
 
@@ -215,37 +211,30 @@ int RGWAccountCtl::list_users(const DoutPrefixProvider* dpp,
 
 
 RGWMetadataObject* RGWAccountMetadataHandler::get_meta_obj(JSONObj *jo,
-                                                            const obj_version& objv,
-                                                            const ceph::real_time& mtime)
+                                                           const obj_version& objv,
+                                                           const ceph::real_time& mtime)
 {
   RGWAccountCompleteInfo aci;
   try {
     decode_json_obj(aci, jo);
-  } catch (JSONDecoder::err& err) {
+  } catch (const JSONDecoder::err&) {
     return nullptr;
   }
-
   return new RGWAccountMetadataObject(aci, objv, mtime);
 }
 
-
-int RGWAccountMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
-                                      std::string& entry,
-                                      RGWMetadataObject **obj,
-                                      optional_yield y,
-                                      const DoutPrefixProvider* dpp)
+int RGWAccountMetadataHandler::get(std::string& entry,
+                                   RGWMetadataObject** obj,
+                                   optional_yield y,
+                                   const DoutPrefixProvider* dpp)
 {
   RGWAccountCompleteInfo aci;
   RGWObjVersionTracker objv;
   real_time mtime;
 
-  int ret = svc.account->read_account_info(dpp, op->ctx(),
-                                           entry,
-                                           aci.info,
-                                           objv,
-                                           &mtime,
-                                           &aci.attrs,
-                                           y);
+  RGWSysObjectCtx ctx{svc_sysobj};
+  int ret = svc_account->read_account_info(dpp, ctx, entry, aci.info,
+                                           objv, &mtime, &aci.attrs, y);
   if (ret < 0) {
     return ret;
   }
@@ -254,82 +243,116 @@ int RGWAccountMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
   return 0;
 }
 
-class RGWMetadataHandlerPut_Account : public RGWMetadataHandlerPut_SObj
+int RGWAccountMetadataHandler::put(std::string& entry, RGWMetadataObject* obj,
+                                   RGWObjVersionTracker& objv, optional_yield y,
+                                   const DoutPrefixProvider* dpp,
+                                   RGWMDLogSyncType type, bool from_remote_zone)
 {
-  RGWAccountMetadataHandler* ahandler;
-  RGWAccountMetadataObject* aobj;
-public:
-  RGWMetadataHandlerPut_Account(RGWAccountMetadataHandler *_handler,
-                                RGWSI_MetaBackend_Handler::Op *op,
-                                std::string& entry,
-                                RGWMetadataObject *obj,
-                                RGWObjVersionTracker& objv_tracker,
-                                optional_yield y,
-                                RGWMDLogSyncType type, bool from_remote_zone)
-      : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker,
-                                   y, type, from_remote_zone),
-        ahandler(_handler),
-        aobj(static_cast<RGWAccountMetadataObject *>(obj))
-  {}
+  auto account_obj = static_cast<RGWAccountMetadataObject*>(obj);
+  const auto& new_info = account_obj->get_aci().info;
 
-  int put_checked(const DoutPrefixProvider *dpp) override;
-};
-
-int RGWMetadataHandlerPut_Account::put_checked(const DoutPrefixProvider *dpp)
-{
-  auto orig_obj = static_cast<RGWAccountMetadataObject*>(old_obj);
-  RGWAccountInfo *pold_info = (orig_obj ? &orig_obj->get_aci().info : nullptr);
-
-  RGWAccountCompleteInfo& aci = aobj->get_aci();
-  std::map<std::string, bufferlist> *pattrs {nullptr};
-  if (aci.has_attrs) {
-    pattrs = &aci.attrs;
+  // account id must match metadata key
+  if (new_info.id != entry) {
+    return -EINVAL;
   }
 
-  auto mtime = obj->get_mtime();
-  int r = ahandler->svc.account->store_account_info(dpp, op->ctx(),
-                                                    aci.info,
-                                                    pold_info,
-                                                    objv_tracker,
-                                                    mtime,
-                                                    false,
-                                                    pattrs,
-                                                    y);
-  if (r < 0) {
-    return r;
+  // read existing metadata
+  RGWSysObjectCtx ctx{svc_sysobj};
+  RGWAccountInfo old_info;
+  int ret = svc_account->read_account_info(dpp, ctx, entry, old_info,
+                                           objv, nullptr, nullptr, y);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
   }
+  const RGWAccountInfo* pold_info = (ret == -ENOENT ? nullptr : &old_info);
 
-  return STATUS_APPLIED;
+  // write/overwrite metadata
+  constexpr bool exclusive = false;
+  return svc_account->store_account_info(dpp, ctx, new_info, pold_info,
+                                         objv, obj->get_mtime(), exclusive,
+                                         obj->get_pattrs(), y);
 }
 
-int RGWAccountMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
-                                      std::string& entry,
-                                      RGWMetadataObject *obj,
-                                      RGWObjVersionTracker& objv_tracker,
+int RGWAccountMetadataHandler::remove(std::string& entry,
+                                      RGWObjVersionTracker& objv,
                                       optional_yield y,
-                                      const DoutPrefixProvider* dpp,
-                                      RGWMDLogSyncType type,
-                                      bool from_remote_zone)
+                                      const DoutPrefixProvider* dpp)
 {
-  RGWMetadataHandlerPut_Account put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
-  return do_put_operate(&put_op, dpp);
-}
-
-int RGWAccountMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
-                                         std::string& entry,
-                                         RGWObjVersionTracker& objv,
-                                         optional_yield y,
-                                         const DoutPrefixProvider* dpp)
-{
-  const std::string account_id = entry;
-
-  RGWAccountInfo info;
-  int ret = svc.account->read_account_info(dpp, op->ctx(), account_id, info,
+  // read existing metadata
+  RGWSysObjectCtx ctx{svc_sysobj};
+  RGWAccountInfo old_info;
+  int ret = svc_account->read_account_info(dpp, ctx, entry, old_info,
                                            objv, nullptr, nullptr, y);
   if (ret < 0) {
     return ret;
   }
-  return svc.account->remove_account_info(dpp, op->ctx(), info, objv, y);
+
+  return svc_account->remove_account_info(dpp, ctx, old_info, objv, y);
+}
+
+int RGWAccountMetadataHandler::mutate(const std::string& entry,
+                                      const ceph::real_time& mtime,
+                                      RGWObjVersionTracker *objv_tracker,
+                                      optional_yield y,
+                                      const DoutPrefixProvider *dpp,
+                                      RGWMDLogStatus op_type,
+                                      std::function<int()> f)
+{
+  return -ENOTSUP; // unused
+}
+
+struct account_list_handle {
+  using Pool = RGWSI_SysObj::Pool;
+  Pool pool;
+  Pool::Op op;
+
+  account_list_handle(RGWSI_SysObj* sysobj, const rgw_pool& p)
+      : pool(sysobj->get_pool(p)), op(pool.op()) {}
+};
+
+int RGWAccountMetadataHandler::list_keys_init(const DoutPrefixProvider* dpp,
+                                              const std::string& marker,
+                                              void** phandle)
+{
+  const auto& pool = svc_account->account_pool();
+  auto handle = std::make_unique<account_list_handle>(svc_sysobj, pool);
+  int ret = handle->op.init(dpp, marker, "");
+  if (ret < 0) {
+    return ret;
+  }
+  *phandle = handle.release();
+  return 0;
+}
+
+int RGWAccountMetadataHandler::list_keys_next(const DoutPrefixProvider* dpp,
+                                              void* handle, int max,
+                                              std::list<std::string>& keys,
+                                              bool* truncated)
+{
+  auto h = static_cast<account_list_handle*>(handle);
+  std::vector<std::string> oids;
+  int ret = h->op.get_next(dpp, max, &oids, truncated);
+  if (ret < 0) {
+    if (ret == -ENOENT) {
+      *truncated = false;
+    }
+    return ret;
+  }
+  std::move(oids.begin(), oids.end(), std::back_inserter(keys));
+  return 0;
+}
+
+void RGWAccountMetadataHandler::list_keys_complete(void* handle)
+{
+  delete static_cast<account_list_handle*>(handle);
+}
+
+std::string RGWAccountMetadataHandler::get_marker(void* handle)
+{
+  std::string marker;
+  auto h = static_cast<account_list_handle*>(handle);
+  h->op.get_marker(&marker);
+  return marker;
 }
 
 int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,

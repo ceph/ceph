@@ -76,7 +76,6 @@ class RGWSI_User;
 class RGWSI_User_RADOS;
 class RGWDataChangesLog;
 class RGWSI_Role_RADOS;
-class RGWSI_Account;
 class RGWSI_Account_RADOS;
 
 
@@ -153,7 +152,7 @@ struct RGWServices
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
   RGWSI_Role_RADOS *role{nullptr};
-  RGWSI_Account *account{nullptr};
+  RGWSI_Account_RADOS *account{nullptr};
 
   int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
 

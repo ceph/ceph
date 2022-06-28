@@ -1,7 +1,7 @@
 #include "svc_account_rados.h"
-#include "svc_meta_be_sobj.h"
-#include "svc_meta.h"
+#include "svc_mdlog.h"
 #include "rgw/rgw_account.h"
+#include "rgw/rgw_mdlog.h"
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_zone.h"
 #include "svc_zone.h"
@@ -12,107 +12,71 @@
 
 constexpr auto RGW_ACCOUNT_USER_OBJ_SUFFIX = ".users";
 
-class RGWSI_Account_Module : public RGWSI_MBSObj_Handler_Module {
-  RGWSI_Zone* zone_svc;
-
-  const std::string prefix;
-public:
-  RGWSI_Account_Module(RGWSI_Zone* zone_svc)
-      : RGWSI_MBSObj_Handler_Module("account"), zone_svc(zone_svc)
-  {}
-
-  void get_pool_and_oid(const std::string& key, rgw_pool *pool, std::string *oid) override {
-    if (pool) {
-      *pool = zone_svc->get_zone_params().account_pool;
-    }
-    if (oid) {
-      *oid = key;
-    }
-  }
-
-  const std::string& get_oid_prefix() override {
-    return prefix;
-  }
-
-  bool is_valid_oid(const std::string& oid) override {
-    // filter out the user.buckets objects
-    return !boost::algorithm::ends_with(oid, RGW_ACCOUNT_USER_OBJ_SUFFIX);
-  }
-
-  std::string key_to_oid(const std::string& key) override {
-    return key;
-  }
-
-  std::string oid_to_key(const std::string& oid) override {
-    return oid;
-  }
-};
-
-RGWSI_Account_RADOS::RGWSI_Account_RADOS(CephContext *cct) :
-  RGWSI_Account(cct) {
-}
-
-void RGWSI_Account_RADOS::init(RGWSI_Zone* zone_svc,
-                               RGWSI_Meta* meta_svc,
-                               RGWSI_MetaBackend* meta_be_svc,
-                               RGWSI_SysObj* sysobj_svc,
-                               RGWSI_RADOS* rados_svc)
+RGWSI_Account_RADOS::RGWSI_Account_RADOS(RGWSI_Zone* zone_svc,
+                                         RGWSI_MDLog* mdlog_svc,
+                                         RGWSI_SysObj* sysobj_svc,
+                                         RGWSI_RADOS* rados_svc)
+  : RGWServiceInstance(zone_svc->ctx())
 {
   svc.zone = zone_svc;
-  svc.meta = meta_svc;
-  svc.meta_be = meta_be_svc;
+  svc.mdlog = mdlog_svc;
   svc.sysobj = sysobj_svc;
   svc.rados = rados_svc;
-}
-
-int RGWSI_Account_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dpp)
-{
-  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ,
-                                     &be_handler);
-  if (r < 0) {
-    ldout(ctx(), 0) << "ERROR: failed to create be_handler for accounts: r=" << r << dendl;
-    return r;
-  }
-
-  auto mod = std::make_unique<RGWSI_Account_Module>(svc.zone);
-
-  RGWSI_MetaBackend_Handler_SObj *bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
-  bh->set_module(mod.get());
-
-  be_module = std::move(mod);
-  return 0;
 }
 
 rgw_raw_obj RGWSI_Account_RADOS::get_account_user_obj(const std::string& account_id) const
 {
   std::string oid = account_id + RGW_ACCOUNT_USER_OBJ_SUFFIX;
-  return rgw_raw_obj(svc.zone->get_zone_params().account_pool, oid);
+  return rgw_raw_obj(account_pool(), oid);
 }
 
-static rgw_raw_obj get_account_name_obj(RGWSI_Zone* zone_svc,
-                                        std::string_view tenant,
-                                        std::string_view name)
+
+// metadata key for RGWAccountInfo
+static std::string get_meta_key(const RGWAccountInfo& info)
 {
-  const auto& pool = zone_svc->get_zone_params().account_name_pool;
-  return {pool, RGWSI_Account::get_name_meta_key(tenant, name)};
+  return info.id;
+}
+
+// metadata key for RGWAccountNameToId
+static std::string get_name_meta_key(std::string_view tenant,
+                                     std::string_view name)
+{
+  if (tenant.empty()) {
+    return std::string{name};
+  }
+  return fmt::format("{}${}", tenant, name);
+}
+
+const rgw_pool& RGWSI_Account_RADOS::account_pool() const
+{
+  return svc.zone->get_zone_params().account_pool;
+}
+
+const rgw_pool& RGWSI_Account_RADOS::account_name_pool() const
+{
+  return svc.zone->get_zone_params().account_name_pool;
 }
 
 struct AccountNameObj {
+  rgw_pool pool;
+  std::string oid;
   RGWAccountNameToId data;
-  rgw_raw_obj obj;
   RGWObjVersionTracker objv;
+
+  AccountNameObj(const rgw_pool& pool,
+                 std::string_view tenant,
+                 std::string_view name)
+      : pool(pool), oid(get_name_meta_key(tenant, name))
+  {}
 };
 
 static int read_account_name(const DoutPrefixProvider* dpp,
-                             RGWSI_Zone* zone_svc, RGWSysObjectCtx& obj_ctx,
-                             std::string_view tenant, std::string_view name,
+                             RGWSysObjectCtx& obj_ctx,
                              AccountNameObj& obj, optional_yield y)
 {
-  obj.obj = get_account_name_obj(zone_svc, tenant, name);
   bufferlist bl;
-
-  int ret = rgw_get_system_obj(obj_ctx, obj.obj.pool, obj.obj.oid,
-                               bl, &obj.objv, nullptr, y, dpp);
+  int ret = rgw_get_system_obj(obj_ctx, obj.pool, obj.oid, bl,
+                               &obj.objv, nullptr, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -133,29 +97,37 @@ static int write_account_name(const DoutPrefixProvider *dpp,
   encode(name.data, bl);
 
   constexpr bool exclusive = true;
-  return rgw_put_system_obj(dpp, obj_ctx, name.obj.pool, name.obj.oid, bl,
+  return rgw_put_system_obj(dpp, obj_ctx, name.pool, name.oid, bl,
                             exclusive, &name.objv, ceph::real_time{}, y);
-}
-
-static int remove_account_name(const DoutPrefixProvider *dpp,
-                               RGWSI_Zone* zone_svc, RGWSI_SysObj* sysobj_svc,
-                               std::string_view tenant, std::string_view name,
-                               RGWObjVersionTracker* objv, optional_yield y)
-{
-  const auto obj = get_account_name_obj(zone_svc, tenant, name);
-  return rgw_delete_system_obj(dpp, sysobj_svc, obj.pool, obj.oid, objv, y);
 }
 
 static int remove_account_name(const DoutPrefixProvider *dpp,
                                RGWSI_SysObj* sysobj_svc,
                                AccountNameObj& name, optional_yield y)
 {
-  return rgw_delete_system_obj(dpp, sysobj_svc, name.obj.pool, name.obj.oid,
-                               &name.objv, y);
+  return rgw_delete_system_obj(dpp, sysobj_svc, name.pool,
+                               name.oid, &name.objv, y);
+}
+
+static int write_mdlog_entry(const DoutPrefixProvider* dpp,
+                             RGWSI_MDLog* mdlog_svc, const std::string& key,
+                             const RGWObjVersionTracker& objv)
+{
+  RGWMetadataLogData entry;
+  entry.read_version = objv.read_version;
+  entry.write_version = objv.write_version;
+  entry.status = MDLOG_STATUS_COMPLETE;
+
+  bufferlist bl;
+  encode(entry, bl);
+
+  const std::string section = "account";
+  auto hash_key = fmt::format("{}:{}", section, key);
+  return mdlog_svc->add_entry(dpp, hash_key, section, key, bl);
 }
 
 int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
-                                            RGWSI_MetaBackend::Context* _ctx,
+                                            RGWSysObjectCtx& obj_ctx,
                                             const RGWAccountInfo& info,
                                             const RGWAccountInfo* old_info,
                                             RGWObjVersionTracker& objv,
@@ -164,8 +136,7 @@ int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
                                             std::map<std::string, bufferlist> *pattrs,
                                             optional_yield y)
 {
-  RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
-  RGWSysObjectCtx& obj_ctx = *ctx->obj_ctx;
+  const std::string key = get_meta_key(info);
 
   const bool same_name = old_info
       && old_info->tenant == info.tenant
@@ -178,9 +149,8 @@ int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
     }
     if (!same_name) {
       // read old account name object
-      AccountNameObj name;
-      int ret = read_account_name(dpp, svc.zone, obj_ctx, old_info->tenant,
-                                  old_info->name, name, y);
+      AccountNameObj name{account_name_pool(), old_info->tenant, old_info->name};
+      int ret = read_account_name(dpp, obj_ctx, name, y);
       if (ret == -ENOENT) {
         // leave remove_name empty
       } else if (ret < 0) {
@@ -193,9 +163,8 @@ int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
 
   if (!same_name) {
     // read new account name object
-    AccountNameObj name;
-    int ret = read_account_name(dpp, svc.zone, obj_ctx, info.tenant,
-                                info.name, name, y);
+    AccountNameObj name{account_name_pool(), info.tenant, info.name};
+    int ret = read_account_name(dpp, obj_ctx, name, y);
     if (ret == -ENOENT) {
       // write the new name object below
     } else if (ret == 0) {
@@ -206,41 +175,43 @@ int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
   }
 
   // encode/write the account info
-  bufferlist data_bl;
-  encode(info, data_bl);
+  {
+    bufferlist bl;
+    encode(info, bl);
 
-  RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
-  int ret = svc.meta_be->put(_ctx, get_meta_key(info), params, &objv, y, dpp);
-  if (ret < 0) {
-    return ret;
+    int ret = rgw_put_system_obj(dpp, obj_ctx, account_pool(), key, bl,
+                                 exclusive, &objv, mtime, y, pattrs);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   if (remove_name) {
     // remove the old name object, ignoring errors
     auto& name = *remove_name;
-    int r2 = remove_account_name(dpp, svc.sysobj, name, y);
-    if (r2 < 0) {
-      ldpp_dout(dpp, 20) << "WARNING: remove_account_name obj=" << name.obj
-          << " failed: " << cpp_strerror(r2) << dendl;
+    int ret = remove_account_name(dpp, svc.sysobj, name, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 20) << "WARNING: remove_account_name obj=" << name.oid
+          << " failed: " << cpp_strerror(ret) << dendl;
     } // not fatal
   }
   if (!same_name) {
     // write the new name object
-    AccountNameObj name;
+    AccountNameObj name{account_name_pool(), info.tenant, info.name};
     name.data.id = info.id;
-    name.obj = get_account_name_obj(svc.zone, info.tenant, info.name);
     name.objv.generate_new_write_ver(dpp->get_cct());
-    int r2 = write_account_name(dpp, obj_ctx, name, y);
-    if (r2 < 0) {
-      ldpp_dout(dpp, 20) << "WARNING: write_account_name obj=" << name.obj
-          << " failed: " << cpp_strerror(r2) << dendl;
+    int ret = write_account_name(dpp, obj_ctx, name, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 20) << "WARNING: write_account_name obj=" << name.oid
+          << " failed: " << cpp_strerror(ret) << dendl;
     } // not fatal
   }
-  return 0;
+
+  return write_mdlog_entry(dpp, svc.mdlog, key, objv);
 }
 
 int RGWSI_Account_RADOS::read_account_by_name(const DoutPrefixProvider* dpp,
-                                              RGWSI_MetaBackend::Context* _ctx,
+                                              RGWSysObjectCtx& obj_ctx,
                                               std::string_view tenant,
                                               std::string_view name,
                                               RGWAccountInfo& info,
@@ -249,22 +220,20 @@ int RGWSI_Account_RADOS::read_account_by_name(const DoutPrefixProvider* dpp,
                                               std::map<std::string, bufferlist>* pattrs,
                                               optional_yield y)
 {
-  RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
-
   // read RGWAccountNameToId from account_name_pool
-  AccountNameObj obj;
-  int ret = read_account_name(dpp, svc.zone, *ctx->obj_ctx, tenant, name, obj, y);
+  AccountNameObj nameobj{account_name_pool(), tenant, name};
+  int ret = read_account_name(dpp, obj_ctx, nameobj, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "account lookup with tenant=" << tenant
        << " name=" << name << " failed: " << cpp_strerror(ret) << dendl;
     return ret;
   }
-  const auto& account_id = obj.data.id;
-  return read_account_info(dpp, _ctx, account_id, info, objv, pmtime, pattrs, y);
+  const auto& account_id = nameobj.data.id;
+  return read_account_info(dpp, obj_ctx, account_id, info, objv, pmtime, pattrs, y);
 }
 
 int RGWSI_Account_RADOS::read_account_info(const DoutPrefixProvider* dpp,
-                                           RGWSI_MetaBackend::Context *ctx,
+                                           RGWSysObjectCtx& obj_ctx,
                                            std::string_view account_id,
                                            RGWAccountInfo& info,
                                            RGWObjVersionTracker& objv,
@@ -273,51 +242,55 @@ int RGWSI_Account_RADOS::read_account_info(const DoutPrefixProvider* dpp,
                                            optional_yield y)
 {
   bufferlist bl;
-  RGWSI_MBSObj_GetParams params(&bl, pattrs, pmtime);
-  int r = svc.meta_be->get_entry(ctx, std::string{account_id},
-                                 params, &objv, y, dpp);
-  if (r < 0) {
+  int ret = rgw_get_system_obj(obj_ctx, account_pool(), std::string{account_id},
+                               bl, &objv, pmtime, y, dpp, pattrs);
+  if (ret < 0) {
     ldpp_dout(dpp, 20) << "account lookup with id=" << account_id
-       << " failed: " << cpp_strerror(r) << dendl;
-    return r;
+       << " failed: " << cpp_strerror(ret) << dendl;
+    return ret;
   }
 
   auto bl_iter = bl.cbegin();
   try {
     decode(info, bl_iter);
   } catch (buffer::error& err) {
-    ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode account info, caught buffer::error" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode account info, caught buffer::error" << dendl;
     return -EIO;
   }
   if (info.id != account_id) {
-    lderr(svc.meta_be->ctx()) << "ERROR: read_account_info account id mismatch" << info.id << " != " << account_id << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: read_account_info account id mismatch" << info.id << " != " << account_id << dendl;
     return -EIO;
   }
   return 0;
 }
 
 int RGWSI_Account_RADOS::remove_account_info(const DoutPrefixProvider* dpp,
-                                             RGWSI_MetaBackend::Context *ctx,
+                                             RGWSysObjectCtx& obj_ctx,
                                              const RGWAccountInfo& info,
                                              RGWObjVersionTracker& objv,
                                              optional_yield y)
 {
-  RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove(ctx, get_meta_key(info), params, &objv, y, dpp);
+  const std::string key = get_meta_key(info);
+
+  // delete the account object
+  int ret = rgw_delete_system_obj(dpp, svc.sysobj, account_pool(), key, &objv, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: remove_account_info id=" << info.id
        << " failed: " << cpp_strerror(ret) << dendl;
     return ret;
   }
 
-  ret = remove_account_name(dpp, svc.zone, svc.sysobj,
-                            info.tenant, info.name, nullptr, y);
+  // delete the account name object
+  AccountNameObj name{account_name_pool(), info.tenant, info.name};
+  ret = rgw_delete_system_obj(dpp, svc.sysobj, name.pool, name.oid, &name.objv, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "WARNING: remove_account_name tenant=" << info.tenant
        << " name=" << info.name << " failed: " << cpp_strerror(ret) << dendl;
     // not fatal
   }
-  return 0;
+
+  // record the change in the mdlog
+  return write_mdlog_entry(dpp, svc.mdlog, key, objv);
 }
 
 int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,

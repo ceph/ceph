@@ -22,7 +22,6 @@ find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
   services/svc_finisher.cc
-  services/svc_account.cc
   services/svc_account_rados.cc
   services/svc_bi_rados.cc
   services/svc_bilog_rados.cc

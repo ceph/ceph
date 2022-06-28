@@ -24,9 +24,7 @@
 class optional_yield;
 class RGWRole;
 
-class RGWSI_Zone;
-class RGWSI_Account;
-class RGWSI_MetaBackend_Handler;
+class RGWSI_Account_RADOS;
 class RGWFormatterFlusher;
 
 std::string rgw_generate_account_id(CephContext* cct);
@@ -91,16 +89,15 @@ class RGWAccountMetadataHandler;
 class RGWAccountCtl
 {
   struct Svc {
-    RGWSI_Zone *zone{nullptr};
-    RGWSI_Account *account {nullptr};
+    RGWSI_Account_RADOS* account = nullptr;
+    RGWSI_SysObj* sysobj = nullptr;
   } svc;
 
-  RGWAccountMetadataHandler *am_handler{nullptr};
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
+  RGWAccountMetadataHandler* handler;
 public:
-  RGWAccountCtl(RGWSI_Zone *zone_svc,
-		RGWSI_Account *account_svc,
-		RGWAccountMetadataHandler *_am_handler);
+  RGWAccountCtl(RGWSI_Account_RADOS* account_svc,
+                RGWSI_SysObj* sysobj_svc,
+		RGWAccountMetadataHandler* handler);
 
   ~RGWAccountCtl() = default;
 
@@ -177,36 +174,43 @@ public:
   }
 };
 
-class RGWAccountMetadataHandler: public RGWMetadataHandler_GenericMetaBE {
-public:
-  struct Svc {
-    RGWSI_Account *account {nullptr};
-  } svc;
-
-  explicit RGWAccountMetadataHandler(RGWSI_Account *account_svc);
+class RGWAccountMetadataHandler : public RGWMetadataHandler {
+  RGWSI_Account_RADOS* svc_account = nullptr;
+  RGWSI_SysObj* svc_sysobj = nullptr;
+ public:
+  RGWAccountMetadataHandler(RGWSI_Account_RADOS* svc_account,
+                            RGWSI_SysObj* svc_sysobj);
 
   std::string get_type() override { return "account"; }
 
-  int do_get(RGWSI_MetaBackend_Handler::Op *op,
-             std::string& entry,
-             RGWMetadataObject **obj,
+  RGWMetadataObject *get_meta_obj(JSONObj *jo,
+                                  const obj_version& objv,
+                                  const ceph::real_time& mtime) override;
+
+  int get(std::string& entry, RGWMetadataObject** obj,
+          optional_yield y, const DoutPrefixProvider* dpp) override;
+  int put(std::string& entry, RGWMetadataObject* obj,
+          RGWObjVersionTracker& objv, optional_yield y,
+          const DoutPrefixProvider* dpp,
+          RGWMDLogSyncType type, bool from_remote_zone) override;
+  int remove(std::string& entry, RGWObjVersionTracker& objv,
              optional_yield y, const DoutPrefixProvider* dpp) override;
 
-  int do_put(RGWSI_MetaBackend_Handler::Op *op,
-             std::string& entry,
-             RGWMetadataObject *obj,
-             RGWObjVersionTracker& objv_tracker,
-             optional_yield y, const DoutPrefixProvider* dpp,
-             RGWMDLogSyncType type, bool from_remote_zone) override;
+  int mutate(const std::string& entry,
+             const ceph::real_time& mtime,
+             RGWObjVersionTracker* objv,
+             optional_yield y,
+             const DoutPrefixProvider* dpp,
+             RGWMDLogStatus op_type,
+             std::function<int()> f) override;
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op,
-                std::string& entry,
-                RGWObjVersionTracker& objv_tracker,
-                optional_yield y, const DoutPrefixProvider* dpp) override;
+  int list_keys_init(const DoutPrefixProvider* dpp,
+                     const std::string& marker, void** phandle) override;
+  int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
+                     std::list<std::string>& keys, bool* truncated) override;
+  void list_keys_complete(void* handle) override;
 
-  RGWMetadataObject *get_meta_obj(JSONObj *jo,
-				  const obj_version& objv,
-				  const ceph::real_time& mtime) override;
+  std::string get_marker(void* handle) override;
 };
 
 struct RGWAccountAdminOpState
