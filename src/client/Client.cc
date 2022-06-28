@@ -11251,13 +11251,22 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
       block_shift = CEPH_BLOCK_SHIFT;
     }
 
-    const fsblkcnt_t total = quota_root->quota.max_bytes >> block_shift;
+    fsblkcnt_t total = quota_root->quota.max_bytes >> block_shift;
     const fsblkcnt_t used = quota_root->rstat.rbytes >> block_shift;
-    stbuf->f_frsize = 1 << block_shift;
 
     // It is possible for a quota to be exceeded: arithmetic here must
     // handle case where used > total.
-    const fsblkcnt_t free = total > used ? total - used : 0;
+    fsblkcnt_t free = total > used ? total - used : 0;
+
+    // For quota size less than 4KB, report the total=used=4KB,free=0
+    // when quota is full and total=free=4KB, used=0 otherwise.
+    if (!total) {
+      total = 1;
+      free = quota_root->quota.max_bytes > quota_root->rstat.rbytes ? 1 : 0;
+      stbuf->f_frsize = CEPH_4K_BLOCK_SIZE;
+    } else {
+      stbuf->f_frsize = 1 << block_shift;
+    }
 
     stbuf->f_blocks = total;
     stbuf->f_bfree = free;
