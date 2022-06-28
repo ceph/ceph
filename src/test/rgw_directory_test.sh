@@ -7,5 +7,4 @@ redis-cli FLUSHALL
 echo "-----------Redis Server Flushed-----------"
 REDIS_PID=$(lsof -i4TCP:6379 -sTCP:LISTEN -t)
 kill $REDIS_PID
-sleep 0.5
 echo "-----------Redis Server Stopped-----------"
