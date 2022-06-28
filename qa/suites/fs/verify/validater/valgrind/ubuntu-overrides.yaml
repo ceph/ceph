@@ -1,0 +1,7 @@
+teuthology:
+  premerge: |
+            if yaml.os_type ~= 'ubuntu' then reject() end
+overrides:
+  ceph:
+    valgrind:
+      exit_on_first_error: false
