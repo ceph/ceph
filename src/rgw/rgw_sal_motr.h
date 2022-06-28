@@ -32,6 +32,7 @@ extern "C" {
 #include "rgw_role.h"
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
+typedef void (*progress_cb)(off_t, void*);
 
 namespace rgw::sal {
 
@@ -503,10 +504,23 @@ struct AccumulateIOCtxt{
 };
 
 class MotrCopyObj_Filter : public RGWGetDataCB {
+private:
+  progress_cb _progress_cb;
+  void *progress_data;
 public:
   virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override { return 0; }
   MotrCopyObj_Filter() {}
   virtual ~MotrCopyObj_Filter() override {}
+  void set_progress_callback(progress_cb progressCB, void *progressData){
+    this->_progress_cb = progressCB;
+    this->progress_data = progressData;
+  }
+  progress_cb get_progress_cb(){
+    return this->_progress_cb;
+  }
+  void *get_progress_data(){
+    return this->progress_data;
+  }
 };
 
 class MotrCopyObj_CB : public MotrCopyObj_Filter

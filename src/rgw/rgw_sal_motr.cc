@@ -2175,6 +2175,7 @@ int MotrObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astat
 
 int MotrCopyObj_CB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
+  progress_cb progress_CB = this->get_progress_cb();
   int rc = 0;
   ldpp_dout(m_dpp, 20) << "Offset=" << bl_ofs << " Length = "
                        << " Write Offset=" << write_offset << bl_len << dendl;
@@ -2192,6 +2193,9 @@ int MotrCopyObj_CB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
                           write_offset << "failed rc=" << rc << dendl;
     }
     write_offset += bl_len;
+    if(progress_CB){
+      progress_CB(write_offset, this->get_progress_data());
+    }
     return rc;
   }
 
@@ -2248,6 +2252,10 @@ int MotrObject::copy_object_same_zone(RGWObjectCtx& obj_ctx,
   ldpp_dout(dpp, 20) << "Src Object Name : " << this->get_key().get_oid() << dendl;
   ldpp_dout(dpp, 20) << "Dest Object Name : " << dest_object->get_key().get_oid() << dendl;
 
+  //similar src and dest object name is not supported as of now
+  if(this->get_obj() == dest_object->get_obj())
+    return -ERR_NOT_IMPLEMENTED;
+
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op = this->get_read_op(&obj_ctx);
 
   // prepare read op
@@ -2293,6 +2301,9 @@ int MotrObject::copy_object_same_zone(RGWObjectCtx& obj_ctx,
     ldpp_dout(dpp, 20) << "ERROR: read op range_to_ofs failed rc=" << rc << dendl;
     return rc;
   }
+
+  //setting the values of progress_cb and progress_data in MotrCopyObj_Filter class 
+  filter->set_progress_callback(progress_cb, progress_data);
 
   // read::iterate -> handle_data() -> write::process
   rc = read_op->iterate(dpp, cur_ofs, cur_end, filter, y);
