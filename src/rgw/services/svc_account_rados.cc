@@ -265,7 +265,7 @@ int RGWSI_Account_RADOS::read_account_by_name(const DoutPrefixProvider* dpp,
 
 int RGWSI_Account_RADOS::read_account_info(const DoutPrefixProvider* dpp,
                                            RGWSI_MetaBackend::Context *ctx,
-                                           const std::string& account_id,
+                                           std::string_view account_id,
                                            RGWAccountInfo& info,
                                            RGWObjVersionTracker& objv,
                                            real_time* pmtime,
@@ -274,7 +274,8 @@ int RGWSI_Account_RADOS::read_account_info(const DoutPrefixProvider* dpp,
 {
   bufferlist bl;
   RGWSI_MBSObj_GetParams params(&bl, pattrs, pmtime);
-  int r = svc.meta_be->get_entry(ctx, account_id, params, &objv, y, dpp);
+  int r = svc.meta_be->get_entry(ctx, std::string{account_id},
+                                 params, &objv, y, dpp);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "account lookup with id=" << account_id
        << " failed: " << cpp_strerror(r) << dendl;

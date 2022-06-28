@@ -504,24 +504,40 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBAccount::load_account(const DoutPrefixProvider *dpp, optional_yield y) {
-    return 0;
+  int DBStore::load_account_by_id(const DoutPrefixProvider* dpp,
+                                  std::string_view id,
+                                  RGWAccountInfo& info,
+                                  RGWObjVersionTracker& objv,
+                                  optional_yield y)
+  {
+    return -ENOTSUP;
   }
 
-  int DBAccount::store_account(const DoutPrefixProvider *dpp, optional_yield y) {
-    return 0;
+  int DBStore::load_account_by_name(const DoutPrefixProvider* dpp,
+                                    std::string_view tenant,
+                                    std::string_view name,
+                                    RGWAccountInfo& info,
+                                    RGWObjVersionTracker& objv,
+                                    optional_yield y)
+  {
+    return -ENOTSUP;
   }
 
-  int DBAccount::link_user(const DoutPrefixProvider *dpp, optional_yield y){
-    return 0; 
+  int DBStore::store_account(const DoutPrefixProvider* dpp,
+                             const RGWAccountInfo& info,
+                             const RGWAccountInfo* old_info,
+                             RGWObjVersionTracker& objv,
+                             bool exclusive, optional_yield y)
+  {
+    return -ENOTSUP;
   }
 
-  int DBAccount::unlink_user(const DoutPrefixProvider *dpp, optional_yield y) {
-    return 0;
-  }
-
-  int DBAccount::list_users(const DoutPrefixProvider *dpp, optional_yield y) {
-    return 0;
+  int DBStore::delete_account(const DoutPrefixProvider* dpp,
+                              const RGWAccountInfo& info,
+                              RGWObjVersionTracker& objv,
+                              optional_yield y)
+  {
+    return -ENOTSUP;
   }
 
   void DBStore::finalize(void)

@@ -836,26 +836,41 @@ int MotrBucket::abort_multiparts(const DoutPrefixProvider *dpp, CephContext *cct
   return 0;
 }
 
-int MotrAccount::load_account(const DoutPrefixProvider *dpp, optional_yield y) {
-  return 0;
+int MotrStore::load_account_by_id(const DoutPrefixProvider* dpp,
+                                  std::string_view id,
+                                  RGWAccountInfo& info,
+                                  RGWObjVersionTracker& objv,
+                                  optional_yield y)
+{
+  return -ENOTSUP;
 }
 
-int MotrAccount::store_account(const DoutPrefixProvider *dpp, optional_yield y) {
-  return 0;
+int MotrStore::load_account_by_name(const DoutPrefixProvider* dpp,
+                                    std::string_view tenant,
+                                    std::string_view name,
+                                    RGWAccountInfo& info,
+                                    RGWObjVersionTracker& objv,
+                                    optional_yield y)
+{
+  return -ENOTSUP;
 }
 
-int MotrAccount::link_user(const DoutPrefixProvider *dpp, optional_yield y){
-  return 0; 
+int MotrStore::store_account(const DoutPrefixProvider* dpp,
+                             const RGWAccountInfo& info,
+                             const RGWAccountInfo* old_info,
+                             RGWObjVersionTracker& objv,
+                             bool exclusive, optional_yield y)
+{
+  return -ENOTSUP;
 }
 
-int MotrAccount::unlink_user(const DoutPrefixProvider *dpp, optional_yield y) {
-  return 0;
+int MotrStore::delete_account(const DoutPrefixProvider* dpp,
+                              const RGWAccountInfo& info,
+                              RGWObjVersionTracker& objv,
+                              optional_yield y)
+{
+  return -ENOTSUP;
 }
-
-int MotrAccount::list_users(const DoutPrefixProvider *dpp, optional_yield y) {
-  return 0;
-}
-
 
 void MotrStore::finalize(void)
 {

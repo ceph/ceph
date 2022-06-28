@@ -4424,8 +4424,13 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
                           && opt_cmd != OPT::RESHARD_STATUS
+                          && opt_cmd != OPT::ACCOUNT_CREATE
+                          && opt_cmd != OPT::ACCOUNT_MODIFY
+                          && opt_cmd != OPT::ACCOUNT_GET
+                          && opt_cmd != OPT::ACCOUNT_RM
                           && opt_cmd != OPT::ACCOUNT_USER_ADD
-                          && opt_cmd != OPT::ACCOUNT_USER_RM) {
+                          && opt_cmd != OPT::ACCOUNT_USER_RM
+                          && opt_cmd != OPT::ACCOUNT_USER_LIST) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }

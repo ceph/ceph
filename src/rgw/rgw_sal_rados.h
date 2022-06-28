@@ -133,6 +133,28 @@ class RadosStore : public Store {
     virtual int get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) override;
     virtual int get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) override;
     virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) override;
+
+    virtual int load_account_by_id(const DoutPrefixProvider* dpp,
+                                   std::string_view id,
+                                   RGWAccountInfo& info,
+                                   RGWObjVersionTracker& objv,
+                                   optional_yield y) override;
+    virtual int load_account_by_name(const DoutPrefixProvider* dpp,
+                                     std::string_view tenant,
+                                     std::string_view name,
+                                     RGWAccountInfo& info,
+                                     RGWObjVersionTracker& objv,
+                                     optional_yield y) override;
+    virtual int store_account(const DoutPrefixProvider* dpp,
+                              const RGWAccountInfo& info,
+                              const RGWAccountInfo* old_info,
+                              RGWObjVersionTracker& objv,
+                              bool exclusive, optional_yield y) override;
+    virtual int delete_account(const DoutPrefixProvider* dpp,
+                               const RGWAccountInfo& info,
+                               RGWObjVersionTracker& objv,
+                               optional_yield y) override;
+
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y) override;
     virtual int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket) override;
@@ -592,18 +614,6 @@ class RadosBucket : public Bucket {
     int link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
     int unlink(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true);
     friend class RadosUser;
-};
-
-class RadosAccount: public Account {
-  private:
-    RadosStore *store;
-
-  public:
-    virtual int load_account(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int store_account(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int link_user(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int unlink_user(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int list_users(const DoutPrefixProvider *dpp, optional_yield y) override;
 };
 
 class RadosMultipartPart : public MultipartPart {

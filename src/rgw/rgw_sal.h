@@ -39,6 +39,7 @@ class RGWDataSyncStatusManager;
 class RGWSyncModuleInstance;
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
 class RGWCompressionInfo;
+struct RGWAccountInfo;
 
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
@@ -203,7 +204,6 @@ namespace rgw { namespace sal {
 
 class User;
 class Bucket;
-class Account;
 class Object;
 class BucketList;
 class MultipartUpload;
@@ -306,6 +306,32 @@ class Store {
     virtual int get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) = 0;
     /** Lookup a User by swift username.  Queries store for user info. */
     virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) = 0;
+
+    /** Lookup RGWAccountInfo by id */
+    virtual int load_account_by_id(const DoutPrefixProvider* dpp,
+                                   std::string_view id,
+                                   RGWAccountInfo& info,
+                                   RGWObjVersionTracker& objv,
+                                   optional_yield y) = 0;
+    /** Lookup RGWAccountInfo by name */
+    virtual int load_account_by_name(const DoutPrefixProvider* dpp,
+                                     std::string_view tenant,
+                                     std::string_view name,
+                                     RGWAccountInfo& info,
+                                     RGWObjVersionTracker& objv,
+                                     optional_yield y) = 0;
+    /** Write or overwrite an account */
+    virtual int store_account(const DoutPrefixProvider* dpp,
+                              const RGWAccountInfo& info,
+                              const RGWAccountInfo* old_info,
+                              RGWObjVersionTracker& objv,
+                              bool exclusive, optional_yield y) = 0;
+    /** Delete an account */
+    virtual int delete_account(const DoutPrefixProvider* dpp,
+                               const RGWAccountInfo& info,
+                               RGWObjVersionTracker& objv,
+                               optional_yield y) = 0;
+
     /** Get a basic Object.  This Object is not looked up, and is incomplete, since is
      * does not have a bucket.  This should only be used when an Object is needed before
      * there is a Bucket, otherwise use the get_object() in the Bucket class. */
@@ -903,20 +929,6 @@ public:
   }
 };
 
-class Account {
-  protected:
-    std::string name;
-  public:
-    Account(std::string n) { name=n; }
-    virtual ~Account() = default;
-
-    const std::string& get_account_name() const { return name; }
-    virtual int load_account(const DoutPrefixProvider *dpp, optional_yield y)=0;
-    virtual int store_account(const DoutPrefixProvider *dpp, optional_yield y)=0;
-    virtual int link_user(const DoutPrefixProvider *dpp, optional_yield y)=0;
-    virtual int unlink_user(const DoutPrefixProvider *dpp, optional_yield y)=0;
-    virtual int list_users(const DoutPrefixProvider *dpp, optional_yield y)=0;
-};
 /**
  * @brief Object abstraction
  *

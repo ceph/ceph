@@ -1,7 +1,6 @@
 #include "rgw_account.h"
 #include "rgw_metadata.h"
 #include "rgw_sal.h"
-#include "rgw_sal_rados.h" // TODO
 #include "common/random_string.h"
 #include "common/utf8.h"
 
@@ -29,7 +28,7 @@ RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account *account_svc)
 static constexpr std::string_view account_id_prefix = "RGW";
 static constexpr std::size_t account_id_len = 20;
 
-std::string RGWAccountCtl::generate_account_id(CephContext* cct)
+std::string rgw_generate_account_id(CephContext* cct)
 {
   // fill with random numeric digits
   std::string id = gen_rand_numeric(cct, account_id_len);
@@ -38,8 +37,7 @@ std::string RGWAccountCtl::generate_account_id(CephContext* cct)
   return id;
 }
 
-bool RGWAccountCtl::validate_account_id(std::string_view id,
-                                        std::string& err_msg)
+bool rgw_validate_account_id(std::string_view id, std::string& err_msg)
 {
   if (id.size() != account_id_len) {
     err_msg = fmt::format("account id must be {} bytes long", account_id_len);
@@ -59,8 +57,7 @@ bool RGWAccountCtl::validate_account_id(std::string_view id,
   return true;
 }
 
-bool RGWAccountCtl::validate_account_name(std::string_view name,
-                                          std::string& err_msg)
+bool rgw_validate_account_name(std::string_view name, std::string& err_msg)
 {
   if (name.empty()) {
     err_msg = "account name must not be empty";
@@ -140,7 +137,7 @@ int RGWAccountCtl::read_by_name(const DoutPrefixProvider* dpp,
 }
 
 int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
-                             const std::string& account_id,
+                             std::string_view account_id,
                              RGWAccountInfo& info,
                              RGWObjVersionTracker& objv,
                              real_time* pmtime,
@@ -342,14 +339,12 @@ int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,
                                RGWFormatterFlusher& flusher,
                                optional_yield y)
 {
-  auto account_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
-
   // account name is required
   if (!op_state.has_account_name()) {
     err_msg = "requires an account name";
     return -EINVAL;
   }
-  if (!account_ctl->validate_account_name(op_state.account_name, err_msg)) {
+  if (!rgw_validate_account_name(op_state.account_name, err_msg)) {
     return -EINVAL;
   }
 
@@ -359,8 +354,8 @@ int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,
 
   // account id is optional, but must be valid
   if (!op_state.has_account_id()) {
-    info.id = account_ctl->generate_account_id(dpp->get_cct());
-  } else if (!account_ctl->validate_account_id(op_state.account_id, err_msg)) {
+    info.id = rgw_generate_account_id(dpp->get_cct());
+  } else if (!rgw_validate_account_id(op_state.account_id, err_msg)) {
     return -EINVAL;
   } else {
     info.id = op_state.account_id;
@@ -368,10 +363,9 @@ int RGWAdminOp_Account::create(const DoutPrefixProvider *dpp,
 
   constexpr RGWAccountInfo* old_info = nullptr;
   constexpr bool exclusive = true;
+  auto& objv = op_state.objv_tracker;
 
-  int ret = account_ctl->store_info(dpp, info, old_info,
-                                    op_state.objv_tracker, real_time(),
-                                    exclusive, nullptr, y);
+  int ret = store->store_account(dpp, info, old_info, objv, exclusive, y);
   // TODO: on -EEXIST, retry with new random id unless has_account_id()
   if (ret < 0) {
     return ret;
@@ -391,17 +385,15 @@ int RGWAdminOp_Account::modify(const DoutPrefixProvider *dpp,
                                RGWFormatterFlusher& flusher,
                                optional_yield y)
 {
-  auto account_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
-
   int ret = 0;
   RGWAccountInfo info;
   auto& objv = op_state.objv_tracker;
   if (op_state.has_account_id()) {
-    ret = account_ctl->read_info(dpp, op_state.account_id, info,
-                                 objv, nullptr, nullptr, y);
+    ret = store->load_account_by_id(dpp, op_state.account_id, info, objv, y);
   } else if (op_state.has_account_name()) {
-    ret = account_ctl->read_by_name(dpp, op_state.tenant, op_state.account_name,
-                                    info, objv, nullptr, nullptr, y);
+    ret = store->load_account_by_name(dpp, op_state.tenant,
+                                      op_state.account_name,
+                                      info, objv, y);
   } else {
     err_msg = "requires account id or name";
     return -EINVAL;
@@ -418,7 +410,7 @@ int RGWAdminOp_Account::modify(const DoutPrefixProvider *dpp,
 
   if (op_state.has_account_name()) {
     // name must be valid
-    if (!account_ctl->validate_account_name(op_state.account_name, err_msg)) {
+    if (!rgw_validate_account_name(op_state.account_name, err_msg)) {
       return -EINVAL;
     }
     info.name = op_state.account_name;
@@ -426,9 +418,7 @@ int RGWAdminOp_Account::modify(const DoutPrefixProvider *dpp,
 
   constexpr bool exclusive = false;
 
-  ret = account_ctl->store_info(dpp, info, &old_info,
-                                op_state.objv_tracker, real_time(),
-                                exclusive, nullptr, y);
+  ret = store->store_account(dpp, info, &old_info, objv, exclusive, y);
   if (ret < 0) {
     return ret;
   }
@@ -450,16 +440,13 @@ int RGWAdminOp_Account::remove(const DoutPrefixProvider *dpp,
   int ret = 0;
   RGWAccountInfo info;
 
-  // TODO: use sal::Account
-  auto account_svc = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
-
   auto& objv = op_state.objv_tracker;
   if (op_state.has_account_id()) {
-    ret = account_svc->read_info(dpp, op_state.account_id, info,
-                                 objv, nullptr, nullptr, y);
+    ret = store->load_account_by_id(dpp, op_state.account_id, info, objv, y);
   } else if (op_state.has_account_name()) {
-    ret = account_svc->read_by_name(dpp, op_state.tenant, op_state.account_name,
-                                    info, objv, nullptr, nullptr, y);
+    ret = store->load_account_by_name(dpp, op_state.tenant,
+                                      op_state.account_name,
+                                      info, objv, y);
   } else {
     err_msg = "requires account id or name";
     return -EINVAL;
@@ -468,7 +455,7 @@ int RGWAdminOp_Account::remove(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  return account_svc->remove_info(dpp, info, objv, y);
+  return store->delete_account(dpp, info, objv, y);
 }
 
 int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
@@ -481,16 +468,13 @@ int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
   int ret = 0;
   RGWAccountInfo info;
 
-  // TODO: use sal::Account
-  auto account_svc = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account;
-
   auto& objv = op_state.objv_tracker;
   if (op_state.has_account_id()) {
-    ret = account_svc->read_info(dpp, op_state.account_id, info,
-                                 objv, nullptr, nullptr, y);
+    ret = store->load_account_by_id(dpp, op_state.account_id, info, objv, y);
   } else if (op_state.has_account_name()) {
-    ret = account_svc->read_by_name(dpp, op_state.tenant, op_state.account_name,
-                                    info, objv, nullptr, nullptr, y);
+    ret = store->load_account_by_name(dpp, op_state.tenant,
+                                      op_state.account_name,
+                                      info, objv, y);
   } else {
     return -EINVAL;
   }

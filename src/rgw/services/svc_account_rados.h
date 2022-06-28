@@ -69,7 +69,7 @@ public:
 
   int read_account_info(const DoutPrefixProvider *dpp,
 			RGWSI_MetaBackend::Context *ctx,
-			const std::string& account_id,
+			std::string_view account_id,
 			RGWAccountInfo& info,
 			RGWObjVersionTracker& objv,
 			real_time* pmtime,

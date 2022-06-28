@@ -31,6 +31,7 @@
 #include "rgw_aio.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_tracer.h"
+#include "rgw_account.h"
 
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
@@ -982,24 +983,43 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int RadosAccount::load_account(const DoutPrefixProvider *dpp, optional_yield y) {
-  return 0;
+int RadosStore::load_account_by_id(const DoutPrefixProvider *dpp,
+                                   std::string_view id,
+                                   RGWAccountInfo& info,
+                                   RGWObjVersionTracker& objv,
+                                   optional_yield y)
+{
+  return ctl()->account->read_info(dpp, id, info, objv, nullptr, nullptr, y);
 }
 
-int RadosAccount::store_account(const DoutPrefixProvider *dpp, optional_yield y) {
-  return 0;
+int RadosStore::load_account_by_name(const DoutPrefixProvider *dpp,
+                                     std::string_view tenant,
+                                     std::string_view name,
+                                     RGWAccountInfo& info,
+                                     RGWObjVersionTracker& objv,
+                                     optional_yield y)
+{
+  return ctl()->account->read_by_name(dpp, tenant, name, info,
+                                      objv, nullptr, nullptr, y);
 }
 
-int RadosAccount::link_user(const DoutPrefixProvider *dpp, optional_yield y){
-  return 0; 
+int RadosStore::store_account(const DoutPrefixProvider *dpp,
+                              const RGWAccountInfo& info,
+                              const RGWAccountInfo* old_info,
+                              RGWObjVersionTracker& objv,
+                              bool exclusive,
+                              optional_yield y)
+{
+  return ctl()->account->store_info(dpp, info, old_info, objv,
+                                    real_time(), exclusive, nullptr, y);
 }
 
-int RadosAccount::unlink_user(const DoutPrefixProvider *dpp, optional_yield y) {
-  return 0;
-}
-
-int RadosAccount::list_users(const DoutPrefixProvider *dpp, optional_yield y) {
-  return 0;
+int RadosStore::delete_account(const DoutPrefixProvider *dpp,
+                               const RGWAccountInfo& info,
+                               RGWObjVersionTracker& objv,
+                               optional_yield y)
+{
+  return ctl()->account->remove_info(dpp, info, objv, y);
 }
 
 std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)

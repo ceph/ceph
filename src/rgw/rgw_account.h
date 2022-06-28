@@ -29,6 +29,10 @@ class RGWSI_Account;
 class RGWSI_MetaBackend_Handler;
 class RGWFormatterFlusher;
 
+std::string rgw_generate_account_id(CephContext* cct);
+bool rgw_validate_account_id(std::string_view id, std::string& err_msg);
+bool rgw_validate_account_name(std::string_view name, std::string& err_msg);
+
 struct RGWAccountInfo {
   std::string id;
   std::string name;
@@ -100,10 +104,6 @@ public:
 
   ~RGWAccountCtl() = default;
 
-  static std::string generate_account_id(CephContext* cct);
-  static bool validate_account_id(std::string_view id, std::string& err_msg);
-  static bool validate_account_name(std::string_view name, std::string& err_msg);
-
   int add_user(const DoutPrefixProvider* dpp,
 	       const std::string& account_id,
 	       const rgw_user& user,
@@ -142,7 +142,7 @@ public:
                    optional_yield y);
 
   int read_info(const DoutPrefixProvider* dpp,
-		const std::string& account_id,
+		std::string_view account_id,
 		RGWAccountInfo& info,
 		RGWObjVersionTracker& objv,
 		real_time* pmtime,
