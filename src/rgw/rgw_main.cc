@@ -58,6 +58,7 @@
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
+#include "rgw_lua_background.h"
 
 #include "services/svc_zone.h"
 
@@ -186,6 +187,25 @@ static RGWRESTMgr *rest_filter(rgw::sal::Store* store, int dialect, RGWRESTMgr *
     return orig;
   }
 }
+
+class RGWPauser : public RGWRealmReloader::Pauser {
+  std::vector<Pauser*> pausers;
+
+public:
+  ~RGWPauser() override = default;
+  
+  void add_pauser(Pauser* pauser) {
+    pausers.push_back(pauser);
+  }
+
+  void pause() override {
+    std::for_each(pausers.begin(), pausers.end(), [](Pauser* p){p->pause();});
+  }
+  void resume(rgw::sal::Store* store) override {
+    std::for_each(pausers.begin(), pausers.end(), [store](Pauser* p){p->resume(store);});
+  }
+
+};
 
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
@@ -334,7 +354,7 @@ int radosgw_Main(int argc, const char **argv)
     derr << "ERROR: unable to initialize rgw tools" << dendl;
     return -r;
   }
-
+  tracing::rgw::tracer.init("rgw");
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
   rgw_http_client_init(g_ceph_context);
@@ -605,6 +625,12 @@ int radosgw_Main(int argc, const char **argv)
 
   int fe_count = 0;
 
+  std::unique_ptr<rgw::lua::Background> lua_background;
+  if (rados) { /* Supported for only RadosStore */
+    lua_background = std::make_unique<rgw::lua::Background>(store, cct.get(), store->get_luarocks_path());
+    lua_background->start();
+  }
+
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
        fiter != fe_map.end(); ++fiter, ++fe_count) {
     RGWFrontendConfig *config = fiter->second;
@@ -623,7 +649,8 @@ int radosgw_Main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, auth_registry, &ratelimiting };
+      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, 
+                            auth_registry, &ratelimiting, lua_background.get()};
 
       fe = new RGWLoadGenFrontend(env, config);
     }
@@ -632,7 +659,8 @@ int radosgw_Main(int argc, const char **argv)
       config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry, &ratelimiting };
+      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, 
+                         auth_registry, &ratelimiting, lua_background.get()};
       fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
 
@@ -669,13 +697,19 @@ int radosgw_Main(int argc, const char **argv)
 
   std::unique_ptr<RGWRealmReloader> reloader;
   std::unique_ptr<RGWPeriodPusher> pusher;
-  std::unique_ptr<RGWFrontendPauser> pauser;
+  std::unique_ptr<RGWFrontendPauser> fe_pauser;
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
+  std::unique_ptr<RGWPauser> rgw_pauser;
   if (store->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
     pusher = std::make_unique<RGWPeriodPusher>(&dp, store, null_yield);
-    pauser = std::make_unique<RGWFrontendPauser>(fes, implicit_tenant_context, pusher.get());
-    reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, pauser.get());
+    fe_pauser = std::make_unique<RGWFrontendPauser>(fes, implicit_tenant_context, pusher.get());
+    rgw_pauser = std::make_unique<RGWPauser>();
+    rgw_pauser->add_pauser(fe_pauser.get());
+    if (lua_background) {
+      rgw_pauser->add_pauser(lua_background.get());
+    }
+    reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, rgw_pauser.get());
 
     realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
 				  static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm());
@@ -725,6 +759,10 @@ int radosgw_Main(int argc, const char **argv)
   rgw_log_usage_finalize();
   delete olog;
 
+  if (lua_background) {
+    lua_background->shutdown();
+  }
+
   StoreManager::close_storage(store);
   rgw::auth::s3::LDAPEngine::shutdown();
   rgw_tools_cleanup();
@@ -739,6 +777,7 @@ int radosgw_Main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   rgw::kafka::shutdown();
 #endif
+
 
   rgw_perf_stop(g_ceph_context);
 

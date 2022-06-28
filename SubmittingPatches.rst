@@ -5,7 +5,7 @@ Submitting Patches to Ceph
 Patches to Ceph can be divided into three categories:
 
     1. patches targeting Ceph kernel code
-    2. patches targeting the "master" branch
+    2. patches targeting the "main" branch
     3. patches targeting stable branches (e.g.: "nautilus")
 
 Some parts of Ceph - notably the RBD and CephFS kernel clients - are maintained
@@ -16,7 +16,7 @@ The rest of this document assumes that your patch relates to Ceph code that is
 maintained in the GitHub repository https://github.com/ceph/ceph
 
 If you have a patch that fixes an issue, feel free to open a GitHub pull request
-("PR") targeting the "master" branch, but do read this document first, as it
+("PR") targeting the "main" branch, but do read this document first, as it
 contains important information for ensuring that your PR passes code review
 smoothly.
 
@@ -128,7 +128,7 @@ should start with "doc". For instance, a commit fixing a typo in
 
   doc/mgr/dashboard: fix a typo
 
-More positive examples can be obtained from the git history of the ``master``
+More positive examples can be obtained from the git history of the ``main``
 branch::
 
      git log
@@ -151,7 +151,7 @@ In the body of your commit message, be as specific as possible. If the commit
 message title was too short to fully state what the commit is doing, use the
 body to explain not just the "what", but also the "why".
 
-For positive examples, peruse ``git log`` in the ``master`` branch. A negative
+For positive examples, peruse ``git log`` in the ``main`` branch. A negative
 example would be a commit message that merely states the obvious. For example:
 "this patch includes updates for subsystem X. Please apply."
 
@@ -195,7 +195,7 @@ PRs should be opened on branches contained in your fork of
 https://github.com/ceph/ceph.git - do not push branches directly to
 ``ceph/ceph.git``.
 
-PRs should target "master". If you need to add a patch to a stable branch, such
+PRs should target "main". If you need to add a patch to a stable branch, such
 as "nautilus", see the file ``SubmittingPatches-backports.rst``.
 
 In addition to a base, or "target" branch, PRs have several other components:

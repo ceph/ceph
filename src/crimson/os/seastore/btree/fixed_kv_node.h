@@ -12,7 +12,6 @@
 
 #include "crimson/common/fixed_kv_node_layout.h"
 #include "crimson/common/errorator.h"
-#include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
@@ -65,7 +64,7 @@ struct FixedKVNode : CachedExtent {
  * FixedKVInternalNode
  *
  * Abstracts operations on and layout of internal nodes for the
- * LBA Tree.
+ * FixedKVBTree.
  */
 template <
   size_t CAPACITY,
@@ -219,7 +218,7 @@ struct FixedKVInternalNode
     for (auto i: *this) {
       if (i->get_val().is_relative()) {
 	auto updated = base.add_relative(i->get_val());
-	SUBTRACE(seastore_lba_details, "{} -> {}", i->get_val(), updated);
+	SUBTRACE(seastore_fixedkv_tree, "{} -> {}", i->get_val(), updated);
 	i->set_val(updated);
       }
     }
@@ -423,6 +422,12 @@ struct FixedKVLeafNode
     buffer.replay(*this);
     this->set_last_committed_crc(this->get_crc32c());
     this->resolve_relative_addrs(base);
+  }
+
+  std::ostream &print_detail(std::ostream &out) const
+  {
+    return out << ", size=" << this->get_size()
+	       << ", meta=" << this->get_meta();
   }
 
   constexpr static size_t get_min_capacity() {

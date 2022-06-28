@@ -419,6 +419,14 @@ struct cls_rgw_obj_key {
     ls.back()->name = "name";
     ls.back()->instance = "instance";
   }
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32); // version and length prefix
+    constexpr size_t string_overhead = sizeof(__u32); // strings are encoded with 32-bit length prefix
+    return start_overhead +
+        string_overhead + name.size() +
+        string_overhead + instance.size();
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
@@ -796,24 +804,24 @@ struct cls_rgw_bucket_instance_entry {
   using RESHARD_STATUS = cls_rgw_reshard_status;
   
   cls_rgw_reshard_status reshard_status{RESHARD_STATUS::NOT_RESHARDING};
-  std::string new_bucket_instance_id;
-  int32_t num_shards{-1};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode((uint8_t)reshard_status, bl);
-    encode(new_bucket_instance_id, bl);
-    encode(num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     uint8_t s;
     decode(s, bl);
     reshard_status = (cls_rgw_reshard_status)s;
-    decode(new_bucket_instance_id, bl);
-    decode(num_shards, bl);
+    if (struct_v < 2) { // fields removed from v2
+      std::string bucket_instance_id;
+      decode(bucket_instance_id, bl);
+      int32_t num_shards{-1};
+      decode(num_shards, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -822,15 +830,10 @@ struct cls_rgw_bucket_instance_entry {
 
   void clear() {
     reshard_status = RESHARD_STATUS::NOT_RESHARDING;
-    new_bucket_instance_id.clear();
   }
 
-  void set_status(const std::string& new_instance_id,
-		  int32_t new_num_shards,
-		  cls_rgw_reshard_status s) {
+  void set_status(cls_rgw_reshard_status s) {
     reshard_status = s;
-    new_bucket_instance_id = new_instance_id;
-    num_shards = new_num_shards;
   }
 
   bool resharding() const {
@@ -1155,6 +1158,16 @@ struct cls_rgw_obj {
     ls.back()->key.name = "myoid";
     ls.back()->loc = "mykey";
   }
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32); // version and length prefix
+    constexpr size_t string_overhead = sizeof(__u32); // strings are encoded with 32-bit length prefix
+    return start_overhead +
+        string_overhead + pool.size() +
+        string_overhead + key.name.size() +
+        string_overhead + loc.size() +
+        key.estimate_encoded_size();
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj)
 
@@ -1199,6 +1212,16 @@ struct cls_rgw_obj_chain {
   bool empty() {
     return objs.empty();
   }
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32);
+    constexpr size_t size_overhead = sizeof(__u32); // size of the chain
+    size_t chain_overhead = 0;
+    for (auto& it : objs) {
+      chain_overhead += it.estimate_encoded_size();
+    }
+    return (start_overhead + size_overhead + chain_overhead);
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_chain)
 
@@ -1239,6 +1262,14 @@ struct cls_rgw_gc_obj_info
     ls.back()->tag = "footag";
     ceph_timespec ts{ceph_le32(21), ceph_le32(32)};
     ls.back()->time = ceph::real_clock::from_ceph_timespec(ts);
+  }
+
+  size_t estimate_encoded_size() const {
+    constexpr size_t start_overhead = sizeof(__u8) + sizeof(__u8) + sizeof(ceph_le32); // version and length prefix
+    constexpr size_t string_overhead = sizeof(__u32); // strings are encoded with 32-bit length prefix
+    constexpr size_t time_overhead = 2 * sizeof(ceph_le32); // time is stored as tv_sec and tv_nsec
+    return start_overhead + string_overhead + tag.size() +
+            time_overhead + chain.estimate_encoded_size();
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)
@@ -1319,31 +1350,32 @@ struct cls_rgw_reshard_entry
   std::string tenant;
   std::string bucket_name;
   std::string bucket_id;
-  std::string new_instance_id;
   uint32_t old_num_shards{0};
   uint32_t new_num_shards{0};
 
   cls_rgw_reshard_entry() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(time, bl);
     encode(tenant, bl);
     encode(bucket_name, bl);
     encode(bucket_id, bl);
-    encode(new_instance_id, bl);
     encode(old_num_shards, bl);
     encode(new_num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(time, bl);
     decode(tenant, bl);
     decode(bucket_name, bl);
     decode(bucket_id, bl);
-    decode(new_instance_id, bl);
+    if (struct_v < 2) {
+      std::string new_instance_id; // removed in v2
+      decode(new_instance_id, bl);
+    }
     decode(old_num_shards, bl);
     decode(new_num_shards, bl);
     DECODE_FINISH(bl);

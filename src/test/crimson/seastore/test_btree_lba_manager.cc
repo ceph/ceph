@@ -75,9 +75,17 @@ struct btree_test_base :
 
   void update_journal_tail_committed(journal_seq_t committed) final {}
 
-  void update_segment_avail_bytes(paddr_t offset) final {}
+  void update_segment_avail_bytes(segment_type_t, paddr_t) final {}
 
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
+
+  journal_seq_t get_dirty_extents_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  journal_seq_t get_alloc_info_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
 
   virtual void complete_commit(Transaction &t) {}
   seastar::future<> submit_transaction(TransactionRef t)
@@ -315,7 +323,21 @@ struct btree_lba_manager_test : btree_test_base {
   btree_lba_manager_test() = default;
 
   void complete_commit(Transaction &t) final {
-    lba_manager->complete_transaction(t);
+    std::vector<CachedExtentRef> lba_to_clear;
+    lba_to_clear.reserve(t.get_retired_set().size());
+    for (auto &e: t.get_retired_set()) {
+      if (e->is_logical() || is_lba_node(e->get_type()))
+	lba_to_clear.push_back(e);
+    }
+    std::vector<CachedExtentRef> lba_to_link;
+    lba_to_link.reserve(t.get_fresh_block_stats().num);
+    t.for_each_fresh_block([&](auto &e) {
+      if (e->is_valid() &&
+	  (is_lba_node(e->get_type()) || e->is_logical()))
+	  lba_to_link.push_back(e);
+    });
+
+    lba_manager->complete_transaction(t, lba_to_clear, lba_to_link);
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
@@ -404,7 +426,7 @@ struct btree_lba_manager_test : btree_test_base {
       std::make_pair(
 	ret->get_key(),
 	test_extent_t{
-	  ret->get_paddr(),
+	  ret->get_val(),
 	  ret->get_length(),
 	  1
         }
@@ -495,7 +517,7 @@ struct btree_lba_manager_test : btree_test_base {
 	}).unsafe_get0();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.addr, ret->get_paddr());
+      EXPECT_EQ(i.second.addr, ret->get_val());
       EXPECT_EQ(laddr, ret->get_key());
       EXPECT_EQ(len, ret->get_length());
 
@@ -505,7 +527,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  return lba_manager->get_mapping(
 	    t, laddr);
 	}).unsafe_get0();
-      EXPECT_EQ(i.second.addr, ret_pin->get_paddr());
+      EXPECT_EQ(i.second.addr, ret_pin->get_val());
       EXPECT_EQ(laddr, ret_pin->get_key());
       EXPECT_EQ(len, ret_pin->get_length());
     }

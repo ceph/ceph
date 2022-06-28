@@ -162,6 +162,10 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "TEST_BLOCK";
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return out << "TEST_BLOCK_PHYSICAL";
+  case extent_types_t::BACKREF_INTERNAL:
+    return out << "BACKREF_INTERNAL";
+  case extent_types_t::BACKREF_LEAF:
+    return out << "BACKREF_LEAF";
   case extent_types_t::NONE:
     return out << "NONE";
   default:
@@ -572,8 +576,7 @@ try_decode_deltas(
       }
     }
     for (auto& i: r.extent_infos) {
-      auto& seg_addr = record_block_base.as_seg_paddr();
-      seg_addr.set_segment_off(seg_addr.get_segment_off() + i.len);
+      record_block_base = record_block_base.add_offset(i.len);
     }
     ++result_iter;
   }

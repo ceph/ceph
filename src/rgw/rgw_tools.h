@@ -73,6 +73,11 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const std
 int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
                           RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const std::string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y);
+int rgw_stat_system_obj(const DoutPrefixProvider *dpp,
+                        RGWSysObjectCtx& obj_Ctx, const rgw_pool& pool,
+                        const std::string& key, RGWObjVersionTracker *objv_tracker,
+                        real_time *pmtime, optional_yield y,
+                        std::map<std::string, bufferlist> *pattrs = nullptr);
 
 const char *rgw_find_mime_by_ext(std::string& ext);
 
@@ -257,4 +262,11 @@ using RGWDataAccessRef = std::shared_ptr<RGWDataAccess>;
 /// calls and error handling.
 void rgw_complete_aio_completion(librados::AioCompletion* c, int r);
 
+/// This returns a static, non-NULL pointer, recognized only by
+/// rgw_put_system_obj(). When supplied instead of the attributes, the
+/// attributes will be unmodified.
+///
+// (Currently providing nullptr will wipe all attributes.)
+
+std::map<std::string, ceph::buffer::list>* no_change_attrs();
 #endif

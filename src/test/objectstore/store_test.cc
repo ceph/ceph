@@ -7259,8 +7259,9 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
 }
 
 TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallAppend) {
-  if (string(GetParam()) != "bluestore") {
-    return;
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
+    GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
   }
 
   size_t block_size = 65536;
@@ -7334,12 +7335,12 @@ TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallAppend) {
 }
 
 TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallOverwrite) {
-  if (string(GetParam()) != "bluestore") {
-    return;
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
+    GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
   }
   if (smr) {
-    cout << "SKIP" << std::endl;
-    return;
+    GTEST_SKIP() << "smr, skipping";
   }
 
   size_t block_size = 65536;
@@ -7435,8 +7436,9 @@ TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionSmallOverwrite) {
 }
 
 TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigAppend) {
-  if (string(GetParam()) != "bluestore") {
-    return;
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
+    GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
   }
 
   size_t block_size = 4096;
@@ -7513,12 +7515,12 @@ TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigAppend) {
 }
 
 TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigOverwrite) {
-  if (string(GetParam()) != "bluestore") {
-    return;
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  if (string(GetParam()) != "bluestore" || !cct->_conf->bluestore_zero_block_detection) {
+    GTEST_SKIP() << "not bluestore or bluestore_zero_block_detection=false, skipping";
   }
   if (smr) {
-    cout << "SKIP" << std::endl;
-    return;
+    GTEST_SKIP() << "smr, skipping";
   }
 
   size_t block_size = 4096;

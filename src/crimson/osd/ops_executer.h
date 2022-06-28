@@ -43,6 +43,7 @@ class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
     crimson::ct_error::eexist,
     crimson::ct_error::enospc,
     crimson::ct_error::edquot,
+    crimson::ct_error::cmp_fail,
     crimson::ct_error::eagain,
     crimson::ct_error::invarg,
     crimson::ct_error::erange,
@@ -273,8 +274,11 @@ public:
     const std::vector<OSDOp>& ops);
   void fill_op_params_bump_pg_version();
 
+  const object_info_t &get_object_info() const {
+    return obc->obs.oi;
+  }
   const hobject_t &get_target() const {
-    return obc->obs.oi.soid;
+    return get_object_info().soid;
   }
 
   const auto& get_message() const {

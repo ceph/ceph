@@ -361,7 +361,7 @@ class TestCephAdm(object):
                                  '514e6a882f6e74806a5856468489eeff8d7106095557578da96935e4d0ba4d9d',
                                  '2022-04-19 13:45:20.97146228 +0000 UTC',
                                  '')
-        out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|master|2022-03-23 16:29:19 +0000 UTC
+        out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
         quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
         docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
@@ -370,7 +370,7 @@ class TestCephAdm(object):
                 assert image == 'quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e'
 
         # make sure first valid image is used when no container_info is found
-        out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|master|2022-03-23 16:29:19 +0000 UTC
+        out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
         quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
         docker.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
@@ -1013,7 +1013,7 @@ class TestMaintenance:
     @mock.patch('cephadm.call')
     @mock.patch('cephadm.systemd_target_state')
     def test_enter_failure_2(self, _target_state, _call, _listdir):
-        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
             ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
@@ -1040,7 +1040,7 @@ class TestMaintenance:
     @mock.patch('cephadm.systemd_target_state')
     @mock.patch('cephadm.target_exists')
     def test_exit_failure_2(self, _target_exists, _target_state, _call, _listdir):
-        _call.side_effect = [('', '', 0), ('', '', 999)]
+        _call.side_effect = [('', '', 0), ('', '', 999), ('', '', 0), ('', '', 999)]
         _target_state.return_value = False
         _target_exists.return_value = True
         ctx: cd.CephadmContext = cd.cephadm_init_ctx(
@@ -1078,6 +1078,14 @@ class TestMonitoring(object):
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
         version = cd.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
+
+    def test_prometheus_external_url(self):
+        ctx = cd.CephadmContext()
+        daemon_type = 'prometheus'
+        daemon_id = 'home'
+        fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
+        args = cd.get_daemon_args(ctx, fsid, daemon_type, daemon_id)
+        assert any([x.startswith('--web.external-url=http://') for x in args])
 
     @mock.patch('cephadm.call')
     def test_get_version_node_exporter(self, _call):
@@ -2010,7 +2018,8 @@ class TestPull:
 class TestApplySpec:
 
     def test_parse_yaml(self, cephadm_fs):
-        yaml = '''service_type: host
+        yaml = '''---
+service_type: host
 hostname: vm-00
 addr: 192.168.122.44
 labels:
@@ -2022,16 +2031,46 @@ hostname: vm-01
 addr: 192.168.122.247
 labels:
  - grafana
----
+---      
 service_type: host
 hostname: vm-02
-addr: 192.168.122.165'''
+addr: 192.168.122.165
+---
+---      
+service_type: rgw
+service_id: myrgw
+spec:
+  rgw_frontend_ssl_certificate: |
+    -----BEGIN PRIVATE KEY-----
+    V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
+    ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
+    IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
+    YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
+    ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
+    -----END PRIVATE KEY-----
+    -----BEGIN CERTIFICATE-----
+    V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
+    ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
+    IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
+    YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
+    ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
+    -----END CERTIFICATE-----
+  ssl: true
+---  
+'''
 
         cephadm_fs.create_file('spec.yml', contents=yaml)
-
         retdic = [{'service_type': 'host', 'hostname': 'vm-00', 'addr': '192.168.122.44', 'labels': '- example1- example2'},
                   {'service_type': 'host', 'hostname': 'vm-01', 'addr': '192.168.122.247', 'labels': '- grafana'},
-                  {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'}]
+                  {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'},
+                  {'service_id': 'myrgw',
+                   'service_type': 'rgw',
+                   'spec':
+                   'rgw_frontend_ssl_certificate: |-----BEGIN PRIVATE '
+                   'KEY-----V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3MgZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=-----END '
+                   'PRIVATE KEY----------BEGIN '
+                   'CERTIFICATE-----V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3MgZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=-----END '
+                   'CERTIFICATE-----ssl: true'}]
 
         with open('spec.yml') as f:
             dic = cd.parse_yaml_objs(f)
@@ -2270,6 +2309,10 @@ class TestNetworkValidation:
         rc = cd.ip_in_subnets('fe80::5054:ff:fef4:873a', 'fe80::/64')
         assert rc is True
 
+        # valid wrapped ip and valid IPV6 network
+        rc = cd.ip_in_subnets('[fe80::5054:ff:fef4:873a]', 'fe80::/64')
+        assert rc is True
+
         # valid ip and that doesn't belong to IPV6 network
         rc = cd.ip_in_subnets('fe80::5054:ff:fef4:873a', '2001:db8:85a3::/64')
         assert rc is False
@@ -2281,3 +2324,43 @@ class TestNetworkValidation:
         # invalid IPv6 and valid subnets list
         with pytest.raises(Exception):
             rc = cd.ip_in_sublets('fe80:2030:31:24', 'fe80::/64')
+
+
+class TestSysctl:
+    @mock.patch('cephadm.sysctl_get')
+    def test_filter_sysctl_settings(self, sysctl_get):
+        ctx = cd.CephadmContext()
+        input = [
+            # comment-only lines should be ignored
+            "# just a comment",
+            # As should whitespace-only lines",
+            "   \t ",
+            "   =  \t  ",
+            # inline comments are stripped when querying
+            "something = value # inline comment",
+            "fs.aio-max-nr = 1048576",
+            "kernel.pid_max = 4194304",
+            "vm.lowmem_reserve_ratio = 256\t256\t32\t0\t0",
+            "  vm.max_map_count       =            65530    ",
+            "  vm.max_map_count       =            65530    ",
+        ]
+        sysctl_get.side_effect = [
+            "value",
+            "1",
+            "4194304",
+            "256\t256\t32\t0\t0",
+            "65530",
+            "something else",
+        ]
+        result = cd.filter_sysctl_settings(ctx, input)
+        assert len(sysctl_get.call_args_list) == 6
+        assert sysctl_get.call_args_list[0].args[1] == "something"
+        assert sysctl_get.call_args_list[1].args[1] == "fs.aio-max-nr"
+        assert sysctl_get.call_args_list[2].args[1] == "kernel.pid_max"
+        assert sysctl_get.call_args_list[3].args[1] == "vm.lowmem_reserve_ratio"
+        assert sysctl_get.call_args_list[4].args[1] == "vm.max_map_count"
+        assert sysctl_get.call_args_list[5].args[1] == "vm.max_map_count"
+        assert result == [
+            "fs.aio-max-nr = 1048576",
+            "  vm.max_map_count       =            65530    ",
+        ]

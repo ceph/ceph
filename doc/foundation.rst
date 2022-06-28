@@ -36,7 +36,6 @@ Premier
 * `SoftIron <https://www.softiron.com/>`_
 * `SUSE <https://www.suse.com/>`_
 * `Western Digital <https://www.wdc.com/>`_
-* `XSKY <https://www.xsky.com/en/>`_
 * `ZTE <https://www.zte.com.cn/global/>`_
 
 General
@@ -109,7 +108,6 @@ Members
 * Pawel Sadowski (OVH)
 * Phil Straw (SoftIron)
 * Robin Johnson (DigitalOcean)
-* Sage Weil (Red Hat) - Ceph project leader
 * Xie Xingguo (ZTE)
 * Zhang Shaowen (China Mobile)
 

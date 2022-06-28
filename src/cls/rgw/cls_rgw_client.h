@@ -219,7 +219,7 @@ public:
    * 2. One or more shards, shard id specified for each shard, e.g., 0#00002.12,1#00003.23.2
    *
    */
-  int from_string(const std::string& composed_marker, int shard_id) {
+  int from_string(std::string_view composed_marker, int shard_id) {
     value_by_shards.clear();
     std::vector<std::string> shards;
     get_str_vec(composed_marker, SHARDS_SEPARATOR.c_str(), shards);

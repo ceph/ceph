@@ -10,7 +10,7 @@
 
 #include "osd/osd_types.h"
 
-#include "crimson/common/log.h"
+#include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -40,7 +40,7 @@ struct segment_info_t {
   time_point last_modified;
   time_point last_rewritten;
 
-  std::size_t open_avail_bytes = 0;
+  std::size_t written_to = 0;
 
   bool is_in_journal(journal_seq_t tail_committed) const {
     return type == segment_type_t::JOURNAL &&
@@ -59,9 +59,9 @@ struct segment_info_t {
     return state == Segment::segment_state_t::OPEN;
   }
 
-  void init_closed(segment_seq_t, segment_type_t);
+  void init_closed(segment_seq_t, segment_type_t, std::size_t);
 
-  void set_open(segment_seq_t, segment_type_t, std::size_t segment_size);
+  void set_open(segment_seq_t, segment_type_t);
 
   void set_empty();
 
@@ -113,8 +113,14 @@ public:
     assert(segment_size > 0);
     return segment_size;
   }
-  std::size_t get_num_in_journal() const {
-    return num_in_journal;
+  std::size_t get_num_in_journal_open() const {
+    return num_in_journal_open;
+  }
+  std::size_t get_num_type_journal() const {
+    return num_type_journal;
+  }
+  std::size_t get_num_type_ool() const {
+    return num_type_ool;
   }
   std::size_t get_num_open() const {
     return num_open;
@@ -125,20 +131,58 @@ public:
   std::size_t get_num_closed() const {
     return num_closed;
   }
-  std::size_t get_count_open() const {
-    return count_open;
+  std::size_t get_count_open_journal() const {
+    return count_open_journal;
   }
-  std::size_t get_count_release() const {
-    return count_release;
+  std::size_t get_count_open_ool() const {
+    return count_open_ool;
   }
-  std::size_t get_count_close() const {
-    return count_close;
+  std::size_t get_count_release_journal() const {
+    return count_release_journal;
   }
-  size_t get_total_bytes() const {
+  std::size_t get_count_release_ool() const {
+    return count_release_ool;
+  }
+  std::size_t get_count_close_journal() const {
+    return count_close_journal;
+  }
+  std::size_t get_count_close_ool() const {
+    return count_close_ool;
+  }
+
+  std::size_t get_total_bytes() const {
     return total_bytes;
   }
-  size_t get_available_bytes() const {
-    return avail_bytes;
+  /// the available space that is writable, including in open segments
+  std::size_t get_available_bytes() const {
+    return num_empty * get_segment_size() + avail_bytes_in_open;
+  }
+  /// the unavailable space that is not writable
+  std::size_t get_unavailable_bytes() const {
+    assert(total_bytes >= get_available_bytes());
+    return total_bytes - get_available_bytes();
+  }
+  std::size_t get_available_bytes_in_open() const {
+    return avail_bytes_in_open;
+  }
+  double get_available_ratio() const {
+    return (double)get_available_bytes() / (double)total_bytes;
+  }
+
+  journal_seq_t get_journal_head() const {
+    if (unlikely(journal_segment_id == NULL_SEG_ID)) {
+      return JOURNAL_SEQ_NULL;
+    }
+    auto &segment_info = segments[journal_segment_id];
+    assert(!segment_info.is_empty());
+    assert(segment_info.type == segment_type_t::JOURNAL);
+    assert(segment_info.seq != NULL_SEG_SEQ);
+    return journal_seq_t{
+      segment_info.seq,
+      paddr_t::make_seg_paddr(
+        journal_segment_id,
+        segment_info.written_to)
+    };
   }
 
   void reset();
@@ -154,7 +198,7 @@ public:
 
   void mark_closed(segment_id_t);
 
-  void update_written_to(paddr_t offset);
+  void update_written_to(segment_type_t, paddr_t);
 
   void update_last_modified_rewritten(
       segment_id_t id, time_point last_modified, time_point last_rewritten) {
@@ -167,17 +211,24 @@ private:
 
   std::size_t segment_size;
 
-  std::size_t num_in_journal;
+  segment_id_t journal_segment_id;
+  std::size_t num_in_journal_open;
+  std::size_t num_type_journal;
+  std::size_t num_type_ool;
+
   std::size_t num_open;
   std::size_t num_empty;
   std::size_t num_closed;
 
-  std::size_t count_open;
-  std::size_t count_release;
-  std::size_t count_close;
+  std::size_t count_open_journal;
+  std::size_t count_open_ool;
+  std::size_t count_release_journal;
+  std::size_t count_release_ool;
+  std::size_t count_close_journal;
+  std::size_t count_close_ool;
 
   std::size_t total_bytes;
-  std::size_t avail_bytes;
+  std::size_t avail_bytes_in_open;
 };
 
 /**
@@ -192,11 +243,15 @@ public:
   virtual segment_id_t allocate_segment(
       segment_seq_t seq, segment_type_t type) = 0;
 
+  virtual journal_seq_t get_dirty_extents_replay_from() const = 0;
+
+  virtual journal_seq_t get_alloc_info_replay_from() const = 0;
+
   virtual void close_segment(segment_id_t) = 0;
 
   virtual void update_journal_tail_committed(journal_seq_t tail_committed) = 0;
 
-  virtual void update_segment_avail_bytes(paddr_t offset) = 0;
+  virtual void update_segment_avail_bytes(segment_type_t, paddr_t) = 0;
 
   virtual SegmentManagerGroup* get_segment_manager_group() = 0;
 
@@ -419,31 +474,65 @@ public:
 
   /// Config
   struct config_t {
+    /// Number of minimum journal segments to stop trimming.
     size_t target_journal_segments = 0;
+    /// Number of maximum journal segments to block user transactions.
     size_t max_journal_segments = 0;
 
-    double available_ratio_gc_max = 0;
-    double reclaim_ratio_hard_limit = 0;
-    double reclaim_ratio_gc_threshhold = 0;
+    /// Number of journal segments the transactions in which can
+    /// have their corresponding backrefs unmerged
+    size_t target_backref_inflight_segments = 0;
 
+    /// Ratio of maximum available space to disable reclaiming.
+    double available_ratio_gc_max = 0;
+    /// Ratio of minimum available space to force reclaiming.
     double available_ratio_hard_limit = 0;
 
-    /// Number of bytes to reclaim on each cycle
-    size_t reclaim_bytes_stride = 0;
+    /// Ratio of minimum reclaimable space to stop reclaiming.
+    double reclaim_ratio_gc_threshold = 0;
 
-    /// Number of bytes of journal entries to rewrite per cycle
-    size_t journal_rewrite_per_cycle = 0;
+    /// Number of bytes to reclaim per cycle
+    size_t reclaim_bytes_per_cycle = 0;
+
+    /// Number of bytes to rewrite dirty per cycle
+    size_t rewrite_dirty_bytes_per_cycle = 0;
+
+    /// Number of bytes to rewrite backref per cycle
+    size_t rewrite_backref_bytes_per_cycle = 0;
+
+    void validate() const {
+      ceph_assert(max_journal_segments > target_journal_segments);
+      ceph_assert(available_ratio_gc_max > available_ratio_hard_limit);
+      ceph_assert(reclaim_bytes_per_cycle > 0);
+      ceph_assert(rewrite_dirty_bytes_per_cycle > 0);
+      ceph_assert(rewrite_backref_bytes_per_cycle > 0);
+    }
 
     static config_t get_default() {
       return config_t{
+	  12,   // target_journal_segments
+	  16,   // max_journal_segments
+	  2,	// target_backref_inflight_segments
+	  .1,   // available_ratio_gc_max
+	  .05,  // available_ratio_hard_limit
+	  .1,   // reclaim_ratio_gc_threshold
+	  1<<20,// reclaim_bytes_per_cycle
+	  1<<17,// rewrite_dirty_bytes_per_cycle
+	  1<<24 // rewrite_backref_bytes_per_cycle
+	};
+    }
+
+    static config_t get_test() {
+      return config_t{
 	  2,    // target_journal_segments
 	  4,    // max_journal_segments
-	  .9,   // available_ratio_gc_max
-	  .8,   // reclaim_ratio_hard_limit
-	  .6,   // reclaim_ratio_gc_threshhold
+	  2,	// target_backref_inflight_segments
+	  .99,  // available_ratio_gc_max
 	  .2,   // available_ratio_hard_limit
-	  1<<25,// reclaim 64MB per gc cycle
-	  1<<25 // rewrite 64MB of journal entries per gc cycle
+	  .6,   // reclaim_ratio_gc_threshold
+	  1<<20,// reclaim_bytes_per_cycle
+	  1<<17,// rewrite_dirty_bytes_per_cycle
+	  1<<24 // rewrite_backref_bytes_per_cycle
 	};
     }
   };
@@ -541,7 +630,8 @@ public:
     using submit_transaction_direct_ret =
       submit_transaction_direct_iertr::future<>;
     virtual submit_transaction_direct_ret submit_transaction_direct(
-      Transaction &t) = 0;
+      Transaction &t,
+      std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
   };
 
 private:
@@ -549,25 +639,46 @@ private:
   const config_t config;
 
   SegmentManagerGroupRef sm_group;
+  BackrefManager &backref_manager;
 
   SpaceTrackerIRef space_tracker;
   segments_info_t segments;
   bool init_complete = false;
 
   struct {
+    /**
+     * used_bytes
+     *
+     * Bytes occupied by live extents
+     */
     uint64_t used_bytes = 0;
+
     /**
      * projected_used_bytes
      *
      * Sum of projected bytes used by each transaction between throttle
-     * acquisition and commit completion.  See await_throttle()
+     * acquisition and commit completion.  See reserve_projected_usage()
      */
     uint64_t projected_used_bytes = 0;
+    uint64_t projected_count = 0;
+    uint64_t projected_used_bytes_sum = 0;
 
-    uint64_t accumulated_blocked_ios = 0;
-    int64_t ios_blocking = 0;
-    uint64_t reclaim_rewrite_bytes = 0;
+    uint64_t closed_journal_used_bytes = 0;
+    uint64_t closed_journal_total_bytes = 0;
+    uint64_t closed_ool_used_bytes = 0;
+    uint64_t closed_ool_total_bytes = 0;
+
+    uint64_t io_blocking_num = 0;
+    uint64_t io_count = 0;
+    uint64_t io_blocked_count = 0;
+    uint64_t io_blocked_count_trim = 0;
+    uint64_t io_blocked_count_reclaim = 0;
+    uint64_t io_blocked_sum = 0;
+
     uint64_t reclaiming_bytes = 0;
+    uint64_t reclaimed_bytes = 0;
+    uint64_t reclaimed_segment_bytes = 0;
+
     seastar::metrics::histogram segment_util;
   } stats;
   seastar::metrics::metric_group metrics;
@@ -576,11 +687,14 @@ private:
   /// target journal_tail for next fresh segment
   journal_seq_t journal_tail_target;
 
+  /// target replay_from for dirty extents
+  journal_seq_t dirty_extents_replay_from;
+
+  /// target replay_from for alloc infos
+  journal_seq_t alloc_info_replay_from;
+
   /// most recently committed journal_tail
   journal_seq_t journal_tail_committed;
-
-  /// head of journal
-  journal_seq_t journal_head;
 
   ExtentCallbackInterface *ecb = nullptr;
 
@@ -589,10 +703,19 @@ private:
 
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
 
+  /**
+   * disable_trim
+   *
+   * added to enable unit testing of CircularBoundedJournal before
+   * proper support is added to SegmentCleaner.
+   * Should be removed once proper support is added. TODO
+   */
+  bool disable_trim = false;
 public:
   SegmentCleaner(
     config_t config,
     SegmentManagerGroupRef&& sm_group,
+    BackrefManager &backref_manager,
     bool detailed = false);
 
   SegmentSeqAllocator& get_ool_segment_seq_allocator() {
@@ -622,36 +745,46 @@ public:
 
   void update_journal_tail_committed(journal_seq_t committed) final;
 
-  void update_segment_avail_bytes(paddr_t offset) final {
-    segments.update_written_to(offset);
+  void update_segment_avail_bytes(segment_type_t type, paddr_t offset) final {
+    segments.update_written_to(type, offset);
+    gc_process.maybe_wake_on_space_used();
   }
 
   SegmentManagerGroup* get_segment_manager_group() final {
     return sm_group.get();
   }
 
-  void update_journal_tail_target(journal_seq_t target);
-
-  void init_mkfs(journal_seq_t head) {
-    journal_tail_target = head;
-    journal_tail_committed = head;
-    journal_head = head;
+  journal_seq_t get_dirty_extents_replay_from() const final {
+    return dirty_extents_replay_from;
   }
 
-  void set_journal_head(journal_seq_t head) {
-    assert(journal_head == JOURNAL_SEQ_NULL || head >= journal_head);
-    journal_head = head;
-    segments.update_written_to(head.offset);
-    gc_process.maybe_wake_on_space_used();
+  journal_seq_t get_alloc_info_replay_from() const final {
+    return alloc_info_replay_from;
+  }
+
+  void update_journal_tail_target(
+    journal_seq_t dirty_replay_from,
+    journal_seq_t alloc_replay_from);
+
+  void update_alloc_info_replay_from(
+    journal_seq_t alloc_replay_from);
+
+  void init_mkfs() {
+    auto journal_head = segments.get_journal_head();
+    ceph_assert(disable_trim || journal_head != JOURNAL_SEQ_NULL);
+    journal_tail_target = journal_head;
+    journal_tail_committed = journal_head;
   }
 
   using release_ertr = SegmentManagerGroup::release_ertr;
   release_ertr::future<> maybe_release_segment(Transaction &t);
 
   void adjust_segment_util(double old_usage, double new_usage) {
-    assert(stats.segment_util.buckets[std::floor(old_usage * 10)].count > 0);
-    stats.segment_util.buckets[std::floor(old_usage * 10)].count--;
-    stats.segment_util.buckets[std::floor(new_usage * 10)].count++;
+    auto old_index = get_bucket_index(old_usage);
+    auto new_index = get_bucket_index(new_usage);
+    assert(stats.segment_util.buckets[old_index].count > 0);
+    stats.segment_util.buckets[old_index].count--;
+    stats.segment_util.buckets[new_index].count++;
   }
 
   void mark_space_used(
@@ -659,72 +792,24 @@ public:
     extent_len_t len,
     time_point last_modified = time_point(),
     time_point last_rewritten = time_point(),
-    bool init_scan = false) {
-    auto& seg_addr = addr.as_seg_paddr();
-
-    if (!init_scan && !init_complete)
-      return;
-
-    stats.used_bytes += len;
-    auto old_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
-    [[maybe_unused]] auto ret = space_tracker->allocate(
-      seg_addr.get_segment_id(),
-      seg_addr.get_segment_off(),
-      len);
-    auto new_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
-    adjust_segment_util(old_usage, new_usage);
-
-    // use the last extent's last modified time for the calculation of the projected
-    // time the segments' live extents are to stay unmodified; this is an approximation
-    // of the sprite lfs' segment "age".
-
-    segments.update_last_modified_rewritten(
-        seg_addr.get_segment_id(), last_modified, last_rewritten);
-
-    gc_process.maybe_wake_on_space_used();
-    assert(ret > 0);
-  }
+    bool init_scan = false);
 
   void mark_space_free(
     paddr_t addr,
-    extent_len_t len) {
-    if (!init_complete)
-      return;
-
-    ceph_assert(stats.used_bytes >= len);
-    stats.used_bytes -= len;
-    auto& seg_addr = addr.as_seg_paddr();
-
-    auto old_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
-    [[maybe_unused]] auto ret = space_tracker->release(
-      seg_addr.get_segment_id(),
-      seg_addr.get_segment_off(),
-      len);
-    auto new_usage = space_tracker->calc_utilization(seg_addr.get_segment_id());
-    adjust_segment_util(old_usage, new_usage);
-    maybe_wake_gc_blocked_io();
-    assert(ret >= 0);
-  }
+    extent_len_t len);
 
   SpaceTrackerIRef get_empty_space_tracker() const {
     return space_tracker->make_empty();
   }
 
-  void start() {
-    gc_process.start();
-  }
-
-  void complete_init() {
-    init_complete = true;
-    start();
-  }
+  void complete_init();
 
   store_statfs_t stat() const {
     store_statfs_t st;
-    st.total = get_total_bytes();
-    st.available = get_total_bytes() - get_used_bytes();
-    st.allocated = get_used_bytes();
-    st.data_stored = get_used_bytes();
+    st.total = segments.get_total_bytes();
+    st.available = segments.get_total_bytes() - stats.used_bytes;
+    st.allocated = stats.used_bytes;
+    st.data_stored = stats.used_bytes;
 
     // TODO add per extent type counters for omap_allocated and
     // internal metadata
@@ -747,15 +832,44 @@ public:
     return space_tracker->equals(tracker);
   }
 
+  void set_disable_trim(bool val) {
+    disable_trim = val;
+  }
+
   using work_ertr = ExtentCallbackInterface::extent_mapping_ertr;
   using work_iertr = ExtentCallbackInterface::extent_mapping_iertr;
 
 private:
+  /*
+   * 10 buckets for the number of closed segments by usage
+   * 2 extra buckets for the number of open and empty segments
+   */
+  static constexpr double UTIL_STATE_OPEN = 1.05;
+  static constexpr double UTIL_STATE_EMPTY = 1.15;
+  static constexpr std::size_t UTIL_BUCKETS = 12;
+  static std::size_t get_bucket_index(double util) {
+    auto index = std::floor(util * 10);
+    assert(index < UTIL_BUCKETS);
+    return index;
+  }
+  double calc_utilization(segment_id_t id) const {
+    auto& info = segments[id];
+    if (info.is_open()) {
+      return UTIL_STATE_OPEN;
+    } else if (info.is_empty()) {
+      return UTIL_STATE_EMPTY;
+    } else {
+      auto ret = space_tracker->calc_utilization(id);
+      assert(ret >= 0 && ret < 1);
+      return ret;
+    }
+  }
 
   // journal status helpers
 
   double calc_gc_benefit_cost(segment_id_t id) const {
-    double util = space_tracker->calc_utilization(id);
+    double util = calc_utilization(id);
+    ceph_assert(util >= 0 && util < 1);
     auto cur_time = seastar::lowres_system_clock::now();
     auto segment = segments[id];
     assert(cur_time >= segment.last_modified);
@@ -765,35 +879,7 @@ private:
     return (1 - util) * age / (1 + util);
   }
 
-  journal_seq_t get_next_gc_target() const {
-    segment_id_t id = NULL_SEG_ID;
-    segment_seq_t seq = NULL_SEG_SEQ;
-    double max_benefit_cost = 0;
-    for (auto it = segments.begin();
-	 it != segments.end();
-	 ++it) {
-      auto _id = it->first;
-      const auto& segment_info = it->second;
-      double benefit_cost = calc_gc_benefit_cost(_id);
-      if (segment_info.is_closed() &&
-	  !segment_info.is_in_journal(journal_tail_committed) &&
-	  benefit_cost > max_benefit_cost) {
-	id = _id;
-	seq = segment_info.seq;
-	max_benefit_cost = benefit_cost;
-      }
-    }
-    if (id != NULL_SEG_ID) {
-      crimson::get_logger(ceph_subsys_seastore_cleaner).debug(
-	"SegmentCleaner::get_next_gc_target: segment {} seq {}, benefit_cost {}",
-	id,
-	seq,
-	max_benefit_cost);
-      return journal_seq_t{seq, paddr_t::make_seg_paddr(id, 0)};
-    } else {
-      return JOURNAL_SEQ_NULL;
-    }
-  }
+  segment_id_t get_next_reclaim_segment() const;
 
   /**
    * rewrite_dirty
@@ -806,26 +892,82 @@ private:
     Transaction &t,
     journal_seq_t limit);
 
+  using trim_backrefs_iertr = work_iertr;
+  using trim_backrefs_ret = trim_backrefs_iertr::future<journal_seq_t>;
+  trim_backrefs_ret trim_backrefs(
+    Transaction &t,
+    journal_seq_t limit);
+
   journal_seq_t get_dirty_tail() const {
-    auto ret = journal_head;
-    ret.segment_seq -= std::min(
-      static_cast<size_t>(ret.segment_seq),
-      config.target_journal_segments);
+    auto ret = segments.get_journal_head();
+    ceph_assert(ret != JOURNAL_SEQ_NULL);
+    if (ret.segment_seq >= config.target_journal_segments) {
+      ret.segment_seq -= config.target_journal_segments;
+    } else {
+      ret.segment_seq = 0;
+      ret.offset = P_ADDR_MIN;
+    }
     return ret;
   }
 
   journal_seq_t get_dirty_tail_limit() const {
-    auto ret = journal_head;
-    ret.segment_seq -= std::min(
-      static_cast<size_t>(ret.segment_seq),
-      config.max_journal_segments);
+    auto ret = segments.get_journal_head();
+    ceph_assert(ret != JOURNAL_SEQ_NULL);
+    if (ret.segment_seq >= config.max_journal_segments) {
+      ret.segment_seq -= config.max_journal_segments;
+    } else {
+      ret.segment_seq = 0;
+      ret.offset = P_ADDR_MIN;
+    }
     return ret;
   }
 
-  // GC status helpers
-  std::unique_ptr<
-    SegmentManagerGroup::scan_extents_cursor
-    > scan_cursor;
+  journal_seq_t get_backref_tail() const {
+    auto ret = segments.get_journal_head();
+    ceph_assert(ret != JOURNAL_SEQ_NULL);
+    if (ret.segment_seq >= config.target_backref_inflight_segments) {
+      ret.segment_seq -= config.target_backref_inflight_segments;
+    } else {
+      ret.segment_seq = 0;
+      ret.offset = P_ADDR_MIN;
+    }
+    return ret;
+  }
+
+  struct reclaim_state_t {
+    std::size_t segment_size;
+    paddr_t start_pos;
+    paddr_t end_pos;
+
+    static reclaim_state_t create(
+        segment_id_t segment_id,
+        std::size_t segment_size) {
+      return {segment_size,
+              P_ADDR_NULL,
+              paddr_t::make_seg_paddr(segment_id, 0)};
+    }
+
+    segment_id_t get_segment_id() const {
+      return end_pos.as_seg_paddr().get_segment_id();
+    }
+
+    bool is_complete() const {
+      return (std::size_t)end_pos.as_seg_paddr().get_segment_off() >= segment_size;
+    }
+
+    void advance(std::size_t bytes) {
+      assert(!is_complete());
+      start_pos = end_pos;
+      auto &end_seg_paddr = end_pos.as_seg_paddr();
+      auto next_off = end_seg_paddr.get_segment_off() + bytes;
+      if (next_off > segment_size) {
+        end_seg_paddr.set_segment_off(segment_size);
+      } else {
+        end_seg_paddr.set_segment_off(next_off);
+      }
+    }
+  };
+  std::optional<reclaim_state_t> reclaim_state;
 
   /**
    * GCProcess
@@ -838,9 +980,11 @@ private:
 
     SegmentCleaner &cleaner;
 
-    bool stopping = false;
-
     std::optional<seastar::promise<>> blocking;
+
+    bool is_stopping() const {
+      return !process_join;
+    }
 
     gc_cycle_ret run();
 
@@ -855,7 +999,7 @@ private:
       return seastar::do_until(
 	[this] {
 	  cleaner.log_gc_state("GCProcess::maybe_wait_should_run");
-	  return stopping || cleaner.gc_should_run();
+	  return is_stopping() || cleaner.gc_should_run();
 	},
 	[this] {
 	  ceph_assert(!blocking);
@@ -867,23 +1011,25 @@ private:
     GCProcess(SegmentCleaner &cleaner) : cleaner(cleaner) {}
 
     void start() {
-      ceph_assert(!process_join);
+      ceph_assert(is_stopping());
+      process_join = seastar::now(); // allow run()
       process_join = run();
+      assert(!is_stopping());
     }
 
     gc_cycle_ret stop() {
-      if (!process_join)
-	return seastar::now();
-      stopping = true;
-      wake();
-      ceph_assert(process_join);
+      if (is_stopping()) {
+        return seastar::now();
+      }
       auto ret = std::move(*process_join);
-      process_join = std::nullopt;
-      return ret.then([this] { stopping = false; });
+      process_join.reset();
+      assert(is_stopping());
+      wake();
+      return ret;
     }
 
     gc_cycle_ret run_until_halt() {
-      ceph_assert(!process_join);
+      ceph_assert(is_stopping());
       return seastar::do_until(
 	[this] {
 	  cleaner.log_gc_state("GCProcess::run_until_halt");
@@ -895,6 +1041,9 @@ private:
     }
 
     void maybe_wake_on_space_used() {
+      if (is_stopping()) {
+        return;
+      }
       if (cleaner.gc_should_run()) {
 	wake();
       }
@@ -911,127 +1060,127 @@ private:
   using gc_trim_journal_ret = gc_trim_journal_ertr::future<>;
   gc_trim_journal_ret gc_trim_journal();
 
+  using gc_trim_backref_ertr = gc_ertr;
+  using gc_trim_backref_ret = gc_trim_backref_ertr::future<journal_seq_t>;
+  gc_trim_backref_ret gc_trim_backref(journal_seq_t limit);
+
   using gc_reclaim_space_ertr = gc_ertr;
   using gc_reclaim_space_ret = gc_reclaim_space_ertr::future<>;
   gc_reclaim_space_ret gc_reclaim_space();
 
-  size_t get_bytes_used_current_segment() const {
-    auto& seg_addr = journal_head.offset.as_seg_paddr();
-    return seg_addr.get_segment_off();
-  }
 
-  size_t get_bytes_available_current_segment() const {
-    auto segment_size = segments.get_segment_size();
-    return segment_size - get_bytes_used_current_segment();
-  }
+  using retrieve_live_extents_iertr = work_iertr;
+  using retrieve_live_extents_ret =
+    retrieve_live_extents_iertr::future<journal_seq_t>;
+  retrieve_live_extents_ret _retrieve_live_extents(
+    Transaction &t,
+    std::set<
+      backref_buf_entry_t,
+      backref_buf_entry_t::cmp_t> &&backrefs,
+    std::vector<CachedExtentRef> &extents);
 
-  /**
-   * get_bytes_scanned_current_segment
-   *
-   * Returns the number of bytes from the current gc segment that
-   * have been scanned.
+  using retrieve_backref_mappings_ertr = work_ertr;
+  using retrieve_backref_mappings_ret =
+    retrieve_backref_mappings_ertr::future<backref_pin_list_t>;
+  retrieve_backref_mappings_ret retrieve_backref_mappings(
+    paddr_t start_paddr,
+    paddr_t end_paddr);
+
+  /*
+   * Segments calculations
    */
-  size_t get_bytes_scanned_current_segment() const {
-    if (!scan_cursor)
+  std::size_t get_segments_in_journal() const {
+    if (!init_complete) {
       return 0;
-    return scan_cursor->get_segment_offset();
+    }
+    if (journal_tail_committed == JOURNAL_SEQ_NULL) {
+      return segments.get_num_type_journal();
+    }
+    auto journal_head = segments.get_journal_head();
+    assert(journal_head != JOURNAL_SEQ_NULL);
+    assert(journal_head.segment_seq >= journal_tail_committed.segment_seq);
+    return journal_head.segment_seq + 1 - journal_tail_committed.segment_seq;
   }
-
-  /// Returns free space available for writes
-  size_t get_available_bytes() const {
-    return segments.get_available_bytes();
-  }
-  size_t get_projected_available_bytes() const {
-    return (get_available_bytes() > stats.projected_used_bytes) ?
-      get_available_bytes() - stats.projected_used_bytes:
-      0;
-  }
-
-  /// Returns total space available
-  size_t get_total_bytes() const {
-    return segments.get_total_bytes();
-  }
-
-  /// Returns total space not free
-  size_t get_unavailable_bytes() const {
-    return segments.get_total_bytes() - segments.get_available_bytes();
-  }
-  size_t get_projected_unavailable_bytes() const {
-    return (get_total_bytes() > get_projected_available_bytes()) ?
-      (get_total_bytes() - get_projected_available_bytes()) :
-      0;
-  }
-
-  /// Returns bytes currently occupied by live extents (not journal)
-  size_t get_used_bytes() const {
-    return stats.used_bytes;
-  }
-  size_t get_projected_used_bytes() const {
-    return stats.used_bytes + stats.projected_used_bytes;
-  }
-
-  /// Return bytes contained in segments in journal
-  size_t get_journal_segment_bytes() const {
-    if (journal_head == JOURNAL_SEQ_NULL) {
-      // this for calculating journal bytes in the journal
-      // replay phase in which journal_head is not set
-      return segments.get_num_in_journal() * segments.get_segment_size();
+  std::size_t get_segments_in_journal_closed() const {
+    auto in_journal = get_segments_in_journal();
+    auto in_journal_open = segments.get_num_in_journal_open();
+    if (in_journal >= in_journal_open) {
+      return in_journal - in_journal_open;
     } else {
-      assert(journal_head >= journal_tail_committed);
-      auto segment_size = segments.get_segment_size();
-      return (journal_head.segment_seq - journal_tail_committed.segment_seq + 1) *
-	segment_size;
+      return 0;
     }
   }
-
-  /**
-   * get_reclaimable_bytes
-   *
-   * Returns the number of bytes in unavailable segments that can be
-   * reclaimed.
-   */
-  size_t get_reclaimable_bytes() const {
-    auto ret = get_unavailable_bytes() - get_used_bytes();
-    if (ret > get_journal_segment_bytes())
-      return ret - get_journal_segment_bytes();
-    else
-      return 0;
-  }
-  size_t get_projected_reclaimable_bytes() const {
-    auto ret = get_projected_unavailable_bytes() - get_projected_used_bytes();
-    if (ret > get_journal_segment_bytes())
-      return ret - get_journal_segment_bytes();
-    else
-      return 0;
+  std::size_t get_segments_reclaimable() const {
+    assert(segments.get_num_closed() >= get_segments_in_journal_closed());
+    return segments.get_num_closed() - get_segments_in_journal_closed();
   }
 
-  /**
-   * get_reclaim_ratio
-   *
-   * Returns the ratio of space reclaimable unavailable space to
-   * total unavailable space.
+  /*
+   * Space calculations
    */
+  /// the unavailable space that is not reclaimable yet
+  std::size_t get_unavailable_unreclaimable_bytes() const {
+    auto ret = (segments.get_num_open() + get_segments_in_journal_closed()) *
+               segments.get_segment_size();
+    assert(ret >= segments.get_available_bytes_in_open());
+    return ret - segments.get_available_bytes_in_open();
+  }
+  /// the unavailable space that can be reclaimed
+  std::size_t get_unavailable_reclaimable_bytes() const {
+    auto ret = get_segments_reclaimable() * segments.get_segment_size();
+    ceph_assert(ret + get_unavailable_unreclaimable_bytes() == segments.get_unavailable_bytes());
+    return ret;
+  }
+  /// the unavailable space that is not alive
+  std::size_t get_unavailable_unused_bytes() const {
+    assert(segments.get_unavailable_bytes() > stats.used_bytes);
+    return segments.get_unavailable_bytes() - stats.used_bytes;
+  }
   double get_reclaim_ratio() const {
-    if (get_unavailable_bytes() == 0) return 0;
-    return (double)get_reclaimable_bytes() / (double)get_unavailable_bytes();
-  }
-  double get_projected_reclaim_ratio() const {
-    if (get_projected_unavailable_bytes() == 0) return 0;
-    return (double)get_reclaimable_bytes() /
-      (double)get_projected_unavailable_bytes();
+    if (segments.get_unavailable_bytes() == 0) return 0;
+    return (double)get_unavailable_unused_bytes() / (double)segments.get_unavailable_bytes();
   }
 
-  /**
-   * get_available_ratio
-   *
-   * Returns ratio of available space to write to total space
+  /*
+   * Space calculations (projected)
    */
-  double get_available_ratio() const {
-    return (double)get_available_bytes() / (double)get_total_bytes();
+  std::size_t get_projected_available_bytes() const {
+    return (segments.get_available_bytes() > stats.projected_used_bytes) ?
+      segments.get_available_bytes() - stats.projected_used_bytes:
+      0;
   }
   double get_projected_available_ratio() const {
     return (double)get_projected_available_bytes() /
-      (double)get_total_bytes();
+      (double)segments.get_total_bytes();
+  }
+
+  /*
+   * Journal sizes
+   */
+  std::size_t get_dirty_journal_size() const {
+    auto journal_head = segments.get_journal_head();
+    if (journal_head == JOURNAL_SEQ_NULL ||
+        dirty_extents_replay_from == JOURNAL_SEQ_NULL) {
+      return 0;
+    }
+    return (journal_head.segment_seq - dirty_extents_replay_from.segment_seq) *
+           segments.get_segment_size() +
+           journal_head.offset.as_seg_paddr().get_segment_off() -
+           segments.get_segment_size() -
+           dirty_extents_replay_from.offset.as_seg_paddr().get_segment_off();
+  }
+
+  std::size_t get_alloc_journal_size() const {
+    auto journal_head = segments.get_journal_head();
+    if (journal_head == JOURNAL_SEQ_NULL ||
+        alloc_info_replay_from == JOURNAL_SEQ_NULL) {
+      return 0;
+    }
+    return (journal_head.segment_seq - alloc_info_replay_from.segment_seq) *
+           segments.get_segment_size() +
+           journal_head.offset.as_seg_paddr().get_segment_off() -
+           segments.get_segment_size() -
+           alloc_info_replay_from.offset.as_seg_paddr().get_segment_off();
   }
 
   /**
@@ -1039,89 +1188,36 @@ private:
    *
    * Encapsulates whether block pending gc.
    */
-  bool should_block_on_gc() const {
-    // TODO: probably worth projecting journal usage as well
-    auto aratio = get_projected_available_ratio();
-    return (
-      ((aratio < config.available_ratio_gc_max) &&
-       ((get_projected_reclaim_ratio() >
-	 config.reclaim_ratio_hard_limit) ||
-	(aratio < config.available_ratio_hard_limit))) ||
-      (get_dirty_tail_limit() > journal_tail_target)
-    );
+  bool should_block_on_trim() const {
+    if (disable_trim) return false;
+    return get_dirty_tail_limit() > journal_tail_target;
   }
 
-  void log_gc_state(const char *caller) const {
-    auto &logger = crimson::get_logger(ceph_subsys_seastore_cleaner);
-    if (logger.is_enabled(seastar::log_level::debug)) {
-      logger.debug(
-	"SegmentCleaner::log_gc_state({}): "
-	"total {}, "
-	"available {}, "
-	"unavailable {}, "
-	"used {}, "
-	"reclaimable {}, "
-	"reclaim_ratio {}, "
-	"available_ratio {}, "
-	"should_block_on_gc {}, "
-	"gc_should_reclaim_space {}, "
-	"journal_head {}, "
-	"journal_tail_target {}, "
-	"journal_tail_commit {}, "
-	"dirty_tail {}, "
-	"dirty_tail_limit {}, "
-	"gc_should_trim_journal {}, ",
-	caller,
-	get_total_bytes(),
-	get_available_bytes(),
-	get_unavailable_bytes(),
-	get_used_bytes(),
-	get_reclaimable_bytes(),
-	get_reclaim_ratio(),
-	get_available_ratio(),
-	should_block_on_gc(),
-	gc_should_reclaim_space(),
-	journal_head,
-	journal_tail_target,
-	journal_tail_committed,
-	get_dirty_tail(),
-	get_dirty_tail_limit(),
-	gc_should_trim_journal()
-      );
+  bool should_block_on_reclaim() const {
+    if (disable_trim) return false;
+    if (get_segments_reclaimable() == 0) {
+      return false;
     }
+    auto aratio = get_projected_available_ratio();
+    return aratio < config.available_ratio_hard_limit;
   }
+
+  bool should_block_on_gc() const {
+    return should_block_on_trim() || should_block_on_reclaim();
+  }
+
+  void log_gc_state(const char *caller) const;
 
 public:
-  seastar::future<> reserve_projected_usage(size_t projected_usage) {
-    // The pipeline configuration prevents another IO from entering
-    // prepare until the prior one exits and clears this.
-    ceph_assert(!blocked_io_wake);
-    stats.ios_blocking++;
-    return seastar::do_until(
-      [this] {
-	log_gc_state("await_hard_limits");
-	return !should_block_on_gc();
-      },
-      [this] {
-	stats.accumulated_blocked_ios++;
-	blocked_io_wake = seastar::promise<>();
-	return blocked_io_wake->get_future();
-      }
-    ).then([this, projected_usage] {
-      ceph_assert(!blocked_io_wake);
-      assert(stats.ios_blocking > 0);
-      stats.ios_blocking--;
-      stats.projected_used_bytes += projected_usage;
-    });
-  }
+  seastar::future<> reserve_projected_usage(std::size_t projected_usage);
 
-  void release_projected_usage(size_t projected_usage) {
-    ceph_assert(stats.projected_used_bytes >= projected_usage);
-    stats.projected_used_bytes -= projected_usage;
-    return maybe_wake_gc_blocked_io();
-  }
+  void release_projected_usage(size_t projected_usage);
+
 private:
   void maybe_wake_gc_blocked_io() {
+    if (!init_complete) {
+      return;
+    }
     if (!should_block_on_gc() && blocked_io_wake) {
       blocked_io_wake->set_value();
       blocked_io_wake = std::nullopt;
@@ -1143,11 +1239,16 @@ private:
    * Encapsulates logic for whether gc should be reclaiming segment space.
    */
   bool gc_should_reclaim_space() const {
-    auto aratio = get_available_ratio();
+    if (disable_trim) return false;
+    if (get_segments_reclaimable() == 0) {
+      return false;
+    }
+    auto aratio = segments.get_available_ratio();
+    auto rratio = get_reclaim_ratio();
     return (
-      (aratio < config.available_ratio_gc_max) &&
-      (get_reclaim_ratio() > config.reclaim_ratio_gc_threshhold ||
-       aratio < config.available_ratio_hard_limit)
+      (aratio < config.available_ratio_hard_limit) ||
+      ((aratio < config.available_ratio_gc_max) &&
+       (rratio > config.reclaim_ratio_gc_threshold))
     );
   }
 
@@ -1160,13 +1261,20 @@ private:
     return get_dirty_tail() > journal_tail_target;
   }
 
+  bool gc_should_trim_backref() const {
+    return get_backref_tail() > alloc_info_replay_from;
+  }
   /**
    * gc_should_run
    *
    * True if gc should be running.
    */
   bool gc_should_run() const {
-    return gc_should_reclaim_space() || gc_should_trim_journal();
+    if (disable_trim) return false;
+    ceph_assert(init_complete);
+    return gc_should_reclaim_space()
+      || gc_should_trim_journal()
+      || gc_should_trim_backref();
   }
 
   void init_mark_segment_closed(
@@ -1174,7 +1282,10 @@ private:
       segment_seq_t seq,
       segment_type_t s_type) {
     ceph_assert(!init_complete);
+    auto old_usage = calc_utilization(segment);
     segments.init_closed(segment, seq, s_type);
+    auto new_usage = calc_utilization(segment);
+    adjust_segment_util(old_usage, new_usage);
     if (s_type == segment_type_t::OOL) {
       ool_segment_seq_allocator->set_next_segment_seq(seq);
     }

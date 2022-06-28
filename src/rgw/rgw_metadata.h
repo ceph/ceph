@@ -37,6 +37,8 @@ protected:
   
 public:
   RGWMetadataObject() {}
+  RGWMetadataObject(const obj_version& v,
+		    real_time m) : objv(v), mtime(m) {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
   real_time& get_mtime() { return mtime; }

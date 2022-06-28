@@ -3,11 +3,14 @@
 #include <string>
 #include "include/common_fwd.h"
 
-class req_state;
+struct req_state;
 class RGWREST;
 class OpsLogSink;
 namespace rgw::sal {
   class Store;
+}
+namespace rgw::lua {
+  class Background;
 }
 
 namespace rgw::lua::request {
@@ -19,7 +22,8 @@ int execute(
     OpsLogSink* olog,
     req_state *s, 
     const char* op_name,
-    const std::string& script);
+    const std::string& script,
+    rgw::lua::Background* background = nullptr);
 
 }
 

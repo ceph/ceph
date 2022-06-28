@@ -32,6 +32,7 @@
 #include "include/unordered_set.h"
 #include "include/cephfs/metrics/Types.h"
 #include "mds/mdstypes.h"
+#include "include/cephfs/types.h"
 #include "msg/Dispatcher.h"
 #include "msg/MessageRef.h"
 #include "msg/Messenger.h"
@@ -353,7 +354,7 @@ public:
    * If @a cb returns a negative error code, stop and return that.
    */
   int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
-		   unsigned want=0, unsigned flags=AT_NO_ATTR_SYNC,
+		   unsigned want=0, unsigned flags=AT_STATX_DONT_SYNC,
 		   bool getref=false);
 
   struct dirent * readdir(dir_result_t *d);
@@ -1496,7 +1497,7 @@ private:
   Finisher async_ino_releasor;
   Finisher objecter_finisher;
 
-  utime_t last_cap_renew;
+  ceph::coarse_mono_time last_cap_renew;
 
   CommandHook m_command_hook;
 
@@ -1557,8 +1558,8 @@ private:
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
 
-  utime_t last_auto_reconnect;
-
+  ceph::coarse_mono_time last_auto_reconnect;
+  std::chrono::seconds caps_release_delay, mount_timeout;
   // trace generation
   std::ofstream traceout;
 

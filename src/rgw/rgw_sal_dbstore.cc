@@ -156,7 +156,7 @@ namespace rgw::sal {
   int DBUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   {
     int ret;
-    ret = store->getDB()->get_user(dpp, string("user_id"), "", info, &attrs,
+    ret = store->getDB()->get_user(dpp, string("user_id"), get_id().id, info, &attrs,
         &objv_tracker);
     return ret;
   }
@@ -196,7 +196,7 @@ namespace rgw::sal {
   {
     int ret = 0;
 
-    ret = store->getDB()->get_user(dpp, string("user_id"), "", info, &attrs,
+    ret = store->getDB()->get_user(dpp, string("user_id"), get_id().id, info, &attrs,
         &objv_tracker);
 
     return ret;
@@ -285,7 +285,9 @@ namespace rgw::sal {
   }
 
   /* stats - Not for first pass */
-  int DBBucket::read_stats(const DoutPrefixProvider *dpp, int shard_id,
+  int DBBucket::read_stats(const DoutPrefixProvider *dpp,
+      const bucket_index_layout_generation& idx_layout,
+      int shard_id,
       std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats,
       std::string *max_marker, bool *syncstopped)
@@ -293,7 +295,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB *ctx)
+  int DBBucket::read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *ctx)
   {
     return 0;
   }
@@ -925,7 +927,7 @@ namespace rgw::sal {
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
     del_op->params.bucket_owner = bucket->get_acl_owner();
     del_op->params.versioning_status = 0;
-  
+
     // Since the data objects are associated with meta obj till
     // MultipartUpload::Complete() is done, removing the metadata obj
     // should remove all the uploads so far.
@@ -1550,6 +1552,12 @@ namespace rgw::sal {
     return std::unique_ptr<RGWRole>(p);
   }
 
+  std::unique_ptr<RGWRole> DBStore::get_role(const RGWRoleInfo& info)
+  {
+    RGWRole* p = nullptr;
+    return std::unique_ptr<RGWRole>(p);
+  }
+
   int DBStore::get_roles(const DoutPrefixProvider *dpp,
       optional_yield y,
       const std::string& path_prefix,
@@ -1660,7 +1668,7 @@ namespace rgw::sal {
   int DBStore::get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
   {
     /* Swift keys and subusers are not supported for now */
-    return 0;
+    return -ENOTSUP;
   }
 
   std::string DBStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)
@@ -1722,6 +1730,14 @@ namespace rgw::sal {
       optional_yield y)
   {
     return 0;
+  }
+
+  int DBStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y)
+  {
+      return 0;
   }
 
   std::string DBStore::zone_unique_id(uint64_t unique_num)
@@ -1793,7 +1809,7 @@ namespace rgw::sal {
   }
 
   std::unique_ptr<Notification> DBStore::get_notification(
-    rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
+    rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
     rgw::notify::EventType event_type, const std::string* object_name)
   {
     return std::make_unique<DBNotification>(obj, src_obj, event_type);

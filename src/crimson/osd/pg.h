@@ -26,6 +26,8 @@
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/ops_executer.h"
 #include "crimson/osd/osd_operations/client_request.h"
+#include "crimson/osd/osd_operations/logmissing_request.h"
+#include "crimson/osd/osd_operations/logmissing_request_reply.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
@@ -55,7 +57,6 @@ namespace crimson::os {
 }
 
 namespace crimson::osd {
-class ClientRequest;
 class OpsExecuter;
 
 class PG : public boost::intrusive_ref_counter<
@@ -71,6 +72,8 @@ class PG : public boost::intrusive_ref_counter<
   ClientRequest::PGPipeline client_request_pg_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;
   RepRequest::PGPipeline replicated_request_pg_pipeline;
+
+  ClientRequest::Orderer client_request_orderer;
 
   spg_t pgid;
   pg_shard_t pg_whoami;
@@ -461,8 +464,8 @@ public:
     return get_info().history.same_interval_since;
   }
 
-  const auto& get_pool() const {
-    return peering_state.get_pool();
+  const auto& get_pgpool() const {
+    return peering_state.get_pgpool();
   }
   pg_shard_t get_primary() const {
     return peering_state.get_primary();
@@ -541,9 +544,20 @@ public:
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
   void handle_rep_op_reply(crimson::net::ConnectionRef conn,
 			   const MOSDRepOpReply& m);
+  interruptible_future<> do_update_log_missing(Ref<MOSDPGUpdateLogMissing> m);
+  interruptible_future<> do_update_log_missing_reply(
+                         Ref<MOSDPGUpdateLogMissingReply> m);
+
 
   void print(std::ostream& os) const;
   void dump_primary(Formatter*);
+  seastar::future<> submit_error_log(
+    Ref<MOSDOp> m,
+    const OpInfo &op_info,
+    ObjectContextRef obc,
+    const std::error_code e,
+    ceph_tid_t rep_tid,
+    eversion_t &version);
 
 private:
   template<RWState::State State>
@@ -701,7 +715,7 @@ public:
   interruptible_future<std::tuple<bool, int>> already_complete(const osd_reqid_t& reqid);
   int get_recovery_op_priority() const {
     int64_t pri = 0;
-    get_pool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+    get_pgpool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
     return  pri > 0 ? pri : crimson::common::local_conf()->osd_recovery_op_priority;
   }
   seastar::future<> mark_unfound_lost(int) {
@@ -731,6 +745,8 @@ private:
   template <class T>
   friend class PeeringEvent;
   friend class RepRequest;
+  friend class LogMissingRequest;
+  friend class LogMissingRequestReply;
   friend class BackfillRecovery;
   friend struct PGFacade;
   friend class InternalClientRequest;
@@ -760,6 +776,11 @@ private:
   BackfillRecovery::BackfillRecoveryPipeline backfill_pipeline;
 
   friend class IOInterruptCondition;
+  struct log_update_t {
+    std::set<pg_shard_t> waiting_on;
+    seastar::shared_promise<> all_committed;
+  };
+  std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
 };
 
 struct PG::do_osd_ops_params_t {

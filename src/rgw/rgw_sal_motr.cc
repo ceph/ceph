@@ -554,7 +554,8 @@ int MotrBucket::unlink_user(const DoutPrefixProvider* dpp, User* new_user, optio
 }
 
 /* stats - Not for first pass */
-int MotrBucket::read_stats(const DoutPrefixProvider *dpp, int shard_id,
+int MotrBucket::read_stats(const DoutPrefixProvider *dpp,
+    const bucket_index_layout_generation& idx_layout, int shard_id,
     std::string *bucket_ver, std::string *master_ver,
     std::map<RGWObjCategory, RGWStorageStats>& stats,
     std::string *max_marker, bool *syncstopped)
@@ -590,7 +591,9 @@ int MotrBucket::create_multipart_indices()
 }
 
 
-int MotrBucket::read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB *ctx)
+int MotrBucket::read_stats_async(const DoutPrefixProvider *dpp,
+                                 const bucket_index_layout_generation& idx_layout,
+                                 int shard_id, RGWGetBucketStats_CB *ctx)
 {
   return 0;
 }
@@ -2762,6 +2765,12 @@ std::unique_ptr<RGWRole> MotrStore::get_role(std::string name,
   return std::unique_ptr<RGWRole>(p);
 }
 
+std::unique_ptr<RGWRole> MotrStore::get_role(const RGWRoleInfo& info)
+{
+  RGWRole* p = nullptr;
+  return std::unique_ptr<RGWRole>(p);
+}
+
 std::unique_ptr<RGWRole> MotrStore::get_role(std::string id)
 {
   RGWRole* p = nullptr;
@@ -2927,6 +2936,14 @@ int MotrStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* us
   return 0;
 }
 
+int MotrStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y)
+{
+    return 0;
+}
+
 std::string MotrStore::zone_unique_id(uint64_t unique_num)
 {
   return "";
@@ -2952,7 +2969,7 @@ std::unique_ptr<Completions> MotrStore::get_completions(void)
   return 0;
 }
 
-std::unique_ptr<Notification> MotrStore::get_notification(Object* obj, Object* src_obj, struct req_state* s,
+std::unique_ptr<Notification> MotrStore::get_notification(Object* obj, Object* src_obj, req_state* s,
     rgw::notify::EventType event_type, const string* object_name)
 {
   return std::make_unique<MotrNotification>(obj, src_obj, event_type);

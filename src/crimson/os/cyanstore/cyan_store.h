@@ -27,8 +27,6 @@ namespace crimson::os {
 class Collection;
 
 class CyanStore final : public FuturizedStore {
-  constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
-
   const std::string path;
   std::unordered_map<coll_t, boost::intrusive_ptr<Collection>> coll_map;
   std::map<coll_t, boost::intrusive_ptr<Collection>> new_coll_map;
@@ -171,6 +169,8 @@ private:
     const std::string &first,
     const std::string &last);
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
+  int _clone(const coll_t& cid, const ghobject_t& oid,
+             const ghobject_t& noid);
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
                 std::map<std::string,bufferlist>&& aset);
   int _rm_attr(const coll_t& cid, const ghobject_t& oid,

@@ -101,6 +101,11 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+map<string, bufferlist>* no_change_attrs() {
+  static map<string, bufferlist> no_change;
+  return &no_change;
+}
+
 int rgw_put_system_obj(const DoutPrefixProvider *dpp, 
                        RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
@@ -113,15 +118,40 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp,
   rgw_raw_obj obj(pool, oid);
 
   auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.wop()
-                  .set_objv_tracker(objv_tracker)
-                  .set_exclusive(exclusive)
-                  .set_mtime(set_mtime)
-                  .set_attrs(*pattrs)
-                  .write(dpp, data, y);
+  int ret;
+
+  if (pattrs != no_change_attrs()) {
+    ret = sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .set_exclusive(exclusive)
+      .set_mtime(set_mtime)
+      .set_attrs(*pattrs)
+      .write(dpp, data, y);
+  } else {
+    ret = sysobj.wop()
+      .set_objv_tracker(objv_tracker)
+      .set_exclusive(exclusive)
+      .set_mtime(set_mtime)
+      .write_data(dpp, data, y);
+  }
 
   return ret;
 }
+
+int rgw_stat_system_obj(const DoutPrefixProvider *dpp,
+      RGWSysObjectCtx& obj_ctx, const rgw_pool& pool,
+			const std::string& key, RGWObjVersionTracker *objv_tracker,
+			real_time *pmtime, optional_yield y,
+			std::map<std::string, bufferlist> *pattrs)
+{
+  rgw_raw_obj obj(pool, key);
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.rop()
+               .set_attrs(pattrs)
+               .set_last_mod(pmtime)
+               .stat(y, dpp);
+}
+
 
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,

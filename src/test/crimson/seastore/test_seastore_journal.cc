@@ -99,6 +99,14 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     return tmp_info;
   }
 
+  journal_seq_t get_dirty_extents_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
+  journal_seq_t get_alloc_info_replay_from() const final {
+    return JOURNAL_SEQ_NULL;
+  }
+
   segment_id_t allocate_segment(
     segment_seq_t seq,
     segment_type_t type
@@ -116,7 +124,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
 
   void update_journal_tail_committed(journal_seq_t paddr) final {}
 
-  void update_segment_avail_bytes(paddr_t offset) final {}
+  void update_segment_avail_bytes(segment_type_t, paddr_t) final {}
 
   SegmentManagerGroup* get_segment_manager_group() final { return sms.get(); }
 
@@ -184,7 +192,10 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider {
     replay(
       [&advance,
        &delta_checker]
-      (const auto &offsets, const auto &di, auto t) mutable {
+      (const auto &offsets,
+       const auto &di,
+       const journal_seq_t,
+       auto t) mutable {
 	if (!delta_checker) {
 	  EXPECT_FALSE("No Deltas Left");
 	}

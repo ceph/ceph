@@ -154,6 +154,7 @@ class CephfsConnectionPool(object):
             self.fs.conf_set("client_mount_uid", "0")
             self.fs.conf_set("client_mount_gid", "0")
             self.fs.conf_set("client_check_pool_perm", "false")
+            self.fs.conf_set("client_quota", "false")
             logger.debug("CephFS initializing...")
             self.fs.init()
             logger.debug("CephFS mounting...")

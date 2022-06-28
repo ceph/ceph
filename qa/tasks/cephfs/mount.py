@@ -577,12 +577,16 @@ class CephFSMount(object):
 
     def get_key_from_keyfile(self):
         # XXX: don't call run_shell(), since CephFS might be unmounted.
-        keyring = self.client_remote.run(
-            args=['sudo', 'cat', self.client_keyring_path], stdout=StringIO(),
-            omit_sudo=False).stdout.getvalue()
+        keyring = self.client_remote.read_file(self.client_keyring_path).\
+            decode()
+
         for line in keyring.split('\n'):
             if line.find('key') != -1:
                 return line[line.find('=') + 1 : ].strip()
+
+        raise RuntimeError('Key not found in keyring file '
+                           f'{self.client_keyring_path}. Its contents are -\n'
+                           f'{keyring}')
 
     @property
     def config_path(self):
@@ -693,7 +697,8 @@ class CephFSMount(object):
         if sudo:
             args.append('sudo')
         args += ['adjust-ulimits', 'daemon-helper', 'kill', py_version, '-c', pyscript]
-        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE, stdout=StringIO())
+        return self.client_remote.run(args=args, wait=False, stdin=run.PIPE,
+                                      stdout=StringIO(), omit_sudo=(not sudo))
 
     def run_python(self, pyscript, py_version='python3', sudo=False):
         p = self._run_python(pyscript, py_version, sudo=sudo)
@@ -701,7 +706,7 @@ class CephFSMount(object):
         return p.stdout.getvalue().strip()
 
     def run_shell(self, args, timeout=300, **kwargs):
-        kwargs.pop('omit_sudo', False)
+        omit_sudo = kwargs.pop('omit_sudo', False)
         sudo = kwargs.pop('sudo', False)
         cwd = kwargs.pop('cwd', self.mountpoint)
         stdout = kwargs.pop('stdout', StringIO())
@@ -715,7 +720,7 @@ class CephFSMount(object):
 
         return self.client_remote.run(args=args, cwd=cwd, timeout=timeout,
                                       stdout=stdout, stderr=stderr,
-                                      omit_sudo=False, **kwargs)
+                                      omit_sudo=omit_sudo, **kwargs)
 
     def run_shell_payload(self, payload, **kwargs):
         return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
@@ -842,6 +847,31 @@ class CephFSMount(object):
         # This wait would not be sufficient if the file had already
         # existed, but it's simple and in practice users of open_background
         # are not using it on existing files.
+        self.wait_for_visible(basename)
+
+        return rproc
+
+    def open_dir_background(self, basename):
+        """
+        Create and hold a capability to a directory.
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.hostfs_mntpt, basename)
+
+        pyscript = dedent("""
+            import time
+            import os
+
+            os.mkdir("{path}")
+            fd = os.open("{path}", os.O_RDONLY)
+            while True:
+                time.sleep(1)
+            """).format(path=path)
+
+        rproc = self._run_python(pyscript)
+        self.background_procs.append(rproc)
+
         self.wait_for_visible(basename)
 
         return rproc
@@ -1360,3 +1390,22 @@ class CephFSMount(object):
         checksum_text = self.run_shell(cmd).stdout.getvalue().strip()
         checksum_sorted = sorted(checksum_text.split('\n'), key=lambda v: v.split()[1])
         return hashlib.md5(('\n'.join(checksum_sorted)).encode('utf-8')).hexdigest()
+
+    def validate_subvol_options(self):
+        mount_subvol_num = self.client_config.get('mount_subvol_num', None)
+        if self.cephfs_mntpt and mount_subvol_num is not None:
+            log.warning("You cannot specify both: cephfs_mntpt and mount_subvol_num")
+            log.info(f"Mounting subvol {mount_subvol_num} for now")
+
+        if mount_subvol_num is not None:
+            # mount_subvol must be an index into the subvol path array for the fs
+            if not self.cephfs_name:
+                self.cephfs_name = 'cephfs'
+            assert(hasattr(self.ctx, "created_subvols"))
+            # mount_subvol must be specified under client.[0-9] yaml section
+            subvol_paths = self.ctx.created_subvols[self.cephfs_name]
+            path_to_mount = subvol_paths[mount_subvol_num]
+            self.cephfs_mntpt = path_to_mount
+        elif not self.cephfs_mntpt:
+            # default to the "/" path
+            self.cephfs_mntpt = "/"

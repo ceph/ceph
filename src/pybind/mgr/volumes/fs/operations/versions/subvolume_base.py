@@ -433,3 +433,36 @@ class SubvolumeBase(object):
             if me.errno == -errno.ENOENT:
                 raise VolumeException(-errno.ENOENT, "subvolume metadata not does not exist")
             raise VolumeException(-me.args[0], me.args[1])
+
+    def get_snap_section_name(self, snapname):
+        section = "SNAP_METADATA" + "_" + snapname;
+        return section;
+
+    def set_snapshot_metadata(self, snapname, keyname, value):
+        section = self.get_snap_section_name(snapname)
+        self.metadata_mgr.add_section(section)
+        self.metadata_mgr.update_section(section, keyname, str(value))
+        self.metadata_mgr.flush()
+
+    def get_snapshot_metadata(self, snapname, keyname):
+        try:
+            value = self.metadata_mgr.get_option(self.get_snap_section_name(snapname), keyname)
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "key '{0}' does not exist.".format(keyname))
+            raise VolumeException(-me.args[0], me.args[1])
+        return value
+
+    def list_snapshot_metadata(self, snapname):
+        return self.metadata_mgr.list_all_options_from_section(self.get_snap_section_name(snapname))
+
+    def remove_snapshot_metadata(self, snapname, keyname):
+        try:
+            ret = self.metadata_mgr.remove_option(self.get_snap_section_name(snapname), keyname)
+            if not ret:
+                raise VolumeException(-errno.ENOENT, "key '{0}' does not exist.".format(keyname))
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "snapshot metadata not does not exist")
+            raise VolumeException(-me.args[0], me.args[1])

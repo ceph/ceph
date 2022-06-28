@@ -53,7 +53,8 @@ std::ostream &operator<<(std::ostream &lhs, const test_extent_record_t &rhs) {
 
 struct transaction_manager_test_t :
   public seastar_test_suite_t,
-  TMTestState {
+  TMTestState,
+  ::testing::WithParamInterface<const char*> {
 
   std::random_device rd;
   std::mt19937 gen;
@@ -72,7 +73,14 @@ struct transaction_manager_test_t :
   }
 
   seastar::future<> set_up_fut() final {
-    return tm_setup();
+    std::string j_type = GetParam();
+    if (j_type == "segmented") {
+      return tm_setup(tm_make_config_t::get_test_segmented_journal());
+    } else if (j_type == "circularbounded") {
+      return tm_setup(tm_make_config_t::get_test_cb_journal());
+    } else {
+      ceph_assert(0 == "no support");
+    }
   }
 
   seastar::future<> tear_down_fut() final {
@@ -352,6 +360,10 @@ struct transaction_manager_test_t :
     return { create_mutate_transaction(), {} };
   }
 
+  test_transaction_t create_read_test_transaction() {
+    return {create_read_transaction(), {} };
+  }
+
   test_transaction_t create_weak_test_transaction() {
     return { create_weak_transaction(), {} };
   }
@@ -388,13 +400,31 @@ struct transaction_manager_test_t :
     with_trans_intr(
       *t.t,
       [this, &tracker](auto &t) {
-	return lba_manager->scan_mapped_space(
+	return backref_manager->scan_mapped_space(
 	  t,
-	  [&tracker](auto offset, auto len) {
-	    tracker->allocate(
-	      offset.as_seg_paddr().get_segment_id(),
-	      offset.as_seg_paddr().get_segment_off(),
-	      len);
+	  [&tracker, this](auto offset, auto len, depth_t, extent_types_t) {
+	    if (offset.get_addr_type() == addr_types_t::SEGMENT &&
+		!backref_manager->backref_should_be_removed(offset)) {
+	      logger().debug("check_usage: tracker alloc {}~{}",
+		offset, len);
+	      tracker->allocate(
+		offset.as_seg_paddr().get_segment_id(),
+		offset.as_seg_paddr().get_segment_off(),
+		len);
+	    }
+	  }).si_then([&tracker, this] {
+	    auto &backrefs = backref_manager->get_cached_backrefs();
+	    for (auto &backref : backrefs) {
+	      if (backref.paddr.get_addr_type() == addr_types_t::SEGMENT) {
+		logger().debug("check_usage: by backref, tracker alloc {}~{}",
+		  backref.paddr, backref.len);
+		tracker->allocate(
+		  backref.paddr.as_seg_paddr().get_segment_id(),
+		  backref.paddr.as_seg_paddr().get_segment_off(),
+		  backref.len);
+	      }
+	    }
+	    return seastar::now();
 	  });
       }).unsafe_get0();
     return segment_cleaner->debug_check_space(*tracker);
@@ -606,6 +636,39 @@ struct transaction_manager_test_t :
     );
   }
 
+  void test_parallel_extent_read() {
+    constexpr size_t TOTAL = 4<<20;
+    constexpr size_t BSIZE = 4<<10;
+    constexpr size_t BLOCKS = TOTAL / BSIZE;
+    run_async([this] {
+      for (unsigned i = 0; i < BLOCKS; ++i) {
+	auto t = create_transaction();
+	auto extent = alloc_extent(
+	  t,
+	  i * BSIZE,
+	  BSIZE);
+	ASSERT_EQ(i * BSIZE, extent->get_laddr());
+	submit_transaction(std::move(t));
+      }
+
+      seastar::do_with(
+	create_read_test_transaction(),
+	[this](auto &t) {
+	return with_trans_intr(*(t.t), [this](auto &t) {
+	  return trans_intr::parallel_for_each(
+	    boost::make_counting_iterator(0lu),
+	    boost::make_counting_iterator(BLOCKS),
+	    [this, &t](auto i) {
+	    return tm->read_extent<TestBlock>(t, i * BSIZE, BSIZE
+	    ).si_then([](auto) {
+	      return seastar::now();
+	    });
+	  });
+	});
+      }).unsafe_get0();
+    });
+  }
+
   void test_random_writes_concurrent() {
     constexpr unsigned WRITE_STREAMS = 256;
 
@@ -679,7 +742,7 @@ struct tm_multi_device_test_t :
   tm_multi_device_test_t() : transaction_manager_test_t(3) {}
 };
 
-TEST_F(tm_single_device_test_t, basic)
+TEST_P(tm_single_device_test_t, basic)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -700,7 +763,7 @@ TEST_F(tm_single_device_test_t, basic)
   });
 }
 
-TEST_F(tm_single_device_test_t, mutate)
+TEST_P(tm_single_device_test_t, mutate)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -738,7 +801,7 @@ TEST_F(tm_single_device_test_t, mutate)
   });
 }
 
-TEST_F(tm_single_device_test_t, allocate_lba_conflict)
+TEST_P(tm_single_device_test_t, allocate_lba_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -771,7 +834,7 @@ TEST_F(tm_single_device_test_t, allocate_lba_conflict)
   });
 }
 
-TEST_F(tm_single_device_test_t, mutate_lba_conflict)
+TEST_P(tm_single_device_test_t, mutate_lba_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -810,7 +873,7 @@ TEST_F(tm_single_device_test_t, mutate_lba_conflict)
   });
 }
 
-TEST_F(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
+TEST_P(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
 {
   constexpr laddr_t SIZE = 4096;
   constexpr size_t NUM = 500;
@@ -842,7 +905,7 @@ TEST_F(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
   });
 }
 
-TEST_F(tm_single_device_test_t, create_remove_same_transaction)
+TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -873,7 +936,7 @@ TEST_F(tm_single_device_test_t, create_remove_same_transaction)
   });
 }
 
-TEST_F(tm_single_device_test_t, split_merge_read_same_transaction)
+TEST_P(tm_single_device_test_t, split_merge_read_same_transaction)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -903,7 +966,7 @@ TEST_F(tm_single_device_test_t, split_merge_read_same_transaction)
   });
 }
 
-TEST_F(tm_single_device_test_t, inc_dec_ref)
+TEST_P(tm_single_device_test_t, inc_dec_ref)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -950,7 +1013,7 @@ TEST_F(tm_single_device_test_t, inc_dec_ref)
   });
 }
 
-TEST_F(tm_single_device_test_t, cause_lba_split)
+TEST_P(tm_single_device_test_t, cause_lba_split)
 {
   constexpr laddr_t SIZE = 4096;
   run_async([this] {
@@ -968,7 +1031,7 @@ TEST_F(tm_single_device_test_t, cause_lba_split)
   });
 }
 
-TEST_F(tm_single_device_test_t, random_writes)
+TEST_P(tm_single_device_test_t, random_writes)
 {
   constexpr size_t TOTAL = 4<<20;
   constexpr size_t BSIZE = 4<<10;
@@ -1011,7 +1074,7 @@ TEST_F(tm_single_device_test_t, random_writes)
   });
 }
 
-TEST_F(tm_single_device_test_t, find_hole_assert_trigger)
+TEST_P(tm_single_device_test_t, find_hole_assert_trigger)
 {
   constexpr unsigned max = 10;
   constexpr size_t BSIZE = 4<<10;
@@ -1026,12 +1089,35 @@ TEST_F(tm_single_device_test_t, find_hole_assert_trigger)
   });
 }
 
-TEST_F(tm_single_device_test_t, random_writes_concurrent)
+TEST_P(tm_single_device_test_t, random_writes_concurrent)
 {
   test_random_writes_concurrent();
 }
 
-TEST_F(tm_multi_device_test_t, random_writes_concurrent)
+TEST_P(tm_multi_device_test_t, random_writes_concurrent)
 {
   test_random_writes_concurrent();
 }
+
+TEST_P(tm_single_device_test_t, parallel_extent_read)
+{
+  test_parallel_extent_read();
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  transaction_manager_test,
+  tm_single_device_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+  transaction_manager_test,
+  tm_multi_device_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);

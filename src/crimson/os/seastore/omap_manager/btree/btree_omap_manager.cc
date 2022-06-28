@@ -27,12 +27,14 @@ BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint)
 
   logger().debug("{}", __func__);
   return tm.alloc_extent<OMapLeafNode>(t, hint, OMAP_LEAF_BLOCK_SIZE)
-    .si_then([hint](auto&& root_extent) {
+    .si_then([hint, &t](auto&& root_extent) {
       root_extent->set_size(0);
       omap_node_meta_t meta{1};
       root_extent->set_meta(meta);
       omap_root_t omap_root;
       omap_root.update(root_extent->get_laddr(), 1, hint);
+      t.get_omap_tree_stats().depth = 1u;
+      t.get_omap_tree_stats().extents_num_delta++;
       return initialize_omap_iertr::make_ready_future<omap_root_t>(omap_root);
   });
 }
@@ -53,7 +55,7 @@ BtreeOMapManager::handle_root_split(
 {
   return oc.tm.alloc_extent<OMapInnerNode>(oc.t, omap_root.hint,
                                            OMAP_INNER_BLOCK_SIZE)
-    .si_then([&omap_root, mresult](auto&& nroot) -> handle_root_split_ret {
+    .si_then([&omap_root, mresult, oc](auto&& nroot) -> handle_root_split_ret {
     auto [left, right, pivot] = *(mresult.split_tuple);
     omap_node_meta_t meta{omap_root.depth + 1};
     nroot->set_meta(meta);
@@ -62,6 +64,8 @@ BtreeOMapManager::handle_root_split(
     nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
                                 pivot, nroot->maybe_get_delta_buffer());
     omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint);
+    oc.t.get_omap_tree_stats().depth = omap_root.depth;
+    ++(oc.t.get_omap_tree_stats().extents_num_delta);
     return seastar::now();
   });
 }
@@ -78,6 +82,8 @@ BtreeOMapManager::handle_root_merge(
     iter->get_val(),
     omap_root.depth -= 1,
     omap_root.hint);
+  oc.t.get_omap_tree_stats().depth = omap_root.depth;
+  oc.t.get_omap_tree_stats().extents_num_delta--;
   return oc.tm.dec_ref(oc.t, root->get_laddr()
   ).si_then([](auto &&ret) -> handle_root_merge_ret {
     return seastar::now();

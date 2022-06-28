@@ -387,6 +387,10 @@ void LogMonitor::log_external(const LogEntry& le)
   }
 
   if (g_conf()->mon_cluster_log_to_file) {
+    if (this->log_rotated.exchange(false)) {
+      this->log_external_close_fds();
+    }
+
     auto p = channel_fds.find(channel);
     int fd;
     if (p == channel_fds.end()) {
@@ -1038,6 +1042,11 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   return false;
 }
 
+void LogMonitor::dump_info(Formatter *f)
+{
+  f->dump_unsigned("logm_first_committed", get_first_committed());
+  f->dump_unsigned("logm_last_committed", get_last_committed());
+}
 
 int LogMonitor::sub_name_to_id(const string& n)
 {

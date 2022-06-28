@@ -18,10 +18,16 @@
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
 #include "common/tracer.h"
+#include "rgw_datalog_notify.h"
+#include "include/random.h"
 
 class RGWGetDataCB;
 class RGWAccessListFilter;
 class RGWLC;
+class RGWObjManifest;
+struct RGWZoneGroup;
+struct RGWZoneParams;
+class RGWRealm;
 struct RGWCtl;
 struct rgw_user_bucket;
 class RGWUsageBatch;
@@ -210,6 +216,7 @@ class LuaScriptManager;
 class RGWOIDCProvider;
 class RGWRole;
 class PlacementTier;
+struct RGWRoleInfo;
 
 enum AttrsMod {
   ATTRSMOD_NONE    = 0,
@@ -314,6 +321,10 @@ class Store {
     virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
 					  bufferlist& in_data, JSONParser* jp, req_info& info,
 					  optional_yield y) = 0;
+    virtual int forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y) = 0;
     /** Get zone info for this store */
     virtual Zone* get_zone() = 0;
     /** Get a unique ID specific to this zone. */
@@ -330,7 +341,7 @@ class Store {
      /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
       * management/tracking software */
     /** RGWOp variant */
-    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
+    virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
         rgw::notify::EventType event_type, const std::string* object_name=nullptr) = 0;
     /** No-req_state variant (e.g., rgwlc) */
     virtual std::unique_ptr<Notification> get_notification(
@@ -358,7 +369,9 @@ class Store {
     /** Enable or disable a set of bucket.  e.g. if a User is suspended */
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled) = 0;
     /** Get a new request ID */
-    virtual uint64_t get_new_req_id() = 0;
+    virtual uint64_t get_new_req_id() {
+      return ceph::util::generate_random_number<uint64_t>();
+    }
     /** Get a handler for bucket sync policy. */
     virtual int get_sync_policy_handler(const DoutPrefixProvider* dpp,
 					std::optional<rgw_zone_id> zone,
@@ -370,7 +383,7 @@ class Store {
     /** Wake up sync threads for bucket metadata sync */
     virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) = 0;
     /** Wake up sync threads for bucket data sync */
-    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, std::map<int, std::set<std::string> >& shard_ids) = 0;
+    virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) = 0;
     /** Clear all usage statistics globally */
     virtual int clear_usage(const DoutPrefixProvider *dpp) = 0;
     /** Get usage statistics for all users and buckets */
@@ -411,6 +424,7 @@ class Store {
                 std::multimap<std::string,std::string> tags={}) = 0;
     /** Get an IAM Role by ID */
     virtual std::unique_ptr<RGWRole> get_role(std::string id) = 0;
+    virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) = 0;
     /** Get all IAM Roles optionally filtered by path */
     virtual int get_roles(const DoutPrefixProvider *dpp,
 			  optional_yield y,
@@ -704,13 +718,16 @@ class Bucket {
      * If @a get_stats is true, then statistics on the bucket are also looked up. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats = false) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
-    virtual int read_stats(const DoutPrefixProvider *dpp, int shard_id,
-				 std::string* bucket_ver, std::string* master_ver,
-				 std::map<RGWObjCategory, RGWStorageStats>& stats,
-				 std::string* max_marker = nullptr,
-				 bool* syncstopped = nullptr) = 0;
+    virtual int read_stats(const DoutPrefixProvider *dpp,
+			   const bucket_index_layout_generation& idx_layout,
+			   int shard_id, std::string* bucket_ver, std::string* master_ver,
+			   std::map<RGWObjCategory, RGWStorageStats>& stats,
+			   std::string* max_marker = nullptr,
+			   bool* syncstopped = nullptr) = 0;
     /** Read the bucket stats from the backing Store, asynchronous */
-    virtual int read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB* ctx) = 0;
+    virtual int read_stats_async(const DoutPrefixProvider *dpp,
+				 const bucket_index_layout_generation& idx_layout,
+				 int shard_id, RGWGetBucketStats_CB* ctx) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Refresh the metadata stats (size, count, and so on) from the backing store */

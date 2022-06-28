@@ -1135,7 +1135,7 @@ bool MDSMap::is_degraded() const {
 
 void MDSMap::set_min_compat_client(ceph_release_t version)
 {
-  vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
+  vector<size_t> bits;
 
   if (version >= ceph_release_t::octopus)
     bits.push_back(CEPHFS_FEATURE_OCTOPUS);

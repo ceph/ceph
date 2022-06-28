@@ -63,7 +63,8 @@ public:
   using rep_op_fut_t =
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
-  PGBackend(shard_id_t shard, CollectionRef coll, crimson::os::FuturizedStore* store);
+  PGBackend(shard_id_t shard, CollectionRef coll,
+            crimson::osd::ShardServices &shard_services);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
@@ -98,7 +99,8 @@ public:
     const ObjectState& os,
     OSDOp& osd_op);
   using cmp_ext_errorator = ll_read_errorator::extend<
-    crimson::ct_error::invarg>;
+    crimson::ct_error::invarg,
+    crimson::ct_error::cmp_fail>;
   using cmp_ext_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -337,6 +339,7 @@ public:
 protected:
   const shard_id_t shard;
   CollectionRef coll;
+  crimson::osd::ShardServices &shard_services;
   crimson::os::FuturizedStore* store;
   bool stopping = false;
   std::optional<peering_info_t> peering;

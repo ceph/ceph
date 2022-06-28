@@ -22,8 +22,11 @@ import os
 import time
 from typing import Any, Dict, Optional
 
-AT_NO_ATTR_SYNC = 0x4000
-AT_SYMLINK_NOFOLLOW = 0x100
+AT_SYMLINK_NOFOLLOW = 0x0100
+AT_STATX_SYNC_TYPE  = 0x6000
+AT_STATX_SYNC_AS_STAT = 0x0000
+AT_STATX_FORCE_SYNC = 0x2000
+AT_STATX_DONT_SYNC = 0x4000
 cdef int AT_SYMLINK_NOFOLLOW_CDEF = AT_SYMLINK_NOFOLLOW
 CEPH_STATX_BASIC_STATS = 0x7ff
 cdef int CEPH_STATX_BASIC_STATS_CDEF = CEPH_STATX_BASIC_STATS
@@ -1943,7 +1946,7 @@ cdef class LibCephFS(object):
 
         :param path: the file or directory to get the statistics of.
         :param mask: want bitfield of CEPH_STATX_* flags showing designed attributes.
-        :param flag: bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+        :param flag: bitfield that can be used to set AT_* modifier flags (AT_STATX_SYNC_AS_STAT, AT_STATX_FORCE_SYNC, AT_STATX_DONT_SYNC and AT_SYMLINK_NOFOLLOW)
         """
 
         self.require_state("mounted")

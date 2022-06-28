@@ -5,7 +5,6 @@ import {
   Component,
   EventEmitter,
   Input,
-  NgZone,
   OnChanges,
   OnDestroy,
   OnInit,
@@ -24,7 +23,7 @@ import {
   TableColumnProp
 } from '@swimlane/ngx-datatable';
 import _ from 'lodash';
-import { Observable, Subject, Subscription, timer as observableTimer } from 'rxjs';
+import { Observable, of, Subject, Subscription } from 'rxjs';
 
 import { TableStatus } from '~/app/shared/classes/table-status';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -35,6 +34,7 @@ import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CdUserConfig } from '~/app/shared/models/cd-user-config';
+import { TimerService } from '~/app/shared/services/timer.service';
 
 @Component({
   selector: 'cd-table',
@@ -234,7 +234,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     });
   }
 
-  constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) {}
+  constructor(
+    // private ngZone: NgZone,
+    private cdRef: ChangeDetectorRef,
+    private timerService: TimerService
+  ) {}
 
   static prepareSearch(search: string) {
     search = search.toLowerCase().replace(/,/g, '');
@@ -296,17 +300,19 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       this.loadingIndicator = true;
     }
     if (_.isInteger(this.autoReload) && this.autoReload > 0) {
-      this.ngZone.runOutsideAngular(() => {
-        this.reloadSubscriber = observableTimer(0, this.autoReload).subscribe(() => {
-          this.ngZone.run(() => {
-            return this.reloadData();
-          });
+      this.reloadSubscriber = this.timerService
+        .get(() => of(0), this.autoReload)
+        .subscribe(() => {
+          this.reloadData();
         });
-      });
     } else if (!this.autoReload) {
       this.reloadData();
     } else {
       this.useData();
+    }
+
+    if (this.selectionType === 'single') {
+      this.table.selectCheck = this.singleSelectCheck.bind(this);
     }
   }
 
@@ -668,21 +674,22 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (this.updateSelectionOnRefresh === 'never') {
       return;
     }
-    const newSelected: any[] = [];
+    const newSelected = new Set();
     this.selection.selected.forEach((selectedItem) => {
       for (const row of this.data) {
         if (selectedItem[this.identifier] === row[this.identifier]) {
-          newSelected.push(row);
+          newSelected.add(row);
         }
       }
     });
+    const newSelectedArray = Array.from(newSelected.values());
     if (
       this.updateSelectionOnRefresh === 'onChange' &&
-      _.isEqual(this.selection.selected, newSelected)
+      _.isEqual(this.selection.selected, newSelectedArray)
     ) {
       return;
     }
-    this.selection.selected = newSelected;
+    this.selection.selected = newSelectedArray;
     this.onSelect(this.selection);
   }
 
@@ -709,6 +716,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       this.selection.selected = $event['selected'];
     }
     this.updateSelection.emit(_.clone(this.selection));
+  }
+
+  private singleSelectCheck(row: any) {
+    return this.selection.selected.indexOf(row) === -1;
   }
 
   toggleColumn(column: CdTableColumn) {

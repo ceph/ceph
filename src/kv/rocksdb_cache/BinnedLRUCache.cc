@@ -570,7 +570,7 @@ void BinnedLRUCache::DisownData() {
 #endif  // !__SANITIZE_ADDRESS__
 }
 
-#if (ROCKSDB_MAJOR >= 6 && ROCKSDB_MINOR >= 22)
+#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
 DeleterFn BinnedLRUCache::GetDeleter(Handle* handle) const
 {
   return reinterpret_cast<const BinnedLRUHandle*>(handle)->deleter;

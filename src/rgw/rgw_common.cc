@@ -128,7 +128,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
     { ERR_RATE_LIMITED, {503, "SlowDown"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
-    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSetError"}},
+    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSet"}},
     { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
 });
 
@@ -333,7 +333,7 @@ void set_req_state_err(struct rgw_err& err,	/* out */
   err.err_code = "UnknownError";
 }
 
-void set_req_state_err(struct req_state* s, int err_no, const string& err_msg)
+void set_req_state_err(req_state* s, int err_no, const string& err_msg)
 {
   if (s) {
     set_req_state_err(s, err_no);
@@ -351,14 +351,14 @@ void set_req_state_err(struct req_state* s, int err_no, const string& err_msg)
   }
 }
 
-void set_req_state_err(struct req_state* s, int err_no)
+void set_req_state_err(req_state* s, int err_no)
 {
   if (s) {
     set_req_state_err(s->err, err_no, s->prot_flags);
   }
 }
 
-void dump(struct req_state* s)
+void dump(req_state* s)
 {
   if (s->format != RGW_FORMAT_HTML)
     s->formatter->open_object_section("Error");
@@ -869,6 +869,24 @@ int RGWHTTPArgs::parse(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+void RGWHTTPArgs::remove(const string& name)
+{
+  auto val_iter = val_map.find(name);
+  if (val_iter != std::end(val_map)) {
+    val_map.erase(val_iter);
+  }
+
+  auto sys_val_iter = sys_val_map.find(name);
+  if (sys_val_iter != std::end(sys_val_map)) {
+    sys_val_map.erase(sys_val_iter);
+  }
+
+  auto subres_iter = sub_resources.find(name);
+  if (subres_iter != std::end(sub_resources)) {
+    sub_resources.erase(subres_iter);
+  }
+}
+
 void RGWHTTPArgs::append(const string& name, const string& val)
 {
   if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
@@ -1171,7 +1189,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
 }
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            struct req_state * const s,
+                            req_state * const s,
                             const rgw::ARN& res,
                             const uint64_t op)
 {
@@ -1180,7 +1198,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
 }
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, 
-                                      struct req_state * const s,
+                                      req_state * const s,
                                       const int perm)
 {
   perm_state_from_req_state ps(s);
@@ -1263,7 +1281,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 }
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              struct req_state * const s,
+                              req_state * const s,
 			      const rgw_bucket& bucket,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
@@ -1302,7 +1320,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct pe
   return user_acl->verify_permission(dpp, *s->identity, perm, perm);
 }
 
-bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state * const s,
+bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state * const s,
 					RGWAccessControlPolicy * const user_acl,
 					RGWAccessControlPolicy * const bucket_acl,
 					const int perm)
@@ -1315,7 +1333,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct re
                                             perm);
 }
 
-bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state * const s, const int perm)
+bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state * const s, const int perm)
 {
   perm_state_from_req_state ps(s);
 
@@ -1329,7 +1347,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct re
                                             perm);
 }
 
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * const s, const uint64_t op)
+bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op)
 {
   perm_state_from_req_state ps(s);
 
@@ -1347,7 +1365,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 // Authorize anyone permitted by the bucket policy, identity policies, session policies and the bucket owner
 // unless explicitly denied by the policy.
 
-int verify_bucket_owner_or_policy(struct req_state* const s,
+int verify_bucket_owner_or_policy(req_state* const s,
 				  const uint64_t op)
 {
   auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env, op, ARN(s->bucket->get_key()));
@@ -1518,7 +1536,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   return user_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm);
 }
 
-bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state * const s,
+bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s,
 			      const rgw_obj& obj,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
@@ -1586,7 +1604,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
   return user_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm);
 }
 
-bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state *s, int perm)
+bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s, int perm)
 {
   perm_state_from_req_state ps(s);
 
@@ -1601,7 +1619,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct re
                                             perm);
 }
 
-bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state *s, uint64_t op)
+bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op)
 {
   perm_state_from_req_state ps(s);
 
@@ -2309,7 +2327,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     decode(swift_versioning, bl);
     if (swift_versioning) {
       decode(swift_ver_location, bl);
-    }
+   }
   }
   if (struct_v >= 17) {
     decode(creation_time, bl);
@@ -2336,7 +2354,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
 
   if (layout.logs.empty() &&
       layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
-    layout.logs.push_back(rgw::log_layout_from_index(0, layout.current_index.layout.normal));
+    layout.logs.push_back(rgw::log_layout_from_index(0, layout.current_index));
   }
   DECODE_FINISH(bl);
 }
@@ -2430,7 +2448,7 @@ void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
     l.current_index.layout.normal.num_shards = 11;
     l.logs.push_back(log_layout_from_index(
                        l.current_index.gen,
-                       l.current_index.layout.normal));
+                       l.current_index));
   };
 
 
@@ -3016,7 +3034,6 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
   // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
 
-  cerr << "config_store: " << config_store << std::endl;
   if ((config_store == "dbstore") ||
       (config_store == "motr")) {
     // These stores don't use the mon

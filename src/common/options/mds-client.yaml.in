@@ -31,14 +31,13 @@ options:
   - mds_client
   with_legacy: true
 - name: client_mount_timeout
-  type: float
+  type: secs
   level: advanced
   desc: timeout for mounting CephFS (seconds)
   fmt_desc: Set the timeout for CephFS mount in seconds.
   default: 5_min
   services:
   - mds_client
-  with_legacy: true
 - name: client_tick_interval
   type: secs
   level: dev
@@ -144,7 +143,7 @@ options:
   - mds_client
   with_legacy: true
 - name: client_caps_release_delay
-  type: int
+  type: secs
   level: dev
   default: 5
   services:
@@ -153,7 +152,6 @@ options:
     sets how many   seconds a client waits to release capabilities that it no
     longer needs in case the capabilities are needed for another user space
     operation.
-  with_legacy: true
 - name: client_quota_df
   type: bool
   level: advanced
@@ -447,7 +445,7 @@ options:
   default: true
   services:
   - mds_client
-# the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
+# the client should try to use dentry invalidation instead of remounting, on kernels it believes that will work for
 - name: client_try_dentry_invalidate
   type: bool
   level: dev
@@ -486,6 +484,9 @@ options:
   default: false
   services:
   - mds_client
+  flags:
+  - startup
+  - no_mon_update
   with_legacy: true
 - name: client_fs
   type: str
@@ -555,6 +556,16 @@ options:
   default: false
   tags:
   - client
+  services:
+  - mds_client
+  flags:
+  - runtime
+- name: client_quota
+  type: bool
+  level: advanced
+  desc: Enable quota enforcement
+  long_desc: Enable quota_bytes and quota_files enforcement for the client.
+  default: true
   services:
   - mds_client
   flags:

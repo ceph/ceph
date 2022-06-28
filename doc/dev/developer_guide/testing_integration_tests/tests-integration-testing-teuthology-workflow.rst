@@ -67,7 +67,6 @@ teuthology. This procedure explains how to run tests using teuthology.
         -p 110 \
         --filter "cephfs-shell" \
         -e foo@gmail.com \
-        -R fail
 
    The options in the above command are defined here: 
 
@@ -86,10 +85,6 @@ teuthology. This procedure explains how to run tests using teuthology.
         -e <email>    When tests finish or time out, send an email to the
                       specified address. Can also be specified in 
                       ~/.teuthology.yaml as 'results_email'
-        -R            A comma-separated list of statuses to be used
-                      with --rerun. Supported statuses: 'dead',
-                      'fail', 'pass', 'queued', 'running', 'waiting'
-                      [default: fail,dead]
       =============  =========================================================
 
    .. note:: The priority number present in the command above is a placeholder. 
@@ -239,10 +234,13 @@ example, for the above test ID, the link is - http://pulpito.front.sepia.ceph.co
 Re-running Tests
 ----------------
 
-The ``teuthology-suite`` command has a ``--rerun`` option, which allows you to
-re-run tests. This is handy when your test has failed or is dead. The
-``--rerun`` option takes the name of a teuthology run as an argument, as you
-can see in the example below:
+The ``teuthology-suite`` command has a ``-r`` (or ``--rerun``) option, which
+allows you to re-run tests. This is handy when your tests have failed or end
+up dead. The ``--rerun`` option takes the name of a teuthology run as an
+argument. Option ``-R`` (or ``--rerun-statuses``) can be passed along with
+``-r`` to choose which kind of tests should be picked from the run. For
+example, you can re-run only those tests from previous run which had ended up
+as dead. Following is a practical example:
 
 .. prompt:: bash $ 
 
@@ -250,12 +248,23 @@ can see in the example below:
     -m smithi \
     -c wip-rishabh-fs-test_cephfs_shell-fix \
     -p 50 \
-    --rerun teuthology-2019-12-10_05:00:03-smoke-master-testing-basic-smithi \
-    -R fail,dead,queued,running \
+    --r teuthology-2019-12-10_05:00:03-smoke-master-testing-basic-smithi \
+    -R fail,dead,queued \
     -e $CEPH_QA_MAIL
 
-The meaning and function of the other options is covered in the table in the
-`Triggering Tests`_ section.
+Following's the definition of new options introduced in this section:
+
+      =======================  ===============================================
+         Option                     Meaning
+      =======================  ===============================================
+        -r, --rerun             Attempt to reschedule a run, selecting only
+                                those jobs whose status are mentioned by
+                                --rerun-status.
+        -R, --rerun-statuses    A comma-separated list of statuses to be used
+                                with --rerun. Supported statuses: 'dead',
+                                'fail', 'pass', 'queued', 'running' and
+                                'waiting'. Default value: 'fail,dead'
+      =======================  ===============================================
 
 Naming the ceph-ci branch
 -------------------------

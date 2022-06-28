@@ -39,6 +39,7 @@ set(librgw_common_srcs
   services/svc_quota.cc
   services/svc_sync_modules.cc
   services/svc_rados.cc
+  services/svc_role_rados.cc
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc
   services/svc_sys_obj_core.cc
@@ -158,11 +159,13 @@ set(librgw_common_srcs
   rgw_url.cc
   rgw_oidc_provider.cc
   rgw_datalog.cc
+  rgw_datalog_notify.cc
   cls_fifo_legacy.cc
   rgw_lua_utils.cc
   rgw_lua.cc
   rgw_bucket_encryption.cc
-  rgw_tracer.cc)
+  rgw_tracer.cc
+  rgw_lua_background.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -251,8 +254,8 @@ if(WITH_LTTNG)
 endif()
 
 if(WITH_JAEGER)
-  add_dependencies(rgw_common ${jaeger_base})
-  target_link_libraries(rgw_common PUBLIC ${jaeger_base})
+  add_dependencies(rgw_common jaeger_base)
+  target_link_libraries(rgw_common PUBLIC jaeger_base)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)
@@ -357,7 +360,10 @@ add_library(radosgw SHARED
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
-  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip")
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/libkmip"
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
+  PRIVATE "${LUA_INCLUDE_DIR}")
+
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
 target_link_libraries(radosgw

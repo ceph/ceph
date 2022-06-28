@@ -381,6 +381,12 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   _collect_and_send_global_metrics = cct->_conf.get_val<bool>(
     "client_collect_and_send_global_metrics");
 
+  mount_timeout = cct->_conf.get_val<std::chrono::seconds>(
+    "client_mount_timeout");
+
+  caps_release_delay = cct->_conf.get_val<std::chrono::seconds>(
+    "client_caps_release_delay");
+
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
@@ -1615,6 +1621,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
   mds_rank_t mds = MDS_RANK_NONE;
   __u32 hash = 0;
   bool is_hash = false;
+  int issued = 0;
 
   Inode *in = NULL;
   Dentry *de = NULL;
@@ -1675,9 +1682,12 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
     ldout(cct, 20) << __func__ << " " << *in << " is_hash=" << is_hash
              << " hash=" << hash << dendl;
   
+    if (req->get_op() == CEPH_MDS_OP_GETATTR)
+      issued = req->inode()->caps_issued();
+
     if (is_hash && S_ISDIR(in->mode) && (!in->fragmap.empty() || !in->frag_repmap.empty())) {
       frag_t fg = in->dirfragtree[hash];
-      if (!req->auth_is_best()) {
+      if (!req->auth_is_best(issued)) {
         auto repmapit = in->frag_repmap.find(fg);
         if (repmapit != in->frag_repmap.end()) {
           auto& repmap = repmapit->second;
@@ -1698,7 +1708,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
       }
     }
   
-    if (in->auth_cap && req->auth_is_best()) {
+    if (in->auth_cap && req->auth_is_best(issued)) {
       mds = in->auth_cap->session->mds_num;
     } else if (!in->caps.empty()) {
       mds = in->caps.begin()->second.session->mds_num;
@@ -1889,6 +1899,7 @@ int Client::make_request(MetaRequest *request,
 
   // and timestamp
   request->op_stamp = ceph_clock_now();
+  request->created = ceph::coarse_mono_clock::now();
 
   // make note
   mds_requests[tid] = request->get();
@@ -2330,15 +2341,6 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
       if (!session->seq && m->get_seq())
         session->seq = m->get_seq();
 
-      feature_bitset_t missing_features(CEPHFS_FEATURES_CLIENT_REQUIRED);
-      missing_features -= m->supported_features;
-      if (!missing_features.empty()) {
-	lderr(cct) << "mds." << from << " lacks required features '"
-		   << missing_features << "', closing session " << dendl;
-	_close_mds_session(session.get());
-	_closed_mds_session(session.get(), -CEPHFS_EPERM, true);
-	break;
-      }
       session->mds_features = std::move(m->supported_features);
       session->mds_metric_flags = std::move(m->metric_spec.metric_flags);
 
@@ -2457,6 +2459,9 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   ldout(cct, 10) << __func__ << " rebuilding request " << request->get_tid()
 		 << " for mds." << mds << dendl;
   auto r = build_client_request(request);
+  if (!r)
+    return;
+
   if (request->dentry()) {
     r->set_dentry_wanted();
   }
@@ -2500,6 +2505,28 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
 
 ref_t<MClientRequest> Client::build_client_request(MetaRequest *request)
 {
+  /*
+   * The type of 'retry_attempt' in 'MetaRequest' is 'int',
+   * while in 'ceph_mds_request_head' the type of 'num_retry'
+   * is '__u8'. So in case the request retries exceeding 256
+   * times, the MDS will receive a incorrect retry seq.
+   *
+   * In this case it's ususally a bug in MDS and continue
+   * retrying the request makes no sense.
+   *
+   * In future this could be fixed in ceph code, so avoid
+   * using the hardcode here.
+   */
+  int max_retry = sizeof(((struct ceph_mds_request_head*)0)->num_retry);
+  max_retry = 1 << (max_retry * CHAR_BIT);
+  if (request->retry_attempt >= max_retry) {
+    request->abort(-EMULTIHOP);
+    request->caller_cond->notify_all();
+    ldout(cct, 1) << __func__ << " request tid " << request->tid
+                  << " seq overflow" << ", abort it" << dendl;
+    return nullptr;
+  }
+
   auto req = make_message<MClientRequest>(request->get_op());
   req->set_tid(request->tid);
   req->set_stamp(request->op_stamp);
@@ -2642,6 +2669,13 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
   ldout(cct, 20) << __func__ << " got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
 
+  // correct sessions ?
+  if (request->mds != mds_num) {
+    ldout(cct, 0) << "got a stale reply from mds." << mds_num
+            << " instead of mds." << request->mds << dendl;
+    return;
+  }
+
   if (request->got_unsafe && !is_safe) {
     //duplicate response
     ldout(cct, 0) << "got a duplicate reply on tid " << tid << " from mds "
@@ -2649,25 +2683,6 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
     return;
   }
 
-  if (-CEPHFS_ESTALE == reply->get_result()) { // see if we can get to proper MDS
-    ldout(cct, 20) << "got ESTALE on tid " << request->tid
-		   << " from mds." << request->mds << dendl;
-    request->send_to_auth = true;
-    request->resend_mds = choose_target_mds(request);
-    Inode *in = request->inode();
-    std::map<mds_rank_t, Cap>::const_iterator it;
-    if (request->resend_mds >= 0 &&
-	request->resend_mds == request->mds &&
-	(in == NULL ||
-         (it = in->caps.find(request->resend_mds)) != in->caps.end() ||
-         request->sent_on_mseq == it->second.mseq)) {
-      ldout(cct, 20) << "have to return ESTALE" << dendl;
-    } else {
-      request->caller_cond->notify_all();
-      return;
-    }
-  }
-  
   ceph_assert(!request->reply);
   request->reply = reply;
   insert_trace(request, session.get());
@@ -3657,8 +3672,8 @@ int Client::get_caps_used(Inode *in)
 void Client::cap_delay_requeue(Inode *in)
 {
   ldout(cct, 10) << __func__ << " on " << *in << dendl;
-  in->hold_caps_until = ceph_clock_now();
-  in->hold_caps_until += cct->_conf->client_caps_release_delay;
+
+  in->hold_caps_until = ceph::coarse_mono_clock::now() + caps_release_delay;
   delayed_list.push_back(&in->delay_cap_item);
 }
 
@@ -5721,8 +5736,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
 {
   if (perms.uid() == 0) {
-    // Executable are overridable when there is at least one exec bit set
-    if((want & MAY_EXEC) && !(in->mode & S_IXUGO))
+    // For directories, DACs are overridable.
+    // For files, Read/write DACs are always overridable but executable DACs are
+    // overridable when there is at least one exec bit set
+    if(!S_ISDIR(in->mode) && (want & MAY_EXEC) && !(in->mode & S_IXUGO))
       return -CEPHFS_EACCES;
     return 0;
   }
@@ -6069,7 +6086,7 @@ int Client::authenticate()
   }
 
   client_lock.unlock();
-  int r = monclient->authenticate(cct->_conf->client_mount_timeout);
+  int r = monclient->authenticate(std::chrono::duration<double>(mount_timeout).count());
   client_lock.lock();
   if (r < 0) {
     return r;
@@ -6690,8 +6707,8 @@ void Client::renew_and_flush_cap_releases()
 
   if (!mount_aborted && mdsmap->get_epoch()) {
     // renew caps?
-    utime_t el = ceph_clock_now() - last_cap_renew;
-    if (unlikely(el > mdsmap->get_session_timeout() / 3.0))
+    auto el = ceph::coarse_mono_clock::now() - last_cap_renew;
+    if (unlikely(utime_t(el) > mdsmap->get_session_timeout() / 3.0))
       renew_caps();
 
     flush_cap_releases();
@@ -6702,7 +6719,7 @@ void Client::tick()
 {
   ldout(cct, 20) << "tick" << dendl;
 
-  utime_t now = ceph_clock_now();
+  auto now = ceph::coarse_mono_clock::now();
 
   /*
    * If the mount() is not finished
@@ -6710,7 +6727,7 @@ void Client::tick()
   if (is_mounting() && !mds_requests.empty()) {
     MetaRequest *req = mds_requests.begin()->second;
 
-    if (req->op_stamp + cct->_conf->client_mount_timeout < now) {
+    if (req->created + mount_timeout < now) {
       req->abort(-CEPHFS_ETIMEDOUT);
       if (req->caller_cond) {
         req->kick = true;
@@ -6744,7 +6761,7 @@ void Client::tick()
   trim_cache(true);
 
   if (blocklisted && (is_mounted() || is_unmounting()) &&
-      last_auto_reconnect + 30 * 60 < now &&
+      last_auto_reconnect + std::chrono::seconds(30 * 60) < now &&
       cct->_conf.get_val<bool>("client_reconnect_stale")) {
     messenger->client_reset();
     fd_gen++; // invalidate open files
@@ -6834,7 +6851,8 @@ void Client::collect_and_send_global_metrics() {
   }
 
   // metadata latency
-  if (session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_METADATA_LATENCY)) {
     metric = ClientMetricMessage(MetadataLatencyPayload(logger->tget(l_c_lat),
                                                         logger->tget(l_c_md_avg),
                                                         logger->get(l_c_md_sqsum),
@@ -6859,7 +6877,8 @@ void Client::collect_and_send_global_metrics() {
   }
 
   // opened files
-  if (session->mds_metric_flags.test(CLIENT_METRIC_TYPE_OPENED_FILES)) {
+  if (_collect_and_send_global_metrics ||
+      session->mds_metric_flags.test(CLIENT_METRIC_TYPE_OPENED_FILES)) {
     auto [opened_files, total_inodes] = get_opened_files_rates();
     metric = ClientMetricMessage(OpenedFilesPayload(opened_files, total_inodes));
     message.push_back(metric);
@@ -6903,7 +6922,7 @@ void Client::collect_and_send_global_metrics() {
 void Client::renew_caps()
 {
   ldout(cct, 10) << "renew_caps()" << dendl;
-  last_cap_renew = ceph_clock_now();
+  last_cap_renew = ceph::coarse_mono_clock::now();
 
   for (auto &p : mds_sessions) {
     ldout(cct, 15) << "renew_caps requesting from mds." << p.first << dendl;
@@ -8155,11 +8174,11 @@ unsigned Client::statx_to_mask(unsigned int flags, unsigned int want)
 {
   unsigned mask = 0;
 
-  /* if NO_ATTR_SYNC is set, then we don't need any -- just use what's in cache */
-  if (flags & AT_NO_ATTR_SYNC)
+  /* The AT_STATX_FORCE_SYNC is always in higher priority than AT_STATX_DONT_SYNC. */
+  if ((flags & AT_STATX_SYNC_TYPE) == AT_STATX_DONT_SYNC)
     goto out;
 
-  /* Always set PIN to distinguish from AT_NO_ATTR_SYNC case */
+  /* Always set PIN to distinguish from AT_STATX_DONT_SYNC case */
   mask |= CEPH_CAP_PIN;
   if (want & (CEPH_STATX_MODE|CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_BTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION))
     mask |= CEPH_CAP_AUTH_SHARED;
@@ -8287,7 +8306,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
   memset(stx, 0, sizeof(struct ceph_statx));
 
   /*
-   * If mask is 0, then the caller set AT_NO_ATTR_SYNC. Reset the mask
+   * If mask is 0, then the caller set AT_STATX_DONT_SYNC. Reset the mask
    * so that all bits are set.
    */
   if (!mask)
@@ -10575,12 +10594,13 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
   uint64_t fpos = 0;
-
-  if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
-    return -CEPHFS_EFBIG;
-
-  //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode.get();
+
+  if ( (uint64_t)(offset+size) > mdsmap->get_max_filesize() && //exceeds config
+       (uint64_t)(offset+size) > in->size ) { //exceeds filesize 
+      return -CEPHFS_EFBIG;              
+	}
+  //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
 
   if (objecter->osdmap_pool_full(in->layout.pool_id)) {
     return -CEPHFS_ENOSPC;
@@ -11196,9 +11216,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   ceph_assert(root != nullptr);
   InodeRef quota_root = root->quota.is_enable() ? root : get_quota_root(root.get(), perms);
 
-  // get_quota_root should always give us something
-  // because client quotas are always enabled
-  ceph_assert(quota_root != nullptr);
+  // get_quota_root should always give us something if client quotas are
+  // enabled
+  ceph_assert(cct->_conf.get_val<bool>("client_quota") == false || quota_root != nullptr);
 
   if (quota_root && cct->_conf->client_quota_df && quota_root->quota.max_bytes) {
 
@@ -14054,7 +14074,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     else
       return -CEPHFS_EROFS;
   }
-  if (fromdir != todir) {
+  if (cct->_conf.get_val<bool>("client_quota") && fromdir != todir) {
     Inode *fromdir_root =
       fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
     Inode *todir_root =
@@ -15445,6 +15465,10 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 {
   Inode *quota_in = root_ancestor;
   SnapRealm *realm = in->snaprealm;
+
+  if (!cct->_conf.get_val<bool>("client_quota"))
+    return NULL;
+
   while (realm) {
     ldout(cct, 10) << __func__ << " realm " << realm->ino << dendl;
     if (realm->ino != in->ino) {
@@ -15470,6 +15494,9 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
 				   std::function<bool (const Inode &in)> test)
 {
+  if (!cct->_conf.get_val<bool>("client_quota"))
+    return false;
+
   while (true) {
     ceph_assert(in != NULL);
     if (test(*in)) {
@@ -15938,6 +15965,8 @@ const char** Client::get_tracked_conf_keys() const
     "client_oc_max_dirty",
     "client_oc_target_dirty",
     "client_oc_max_dirty_age",
+    "client_caps_release_delay",
+    "client_mount_timeout",
     NULL
   };
   return keys;
@@ -15974,6 +16003,14 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_collect_and_send_global_metrics")) {
     _collect_and_send_global_metrics = cct->_conf.get_val<bool>(
       "client_collect_and_send_global_metrics");
+  }
+  if (changed.count("client_caps_release_delay")) {
+    caps_release_delay = cct->_conf.get_val<std::chrono::seconds>(
+      "client_caps_release_delay");
+  }
+  if (changed.count("client_mount_timeout")) {
+    mount_timeout = cct->_conf.get_val<std::chrono::seconds>(
+      "client_mount_timeout");
   }
 }
 

@@ -20,6 +20,7 @@
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
 #include "osd_types.h"
+#include "osd_types_fmt.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 #include "MissingLoc.h"
@@ -54,6 +55,22 @@ struct PGPool {
       auto fac = conf->osd_pool_default_read_lease_ratio;
       return ceph::make_timespan(hbi * fac);
     }
+  }
+};
+
+template <>
+struct fmt::formatter<PGPool> {
+  template <typename ParseContext>
+  constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const PGPool& pool, FormatContext& ctx)
+  {
+    return fmt::format_to(ctx.out(),
+                          "{}/{}({})",
+                          pool.id,
+                          pool.name,
+                          pool.info);
   }
 };
 
@@ -2136,7 +2153,7 @@ public:
     return last_rollback_info_trimmed_to_applied;
   }
   /// Returns stable reference to internal pool structure
-  const PGPool &get_pool() const {
+  const PGPool &get_pgpool() const {
     return pool;
   }
   /// Returns reference to current osdmap

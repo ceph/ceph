@@ -7,6 +7,8 @@ Ceph Releases (index)
 .. toctree::
    :maxdepth: 1
 
+.. ceph_releases_gantt:: releases.yml
+
 .. _active-releases:
 
 Active Releases
@@ -56,13 +58,15 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
+.. ceph_timeline_gantt:: releases.yml quincy pacific octopus
 .. ceph_timeline:: releases.yml quincy pacific octopus
 
 .. _Quincy: quincy
 .. _17.2.0: quincy#v17-2-0-quincy
-
+.. _17.2.1: quincy#v17-2-1-quincy
 
 .. _Pacific: pacific
+.. _16.2.8: pacific#v16-2-8-pacific
 .. _16.2.7: pacific#v16-2-7-pacific
 .. _16.2.6: pacific#v16-2-6-pacific
 .. _16.2.5: pacific#v16-2-5-pacific

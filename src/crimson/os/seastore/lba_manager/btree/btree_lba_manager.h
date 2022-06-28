@@ -25,11 +25,24 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
+class BtreeLBAPin : public BtreeNodePin<laddr_t, paddr_t> {
+public:
+  BtreeLBAPin() = default;
+  BtreeLBAPin(
+    CachedExtentRef parent,
+    lba_map_val_t &val,
+    lba_node_meta_t &&meta)
+    : BtreeNodePin(
+	parent,
+	val.paddr,
+	val.len,
+	std::forward<lba_node_meta_t>(meta))
+  {}
+};
+
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,
-  LBALeafNode, LBA_BLOCK_SIZE>;
-
-using BtreeLBAPin = BtreeNodePin<laddr_t>;
+  LBALeafNode, BtreeLBAPin, LBA_BLOCK_SIZE>;
 
 /**
  * BtreeLBAManager
@@ -86,7 +99,9 @@ public:
   }
 
   void complete_transaction(
-    Transaction &t) final;
+    Transaction &t,
+    std::vector<CachedExtentRef> &,
+    std::vector<CachedExtentRef> &) final;
 
   /**
    * init_cached_extent
@@ -105,10 +120,6 @@ public:
     laddr_t begin,
     laddr_t end,
     scan_mappings_func_t &&f) final;
-
-  scan_mapped_space_ret scan_mapped_space(
-    Transaction &t,
-    scan_mapped_space_func_t &&f) final;
 
   rewrite_extent_ret rewrite_extent(
     Transaction &t,

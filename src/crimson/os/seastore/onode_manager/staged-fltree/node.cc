@@ -22,13 +22,17 @@ namespace crimson::os::seastore::onode {
  * tree_cursor_t
  */
 
+// create from insert
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
       : ref_leaf_node{node}, position{pos}, cache{ref_leaf_node}
 {
   assert(is_tracked());
   ref_leaf_node->do_track_cursor<true>(*this);
+  // do not account updates for the inserted values
+  is_mutated = true;
 }
 
+// create from lookup
 tree_cursor_t::tree_cursor_t(
     Ref<LeafNode> node, const search_position_t& pos,
     const key_view_t& key_view, const value_header_t* p_value_header)
@@ -39,6 +43,7 @@ tree_cursor_t::tree_cursor_t(
   ref_leaf_node->do_track_cursor<true>(*this);
 }
 
+// lookup reaches the end, contain leaf node for further insert
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
       : ref_leaf_node{node}, position{search_position_t::end()}, cache{ref_leaf_node}
 {
@@ -46,6 +51,7 @@ tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
   assert(ref_leaf_node->is_level_tail());
 }
 
+// create an invalid tree_cursor_t
 tree_cursor_t::~tree_cursor_t()
 {
   if (is_tracked()) {
@@ -404,6 +410,7 @@ eagain_ifuture<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
   LOG_PREFIX(OTree::Node::mkfs);
   return LeafNode::allocate_root(c, root_tracker
   ).si_then([c, FNAME](auto ret) {
+    c.t.get_onode_tree_stats().extents_num_delta++;
     INFOT("allocated root {}", c.t, ret->get_name());
   });
 }
@@ -621,6 +628,7 @@ Node::try_merge_adjacent(
           search_position_t left_last_pos = left_for_merge->impl->merge(
               left_mut, *right_for_merge->impl, merge_stage, merge_size);
           left_for_merge->track_merge(right_for_merge, merge_stage, left_last_pos);
+	  --(c.t.get_onode_tree_stats().extents_num_delta);
           return left_for_merge->parent_info().ptr->apply_children_merge(
               c, std::move(left_for_merge), left_addr,
               std::move(right_for_merge), update_index_after_merge);
@@ -1231,6 +1239,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::allocate_root(
     fresh_node.mut.copy_in_absolute(
         const_cast<laddr_packed_t*>(p_value), old_root_addr);
     root->make_root_from(c, std::move(super), old_root_addr);
+    ++(c.t.get_onode_tree_stats().extents_num_delta);
     return root;
   });
 }
@@ -1440,6 +1449,7 @@ eagain_ifuture<> InternalNode::try_downgrade_root(
     child->deref_parent();
     auto super_to_move = deref_super();
     child->make_root_from(c, std::move(super_to_move), impl->laddr());
+    --(c.t.get_onode_tree_stats().extents_num_delta);
     return retire(c, std::move(this_ref));
   });
 }
@@ -1545,6 +1555,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
       validate_tracked_children();
       right_node->validate_tracked_children();
     }
+    ++(c.t.get_onode_tree_stats().extents_num_delta);
     return right_node;
   });
 }
@@ -2108,6 +2119,7 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
     validate_tracked_cursors();
     right_node->validate_tracked_cursors();
 
+    ++(c.t.get_onode_tree_stats().extents_num_delta);
     return apply_split_to_parent(
         c, std::move(this_ref), std::move(right_node), false
     ).si_then([ret] {
@@ -2149,7 +2161,8 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {
-    p_cursor = tree_cursor_t::create(this, position, key, p_value_header);
+    p_cursor = tree_cursor_t::create_tracked(
+        this, position, key, p_value_header);
   } else {
     p_cursor = found->second;
     assert(p_cursor->get_leaf_node() == this);
@@ -2199,7 +2212,8 @@ Ref<tree_cursor_t> LeafNode::track_insert(
   // track insert
   // TODO: getting key_view_t from stage::proceed_insert() and
   // stage::append_insert() has not supported yet
-  return tree_cursor_t::create(this, insert_pos);
+  return tree_cursor_t::create_inserted(
+      this, insert_pos);
 }
 
 void LeafNode::track_split(

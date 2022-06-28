@@ -185,7 +185,7 @@ endif()
 
 option(WITH_FUSE "Fuse is here" ON)
 if(WITH_FUSE)
-  find_package(FUSE)
+  find_package(FUSE REQUIRED)
   set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif()
 
@@ -408,7 +408,7 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
-option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" OFF)
+option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" ON)
 if(WITH_JAEGER)
   set(HAVE_JAEGER TRUE)
 endif()
@@ -635,8 +635,12 @@ if(WITH_SYSTEM_BOOST)
       INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
   endif()
 else()
-  set(BOOST_J 1 CACHE STRING
-    "max jobs for Boost build") # override w/-DBOOST_J=<n>
+  include(ProcessorCount)
+  ProcessorCount(DEFAULT_BOOST_J)
+  if(DEFAULT_BOOST_J EQUAL 0)
+    set(DEFAULT_BOOST_J 1)
+  endif()
+  set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
   build_boost(1.75

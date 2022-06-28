@@ -341,21 +341,21 @@ struct DBOpPrepareParams {
 };
 
 struct DBOps {
-  class InsertUserOp *InsertUser;
-  class RemoveUserOp *RemoveUser;
-  class GetUserOp *GetUser;
-  class InsertBucketOp *InsertBucket;
-  class UpdateBucketOp *UpdateBucket;
-  class RemoveBucketOp *RemoveBucket;
-  class GetBucketOp *GetBucket;
-  class ListUserBucketsOp *ListUserBuckets;
-  class InsertLCEntryOp *InsertLCEntry;
-  class RemoveLCEntryOp *RemoveLCEntry;
-  class GetLCEntryOp *GetLCEntry;
-  class ListLCEntriesOp *ListLCEntries;
-  class InsertLCHeadOp *InsertLCHead;
-  class RemoveLCHeadOp *RemoveLCHead;
-  class GetLCHeadOp *GetLCHead;
+  std::shared_ptr<class InsertUserOp> InsertUser;
+  std::shared_ptr<class RemoveUserOp> RemoveUser;
+  std::shared_ptr<class GetUserOp> GetUser;
+  std::shared_ptr<class InsertBucketOp> InsertBucket;
+  std::shared_ptr<class UpdateBucketOp> UpdateBucket;
+  std::shared_ptr<class RemoveBucketOp> RemoveBucket;
+  std::shared_ptr<class GetBucketOp> GetBucket;
+  std::shared_ptr<class ListUserBucketsOp> ListUserBuckets;
+  std::shared_ptr<class InsertLCEntryOp> InsertLCEntry;
+  std::shared_ptr<class RemoveLCEntryOp> RemoveLCEntry;
+  std::shared_ptr<class GetLCEntryOp> GetLCEntry;
+  std::shared_ptr<class ListLCEntriesOp> ListLCEntries;
+  std::shared_ptr<class  InsertLCHeadOp> InsertLCHead;
+  std::shared_ptr<class RemoveLCHeadOp> RemoveLCHead;
+  std::shared_ptr<class GetLCHeadOp> GetLCHead;
 };
 
 class ObjectOp {
@@ -364,19 +364,18 @@ class ObjectOp {
 
     virtual ~ObjectOp() {}
 
-    class PutObjectOp *PutObject;
-    class DeleteObjectOp *DeleteObject;
-    class GetObjectOp *GetObject;
-    class UpdateObjectOp *UpdateObject;
-    class ListBucketObjectsOp *ListBucketObjects;
-    class PutObjectDataOp *PutObjectData;
-    class UpdateObjectDataOp *UpdateObjectData;
-    class GetObjectDataOp *GetObjectData;
-    class DeleteObjectDataOp *DeleteObjectData;
-    class DeleteStaleObjectDataOp *DeleteStaleObjectData;
+    std::shared_ptr<class PutObjectOp> PutObject;
+    std::shared_ptr<class DeleteObjectOp> DeleteObject;
+    std::shared_ptr<class GetObjectOp> GetObject;
+    std::shared_ptr<class UpdateObjectOp> UpdateObject;
+    std::shared_ptr<class ListBucketObjectsOp> ListBucketObjects;
+    std::shared_ptr<class PutObjectDataOp> PutObjectData;
+    std::shared_ptr<class UpdateObjectDataOp> UpdateObjectData;
+    std::shared_ptr<class GetObjectDataOp> GetObjectData;
+    std::shared_ptr<class DeleteObjectDataOp> DeleteObjectData;
+    std::shared_ptr<class DeleteStaleObjectDataOp> DeleteStaleObjectData;
 
     virtual int InitializeObjectOps(std::string db_name, const DoutPrefixProvider *dpp) { return 0; }
-    virtual int FreeObjectOps(const DoutPrefixProvider *dpp) { return 0; }
 };
 
 class DBOp {
@@ -1512,7 +1511,7 @@ class DB {
 
     int InitializeParams(const DoutPrefixProvider *dpp, DBOpParams *params);
     int ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params);
-    DBOp* getDBOp(const DoutPrefixProvider *dpp, std::string_view Op, const DBOpParams *params);
+    std::shared_ptr<class DBOp> getDBOp(const DoutPrefixProvider *dpp, std::string_view Op, const DBOpParams *params);
     int objectmapInsert(const DoutPrefixProvider *dpp, std::string bucket, class ObjectOp* ptr);
     int objectmapDelete(const DoutPrefixProvider *dpp, std::string bucket);
 
@@ -1521,7 +1520,6 @@ class DB {
     virtual int closeDB(const DoutPrefixProvider *dpp) { return 0; }
     virtual int createTables(const DoutPrefixProvider *dpp) { return 0; }
     virtual int InitializeDBOps(const DoutPrefixProvider *dpp) { return 0; }
-    virtual int FreeDBOps(const DoutPrefixProvider *dpp) { return 0; }
     virtual int InitPrepareParams(const DoutPrefixProvider *dpp,
                                   DBOpPrepareParams &p_params,
                                   DBOpParams* params) = 0;

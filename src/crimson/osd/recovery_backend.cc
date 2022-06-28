@@ -41,13 +41,13 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   temp_contents.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
-    if ((recovery_waiter.pi && recovery_waiter.pi->is_complete())
-	|| (!recovery_waiter.pi
-	  && recovery_waiter.obc && recovery_waiter.obc->obs.exists)) {
-      recovery_waiter.obc->interrupt(
+    if ((recovery_waiter->pi && recovery_waiter->pi->is_complete())
+	|| (!recovery_waiter->pi
+	  && recovery_waiter->obc && recovery_waiter->obc->obs.exists)) {
+      recovery_waiter->obc->interrupt(
 	  ::crimson::common::actingset_changed(
 	      pg.is_primary()));
-      recovery_waiter.interrupt(why);
+      recovery_waiter->interrupt(why);
     }
   }
   recovering.clear();

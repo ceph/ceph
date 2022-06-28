@@ -187,12 +187,14 @@ protected:
       virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
       virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
       virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats = false) override;
-      virtual int read_stats(const DoutPrefixProvider *dpp, int shard_id,
+      virtual int read_stats(const DoutPrefixProvider *dpp,
+			     const bucket_index_layout_generation& idx_layout,
+			     int shard_id,
           std::string *bucket_ver, std::string *master_ver,
           std::map<RGWObjCategory, RGWStorageStats>& stats,
           std::string *max_marker = nullptr,
           bool *syncstopped = nullptr) override;
-      virtual int read_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB* ctx) override;
+      virtual int read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB* ctx) override;
       virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
       virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
@@ -767,6 +769,10 @@ public:
       virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
           bufferlist& in_data, JSONParser *jp, req_info& info,
           optional_yield y) override;
+      virtual int forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
+					     bufferlist& in_data,
+					     RGWXMLDecoder::XMLParser* parser, req_info& info,
+					     optional_yield y) override;
       virtual Zone* get_zone() { return &zone; }
       virtual std::string zone_unique_id(uint64_t unique_num) override;
       virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
@@ -775,7 +781,7 @@ public:
       virtual std::unique_ptr<Completions> get_completions(void) override;
 
   virtual std::unique_ptr<Notification> get_notification(
-    rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
+    rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
     rgw::notify::EventType event_type, const std::string* object_name) override;
 
   virtual std::unique_ptr<Notification> get_notification(
@@ -794,7 +800,6 @@ public:
       virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
       virtual void get_quota(RGWQuota& quota) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, std::vector<rgw_bucket>& buckets, bool enabled) override;
-      virtual uint64_t get_new_req_id() override { return 0; }
       virtual int get_sync_policy_handler(const DoutPrefixProvider *dpp,
           std::optional<rgw_zone_id> zone,
           std::optional<rgw_bucket> bucket,
@@ -802,7 +807,11 @@ public:
           optional_yield y) override;
       virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
       virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override { return; }
-      virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, std::map<int, std::set<std::string>>& shard_ids) override { return; }
+      virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp,
+					   const rgw_zone_id& source_zone,
+					   boost::container::flat_map<
+					     int,
+					   boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) override { return; }
       virtual int clear_usage(const DoutPrefixProvider *dpp) override { return 0; }
       virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
           uint32_t max_entries, bool *is_truncated,
@@ -827,6 +836,7 @@ public:
           std::string max_session_duration_str="",
           std::multimap<std::string,std::string> tags={}) override;
       virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
+      virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
       virtual int get_roles(const DoutPrefixProvider *dpp,
           optional_yield y,
           const std::string& path_prefix,

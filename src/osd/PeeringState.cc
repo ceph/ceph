@@ -4164,6 +4164,8 @@ void PeeringState::append_log(
 
   psdout(10) << __func__ << " approx pg log length =  "
 	     << pg_log.get_log().approx_size() << dendl;
+  psdout(10) << __func__ << " dups pg log length =  "
+	     << pg_log.get_log().dups.size() << dendl;
   psdout(10) << __func__ << " transaction_applied = "
 	     << transaction_applied << dendl;
   if (!transaction_applied || async)
@@ -6226,6 +6228,8 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   if (ps->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
     pl->send_pg_created(pgid);
   }
+
+  psdout(1) << __func__ << " AllReplicasActivated Activating complete" << dendl;
 
   ps->info.history.last_epoch_started = ps->info.last_epoch_started;
   ps->info.history.last_interval_started = ps->info.last_interval_started;

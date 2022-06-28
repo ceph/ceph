@@ -117,7 +117,8 @@ SqrubQueue interfaces (main functions):
 #include "common/ceph_atomic.h"
 #include "osd/osd_types.h"
 #include "osd/scrubber_common.h"
-
+#include "include/utime_fmt.h"
+#include "osd/osd_types_fmt.h"
 #include "utime.h"
 
 class PG;
@@ -135,6 +136,29 @@ enum class schedule_result_t {
   no_such_pg,	       // can't find this pg
   bad_pg_state,	       // pg state (clean, active, etc.)
   preconditions	       // time, configuration, etc.
+};
+
+// the OSD services provided to the scrub scheduler
+class ScrubSchedListener {
+ public:
+  virtual int get_nodeid() const = 0;  // returns the OSD number ('whoami')
+
+  /**
+   * A callback used by the ScrubQueue object to initiate a scrub on a specific
+   * PG.
+   *
+   * The request might fail for multiple reasons, as ScrubQueue cannot by its
+   * own check some of the PG-specific preconditions and those are checked here.
+   * See attempt_t definition.
+   *
+   * @return a Scrub::attempt_t detailing either a success, or the failure
+   * reason.
+   */
+  virtual schedule_result_t initiate_a_scrub(
+    spg_t pgid,
+    bool allow_requested_repair_only) = 0;
+
+  virtual ~ScrubSchedListener() {}
 };
 
 }  // namespace Scrub
@@ -161,7 +185,8 @@ class ScrubQueue {
 		     // under lock
   };
 
-  ScrubQueue(CephContext* cct, OSDService& osds);
+  ScrubQueue(CephContext* cct, Scrub::ScrubSchedListener& osds);
+  virtual ~ScrubQueue() = default;
 
   struct scrub_schedule_t {
     utime_t scheduled_at{};
@@ -210,6 +235,13 @@ class ScrubQueue {
      */
     std::atomic_bool updated{false};
 
+    /**
+     * the scrubber is waiting for locked objects to be unlocked.
+     * Set after a grace period has passed.
+     */
+    bool blocked{false};
+    utime_t blocked_since{};
+
     utime_t penalty_timeout{0, 0};
 
     CephContext* cct;
@@ -253,6 +285,7 @@ class ScrubQueue {
   };
 
   friend class TestOSDScrub;
+  friend class ScrubSchedTestWrapper; ///< unit-tests structure
 
   using ScrubJobRef = ceph::ref_t<ScrubJob>;
   using ScrubQContainer = std::vector<ScrubJobRef>;
@@ -328,6 +361,10 @@ class ScrubQueue {
    */
   void update_job(ScrubJobRef sjob, const sched_params_t& suggested);
 
+  sched_params_t determine_scrub_time(const requested_scrub_t& request_flags,
+				      const pg_info_t& pg_info,
+				      const pool_opts_t pool_conf) const;
+
  public:
   void dump_scrubs(ceph::Formatter* f) const;
 
@@ -345,6 +382,11 @@ class ScrubQueue {
   bool inc_scrubs_remote();
   void dec_scrubs_remote();
   void dump_scrub_reservations(ceph::Formatter* f) const;
+
+  /// counting the number of PGs stuck while scrubbing, waiting for objects
+  void mark_pg_scrub_blocked(spg_t blocked_pg);
+  void clear_pg_scrub_blocked(spg_t blocked_pg);
+  int get_blocked_pgs_count() const;
 
   /**
    * Pacing the scrub operation by inserting delays (mostly between chunks)
@@ -366,7 +408,13 @@ class ScrubQueue {
 
  private:
   CephContext* cct;
-  OSDService& osd_service;
+  Scrub::ScrubSchedListener& osd_service;
+
+#ifdef WITH_SEASTAR
+  auto& conf() const { return local_conf(); }
+#else
+  auto& conf() const { return cct->_conf; }
+#endif
 
   /**
    *  jobs_lock protects the job containers and the relevant scrub-jobs state
@@ -424,6 +472,18 @@ class ScrubQueue {
   int scrubs_local{0};
   int scrubs_remote{0};
 
+  /**
+   * The scrubbing of PGs might be delayed if the scrubbed chunk of objects is
+   * locked by some other operation. A bug might cause this to be an infinite
+   * delay. If that happens, the OSDs "scrub resources" (i.e. the
+   * counters that limit the number of concurrent scrub operations) might
+   * be exhausted.
+   * We do issue a cluster-log warning in such occasions, but that message is
+   * easy to miss. The 'some pg is blocked' global flag is used to note the
+   * existence of such a situation in the scrub-queue log messages.
+   */
+  std::atomic_int_fast16_t blocked_scrubs_cnt{0};
+
   std::atomic_bool a_pg_is_reserving{false};
 
   [[nodiscard]] bool scrub_load_below_threshold() const;
@@ -454,4 +514,30 @@ class ScrubQueue {
     ScrubQContainer& group,
     const Scrub::ScrubPreconds& preconds,
     utime_t now_is);
+
+protected: // used by the unit-tests
+  /**
+   * unit-tests will override this function to return a mock time
+   */
+  virtual utime_t time_now() const { return ceph_clock_now(); }
+};
+
+template <>
+struct fmt::formatter<ScrubQueue::ScrubJob> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const ScrubQueue::ScrubJob& sjob, FormatContext& ctx)
+  {
+    return fmt::format_to(
+      ctx.out(),
+      "{}, {} dead: {} - {} / failure: {} / pen. t.o.: {} / queue state: {}",
+      sjob.pgid,
+      sjob.schedule.scheduled_at,
+      sjob.schedule.deadline,
+      sjob.registration_state(),
+      sjob.resources_failure,
+      sjob.penalty_timeout,
+      ScrubQueue::qu_state_text(sjob.state));
+  }
 };
