@@ -649,7 +649,11 @@ class NFSGanesha(object):
 
     daemon_type = 'nfs'
     entrypoint = '/usr/bin/ganesha.nfsd'
-    daemon_args = ['-F', '-L', 'STDERR']
+    daemon_args = ['-F',
+                   '-L',
+                   'STDERR',
+                   '-p',
+                   '/var/run/ganesha.pid']
 
     required_files = ['ganesha.conf']
 
