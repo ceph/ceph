@@ -149,11 +149,8 @@ void ImageCopyRequest<I>::send_object_copies() {
 
     // attempt to schedule at least 'max_ops' initial requests where
     // some objects might be skipped if fast-diff notes no change
-    while (m_current_ops < max_ops) {
-      int r = send_next_object_copy();
-      if (r < 0) {
-        break;
-      }
+    for (uint64_t i = 0; i < max_ops; i++) {
+      send_next_object_copy();
     }
 
     complete = (m_current_ops == 0) && !m_updating_progress;
@@ -165,7 +162,7 @@ void ImageCopyRequest<I>::send_object_copies() {
 }
 
 template <typename I>
-int ImageCopyRequest<I>::send_next_object_copy() {
+void ImageCopyRequest<I>::send_next_object_copy() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   if (m_canceled && m_ret_val == 0) {
@@ -173,10 +170,8 @@ int ImageCopyRequest<I>::send_next_object_copy() {
     m_ret_val = -ECANCELED;
   }
 
-  if (m_ret_val < 0) {
-    return m_ret_val;
-  } else if (m_object_no >= m_end_object_no) {
-    return -ENODATA;
+  if (m_ret_val < 0 || m_object_no >= m_end_object_no) {
+    return;
   }
 
   uint64_t ono = m_object_no++;
@@ -204,7 +199,7 @@ int ImageCopyRequest<I>::send_next_object_copy() {
     if (skip) {
       ldout(m_cct, 20) << "skipping clean object " << ono << dendl;
       create_async_context_callback(*m_src_image_ctx, ctx)->complete(0);
-      return 0;
+      return;
     }
   }
 
@@ -217,7 +212,6 @@ int ImageCopyRequest<I>::send_next_object_copy() {
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_dst_snap_id_start,
     m_snap_map, ono, flags, m_handler, ctx);
   req->send();
-  return 0;
 }
 
 template <typename I>
