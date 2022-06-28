@@ -59,6 +59,9 @@
 #include "rgw_sal_dbstore.h"
 #endif
 #include "rgw_lua_background.h"
+#ifdef WITH_RADOSGW_D4N_FILTER
+#include "rgw_sal_d4n.h" 
+#endif
 
 #include "services/svc_zone.h"
 
@@ -401,6 +404,18 @@ int radosgw_Main(int argc, const char **argv)
   if (config_filter == "base") {
     rgw_filter = "base";
   }
+#ifdef WITH_RADOSGW_D4N_FILTER
+  else if (config_filter == "d4n") {
+    rgw_filter = "d4n";
+  }
+#endif
+
+#ifdef WITH_RADOSGW_TRACER
+  else if (config_filter == "d4n") {
+    dout(0) << "Sam: got to main" << dendl;
+    rgw_filter = "d4n";
+  }
+#endif
 
   rgw::sal::Store* store =
     StoreManager::get_storage(&dp, g_ceph_context,
@@ -702,13 +717,12 @@ int radosgw_Main(int argc, const char **argv)
     /* ignore error */
   }
 
-
   std::unique_ptr<RGWRealmReloader> reloader;
   std::unique_ptr<RGWPeriodPusher> pusher;
   std::unique_ptr<RGWFrontendPauser> fe_pauser;
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   std::unique_ptr<RGWPauser> rgw_pauser;
-  if (store->get_name() == "rados") {
+  if (store->get_name() == "rados") {   
     // add a watcher to respond to realm configuration changes
     pusher = std::make_unique<RGWPeriodPusher>(&dp, store, null_yield);
     fe_pauser = std::make_unique<RGWFrontendPauser>(fes, implicit_tenant_context, pusher.get());
@@ -717,10 +731,11 @@ int radosgw_Main(int argc, const char **argv)
     if (lua_background) {
       rgw_pauser->add_pauser(lua_background.get());
     }
+    
     reloader = std::make_unique<RGWRealmReloader>(store, service_map_meta, rgw_pauser.get());
 
     realm_watcher = std::make_unique<RGWRealmWatcher>(&dp, g_ceph_context,
-				  static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm());
+				  static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->get_realm()); //Should I cast? -Sam
     realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
     realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher.get());
   }
@@ -804,4 +819,3 @@ int radosgw_main(int argc, const char** argv)
 }
 
 } /* extern "C" */
-
