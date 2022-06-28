@@ -1,2 +1,5 @@
+teuthology:
+  postmerge:
+    - if py_attrgetter(yaml.teuthology.meta).get("kclient_stock_rhel", nil) then reject() end
 tasks:
   - ceph-fuse:

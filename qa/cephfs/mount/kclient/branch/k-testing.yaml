@@ -1,0 +1,6 @@
+teuthology:
+  postmerge:
+    - if py_attrgetter(yaml.teuthology.meta).get("kclient_stock_rhel") then reject() end
+kernel:
+  client:
+    branch: testing

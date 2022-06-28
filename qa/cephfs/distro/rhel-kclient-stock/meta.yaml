@@ -1,0 +1,3 @@
+teuthology:
+  meta:
+    kclient_stock_rhel: true

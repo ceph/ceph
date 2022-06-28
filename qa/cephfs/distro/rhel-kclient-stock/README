@@ -1,0 +1,5 @@
+This distro matrix has 3 copies of RHEL. The reason for this is that the stock
+kernel configuration filters out all but rhel jobs in the matrix. In order to
+ensure that the stock kernel receives equal test coverage, we artificially
+increase the number of rhel jobs but only for the stock kernel. Jobs which are
+not on the stock kernel drop those rhel (2 and 3) configurations.

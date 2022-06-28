@@ -1,0 +1,6 @@
+teuthology:
+  postmerge:
+    - if yaml.os_type ~= 'rhel' then reject() end
+kernel:
+  client:
+    sha1: distro
