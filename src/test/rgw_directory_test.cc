@@ -100,9 +100,10 @@ int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
 
   // Other ports can be passed to the program
-  if (argc == 1)
+  if (argc == 1) {
     portStr = "6379";
-  else if (argc == 3) {
+    hostStr = "127.0.0.1";
+  } else if (argc == 3) {
     hostStr = argv[1];
     portStr = argv[2];
   } else {
