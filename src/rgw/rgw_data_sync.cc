@@ -517,6 +517,24 @@ bool RGWListRemoteDataLogCR::spawn_next(const DoutPrefixProvider *dpp) {
   return true;
 }
 
+struct sip_data_list_result {
+  string marker;
+  bool truncated{false};
+
+  struct entry {
+    string entry_id;
+    string key;
+    rgw_bucket bucket;
+    int shard_id{-1};
+    int num_shards{0};
+    ceph::real_time timestamp;
+  };
+
+  vector<entry> entries;
+};
+
+using sip_data_inc_pos  = rgw_sip_pos;
+
 template <class T, class M>
 class RGWSyncInfoCRHandler {
 public:
@@ -545,6 +563,19 @@ public:
   }
 };
 
+class RGWDataSyncInfoCRHandler : virtual public RGWSyncInfoCRHandler<sip_data_list_result, sip_data_inc_pos> {
+protected:
+  RGWDataSyncCtx *sc;
+  RGWDataSyncEnv *sync_env;
+
+public:
+  RGWDataSyncInfoCRHandler(RGWDataSyncCtx *_sc) : sc(_sc),
+                                                  sync_env(_sc->env) {}
+
+  virtual ~RGWDataSyncInfoCRHandler() {}
+};
+
+using RGWDataSyncInfoCRHandlerRef = std::shared_ptr<RGWDataSyncInfoCRHandler>;
 
 
 class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
@@ -729,13 +760,30 @@ int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, const RGWRemoteCtl::
     return 0;
   }
 
-  int ret = http_manager.start();
+  tn = sync_env.sync_tracer->add_node(sync_env.sync_tracer->root_node, "data");
+
+  int ret;
+
+  /* init() might be called multiple times, if it failed to complete initialization */
+  if (!http_manager.is_started()) {
+    ret = http_manager.start();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+      return ret;
+    }
+  }
+
+  ret = run(dpp, sc.dsi.full->init_cr(tn));
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "failed to initialize datalog full sync handler: " << ret << dendl;
     return ret;
   }
 
-  tn = sync_env.sync_tracer->add_node(sync_env.sync_tracer->root_node, "data");
+  ret = run(dpp, sc.dsi.inc->init_cr(tn));
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to initialize datalog incrementa sync handler: " << ret << dendl;
+    return ret;
+  }
 
   initialized = true;
 
@@ -855,6 +903,274 @@ struct bucket_instance_meta_info {
   }
 };
 
+class RGWDataFullSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
+  string path;
+
+  class FetchFullCR : public RGWCoroutine {
+    RGWDataFullSyncInfoCRHandler_Legacy *handler;
+    RGWDataSyncCtx *sc;
+    string marker;
+    sip_data_list_result *result;
+
+    read_metadata_list list_result;
+    list<string>::iterator iter;
+    bucket_instance_meta_info meta_info;
+  public:
+    FetchFullCR(RGWDataFullSyncInfoCRHandler_Legacy *_handler,
+                RGWDataSyncCtx *_sc,
+                const string& _marker,
+                sip_data_list_result *_result) : RGWCoroutine(_sc->cct),
+                                                 handler(_handler),
+                                                 sc(_sc),
+                                                 marker(_marker),
+                                                 result(_result) {}
+
+    int operate(const DoutPrefixProvider *dpp) {
+      reenter(this) {
+        yield {
+          string entrypoint = string("/admin/metadata/bucket.instance");
+
+          rgw_http_param_pair pairs[] = {{"max-entries", "1000"},
+                                         {"marker", marker.c_str()},
+                                         {NULL, NULL}};
+          call(new RGWReadRESTResourceCR<read_metadata_list>(sc->env->cct, sc->conns.data,
+                                                             sc->env->http_manager,
+                                                             entrypoint, pairs, &list_result));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        result->truncated = list_result.truncated;
+        result->marker = list_result.marker;
+        result->entries.clear();
+
+        for (iter = list_result.keys.begin(); iter != list_result.keys.end(); ++iter) {
+          yield call(handler->get_source_bucket_info_cr(*iter, &meta_info));
+
+          auto& bucket_info = meta_info.data.get_bucket_info();
+
+          sip_data_list_result::entry e;
+          e.entry_id = *iter;
+          e.key = *iter;
+          e.bucket = bucket_info.bucket;
+          e.shard_id = -1;
+          e.num_shards = bucket_info.layout.current_index.layout.normal.num_shards;
+          e.timestamp = bucket_info.creation_time;
+
+          result->entries.emplace_back(std::move(e));
+        }
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+  RGWCoroutine *get_source_bucket_info_cr(const string& key,
+                                          bucket_instance_meta_info *result) {
+    rgw_http_param_pair pairs[] = {{"key", key.c_str()},
+                                   {NULL, NULL}};
+
+    return new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conns.data,
+                                                                sync_env->http_manager, path, pairs, result);
+  }
+
+public:
+
+  RGWDataFullSyncInfoCRHandler_Legacy(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler(_sc) {
+    path = "/admin/metadata/bucket.instance";
+  }
+
+  string get_sip_name() const override {
+    return "legacy/data.full";
+  }
+
+  int num_shards() const override {
+    return 1;
+  }
+
+  RGWCoroutine *init_cr(RGWSyncTraceNodeRef& tn) override {
+    /* nothing to init */
+    return nullptr;
+  }
+
+  RGWCoroutine *fetch_cr(int shard_id,
+                         const string& marker,
+                         sip_data_list_result *result) override {
+    return new FetchFullCR(this, sc, marker, result);
+
+  }
+
+  RGWCoroutine *get_pos_cr(const DoutPrefixProvider *dpp, int shard_id, sip_data_inc_pos *pos, bool *disabled) override {
+    pos->marker.clear();
+    pos->timestamp = ceph::real_time();
+    if (*disabled) {
+      *disabled = false;
+    }
+    return nullptr;
+  }
+};
+
+class RGWDataIncSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
+  friend class InitCR;
+
+  rgw_datalog_info remote_datalog_info;
+
+  class ReadDatalogStatusCR : public RGWCoroutine {
+    RGWDataSyncCtx *sc;
+    int shard_id;
+    string *marker;
+    ceph::real_time *timestamp;
+
+    RGWDataChangesLogInfo info;
+
+  public:
+    ReadDatalogStatusCR(RGWDataSyncCtx *_sc,
+                        int _shard_id,
+                        string *_marker,
+                        ceph::real_time *_timestamp) : RGWCoroutine(_sc->cct),
+                                                       sc(_sc),
+                                                       shard_id(_shard_id),
+                                                       marker(_marker),
+                                                       timestamp(_timestamp) {}
+
+    int operate(const DoutPrefixProvider *dpp) {
+      reenter(this) {
+        yield call(new RGWReadRemoteDataLogShardInfoCR(sc, shard_id, &info));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+        *marker = info.marker;
+        *timestamp = info.last_update;
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+  class InitCR : public RGWCoroutine {
+    RGWDataIncSyncInfoCRHandler_Legacy *handler;
+    RGWDataSyncCtx *sc;
+
+  public:
+    InitCR(RGWDataIncSyncInfoCRHandler_Legacy *_handler,
+           RGWDataSyncCtx *_sc) : RGWCoroutine(_sc->cct),
+                                                handler(_handler),
+                                                sc(_sc) {}
+
+    int operate(const DoutPrefixProvider *dpp) {
+      reenter(this) {
+        yield {
+          string entrypoint = string("/admin/log");
+
+          rgw_http_param_pair pairs[] = { { "type", "data" },
+                                          { nullptr, nullptr } };
+
+          call(new RGWReadRESTResourceCR<rgw_datalog_info>(sc->env->cct, sc->conns.data,
+                                                           sc->env->http_manager,
+                                                           entrypoint, pairs, &handler->remote_datalog_info));
+        }
+        if (retcode < 0) {
+          ldout(cct, 0) << "ERROR: failed to fetch remote datalog info: retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
+        }
+
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+  class FetchIncCR : public RGWCoroutine {
+    RGWDataIncSyncInfoCRHandler_Legacy *handler;
+    RGWDataSyncCtx *sc;
+    int shard_id;
+    string marker;
+    sip_data_list_result *result;
+
+    vector<rgw_data_change_log_entry> fetch_result;
+    vector<rgw_data_change_log_entry>::iterator iter;
+  public:
+    FetchIncCR(RGWDataIncSyncInfoCRHandler_Legacy *_handler,
+               RGWDataSyncCtx *_sc,
+               int _shard_id,
+               const string& _marker,
+               sip_data_list_result *_result) : RGWCoroutine(_sc->cct),
+                                                handler(_handler),
+                                                sc(_sc),
+                                                shard_id(_shard_id),
+                                                marker(_marker),
+                                                result(_result) {}
+
+    int operate(const DoutPrefixProvider *dpp) {
+      reenter(this) {
+        yield call(new RGWReadRemoteDataLogShardCR(sc, shard_id,
+                                                   marker,
+                                                   &result->marker,
+                                                   &fetch_result,
+                                                   &result->truncated));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        result->entries.clear();
+
+        for (iter = fetch_result.begin(); iter != fetch_result.end(); ++iter) {
+          auto& log_entry = *iter;
+
+          sip_data_list_result::entry e;
+          e.key = log_entry.entry.key;
+
+          int r = rgw_bucket_parse_bucket_key(sc->cct, e.key,
+                                              &e.bucket, &e.shard_id);
+          if (r < 0) {
+            ldout(sc->cct, 0) << "ERROR: " << __func__ << "(): failed to parse bucket key: " << e.key << ", r=" << r << ", skipping entry" << dendl;
+            continue;
+          }
+
+          e.entry_id = log_entry.log_id;
+          e.num_shards = -1; /* unknown */
+          e.timestamp = log_entry.log_timestamp;
+
+          result->entries.emplace_back(std::move(e));
+        }
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+public:
+
+  RGWDataIncSyncInfoCRHandler_Legacy(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler(_sc) {
+  }
+
+  string get_sip_name() const override {
+    return "legacy/data.inc";
+  }
+
+  int num_shards() const override {
+    return remote_datalog_info.num_shards;
+  }
+
+  RGWCoroutine *init_cr(RGWSyncTraceNodeRef& tn) override {
+    return new InitCR(this, sc);
+  }
+
+  RGWCoroutine *get_pos_cr(const DoutPrefixProvider *dpp, int shard_id, sip_data_inc_pos *pos, bool *disabled) override {
+    if (disabled) {
+      *disabled = false;
+    }
+    return new ReadDatalogStatusCR(sc, shard_id, &pos->marker, &pos->timestamp);
+  }
+
+  RGWCoroutine *fetch_cr(int shard_id,
+                         const string& marker,
+                         sip_data_list_result *result) override {
+    return new FetchIncCR(this, sc, shard_id, marker, result);
+  }
+};
+
 class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
@@ -902,19 +1218,14 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
   int req_ret = 0;
   int ret = 0;
 
-  list<string>::iterator iter;
-
   unique_ptr<RGWShardedOmapCRManager> entries_index;
   string oid_prefix =
     datalog_sync_full_sync_index_prefix + "." + sc->source_zone.id;
 
-  string path = "/admin/metadata/bucket.instance";
-  bucket_instance_meta_info meta_info;
-  string key;
-
   bool failed = false;
   bool truncated = false;
-  read_metadata_list result;
+  sip_data_list_result result;
+  vector<sip_data_list_result::entry>::iterator iter;
 
 public:
   RGWListBucketIndexesCR(RGWDataSyncCtx* sc,
@@ -932,42 +1243,15 @@ public:
       yield; // yield so OmapAppendCRs can start
 
       do {
-        yield {
-          string entrypoint = "/admin/metadata/bucket.instance"s;
-
-          rgw_http_param_pair pairs[] = {{"max-entries", "1000"},
-                                         {"marker", result.marker.c_str()},
-                                         {NULL, NULL}};
-
-          call(new RGWReadRESTResourceCR<read_metadata_list>(
-		 sync_env->cct, sc->conns.data, sync_env->http_manager,
-		 entrypoint, pairs, &result));
-	}
-	if (retcode < 0) {
-	  ldpp_dout(dpp, 0)
-	    << "ERROR: failed to fetch metadata for section bucket.instance"
-	    << dendl;
+        yield call(sc->dsi.full->fetch_cr(0, result.marker, &result));
+        if (retcode < 0) {
+          ldpp_dout(dpp, 0) << "ERROR: failed to fetch metadata for section bucket.instance" << dendl;
           return set_cr_error(retcode);
         }
 
-        for (iter = result.keys.begin(); iter != result.keys.end(); ++iter) {
-          ldpp_dout(dpp, 20) << "list metadata: section=bucket.instance key="
-			     << *iter << dendl;
-          key = *iter;
+        for (iter = result.entries.begin(); iter != result.entries.end(); ++iter) {
+          ldpp_dout(dpp, 20) << "fetch full: bucket=" << iter->bucket << dendl;
 
-          yield {
-            rgw_http_param_pair pairs[] = {{"key", key.c_str()},
-                                           {NULL, NULL}};
-
-            call(new RGWReadRESTResourceCR<bucket_instance_meta_info>(
-		   sync_env->cct, sc->conns.data, sync_env->http_manager, path, pairs,
-		   &meta_info));
-          }
-	  if (retcode < 0) {
-	    ldpp_dout(dpp, 0) << "ERROR: failed to fetch metadata for key: "
-			      << key << dendl;
-	    return set_cr_error(retcode);
-	  }
 	  // Now that bucket full sync is bucket-wide instead of
 	  // per-shard, we only need to register a single shard of
 	  // each bucket to guarantee that sync will see everything
@@ -975,9 +1259,9 @@ public:
 	  // means we don't have to care about the bucket's current
 	  // shard count.
 	  yield entries_index->append(
-	    fmt::format("{}:{}", key, 0),
+	    fmt::format("{}:{}",iter->key, 0),
 	    sync_env->svc->datalog_rados->get_log_shard_id(
-	      meta_info.data.get_bucket_info().bucket, 0));
+	      iter->bucket, 0));
 	}
 	truncated = result.truncated;
       } while (truncated);
@@ -1444,12 +1728,24 @@ void RGWDataSyncCtx::init(RGWDataSyncEnv *_env,
   env = _env;
   conns = _conns;
   source_zone = _source_zone;
+
+  dsi.full.reset(new RGWDataFullSyncInfoCRHandler_Legacy(this));
+  dsi.inc.reset(new RGWDataIncSyncInfoCRHandler_Legacy(this));
 }
 
 void RGWDataSyncCtx::reset_env(RGWDataSyncEnv *new_env)
 {
   env = new_env;
   cct = new_env->cct;
+
+#warning revisit this
+#if 0
+  auto dsi_full = static_cast<RGWDataFullSyncInfoCRHandler_SIP *>(dsi.full.get());
+  auto dsi_inc = static_cast<RGWDataIncSyncInfoCRHandler_SIP *>(dsi.inc.get());
+
+  dsi.full.reset(dsi_full->clone(this));
+  dsi.inc.reset(dsi_inc->clone(this));
+#endif
 }
 
 #define DATA_SYNC_MAX_ERR_ENTRIES 10
@@ -1916,10 +2212,23 @@ public:
         return set_cr_error(retcode);
       }
 
+      yield call(sc->dsi.full->init_cr(tn));
+      if (retcode < 0) {
+        tn->log(0, SSTR("ERROR: failed to init full sync dsi, retcode=" << retcode));
+        return set_cr_error(retcode);
+      }
+
+      yield call(sc->dsi.inc->init_cr(tn));
+      if (retcode < 0) {
+        tn->log(0, SSTR("ERROR: failed to init inc sync dsi, retcode=" << retcode));
+        return set_cr_error(retcode);
+      }
+
+      num_shards = sc->dsi.inc->num_shards();
+
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         tn->log(20, SSTR("init"));
-        sync_status.sync_info.num_shards = num_shards;
         uint64_t instance_id;
         instance_id = ceph::util::generate_random_number<uint64_t>();
         yield call(new RGWInitDataSyncStatusCoroutine(sc, num_shards, instance_id, tn, &sync_status));

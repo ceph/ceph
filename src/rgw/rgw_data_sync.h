@@ -331,12 +331,21 @@ struct RGWDataSyncEnv {
   std::string status_oid();
 };
 
+class RGWDataSyncInfoCRHandler;
+
+struct RGWDataSyncInfoCRHandlerPair {
+  std::shared_ptr<RGWDataSyncInfoCRHandler> full;
+  std::shared_ptr<RGWDataSyncInfoCRHandler> inc;
+};
+
 struct RGWDataSyncCtx {
   RGWDataSyncEnv *env{nullptr};
   CephContext *cct{nullptr};
 
   RGWRemoteCtl::Conns conns;
   rgw_zone_id source_zone;
+
+  RGWDataSyncInfoCRHandlerPair dsi;
 
   RGWDataSyncCtx() = default;
 
