@@ -3551,7 +3551,7 @@ options:
   enum_values:
   - none
   - base
-  - trace
+  - d4n
 - name: dbstore_db_dir
   type: str
   level: advanced
@@ -3692,3 +3692,23 @@ options:
   default: tank
   services:
   - rgw
+- name: rgw_directory_host
+  type: str
+  level: advanced
+  desc: The rgw directory host
+  default: 127.0.0.1
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_directory_port
+  type: int
+  level: advanced
+  desc: The rgw directory port
+  default: 6379
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
