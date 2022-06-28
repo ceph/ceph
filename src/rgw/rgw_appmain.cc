@@ -450,7 +450,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 #ifdef WITH_ARROW_FLIGHT
       int port;
       config->get_val("port", 8077, &port);
-      fe = new rgw::flight::FlightFrontend(cct, config, store, port);
+      fe = new rgw::flight::FlightFrontend(dpp->get_cct(), config, store, port);
 #else
       derr << "WARNING: arrow_flight frontend requested, but not included in build; skipping" << dendl;
       continue;

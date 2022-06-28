@@ -8,10 +8,13 @@
 #include "rgw_frontend.h"
 #include "rgw_op.h"
 
+#include "arrow/status.h"
+
 
 namespace rgw::flight {
 
   using FlightKey = uint32_t;
+  extern const FlightKey null_flight_key;
 
   class FlightServer;
 
@@ -20,7 +23,7 @@ namespace rgw::flight {
     static constexpr std::string_view server_thread_name =
       "Arrow Flight Server thread";
 
-    boost::intrusive_ptr<ceph::common::CephContext>& cct;
+    boost::intrusive_ptr<ceph::common::CephContext> cct;
     const DoutPrefix dp;
     FlightServer* flight_server; // pointer so header file doesn't need to pull in too much
     std::thread flight_thread;
@@ -30,7 +33,7 @@ namespace rgw::flight {
   public:
 
     // port <= 0 -> let server decide; typically 8077
-    FlightFrontend(boost::intrusive_ptr<ceph::common::CephContext>& cct,
+    FlightFrontend(boost::intrusive_ptr<ceph::common::CephContext> cct,
 		   RGWFrontendConfig* config,
 		   rgw::sal::Store* store,
 		   int port = -1);
@@ -48,16 +51,24 @@ namespace rgw::flight {
 
   class FlightGetObj_Filter : public RGWGetObj_Filter {
 
+    const DoutPrefix dp;
     FlightKey key;
+    uint64_t current_offset;
+    uint64_t expected_size;
+    std::string uri;
+    std::string tenant_name;
+    std::string bucket_name;
+    rgw_obj_key object_key;
+    std::string temp_file_name;
+    std::ofstream temp_file;
+    arrow::Status schema_status;
+    rgw_user user_id; // TODO: this should be removed when we do
+		      // proper flight authentication
 
   public:
 
-    FlightGetObj_Filter(const FlightKey& _key, RGWGetObj_Filter* next) :
-      RGWGetObj_Filter(next),
-      key(_key)
-    {
-      // empty
-    }
+    FlightGetObj_Filter(const req_state* request, RGWGetObj_Filter* next);
+    ~FlightGetObj_Filter();
 
     int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
 #if 0

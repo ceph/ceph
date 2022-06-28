@@ -2237,10 +2237,8 @@ void RGWGetObj::execute(optional_yield y)
 
 #ifdef WITH_ARROW_FLIGHT
   if (ofs == 0) {
-    rgw::flight::FlightKey key = rgw::flight::propose_flight(s);
-    ldpp_dout(this, 0) << "ERIC: added arrow flight with key=" << key << dendl;
-
-    flight_filter.emplace(key, filter);
+    // insert a GetObj_Filter to monitor and create flight
+    flight_filter.emplace(s, filter);
     filter = &*flight_filter;
   }
 #endif
