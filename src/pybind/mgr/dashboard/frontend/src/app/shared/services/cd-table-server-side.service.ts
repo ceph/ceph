@@ -9,6 +9,6 @@ export class CdTableServerSideService {
   constructor() {}
 
   static getCount(resp: HttpResponse<any>): number {
-    return Number(resp.headers.get('X-Total-Count'));
+    return Number(resp.headers?.get('X-Total-Count'));
   }
 }

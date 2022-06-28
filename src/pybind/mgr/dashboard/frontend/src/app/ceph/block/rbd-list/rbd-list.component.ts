@@ -360,16 +360,14 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
 
   onFetchError() {
     this.table.reset(); // Disable loading indicator.
+    this.tableStatus = new TableStatusViewCache(ViewCacheStatus.ValueException);
   }
 
-  getRbdImages(context: CdTableFetchDataContext = null) {
+  getRbdImages(context: CdTableFetchDataContext) {
     if (context !== null) {
       this.tableContext = context;
     }
-		if(this.tableContext == null) {
-			this.tableContext = new CdTableFetchDataContext(() => {});
-		}
-    return this.rbdService.list(this.tableContext.toParams());
+    return this.rbdService.list(this.tableContext?.toParams());
   }
 
   prepareResponse(resp: any[]): any[] {
