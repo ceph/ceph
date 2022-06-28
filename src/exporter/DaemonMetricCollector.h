@@ -12,6 +12,17 @@
 #include <string>
 #include <vector>
 
+struct pstat {
+  unsigned long utime;
+  unsigned long stime;
+  unsigned long minflt;
+  unsigned long majflt;
+  unsigned long start_time;
+  int num_threads;
+  unsigned long vm_size;
+  int resident_size;
+};
+
 class DaemonMetricCollector {
 public:
   void main();
@@ -30,6 +41,7 @@ private:
                         std::string labels);
   std::pair<std::string, std::string>
   get_labels_and_metric_name(std::string daemon_name, std::string metric_name);
+  std::string get_process_metrics(std::vector<std::pair<std::string, int>> daemon_pids);
   std::string asok_request(AdminSocketClient &asok, std::string command);
 };
 
