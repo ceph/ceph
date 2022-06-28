@@ -28,6 +28,9 @@
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
+#ifdef WITH_RADOSGW_TRACER
+#include "rgw_sal_d4n.h" //get an ifdef here later
+#endif
 
 #ifdef WITH_RADOSGW_MOTR
 #include "rgw_sal_motr.h"
