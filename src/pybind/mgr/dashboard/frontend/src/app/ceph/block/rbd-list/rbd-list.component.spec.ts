@@ -1,3 +1,4 @@
+import { HttpHeaders } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -253,6 +254,7 @@ describe('RbdListComponent', () => {
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
       spyOn(rbdService, 'list').and.callFake(() => of([{ pool_name: 'rbd', value: images }]));
+      new HttpHeaders().set('X-Total-Count', '10');
       fixture.detectChanges();
     });
 
@@ -290,12 +292,12 @@ describe('RbdListComponent', () => {
 
     it('should show when an existing image is being modified', () => {
       addTask('rbd/edit', 'a');
-      addTask('rbd/delete', 'b');
-      addTask('rbd/flatten', 'c');
-      expect(component.images.length).toBe(3);
       expectItemTasks(component.images[0], 'Updating');
+      addTask('rbd/delete', 'b');
       expectItemTasks(component.images[1], 'Deleting');
+      addTask('rbd/flatten', 'c');
       expectItemTasks(component.images[2], 'Flattening');
+      expect(component.images.length).toBe(3);
     });
   });
 
