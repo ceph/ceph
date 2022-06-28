@@ -366,6 +366,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     if (context !== null) {
       this.tableContext = context;
     }
+		if(this.tableContext == null) {
+			this.tableContext = new CdTableFetchDataContext(() => {});
+		}
     return this.rbdService.list(this.tableContext.toParams());
   }
 
