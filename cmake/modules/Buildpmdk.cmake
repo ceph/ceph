@@ -1,4 +1,4 @@
-function(build_pmem)
+function(build_pmdk)
   include(FindMake)
   find_make("MAKE_EXECUTABLE" "make_cmd")
 
@@ -41,20 +41,20 @@ function(build_pmem)
   set(PMDK_LIB "${source_dir}/src/${PMDK_LIB_DIR}")
 
   # libpmem
-  add_library(pmem::pmem STATIC IMPORTED GLOBAL)
-  add_dependencies(pmem::pmem pmdk_ext)
+  add_library(pmdk::pmem STATIC IMPORTED GLOBAL)
+  add_dependencies(pmdk::pmem pmdk_ext)
   file(MAKE_DIRECTORY ${PMDK_INCLUDE})
   find_package(Threads)
-  set_target_properties(pmem::pmem PROPERTIES
+  set_target_properties(pmdk::pmem PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${PMDK_INCLUDE}
     IMPORTED_LOCATION "${PMDK_LIB}/libpmem.a"
     INTERFACE_LINK_LIBRARIES Threads::Threads)
 
   # libpmemobj
-  add_library(pmem::pmemobj STATIC IMPORTED GLOBAL)
-  add_dependencies(pmem::pmemobj pmdk_ext)
-  set_target_properties(pmem::pmemobj PROPERTIES
+  add_library(pmdk::pmemobj STATIC IMPORTED GLOBAL)
+  add_dependencies(pmdk::pmemobj pmdk_ext)
+  set_target_properties(pmdk::pmemobj PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${PMDK_INCLUDE}
     IMPORTED_LOCATION "${PMDK_LIB}/libpmemobj.a"
-    INTERFACE_LINK_LIBRARIES "pmem::pmem;${CMAKE_THREAD_LIBS_INIT}")
+    INTERFACE_LINK_LIBRARIES "pmdk::pmem;${CMAKE_THREAD_LIBS_INIT}")
 endfunction()
