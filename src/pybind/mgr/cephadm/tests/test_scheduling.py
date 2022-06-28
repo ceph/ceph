@@ -157,39 +157,6 @@ def run_scheduler_test(results, mk_spec, hosts, daemons, key_elems):
             assert_res(e)
 
 
-# * first match from the top wins
-# * where e=[], *=any
-#
-#       + list of known hosts available for scheduling (host_key)
-#       |   + hosts used for explict placement (explicit_key)
-#       |   |   + count
-#       |   |   | + section (host, label, pattern)
-#       |   |   | |     + expected result
-#       |   |   | |     |
-test_explicit_scheduler_results = [
-    (k("*   *   0 *"), error(SpecValidationError, 'num/count must be >= 1')),
-    (k("*   e   N l"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mgr>: No matching hosts for label mylabel')),
-    (k("*   e   N p"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mgr>: No matching hosts')),
-    (k("*   e   N h"), error(OrchestratorValidationError, 'placement spec is empty: no hosts, no label, no pattern, no count')),
-    (k("*   e   * *"), none),
-    (k("1   12  * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mgr> on 2: Unknown hosts")),
-    (k("1   123 * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mgr> on 2, 3: Unknown hosts")),
-    (k("1   *   * *"), exactly('1')),
-    (k("12  1   * *"), exactly('1')),
-    (k("12  12  1 *"), one_of('1', '2')),
-    (k("12  12  * *"), exactly('1', '2')),
-    (k("12  123 * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mgr> on 3: Unknown hosts")),
-    (k("12  123 1 *"), one_of('1', '2', '3')),
-    (k("12  123 * *"), two_of('1', '2', '3')),
-    (k("123 1   * *"), exactly('1')),
-    (k("123 12  1 *"), one_of('1', '2')),
-    (k("123 12  * *"), exactly('1', '2')),
-    (k("123 123 1 *"), one_of('1', '2', '3')),
-    (k("123 123 2 *"), two_of('1', '2', '3')),
-    (k("123 123 * *"), exactly('1', '2', '3')),
-]
-
-
 @pytest.mark.parametrize("dp,n,result",
     [   # noqa: E128
         (
@@ -238,6 +205,39 @@ def test_daemon_placement_renumber(dp, n, result):
     ])
 def test_daemon_placement_match(dp, dd, result):
     assert dp.matches_daemon(dd) == result
+
+
+# * first match from the top wins
+# * where e=[], *=any
+#
+#       + list of known hosts available for scheduling (host_key)
+#       |   + hosts used for explict placement (explicit_key)
+#       |   |   + count
+#       |   |   | + section (host, label, pattern)
+#       |   |   | |     + expected result
+#       |   |   | |     |
+test_explicit_scheduler_results = [
+    (k("*   *   0 *"), error(SpecValidationError, 'num/count must be >= 1')),
+    (k("*   e   N l"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mgr>: No matching hosts for label mylabel')),
+    (k("*   e   N p"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mgr>: No matching hosts')),
+    (k("*   e   N h"), error(OrchestratorValidationError, 'placement spec is empty: no hosts, no label, no pattern, no count')),
+    (k("*   e   * *"), none),
+    (k("1   12  * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mgr> on 2: Unknown hosts")),
+    (k("1   123 * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mgr> on 2, 3: Unknown hosts")),
+    (k("1   *   * *"), exactly('1')),
+    (k("12  1   * *"), exactly('1')),
+    (k("12  12  1 *"), one_of('1', '2')),
+    (k("12  12  * *"), exactly('1', '2')),
+    (k("12  123 * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mgr> on 3: Unknown hosts")),
+    (k("12  123 1 *"), one_of('1', '2', '3')),
+    (k("12  123 * *"), two_of('1', '2', '3')),
+    (k("123 1   * *"), exactly('1')),
+    (k("123 12  1 *"), one_of('1', '2')),
+    (k("123 12  * *"), exactly('1', '2')),
+    (k("123 123 1 *"), one_of('1', '2', '3')),
+    (k("123 123 2 *"), two_of('1', '2', '3')),
+    (k("123 123 * *"), exactly('1', '2', '3')),
+]
 
 
 @pytest.mark.parametrize("spec_section_key,spec_section",
@@ -655,8 +655,8 @@ class NodeAssignmentTest(NamedTuple):
             [],
             {},
             {0: {0: None}, 1: {0: None}, 2: {0: None}},
-            ['nfs:host1(rank=0.0)', 'nfs:host2(rank=1.0)', 'nfs:host3(rank=2.0)'],
-            ['nfs:host1(rank=0.0)', 'nfs:host2(rank=1.0)', 'nfs:host3(rank=2.0)'],
+            ['nfs:host3(rank=0.0)', 'nfs:host2(rank=1.0)', 'nfs:host1(rank=2.0)'],
+            ['nfs:host3(rank=0.0)', 'nfs:host2(rank=1.0)', 'nfs:host1(rank=2.0)'],
             []
         ),
         # 21: ranked, exist
@@ -669,8 +669,8 @@ class NodeAssignmentTest(NamedTuple):
             ],
             {0: {1: '0.1'}},
             {0: {1: '0.1'}, 1: {0: None}, 2: {0: None}},
-            ['nfs:host1(rank=0.1)', 'nfs:host2(rank=1.0)', 'nfs:host3(rank=2.0)'],
-            ['nfs:host2(rank=1.0)', 'nfs:host3(rank=2.0)'],
+            ['nfs:host1(rank=0.1)', 'nfs:host3(rank=1.0)', 'nfs:host2(rank=2.0)'],
+            ['nfs:host3(rank=1.0)', 'nfs:host2(rank=2.0)'],
             []
         ),
         # ranked, exist, different ranks
@@ -778,8 +778,8 @@ class NodeAssignmentTest(NamedTuple):
             ],
             {0: {2: '0.2'}, 1: {2: '1.2', 3: '1.3'}},
             {0: {2: '0.2'}, 1: {2: '1.2', 3: '1.3', 4: None}},
-            ['nfs:host1(rank=0.2)', 'nfs:host2(rank=1.4)'],
-            ['nfs:host2(rank=1.4)'],
+            ['nfs:host1(rank=0.2)', 'nfs:host3(rank=1.4)'],
+            ['nfs:host3(rank=1.4)'],
             ['nfs.1.2']
         ),
         # ranked, not enough hosts
@@ -869,6 +869,78 @@ def test_node_assignment(service_type, placement, hosts, daemons, rank_map, post
     assert num_wildcard == len(got)
 
     assert sorted([d.name() for d in to_remove]) == sorted(expected_remove)
+
+
+class NodeAssignmentTest5(NamedTuple):
+    service_type: str
+    placement: PlacementSpec
+    available_hosts: List[str]
+    candidates_hosts: List[str]
+
+
+@pytest.mark.parametrize("service_type, placement, available_hosts, expected_candidates",
+    [
+        NodeAssignmentTest5(
+            'alertmanager',
+            PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+            'host1 host2 host3 host4'.split(),
+            'host3 host1 host4 host2'.split(),
+        ),
+        NodeAssignmentTest5(
+            'prometheus',
+            PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+            'host1 host2 host3 host4'.split(),
+            'host3 host2 host4 host1'.split(),
+        ),
+        NodeAssignmentTest5(
+            'grafana',
+            PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+            'host1 host2 host3 host4'.split(),
+            'host1 host2 host4 host3'.split(),
+        ),
+        NodeAssignmentTest5(
+            'mgr',
+            PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+            'host1 host2 host3 host4'.split(),
+            'host4 host2 host1 host3'.split(),
+        ),
+        NodeAssignmentTest5(
+            'mon',
+            PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+            'host1 host2 host3 host4'.split(),
+            'host1 host3 host4 host2'.split(),
+        ),
+        NodeAssignmentTest5(
+            'rgw',
+            PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+            'host1 host2 host3 host4'.split(),
+            'host1 host3 host2 host4'.split(),
+        ),
+        NodeAssignmentTest5(
+            'cephfs-mirror',
+            PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+            'host1 host2 host3 host4'.split(),
+            'host4 host3 host1 host2'.split(),
+        ),
+    ])
+def test_node_assignment_random_shuffle(service_type, placement, available_hosts, expected_candidates):
+    spec = None
+    service_id = None
+    allow_colo = False
+    spec = ServiceSpec(service_type=service_type,
+                       service_id=service_id,
+                       placement=placement)
+
+    candidates = HostAssignment(
+        spec=spec,
+        hosts=[HostSpec(h, labels=['foo']) for h in available_hosts],
+        unreachable_hosts=[],
+        daemons=[],
+        allow_colo=allow_colo,
+    ).get_candidates()
+
+    candidates_hosts = [h.hostname for h in candidates]
+    assert candidates_hosts == expected_candidates
 
 
 class NodeAssignmentTest2(NamedTuple):
