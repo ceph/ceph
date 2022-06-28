@@ -525,6 +525,7 @@ struct sip_data_list_result {
     string entry_id;
     string key;
     rgw_bucket bucket;
+    std::optional<uint64_t> gen;
     int shard_id{-1};
     int num_shards{0};
     ceph::real_time timestamp;
@@ -1128,6 +1129,7 @@ class RGWDataIncSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
             continue;
           }
 
+          e.gen = log_entry.entry.gen;
           e.entry_id = log_entry.log_id;
           e.num_shards = -1; /* unknown */
           e.timestamp = log_entry.log_timestamp;
@@ -2106,7 +2108,7 @@ public:
             source_bs = rgw_bucket_shard{fetch_iter->bucket, fetch_iter->shard_id};
             yield_spawn_window(sync_single_entry(sc->dsi.inc,
                                                  source_bs, fetch_iter->gen,
-                                                 fetch_iter->key, fetch_iter->entry_id,
+                                                 fetch_iter->entry_id,
                                                  fetch_iter->timestamp, false),
                                cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
           }
