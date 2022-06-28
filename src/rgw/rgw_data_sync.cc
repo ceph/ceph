@@ -1593,6 +1593,8 @@ public:
 class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
+  std::shared_ptr<RGWDataSyncInfoCRHandler> sip;
+  int shard_id;
   rgw::bucket_sync::Handle state; // cached bucket-shard state
   rgw_data_sync_obligation obligation; // input obligation
   std::optional<rgw_data_sync_obligation> complete; // obligation to complete
@@ -1602,16 +1604,23 @@ class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
   RGWSyncTraceNodeRef tn;
 
+  bool has_lowerbound_marker{false};
+  RGWDataSyncShardMarkerTrack::marker_entry_type lowerbound_marker;
+
   ceph::real_time progress;
   int sync_status = 0;
 public:
-  RGWDataSyncSingleEntryCR(RGWDataSyncCtx *_sc, rgw::bucket_sync::Handle state,
+  RGWDataSyncSingleEntryCR(RGWDataSyncCtx *_sc,
+                           std::shared_ptr<RGWDataSyncInfoCRHandler>& _sip,
+                           int _shard_id,
+                           rgw::bucket_sync::Handle state,
                            rgw_data_sync_obligation obligation,
                            RGWDataSyncShardMarkerTrack *_marker_tracker,
                            const rgw_raw_obj& error_repo,
                            boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
                            const RGWSyncTraceNodeRef& _tn_parent)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
+      sip(_sip),
       state(std::move(state)), obligation(std::move(obligation)),
       marker_tracker(_marker_tracker), error_repo(error_repo),
       lease_cr(std::move(lease_cr)) {
@@ -1708,12 +1717,20 @@ public:
       if (marker_tracker && !complete->marker.empty()) {
         /* update marker */
         yield call(marker_tracker->finish(dpp, complete->marker));
+
+        has_lowerbound_marker = marker_tracker->get_lowerbound(&lowerbound_marker);
       }
       if (sync_status == 0) {
         sync_status = retcode;
       }
       if (sync_status < 0) {
         return set_cr_error(sync_status);
+      }
+      if (sip && has_lowerbound_marker) {
+        yield call(sip->update_marker_cr(dpp, shard_id, { RGWSI_SIP_Marker::create_target_id(sc->env->svc->zone->get_zone().id, nullopt),
+                                                     lowerbound_marker.marker,
+                                                     lowerbound_marker.timestamp,
+                                                     false }));
       }
       return set_cr_done();
     }
@@ -1767,10 +1784,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   std::optional<RGWDataSyncShardMarkerTrack> marker_tracker;
 
-  std::string next_marker;
-  vector<rgw_data_change_log_entry> log_entries;
-  vector<rgw_data_change_log_entry>::iterator log_iter;
-  bool truncated = false;
+  sip_data_list_result fetch_result;
+  vector<sip_data_list_result::entry>::iterator fetch_iter;
 
   ceph::mutex inc_lock = ceph::make_mutex("RGWDataSyncShardCR::inc_lock");
   ceph::condition_variable inc_cond;
@@ -1808,17 +1823,20 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   static constexpr size_t target_cache_size = 256;
   boost::intrusive_ptr<rgw::bucket_sync::Cache> bucket_shard_cache;
 
+  std::shared_ptr<RGWDataSyncInfoCRHandler> no_sip; /* nullptr */
+
   int parse_bucket_key(const std::string& key, rgw_bucket_shard& bs) const {
     return rgw_bucket_parse_bucket_key(sync_env->cct, key,
                                        &bs.bucket, &bs.shard_id);
   }
-  RGWCoroutine* sync_single_entry(const rgw_bucket_shard& src,
+  RGWCoroutine* sync_single_entry(std::shared_ptr<RGWDataSyncInfoCRHandler>& sip,
+                                  const rgw_bucket_shard& src,
                                   std::optional<uint64_t> gen,
                                   const std::string& marker,
                                   ceph::real_time timestamp, bool retry) {
     auto state = bucket_shard_cache->get(src, gen);
     auto obligation = rgw_data_sync_obligation{src, gen, marker, timestamp, retry};
-    return new RGWDataSyncSingleEntryCR(sc, std::move(state), std::move(obligation),
+    return new RGWDataSyncSingleEntryCR(sc, sip, shard_id, std::move(state), std::move(obligation),
                                         &*marker_tracker, error_repo,
                                         lease_cr.get(), tn);
   }
@@ -1943,8 +1961,10 @@ public:
             tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
-	      yield_spawn_window(sync_single_entry(source_bs, std::nullopt, iter->first,
-						   entry_timestamp, false),
+            yield_spawn_window(sync_single_entry(no_sip,
+                                                 source_bs, std::nullopt,
+                                                 iter->first,
+                                                 entry_timestamp, false),
 				 cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
 	  }
 	  sync_marker.marker = iter->first;
@@ -2025,7 +2045,8 @@ public:
             continue;
           }
           tn->log(20, SSTR("received async update notification: " << modified_iter->key));
-          spawn(sync_single_entry(source_bs, modified_iter->gen, string(),
+          spawn(sync_single_entry(sc->dsi.inc,
+                                  source_bs, modified_iter->gen, string(),
                                   ceph::real_time{}, false), false);
         }
 
@@ -2053,7 +2074,8 @@ public:
               continue;
             }
             tn->log(20, SSTR("handle error entry key=" << to_string(source_bs, gen) << " timestamp=" << entry_timestamp));
-            spawn(sync_single_entry(source_bs, gen, "", entry_timestamp, true), false);
+            spawn(sync_single_entry(sc->dsi.inc,
+                                    source_bs, gen, "", entry_timestamp, true), false);
           }
           if (!omapvals->more) {
             error_retry_time = ceph::coarse_real_clock::now() + make_timespan(retry_backoff_secs);
@@ -2063,8 +2085,8 @@ public:
         omapvals.reset();
 
         tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker));
-        yield call(new RGWReadRemoteDataLogShardCR(sc, shard_id, sync_marker.marker,
-                                                   &next_marker, &log_entries, &truncated));
+        yield call(sc->dsi.inc->fetch_cr(shard_id, sync_marker.marker,
+                                         &fetch_result));
         if (retcode < 0 && retcode != -ENOENT) {
           tn->log(0, SSTR("ERROR: failed to read remote data log info: ret=" << retcode));
           lease_cr->go_down();
@@ -2072,35 +2094,32 @@ public:
           return set_cr_error(retcode);
         }
 
-        if (log_entries.size() > 0) {
+        if (fetch_result.entries.size() > 0) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
         }
 
-        for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
-          tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key));
-          retcode = parse_bucket_key(log_iter->entry.key, source_bs);
-          if (retcode < 0) {
-            tn->log(1, SSTR("failed to parse bucket shard: " << log_iter->entry.key));
-            marker_tracker->try_update_high_marker(log_iter->log_id, std::nullopt, 0, log_iter->log_timestamp);
-            continue;
-          }
-          if (!marker_tracker->start(log_iter->log_id, std::nullopt, 0, log_iter->log_timestamp)) {
-            tn->log(0, SSTR("ERROR: cannot start syncing " << log_iter->log_id << ". Duplicate entry?"));
+        for (fetch_iter = fetch_result.entries.begin(); fetch_iter != fetch_result.entries.end(); ++fetch_iter) {
+          tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: " << fetch_iter->entry_id << ":" << fetch_iter->timestamp << ":" << fetch_iter->key));
+          if (!marker_tracker->start(fetch_iter->entry_id, std::nullopt, 0, fetch_iter->timestamp)) {
+            tn->log(0, SSTR("ERROR: cannot start syncing " << fetch_iter->entry_id << ". Duplicate entry?"));
           } else {
-            yield_spawn_window(sync_single_entry(source_bs, log_iter->entry.gen, log_iter->log_id,
-                                                 log_iter->log_timestamp, false),
+            source_bs = rgw_bucket_shard{fetch_iter->bucket, fetch_iter->shard_id};
+            yield_spawn_window(sync_single_entry(sc->dsi.inc,
+                                                 source_bs, fetch_iter->gen,
+                                                 fetch_iter->key, fetch_iter->entry_id,
+                                                 fetch_iter->timestamp, false),
                                cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
           }
         }
 
         tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker
-                         << " next_marker=" << next_marker << " truncated=" << truncated));
-        if (!next_marker.empty()) {
-          sync_marker.marker = next_marker;
-        } else if (!log_entries.empty()) {
-          sync_marker.marker = log_entries.back().log_id;
+                         << " fetch_result.marker=" << fetch_result.marker << " truncated=" << fetch_result.truncated));
+        if (!fetch_result.marker.empty()) {
+          sync_marker.marker = fetch_result.marker;
+        } else if (!fetch_result.entries.empty()) {
+          sync_marker.marker = fetch_result.entries.back().entry_id;
         }
-        if (!truncated) {
+        if (!fetch_result.truncated) {
           // we reached the end, wait a while before checking for more
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 	  yield wait(get_idle_interval());
