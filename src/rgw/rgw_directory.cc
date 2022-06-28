@@ -8,6 +8,9 @@
 #include <vector>
 #include <list>
 
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
+
 void RGWBlockDirectory::findClient(cpp_redis::client *client) {
   if (client->is_connected())
     return;
@@ -22,24 +25,24 @@ std::string RGWBlockDirectory::buildIndex(cache_block *ptr) {
   return ptr->c_obj.obj_name;
 }
 
-int RGWBlockDirectory::existKey(std::string key, cpp_redis::client *client) {
+int RGWBlockDirectory::existKey(std::string key) {
   int result = 0;
   std::vector<std::string> keys;
   keys.push_back(key);
-
-  if (!client->is_connected()) {
+  
+  if (!client.is_connected()) {
     return result;
   }
 
   try {
-    client->exists(keys, [&result](cpp_redis::reply &reply) {
+    client.exists(keys, [&result](cpp_redis::reply &reply) {
       if (reply.is_integer()) {
         result = reply.as_integer();
       }
     });
-
-    client->sync_commit(std::chrono::milliseconds(1000));
-}
+    
+    client.sync_commit(std::chrono::milliseconds(1000));
+  }
   catch(std::exception &e) {}
 
   return result;
@@ -48,7 +51,6 @@ int RGWBlockDirectory::existKey(std::string key, cpp_redis::client *client) {
 int RGWBlockDirectory::setValue(cache_block *ptr) {
   //creating the index based on obj_name
   std::string key = buildIndex(ptr);
-
   if (!client.is_connected()) { 
     findClient(&client);
   }
@@ -73,13 +75,20 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
 
   if (!exist) {
     std::vector<std::pair<std::string, std::string>> list;
-
+    
+    if (host == "" || port == 0) {
+      dout(20) << "RGW directory error: directory endpoint not configured correctly" << dendl;
+      return -2;
+    }
+    
+    std::string endpoint = host + ":" + std::to_string(port);
+    
     //creating a list of key's properties
     list.push_back(make_pair("key", key));
     list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
     list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
     list.push_back(make_pair("obj_name", ptr->c_obj.obj_name));
-    list.push_back(make_pair("hosts", ptr->hosts_list[0]));
+    list.push_back(make_pair("hosts", endpoint)); 
 
     client.hmset(key, list, [&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
@@ -134,7 +143,7 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
     findClient(&client);
   }
 
-  if (existKey(key, &client)) {
+  if (existKey(key)) {
     std::string hosts;
     std::string size;
     std::string bucket_name;
@@ -186,4 +195,32 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
   }
 
   return key_exist;
+}
+
+int RGWBlockDirectory::delValue(cache_block *ptr){
+  int result = 0;
+  std::vector<std::string> keys;
+  std::string key = buildIndex(ptr);
+  keys.push_back(key);
+  
+  if (!client.is_connected()){
+    findClient(&client);
+  }
+  
+  if (existKey(key)) {
+    try {
+      client.del(keys, [&result](cpp_redis::reply &reply) {
+        if (reply.is_integer()) {
+          result = reply.as_integer();
+        }
+      });
+	
+      client.sync_commit(std::chrono::milliseconds(1000));	
+      return result-1;
+    }
+    catch(std::exception &e) {
+      return -1;
+    }
+  } else
+    return -2;
 }
