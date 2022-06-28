@@ -353,14 +353,7 @@ class HostAssignment(object):
             for i in range(len(to_add)):
                 to_add[i] = to_add[i].assign_rank_generation(ranks[i], self.rank_map)
 
-        # If we don't have <count> the list of candidates is definitive.
-        if count is None:
-            final = existing_slots + to_add
-            logger.debug('Provided hosts: %s' % final)
-            return self.place_per_host_daemons(final, to_add, to_remove)
-
-        logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
-            existing, to_add))
+        logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (existing, to_add))
         return self.place_per_host_daemons(existing_slots + to_add, to_add, to_remove)
 
     def find_ip_on_host(self, hostname: str, subnets: List[str]) -> Optional[str]:
@@ -429,15 +422,17 @@ class HostAssignment(object):
             if len(old) > len(ls):
                 logger.debug('Filtered %s down to %s' % (old, ls))
 
-        # shuffle for pseudo random selection
-        # gen seed off of self.spec to make shuffling deterministic
+        # now that we have the list of nodes candidates based on the configured
+        # placement, let's shuffle the list for node pseudo-random selection. For this,
+        # we generate a seed from the service name and we use to shuffle the candidates.
+        # This makes shuffling deterministic for the same service name.
         seed = int(
             hashlib.sha1(self.spec.service_name().encode('utf-8')).hexdigest(),
             16
-        ) % (2 ** 32)
+        ) % (2 ** 32)  # truncate result to 32 bits
         final = sorted(ls)
         random.Random(seed).shuffle(final)
-        return ls
+        return final
 
     def remove_non_maintenance_unreachable_candidates(self, candidates: List[DaemonPlacement]) -> List[DaemonPlacement]:
         in_maintenance: Dict[str, bool] = {}
