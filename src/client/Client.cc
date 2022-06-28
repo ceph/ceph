@@ -11194,15 +11194,22 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   memset(stbuf, 0, sizeof(*stbuf));
 
   /*
-   * we're going to set a block size of 4MB so we can represent larger
-   * FSes without overflowing. Additionally convert the space
-   * measurements from KB to bytes while making them in terms of
-   * blocks.  We use 4MB only because it is big enough, and because it
-   * actually *is* the (ceph) default block size.
+   * Use 4KB as the default block size, and will switch to use 4MB if
+   * the quota size is larger than or equals to 4MB. 4KB block size
+   * could avoid the statfs incorrectly show the filesystem size if
+   * the quota size is not aligned to 4M.
+   *
+   * The 4MB block size can represent larger FSes without overflowing.
+   * Additionally convert the space measurements from KB to bytes while
+   * making them in terms of blocks.  We use 4MB only because it is big
+   * enough, and because it actually *is* the (ceph) default block size.
    */
   const int CEPH_BLOCK_SHIFT = 22;
-  stbuf->f_frsize = 1 << CEPH_BLOCK_SHIFT;
-  stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
+  const int CEPH_BLOCK_SIZE = (1 << CEPH_BLOCK_SHIFT); // 4MB
+  const int CEPH_4K_BLOCK_SHIFT = 12;
+  const int CEPH_4K_BLOCK_SIZE = (1 << CEPH_4K_BLOCK_SHIFT); // 4KB
+
+  stbuf->f_frsize = CEPH_BLOCK_SIZE;
   stbuf->f_files = total_files_on_fs;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
@@ -11239,8 +11246,15 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // Special case: if there is a size quota set on the Inode acting
     // as the root for this client mount, then report the quota status
     // as the filesystem statistics.
-    const fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_BLOCK_SHIFT;
-    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_BLOCK_SHIFT;
+    int block_shift = CEPH_4K_BLOCK_SHIFT;
+    if (!(quota_root->quota.max_bytes & (CEPH_BLOCK_SIZE - 1))) {
+      block_shift = CEPH_BLOCK_SHIFT;
+    }
+
+    const fsblkcnt_t total = quota_root->quota.max_bytes >> block_shift;
+    const fsblkcnt_t used = quota_root->rstat.rbytes >> block_shift;
+    stbuf->f_frsize = 1 << block_shift;
+
     // It is possible for a quota to be exceeded: arithmetic here must
     // handle case where used > total.
     const fsblkcnt_t free = total > used ? total - used : 0;
@@ -11256,6 +11270,12 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
     stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   }
+
+  // NOTE: for the time being, we make bsize == frsize to humor
+  // not-yet-ancient versions of glibc that are broken.
+  // Someday, we will probably want to report a real block
+  // size...  whatever that may mean for a network file system!
+  stbuf->f_bsize = stbuf->f_frsize;
 
   return rval;
 }
