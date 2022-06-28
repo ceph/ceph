@@ -13,6 +13,7 @@ string oid = "samoid";
 string bucketName = "testBucket";
 int blkSize = 123;
 
+
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
@@ -173,6 +174,27 @@ TEST_F(DirectoryFixture, DelValueTest) {
   });
 
   client.flushall();
+}
+
+// Successful delValue Call and Redis Check
+TEST_F(DirectoryFixture, DelValueTest) {
+  cpp_redis::client client;
+  vector<string> keys;
+  int setReturn = blk_dir->setValue(c_blk);
+  int getReturn = blk_dir->getValue(c_blk);
+  int delReturn = blk_dir->delValue(c_blk);
+
+  keys.push_back(oid);
+
+  ASSERT_EQ(setReturn, 0);
+  ASSERT_EQ(getReturn, 0);
+  EXPECT_EQ(delReturn, 0);
+  
+  client.exists(keys, [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 0); // Zero keys exist
+    }
+  });
 }
 
 int main(int argc, char *argv[]) {
