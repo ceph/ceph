@@ -707,6 +707,32 @@ TEST_F(TestMockDeepCopyImageCopyRequest, Cancel_Inflight_Sync) {
   ASSERT_EQ(5u, handler.object_number.get());
 }
 
+TEST_F(TestMockDeepCopyImageCopyRequest, CancelBeforeSend) {
+  librados::snap_t snap_id_end;
+  ASSERT_EQ(0, create_snap("copy", &snap_id_end));
+
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  InSequence seq;
+
+  MockDiffRequest mock_diff_request;
+  expect_diff_send(mock_diff_request, {}, -EINVAL);
+  expect_get_image_size(mock_src_image_ctx, 2 * (1 << m_src_image_ctx->order));
+  expect_get_image_size(mock_src_image_ctx, 0);
+
+  librbd::deep_copy::NoOpHandler no_op;
+  C_SaferCond ctx;
+  auto request = new MockImageCopyRequest(&mock_src_image_ctx,
+                                          &mock_dst_image_ctx,
+                                          0, snap_id_end, 0, false, boost::none,
+                                          m_snap_seqs, &no_op, &ctx);
+  request->cancel();
+  request->send();
+
+  ASSERT_EQ(-ECANCELED, ctx.wait());
+}
+
 TEST_F(TestMockDeepCopyImageCopyRequest, MissingSnap) {
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
