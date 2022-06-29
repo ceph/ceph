@@ -34,6 +34,27 @@ void RGWOp_Account_Create::execute(optional_yield y)
     acc_op_state.set_max_users(max_users);
   }
 
+  if (!store->is_meta_master()) {
+    bufferlist data;
+    JSONParser parser;
+    op_ret = store->forward_request_to_master(s, s->user.get(), nullptr,
+                                              data, &parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+
+    // the master zone may have generated its own account id, use the same
+    std::string meta_master_id;
+    JSONDecoder::decode_json("id", meta_master_id, &parser);
+    if (meta_master_id.empty()) {
+      ldpp_dout(this, 4) << "forward_request_to_master returned empty account id" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    acc_op_state.account_id = meta_master_id;
+  }
+
   op_ret = RGWAdminOp_Account::create(this, store, acc_op_state,
                                       s->err.message, flusher, s->yield);
   if (op_ret < 0) {
@@ -56,6 +77,14 @@ public:
 
 void RGWOp_Account_Modify::execute(optional_yield y)
 {
+  bufferlist data;
+  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr,
+                                            data, nullptr, s->info, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
   std::string id;
   std::string tenant;
   std::string name;
@@ -122,6 +151,14 @@ public:
 
 void RGWOp_Account_Delete::execute(optional_yield y)
 {
+  bufferlist data;
+  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr,
+                                            data, nullptr, s->info, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
   std::string id;
   std::string tenant;
   std::string name;
