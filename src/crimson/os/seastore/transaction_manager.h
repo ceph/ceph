@@ -21,7 +21,7 @@
 #include "crimson/osd/exceptions.h"
 
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/lba_manager.h"
@@ -103,13 +103,13 @@ auto repeat_eagain(F &&f) {
  * Abstraction hiding reading and writing to persistence.
  * Exposes transaction based interface with read isolation.
  */
-class TransactionManager : public SegmentCleaner::ExtentCallbackInterface {
+class TransactionManager : public AsyncCleaner::ExtentCallbackInterface {
 public:
   using base_ertr = Cache::base_ertr;
   using base_iertr = Cache::base_iertr;
 
   TransactionManager(
-    SegmentCleanerRef segment_cleaner,
+    AsyncCleanerRef async_cleaner,
     JournalRef journal,
     CacheRef cache,
     LBAManagerRef lba_manager,
@@ -423,8 +423,8 @@ public:
   using submit_transaction_iertr = base_iertr;
   submit_transaction_iertr::future<> submit_transaction(Transaction &);
 
-  /// SegmentCleaner::ExtentCallbackInterface
-  using SegmentCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
+  /// AsyncCleaner::ExtentCallbackInterface
+  using AsyncCleaner::ExtentCallbackInterface::submit_transaction_direct_ret;
   submit_transaction_direct_ret submit_transaction_direct(
     Transaction &t,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
@@ -438,18 +438,18 @@ public:
    */
   seastar::future<> flush(OrderingHandle &handle);
 
-  using SegmentCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
+  using AsyncCleaner::ExtentCallbackInterface::get_next_dirty_extents_ret;
   get_next_dirty_extents_ret get_next_dirty_extents(
     Transaction &t,
     journal_seq_t seq,
     size_t max_bytes) final;
 
-  using SegmentCleaner::ExtentCallbackInterface::rewrite_extent_ret;
+  using AsyncCleaner::ExtentCallbackInterface::rewrite_extent_ret;
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) final;
 
-  using SegmentCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
+  using AsyncCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
   get_extent_if_live_ret get_extent_if_live(
     Transaction &t,
     extent_types_t type,
@@ -577,7 +577,7 @@ public:
   }
 
   store_statfs_t store_stat() const {
-    return segment_cleaner->stat();
+    return async_cleaner->stat();
   }
 
   void add_device(Device* dev, bool is_primary) {
@@ -598,7 +598,7 @@ public:
 private:
   friend class Transaction;
 
-  SegmentCleanerRef segment_cleaner;
+  AsyncCleanerRef async_cleaner;
   CacheRef cache;
   LBAManagerRef lba_manager;
   JournalRef journal;
@@ -614,8 +614,8 @@ private:
     LogicalCachedExtentRef extent);
 public:
   // Testing interfaces
-  auto get_segment_cleaner() {
-    return segment_cleaner.get();
+  auto get_async_cleaner() {
+    return async_cleaner.get();
   }
 
   auto get_lba_manager() {
