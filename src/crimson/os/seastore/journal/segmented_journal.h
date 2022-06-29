@@ -9,7 +9,7 @@
 #include "include/buffer.h"
 #include "include/denc.h"
 
-#include "crimson/os/seastore/segment_cleaner.h"
+#include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/ordering_handle.h"

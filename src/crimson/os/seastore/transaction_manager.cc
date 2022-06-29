@@ -23,23 +23,23 @@ SET_SUBSYS(seastore_tm);
 namespace crimson::os::seastore {
 
 TransactionManager::TransactionManager(
-  SegmentCleanerRef _segment_cleaner,
+  AsyncCleanerRef _async_cleaner,
   JournalRef _journal,
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef &&epm,
   BackrefManagerRef&& backref_manager,
   tm_make_config_t config)
-  : segment_cleaner(std::move(_segment_cleaner)),
+  : async_cleaner(std::move(_async_cleaner)),
     cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(epm)),
     backref_manager(std::move(backref_manager)),
-    sm_group(*segment_cleaner->get_segment_manager_group()),
+    sm_group(*async_cleaner->get_segment_manager_group()),
     config(config)
 {
-  segment_cleaner->set_extent_callback(this);
+  async_cleaner->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
 }
 
@@ -47,11 +47,11 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
 {
   LOG_PREFIX(TransactionManager::mkfs);
   INFO("enter");
-  return segment_cleaner->mount(
+  return async_cleaner->mount(
   ).safe_then([this] {
     return journal->open_for_write();
   }).safe_then([this](auto) {
-    segment_cleaner->init_mkfs();
+    async_cleaner->init_mkfs();
     return epm->open();
   }).safe_then([this, FNAME]() {
     return with_transaction_intr(
@@ -88,7 +88,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   LOG_PREFIX(TransactionManager::mount);
   INFO("enter");
   cache->init();
-  return segment_cleaner->mount(
+  return async_cleaner->mount(
   ).safe_then([this] {
     return journal->replay(
       [this](
@@ -98,7 +98,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	auto last_modified)
       {
 	auto start_seq = offsets.write_result.start_seq;
-	segment_cleaner->update_journal_tail_target(
+	async_cleaner->update_journal_tail_target(
 	  cache->get_oldest_dirty_from().value_or(start_seq),
 	  cache->get_oldest_backref_dirty_from().value_or(start_seq));
 	return cache->replay_delta(
@@ -124,8 +124,8 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 	      else
 		return lba_manager->init_cached_extent(t, e);
 	    }).si_then([this, FNAME, &t] {
-	      assert(segment_cleaner->debug_check_space(
-		       *segment_cleaner->get_empty_space_tracker()));
+	      assert(async_cleaner->debug_check_space(
+		       *async_cleaner->get_empty_space_tracker()));
 	      return backref_manager->scan_mapped_space(
 		t,
 		[this, FNAME, &t](
@@ -141,7 +141,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		    len);
 		  if (addr.is_real() &&
 		      !backref_manager->backref_should_be_removed(addr)) {
-		    segment_cleaner->mark_space_used(
+		    async_cleaner->mark_space_used(
 		      addr,
 		      len ,
 		      seastar::lowres_system_clock::time_point(),
@@ -163,7 +163,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 		  auto &backrefs = backref_manager->get_cached_backrefs();
 		  DEBUG("marking {} backrefs used", backrefs.size());
 		  for (auto &backref : backrefs) {
-		    segment_cleaner->mark_space_used(
+		    async_cleaner->mark_space_used(
 		      backref.paddr,
 		      backref.len,
 		      seastar::lowres_system_clock::time_point(),
@@ -179,7 +179,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
   }).safe_then([this] {
     return epm->open();
   }).safe_then([FNAME, this] {
-    segment_cleaner->complete_init();
+    async_cleaner->complete_init();
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -192,7 +192,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
 TransactionManager::close_ertr::future<> TransactionManager::close() {
   LOG_PREFIX(TransactionManager::close);
   INFO("enter");
-  return segment_cleaner->stop(
+  return async_cleaner->stop(
   ).then([this] {
     return cache->close();
   }).safe_then([this] {
@@ -314,12 +314,12 @@ TransactionManager::submit_transaction(
     size_t projected_usage = t.get_allocation_size();
     SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
     return trans_intr::make_interruptible(
-      segment_cleaner->reserve_projected_usage(projected_usage)
+      async_cleaner->reserve_projected_usage(projected_usage)
     ).then_interruptible([this, &t] {
       return submit_transaction_direct(t);
     }).finally([this, FNAME, projected_usage, &t] {
       SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
-      segment_cleaner->release_projected_usage(projected_usage);
+      async_cleaner->release_projected_usage(projected_usage);
     });
   });
 }
@@ -365,7 +365,7 @@ TransactionManager::submit_transaction_direct(
     if (seq_to_trim && *seq_to_trim != JOURNAL_SEQ_NULL) {
       cache->trim_backref_bufs(*seq_to_trim);
     }
-    auto record = cache->prepare_record(tref, segment_cleaner.get());
+    auto record = cache->prepare_record(tref, async_cleaner.get());
 
     tref.get_handle().maybe_release_collection_lock();
 
@@ -379,7 +379,7 @@ TransactionManager::submit_transaction_direct(
           tref,
           submit_result.record_block_base,
           start_seq,
-          segment_cleaner.get());
+          async_cleaner.get());
 
       std::vector<CachedExtentRef> lba_to_clear;
       std::vector<CachedExtentRef> backref_to_clear;
@@ -409,10 +409,10 @@ TransactionManager::submit_transaction_direct(
       lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
       backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
 
-      segment_cleaner->update_journal_tail_target(
+      async_cleaner->update_journal_tail_target(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
-      return segment_cleaner->maybe_release_segment(tref);
+      return async_cleaner->maybe_release_segment(tref);
     }).safe_then([FNAME, &tref] {
       SUBTRACET(seastore_t, "completed", tref);
       return tref.get_handle().complete();
@@ -486,7 +486,7 @@ TransactionManager::rewrite_logical_extent(
 
   /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
    * extents since we're going to do it again once we either do the ool write
-   * or allocate a relative inline addr.  TODO: refactor SegmentCleaner to
+   * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
    * avoid this complication. */
   return lba_manager->update_mapping(
     t,
@@ -647,15 +647,15 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
   auto backref_manager = create_backref_manager(*sms, *cache);
 
   bool cleaner_is_detailed;
-  SegmentCleaner::config_t cleaner_config;
+  AsyncCleaner::config_t cleaner_config;
   if (config.is_test) {
     cleaner_is_detailed = true;
-    cleaner_config = SegmentCleaner::config_t::get_test();
+    cleaner_config = AsyncCleaner::config_t::get_test();
   } else {
     cleaner_is_detailed = false;
-    cleaner_config = SegmentCleaner::config_t::get_default();
+    cleaner_config = AsyncCleaner::config_t::get_default();
   }
-  auto segment_cleaner = std::make_unique<SegmentCleaner>(
+  auto async_cleaner = std::make_unique<AsyncCleaner>(
     cleaner_config,
     std::move(sms),
     *backref_manager,
@@ -663,20 +663,20 @@ TransactionManagerRef make_transaction_manager(tm_make_config_t config)
 
   JournalRef journal;
   if (config.j_type == journal_type_t::SEGMENT_JOURNAL) {
-    journal = journal::make_segmented(*segment_cleaner);
+    journal = journal::make_segmented(*async_cleaner);
   } else {
     journal = journal::make_circularbounded(
       nullptr, "");
-    segment_cleaner->set_disable_trim(true);
+    async_cleaner->set_disable_trim(true);
     ERROR("disabling journal trimming since support for CircularBoundedJournal\
 	  hasn't been added yet");
   }
   epm->init_ool_writers(
-      *segment_cleaner,
-      segment_cleaner->get_ool_segment_seq_allocator());
+      *async_cleaner,
+      async_cleaner->get_ool_segment_seq_allocator());
 
   return std::make_unique<TransactionManager>(
-    std::move(segment_cleaner),
+    std::move(async_cleaner),
     std::move(journal),
     std::move(cache),
     std::move(lba_manager),
