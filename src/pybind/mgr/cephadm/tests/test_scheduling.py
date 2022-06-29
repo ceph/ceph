@@ -879,7 +879,7 @@ class NodeAssignmentTest5(NamedTuple):
 
 
 @pytest.mark.parametrize("service_type, placement, available_hosts, expected_candidates",
-    [
+    [   # noqa: E128
         NodeAssignmentTest5(
             'alertmanager',
             PlacementSpec(hosts='host1 host2 host3 host4'.split()),
