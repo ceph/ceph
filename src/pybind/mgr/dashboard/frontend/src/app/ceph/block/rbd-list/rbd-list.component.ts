@@ -6,7 +6,7 @@ import { Observable, Subscriber } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { TableStatus } from '~/app/shared/classes/table-status';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -71,12 +71,11 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   images: any;
   columns: CdTableColumn[];
   retries: number;
-  tableStatus = new TableStatusViewCache();
+  tableStatus = new TableStatus('light');
   selection = new CdTableSelection();
   icons = Icons;
   count = 0;
   private tableContext: CdTableFetchDataContext = null;
-
   modalRef: NgbModalRef;
 
   builders = {
@@ -360,7 +359,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
 
   onFetchError() {
     this.table.reset(); // Disable loading indicator.
-    this.tableStatus = new TableStatusViewCache(ViewCacheStatus.ValueException);
+    this.tableStatus = new TableStatus('danger');
   }
 
   getRbdImages(context: CdTableFetchDataContext) {

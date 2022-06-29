@@ -27,6 +27,7 @@ describe('RbdListComponent', () => {
   let component: RbdListComponent;
   let summaryService: SummaryService;
   let rbdService: RbdService;
+  let headers: HttpHeaders;
 
   const refresh = (data: any) => {
     summaryService['summaryDataSource'].next(data);
@@ -57,6 +58,7 @@ describe('RbdListComponent', () => {
     component = fixture.componentInstance;
     summaryService = TestBed.inject(SummaryService);
     rbdService = TestBed.inject(RbdService);
+    headers = new HttpHeaders().set('X-Total-Count', '10');
 
     // this is needed because summaryService isn't being reset after each test.
     summaryService['summaryDataSource'] = new BehaviorSubject(null);
@@ -117,7 +119,9 @@ describe('RbdListComponent', () => {
     });
 
     it('should display N/A for Provisioned & Total Provisioned columns if disk usage is null', () => {
-      rbdServiceListSpy.and.callFake(() => of([{ pool_name: 'rbd', value: images }]));
+      rbdServiceListSpy.and.callFake(() =>
+        of([{ pool_name: 'rbd', value: images, headers: headers }])
+      );
       fixture.detectChanges();
       const spanWithoutFastDiff = fixture.debugElement.nativeElement.querySelectorAll(
         '.datatable-body-cell-label span'
@@ -129,7 +133,9 @@ describe('RbdListComponent', () => {
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
 
-      rbdServiceListSpy.and.callFake(() => of([{ pool_name: 'rbd', value: images }]));
+      rbdServiceListSpy.and.callFake(() =>
+        of([{ pool_name: 'rbd', value: images, headers: headers }])
+      );
       fixture.detectChanges();
 
       const spanWithFastDiff = fixture.debugElement.nativeElement.querySelectorAll(
@@ -253,8 +259,9 @@ describe('RbdListComponent', () => {
       addImage('c');
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
-      spyOn(rbdService, 'list').and.callFake(() => of([{ pool_name: 'rbd', value: images }]));
-      new HttpHeaders().set('X-Total-Count', '10');
+      spyOn(rbdService, 'list').and.callFake(() =>
+        of([{ pool_name: 'rbd', value: images, headers: headers }])
+      );
       fixture.detectChanges();
     });
 
