@@ -214,7 +214,15 @@ OMapInnerNode::list(
     child_iter,
     iter_cend(),
     list_bare_ret(false, {}),
-    [=, &start](auto &biter, auto &eiter, auto &ret) {
+    true,
+    start,
+    [this, oc, config](
+      auto &biter,
+      auto &eiter,
+      auto &ret,
+      bool &first_entry,
+      auto &start)
+    {
       auto &complete = std::get<0>(ret);
       auto &result = std::get<1>(ret);
       return trans_intr::repeat(
@@ -231,7 +239,7 @@ OMapInnerNode::list(
 	  ).si_then([&, config, oc] (auto &&extent) {
 	    return extent->list(
 	      oc,
-	      start,
+	      first_entry ? start : std::nullopt,
 	      config.with_reduced_max(result.size())
 	    ).si_then([&, config](auto &&child_ret) mutable {
 	      boost::ignore_unused(config);   // avoid clang warning;
@@ -239,12 +247,13 @@ OMapInnerNode::list(
 	      if (result.size() && child_result.size()) {
 		assert(child_result.begin()->first > result.rbegin()->first);
 	      }
-	      if (child_result.size() && start) {
+	      if (child_result.size() && start && first_entry) {
 		assert(child_result.begin()->first > *start);
 	      }
 	      result.merge(std::move(child_result));
 	      ++biter;
 	      assert(child_complete || result.size() == config.max_result_size);
+	      first_entry = false;
 	      return list_iertr::make_ready_future<seastar::stop_iteration>(
 		seastar::stop_iteration::no);
 	    });
