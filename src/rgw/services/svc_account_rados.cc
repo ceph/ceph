@@ -294,13 +294,22 @@ int RGWSI_Account_RADOS::remove_account_info(const DoutPrefixProvider* dpp,
 }
 
 int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,
-                                  const RGWAccountInfo& info,
+                                  std::string_view account_id,
                                   const rgw_user& user,
                                   optional_yield y)
 {
+  RGWAccountInfo info;
+  RGWSysObjectCtx obj_ctx{svc.sysobj};
+  RGWObjVersionTracker objv;
+  int ret = read_account_info(dpp, obj_ctx, account_id, info,
+                              objv, nullptr, nullptr, y);
+  if (ret < 0) {
+    return ret;
+  }
+
   auto obj = get_account_user_obj(info.id);
   auto handle = svc.rados->obj(obj);
-  int ret = handle.open(dpp);
+  ret = handle.open(dpp);
   if (ret < 0) {
     return ret;
   }
@@ -311,11 +320,11 @@ int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,
 }
 
 int RGWSI_Account_RADOS::remove_user(const DoutPrefixProvider *dpp,
-                                     const RGWAccountInfo& info,
+                                     std::string_view account_id,
                                      const rgw_user& user,
                                      optional_yield y)
 {
-  auto obj = get_account_user_obj(info.id);
+  auto obj = get_account_user_obj(std::string{account_id});
   auto handle = svc.rados->obj(obj);
   int ret = handle.open(dpp);
   if (ret < 0) {
@@ -329,20 +338,19 @@ int RGWSI_Account_RADOS::remove_user(const DoutPrefixProvider *dpp,
 
 
 int RGWSI_Account_RADOS::list_users(const DoutPrefixProvider *dpp,
-                                    const RGWAccountInfo& info,
+                                    std::string_view account_id,
                                     const std::string& marker,
-                                    bool *more,
+                                    int max_entries, bool *more,
                                     std::vector<rgw_user>& users,
                                     optional_yield y)
 {
-  auto obj = get_account_user_obj(info.id);
+  auto obj = get_account_user_obj(std::string{account_id});
   auto handle = svc.rados->obj(obj);
   int ret = handle.open(dpp);
   if (ret < 0) {
     return ret;
   }
 
-  static constexpr uint32_t max_entries = 1000u;
   std::vector<std::string> entries;
   int ret2 = 0;
 

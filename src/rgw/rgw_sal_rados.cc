@@ -47,6 +47,7 @@
 #include "services/svc_config_key.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_role_rados.h"
+#include "services/svc_account_rados.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_pubsub.h"
@@ -989,7 +990,9 @@ int RadosStore::load_account_by_id(const DoutPrefixProvider *dpp,
                                    RGWObjVersionTracker& objv,
                                    optional_yield y)
 {
-  return ctl()->account->read_info(dpp, id, info, objv, nullptr, nullptr, y);
+  RGWSysObjectCtx ctx{svc()->sysobj};
+  return svc()->account->read_account_info(dpp, ctx, id, info, objv,
+                                           nullptr, nullptr, y);
 }
 
 int RadosStore::load_account_by_name(const DoutPrefixProvider *dpp,
@@ -999,8 +1002,9 @@ int RadosStore::load_account_by_name(const DoutPrefixProvider *dpp,
                                      RGWObjVersionTracker& objv,
                                      optional_yield y)
 {
-  return ctl()->account->read_by_name(dpp, tenant, name, info,
-                                      objv, nullptr, nullptr, y);
+  RGWSysObjectCtx ctx{svc()->sysobj};
+  return svc()->account->read_account_by_name(dpp, ctx, tenant, name, info,
+                                              objv, nullptr, nullptr, y);
 }
 
 int RadosStore::store_account(const DoutPrefixProvider *dpp,
@@ -1010,8 +1014,9 @@ int RadosStore::store_account(const DoutPrefixProvider *dpp,
                               bool exclusive,
                               optional_yield y)
 {
-  return ctl()->account->store_info(dpp, info, old_info, objv,
-                                    real_time(), exclusive, nullptr, y);
+  RGWSysObjectCtx ctx{svc()->sysobj};
+  return svc()->account->store_account_info(dpp, ctx, info, old_info, objv,
+                                            real_time{}, exclusive, nullptr, y);
 }
 
 int RadosStore::delete_account(const DoutPrefixProvider *dpp,
@@ -1019,7 +1024,19 @@ int RadosStore::delete_account(const DoutPrefixProvider *dpp,
                                RGWObjVersionTracker& objv,
                                optional_yield y)
 {
-  return ctl()->account->remove_info(dpp, info, objv, y);
+  RGWSysObjectCtx ctx{svc()->sysobj};
+  return svc()->account->remove_account_info(dpp, ctx, info, objv, y);
+}
+
+int RadosStore::list_account_users(const DoutPrefixProvider* dpp,
+                                   std::string_view account_id,
+                                   const std::string& marker,
+                                   int max_entries, bool *more,
+                                   std::vector<rgw_user>& results,
+                                   optional_yield y)
+{
+  return svc()->account->list_users(dpp, account_id, marker,
+                                    max_entries, more, results, y);
 }
 
 std::unique_ptr<User> RadosStore::get_user(const rgw_user &u)

@@ -154,6 +154,12 @@ class RadosStore : public Store {
                                const RGWAccountInfo& info,
                                RGWObjVersionTracker& objv,
                                optional_yield y) override;
+    virtual int list_account_users(const DoutPrefixProvider* dpp,
+                                   std::string_view account_id,
+                                   const std::string& marker,
+                                   int max_entries, bool *more,
+                                   std::vector<rgw_user>& results,
+                                   optional_yield y) override;
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y) override;

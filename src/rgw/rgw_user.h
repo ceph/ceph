@@ -630,14 +630,6 @@ public:
   /* list the existing users */
   int list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  int link_account(const DoutPrefixProvider *dpp,
-                   RGWUserAdminOpState& op_state, optional_yield y,
-                   std::string *err_msg = nullptr);
-
-  int unlink_account(const DoutPrefixProvider *dpp,
-                     RGWUserAdminOpState& op_state, optional_yield y,
-                     std::string *err_msg = nullptr);
-
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
   friend class RGWUserCapPool;
@@ -667,19 +659,6 @@ public:
 
   static int remove(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
-
-  static int link_account(const DoutPrefixProvider *dpp,
-                          rgw::sal::Store *store,
-                          RGWUserAdminOpState& op_state,
-                          RGWFormatterFlusher& flusher,
-                          optional_yield y);
-
-  static int unlink_account(const DoutPrefixProvider *dpp,
-                            rgw::sal::Store *store,
-                            RGWUserAdminOpState& op_state,
-                            RGWFormatterFlusher& flusher,
-                            optional_yield y);
-
 };
 
 class RGWUserAdminOp_Subuser
@@ -760,7 +739,6 @@ class RGWUserCtl
 
   struct Ctl {
     RGWBucketCtl *bucket{nullptr};
-    RGWAccountCtl *account{nullptr};
   } ctl;
 
   RGWUserMetadataHandler *umhandler;
@@ -771,9 +749,8 @@ public:
              RGWSI_User *user_svc,
              RGWUserMetadataHandler *_umhandler);
 
-  void init(RGWBucketCtl *bucket_ctl, RGWAccountCtl *account_ctl) {
+  void init(RGWBucketCtl *bucket_ctl) {
     ctl.bucket = bucket_ctl;
-    ctl.account = account_ctl;
   }
 
   RGWBucketCtl *get_bucket_ctl() {
@@ -912,31 +889,12 @@ public:
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
   int read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& user, RGWGetUserStats_CB *ctx);
-  int link_account(const DoutPrefixProvider *dpp, 
-		   const rgw_user& user,
-		   const std::string& account_id,
-		   const PutParams& put_params,
-		   optional_yield y);
-  int link_account(const DoutPrefixProvider *dpp,
-		   RGWUserInfo& uinfo,
-		   const std::string& account_id,
-		   const PutParams& put_params,
-		   optional_yield y);
-  int unlink_account(const DoutPrefixProvider *dpp,
-                     const rgw_user& user_id,
-                     const std::string& account_id,
-                     const PutParams& put_params,
-                     optional_yield y);
-  int unlink_account(const DoutPrefixProvider *dpp,
-                     RGWUserInfo& uinfo,
-                     const std::string& account_id,
-                     const PutParams& put_params,
-                     optional_yield y);
 };
 
 class RGWUserMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_User *user_svc, RGWAccountCtl *account_ctl);
+  static RGWMetadataHandler *alloc(RGWSI_User *user_svc,
+                                   RGWSI_Account_RADOS *account_svc);
 };
 
 

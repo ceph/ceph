@@ -332,6 +332,14 @@ class Store {
                                RGWObjVersionTracker& objv,
                                optional_yield y) = 0;
 
+    /** List users in an account */
+    virtual int list_account_users(const DoutPrefixProvider* dpp,
+                                   std::string_view account_id,
+                                   const std::string& marker,
+                                   int max_entries, bool *more,
+                                   std::vector<rgw_user>& results,
+                                   optional_yield y) = 0;
+
     /** Get a basic Object.  This Object is not looked up, and is incomplete, since is
      * does not have a bucket.  This should only be used when an Object is needed before
      * there is a Bucket, otherwise use the get_object() in the Bucket class. */

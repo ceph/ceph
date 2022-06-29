@@ -9,22 +9,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWAccountCtl::RGWAccountCtl(RGWSI_Account_RADOS* account_svc,
-                             RGWSI_SysObj* sysobj_svc,
-                             RGWAccountMetadataHandler* handler)
-  : handler(handler)
-{
-  svc.account = account_svc;
-  svc.sysobj = sysobj_svc;
-}
-
-RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account_RADOS* svc_account,
-                                                     RGWSI_SysObj* svc_sysobj)
-  : svc_account(svc_account), svc_sysobj(svc_sysobj)
-{
-  base_init(svc_account->ctx());
-}
-
 // account ids start with 'RGW' followed by 17 numeric digits
 static constexpr std::string_view account_id_prefix = "RGW";
 static constexpr std::size_t account_id_len = 20;
@@ -82,19 +66,6 @@ bool rgw_validate_account_name(std::string_view name, std::string& err_msg)
   return true;
 }
 
-int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
-                              const RGWAccountInfo& info,
-                              const RGWAccountInfo* old_info,
-                              RGWObjVersionTracker& objv,
-                              const real_time& mtime, bool exclusive,
-                              std::map<std::string, bufferlist> *pattrs,
-                              optional_yield y)
-{
-  RGWSysObjectCtx ctx{svc.sysobj};
-  return svc.account->store_account_info(dpp, ctx, info, old_info, objv,
-                                         mtime, exclusive, pattrs, y);
-}
-
 void RGWAccountInfo::dump(Formatter * const f) const
 {
   encode_json("id", id, f);
@@ -121,94 +92,13 @@ void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
   o.push_back(p);
 }
 
-int RGWAccountCtl::read_by_name(const DoutPrefixProvider* dpp,
-                                std::string_view tenant,
-                                std::string_view name,
-                                RGWAccountInfo& info,
-                                RGWObjVersionTracker& objv,
-                                real_time* pmtime,
-                                std::map<std::string, bufferlist>* pattrs,
-                                optional_yield y)
+
+RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account_RADOS* svc_account,
+                                                     RGWSI_SysObj* svc_sysobj)
+  : svc_account(svc_account), svc_sysobj(svc_sysobj)
 {
-  RGWSysObjectCtx ctx{svc.sysobj};
-  return svc.account->read_account_by_name(dpp, ctx, tenant, name,
-                                           info, objv, pmtime, pattrs, y);
+  base_init(svc_account->ctx());
 }
-
-int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
-                             std::string_view account_id,
-                             RGWAccountInfo& info,
-                             RGWObjVersionTracker& objv,
-                             real_time* pmtime,
-                             std::map<std::string, bufferlist>* pattrs,
-                             optional_yield y)
-{
-  RGWSysObjectCtx ctx{svc.sysobj};
-  return svc.account->read_account_info(dpp, ctx, account_id, info,
-                                        objv, pmtime, pattrs, y);
-}
-
-int RGWAccountCtl::remove_info(const DoutPrefixProvider* dpp,
-                               const RGWAccountInfo& info,
-                               RGWObjVersionTracker& objv,
-                               optional_yield y)
-{
-  RGWSysObjectCtx ctx{svc.sysobj};
-  return svc.account->remove_account_info(dpp, ctx, info, objv, y);
-}
-
-
-int RGWAccountCtl::add_user(const DoutPrefixProvider* dpp,
-                            const std::string& account_id,
-                            const rgw_user& user,
-                            optional_yield y)
-{
-  RGWAccountInfo info;
-  RGWObjVersionTracker objv;
-  real_time mtime;
-
-  int ret = read_info(dpp, account_id, info, objv, &mtime, nullptr, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return svc.account->add_user(dpp, info, user, y);
-}
-
-int RGWAccountCtl::remove_user(const DoutPrefixProvider* dpp,
-                               const std::string& account_id,
-                               const rgw_user& user_id,
-                               optional_yield y)
-{
-  RGWAccountInfo info;
-  RGWObjVersionTracker objv;
-
-  int ret = read_info(dpp, account_id, info, objv, nullptr, nullptr, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return svc.account->remove_user(dpp, info, user_id, y);
-}
-
-int RGWAccountCtl::list_users(const DoutPrefixProvider* dpp,
-                              const std::string& account_id,
-                              const std::string& marker,
-                              bool *more,
-                              std::vector<rgw_user>& results,
-                              optional_yield y)
-{
-  RGWAccountInfo info;
-  RGWObjVersionTracker objv;
-
-  int ret = read_info(dpp, account_id, info, objv, nullptr, nullptr, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return svc.account->list_users(dpp, info, marker, more, results, y);
-}
-
 
 RGWMetadataObject* RGWAccountMetadataHandler::get_meta_obj(JSONObj *jo,
                                                            const obj_version& objv,
@@ -499,6 +389,7 @@ int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
                                       op_state.account_name,
                                       info, objv, y);
   } else {
+    err_msg = "requires account id or name";
     return -EINVAL;
   }
   if (ret < 0) {
@@ -509,5 +400,72 @@ int RGWAdminOp_Account::info(const DoutPrefixProvider *dpp,
   encode_json("AccountInfo", info, flusher.get_formatter());
   flusher.flush();
 
+  return 0;
+}
+
+int RGWAdminOp_Account::list_users(const DoutPrefixProvider *dpp,
+                                   rgw::sal::Store* store,
+                                   RGWAccountAdminOpState& op_state,
+                                   std::string& err_msg,
+                                   RGWFormatterFlusher& flusher,
+                                   optional_yield y)
+{
+  int ret = 0;
+  RGWAccountInfo info;
+
+  auto& objv = op_state.objv_tracker;
+  if (op_state.has_account_id()) {
+    ret = store->load_account_by_id(dpp, op_state.account_id, info, objv, y);
+  } else if (op_state.has_account_name()) {
+    RGWAccountInfo info;
+    ret = store->load_account_by_name(dpp, op_state.tenant,
+                                      op_state.account_name,
+                                      info, objv, y);
+  } else {
+    err_msg = "requires account id or name";
+    return -EINVAL;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  flusher.start(0);
+  Formatter* formatter = flusher.get_formatter();
+
+  std::string marker = op_state.marker;
+  int left = std::numeric_limits<int>::max();
+  bool truncated = true;
+
+  // if max-entries is given, wrap the keys in another 'result' section to
+  // include the 'truncated' flag. otherwise, just list all keys
+  if (op_state.max_entries) {
+    left = *op_state.max_entries;
+    formatter->open_object_section("result");
+  }
+  formatter->open_array_section("keys");
+
+  do {
+    std::vector<rgw_user> users;
+    int max_entries = std::min(left, 1000);
+    ret = store->list_account_users(dpp, info.id, marker, max_entries,
+                                    &truncated, users, y);
+    if (ret < 0) {
+      return ret;
+    }
+    for (const auto& u : users) {
+      encode_json("user", u, formatter);
+    }
+    if (!users.empty()) {
+      marker = users.back().to_str();
+    }
+    left -= users.size();
+  } while (truncated && left > 0);
+
+  formatter->close_section(); // keys
+  if (op_state.max_entries) {
+    encode_json("truncated", truncated, formatter);
+    formatter->close_section(); // result
+  }
+  flusher.flush();
   return 0;
 }

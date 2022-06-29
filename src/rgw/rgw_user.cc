@@ -30,6 +30,7 @@
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_user.h"
 #include "services/svc_meta.h"
+#include "services/svc_account_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -2082,6 +2083,10 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     user_info.placement_tags = op_state.placement_tags;
   }
 
+  if (op_state.has_account_id()) {
+    user_info.account_id = op_state.account_id;
+  }
+
   op_state.set_user_info(user_info);
 
   // if we're supposed to modify keys, do so
@@ -2198,67 +2203,6 @@ int RGWUser::list(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   store->meta_list_keys_complete(handle);
 
   flusher.flush();
-  return 0;
-}
-
-int RGWUser::link_account(const DoutPrefixProvider *dpp,
-                          RGWUserAdminOpState& op_state,
-                          optional_yield y,
-			  std::string *err_msg)
-{
-  if (!op_state.has_account_id()) {
-    set_err_msg(err_msg, "invalid account id");
-    return -EINVAL;
-  }
-  int ret = init(dpp, op_state, y);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to fetch user info");
-    return ret;
-  }
-
-  if (!is_populated()) {
-    set_err_msg(err_msg, "no user info saved");
-    return -EINVAL;
-  }
-
-  // TODO: add sal::User::link_account()
-  auto user_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user;
-  user_ctl->link_account(dpp, old_info,
-                         op_state.get_account_id(),
-                         RGWUserCtl::PutParams()
-                         .set_objv_tracker(&op_state.objv),
-                         y);
-  return 0;
-}
-
-
-int RGWUser::unlink_account(const DoutPrefixProvider *dpp,
-                            RGWUserAdminOpState& op_state,
-                            optional_yield y,
-                            std::string *err_msg)
-{
-  if (!op_state.has_account_id()) {
-    set_err_msg(err_msg, "invalid account id");
-    return -EINVAL;
-  }
-  int ret = init(dpp, op_state, y);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to fetch user info");
-    return ret;
-  }
-
-  if (!is_populated()) {
-    set_err_msg(err_msg, "no user info saved");
-    return -EINVAL;
-  }
-
-  // TODO: add sal::User::unlink_account()
-  auto user_ctl = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user;
-  user_ctl->unlink_account(dpp, old_info,
-                           op_state.get_account_id(),
-                           RGWUserCtl::PutParams()
-                           .set_objv_tracker(&op_state.objv),
-                           y);
   return 0;
 }
 
@@ -2414,47 +2358,6 @@ int RGWUserAdminOp_User::remove(const DoutPrefixProvider *dpp,
     ret = -ERR_NO_SUCH_USER;
   return ret;
 }
-
-int RGWUserAdminOp_User::link_account(const DoutPrefixProvider *dpp,
-                                      rgw::sal::Store *store,
-                                      RGWUserAdminOpState& op_state,
-                                      RGWFormatterFlusher& flusher,
-                                      optional_yield y)
-{
-  RGWUserInfo info;
-  RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
-  if (ret < 0)
-    return ret;
-
-
-  ret = user.link_account(dpp, op_state, y);
-
-  if (ret == -ENOENT)
-    ret = -ERR_NO_SUCH_USER;
-  return ret;
-}
-
-int RGWUserAdminOp_User::unlink_account(const DoutPrefixProvider *dpp,
-                                        rgw::sal::Store *store,
-                                        RGWUserAdminOpState& op_state,
-                                        RGWFormatterFlusher& flusher,
-                                        optional_yield y)
-{
-  RGWUserInfo info;
-  RGWUser user;
-  int ret = user.init(dpp, store, op_state, y);
-  if (ret < 0)
-    return ret;
-
-
-  ret = user.unlink_account(dpp, op_state, y);
-
-  if (ret == -ENOENT)
-    ret = -ERR_NO_SUCH_USER;
-  return ret;
-}
-
 
 
 int RGWUserAdminOp_Subuser::create(const DoutPrefixProvider *dpp,
@@ -2685,16 +2588,13 @@ class RGWUserMetadataHandler : public RGWMetadataHandler_GenericMetaBE {
 public:
   struct Svc {
     RGWSI_User *user{nullptr};
+    RGWSI_Account_RADOS *account{nullptr};
   } svc;
 
-  struct Ctl {
-    RGWAccountCtl *account{nullptr};
-  } ctl;
-
-  RGWUserMetadataHandler(RGWSI_User *user_svc, RGWAccountCtl *account_ctl) {
+  RGWUserMetadataHandler(RGWSI_User *user_svc, RGWSI_Account_RADOS *account_svc) {
     base_init(user_svc->ctx(), user_svc->get_be_handler());
     svc.user = user_svc;
-    ctl.account = account_ctl;
+    svc.account = account_svc;
   }
 
 
@@ -2787,7 +2687,7 @@ int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& en
 
 int RGWMetadataHandlerPut_User::put_post(const DoutPrefixProvider *dpp)
 {
-  if (uhandler->ctl.account == nullptr) {
+  if (uhandler->svc.account == nullptr) {
     return 0;
   }
 
@@ -2805,14 +2705,14 @@ int RGWMetadataHandlerPut_User::put_post(const DoutPrefixProvider *dpp)
   }
 
   if (!orig_account_id.empty()) {
-    ret = uhandler->ctl.account->remove_user(dpp, orig_account_id, uinfo.user_id, y);
+    ret = uhandler->svc.account->remove_user(dpp, orig_account_id, uinfo.user_id, y);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
   }
 
   if (!new_account_id.empty()) {
-    ret = uhandler->ctl.account->add_user(dpp, new_account_id, uinfo.user_id, y);
+    ret = uhandler->svc.account->add_user(dpp, new_account_id, uinfo.user_id, y);
   }
   return ret;
 
@@ -3088,89 +2988,9 @@ int RGWUserCtl::read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& 
   });
 }
 
-int RGWUserCtl::link_account(const DoutPrefixProvider *dpp, 
-			     const rgw_user& user_id,
-			     const std::string& account_id,
-			     const PutParams& put_params,
-			     optional_yield y)
-{
-  RGWUserInfo user_info;
 
-  int ret = get_info_by_uid(dpp, user_id, &user_info, y, RGWUserCtl::GetParams()
-			   .set_objv_tracker(put_params.objv_tracker));
-  if (ret < 0) {
-    return ret;
-  }
-
-  return link_account(dpp, user_info, account_id, put_params, y);
-}
-
-int RGWUserCtl::link_account(const DoutPrefixProvider *dpp, 
-			     RGWUserInfo& user_info,
-			     const std::string& account_id,
-			     const PutParams& put_params,
-			     optional_yield y)
-{
-  int ret;
-  // unlink previous accounts if any
-  if (!user_info.account_id.empty()) {
-    ret = unlink_account(dpp, user_info, account_id, put_params, y);
-    if (ret < 0) {
-      ldout(svc.user->ctx(),0) << "Error: Failed unlinking previous account: "
-			       << user_info.account_id << " error: "
-			       << cpp_strerror(ret) << dendl;
-      return ret;
-    }
-  }
-
-  ret = ctl.account->add_user(dpp, account_id, user_info.user_id, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  user_info.account_id = account_id;
-  return store_info(dpp, user_info, y, put_params);
-}
-
-int RGWUserCtl::unlink_account(const DoutPrefixProvider *dpp,
-                               const rgw_user& user_id,
-                               const string& account_id,
-                               const PutParams& put_params,
-                               optional_yield y)
-{
-  RGWUserInfo user_info;
-
-  int ret = get_info_by_uid(dpp, user_id, &user_info, y, RGWUserCtl::GetParams()
-                            .set_objv_tracker(put_params.objv_tracker));
-  if (ret < 0) {
-    return ret;
-  }
-
-  return unlink_account(dpp, user_info, account_id, put_params, y);
-
-}
-
-int RGWUserCtl::unlink_account(const DoutPrefixProvider *dpp,
-                               RGWUserInfo& user_info,
-                               const string& account_id,
-                               const PutParams& put_params,
-                               optional_yield y)
-{
-
-  int ret = ctl.account->remove_user(dpp, account_id, user_info.user_id, y);
-  if (ret < 0) {
-    ldout(svc.user->ctx(),0) << "ERROR: failed to remove user from account="
-			     << account_id << "user" << user_info.user_id
-			     << cpp_strerror(ret) << dendl;
-    return ret;
-  }
-
-  user_info.account_id.clear();
-  return store_info(dpp, user_info, y, put_params);
-}
-
-RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc, RGWAccountCtl *account_ctl) {
-  return new RGWUserMetadataHandler(user_svc, account_ctl);
+RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc, RGWSI_Account_RADOS *account_svc) {
+  return new RGWUserMetadataHandler(user_svc, account_svc);
 }
 
 void rgw_user::dump(Formatter *f) const

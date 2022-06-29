@@ -372,14 +372,8 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
 {
   meta.mgr.reset(new RGWMetadataManager(svc.meta));
 
-  {
-    auto account_handler = std::make_unique<RGWAccountMetadataHandler>(
-        svc.account, svc.sysobj);
-    account = std::make_unique<RGWAccountCtl>(svc.account, svc.sysobj,
-                                              account_handler.get());
-    meta.account = std::move(account_handler);
-  }
-  meta.user.reset(RGWUserMetaHandlerAllocator::alloc(svc.user, account.get()));
+  meta.account = std::make_unique<RGWAccountMetadataHandler>(svc.account, svc.sysobj);
+  meta.user.reset(RGWUserMetaHandlerAllocator::alloc(svc.user, svc.account));
 
   auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {
@@ -409,7 +403,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
   RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
   otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);
 
-  user->init(bucket.get(), account.get());
+  user->init(bucket.get());
   bucket->init(user.get(),
                (RGWBucketMetadataHandler *)bucket_meta_handler,
                (RGWBucketInstanceMetadataHandler *)bi_meta_handler,
@@ -443,7 +437,6 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Store* store, const DoutPrefixProv
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
   otp = _ctl.otp.get();
-  account = _ctl.account.get();
 
   r = meta.user->attach(meta.mgr);
   if (r < 0) {

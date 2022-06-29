@@ -133,8 +133,6 @@ void usage()
   cout << "  account create             create an account\n";
   cout << "  account get                get account info\n";
   cout << "  account rm                 remove an account\n";
-  cout << "  account user add           add a user to an account\n";
-  cout << "  account user rm            remove a user from an account\n";
   cout << "  account user list          list users in an account\n";
   cout << "  bucket list                list buckets (specify --allow-unordered for\n";
   cout << "                             faster, unsorted listing)\n";
@@ -836,8 +834,6 @@ enum class OPT {
   ACCOUNT_MODIFY,
   ACCOUNT_GET,
   ACCOUNT_RM,
-  ACCOUNT_USER_ADD,
-  ACCOUNT_USER_RM,
   ACCOUNT_USER_LIST,
 };
 
@@ -1076,8 +1072,6 @@ static SimpleCmd::Commands all_cmds = {
   { "account modify", OPT::ACCOUNT_MODIFY },
   { "account get", OPT::ACCOUNT_GET },
   { "account rm", OPT::ACCOUNT_RM },
-  { "account user add", OPT::ACCOUNT_USER_ADD },
-  { "account user rm", OPT::ACCOUNT_USER_RM },
   { "account user list", OPT::ACCOUNT_USER_LIST },
 };
 
@@ -3463,7 +3457,7 @@ int main(int argc, const char **argv)
   string tenant;
   string user_ns;
   string account_name;
-  string account_id;
+  std::optional<string> account_id;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -4428,8 +4422,6 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ACCOUNT_MODIFY
                           && opt_cmd != OPT::ACCOUNT_GET
                           && opt_cmd != OPT::ACCOUNT_RM
-                          && opt_cmd != OPT::ACCOUNT_USER_ADD
-                          && opt_cmd != OPT::ACCOUNT_USER_RM
                           && opt_cmd != OPT::ACCOUNT_USER_LIST) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
@@ -6376,6 +6368,10 @@ int main(int argc, const char **argv)
 
   if (!tags.empty()) {
     user_op.set_placement_tags(tags);
+  }
+
+  if (account_id) {
+    user_op.set_account_id(*account_id);
   }
 
   // RGWUser to use for user operations
@@ -10500,19 +10496,23 @@ next:
       opt_cmd == OPT::ACCOUNT_MODIFY ||
       opt_cmd == OPT::ACCOUNT_GET ||
       opt_cmd == OPT::ACCOUNT_RM ||
-      opt_cmd == OPT::ACCOUNT_USER_ADD ||
-      opt_cmd == OPT::ACCOUNT_USER_RM ||
       opt_cmd == OPT::ACCOUNT_USER_LIST) {
-    if (account_name.empty() && account_id.empty()) {
+    if (account_name.empty() && !account_id) {
       cerr << "ERROR: Account was not provided (via --account-name or --account-id)" << std::endl;
       return EINVAL;
     }
     std::string err_msg;
     RGWObjVersionTracker objv_tracker;
     RGWAccountAdminOpState acc_op_state;
-    acc_op_state.account_id = account_id;
+    if (account_id) {
+      acc_op_state.account_id = *account_id;
+    }
     acc_op_state.tenant = tenant;
     acc_op_state.account_name = account_name;
+    acc_op_state.marker = marker;
+    if (max_entries_specified) {
+      acc_op_state.max_entries = max_entries;
+    }
 
     if (opt_cmd == OPT::ACCOUNT_CREATE) {
       ret = RGWAdminOp_Account::create(dpp(), store, acc_op_state, err_msg,
@@ -10554,44 +10554,14 @@ next:
       }
     }
 
-    if (opt_cmd == OPT::ACCOUNT_USER_ADD) {
-      if (rgw::sal::User::empty(user)) {
-        cerr << "ERROR: User id was not provided (via --uid)" << std::endl;
-        return EINVAL;
-      }
-      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user->link_account(
-          dpp(), user->get_id(), account_id,
-          RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker),
-          null_yield);
-      if (ret < 0) {
-        cerr << "ERROR: could not add user" << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
-    if (opt_cmd == OPT::ACCOUNT_USER_RM) {
-      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->user->unlink_account(
-          dpp(), user->get_id(), account_id,
-          RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker),
-          null_yield);
-      if (ret < 0) {
-        cerr << "ERROR: could not rm user" << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
-
     if (opt_cmd == OPT::ACCOUNT_USER_LIST) {
-      std::string marker;
-      std::vector<rgw_user> users;
-      bool more;
-      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->list_users(
-          dpp(), account_id, marker, &more, users, null_yield);
+      ret = RGWAdminOp_Account::list_users(dpp(), store, acc_op_state, err_msg,
+                                           stream_flusher, null_yield);
       if (ret < 0) {
-        cerr << "ERROR: could not list users" << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: failed to list users with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
         return -ret;
       }
-
-      encode_json("account_user_list", users, formatter.get());
-      formatter->flush(cout);
     }
   }
   return 0;

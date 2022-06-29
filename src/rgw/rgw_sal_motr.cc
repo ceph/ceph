@@ -872,6 +872,16 @@ int MotrStore::delete_account(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+int MotrStore::list_account_users(const DoutPrefixProvider* dpp,
+                                   std::string_view account_id,
+                                   const std::string& marker,
+                                   int max_entries, bool *more,
+                                   std::vector<rgw_user>& results,
+                                   optional_yield y)
+{
+  return -ENOTSUP;
+}
+
 void MotrStore::finalize(void)
 {
 }

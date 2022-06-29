@@ -72,19 +72,19 @@ public:
                           optional_yield y);
 
   int add_user(const DoutPrefixProvider *dpp,
-               const RGWAccountInfo& info,
+               std::string_view account_id,
                const rgw_user& rgw_user,
                optional_yield y);
 
   int remove_user(const DoutPrefixProvider *dpp,
-                  const RGWAccountInfo& info,
+                  std::string_view account_id,
                   const rgw_user& rgw_user,
                   optional_yield y);
 
   int list_users(const DoutPrefixProvider *dpp,
-                 const RGWAccountInfo& info,
+                 std::string_view account_id,
                  const std::string& marker,
-                 bool *more,
+                 int max_entries, bool *more,
                  std::vector<rgw_user>& results,
                  optional_yield y);
 

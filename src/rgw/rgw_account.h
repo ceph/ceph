@@ -86,72 +86,6 @@ WRITE_CLASS_ENCODER(RGWAccountNameToId)
 
 class RGWAccountMetadataHandler;
 
-class RGWAccountCtl
-{
-  struct Svc {
-    RGWSI_Account_RADOS* account = nullptr;
-    RGWSI_SysObj* sysobj = nullptr;
-  } svc;
-
-  RGWAccountMetadataHandler* handler;
-public:
-  RGWAccountCtl(RGWSI_Account_RADOS* account_svc,
-                RGWSI_SysObj* sysobj_svc,
-		RGWAccountMetadataHandler* handler);
-
-  ~RGWAccountCtl() = default;
-
-  int add_user(const DoutPrefixProvider* dpp,
-	       const std::string& account_id,
-	       const rgw_user& user,
-	       optional_yield);
-  int add_role(const RGWRole& role);
-
-  int list_users(const DoutPrefixProvider* dpp,
-                 const std::string& account_id,
-                 const std::string& marker,
-                 bool *more,
-                 std::vector<rgw_user>& results,
-                 optional_yield y);
-
-  int remove_user(const DoutPrefixProvider* dpp,
-                  const std::string& account_id,
-                  const rgw_user& user,
-                  optional_yield y);
-  int remove_role(const RGWRole& role);
-
-  int store_info(const DoutPrefixProvider* dpp,
-		 const RGWAccountInfo& info,
-		 const RGWAccountInfo* old_info,
-		 RGWObjVersionTracker& objv,
-		 const real_time& mtime,
-		 bool exclusive,
-		 std::map<std::string, bufferlist> *pattrs,
-		 optional_yield y);
-
-  int read_by_name(const DoutPrefixProvider* dpp,
-                   std::string_view tenant,
-                   std::string_view name,
-                   RGWAccountInfo& info,
-                   RGWObjVersionTracker& objv,
-                   real_time* pmtime,
-                   std::map<std::string, bufferlist>* pattrs,
-                   optional_yield y);
-
-  int read_info(const DoutPrefixProvider* dpp,
-		std::string_view account_id,
-		RGWAccountInfo& info,
-		RGWObjVersionTracker& objv,
-		real_time* pmtime,
-		std::map<std::string, bufferlist>* pattrs,
-		optional_yield y);
-
-  int remove_info(const DoutPrefixProvider* dpp,
-                  const RGWAccountInfo& info,
-		  RGWObjVersionTracker& objv,
-		  optional_yield y);
-};
-
 using RGWAccountCompleteInfo = CompleteInfo<RGWAccountInfo>;
 
 class RGWAccountMetadataObject : public RGWMetadataObject {
@@ -219,8 +153,11 @@ struct RGWAccountAdminOpState
   std::string account_id;
   std::string tenant;
   std::string account_name;
-  uint32_t max_users;
+  uint32_t max_users = 0;
   RGWObjVersionTracker objv_tracker;
+
+  std::string marker;
+  std::optional<int> max_entries;
 
   bool has_account_id() const { return !account_id.empty(); }
   bool has_account_name() const { return !account_name.empty(); }
@@ -250,7 +187,7 @@ public:
 		  RGWAccountAdminOpState& op_state, std::string& err_msg,
 		  RGWFormatterFlusher& flusher, optional_yield y);
 
-  static int list(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
-		  RGWAccountAdminOpState& op_state, std::string& err_msg,
-		  RGWFormatterFlusher& flusher, optional_yield y);
+  static int list_users(const DoutPrefixProvider *dpp, rgw::sal::Store* store,
+                        RGWAccountAdminOpState& op_state, std::string& err_msg,
+                        RGWFormatterFlusher& flusher, optional_yield y);
 };
