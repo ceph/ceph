@@ -1824,7 +1824,7 @@ Instructions
 
 
 #. If you are upgrading from Mimic, or did not already do so when you
-   upgraded to Nautlius, we recommened you enable the new :ref:`v2
+   upgraded to Nautlius, we recommended you enable the new :ref:`v2
    network protocol <msgr2>`, issue the following command::
 
      ceph mon enable-msgr2
@@ -2002,7 +2002,7 @@ Upgrade compatibility notes
   from this change, as they won't be blocked by the full pools which they are
   not writing to. In this release, ``ceph {set,unset} full`` is now considered
   as an invalid command. And the clients will continue honoring both the
-  cluster-wide and per-pool flags to be backward comaptible with pre-infernalis
+  cluster-wide and per-pool flags to be backward compatible with pre-infernalis
   clusters.
 
 * The telemetry module now reports more information.
@@ -2131,7 +2131,7 @@ Upgrade compatibility notes
 * The behaviour of the ``-o`` argument to the rados tool has been 
   reverted to its original behaviour of indicating an output file. This 
   reverts it to a more consistent behaviour when compared to other 
-  tools. Specifying obect size is now accomplished by using an 
+  tools. Specifying object size is now accomplished by using an 
   upper-case O ``-O``.
 
 * In certain rare cases, OSDs would self-classify themselves as type
