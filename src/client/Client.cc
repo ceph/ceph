@@ -2784,7 +2784,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
       request->unsafe_item.remove_myself();
       request->unsafe_dir_item.remove_myself();
       request->unsafe_target_item.remove_myself();
-      signal_cond_list(request->waitfor_safe);
+      signal_context_list(request->waitfor_safe);
     }
     request->item.remove_myself();
     unregister_request(request);
@@ -3277,7 +3277,7 @@ void Client::wait_unsafe_requests()
        ++p) {
     MetaRequest *req = *p;
     if (req->unsafe_item.is_on_list())
-      wait_on_list(req->waitfor_safe);
+      wait_on_context_list(req->waitfor_safe);
     put_request(req);
   }
 }
@@ -3313,7 +3313,7 @@ void Client::kick_requests_closed(MetaSession *session)
 		     <<  in->ino  << " " << req->get_tid() << dendl;
 	  req->unsafe_target_item.remove_myself();
 	}
-	signal_cond_list(req->waitfor_safe);
+	signal_context_list(req->waitfor_safe);
 	unregister_request(req);
       }
     }
@@ -3586,12 +3586,12 @@ void Client::put_cap_ref(Inode *in, int cap)
 	ldout(cct, 10) << __func__ << " finishing pending cap_snap on " << *in << dendl;
 	in->cap_snaps.rbegin()->second.writing = 0;
 	finish_cap_snap(in, in->cap_snaps.rbegin()->second, get_caps_used(in));
-	signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
+	signal_context_list(in->waitfor_caps);  // wake up blocked sync writers
       }
       if (last & CEPH_CAP_FILE_BUFFER) {
 	for (auto &p : in->cap_snaps)
 	  p.second.dirty_data = 0;
-	signal_cond_list(in->waitfor_commit);
+	signal_context_list(in->waitfor_commit);
 	ldout(cct, 5) << __func__ << " dropped last FILE_BUFFER ref on " << *in << dendl;
 	++put_nref;
 
@@ -3716,9 +3716,9 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
     }
 
     if (waitfor_caps)
-      wait_on_list(in->waitfor_caps);
+      wait_on_context_list(in->waitfor_caps);
     else if (waitfor_commit)
-      wait_on_list(in->waitfor_commit);
+      wait_on_context_list(in->waitfor_commit);
   }
 }
 
@@ -4252,7 +4252,7 @@ void Client::wake_up_session_caps(MetaSession *s, bool reconnect)
 	  in.flags |= I_CAP_DROPPED;
       }
     }
-    signal_cond_list(in.waitfor_caps);
+    signal_context_list(in.waitfor_caps);
   }
 }
 
@@ -4507,7 +4507,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   }
 
   if (issued & ~old_caps)
-    signal_cond_list(in->waitfor_caps);
+    signal_context_list(in->waitfor_caps);
 }
 
 void Client::remove_cap(Cap *cap, bool queue_release)
@@ -4599,7 +4599,7 @@ void Client::remove_session_caps(MetaSession *s, int err)
       _schedule_invalidate_callback(in.get(), 0, 0);
     }
 
-    signal_cond_list(in->waitfor_caps);
+    signal_context_list(in->waitfor_caps);
   }
   s->flushing_caps_tids.clear();
   sync_cond.notify_all();
@@ -4811,7 +4811,7 @@ void Client::force_session_readonly(MetaSession *s)
   for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
     auto &in = (*p)->inode;
     if (in.caps_wanted() & CEPH_CAP_FILE_WR)
-      signal_cond_list(in.waitfor_caps);
+      signal_context_list(in.waitfor_caps);
   }
 }
 
@@ -4894,7 +4894,7 @@ void Client::wait_sync_caps(Inode *in, ceph_tid_t want)
     ldout(cct, 10) << __func__ << " on " << *in << " flushing "
 		   << ccap_string(it->second) << " want " << want
 		   << " last " << it->first << dendl;
-    wait_on_list(in->waitfor_caps);
+    wait_on_context_list(in->waitfor_caps);
   }
 }
 
@@ -5533,7 +5533,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, con
 	  << " with " << ccap_string(dirty) << dendl;
 
   if (flushed) {
-    signal_cond_list(in->waitfor_caps);
+    signal_context_list(in->waitfor_caps);
     if (session->flushing_caps_tids.empty() ||
 	*session->flushing_caps_tids.begin() > flush_ack_tid)
       sync_cond.notify_all();
@@ -5585,7 +5585,7 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MCo
 	in->flushing_cap_item.remove_myself();
       in->cap_snaps.erase(it);
 
-      signal_cond_list(in->waitfor_caps);
+      signal_context_list(in->waitfor_caps);
       if (session->flushing_caps_tids.empty() ||
 	  *session->flushing_caps_tids.begin() > flush_ack_tid)
 	sync_cond.notify_all();
@@ -5848,7 +5848,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 
   // wake up waiters
   if (new_caps)
-    signal_cond_list(in->waitfor_caps);
+    signal_context_list(in->waitfor_caps);
 
   // may drop inode's last ref
   if (deleted_inode)
@@ -10528,6 +10528,7 @@ void Client::C_Read_Finisher::finish_io(int r)
   if (have_caps) {
     clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
   }
+
   if (movepos) {
     clnt->unlock_fh_pos(f);
   }
@@ -11603,7 +11604,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
 
     req->get();
-    wait_on_list(req->waitfor_safe);
+    wait_on_context_list(req->waitfor_safe);
     put_request(req);
   }
 
@@ -11618,7 +11619,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
       ldout(cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
 		     << " uncommitted, waiting" << dendl;
-      wait_on_list(in->waitfor_commit);
+      wait_on_context_list(in->waitfor_commit);
     }
   }
 
