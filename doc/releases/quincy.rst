@@ -180,7 +180,8 @@ General
 
 * telemetry: Improved the opt-in flow so that users can keep sharing the same
   data, even when new data collections are available. A new 'perf' channel that
-  collects various performance metrics is now avaiable to opt into with:
+  collects various performance metrics is now available for operators to opt
+  into with:
   `ceph telemetry on`
   `ceph telemetry enable channel perf`
   See a sample report with `ceph telemetry preview`.
@@ -191,7 +192,7 @@ General
 
 * MGR: The progress module disables the pg recovery event by default since the
   event is expensive and has interrupted other services when there are OSDs
-  being marked in/out from the the cluster. However, the user can still enable
+  being marked in/out from the cluster. However, the user can still enable
   this event anytime. For more detail, see:
 
   https://docs.ceph.com/en/quincy/mgr/progress/
