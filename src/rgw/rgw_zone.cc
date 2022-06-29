@@ -1680,6 +1680,8 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
   encode_json("notif_pool", notif_pool, f);
+  encode_json("account_pool", account_pool, f);
+  encode_json("account_name_pool", account_name_pool, f);
 }
 
 namespace {
@@ -2690,7 +2692,8 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("notif_pool", notif_pool, obj);
-
+  JSONDecoder::decode_json("account_pool", account_pool, obj);
+  JSONDecoder::decode_json("account_name_pool", account_name_pool, obj);
 }
 
 void RGWZone::dump(Formatter *f) const
