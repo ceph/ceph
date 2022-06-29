@@ -187,3 +187,28 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
 
   return key_exist;
 }
+
+int RGWBlockDirectory::delValue(cache_block *ptr){
+  int result = 0;
+  std::vector<std::string> keys;
+  std::string key = buildIndex(ptr);
+  keys.push_back(key);
+  
+  if (!client.is_connected()){
+    findClient(&client);
+  }
+  
+  try {
+    client.del(keys, [&result](cpp_redis::reply &reply) {
+      if (reply.is_integer()) {
+        result = reply.as_integer();
+      }
+    });
+	
+    client.sync_commit(std::chrono::milliseconds(1000));	
+    return result-1;
+  }
+  catch(std::exception &e) {
+    return -1;
+  }
+}

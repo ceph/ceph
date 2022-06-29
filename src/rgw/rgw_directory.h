@@ -42,12 +42,13 @@ class RGWBlockDirectory: RGWDirectory {
     int existKey(std::string key, cpp_redis::client *client);
     int setValue(cache_block *ptr);
     int getValue(cache_block *ptr);
-    std::string host = "";
-    int port = 0;
+    int delValue(cache_block *ptr);
   
   private:
     std::string buildIndex(cache_block *ptr);
     cpp_redis::client client;
+    std::string host = ""; 
+    int port = 0; 
 };
 
 #endif
