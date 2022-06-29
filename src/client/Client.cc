@@ -11221,7 +11221,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   // quota but we can see a parent of it that does have a quota, we'll
   // respect that one instead.
   ceph_assert(root != nullptr);
-  InodeRef quota_root = root->quota.is_enable() ? root : get_quota_root(root.get(), perms);
+  InodeRef quota_root = root->quota.is_enable(QUOTA_MAX_BYTES) ? root : get_quota_root(root.get(), perms, QUOTA_MAX_BYTES);
 
   // get_quota_root should always give us something if client quotas are
   // enabled
@@ -14105,9 +14105,9 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   }
   if (cct->_conf.get_val<bool>("client_quota") && fromdir != todir) {
     Inode *fromdir_root =
-      fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
+      fromdir->quota.is_enable(QUOTA_MAX_FILES) ? fromdir : get_quota_root(fromdir, perm, QUOTA_MAX_FILES);
     Inode *todir_root =
-      todir->quota.is_enable() ? todir : get_quota_root(todir, perm);
+      todir->quota.is_enable(QUOTA_MAX_FILES) ? todir : get_quota_root(todir, perm, QUOTA_MAX_FILES);
     if (fromdir_root != todir_root) {
       return -CEPHFS_EXDEV;
     }
@@ -15490,7 +15490,7 @@ bool Client::ms_handle_refused(Connection *con)
   return false;
 }
 
-Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
+Inode *Client::get_quota_root(Inode *in, const UserPerm& perms, quota_max_t type)
 {
   Inode *quota_in = root_ancestor;
   SnapRealm *realm = in->snaprealm;
@@ -15505,7 +15505,7 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
       if (p == inode_map.end())
 	break;
 
-      if (p->second->quota.is_enable()) {
+      if (p->second->quota.is_enable(type)) {
 	quota_in = p->second;
 	break;
       }
