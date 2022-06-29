@@ -2,7 +2,7 @@
 name: "Label doc/releases PRs so our backport GitHub Action picks them up"
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
     paths:
@@ -10,6 +10,9 @@ on:
 
 jobs:
   if_merged:
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Assign labels based on modified files
