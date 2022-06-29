@@ -8954,8 +8954,8 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description("issue new requests to a random active MDS"),
 
-    Option("client_mount_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(300.0)
+    Option("client_mount_timeout", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(300)
     .set_description("timeout for mounting CephFS (seconds)"),
 
     Option("client_tick_interval", Option::TYPE_SECS, Option::LEVEL_DEV)
@@ -9008,7 +9008,7 @@ std::vector<Option> get_mds_client_options() {
     .set_default(30)
     .set_description(""),
 
-    Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_DEV)
+    Option("client_caps_release_delay", Option::TYPE_SECS, Option::LEVEL_DEV)
     .set_default(5)
     .set_description(""),
 
