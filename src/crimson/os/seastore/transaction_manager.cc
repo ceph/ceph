@@ -557,7 +557,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   });
 }
 
-TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_live(
+TransactionManager::get_extents_if_live_ret TransactionManager::get_extents_if_live(
   Transaction &t,
   extent_types_t type,
   paddr_t addr,
@@ -569,64 +569,67 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 
   return cache->get_extent_if_cached(t, addr, type
   ).si_then([this, FNAME, &t, type, addr, laddr, len](auto extent)
-	    -> get_extent_if_live_ret {
-    if (extent) {
+	    -> get_extents_if_live_ret {
+    if (extent && extent->get_length() == (extent_len_t)len) {
       DEBUGT("{} {}~{} {} is live in cache -- {}",
              t, type, laddr, len, addr, *extent);
-      return get_extent_if_live_ret (
+      std::list<CachedExtentRef> res;
+      res.emplace_back(std::move(extent));
+      return get_extents_if_live_ret(
 	interruptible::ready_future_marker{},
-	extent);
+	res);
     }
 
     if (is_logical_type(type)) {
       using inner_ret = LBAManager::get_mapping_iertr::future<CachedExtentRef>;
-      return lba_manager->get_mapping(
+      return lba_manager->get_mappings(
 	t,
-	laddr).si_then([=, &t] (LBAPinRef pin) -> inner_ret {
-	  ceph_assert(pin->get_key() == laddr);
-	  if (pin->get_val() == addr) {
-	    if (pin->get_length() != (extent_len_t)len) {
-	      ERRORT(
-		"Invalid pin {}~{} {} found for "
-		"extent {} {}~{} {}",
-		t,
-		pin->get_key(),
-		pin->get_length(),
-		pin->get_val(),
-		type,
-		laddr,
-		len,
-		addr);
-	      ceph_abort();
-	    }
-	    return cache->get_extent_by_type(
-	      t,
-	      type,
-	      addr,
-	      laddr,
-	      len,
-	      [this, pin=std::move(pin)](CachedExtent &extent) mutable {
-		auto lref = extent.cast<LogicalCachedExtent>();
-		assert(!lref->has_pin());
-		assert(!lref->has_been_invalidated());
-		assert(!pin->has_been_invalidated());
-		lref->set_pin(std::move(pin));
-		lba_manager->add_pin(lref->get_pin());
-	      }).si_then([=, &t](auto ret) {;
-		DEBUGT("{} {}~{} {} is live as logical extent -- {}",
-		       t, type, laddr, len, addr, extent);
-		return ret;
+	laddr,
+	len
+      ).si_then([=, &t](lba_pin_list_t pin_list) {
+	return seastar::do_with(
+	  std::list<CachedExtentRef>(),
+	  std::move(pin_list),
+	  [=, &t](std::list<CachedExtentRef> &list, lba_pin_list_t &pin_list) {
+	    auto &seg_addr = addr.as_seg_paddr();
+	    auto seg_addr_id = seg_addr.get_segment_id();
+	    return trans_intr::parallel_for_each(pin_list, [=, &seg_addr, &list, &t](LBAPinRef &pin) ->
+						 Cache::get_extent_iertr::future<> {
+	      auto pin_laddr = pin->get_key();
+	      auto pin_paddr = pin->get_val();
+	      auto pin_len = pin->get_length();
+
+	      auto &pin_seg_addr = pin_paddr.as_seg_paddr();
+	      auto pin_seg_addr_id = pin_seg_addr.get_segment_id();
+
+	      if (pin_seg_addr_id != seg_addr_id ||
+		  pin_paddr < seg_addr ||
+		  pin_paddr.add_offset(pin_len) > seg_addr.add_offset(len)) {
+		return seastar::now();
+	      }
+	      return cache->get_extent_by_type(
+	        t, type, pin_paddr, pin_laddr, pin_len,
+		[this, pin=std::move(pin)](CachedExtent &extent) mutable {
+		  auto lref = extent.cast<LogicalCachedExtent>();
+		  assert(!lref->has_pin());
+		  assert(!lref->has_been_invalidated());
+		  assert(!pin->has_been_invalidated());
+		  lref->set_pin(std::move(pin));
+		  lba_manager->add_pin(lref->get_pin());
+		}
+	      ).si_then([=, &list](auto ret) {
+		list.emplace_back(std::move(ret));
+		return seastar::now();
 	      });
-	  } else {
-	    DEBUGT("{} {}~{} {} is not live as logical extent",
-	           t, type, laddr, len, addr);
-	    return inner_ret(
-	      interruptible::ready_future_marker{},
-	      CachedExtentRef());
-	  }
-	}).handle_error_interruptible(crimson::ct_error::enoent::handle([] {
-	  return CachedExtentRef();
-	}), crimson::ct_error::pass_further_all{});
+	    }).si_then([&list] {
+	      return get_extents_if_live_ret(
+	        interruptible::ready_future_marker{},
+		std::move(list));
+	    });
+	  });
+      }).handle_error_interruptible(crimson::ct_error::enoent::handle([] {
+	return std::list<CachedExtentRef>();
+      }), crimson::ct_error::pass_further_all{});
     } else {
       return lba_manager->get_physical_extent_if_live(
 	t,
@@ -642,7 +645,11 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
           DEBUGT("{} {}~{} {} is not live as physical extent",
                  t, type, laddr, len, addr);
         }
-        return ret;
+	std::list<CachedExtentRef> res;
+	res.emplace_back(std::move(ret));
+        return get_extents_if_live_ret(
+	  interruptible::ready_future_marker{},
+	  std::move(res));
       });
     }
   });
