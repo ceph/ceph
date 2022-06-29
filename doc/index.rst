@@ -5,10 +5,18 @@
 Ceph uniquely delivers **object, block, and file storage in one unified
 system**.
 
+.. warning:: 
+
+   :ref:`If this is your first time using Ceph, read the "Basic Workflow" 
+   page in the Ceph Developer Guide to learn how to contribute to the 
+   Ceph project. (Click anywhere in this paragraph to read the "Basic 
+   Workflow" page of the Ceph Developer Guide.) <basic workflow dev guide>`.
+
 .. raw:: html
 
-	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
-	<table cellpadding="10"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Ceph Object Store</h3>
+      <style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
+      <table cellpadding="10"><colgroup><col width="33%"><col width="33%">
+      <col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Ceph Object Store</h3>
 
 - RESTful Interface
 - S3- and Swift-compliant APIs
