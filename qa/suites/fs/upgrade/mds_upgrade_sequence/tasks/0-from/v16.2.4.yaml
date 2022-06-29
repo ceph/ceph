@@ -1,3 +1,7 @@
+teuthology:
+  postmerge:
+    - if yaml.teuthology.variables.fail_fs then reject() end
+
 meta:
 - desc: |
    setup ceph/pacific v16.2.4
