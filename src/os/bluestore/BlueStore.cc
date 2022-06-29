@@ -12919,6 +12919,10 @@ int BlueStore::_deferred_replay()
   dout(10) << __func__ << " start" << dendl;
   int count = 0;
   int r = 0;
+  interval_set<uint64_t> bluefs_extents;
+  if (bluefs) {
+    bluefs->get_block_extents(bluefs_layout.shared_bdev, &bluefs_extents);
+  }
   CollectionRef ch = _get_collection(coll_t::meta());
   bool fake_ch = false;
   if (!ch) {
@@ -12944,10 +12948,13 @@ int BlueStore::_deferred_replay()
       r = -EIO;
       goto out;
     }
-    TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
-    txc->deferred_txn = deferred_txn;
-    txc->set_state(TransContext::STATE_KV_DONE);
-    _txc_state_proc(txc);
+    bool has_some = _eliminate_outdated_deferred(deferred_txn, bluefs_extents);
+    if (has_some) {
+      TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
+      txc->deferred_txn = deferred_txn;
+      txc->set_state(TransContext::STATE_KV_DONE);
+      _txc_state_proc(txc);
+    }
   }
  out:
   dout(20) << __func__ << " draining osr" << dendl;
@@ -12958,6 +12965,60 @@ int BlueStore::_deferred_replay()
   }
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return r;
+}
+
+bool BlueStore::_eliminate_outdated_deferred(bluestore_deferred_transaction_t* deferred_txn,
+					     interval_set<uint64_t>& bluefs_extents)
+{
+  bool has_some = false;
+  dout(30) << __func__ << " bluefs_extents: " << std::hex << bluefs_extents << std::dec << dendl;
+  auto it = deferred_txn->ops.begin();
+  while (it != deferred_txn->ops.end()) {
+    PExtentVector new_extents;
+    ceph::buffer::list new_data;
+    uint32_t data_offset = 0;
+    dout(30) << __func__ << " input extents: " << it->extents << dendl;
+    for (auto& e: it->extents) {
+      uint64_t offset = e.offset;
+      uint32_t length = e.length;
+      interval_set<uint64_t> region;
+      region.insert(offset, length);
+
+      auto mi = bluefs_extents.lower_bound(offset);
+      if (mi != bluefs_extents.begin()) {
+	--mi;
+	if (mi.get_end() <= offset) {
+	  ++mi;
+	}
+      }
+      while (mi != bluefs_extents.end() && mi.get_start() < offset + length) {
+	interval_set<uint64_t> temp;
+	region.union_insert(mi.get_start(), mi.get_len());
+	region.erase(mi.get_start(), mi.get_len());
+	++mi;
+      }
+      for (auto ki = region.begin(); ki != region.end(); ki++) {
+	ceph::buffer::list temp;
+	temp.substr_of(it->data, data_offset + ki.get_start() - offset, ki.get_len());
+	new_data.append(temp);
+	new_extents.emplace_back(bluestore_pextent_t(ki.get_start(), ki.get_len()));
+      }
+      data_offset += length;
+    }
+    dout(30) << __func__ << " output extents: " << new_extents << dendl;
+    if (it->data.length() != new_data.length()) {
+      dout(10) << __func__ << " trimmed deferred extents: " << it->extents << "->" << new_extents << dendl;
+    }
+    has_some |= new_extents.size() != 0;
+    if (new_extents.size() == 0) {
+      it = deferred_txn->ops.erase(it);
+    } else {
+      it->extents = new_extents;
+      it->data = new_data;
+      ++it;
+    }
+  }
+  return has_some;
 }
 
 // ---------------------------
