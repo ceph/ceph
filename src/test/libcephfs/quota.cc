@@ -109,3 +109,44 @@ TEST(LibCephFS, SnapQuota) {
 
   ceph_shutdown(cmount);
 }
+
+void statfs_quota_size_check(struct ceph_mount_info *cmount, const char *size, int blocks, int bsize)
+{
+  char xattrk[32];
+  char xattrv[16];
+  struct statvfs stvfs;
+
+  sprintf(xattrk, "ceph.quota.max_bytes");
+  sprintf(xattrv, "%s", size);
+  ASSERT_EQ(0, ceph_setxattr(cmount, "/", xattrk, (void *)xattrv, strlen(size), XATTR_CREATE));
+  ASSERT_EQ(0, ceph_statfs(cmount, "/", &stvfs));
+  ASSERT_EQ(blocks, stvfs.f_blocks);
+  ASSERT_EQ(bsize, stvfs.f_bsize);
+  ASSERT_EQ(bsize, stvfs.f_frsize);
+}
+
+TEST(LibCephFS, StatfsQuotaSize) {
+  struct ceph_mount_info *cmount;
+  char xattrk[32];
+  char xattrv[16];
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  /*
+   * Only when the quota size is aligned to 4MB will the block size
+   * be 4MB, or it should be 4KB.
+   */
+  statfs_quota_size_check(cmount, "2048", 1, 4096); // 2KB
+  statfs_quota_size_check(cmount, "1048576", 256, 4096); // 1MB
+  statfs_quota_size_check(cmount, "8388608", 2, 4194304); // 8MB
+  statfs_quota_size_check(cmount, "9437184", 2304, 4096); // 9MB
+
+  sprintf(xattrk, "ceph.quota.max_bytes");
+  sprintf(xattrv, "0");
+  ASSERT_EQ(0, ceph_setxattr(cmount, "/", xattrk, (void *)xattrv, 1, 0));
+
+  ceph_shutdown(cmount);
+}
