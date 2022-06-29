@@ -349,6 +349,7 @@ int RGWSI_Account_RADOS::add_user(const DoutPrefixProvider* dpp,
                                   const rgw_user& user,
                                   optional_yield y)
 {
+  // read account info for 'max_users'
   RGWAccountInfo info;
   RGWSysObjectCtx obj_ctx{svc.sysobj};
   RGWObjVersionTracker objv;
@@ -383,6 +384,7 @@ int RGWSI_Account_RADOS::remove_user(const DoutPrefixProvider *dpp,
   }
 
   librados::ObjectWriteOperation op;
+  op.assert_exists();
   cls_account_users_rm(op, user.to_str());
   return handle.operate(dpp, &op, y);
 }
@@ -415,7 +417,7 @@ int RGWSI_Account_RADOS::list_users(const DoutPrefixProvider *dpp,
     return ret2;
   }
 
-  // note that copy converts std::string -> rgw_user via from_str()
-  std::copy(entries.begin(), entries.end(), users.end());
+  std::transform(entries.begin(), entries.end(), std::back_inserter(users),
+                 [] (const std::string& u) { return rgw_user{u}; });
   return 0;
 }

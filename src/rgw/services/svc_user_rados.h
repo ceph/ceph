@@ -28,6 +28,7 @@ class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
 class RGWSI_SyncModules;
 class RGWSI_MetaBackend_Handler;
+class RGWSI_Account_RADOS;
 
 struct rgw_cache_entry_info;
 
@@ -105,6 +106,7 @@ public:
     RGWSI_SysObj_Cache *cache{nullptr};
     RGWSI_Meta *meta{nullptr};
     RGWSI_MetaBackend *meta_be{nullptr};
+    RGWSI_Account_RADOS *account{nullptr};
     RGWSI_SyncModules *sync_modules{nullptr};
   } svc;
 
@@ -114,7 +116,7 @@ public:
   void init(RGWSI_RADOS *_rados_svc,
             RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
 	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
-            RGWSI_MetaBackend *_meta_be_svc,
+            RGWSI_MetaBackend *_meta_be_svc, RGWSI_Account_RADOS *_account_svc,
 	    RGWSI_SyncModules *_sync_modules);
 
   RGWSI_MetaBackend_Handler *get_be_handler() override {

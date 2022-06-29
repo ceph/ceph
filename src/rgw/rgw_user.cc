@@ -2672,7 +2672,6 @@ public:
   }
 
   int put_checked(const DoutPrefixProvider *dpp) override;
-  int put_post(const DoutPrefixProvider *dpp) override;
 };
 
 int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
@@ -2683,39 +2682,6 @@ int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& en
 {
   RGWMetadataHandlerPut_User put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
   return do_put_operate(&put_op, dpp);
-}
-
-int RGWMetadataHandlerPut_User::put_post(const DoutPrefixProvider *dpp)
-{
-  if (uhandler->svc.account == nullptr) {
-    return 0;
-  }
-
-  auto new_account_id = uobj->get_uci().info.account_id;
-  std::string orig_account_id;
-  if (orig_obj != nullptr) {
-    orig_account_id = orig_obj->get_uci().info.account_id;
-  }
-
-  RGWUserInfo uinfo = uobj->get_uci().info;
-  int ret;
-
-  if (orig_account_id == new_account_id) {
-    return 0;
-  }
-
-  if (!orig_account_id.empty()) {
-    ret = uhandler->svc.account->remove_user(dpp, orig_account_id, uinfo.user_id, y);
-    if (ret < 0 && ret != -ENOENT) {
-      return ret;
-    }
-  }
-
-  if (!new_account_id.empty()) {
-    ret = uhandler->svc.account->add_user(dpp, new_account_id, uinfo.user_id, y);
-  }
-  return ret;
-
 }
 
 int RGWMetadataHandlerPut_User::put_checked(const DoutPrefixProvider *dpp)

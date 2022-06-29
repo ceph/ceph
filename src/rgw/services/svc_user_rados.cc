@@ -10,6 +10,7 @@
 #include "svc_sys_obj_cache.h"
 #include "svc_meta.h"
 #include "svc_meta_be_sobj.h"
+#include "svc_account_rados.h"
 #include "svc_sync_modules.h"
 
 #include "rgw/rgw_user.h"
@@ -71,6 +72,7 @@ void RGWSI_User_RADOS::init(RGWSI_RADOS *_rados_svc,
                             RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
                             RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
                             RGWSI_MetaBackend *_meta_be_svc,
+                            RGWSI_Account_RADOS *_account_svc,
                             RGWSI_SyncModules *_sync_modules_svc)
 {
   svc.user = this;
@@ -80,6 +82,7 @@ void RGWSI_User_RADOS::init(RGWSI_RADOS *_rados_svc,
   svc.cache = _cache_svc;
   svc.meta = _meta_svc;
   svc.meta_be = _meta_be_svc;
+  svc.account = _account_svc;
   svc.sync_modules = _sync_modules_svc;
 }
 
@@ -288,6 +291,34 @@ public:
                                link_bl, exclusive, NULL, real_time(), y);
       if (ret < 0)
         return ret;
+    }
+
+    // update account linkage
+    std::string_view new_account_id = info.account_id;
+    std::string_view old_account_id;
+    if (old_info) {
+      old_account_id = old_info->account_id;
+    }
+
+    if (new_account_id != old_account_id) {
+      if (!old_account_id.empty()) {
+        // unlink user from old account
+        int r2 = svc.account->remove_user(dpp, old_account_id, info.user_id, y);
+        if (r2 < 0) {
+          ldpp_dout(dpp, 1) << "WARNING: failed to remove user=" << info.user_id
+              << " from old account=" << old_account_id
+              << ": " << cpp_strerror(r2) << dendl;
+        } // not fatal
+      }
+      if (!new_account_id.empty()) {
+        // link user to new account
+        int r2 = svc.account->add_user(dpp, new_account_id, info.user_id, y);
+        if (r2 < 0) {
+          ldpp_dout(dpp, 1) << "WARNING: failed to add user=" << info.user_id
+              << " to new account=" << new_account_id
+              << ": " << cpp_strerror(r2) << dendl;
+        } // not fatal
+      }
     }
 
     if (old_info) {

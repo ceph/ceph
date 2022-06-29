@@ -417,7 +417,6 @@ int RGWAdminOp_Account::list_users(const DoutPrefixProvider *dpp,
   if (op_state.has_account_id()) {
     ret = store->load_account_by_id(dpp, op_state.account_id, info, objv, y);
   } else if (op_state.has_account_name()) {
-    RGWAccountInfo info;
     ret = store->load_account_by_name(dpp, op_state.tenant,
                                       op_state.account_name,
                                       info, objv, y);
