@@ -919,17 +919,19 @@ AsyncCleaner::_retrieve_live_extents(
 	ent.type,
 	ent.paddr,
 	ent.len);
-      return ecb->get_extent_if_live(
+      return ecb->get_extents_if_live(
 	t, ent.type, ent.paddr, ent.laddr, ent.len
-      ).si_then([this, FNAME, &extents, &ent, &seq, &t](auto ext) {
-	if (!ext) {
+      ).si_then([this, FNAME, &extents, &ent, &seq, &t](auto list) {
+	if (list.empty()) {
 	  DEBUGT("addr {} dead, skipping", t, ent.paddr);
 	  auto backref = backref_manager.get_cached_backref_removal(ent.paddr);
 	  if (seq == JOURNAL_SEQ_NULL || seq < backref.seq) {
 	    seq = backref.seq;
 	  }
 	} else {
-	  extents.emplace_back(std::move(ext));
+	  for (auto &e : list) {
+	    extents.emplace_back(std::move(e));
+	  }
 	}
 	return ExtentCallbackInterface::rewrite_extent_iertr::now();
       });
@@ -1043,7 +1045,8 @@ AsyncCleaner::gc_reclaim_space_ret AsyncCleaner::gc_reclaim_space()
 		DEBUGT("del_backref {}~{} {} {}", t,
 		  del_backref.paddr, del_backref.len, del_backref.type, del_backref.seq);
 		auto it = backrefs.find(del_backref.paddr);
-		if (it != backrefs.end())
+		if (it != backrefs.end() &&
+		    it->len == del_backref.len)
 		  backrefs.erase(it);
 		if (seq == JOURNAL_SEQ_NULL
 		    || (del_backref.seq != JOURNAL_SEQ_NULL && del_backref.seq > seq))
@@ -1308,7 +1311,10 @@ AsyncCleaner::maybe_release_segment(Transaction &t)
     return sm_group->release_segment(to_release
     ).safe_then([this, FNAME, &t, to_release] {
       auto old_usage = calc_utilization(to_release);
-      ceph_assert(old_usage == 0);
+      if(old_usage != 0) {
+	ERRORT("segment {} old_usage {} != 0", t, to_release, old_usage);
+	ceph_abort();
+      }
       segments.mark_empty(to_release);
       auto new_usage = calc_utilization(to_release);
       adjust_segment_util(old_usage, new_usage);

@@ -508,8 +508,8 @@ public:
     reclaim_gen_t target_generation,
     sea_time_point modify_time) final;
 
-  using AsyncCleaner::ExtentCallbackInterface::get_extent_if_live_ret;
-  get_extent_if_live_ret get_extent_if_live(
+  using AsyncCleaner::ExtentCallbackInterface::get_extents_if_live_ret;
+  get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
     extent_types_t type,
     paddr_t addr,
