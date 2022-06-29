@@ -36,6 +36,9 @@ public:
 
   const rgw_pool& account_pool() const;
   const rgw_pool& account_name_pool() const;
+  const rgw_pool& account_users_pool() const;
+
+  rgw_raw_obj get_account_user_obj(const std::string& account_id) const;
 
   int store_account_info(const DoutPrefixProvider *dpp,
 			 RGWSysObjectCtx& obj_ctx,
@@ -87,6 +90,4 @@ public:
                  int max_entries, bool *more,
                  std::vector<rgw_user>& results,
                  optional_yield y);
-
-  rgw_raw_obj get_account_user_obj(const std::string& account_id) const;
 };

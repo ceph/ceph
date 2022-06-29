@@ -392,6 +392,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool notif_pool;
   rgw_pool account_pool;
   rgw_pool account_name_pool;
+  rgw_pool account_users_pool;
 
   RGWZoneParams() : RGWSystemMetaObj() {}
   explicit RGWZoneParams(const std::string& name) : RGWSystemMetaObj(name){}
@@ -447,6 +448,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(notif_pool, bl);
     encode(account_pool, bl);
     encode(account_name_pool, bl);
+    encode(account_users_pool, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -523,9 +525,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 15) {
       decode(account_pool, bl);
       decode(account_name_pool, bl);
+      decode(account_users_pool, bl);
     } else {
       account_pool = name + ".rgw.meta:account";
       account_name_pool = name + ".rgw.meta:account.names";
+      account_users_pool = name + ".rgw.meta:account.users";
     }
     DECODE_FINISH(bl);
   }

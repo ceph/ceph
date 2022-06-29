@@ -10,8 +10,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-constexpr auto RGW_ACCOUNT_USER_OBJ_SUFFIX = ".users";
-
 RGWSI_Account_RADOS::RGWSI_Account_RADOS(RGWSI_Zone* zone_svc,
                                          RGWSI_MDLog* mdlog_svc,
                                          RGWSI_SysObj* sysobj_svc,
@@ -22,12 +20,6 @@ RGWSI_Account_RADOS::RGWSI_Account_RADOS(RGWSI_Zone* zone_svc,
   svc.mdlog = mdlog_svc;
   svc.sysobj = sysobj_svc;
   svc.rados = rados_svc;
-}
-
-rgw_raw_obj RGWSI_Account_RADOS::get_account_user_obj(const std::string& account_id) const
-{
-  std::string oid = account_id + RGW_ACCOUNT_USER_OBJ_SUFFIX;
-  return rgw_raw_obj(account_pool(), oid);
 }
 
 
@@ -55,6 +47,16 @@ const rgw_pool& RGWSI_Account_RADOS::account_pool() const
 const rgw_pool& RGWSI_Account_RADOS::account_name_pool() const
 {
   return svc.zone->get_zone_params().account_name_pool;
+}
+
+const rgw_pool& RGWSI_Account_RADOS::account_users_pool() const
+{
+  return svc.zone->get_zone_params().account_users_pool;
+}
+
+rgw_raw_obj RGWSI_Account_RADOS::get_account_user_obj(const std::string& account_id) const
+{
+  return rgw_raw_obj(account_users_pool(), account_id);
 }
 
 struct AccountNameObj {
@@ -107,6 +109,37 @@ static int remove_account_name(const DoutPrefixProvider *dpp,
 {
   return rgw_delete_system_obj(dpp, sysobj_svc, name.pool,
                                name.oid, &name.objv, y);
+}
+
+static int write_account_users(const DoutPrefixProvider* dpp,
+                               RGWSI_RADOS* svc_rados,
+                               const rgw_raw_obj& obj,
+                               optional_yield y)
+{
+  auto handle = svc_rados->obj(obj);
+  int ret = handle.open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  librados::ObjectWriteOperation op;
+  constexpr bool exclusive = false;
+  op.create(exclusive);
+  return handle.operate(dpp, &op, y);
+}
+
+static int remove_account_users(const DoutPrefixProvider* dpp,
+                                RGWSI_RADOS* svc_rados,
+                                const rgw_raw_obj& obj,
+                                optional_yield y)
+{
+  auto handle = svc_rados->obj(obj);
+  int ret = handle.open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  librados::ObjectWriteOperation op;
+  op.remove();
+  return handle.operate(dpp, &op, y);
 }
 
 static int write_mdlog_entry(const DoutPrefixProvider* dpp,
@@ -207,6 +240,17 @@ int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
     } // not fatal
   }
 
+  // create the account users object
+  if (!old_info) {
+    auto obj = get_account_user_obj(info.id);
+    int ret = write_account_users(dpp, svc.rados, obj, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 20) << "WARNING: write_account_users obj=" << obj
+          << " failed: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+  }
+
   return write_mdlog_entry(dpp, svc.mdlog, key, objv);
 }
 
@@ -286,8 +330,15 @@ int RGWSI_Account_RADOS::remove_account_info(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "WARNING: remove_account_name tenant=" << info.tenant
        << " name=" << info.name << " failed: " << cpp_strerror(ret) << dendl;
-    // not fatal
-  }
+  } // not fatal
+
+  // delete the account users object
+  const auto userobj = get_account_user_obj(info.id);
+  ret = remove_account_users(dpp, svc.rados, userobj, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "WARNING: remove_account_users obj=" << userobj
+       << " failed: " << cpp_strerror(ret) << dendl;
+  } // not fatal
 
   // record the change in the mdlog
   return write_mdlog_entry(dpp, svc.mdlog, key, objv);
@@ -335,7 +386,6 @@ int RGWSI_Account_RADOS::remove_user(const DoutPrefixProvider *dpp,
   cls_account_users_rm(op, user.to_str());
   return handle.operate(dpp, &op, y);
 }
-
 
 int RGWSI_Account_RADOS::list_users(const DoutPrefixProvider *dpp,
                                     std::string_view account_id,
