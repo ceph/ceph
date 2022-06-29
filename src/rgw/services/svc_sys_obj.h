@@ -171,10 +171,8 @@ public:
       int get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
                    std::map<std::string, bufferlist> *m,
                    bool *pmore, optional_yield y);
-      int get_header(const DoutPrefixProvider *dpp, bufferlist *bl, optional_yield y);
       int set(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& bl, optional_yield y);
       int set(const DoutPrefixProvider *dpp, const std::map<std::string, bufferlist>& m, optional_yield y);
-      int set_header(const DoutPrefixProvider *dpp, const bufferlist& bl, optional_yield y);
       int del(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y);
     };
 
