@@ -13,6 +13,7 @@ string oid = "samoid";
 string bucketName = "testBucket";
 int blkSize = 123;
 
+
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
@@ -44,17 +45,8 @@ TEST_F(DirectoryFixture, DirectoryInit) {
   ASSERT_NE((int)portStr.length(), (int)0);
 }
 
-// Successful Set and Get Value Calls
+// Successful set and getValue Calls and Redis Check
 TEST_F(DirectoryFixture, SetGetValueTest) {
-  int setReturn = blk_dir->setValue(c_blk);
-  int getReturn = blk_dir->getValue(c_blk);
-
-  EXPECT_EQ(setReturn, 0);
-  EXPECT_EQ(getReturn, 0);
-}
-
-// Redis Server Key Check
-TEST(DirectoryTest, RedisTest) {
   cpp_redis::client client;
   int key_exist = -1;
   string key;
@@ -63,16 +55,21 @@ TEST(DirectoryTest, RedisTest) {
   string bucket_name;
   string obj_name;
   std::vector<std::string> fields;
+  int setReturn = blk_dir->setValue(c_blk);
+  int getReturn = blk_dir->getValue(c_blk);
 
+  EXPECT_EQ(setReturn, 0);
+  EXPECT_EQ(getReturn, 0);
+  
   fields.push_back("key");
   fields.push_back("hosts");
   fields.push_back("size");
   fields.push_back("bucket_name");
   fields.push_back("obj_name");
-
+  
   client.connect(hostStr, stoi(portStr), nullptr, 0, 5, 1000);
   ASSERT_EQ((bool)client.is_connected(), (bool)1);
-
+  
   client.hmget(oid, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &key_exist](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
@@ -87,13 +84,34 @@ TEST(DirectoryTest, RedisTest) {
   });
   
   client.sync_commit(std::chrono::milliseconds(1000));
-
+  
   EXPECT_EQ(key_exist, 0);
   EXPECT_EQ(key, oid);
   EXPECT_EQ(hosts, redisHost);
   EXPECT_EQ(size, to_string(blkSize));
   EXPECT_EQ(bucket_name, bucketName);
   EXPECT_EQ(obj_name, oid);
+}
+
+// Successful delValue Call and Redis Check
+TEST_F(DirectoryFixture, DelValueTest) {
+  cpp_redis::client client;
+  vector<string> keys;
+  int setReturn = blk_dir->setValue(c_blk);
+  int getReturn = blk_dir->getValue(c_blk);
+  int delReturn = blk_dir->delValue(c_blk);
+
+  keys.push_back(oid);
+
+  ASSERT_EQ(setReturn, 0);
+  ASSERT_EQ(getReturn, 0);
+  EXPECT_EQ(delReturn, 0);
+  
+  client.exists(keys, [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 0); // Zero keys exist
+    }
+  });
 }
 
 int main(int argc, char *argv[]) {
