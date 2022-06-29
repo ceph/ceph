@@ -1854,7 +1854,7 @@ void PG::send_pg_created(pg_t pgid)
   osd->send_pg_created(pgid);
 }
 
-ceph::signedspan PG::get_mnow()
+ceph::signedspan PG::get_mnow() const
 {
   return osd->get_mnow();
 }

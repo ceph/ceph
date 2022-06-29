@@ -130,7 +130,7 @@ public:
     }
   }
 
-  ceph::signedspan get_mnow();
+  ceph::signedspan get_mnow() const;
 
 private:
   // -- superblock --
