@@ -1,0 +1,8 @@
+teuthology:
+  variables:
+    fail_fs: true
+overrides:
+  ceph:
+    conf:
+      mgr:
+        mgr/orchestrator/fail_fs: true
