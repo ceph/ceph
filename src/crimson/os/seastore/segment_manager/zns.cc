@@ -590,8 +590,8 @@ Segment::write_ertr::future<> ZNSSegment::write(
   seastore_off_t offset, ceph::bufferlist bl)
 {
   LOG_PREFIX(ZNSSegment::write);
-  if (offset < write_pointer || offset % manager.metadata.block_size != 0) {
-    ERROR("invalid segment write on segment {} to offset {}",
+  if (offset != write_pointer || offset % manager.metadata.block_size != 0) {
+    ERROR("Invalid segment write on segment {} to offset {}",
       id,
       offset);
     return crimson::ct_error::invarg::make();
