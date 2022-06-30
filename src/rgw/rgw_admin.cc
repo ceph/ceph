@@ -8939,7 +8939,7 @@ next:
 
     auto sync = RGWBucketPipeSyncStatusManager::construct(
       dpp(), static_cast<rgw::sal::RadosStore*>(store), source_zone, opt_sb,
-      bucket->get_key());
+      bucket->get_key(), extra_info ? &std::cout : nullptr);
 
     if (!sync) {
       cerr << "ERROR: sync.init() returned error=" << sync.error() << std::endl;
@@ -9047,7 +9047,7 @@ next:
     }
     auto sync = RGWBucketPipeSyncStatusManager::construct(
       dpp(), static_cast<rgw::sal::RadosStore*>(store), source_zone,
-      opt_source_bucket, bucket->get_key());
+      opt_source_bucket, bucket->get_key(), nullptr);
 
     if (!sync) {
       cerr << "ERROR: sync.init() returned error=" << sync.error() << std::endl;
@@ -9080,7 +9080,7 @@ next:
     }
     auto sync = RGWBucketPipeSyncStatusManager::construct(
       dpp(), static_cast<rgw::sal::RadosStore*>(store), source_zone,
-      opt_source_bucket, bucket->get_key());
+      opt_source_bucket, bucket->get_key(), extra_info ? &std::cout : nullptr);
 
     if (!sync) {
       cerr << "ERROR: sync.init() returned error=" << sync.error() << std::endl;
